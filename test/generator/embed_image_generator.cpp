@@ -6,6 +6,10 @@ class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
     ImageParam input{ Float(32), 3, "input" };
 
+    void help(std::ostream &out) override {
+        out << "This tests that small constant images are correctly embedded in the generated object files.\n";
+    }
+
     Func build() override {
         Image<float> matrix(3, 3);
 
@@ -22,6 +26,11 @@ public:
         RDom j(0, 3);
         f(x, y, c) = sum(matrix(j, c) * input(x, y, j));
         return f;
+    }
+
+    bool test() override {
+        // This is an AOT-only test
+        return true;
     }
 };
 

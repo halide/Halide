@@ -72,9 +72,18 @@ public:
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
 
+    // The help() method of a generator should print out a description
+    // of what the Generator is. This is triggered by the -help option
+    // when compiling this file along with GenGen.cpp
+    void help(std::ostream &out) override {
+        out << "This is an example generator!\n";
+    }
+
+    // The build() method of a generator defines the actual pipeline
+    // and returns the output Func.
     Func build() override {
-        Var x, y, c;
         Func f("f"), g("g");
+        Var x, y, c;
 
         f(x, y) = max(x, y);
         g(x, y, c) = cast(output_type, f(x, y) * c * compiletime_factor * runtime_factor);
@@ -87,6 +96,41 @@ public:
         g.vectorize(x, natural_vector_size(output_type));
 
         return g;
+    }
+
+    // Your should put correctness and performance tests for a
+    // generator into the test() method. This is triggered by the
+    // -test option when compiling this file along with GenGen.cpp
+    bool test() override {
+        // Generator params must be set before calling build.
+        compiletime_factor.set(2.5f);
+        output_type.set(Int(32));
+
+        // Build the pipeline.
+        Func g = build();
+
+        // Set the runtime params. These can be set before or after
+        // calling build.
+        runtime_factor.set(2.0f);
+
+        // Run it.
+        Image<int> out = g.realize(10, 10, 3);
+
+        // Check the output is as expected:
+        for (int c = 0; c < out.channels(); c++) {
+            for (int y = 0; y < out.height(); y++) {
+                for (int x = 0; x < out.width(); x++) {
+                    int correct = std::max(x, y) * c * 5;
+                    if (correct != out(x, y, c)) {
+                        printf("out(%d, %d, %d) = %d instead of %d\n",
+                               x, y, c, out(x, y, c), correct);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 };
 

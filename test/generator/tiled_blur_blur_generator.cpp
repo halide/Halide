@@ -9,6 +9,10 @@ public:
     Param<int> width{ "width" };
     Param<int> height{ "height" };
 
+    void help(std::ostream &out) override {
+        out << "This is an internal generator used by the tiled_blur test\n";
+    }
+
     Func build() override {
         // We pass in parameters to tell us where the boundary
         // condition kicks in. This is decoupled from the size of the
@@ -32,6 +36,11 @@ public:
             blur.output_buffer().set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
         }
         return blur;
+    }
+
+    bool test() override {
+        // Tested by the tiled_blur test
+        return true;
     }
 };
 Halide::RegisterGenerator<TiledBlurBlur> register_my_gen{"tiled_blur_blur"};

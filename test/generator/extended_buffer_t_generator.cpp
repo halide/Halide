@@ -27,11 +27,20 @@ class ExtendedBufferT : public Generator<ExtendedBufferT> {
 public:
     FancyImageParam input{ Float(32), 2, "input" };
 
+    void help(std::ostream &out) override {
+        out << "This tests jamming extra data at the end of a buffer_t then extracting it using an extern call.\n";
+    }
+
     Func build() override {
         Var x, y;
         Func output;
         output(x, y) = input(x, y) + input.extra_field();
         return output;
+    }
+
+    bool test() {
+        // This is an AOT-only test
+        return true;
     }
 };
 

@@ -381,6 +381,17 @@ public:
     /** Build and return a Halide::Func. All Generators must override this. */
     virtual Func build() = 0;
 
+    /** Run a Generator's test. Returns whether or not it succeeds. If
+     * unimplemented, it is assumed to fail, because untested code is
+     * probably broken. */
+    virtual bool test() {return false;}
+
+    /** Print out help text describing how to use this generator. */
+    virtual void help(std::ostream &out) {}
+
+    /** Prints out a description of the params and generator params. */
+    EXPORT void print_params(std::ostream &out);
+
     /** Return a Func that calls a previously-generated instance of this Generator.
      * This is (essentially) a smart wrapper around define_extern(), but uses the
      * output types and dimensionality of the Func returned by build. It is

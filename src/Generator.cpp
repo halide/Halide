@@ -48,13 +48,20 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-e EMIT_OPTIONS] "
-                          "target=target-string [generator_arg=value [...]]\n\n"
-                          "  -e  A comma separated list of optional files to emit. Accepted values are "
-                          "[assembly, bitcode, stmt, html]\n";
+    const char kUsage[] =
+        "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-e [assembly],[stmt],[bitcode],[html]] "
+        "[-test] [-help] [-list] "
+        "[target=target-string] [generator_arg=value [...]]\n";
 
-    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" }, { "-e", "" } };
-    std::map<std::string, std::string> generator_args;
+    std::map<std::string, std::string> flags_info = {{ "-f", "" },
+                                                     { "-g", "" },
+                                                     { "-e", "" },
+                                                     { "-o", "" }};
+
+    std::map<std::string, bool> bool_flags_info = {{ "-test", false },
+                                                   { "-help", false },
+                                                   { "-list", false }};
+    std::map<std::string, std::string> generator_args = {{ "target", "host" }};
 
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] != '-') {
@@ -66,20 +73,39 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             generator_args[v[0]] = v[1];
             continue;
         }
-        auto it = flags_info.find(argv[i]);
-        if (it != flags_info.end()) {
-            if (i + 1 >= argc) {
-                cerr << kUsage;
-                return 1;
+        {
+            auto it = flags_info.find(argv[i]);
+            if (it != flags_info.end()) {
+                if (i + 1 >= argc) {
+                    cerr << kUsage;
+                    return 1;
+                }
+                it->second = argv[i + 1];
+                ++i;
+                continue;
             }
-            it->second = argv[i + 1];
-            ++i;
-            continue;
+        }
+        {
+            auto it = bool_flags_info.find(argv[i]);
+            if (it != bool_flags_info.end()) {
+                it->second = true;
+                continue;
+            }
         }
         cerr << "Unknown flag: " << argv[i] << "\n";
         cerr << kUsage;
         return 1;
     }
+
+    bool run_test = bool_flags_info["-test"];
+    bool print_help = bool_flags_info["-help"];
+    bool list_generators = bool_flags_info["-list"];
+
+    std::string output_dir = flags_info["-o"];
+    bool emit_output = !output_dir.empty();
+
+    std::string generator_name = flags_info["-g"];
+    std::string function_name = flags_info["-f"];
 
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
     if (generator_names.size() == 0) {
@@ -88,7 +114,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
-    std::string generator_name = flags_info["-g"];
+    if (list_generators) {
+        for (auto name : generator_names) {
+            cerr << name << "\n";
+        }
+        return 0;
+    }
+
     if (generator_name.empty()) {
         // If -g isn't specified, but there's only one generator registered, just use that one.
         if (generator_names.size() != 1) {
@@ -101,22 +133,18 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         }
         generator_name = generator_names[0];
     }
-    std::string function_name = flags_info["-f"];
+
     if (function_name.empty()) {
         // If -f isn't specified, assume function name = generator name.
         function_name = generator_name;
     }
-    std::string output_dir = flags_info["-o"];
-    if (output_dir.empty()) {
-        cerr << "-o must always be specified.\n";
+
+    if (!emit_output && !run_test && !print_help) {
+        cerr << "At least one of -o, -test, or -help must be specified.\n";
         cerr << kUsage;
         return 1;
     }
-    if (generator_args.find("target") == generator_args.end()) {
-        cerr << "Target missing\n";
-        cerr << kUsage;
-        return 1;
-    }
+
     GeneratorBase::EmitOptions emit_options;
     std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
     for (const std::string &opt : emit_flags) {
@@ -140,7 +168,27 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name, function_name, emit_options);
+
+    if (print_help) {
+        cerr << "Generator: " << generator_name << "\n";
+        gen->help(cerr);
+        gen->print_params(cerr);
+    }
+
+    if (run_test) {
+        if (!gen->test()) {
+            cerr << "Test failed\n";
+            // Don't bother emitting the filter if the test fails.
+            return 1;
+        } else {
+            cerr << "Test passed\n";
+        }
+    }
+
+    if (!output_dir.empty()) {
+        gen->emit_filter(output_dir, function_name, function_name, emit_options);
+    }
+
     return 0;
 }
 
@@ -173,7 +221,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) != registry.factories.end())
-        << "Generator not found: " << name;
+        << "Generator not found: " << name << "\n";
     registry.factories.erase(name);
 }
 
@@ -183,7 +231,7 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
-    user_assert(it != registry.factories.end()) << "Generator not found: " << name;
+    user_assert(it != registry.factories.end()) << "Generator not found: " << name << "\n";
     return it->second->create(params);
 }
 
@@ -261,6 +309,47 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
         user_assert(param != generator_params.end())
             << "Generator has no GeneratorParam named: " << key;
         param->second->from_string(value);
+    }
+}
+
+void GeneratorBase::print_params(std::ostream &out) {
+    build_params();
+    out << "\nGenerator parameters:\n";
+    for (auto key_value : generator_params) {
+        const GeneratorParamBase *param = key_value.second;
+        out << "  " << param->name  << " == " << param->to_string() << "\n";
+    }
+    out << "\nFilter parameters:\n";
+    for (auto key_value : filter_params) {
+        const Internal::Parameter *param = key_value.second;
+        if (param->is_buffer()) {
+            out << "  ImageParam " << param->name() << "(" << param->type() << ", " << param->dimensions() << ")\n";
+
+            for (int i = 0; i < param->dimensions(); i++) {
+                Expr c = param->min_constraint(i);
+                if (c.defined()) {
+                    out << "    min[" << i << "] == " << c << "\n";
+                }
+                c = param->extent_constraint(i);
+                if (c.defined()) {
+                    out << "    extent[" << i << "] == " << c << "\n";
+                }
+                c = param->stride_constraint(i);
+                if (c.defined()) {
+                    out << "    stride[" << i << "] == " << c << "\n";
+                }
+            }
+        } else {
+            out << "  Param<" << param->type() << "> " << param->name() << "\n";
+            Expr min = param->get_min_value();
+            if (min.defined()) {
+                out << "    minimum value: " << min << "\n";
+            }
+            Expr max = param->get_max_value();
+            if (max.defined()) {
+                out << "    maximum value: " << max << "\n";
+            }
+        }
     }
 }
 
