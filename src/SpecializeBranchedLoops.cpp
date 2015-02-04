@@ -64,7 +64,7 @@ bool should_extract(Expr e) {
 
 bool is_extent_var(const Variable *v) {
     std::vector<std::string> parts = split_string(v->name, ".");
-    for (size_t i = 0; i < parts.size(); ++i) {
+    for (size_t i = 1; i < parts.size(); ++i) {
         if (parts[i] == "extent") {
             return true;
         }
