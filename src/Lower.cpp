@@ -1109,7 +1109,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     void visit(const For *op) {
         if (ends_with(op->name, ".__outermost")) {
-            stmt = op->body;
+            stmt = mutate(op->body);
         } else {
             IRMutator::visit(op);
         }
