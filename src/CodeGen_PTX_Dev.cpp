@@ -326,7 +326,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         #if LLVM_VERSION < 33
         PM.add(new TargetTransformInfo(target->getScalarTargetTransformInfo(),
                                        target->getVectorTargetTransformInfo()));
-        #else
+        #elif LLVM_VERSION < 37
         target->addAnalysisPasses(PM);
         #endif
     }
