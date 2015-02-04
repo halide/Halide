@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-CXXFLAGS += -O3 -fopenmp -Wall -std=c++11
+CXXFLAGS += -O3 -fopenmp -Wall -std=c++11 -march=native
 HL_TARGET ?= host
 LIBHALIDE_BLAS = src/libhalide_blas.a
 EMIT_OPTIONS = stmt,assembly
@@ -30,6 +30,12 @@ KERNELS = \
 	dgemv_trans \
 	sgemm_notrans \
 	dgemm_notrans \
+	sgemm_transA \
+	dgemm_transA \
+	sgemm_transB \
+	dgemm_transB \
+	sgemm_transAB \
+	dgemm_transAB \
 
 BENCHMARKS = \
 	benchmarks/cblas_benchmarks \
@@ -71,12 +77,14 @@ tests/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -Wno-unused-variable -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
 	$(CBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
-L1_BENCHMARK_SIZES = 16 64 256 1024 4096 16384
-L2_BENCHMARK_SIZES = 8 32 128 512 1024
-L3_BENCHMARK_SIZES = 8 32 128 512
+# Large powers of two are a pathological case for the cache, so avoid
+# them for the benchmarks.
+L1_BENCHMARK_SIZES = 16 64 288 1056 2080
+L2_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
+L3_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
 L1_BENCHMARKS = scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum
 L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans
-L3_BENCHMARKS = sgemm_notrans dgemm_notrans
+L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_trans dgemm_trans
 
 cblas_l1_benchmark_%: benchmarks/cblas_benchmarks
 	@$(foreach size,$(L1_BENCHMARK_SIZES),benchmarks/cblas_benchmarks $(@:cblas_l1_benchmark_%=%) $(size);)
@@ -242,3 +250,27 @@ $(KERNEL_DIR)/halide_sgemm_notrans.o $(KERNEL_DIR)/halide_sgemm_notrans.h: $(KER
 $(KERNEL_DIR)/halide_dgemm_notrans.o $(KERNEL_DIR)/halide_dgemm_notrans.h: $(KERNEL_DIR)/blas_l3.generator
 	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_notrans -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=false transpose_B=false
+
+$(KERNEL_DIR)/halide_sgemm_transA.o $(KERNEL_DIR)/halide_sgemm_transA.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_transA -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=false
+
+$(KERNEL_DIR)/halide_dgemm_transA.o $(KERNEL_DIR)/halide_dgemm_transA.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_transA -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=false
+
+$(KERNEL_DIR)/halide_sgemm_transB.o $(KERNEL_DIR)/halide_sgemm_transB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_transB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=false transpose_B=true
+
+$(KERNEL_DIR)/halide_dgemm_transB.o $(KERNEL_DIR)/halide_dgemm_transB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_transB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=false transpose_B=true
+
+$(KERNEL_DIR)/halide_sgemm_transAB.o $(KERNEL_DIR)/halide_sgemm_transAB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_transAB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=true
+
+$(KERNEL_DIR)/halide_dgemm_transAB.o $(KERNEL_DIR)/halide_dgemm_transAB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_transAB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=true

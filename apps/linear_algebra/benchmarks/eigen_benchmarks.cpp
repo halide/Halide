@@ -176,12 +176,13 @@ int main(int argc, char* argv[]) {
     std::string subroutine = argv[1];
     char type = subroutine[0];
     int  size = std::stoi(argv[2]);
+    int iters = 100;
 
     subroutine = subroutine.substr(1);
     if (type == 's') {
-        Benchmarks<float> ("Eigen", 1000).run(subroutine, size);
+        Benchmarks<float> ("Eigen", iters).run(subroutine, size);
     } else if (type == 'd') {
-        Benchmarks<double>("Eigen", 1000).run(subroutine, size);
+        Benchmarks<double>("Eigen", iters).run(subroutine, size);
     }
 
     return 0;
