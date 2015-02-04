@@ -239,12 +239,13 @@ int main(int argc, char* argv[]) {
     std::string subroutine = argv[1];
     char type = subroutine[0];
     int  size = std::stoi(argv[2]);
+    int iters = 100;
 
     subroutine = subroutine.substr(1);
     if (type == 's') {
-        BenchmarksFloat ("Halide", 1000).run(subroutine, size);
+        BenchmarksFloat ("Halide", iters).run(subroutine, size);
     } else if (type == 'd') {
-        BenchmarksDouble("Halide", 1000).run(subroutine, size);
+        BenchmarksDouble("Halide", iters).run(subroutine, size);
     }
 
     return 0;
