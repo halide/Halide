@@ -18,6 +18,8 @@ function(halide_add_generator_dependency target gen_target gen_name func_name)
   # Determine a scratch directory to build and execute the generator. ${target}
   # will include the generated header from this directory.
   halide_generator_output_path(${gen_name} SCRATCH_DIR)
+  file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/" NATIVE_INT_DIR)
+  file(MAKE_DIRECTORY "${NATIVE_INT_DIR}scratch_${gen_name}")
 
   # CMake 2.8 doesn't have string(CONCAT), so fake it like so:
   string(REPLACE ".lib" "${CMAKE_STATIC_LIBRARY_SUFFIX}" FILTER_LIB "${func_name}.lib" )
