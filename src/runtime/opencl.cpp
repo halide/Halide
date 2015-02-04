@@ -604,7 +604,7 @@ WEAK int halide_opencl_device_release(void *user_context) {
     cl_command_queue q;
     err = halide_acquire_cl_context(user_context, &ctx, &q, false);
     if (err != 0) {
-        return;
+        return -1;
     }
 
     if (ctx) {
