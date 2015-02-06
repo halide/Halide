@@ -378,7 +378,17 @@ void CodeGen_GLSL::visit(const Evaluate *op) {
 void CodeGen_GLSL::visit(const Call *op) {
     ostringstream rhs;
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::glsl_texture_load) {
+        if (op->name == Call::glsl_inline) {
+            // The first argument to the intrinsic must be a StringImm. The
+            // string value is inlined into the generated code and must contain
+            // glsl source code. If the string argument uses names of other
+            // parameters, these may be passed in the other arguments to the
+            // intrinsic to prevent the parameters from being simplified out of
+            // the IR tree.
+            internal_assert(op->args[0].as<StringImm>());
+            id = op->args[0].as<StringImm>()->value;
+            return;
+        } else if (op->name == Call::glsl_texture_load) {
             // This intrinsic takes four arguments
             // glsl_texture_load(<tex name>, <buffer>, <x>, <y>)
             internal_assert(op->args.size() == 4);
@@ -525,11 +535,20 @@ void CodeGen_GLSL::visit(const Call *op) {
             return;
         }
     } else {
-        if (builtin.count(op->name) == 0) {
-            user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
+        // Otherwise check to see if the call name matches a halide library
+        // function that we can map to a GLSL built-in call.
+        if (builtin.count(op->name)) {
+            rhs << builtin[op->name];
+        } else {
+            // If the call has Extern type but is not recognized as a halide
+            // library function, output GLSL function call syntax for it.
+            // There is no explicit check here that the GLSL call actually exists,
+            // code compilation will fail at runtime if it does not.
+            rhs << op->name;
         }
 
-        rhs << builtin[op->name] << "(";
+        // Codegen the arguments to the function.
+        rhs << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) rhs << ", ";
             rhs << print_expr(op->args[i]);
