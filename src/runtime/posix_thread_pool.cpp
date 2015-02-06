@@ -83,8 +83,24 @@ struct halide_work_queue_t {
     // Singly linked list for job stack
     work *jobs;
 
-    // Broadcast whenever items are added to the queue or a job completes.
-    pthread_cond_t state_change;
+    // Worker threads are divided into an 'A' team and a 'B' team. The
+    // B team sleeps on the wakeup_b_team condition variable. The A
+    // team does work. Threads transition to the B team if they wake
+    // up and find that a_team_size > target_a_team_size.  Threads
+    // move into the A team whenever they wake up and find that
+    // a_team_size < target_a_team_size.
+    int a_team_size, target_a_team_size;
+
+    // Broadcast when a job completes.
+    pthread_cond_t wakeup_owners;
+
+    // Broadcast whenever items are added to the work queue.
+    pthread_cond_t wakeup_a_team;
+
+    // May also be broadcast when items are added to the work queue if
+    // more threads are required than are currently in the A team.
+    pthread_cond_t wakeup_b_team;
+
     // Keep track of threads so they can be joined at shutdown
     pthread_t threads[MAX_THREADS];
 
@@ -117,12 +133,23 @@ WEAK void *halide_worker_thread(void *void_arg) {
            : halide_work_queue.running()) {
 
         if (halide_work_queue.jobs == NULL) {
-            // There are no jobs pending, though some tasks may still
-            // be in flight from the last job. Release the lock and
-            // wait for something new to happen.
-            pthread_cond_wait(&halide_work_queue.state_change, &halide_work_queue.mutex);
+            if (owned_job) {
+                // There are no jobs pending. Wait for the last worker
+                // to signal that the job is finished.
+                pthread_cond_wait(&halide_work_queue.wakeup_owners, &halide_work_queue.mutex);
+            } else if (halide_work_queue.a_team_size <= halide_work_queue.target_a_team_size) {
+                // There are no jobs pending. Wait until more jobs are enqueued.
+                pthread_cond_wait(&halide_work_queue.wakeup_a_team, &halide_work_queue.mutex);
+            } else {
+                // There are no jobs pending, and there are too many
+                // threads in the A team. Transition to the B team
+                // until the wakeup_b_team condition is fired.
+                halide_work_queue.a_team_size--;
+                pthread_cond_wait(&halide_work_queue.wakeup_b_team, &halide_work_queue.mutex);
+                halide_work_queue.a_team_size++;
+            }
         } else {
-            // There are jobs still to do. Grab the next one.
+            // Grab the next job.
             work *job = halide_work_queue.jobs;
 
             // Claim a task from it.
@@ -157,7 +184,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
             // If the job is done and I'm not the owner of it, wake up
             // the owner.
             if (!job->running() && job != owned_job) {
-                pthread_cond_broadcast(&halide_work_queue.state_change);
+                pthread_cond_broadcast(&halide_work_queue.wakeup_owners);
             }
         }
     }
@@ -175,7 +202,9 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
 
     if (!halide_thread_pool_initialized) {
         halide_work_queue.shutdown = false;
-        pthread_cond_init(&halide_work_queue.state_change, NULL);
+        pthread_cond_init(&halide_work_queue.wakeup_owners, NULL);
+        pthread_cond_init(&halide_work_queue.wakeup_a_team, NULL);
+        pthread_cond_init(&halide_work_queue.wakeup_b_team, NULL);
         halide_work_queue.jobs = NULL;
 
         if (!halide_num_threads) {
@@ -200,6 +229,8 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
             //fprintf(stderr, "Creating thread %d\n", i);
             pthread_create(halide_work_queue.threads + i, NULL, halide_worker_thread, NULL);
         }
+        // Everyone starts on the a team.
+        halide_work_queue.a_team_size = halide_num_threads;
 
         halide_thread_pool_initialized = true;
     }
@@ -214,13 +245,33 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
     job.exit_status = 0;     // The job hasn't failed yet
     job.active_workers = 0;  // Nobody is working on this yet
 
+    if (!halide_work_queue.jobs && size < halide_num_threads) {
+        // If there's no nested parallelism happening and there are
+        // fewer tasks to do than threads, then set the target A team
+        // size so that some threads will put themselves to sleep
+        // until a larger job arrives.
+        halide_work_queue.target_a_team_size = size;
+    } else {
+        halide_work_queue.target_a_team_size = halide_num_threads;
+    }
+
+    // If there are more tasks than threads in the A team, we should
+    // wake up everyone.
+    bool wake_b_team = size > halide_work_queue.a_team_size;
+
     // Push the job onto the stack.
     job.next_job = halide_work_queue.jobs;
     halide_work_queue.jobs = &job;
+
     pthread_mutex_unlock(&halide_work_queue.mutex);
 
-    // Wake up any idle worker threads.
-    pthread_cond_broadcast(&halide_work_queue.state_change);
+    // Wake up our A team.
+    pthread_cond_broadcast(&halide_work_queue.wakeup_a_team);
+
+    if (wake_b_team) {
+        // We need the B team too.
+        pthread_cond_broadcast(&halide_work_queue.wakeup_b_team);
+    }
 
     // Do some work myself.
     halide_worker_thread((void *)(&job));
@@ -261,7 +312,9 @@ WEAK void halide_shutdown_thread_pool() {
     // to go home
     pthread_mutex_lock(&halide_work_queue.mutex);
     halide_work_queue.shutdown = true;
-    pthread_cond_broadcast(&halide_work_queue.state_change);
+    pthread_cond_broadcast(&halide_work_queue.wakeup_owners);
+    pthread_cond_broadcast(&halide_work_queue.wakeup_a_team);
+    pthread_cond_broadcast(&halide_work_queue.wakeup_b_team);
     pthread_mutex_unlock(&halide_work_queue.mutex);
 
     // Wait until they leave
@@ -276,7 +329,9 @@ WEAK void halide_shutdown_thread_pool() {
     pthread_mutex_destroy(&halide_work_queue.mutex);
     // Reinitialize in case we call another do_par_for
     pthread_mutex_init(&halide_work_queue.mutex, NULL);
-    pthread_cond_destroy(&halide_work_queue.state_change);
+    pthread_cond_destroy(&halide_work_queue.wakeup_owners);
+    pthread_cond_destroy(&halide_work_queue.wakeup_a_team);
+    pthread_cond_destroy(&halide_work_queue.wakeup_b_team);
     halide_thread_pool_initialized = false;
 }
 
