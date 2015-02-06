@@ -84,7 +84,7 @@ L2_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
 L3_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
 L1_BENCHMARKS = scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum
 L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans
-L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_trans dgemm_trans
+L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB
 
 cblas_l1_benchmark_%: benchmarks/cblas_benchmarks
 	@$(foreach size,$(L1_BENCHMARK_SIZES),benchmarks/cblas_benchmarks $(@:cblas_l1_benchmark_%=%) $(size);)
@@ -163,23 +163,23 @@ benchmarks.csv: $(BENCHMARKS)
 	make --no-print-directory run_benchmarks > benchmarks.dat
 	awk '{printf("%s,%s,%s,%s,%s\n",$$1,$$2,$$3,$$4,$$5)}' benchmarks.dat > benchmarks.csv
 
-benchmarks/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(CBLAS_FLAGS) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(ATLAS_FLAGS) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(ATLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(OPENBLAS_FLAGS) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(OPENBLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(EIGEN_INCLUDES) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(LLVM_LDFLAGS)
 
-benchmarks/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(LLVM_LDFLAGS)
 

@@ -15,73 +15,7 @@
 #include <string>
 #include <Eigen/Eigen>
 #include "clock.h"
-
-#define L1Benchmark(benchmark, type, code)                              \
-    void bench_##benchmark(int N) {                                     \
-        Scalar alpha = random_scalar();                                 \
-        Vector x = random_vector(N);                                    \
-        Vector y = random_vector(N);                                    \
-                                                                        \
-        double start = current_time();                                  \
-        for (int i = 0; i < num_iters; ++i) {                           \
-            code;                                                       \
-        }                                                               \
-        double end = current_time();                                    \
-        double elapsed = end - start;                                   \
-                                                                        \
-        std::cout << std::setw(8) << name                               \
-                  << std::setw(15) << type + #benchmark                 \
-                  << std::setw(8) << std::to_string(N)                  \
-                  << std::setw(20) << std::to_string(elapsed)           \
-                  << std::setw(20) << 1000 * N / elapsed                \
-                  << std::endl;                                         \
-    }                                                                   \
-
-#define L2Benchmark(benchmark, type, code)                              \
-    void bench_##benchmark(int N) {                                     \
-        Scalar alpha = random_scalar();                                 \
-        Scalar beta = random_scalar();                                  \
-        Vector x = random_vector(N);                                    \
-        Vector y = random_vector(N);                                    \
-        Matrix A = random_matrix(N);                                    \
-                                                                        \
-        double start = current_time();                                  \
-        for (int i = 0; i < num_iters; ++i) {                           \
-            code;                                                       \
-        }                                                               \
-        double end = current_time();                                    \
-        double elapsed = end - start;                                   \
-                                                                        \
-        std::cout << std::setw(8) << name                               \
-                  << std::setw(15) << type + #benchmark                 \
-                  << std::setw(8) << std::to_string(N)                  \
-                  << std::setw(20) << std::to_string(elapsed)           \
-                  << std::setw(20) << 1000 * N / elapsed                \
-                  << std::endl;                                         \
-    }                                                                   \
-
-#define L3Benchmark(benchmark, type, code)                              \
-    void bench_##benchmark(int N) {                                     \
-        Scalar alpha = random_scalar();                                 \
-        Scalar beta = random_scalar();                                  \
-        Matrix A = random_matrix(N);                                    \
-        Matrix B = random_matrix(N);                                    \
-        Matrix C = random_matrix(N);                                    \
-                                                                        \
-        double start = current_time();                                  \
-        for (int i = 0; i < num_iters; ++i) {                           \
-            code;                                                       \
-        }                                                               \
-        double end = current_time();                                    \
-        double elapsed = end - start;                                   \
-                                                                        \
-        std::cout << std::setw(8) << name                               \
-                  << std::setw(15) << type + #benchmark                 \
-                  << std::setw(8) << std::to_string(N)                  \
-                  << std::setw(20) << std::to_string(elapsed)           \
-                  << std::setw(20) << 1000 * N / elapsed                \
-                  << std::endl;                                         \
-    }                                                                   \
+#include "macros.h"
 
 template<class T>
 std::string type_name();
@@ -116,9 +50,7 @@ struct Benchmarks {
         return A;
     }
 
-    Benchmarks(std::string n, int iters) :
-            name(n), num_iters(iters)
-    {}
+    Benchmarks(std::string n) : name(n) {}
 
     void run(std::string benchmark, int size) {
         if (benchmark == "copy") {
@@ -164,7 +96,6 @@ struct Benchmarks {
 
   private:
     std::string name;
-    int num_iters;
 };
 
 int main(int argc, char* argv[]) {
@@ -176,13 +107,12 @@ int main(int argc, char* argv[]) {
     std::string subroutine = argv[1];
     char type = subroutine[0];
     int  size = std::stoi(argv[2]);
-    int iters = 100;
 
     subroutine = subroutine.substr(1);
     if (type == 's') {
-        Benchmarks<float> ("Eigen", iters).run(subroutine, size);
+        Benchmarks<float> ("Eigen").run(subroutine, size);
     } else if (type == 'd') {
-        Benchmarks<double>("Eigen", iters).run(subroutine, size);
+        Benchmarks<double>("Eigen").run(subroutine, size);
     }
 
     return 0;
