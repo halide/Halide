@@ -777,35 +777,33 @@ private:
     void visit_min_or_max(const Op *op) {
         visit_binary_op(op);
 
-        if (!branching_vars) {
-            vector<Branch> child_branches;
-            branches.swap(child_branches);
-            for (size_t i = 0; i < child_branches.size(); ++i) {
-                Branch &branch = child_branches[i];
-                const Op *min_or_max = branch.content.as<Op>();
-                if (min_or_max) {
-                    Expr a = min_or_max->a;
-                    Expr b = min_or_max->b;
-                    if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
-                        // Ensure that the variable appears in a for consistency with other min/max exprs.
-                        if (!expr_uses_var(b, name, scope)) {
-                            std::swap(a, b);
-                        }
-
-                        push_bounds(branch.min, branch.extent);
-                        Expr cond = Cmp::make(a, b);
-                        if (!visit_simple_cond(cond, a, b)) {
-                            branches.push_back(branch);
-                        }
-                        pop_bounds();
-
-                        continue;
+        vector<Branch> child_branches;
+        branches.swap(child_branches);
+        for (size_t i = 0; i < child_branches.size(); ++i) {
+            Branch &branch = child_branches[i];
+            const Op *min_or_max = branch.content.as<Op>();
+            if (min_or_max) {
+                Expr a = min_or_max->a;
+                Expr b = min_or_max->b;
+                if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
+                    // Ensure that the variable appears in a for consistency with other min/max exprs.
+                    if (!expr_uses_var(b, name, scope)) {
+                        std::swap(a, b);
                     }
-                }
 
-                // We did not branch, so add current branch as is.
-                branches.push_back(branch);
+                    push_bounds(branch.min, branch.extent);
+                    Expr cond = Cmp::make(a, b);
+                    if (!visit_simple_cond(cond, a, b)) {
+                        branches.push_back(branch);
+                    }
+                    pop_bounds();
+
+                    continue;
+                }
             }
+
+            // We did not branch, so add current branch as is.
+            branches.push_back(branch);
         }
     }
 
