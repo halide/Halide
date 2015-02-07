@@ -353,13 +353,6 @@ WEAK void halide_shutdown_thread_pool() {
     halide_thread_pool_initialized = false;
 }
 
-namespace {
-__attribute__((destructor))
-WEAK void halide_posix_thread_pool_cleanup() {
-    halide_shutdown_thread_pool();
-}
-}
-
 WEAK void halide_set_num_threads(int n) {
     if (halide_num_threads == n) {
         return;
