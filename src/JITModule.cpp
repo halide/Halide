@@ -742,6 +742,15 @@ void JITSharedRuntime::release_all() {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     #endif
 
+    #ifdef _MSC_VEC
+    // On windows, we need to explicitly shutdown the thread pool (it
+    // can't be a static destructor without risking deadlock at
+    // program exit).
+    uint64_t fun_addr = shared_runtimes[MainShared].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_shutdown_thread_pool");
+    internal_assert(fun_addr != 0);
+    ((void (*)())fun_addr)();
+    #endif
+
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes[(RuntimeKind)(i - 1)].jit_module = NULL;
     }
