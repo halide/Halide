@@ -225,13 +225,13 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     cl_device_type device_type = 0;
     const char * dev_type = halide_get_ocl_device_type(user_context);
     if (dev_type != NULL) {
-        if (strstr("cpu", dev_type)) {
+        if (strstr(dev_type, "cpu")) {
             device_type |= CL_DEVICE_TYPE_CPU;
         }
-        if (strstr("gpu", dev_type)) {
+        if (strstr(dev_type, "gpu")) {
             device_type |= CL_DEVICE_TYPE_GPU;
         }
-        if (strstr("acc", dev_type)) {
+        if (strstr(dev_type, "acc")) {
             device_type |= CL_DEVICE_TYPE_ACCELERATOR;
         }
     }
