@@ -3,6 +3,7 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -218,8 +219,10 @@ std::map<DeviceAPI, CodeGen_GPU_Dev *> CodeGen_GPU_Host<CodeGen_CPU>::make_devic
 {
     std::map<DeviceAPI, CodeGen_GPU_Dev *> result;
 
-    // For the default GPU, OpenCL is preferred, CUDA next, and OpenGL last.
-    // The code is in reverse order to allow later tests to override earlier ones.
+    // For the default GPU, OpenCL is preferred, CUDA next, and OpenGL
+    // last. The code is in reverse order to allow later tests to
+    // override earlier ones. If Metal is specified in the target, it
+    // will be used as the default. (TODO: verify this is a good bet.)
     DeviceAPI default_api = DeviceAPI::Default_GPU;
     if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
@@ -235,6 +238,11 @@ std::map<DeviceAPI, CodeGen_GPU_Dev *> CodeGen_GPU_Host<CodeGen_CPU>::make_devic
         debug(1) << "Constructing OpenCL device codegen\n";
         result[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(t);
         default_api = DeviceAPI::OpenCL;
+    }
+    if (t.has_feature(Target::Metal)) {
+        debug(1) << "Constructing Metal device codegen\n";
+        result[DeviceAPI::Metal] = new CodeGen_Metal_Dev(t);
+        default_api = DeviceAPI::Metal;
     }
 
     if (result.empty()) {
@@ -386,6 +394,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             }
             user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
         }
+    } else if (target.has_feature(Target::Metal)) {
+      // TODO: figure this out.
     } else if (target.has_feature(Target::OpenGL)) {
         if (target.os == Target::Linux) {
             if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {

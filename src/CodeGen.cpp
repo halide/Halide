@@ -1382,9 +1382,11 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_memoization_cache_store",
         "halide_cuda_run",
         "halide_opencl_run",
+        "halide_metal_run",
         "halide_opengl_run",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
+        "halide_metal_initialize_kernels",
         "halide_opengl_initialize_kernels"
         "halide_get_gpu_device",
     };

@@ -62,6 +62,10 @@ if (TARGET_OPENCL)
   add_definitions("-DWITH_OPENCL")
 endif()
 
+if (TARGET_METAL)
+  add_definitions("-DWITH_METAL")
+endif()
+
 if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL")
 endif()
@@ -91,6 +95,7 @@ set(RUNTIME_CPP
   module_jit_ref_count
   nacl_host_cpu_count
   opencl
+  metal,
   opengl
   osx_clock
   osx_host_cpu_count
@@ -233,6 +238,7 @@ set(HEADER_FILES
   CodeGen_GPU_Host.h
   CodeGen_PTX_Dev.h
   CodeGen_OpenCL_Dev.h
+  CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_PNaCl.h
@@ -326,6 +332,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
 file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeMetal.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
@@ -337,6 +344,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_GPU_Host.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_OpenCL_Dev.cpp
+  CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp

@@ -184,7 +184,7 @@ Target parse_target_string(const std::string &target) {
                    << "and os is linux, windows, osx, nacl, ios, or android. "
                    << "If arch or os are omitted, they default to the host. "
                    << "Features include sse41, avx, avx2, armv7s, cuda, "
-                   << "opencl, no_asserts, no_bounds_query, and debug.\n"
+                   << "opencl, metal, no_asserts, no_bounds_query, and debug.\n"
                    << "HL_TARGET can also begin with \"host\", which sets the "
                    << "host's architecture, os, and feature set, with the "
                    << "exception of the GPU runtimes, which default to off.\n"
@@ -277,6 +277,8 @@ bool Target::merge_string(const std::string &target) {
             set_features(vec(Target::CUDA, Target::CUDACapability50));
         } else if (tok == "opencl") {
             set_feature(Target::OpenCL);
+        } else if (tok == "metal") {
+            set_feature(Target::Metal);
         } else if (tok == "debug" || tok == "gpu_debug") {
             set_feature(Target::Debug);
         } else if (tok == "opengl") {
@@ -352,6 +354,7 @@ std::string Target::to_string() const {
       "armv7s",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
+      "metal",
       "opengl",
       "user_context"
   };
@@ -444,6 +447,7 @@ DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(opencl)
+DECLARE_CPP_INITMOD(metal)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
@@ -835,6 +839,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
+        } else if (t.has_feature(Target::Metal)) {
+           modules.push_back(get_initmod_metal(c, bits_64, debug));
         } else if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));
             if (t.os == Target::Linux) {

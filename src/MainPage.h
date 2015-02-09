@@ -7,8 +7,8 @@
  * Halide is a programming language designed to make it easier to
  * write high-performance image processing code on modern
  * machines. Its front end is embedded in C++. Compiler
- * targets include x86/SSE, ARM v7/NEON, CUDA, Native Client, and
- * OpenCL.
+ * targets include x86/SSE, ARM v7/NEON, CUDA, Native Client,
+ * OpenCL, and Metal.
  *
  * You build a Halide program by writing C++ code using objects of
  * type \ref Halide::Var, \ref Halide::Expr, and \ref Halide::Func,

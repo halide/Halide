@@ -30,6 +30,7 @@ enum Values {
     Default_GPU,
     CUDA,
     OpenCL,
+    Metal,
     GLSL
 };
 
@@ -57,6 +58,9 @@ inline const char *device_api_to_string(const DeviceAPI &device_api) {
         break;
     case DeviceAPI::OpenCL:
         return "<OpenCL>";
+        break;
+    case DeviceAPI::Metal:
+        return "<Metal>";
         break;
     case DeviceAPI::GLSL:
         return "<GLSL>";
