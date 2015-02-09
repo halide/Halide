@@ -20,6 +20,7 @@ StmtCompiler::StmtCompiler(Target target) {
     // The awkward mapping from targets to code generators
     if (target.features_any_of(vec(Target::CUDA,
                                    Target::OpenCL,
+				   Target::Metal,
                                    Target::OpenGL))) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {

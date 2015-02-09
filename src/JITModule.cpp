@@ -616,6 +616,7 @@ std::mutex shared_runtimes_mutex;
 enum RuntimeKind {
     MainShared,
     OpenCL,
+    Metal,
     CUDA,
     OpenGL,
     MaxRuntimeKind
@@ -629,6 +630,7 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
         Target one_gpu(target);
         one_gpu.set_feature(Target::OpenCL, runtime_kind == OpenCL);
+        one_gpu.set_feature(Target::Metal, runtime_kind == Metal);
         one_gpu.set_feature(Target::CUDA, runtime_kind == CUDA);
         one_gpu.set_feature(Target::OpenGL, runtime_kind == OpenGL);
         llvm::Module *shared_runtime = get_initial_module_for_target(one_gpu,
@@ -717,6 +719,9 @@ std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) 
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
         gpu_modules.push_back(make_module(cg, target, OpenCL, result));
+    }
+    if (target.has_feature(Target::Metal)) {
+        gpu_modules.push_back(make_module(cg, target, Metal, result));
     }
     if (target.has_feature(Target::CUDA)) {
         gpu_modules.push_back(make_module(cg, target, CUDA, result));

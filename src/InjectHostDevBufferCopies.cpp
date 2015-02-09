@@ -17,12 +17,14 @@ using std::pair;
 
 DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
     if (device_api == DeviceAPI::Default_GPU) {
-        if (target.has_feature(Target::OpenCL)) {
+        if (target.has_feature(Target::Metal)) {
+            return DeviceAPI::Metal;
+        } else if (target.has_feature(Target::OpenCL)) {
             return DeviceAPI::OpenCL;
         } else if (target.has_feature(Target::CUDA)) {
             return DeviceAPI::CUDA;
         } else {
-            user_error << "Schedule uses Default_GPU without a valid GPU (OpenCL or CUDA) specified in target.\n";
+            user_error << "Schedule uses Default_GPU without a valid GPU (Metal, OpenCL or CUDA) specified in target.\n";
         }
     }
     return device_api;
@@ -158,6 +160,9 @@ class InjectBufferCopies : public IRMutator {
             break;
           case DeviceAPI::OpenCL:
             interface_name = "halide_opencl_device_interface";
+            break;
+          case DeviceAPI::Metal:
+            interface_name = "halide_metal_device_interface";
             break;
           case DeviceAPI::GLSL:
             interface_name = "halide_opengl_device_interface";

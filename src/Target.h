@@ -59,6 +59,8 @@ struct Target {
         OpenCL,  ///< Enable the OpenCL runtime.
         CLDoubles,  ///< Enable double support on OpenCL targets
 
+	Metal, ///< Enable the (Apple) Metal runtime.
+
         OpenGL,  ///< Enable the OpenGL runtime.
 
         UserContext,  ///< Generated code takes a user_context pointer as first argument
@@ -134,12 +136,13 @@ struct Target {
         return copy;
     }
 
-    /** Is OpenCL or CUDA enabled in this target? I.e. is
-     * Func::gpu_tile and similar going to work? We do not include
-     * OpenGL, because it is not capable of gpgpu, and is not
-     * scheduled via Func::gpu_tile. */
+    /** Is a fully feature GPU compute runtime enabled? I.e. is
+     * Func::gpu_tile and similar going to work? Currently includes
+     * CUDA, OpenCL, and Metal. We do not include OpenGL, because it
+     * is not capable of gpgpu, and is not scheduled via
+     * Func::gpu_tile. */
     bool has_gpu_feature() const {
-        return has_feature(CUDA) || has_feature(OpenCL);
+      return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }
 
     bool operator==(const Target &other) const {
