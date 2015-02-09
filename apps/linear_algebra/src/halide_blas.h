@@ -20,6 +20,12 @@
 #include "halide_dgemv_trans.h"
 #include "halide_sgemm_notrans.h"
 #include "halide_dgemm_notrans.h"
+#include "halide_sgemm_transA.h"
+#include "halide_dgemm_transA.h"
+#include "halide_sgemm_transB.h"
+#include "halide_dgemm_transB.h"
+#include "halide_sgemm_transAB.h"
+#include "halide_dgemm_transAB.h"
 
 inline int halide_scopy(buffer_t *x, buffer_t *y) {
     return halide_scopy_impl(0, x, nullptr, y);
@@ -65,14 +71,11 @@ inline int halide_sgemm(bool transA, bool transB, float a, buffer_t *A, buffer_t
     if (!transA && !transB) {
         return halide_sgemm_notrans(a, A, B, b, C, C);
     } else if (transA) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_sgemv_trans_A(a, A, B, b, C, C);
+        return halide_sgemm_transA(a, A, B, b, C, C);
     } else if (transB) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_sgemv_trans_B(a, A, B, b, C, C);
+        return halide_sgemm_transB(a, A, B, b, C, C);
     } else {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_sgemv_trans_AB(a, A, B, b, C, C);
+        return halide_sgemm_transAB(a, A, B, b, C, C);
     }
     return -1;
 }
@@ -81,14 +84,11 @@ inline int halide_dgemm(bool transA, bool transB, double a, buffer_t *A, buffer_
     if (!transA && !transB) {
         return halide_dgemm_notrans(a, A, B, b, C, C);
     } else if (transA) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_dgemv_trans_A(a, A, B, b, C, C);
+        return halide_dgemm_transA(a, A, B, b, C, C);
     } else if (transB) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_dgemv_trans_B(a, A, B, b, C, C);
+        return halide_dgemm_transB(a, A, B, b, C, C);
     } else {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_dgemv_trans_AB(a, A, B, b, C, C);
+        return halide_dgemm_transAB(a, A, B, b, C, C);
     }
     return -1;
 }
