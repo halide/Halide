@@ -24,7 +24,7 @@ typedef uint64_t ConditionVariable;
 typedef uint64_t InitOnce;
 typedef void * Thread;
 typedef struct {
-    uint8_t buf[40];
+    uint64_t buf[5];
 } CriticalSection;
 
 extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
