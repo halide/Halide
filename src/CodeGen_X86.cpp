@@ -440,7 +440,6 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
     CodeGen_Posix::visit(op);
-
 }
 
 void CodeGen_X86::visit(const Div *op) {

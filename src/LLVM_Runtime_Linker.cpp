@@ -1,5 +1,6 @@
 #include "LLVM_Runtime_Linker.h"
 
+#include <memory>
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -10,6 +11,7 @@ using std::vector;
 using Internal::vec;
 
 namespace {
+
 llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
 
     #if LLVM_VERSION >= 36
@@ -32,6 +34,7 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
 
     return mod;
 }
+
 }
 
 #define DECLARE_INITMOD(mod)                                            \
