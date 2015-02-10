@@ -313,6 +313,7 @@ set(HEADER_FILES
   BranchVisitors.h
   SpecializeBranchedLoops.h
   RemoveDeadAllocations.h
+  LLVM_Runtime_Linker.h
   CodeGen.h
 )
 

@@ -1825,7 +1825,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                 // Use a select instead
                 codegen(Select::make(a < b, b - a, a - b));
             }
-
         } else if (op->name == Call::copy_buffer_t) {
             // Make some memory for this buffer_t
             Value *dst = create_alloca_at_entry(buffer_t_type, 1);
@@ -2757,7 +2756,6 @@ Value *CodeGen_LLVM::get_user_context() const {
     }
     return ctx;
 }
-
 
 Value *CodeGen_LLVM::call_intrin(Type result_type, int intrin_vector_width,
                                  const string &name, vector<Expr> args) {

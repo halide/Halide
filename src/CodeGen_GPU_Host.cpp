@@ -415,7 +415,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
                                                            CodeGen_LLVM::f32->getPointerTo());
-
         }
 
         // compute a closure over the state passed into the kernel
