@@ -7,10 +7,14 @@ EMIT_OPTIONS = stmt,assembly
 
 EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
-ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
-ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
 OPENBLAS_FLAGS ?= -DUSE_OPENBLAS
 OPENBLAS_LIBS ?= -lopenblas
+
+# ATLAS should be built and installed locally to get the best performance.
+# It is designed to automatically tune its performance to your machine during
+# the build. Get the source code here: http://math-atlas.sourceforge.net/
+ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
+ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
 
 KERNEL_DIR = src/kernels
 KERNELS = \
