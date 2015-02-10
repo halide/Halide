@@ -17,6 +17,7 @@
 #include "Lower.h"
 #include "StmtCompiler.h"
 #include "CodeGen_C.h"
+#include "CodeGen_JavaScript.h"
 #include "Image.h"
 #include "Param.h"
 #include "Debug.h"
@@ -2058,6 +2059,24 @@ void Func::compile_to_c(const string &filename, vector<Argument> args,
 
     ofstream src(filename.c_str());
     CodeGen_C cg(src);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+}
+
+void Func::compile_to_javascript(const string &filename, vector<Argument> args,
+                                 const string &fn_name, const Target &target) {
+    args = add_user_context_arg(args, target);
+
+    lower(target);
+
+    vector<Buffer> images_to_embed;
+    validate_arguments(name(), args, lowered, images_to_embed);
+
+    for (int i = 0; i < outputs(); i++) {
+        args.push_back(output_buffers()[i]);
+    }
+
+    ofstream src(filename.c_str());
+    CodeGen_JavaScript cg(src);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
 }
 

@@ -224,6 +224,7 @@ SOURCE_FILES = \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
   CodeGen_Internal.cpp \
+  CodeGen_JavaScript.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
@@ -317,6 +318,7 @@ HEADER_FILES = \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
   CodeGen.h \
+  CodeGen_JavaScript.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_OpenGL_Dev.h \

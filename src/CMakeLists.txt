@@ -312,7 +312,8 @@ set(HEADER_FILES
   LinearSolve.h
   BranchVisitors.h
   SpecializeBranchedLoops.h
-  RemoveDeadAllocations.h)
+  RemoveDeadAllocations.h
+  CodeGen_JavaScript.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -416,6 +417,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BranchVisitors.cpp
   SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
+  CodeGen_JavaScript.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

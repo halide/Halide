@@ -1,0 +1,1086 @@
+#include <sstream>
+#include <iostream>
+#include <limits>
+
+#include "CodeGen_JavaScript.h"
+#include "CodeGen.h"
+#include "CodeGen_Internal.h"
+#include "Substitute.h"
+#include "IROperator.h"
+#include "Param.h"
+#include "Var.h"
+#include "Lerp.h"
+#include "Simplify.h"
+
+namespace Halide {
+namespace Internal {
+
+using std::ostream;
+using std::endl;
+using std::string;
+using std::vector;
+using std::ostringstream;
+using std::map;
+
+namespace {
+// TODO: Fill in preamble...
+const string preamble =
+    "function halide_error(msg) { alert(msg); }"
+  //...
+    "";
+}
+
+CodeGen_JavaScript::CodeGen_JavaScript(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
+
+string CodeGen_JavaScript::print_reinterpret(Type type, Expr e) {
+#if 0
+    ostringstream oss;
+    oss << "reinterpret<" << print_type(type) << ">(" << print_expr(e) << ")";
+    return oss.str();
+#endif
+    return print_expr(e);
+}
+
+string CodeGen_JavaScript::print_name(const string &name) {
+    ostringstream oss;
+
+    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
+    if (isalpha(name[0])) {
+        oss << '_';
+    }
+
+    for (size_t i = 0; i < name.size(); i++) {
+        if (name[i] == '.') {
+            oss << '_';
+#if 0 // $ is allowed in JS, but this may be reserved for internal use. I still think it should be passed literally.
+        } else if (name[i] == '$') {
+            oss << "__";
+#endif
+        } else if (name[i] != '_' && !isalnum(name[i])) {
+            oss << "___";
+        }
+        else oss << name[i];
+    }
+    return oss.str();
+}
+
+void CodeGen_JavaScript::compile(Stmt s, string name,
+                                 const vector<Argument> &args,
+                                 const vector<Buffer> &images_to_embed) {
+    stream << preamble;
+
+    // Embed the constant images
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+        Buffer buffer = images_to_embed[i];
+        string name = print_name(buffer.name());
+        buffer_t b = *(buffer.raw_buffer());
+
+        // Figure out the offset of the last pixel.
+        size_t num_elems = 1;
+        for (int d = 0; b.extent[d]; d++) {
+            num_elems += b.stride[d] * (b.extent[d] - 1);
+        }
+
+        // Emit the data
+        stream << "var " << name << "_data = new Uint8Array([";
+        for (size_t i = 0; i < num_elems * b.elem_size; i++) {
+            if (i > 0) stream << ", ";
+            stream << (int)(b.host[i]);
+        }
+        stream << "]);\n";
+
+        // Emit the buffer_t
+        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
+        user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
+        stream << "var " << name << "_buffer = {"
+               << "dev: 0, " // dev
+               << "host: " << name << "_data[0], " // host
+               << "extent: [" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "], "
+               << "stride: [" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "], "
+               << "min: [" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "], "
+               << "elem_size: " << b.elem_size << ", "
+               << "host_dirty: 0, " // host_dirty
+               << "dev_dirty: 0};\n"; //dev_dirty
+
+        // TODO: Is this necessary?
+        // Make a global pointer to it
+        stream << "var " << name << " = " << name << "_buffer;\n";
+
+    }
+
+    have_user_context = false;
+    for (size_t i = 0; i < args.size(); i++) {
+        // TODO: check that its type is void *?
+        have_user_context |= (args[i].name == "__user_context");
+    }
+
+    // Emit the function prototype
+    stream << "function " << name << "(";
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            stream << print_name(args[i].name)
+                   << "_buffer";
+        } else {
+            stream << print_name(args[i].name);
+        }
+
+        if (i < args.size()-1) stream << ", ";
+    }
+
+    stream << ") {\n";
+
+    // Unpack the buffer_t's
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            unpack_buffer(args[i].type, args[i].name);
+        }
+    }
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+        unpack_buffer(images_to_embed[i].type(), images_to_embed[i].name());
+    }
+    // Emit the body
+    print(s);
+
+    stream << "return 0;\n"
+           << "}\n";
+}
+
+void CodeGen_JavaScript::unpack_buffer(Type t, const std::string &buffer_name) {
+    string name = print_name(buffer_name);
+    string buf_name = name + "_buffer";
+
+    stream << "var "
+           << name
+           << " = "
+           << buf_name
+           << ".host;\n";
+    allocations.push(buffer_name, t);
+
+    stream << "var "
+           << name
+           << "_host_and_dev_are_null = ("
+           << buf_name << ".host == null) && ("
+           << buf_name << ".dev == 0);\n";
+
+    for (int j = 0; j < 4; j++) {
+        stream << "var "
+               << name
+               << "_min_" << j << " = "
+               << buf_name
+               << ".min[" << j << "];\n";
+    }
+    for (int j = 0; j < 4; j++) {
+        stream << "var "
+               << name
+               << "_extent_" << j << " = "
+               << buf_name
+               << ".extent[" << j << "];\n";
+    }
+    for (int j = 0; j < 4; j++) {
+        stream << "var "
+               << name
+               << "_stride_" << j << " = "
+               << buf_name
+               << ".stride[" << j << "];\n";
+    }
+    stream << "var "
+           << name
+           << "_elem_size = "
+           << buf_name
+           << ".elem_size;\n";
+}
+
+string CodeGen_JavaScript::print_expr(Expr e) {
+    id = "$$ BAD ID $$";
+    e.accept(this);
+    return id;
+}
+
+void CodeGen_JavaScript::print_stmt(Stmt s) {
+    s.accept(this);
+}
+
+string CodeGen_JavaScript::print_assignment(Type t, const std::string &rhs) {
+    // TODO: t is ignored and I expect casts will be required for value correctness.
+    map<string, string>::iterator cached = cache.find(rhs);
+
+    if (cached == cache.end()) {
+        id = unique_name('_');
+        do_indent();
+        stream << "var " << id << " = " << rhs << ";\n";
+        cache[rhs] = id;
+    } else {
+        id = cached->second;
+    }
+    return id;
+}
+
+void CodeGen_JavaScript::open_scope() {
+    cache.clear();
+    do_indent();
+    indent++;
+    stream << "{\n";
+}
+
+void CodeGen_JavaScript::close_scope(const std::string &comment) {
+    cache.clear();
+    indent--;
+    do_indent();
+    if (!comment.empty()) {
+        stream << "} // " << comment << "\n";
+    } else {
+        stream << "}\n";
+    }
+}
+
+void CodeGen_JavaScript::visit(const Variable *op) {
+    id = print_name(op->name);
+}
+
+string CodeGen_JavaScript::make_js_int_cast(string value, bool src_unsigned, int src_bits, bool dst_unsigned, int dst_bits) {
+    // TODO: Do we us print_assignment to cache constants?
+    string result;
+    if ((src_bits <= dst_bits) && (src_unsigned == dst_unsigned)) {
+        result = value;
+    } else {
+        result = print_assignment(Int(32), value + " & " + print_assignment(Int(32), int_to_string(1 << dst_bits)));
+        if (!dst_unsigned) {
+            string shift_amount = int_to_string(32 - dst_bits);
+            result = print_assignment(Int(32), "(" + result + " << " + shift_amount + ") >> " + shift_amount);
+        }
+    }
+    return result;
+}
+
+void CodeGen_JavaScript::visit(const Cast *op) {
+    Halide::Type src = op->value.type();
+    Halide::Type dst = op->type;
+
+    string value = print_expr(op->value);
+
+    if (dst.is_handle() && src.is_handle()) {
+    } else if (dst.is_handle() || src.is_handle()) {
+        internal_error << "Can't cast from " << src << " to " << dst << "\n";
+    } else if (!src.is_float() && !dst.is_float()) {
+        value = make_js_int_cast(value, src.is_uint(), src.bits, dst.is_uint(), dst.bits);
+    } else if (src.is_float() && dst.is_int()) {
+        value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, false, dst.bits);
+    } else if (src.is_float() && dst.is_uint()) {
+        value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, true, dst.bits);
+    } else if (src.is_int() && dst.is_float()) {
+    } else if (src.is_uint() && dst.is_float()) {
+    } else {
+        internal_assert(src.is_float() && dst.is_float());
+        if (dst.bits == 32 && src.bits == 64) {
+            value = "Math.fround(" + value + ")";
+        } // otherwise a no-op
+    }
+  
+    print_assignment(op->type, value);
+}
+
+void CodeGen_JavaScript::visit_binop(Type t, Expr a, Expr b, const char * op) {
+    string sa = print_expr(a);
+    string sb = print_expr(b);
+    print_assignment(t, sa + " " + op + " " + sb);
+}
+
+void CodeGen_JavaScript::visit(const Add *op) {
+    visit_binop(op->type, op->a, op->b, "+");
+}
+
+void CodeGen_JavaScript::visit(const Sub *op) {
+    visit_binop(op->type, op->a, op->b, "-");
+}
+
+void CodeGen_JavaScript::visit(const Mul *op) {
+    visit_binop(op->type, op->a, op->b, "*");
+}
+
+void CodeGen_JavaScript::visit(const Div *op) {
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " >> " << bits;
+        print_assignment(op->type, oss.str());
+#if 0 // TODO: check JS spec
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b), Call::Extern));
+#endif
+    } else {
+        visit_binop(op->type, op->a, op->b, "/");
+    }
+}
+
+void CodeGen_JavaScript::visit(const Mod *op) {
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
+        print_assignment(op->type, oss.str());
+#if 0 // TODO: check JS reference
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "smod", vec(op->a, op->b), Call::Extern));
+#endif
+    } else {
+        visit_binop(op->type, op->a, op->b, "%");
+    }
+}
+
+void CodeGen_JavaScript::visit(const Max *op) {
+    print_expr(Call::make(op->type, "Math.max", vec(op->a, op->b), Call::Extern));
+}
+
+void CodeGen_JavaScript::visit(const Min *op) {
+    print_expr(Call::make(op->type, "Math.min", vec(op->a, op->b), Call::Extern));
+}
+
+void CodeGen_JavaScript::visit(const EQ *op) {
+    visit_binop(op->type, op->a, op->b, "==");
+}
+
+void CodeGen_JavaScript::visit(const NE *op) {
+    visit_binop(op->type, op->a, op->b, "!=");
+}
+
+void CodeGen_JavaScript::visit(const LT *op) {
+    visit_binop(op->type, op->a, op->b, "<");
+}
+
+void CodeGen_JavaScript::visit(const LE *op) {
+    visit_binop(op->type, op->a, op->b, "<=");
+}
+
+void CodeGen_JavaScript::visit(const GT *op) {
+    visit_binop(op->type, op->a, op->b, ">");
+}
+
+void CodeGen_JavaScript::visit(const GE *op) {
+    visit_binop(op->type, op->a, op->b, ">=");
+}
+
+void CodeGen_JavaScript::visit(const Or *op) {
+    visit_binop(op->type, op->a, op->b, "||");
+}
+
+void CodeGen_JavaScript::visit(const And *op) {
+    visit_binop(op->type, op->a, op->b, "&&");
+}
+
+void CodeGen_JavaScript::visit(const Not *op) {
+    print_assignment(op->type, "!(" + print_expr(op->a) + ")");
+}
+
+void CodeGen_JavaScript::visit(const IntImm *op) {
+    ostringstream oss;
+    oss << op->value;
+    id = oss.str();
+}
+
+void CodeGen_JavaScript::visit(const StringImm *op) {
+    ostringstream oss;
+    oss << Expr(op);
+    id = oss.str();
+}
+
+// NaN is the only float/double for which this is true... and
+// surprisingly, there doesn't seem to be a portable isnan function
+// (dsharlet).
+template <typename T>
+static bool isnan(T x) { return x != x; }
+
+template <typename T>
+static bool isinf(T x)
+{
+    return std::numeric_limits<T>::has_infinity && (
+        x == std::numeric_limits<T>::infinity() ||
+        x == -std::numeric_limits<T>::infinity());
+}
+
+void CodeGen_JavaScript::visit(const FloatImm *op) {
+    if (isnan(op->value)) {
+        id = "Number.NaN";
+    } else if (isinf(op->value)) {
+        if (op->value > 0) {
+            id = "Number.POSITIVE_INFINITY";
+        } else {
+            id = "Number.NEGTIVE_INFINITY";
+        }
+    } else {
+#if 0 // TODO: Figure out if there is a way to wrie a floating-point literal in JS
+        // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+        union {
+            uint32_t as_uint;
+            float as_float;
+        } u;
+        u.as_float = op->value;
+
+
+        ostringstream oss;
+        oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
+        id = oss.str();
+#else
+    }
+        ostringstream oss;
+        oss << op->value;
+        id = oss.str();
+#endif
+}
+
+void CodeGen_JavaScript::visit(const Call *op) {
+    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+        << "Can only codegen extern calls and intrinsics\n";
+
+    ostringstream rhs;
+
+    // Handle intrinsics first
+    if (op->call_type == Call::Intrinsic) {
+        if (op->name == Call::debug_to_file) {
+            internal_assert(op->args.size() == 9);
+            const StringImm *string_imm = op->args[0].as<StringImm>();
+            internal_assert(string_imm);
+            string filename = string_imm->value;
+            const Load *load = op->args[1].as<Load>();
+            internal_assert(load);
+            string func = print_name(load->name);
+
+            vector<string> args(6);
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = print_expr(op->args[i+3]);
+            }
+
+            rhs << "halide_debug_to_file(";
+            rhs << (have_user_context ? "__user_context_" : "null");
+            rhs << ", \"" + filename + "\", " + func;
+            for (size_t i = 0; i < args.size(); i++) {
+                rhs << ", " << args[i];
+            }
+            rhs << ")";
+        } else if (op->name == Call::bitwise_and) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " & " << a1;
+        } else if (op->name == Call::bitwise_xor) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " ^ " << a1;
+        } else if (op->name == Call::bitwise_or) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " | " << a1;
+        } else if (op->name == Call::bitwise_not) {
+            internal_assert(op->args.size() == 1);
+            rhs << "~" << print_expr(op->args[0]);
+        } else if (op->name == Call::reinterpret) {
+            internal_assert(op->args.size() == 1);
+            rhs << print_reinterpret(op->type, op->args[0]);
+        } else if (op->name == Call::shift_left) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " << " << a1;
+        } else if (op->name == Call::shift_right) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " >> " << a1;
+        } else if (op->name == Call::rewrite_buffer) {
+            int dims = ((int)(op->args.size())-2)/3;
+            (void)dims; // In case internal_assert is ifdef'd to do nothing
+            internal_assert((int)(op->args.size()) == dims*3 + 2);
+            internal_assert(dims <= 4);
+            vector<string> args(op->args.size());
+            const Variable *v = op->args[0].as<Variable>();
+            internal_assert(v);
+            args[0] = print_name(v->name);
+            for (size_t i = 1; i < op->args.size(); i++) {
+                args[i] = print_expr(op->args[i]);
+            }
+            rhs << "halide_rewrite_buffer(";
+            for (size_t i = 0; i < 14; i++) {
+                if (i > 0) rhs << ", ";
+                if (i < args.size()) {
+                    rhs << args[i];
+                } else {
+                    rhs << '0';
+                }
+            }
+            rhs << ")";
+        } else if (op->name == Call::profiling_timer) {
+            internal_assert(op->args.size() == 0);
+            rhs << "halide_profiling_timer(";
+            rhs << (have_user_context ? "__user_context_" : "null");
+            rhs << ")";
+        } else if (op->name == Call::lerp) {
+            Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+            rhs << print_expr(e);
+        } else if (op->name == Call::null_handle) {
+            rhs << "null";
+        } else if (op->name == Call::address_of) {
+            // TODO: Figure out if arrays can be sliced, viewed, etc.
+            const Load *l = op->args[0].as<Load>();
+            internal_assert(op->args.size() == 1 && l);
+            rhs << print_name(l->name) << ".subarray(" << print_expr(l->index) << ")";
+        } else if (op->name == Call::return_second) {
+            internal_assert(op->args.size() == 2);
+            string arg0 = print_expr(op->args[0]);
+            string arg1 = print_expr(op->args[1]);
+            rhs << "(" << arg0 << ", " << arg1 << ")";
+        } else if (op->name == Call::if_then_else) {
+            internal_assert(op->args.size() == 3);
+
+            string result_id = unique_name('_');
+
+            do_indent();
+            stream << "var " << result_id << ";\n";
+
+            string cond_id = print_expr(op->args[0]);
+
+            do_indent();
+            stream << "if (" << cond_id << ")\n";
+            open_scope();
+            string true_case = print_expr(op->args[1]);
+            do_indent();
+            stream << result_id << " = " << true_case << ";\n";
+            close_scope("if " + cond_id);
+            do_indent();
+            stream << "else\n";
+            open_scope();
+            string false_case = print_expr(op->args[2]);
+            do_indent();
+            stream << result_id << " = " << false_case << ";\n";
+            close_scope("if " + cond_id + " else");
+
+            rhs << result_id;
+        } else if (op->name == Call::copy_buffer_t) {
+            internal_assert(op->args.size() == 1);
+            string arg = print_expr(op->args[0]);
+            string buf_id = unique_name('B');
+            do_indent();
+            stream << "var " << buf_id << " = ";
+            open_scope();
+            do_indent();
+            stream << "dev: " << arg << ".dev,\n";
+            do_indent();
+            stream << "host: " << arg << ".host,\n";
+            do_indent();
+            stream << "min: [" << arg << ".min[0], " << arg << ".min[1], " << arg << ".min[2], " << arg << ".min[3]],\n";
+            do_indent();
+            stream << "extent: [" << arg << ".extent[0], " << arg << ".extent[1], " << arg << ".extent[2], " << arg << ".extent[3]],\n";
+            do_indent();
+            stream << "stride: [" << arg << ".stride[0], " << arg << ".stride[1], " << arg << ".stride[2], " << arg << ".stride[3]],\n";
+            do_indent();
+            stream << "elem_size: " << arg << ".elem_size,\n";
+            do_indent();
+            stream << "host_dirty: " << arg << ".host_dirty,\n";
+            do_indent();
+            stream << "dev_dirty: " << arg << ".dev_dirty,\n";
+            close_scope("copy_buffer_t");
+            rhs << buf_id;
+        } else if (op->name == Call::create_buffer_t) {
+            internal_assert(op->args.size() >= 2);
+            vector<string> args;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                args.push_back(print_expr(op->args[i]));
+            }
+            string buf_id = unique_name('B');
+            do_indent();
+            stream << "var " << buf_id << " = {\n";
+            do_indent();
+            stream << "dev: 0,\n";
+            do_indent();
+            stream << "host: " << args[0] << ",\n";
+            int dims = ((int)op->args.size() - 2)/3;
+            do_indent();
+            stream << "min: [ "; 
+            for (int i = 0; i < dims; i++) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                stream << args[i*3+2];
+            }
+            stream << "],\n";
+            do_indent();
+            stream << "extent: [ ";
+            for (int i = 0; i < dims; i++) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                stream << args[i*3+3];
+            }
+            stream << "],\n";
+            do_indent();
+            stream << "stride: [ ";
+            for (int i = 0; i < dims; i++) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                stream << args[i*3+4];
+            }
+            do_indent();
+            stream << "elem_size: " << args[1] << ",\n";
+            do_indent();
+            stream << "host_dirty: false,\n";
+            do_indent();
+            stream << "dev_dirty: false,\n";
+            stream << "],\n};";
+        } else if (op->name == Call::extract_buffer_max) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << "(" << a0 << ".min[" << a1 << "] + " << a0 << ".extent[" << a1 << "] - 1)";
+        } else if (op->name == Call::extract_buffer_min) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << ".min[" << a1 << "]";
+        } else if (op->name == Call::set_host_dirty) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            do_indent();
+            stream << a0 << ".host_dirty = " << a1 << ";\n";
+            rhs << "0";
+        } else if (op->name == Call::set_dev_dirty) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            do_indent();
+            stream << a0 << ".dev_dirty = " << a1 << ";\n";
+            rhs << "0";
+        } else if (op->name == Call::abs) {
+            internal_assert(op->args.size() == 1);
+            string arg = print_expr(op->args[0]);
+            // TODO: Should this use Math.abs?
+            rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
+        } else if (op->name == Call::memoize_expr) {
+            internal_assert(op->args.size() >= 1);
+            string arg = print_expr(op->args[0]);
+            rhs << "(" << arg << ")";
+        } else if (op->name == Call::copy_memory) {
+            internal_assert(op->args.size() == 3);
+            string dest = print_expr(op->args[0]);
+            string src = print_expr(op->args[1]);
+            string size = print_expr(op->args[2]);
+            string index_var = unique_name("i");
+            stream << "for (var " << index_var << " = 0; " << index_var << " < " << size << "; " << index_var << "++) ";
+            open_scope();
+            do_indent();
+            stream << dest << "[" << index_var << "] = " << src << "[" << index_var << "];\n";
+            close_scope("memcpy");
+            rhs << dest;
+        } else if (op->name == Call::make_struct) {
+            // TODO: Figure out if this is at all useful in JavaScript
+            // and if it should be an array rather than an object.
+
+            // Emit a line something like:
+            // var foo = {f_0: 3.0f, char f_1: 'c', int f_2: 4 };
+
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+            do_indent();
+            string struct_name = unique_name('s');
+            stream << "var " << struct_name << " ";
+            open_scope();
+            for (size_t i = 0; i < op->args.size(); i++) {
+                do_indent();
+                if (i > 0) stream << ", ";
+                stream << "f_" << i << ": " << values[i];
+            }
+            close_scope("make_struct");
+            rhs << struct_name;
+        } else if (op->name == Call::stringify) {
+            string buf_name = unique_name('b');
+            do_indent();
+            stream << "var " << buf_name << " = \"\";\n";
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Type t = op->args[i].type();
+
+                if (op->args[i].as<StringImm>()) {
+                    stream << buf_name << ".concat(" << op->args[i] << ");\n";
+                } else if (t.is_handle()) {
+                    stream << buf_name << ".concat(\"<Object>\");\n";
+                } else {
+                    stream << buf_name << ".concat(" << op->args[i] << ".toString());\n";
+                }
+            }
+            rhs << buf_name;
+        } else {
+            // TODO: other intrinsics
+            internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
+        }
+
+    } else {
+        // Generic calls
+        vector<string> args(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            args[i] = print_expr(op->args[i]);
+        }
+        rhs << op->name << "(";
+
+        if (CodeGen::function_takes_user_context(op->name)) {
+            rhs << (have_user_context ? "__user_context_, " : "null, ");
+        }
+
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) rhs << ", ";
+            rhs << args[i];
+        }
+        rhs << ")";
+    }
+
+    print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::visit(const Load *op) {
+#if 0 // TODO: Figure out if this can ever result in a value changing cast.
+    bool type_cast_needed = !(allocations.contains(op->name) &&
+                              allocations.get(op->name) == op->type);
+#endif
+    ostringstream rhs;
+    rhs << print_name(op->name);
+    rhs << "["
+        << print_expr(op->index)
+        << "]";
+
+    print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::visit(const Store *op) {
+#if 0 // TODO: Figure out if this can ever result in a value changing cast.
+    Type t = op->value.type();
+
+    bool type_cast_needed = !(allocations.contains(op->name) &&
+                              allocations.get(op->name) == t);
+#endif
+
+    string id_index = print_expr(op->index);
+    string id_value = print_expr(op->value);
+    do_indent();
+
+    stream << print_name(op->name);
+    stream << "["
+           << id_index
+           << "] = "
+           << id_value
+           << ";\n";
+
+    cache.clear();
+}
+
+void CodeGen_JavaScript::visit(const Let *op) {
+    string id_value = print_expr(op->value);
+    Expr new_var = Variable::make(op->value.type(), id_value);
+    Expr body = substitute(op->name, new_var, op->body);
+    print_expr(body);
+}
+
+void CodeGen_JavaScript::visit(const Select *op) {
+    ostringstream rhs;
+    string true_val = print_expr(op->true_value);
+    string false_val = print_expr(op->false_value);
+    string cond = print_expr(op->condition);
+    rhs << "(" << cond
+        << " ? " << true_val
+        << " : " << false_val
+        << ")";
+    print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::visit(const LetStmt *op) {
+    string id_value = print_expr(op->value);
+    Expr new_var = Variable::make(op->value.type(), id_value);
+    Stmt body = substitute(op->name, new_var, op->body);
+    body.accept(this);
+}
+
+void CodeGen_JavaScript::visit(const AssertStmt *op) {
+    string id_cond = print_expr(op->condition);
+
+    do_indent();
+    // Halide asserts have different semantics to C asserts.  They're
+    // supposed to clean up and make the containing function return
+    // -1, so we can't use the C version of assert. Instead we convert
+    // to an if statement.
+
+    stream << "if (!" << id_cond << ") ";
+    open_scope();
+    string id_msg = print_expr(op->message);
+    do_indent();
+    stream << "halide_error("
+           << (have_user_context ? "__user_context_, " : "null, ")
+           << id_msg
+           << ");\n";
+    do_indent();
+    stream << "return -1;\n";
+    close_scope("");
+}
+
+void CodeGen_JavaScript::visit(const Pipeline *op) {
+
+    do_indent();
+    stream << "// produce " << op->name << '\n';
+    print_stmt(op->produce);
+
+    if (op->update.defined()) {
+        do_indent();
+        stream << "// update " << op->name << '\n';
+        print_stmt(op->update);
+    }
+
+    do_indent();
+    stream << "// consume " << op->name << '\n';
+    print_stmt(op->consume);
+}
+
+void CodeGen_JavaScript::visit(const For *op) {
+#if 0 // TODO: RiverTrail
+    if (op->for_type == For::Parallel) {
+        do_indent();
+        stream << "#pragma omp parallel for\n";
+    } else {
+        internal_assert(op->for_type == For::Serial)
+            << "Can only emit serial or parallel for loops to C\n";
+    }
+#endif
+
+    string id_min = print_expr(op->min);
+    string id_extent = print_expr(op->extent);
+
+    do_indent();
+    stream << "for (var "
+           << print_name(op->name)
+           << " = " << id_min
+           << "; "
+           << print_name(op->name)
+           << " < " << id_min
+           << " + " << id_extent
+           << "; "
+           << print_name(op->name)
+           << "++)\n";
+
+    open_scope();
+    op->body.accept(this);
+    close_scope("for " + print_name(op->name));
+
+}
+
+void CodeGen_JavaScript::visit(const Provide *op) {
+    internal_error << "Cannot emit Provide statements as JavaScript\n";
+}
+
+void CodeGen_JavaScript::visit(const Allocate *op) {
+    open_scope(); // TODO: this probably doesn't work right as JavaScript has ridiculous scoping. Either use Let or explicitly deallocate...
+
+    allocations.push(op->name, op->type);
+    string typed_array_name;
+    
+    internal_assert(op->type.is_float() || op->type.is_int() || op->type.is_uint()) << "Cannot allocate numeric type in JavaScript codegen.\n";
+    internal_assert(op->type.width == 1) << "Vector types not supported in JavaScript codegen.\n";
+    if (op->type.is_float()) {
+        if (op->type.bits == 32) {
+            typed_array_name = "Float32Array";
+        } else if (op->type.bits == 64) {
+            typed_array_name = "Float64Array";
+        } else {
+            user_error << "Only 32-bit and 64-bit floating-point types are supported in JavaScript.\n";
+        }
+    } else {
+        if (op->type.is_uint()) {
+            typed_array_name = "U";
+        }
+        switch (op->type.bits) {
+            case 8:
+              typed_array_name += "Int8Array";
+              break;
+            case 16:
+              typed_array_name += "Int16Array";
+              break;
+            case 32:
+              typed_array_name += "Int32Array";
+              break;
+            case 64:
+              user_error << "64-bit integers are not supported in JavaScript.\n";
+              break;
+            default:
+              break;
+        }
+    }
+
+    // TODO: Verify overflow is not a concern.
+    string allocation_size = print_expr(op->extents[0]);
+    for (size_t i = 1; i < op->extents.size(); i++) {
+        allocation_size = print_assignment(Float(64), allocation_size + " * " + print_expr(op->extents[i]));
+    }
+
+    stream << "var " << op->name << " = new " << typed_array_name << "(" << allocation_size << ");\n";
+    // TODO: Error handling?
+    heap_allocations.push(op->name, 0);
+    do_indent();
+
+    op->body.accept(this);
+
+    // Should have been freed internally
+    internal_assert(!heap_allocations.contains(op->name));
+
+    close_scope("alloc " + print_name(op->name));
+}
+
+void CodeGen_JavaScript::visit(const Free *op) {
+    stream << print_name(op->name) << " = undefined;"; // TODO: should this be null?
+    heap_allocations.pop(op->name);
+}
+
+void CodeGen_JavaScript::visit(const Realize *op) {
+    internal_error << "Cannot emit realize statements to JavaScript\n";
+}
+
+void CodeGen_JavaScript::visit(const IfThenElse *op) {
+    string cond_id = print_expr(op->condition);
+
+    do_indent();
+    stream << "if (" << cond_id << ")\n";
+    open_scope();
+    op->then_case.accept(this);
+    close_scope("if " + cond_id);
+
+    if (op->else_case.defined()) {
+        do_indent();
+        stream << "else\n";
+        open_scope();
+        op->else_case.accept(this);
+        close_scope("if " + cond_id + " else");
+    }
+}
+
+void CodeGen_JavaScript::visit(const Evaluate *op) {
+    string id = print_expr(op->value);
+    if (id == "0") {
+        // Skip evaluate(0) nodes. They're how we represent no-ops.
+        return;
+    }
+    do_indent();
+}
+
+void CodeGen_JavaScript::test() {
+#if 0
+    Argument buffer_arg("buf", true, Int(32));
+    Argument float_arg("alpha", false, Float(32));
+    Argument int_arg("beta", false, Int(32));
+    Argument user_context_arg("__user_context", false, Handle());
+    vector<Argument> args(4);
+    args[0] = buffer_arg;
+    args[1] = float_arg;
+    args[2] = int_arg;
+    args[3] = user_context_arg;
+    Var x("x");
+    Param<float> alpha("alpha");
+    Param<int> beta("beta");
+    Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
+    Stmt s = Store::make("buf", e, x);
+    s = LetStmt::make("x", beta+1, s);
+    s = Block::make(s, Free::make("tmp.stack"));
+    s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), const_true(), s);
+    s = Block::make(s, Free::make("tmp.heap"));
+    s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), s);
+
+    ostringstream source;
+    CodeGen_JavaScript cg(source);
+    cg.compile(s, "test1", args, vector<Buffer>());
+
+    string src = source.str();
+    string correct_source = preamble +
+        "\n\n"
+        "extern \"C\" int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) {\n"
+        "int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
+        "const bool _buf_host_and_dev_are_null = (_buf_buffer->host == null) && (_buf_buffer->dev == 0);\n"
+        "(void)_buf_host_and_dev_are_null;\n"
+        "const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
+        "(void)_buf_min_0;\n"
+        "const int32_t _buf_min_1 = _buf_buffer->min[1];\n"
+        "(void)_buf_min_1;\n"
+        "const int32_t _buf_min_2 = _buf_buffer->min[2];\n"
+        "(void)_buf_min_2;\n"
+        "const int32_t _buf_min_3 = _buf_buffer->min[3];\n"
+        "(void)_buf_min_3;\n"
+        "const int32_t _buf_extent_0 = _buf_buffer->extent[0];\n"
+        "(void)_buf_extent_0;\n"
+        "const int32_t _buf_extent_1 = _buf_buffer->extent[1];\n"
+        "(void)_buf_extent_1;\n"
+        "const int32_t _buf_extent_2 = _buf_buffer->extent[2];\n"
+        "(void)_buf_extent_2;\n"
+        "const int32_t _buf_extent_3 = _buf_buffer->extent[3];\n"
+        "(void)_buf_extent_3;\n"
+        "const int32_t _buf_stride_0 = _buf_buffer->stride[0];\n"
+        "(void)_buf_stride_0;\n"
+        "const int32_t _buf_stride_1 = _buf_buffer->stride[1];\n"
+        "(void)_buf_stride_1;\n"
+        "const int32_t _buf_stride_2 = _buf_buffer->stride[2];\n"
+        "(void)_buf_stride_2;\n"
+        "const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
+        "(void)_buf_stride_3;\n"
+        "const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
+        "{\n"
+        " int64_t _0 = 43;\n"
+        " int64_t _1 = _0 * _beta;\n"
+        " if ((_1 > ((int64_t(1) << 31) - 1)) || ((_1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
+        " {\n"
+        "  halide_error(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        "  return -1;\n"
+        " } // overflow test tmp.heap\n"
+        " int64_t _2 = _1;\n"
+        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_2);\n"
+        " {\n"
+        "  int32_t _tmp_stack[127];\n"
+        "  int32_t _3 = _beta + 1;\n"
+        "  int32_t _4;\n"
+        "  bool _5 = _3 < 1;\n"
+        "  if (_5)\n"
+        "  {\n"
+        "   char b0[1024];\n"
+        "   snprintf(b0, 1024, \"%lld%s\", (long long)(3), \"\\n\");\n"
+        "   void * _6 = b0;\n"
+        "   int32_t _7 = halide_print(__user_context_, _6);\n"
+        "   int32_t _8 = (_7, 3);\n"
+        "   _4 = _8;\n"
+        "  } // if _5\n"
+        "  else\n"
+        "  {\n"
+        "   _4 = 3;\n"
+        "  } // if _5 else\n"
+        "  int32_t _9 = _4;\n"
+        "  bool _10 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "  int32_t _11 = (int32_t)(_10 ? _9 : 2);\n"
+        "  _buf[_3] = _11;\n"
+        " } // alloc _tmp_stack\n"
+        " halide_free(__user_context_, _tmp_heap);\n"
+        "} // alloc _tmp_heap\n"
+        "return 0;\n"
+        "}\n";
+    if (src != correct_source) {
+        int diff = 0;
+        while (src[diff] == correct_source[diff]) diff++;
+        int diff_end = diff + 1;
+        while (diff > 0 && src[diff] != '\n') diff--;
+        while (diff_end < (int)src.size() && src[diff_end] != '\n') diff_end++;
+
+        internal_error
+            << "Correct source code:\n" << correct_source
+            << "Actual source code:\n" << src
+            << "\nDifference starts at: " << src.substr(diff, diff_end - diff) << "\n";
+
+    }
+
+
+    std::cout << "CodeGen_JavaScript test passed\n";
+#endif
+}
+
+}
+}
