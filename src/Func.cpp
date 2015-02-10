@@ -755,7 +755,7 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size, con
         user_assert(found)
             << "In schedule for " << stage.name()
             << ", could not find var " << vars[i].name()
-            << " to reorder in the argumemt list.\n"
+            << " to reorder in the argument list.\n"
             << stage.dump_argument_list();
     }
 

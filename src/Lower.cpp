@@ -1110,7 +1110,29 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     void visit(const For *op) {
         if (ends_with(op->name, ".__outermost")) {
-            stmt = op->body;
+            stmt = mutate(op->body);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent")) {
+            expr = 1;
+        } else if (ends_with(op->name, ".__outermost.loop_min")) {
+            expr = 0;
+        } else if (ends_with(op->name, ".__outermost.loop_max")) {
+            expr = 1;
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent") ||
+            ends_with(op->name, ".__outermost.loop_min") ||
+            ends_with(op->name, ".__outermost.loop_max")) {
+            stmt = mutate(op->body);
         } else {
             IRMutator::visit(op);
         }
