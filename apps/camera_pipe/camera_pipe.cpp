@@ -43,10 +43,6 @@ Func deinterleave(Func raw) {
     return deinterleaved;
 }
 
-Expr absd(Expr a, Expr b) {
-    return select(a > b, a - b, b - a);
-}
-
 Func demosaic(Func deinterleaved) {
     // These are the values we already know from the input
     // x_y = the value of channel x at a site in the input of channel y

@@ -1109,7 +1109,29 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     void visit(const For *op) {
         if (ends_with(op->name, ".__outermost")) {
-            stmt = op->body;
+            stmt = mutate(op->body);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent")) {
+            expr = 1;
+        } else if (ends_with(op->name, ".__outermost.loop_min")) {
+            expr = 0;
+        } else if (ends_with(op->name, ".__outermost.loop_max")) {
+            expr = 1;
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent") ||
+            ends_with(op->name, ".__outermost.loop_min") ||
+            ends_with(op->name, ".__outermost.loop_max")) {
+            stmt = mutate(op->body);
         } else {
             IRMutator::visit(op);
         }
@@ -1772,6 +1794,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = allocation_bounds_inference(s, env, func_bounds);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
+    debug(1) << "Removing code that depends on undef values...\n";
+    s = remove_undef(s);
+    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
+
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
     // equivalence means semantic equivalence.
@@ -1816,10 +1842,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
-
-    debug(1) << "Removing code that depends on undef values...\n";
-    s = remove_undef(s);
-    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);

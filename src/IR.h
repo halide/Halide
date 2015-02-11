@@ -627,6 +627,7 @@ struct Call : public ExprNode<Call> {
         shift_left,
         shift_right,
         abs,
+        absd,
         rewrite_buffer,
         profiling_timer,
         random,

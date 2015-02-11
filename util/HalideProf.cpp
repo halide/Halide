@@ -80,7 +80,7 @@ namespace {
     return std::string();
   }
 
-  void ProcessLine(const std::string& s, FuncInfoMap& info) {
+  void ProcessLine(const std::string& s, FuncInfoMap& info, bool accumulate_runs) {
     std::vector<std::string> v = Split(s, ' ');
     if (v.size() < 8) {
       return;
@@ -117,11 +117,11 @@ namespace {
     op_info.parent_type = parent_type;
     op_info.parent_name = parent_name;
     if (metric == "count") {
-      op_info.count = value;
+      op_info.count = (accumulate_runs ? op_info.count : 0) + value;
     } else if (metric == "ticks") {
-      op_info.ticks = value;
+      op_info.ticks = (accumulate_runs ? op_info.ticks : 0) + value;
     } else if (metric == "nsec") {
-      op_info.nsec = value;
+      op_info.nsec = (accumulate_runs ? op_info.nsec : 0) + value;
     }
   }
 
@@ -129,15 +129,19 @@ namespace {
 
   int64_t AdjustOverhead(OpInfo& op_info, ChildMap& child_map, double overhead_ticks_avg) {
     int64_t overhead_ticks = op_info.count * overhead_ticks_avg;
+
+    op_info.ticks_only -= overhead_ticks;
+
     std::string qual_name = qualified_name(op_info.op_type, op_info.op_name);
     const std::vector<OpInfo*>& children = child_map[qual_name];
     for (std::vector<OpInfo*>::const_iterator it = children.begin(); it != children.end(); ++it) {
       OpInfo* c = *it;
       int64_t child_overhead = AdjustOverhead(*c, child_map, overhead_ticks_avg);
       overhead_ticks += child_overhead;
-      op_info.ticks -= child_overhead;
-      op_info.ticks_only -= child_overhead;
     }
+
+    op_info.ticks -= overhead_ticks;
+
     return overhead_ticks;
   }
 
@@ -145,7 +149,6 @@ namespace {
 
     std::string toplevel_qual_name = qualified_name(kToplevel, kToplevel);
     OpInfo& total = op_info_map[toplevel_qual_name];
-    total.count = 1;
     total.percent = 1.0;
 
     double ticks_per_nsec = (double)total.ticks / (double)total.nsec;
@@ -214,7 +217,7 @@ namespace {
 int main(int argc, char** argv) {
 
   if (HasOpt(argv, argv + argc, "-h")) {
-    printf("HalideProf [-f funcname] [-sort c|t|to] [-top N] [-overhead=0|1] < profiledata\n");
+    printf("HalideProf [-f funcname] [-sort c|t|to] [-top N] [-overhead=0|1] [-accumulate=[0|1]] < profiledata\n");
     return 0;
   }
 
@@ -248,10 +251,16 @@ int main(int argc, char** argv) {
     std::istringstream(adjust_for_overhead_str) >> adjust_for_overhead;
   }
 
+  int32_t accumulate_runs = 0;
+  std::string accumulate_runs_str = GetOpt(argv, argv + argc, "-accumulate");
+  if (!accumulate_runs_str.empty()) {
+    std::istringstream(accumulate_runs_str) >> accumulate_runs;
+  }
+
   FuncInfoMap func_info_map;
   std::string line;
   while (std::getline(std::cin, line)) {
-    ProcessLine(line, func_info_map);
+    ProcessLine(line, func_info_map, accumulate_runs);
   }
 
   for (FuncInfoMap::iterator f = func_info_map.begin(); f != func_info_map.end(); ++f) {

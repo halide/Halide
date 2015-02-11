@@ -33,7 +33,6 @@ llvm::Triple CodeGen_PNaCl::get_target_triple() const {
     triple.setVendor(llvm::Triple::UnknownVendor);
     triple.setOS(llvm::Triple::NaCl);
     #endif
-
     return triple;
 }
 
@@ -47,6 +46,10 @@ string CodeGen_PNaCl::mattrs() const {
 
 bool CodeGen_PNaCl::use_soft_float_abi() const {
     return false;
+}
+
+int CodeGen_PNaCl::native_vector_bits() const {
+    return 128;
 }
 
 }}

@@ -17,19 +17,9 @@ public:
     /** Create an ARM code generator for the given arm target. */
     CodeGen_ARM(Target);
 
-    static void test();
-
-protected:
-
     llvm::Triple get_target_triple() const;
 
-    /** Generate a call to a neon intrinsic */
-    // @{
-    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);
-    llvm::Instruction *call_void_intrin(const std::string &name, std::vector<Expr>);
-    llvm::Instruction *call_void_intrin(const std::string &name, std::vector<llvm::Value *>);
-    // @}
+protected:
 
     using CodeGen_Posix::visit;
 
@@ -42,9 +32,6 @@ protected:
     void visit(const Mul *);
     void visit(const Min *);
     void visit(const Max *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const Select *);
     void visit(const Store *);
     void visit(const Load *);
     void visit(const Call *);
@@ -52,19 +39,25 @@ protected:
 
     /** Various patterns to peephole match against */
     struct Pattern {
-        std::string intrin;
-        Expr pattern;
-        enum PatternType {Simple = 0, LeftShift, RightShift, NarrowArgs};
+        std::string intrin; ///< Name of the intrinsic
+        int intrin_width;   ///< The native vector width of the intrinsic
+        Expr pattern;       ///< The pattern to match against
+        enum PatternType {Simple = 0, ///< Just match the pattern
+                          LeftShift,  ///< Match the pattern if the RHS is a const power of two
+                          RightShift, ///< Match the pattern if the RHS is a const power of two
+                          NarrowArgs  ///< Match the pattern if the args can be losslessly narrowed
+        };
         PatternType type;
         Pattern() {}
-        Pattern(std::string i, Expr p, PatternType t = Simple) : intrin(i), pattern(p), type(t) {}
+        Pattern(const std::string &i, int w, Expr p, PatternType t = Simple) :
+            intrin("llvm.arm.neon." + i), intrin_width(w), pattern(p), type(t) {}
     };
     std::vector<Pattern> casts, left_shifts, averagings, negations;
-
 
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
+    int native_vector_bits() const;
 };
 
 }}

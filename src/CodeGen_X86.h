@@ -22,20 +22,13 @@ public:
      * enabled using the appropriate flags in the target struct. */
     CodeGen_X86(Target);
 
-    static void test();
-
 protected:
 
     llvm::Triple get_target_triple() const;
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
-
-    /** Generate a call to an sse or avx intrinsic */
-    // @{
-    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);
-    // @}
+    int native_vector_bits() const;
 
     using CodeGen_Posix::visit;
 
@@ -47,6 +40,13 @@ protected:
     void visit(const Div *);
     void visit(const Min *);
     void visit(const Max *);
+    void visit(const GT *);
+    void visit(const LT *);
+    void visit(const LE *);
+    void visit(const GE *);
+    void visit(const EQ *);
+    void visit(const NE *);
+    void visit(const Select *);
     // @}
 };
 

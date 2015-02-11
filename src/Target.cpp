@@ -147,11 +147,13 @@ Target get_target_from_environment() {
 
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
+    host.set_feature(Target::JIT);
     string target = get_env("HL_JIT_TARGET");
     if (target.empty()) {
         return host;
     } else {
         Target t = parse_target_string(target);
+        t.set_feature(Target::JIT);
         user_assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits)
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
             << "HL_JIT_TARGET was " << target << ". "

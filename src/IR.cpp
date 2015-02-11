@@ -289,7 +289,7 @@ Expr Ramp::make(Expr base, Expr stride, int width) {
 Expr Broadcast::make(Expr value, int width) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
     internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
-    internal_assert(width > 1) << "Broadcast of width <= 1\n";
+    internal_assert(width != 1) << "Broadcast of width 1\n";
 
     Broadcast *node = new Broadcast;
     node->type = value.type().vector_of(width);
@@ -577,6 +577,7 @@ const string Call::bitwise_or = "bitwise_or";
 const string Call::shift_left = "shift_left";
 const string Call::shift_right = "shift_right";
 const string Call::abs = "abs";
+const string Call::absd = "absd";
 const string Call::lerp = "lerp";
 const string Call::random = "random";
 const string Call::rewrite_buffer = "rewrite_buffer";
