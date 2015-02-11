@@ -92,6 +92,36 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
 }
 
+
+void clone_target_options(const llvm::Module *from, llvm::Module *to) {
+    to->setTargetTriple(from->getTargetTriple());
+
+    llvm::LLVMContext &context = to->getContext();
+
+    bool use_soft_float_abi = false;
+    if (Internal::get_md_bool(from->getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi))
+        to->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
+
+    std::string mcpu;
+    if (Internal::get_md_string(from->getModuleFlag("halide_mcpu"), mcpu)) {
+#if LLVM_VERSION < 36
+        to->addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::ConstantDataArray::getString(context, mcpu));
+#else
+        to->addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
+#endif
+    }
+
+    std::string mattrs;
+    if (Internal::get_md_string(from->getModuleFlag("halide_mattrs"), mattrs)) {
+#if LLVM_VERSION < 36
+        to->addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::ConstantDataArray::getString(context, mattrs));
+#else
+        to->addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
+#endif
+    }
+}
+
+
 llvm::TargetMachine *get_target_machine(const llvm::Module *module) {
     string error_string;
 

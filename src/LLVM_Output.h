@@ -16,6 +16,7 @@ namespace Halide {
 
 /** Get given an llvm Module, get the target options by extracting the Halide metadata. */
 EXPORT void get_target_options(const llvm::Module *module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
+EXPORT void clone_target_options(const llvm::Module *from, llvm::Module *to);
 
 /** Generate an LLVM module. */
 EXPORT llvm::Module *output_llvm_module(const Module &module);

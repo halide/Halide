@@ -101,7 +101,7 @@ EXPORT bool collect_linear_terms(Expr e, std::vector<Term> &terms,
  * expressions for a particular variable. If the expression contains
  * logical conjunctives, then each proposition is solved
  * independently. It returns the solved expression if it succeeds,
- * otherwise it returns the inpute expression [e].
+ * otherwise it returns the input expression [e].
  */
 // @{
 EXPORT Expr solve_for_linear_variable(Expr e, Var x,

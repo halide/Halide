@@ -82,11 +82,42 @@ double divide(double x, double y) {
     return x/y;
 }
 
+template <typename A>
+A absd(A x, A y) {
+    return x > y ? x - y : y - x;
+}
+
 int mantissa(float x) {
     int bits = 0;
     memcpy(&bits, &x, 4);
     return bits & 0x007fffff;
 }
+
+template <typename T>
+struct with_unsigned {
+    typedef T type;
+};
+
+template <>
+struct with_unsigned<int8_t> {
+    typedef uint8_t type;
+};
+
+template <>
+struct with_unsigned<int16_t> {
+    typedef uint16_t type;
+};
+
+template <>
+struct with_unsigned<int32_t> {
+    typedef uint32_t type;
+};
+
+template <>
+struct with_unsigned<int64_t> {
+    typedef uint64_t type;
+};
+
 
 template<typename A>
 bool test(int vec_width) {
@@ -566,6 +597,23 @@ bool test(int vec_width) {
             A correct = (A)(lerped);
             if (im21(x, y) != correct) {
                 printf("lerp(%f, %f, %f) = %f instead of %f\n", a, b, w, (double)(im21(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Absolute difference
+    if (verbose) printf("Absolute difference\n");
+    Func f22;
+    f22(x, y) = absd(input(x, y), input(x+1, y));
+    f22.vectorize(x, vec_width);
+    Image<typename with_unsigned<A>::type> im22 = f22.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            typename with_unsigned<A>::type correct = absd((double)input(x, y), (double)input(x+1, y));
+            if (im22(x, y) != correct) {
+                printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im3(x, y)), (double)(correct));
                 return false;
             }
         }

@@ -17,11 +17,30 @@
 namespace Halide {
 namespace Internal {
 
+namespace Introspection {
 /** Get the name of a stack variable from its address. The stack
  * variable must be in a compilation unit compiled with -g to
  * work. The expected type helps distinguish between variables at the
  * same address, e.g a class instance vs its first member. */
 EXPORT std::string get_variable_name(const void *, const std::string &expected_type);
+
+/** Register an untyped heap object. Derive type information from an
+ * introspectable pointer to a pointer to a global object of the same
+ * type. Not thread-safe. */
+EXPORT void register_heap_object(const void *obj, size_t size, const void *helper);
+
+/** Deregister a heap object. Not thread-safe. */
+EXPORT void deregister_heap_object(const void *obj, size_t size);
+
+/** Return the address of a global with type T *. Call this to
+ * generate something to pass as the last argument to
+ * register_heap_object.
+ */
+template<typename T>
+const void *get_introspection_helper() {
+    static T *introspection_helper = NULL;
+    return &introspection_helper;
+}
 
 /** Get the source location in the call stack, skipping over calls in
  * the Halide namespace. */
@@ -31,6 +50,7 @@ EXPORT std::string get_source_location();
 // the code below. It tests if this functionality works for the given
 // compilation unit, and disables it if not.
 EXPORT void test_compilation_unit(bool (*test)(), void (*calib)());
+}
 
 }
 }
@@ -38,7 +58,7 @@ EXPORT void test_compilation_unit(bool (*test)(), void (*calib)());
 
 // This code verifies that introspection is working before relying on
 // it. The definitions must appear in Halide.h, but they should not
-// appear in libHalide itself. They're defined as weak so that clients
+// appear in libHalide itself. They're defined as static so that clients
 // can include Halide.h multiple times without link errors.
 #ifndef COMPILING_HALIDE
 
@@ -48,8 +68,8 @@ static bool check_introspection(const void *var, const std::string &type,
                                 const std::string &correct_name,
                                 const std::string &correct_file, int line) {
     std::string correct_loc = correct_file + ":" + int_to_string(line);
-    std::string loc = get_source_location();
-    std::string name = get_variable_name(var, type);
+    std::string loc = Introspection::get_source_location();
+    std::string name = Introspection::get_variable_name(var, type);
     return name == correct_name && loc == correct_loc;
 }
 }
@@ -107,7 +127,7 @@ static bool test() {
 namespace {
 struct TestCompilationUnit {
     TestCompilationUnit() {
-        Halide::Internal::test_compilation_unit(&test, &offset_marker);
+        Halide::Internal::Introspection::test_compilation_unit(&test, &offset_marker);
     }
 };
 }

@@ -68,5 +68,3 @@ INLINE double minval_f64() {
 }
 
 }
-
-

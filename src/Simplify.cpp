@@ -1772,6 +1772,16 @@ private:
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
 
+        // If both sides are no-ops, bail out.
+        if (is_no_op(then_case) && is_no_op(else_case)) {
+            stmt = then_case;
+            return;
+        }
+
+        // Remember the statements before substitution.
+        Stmt then_nosubs = then_case;
+        Stmt else_nosubs = else_case;
+
         // Mine the condition for useful constraints to apply (eg var == value && bool_param).
         std::vector<Expr> stack;
         stack.push_back(condition);
@@ -1779,21 +1789,6 @@ private:
         while (!stack.empty()) {
             Expr next = stack.back();
             stack.pop_back();
-            if (const And *a = next.as<And>()) {
-                if (!or_chain) {
-                    stack.push_back(a->b);
-                    stack.push_back(a->a);
-                    and_chain = true;
-                }
-                continue;
-            } else if (const Or *o = next.as<Or>()) {
-                if (!and_chain) {
-                    stack.push_back(o->b);
-                    stack.push_back(o->a);
-                    or_chain = true;
-                }
-                continue;
-            }
 
             if (!or_chain) {
                 then_case = substitute(next, const_true(), then_case);
@@ -1802,35 +1797,54 @@ private:
                 else_case = substitute(next, const_false(), else_case);
             }
 
-            const EQ *eq = next.as<EQ>();
-            const NE *ne = next.as<NE>();
-            const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
-
-            if (eq && var) {
+            if (const And *a = next.as<And>()) {
                 if (!or_chain) {
-                    then_case = substitute(var->name, eq->b, then_case);
+                    stack.push_back(a->b);
+                    stack.push_back(a->a);
+                    and_chain = true;
                 }
-                if (!and_chain && eq->b.type().is_bool()) {
-                    else_case = substitute(var->name, !eq->b, then_case);
-                }
-            } else if (var) {
-                if (!or_chain) {
-                    then_case = substitute(var->name, const_true(), then_case);
-                }
+            } else if (const Or *o = next.as<Or>()) {
                 if (!and_chain) {
-                    else_case = substitute(var->name, const_false(), else_case);
+                    stack.push_back(o->b);
+                    stack.push_back(o->a);
+                    or_chain = true;
                 }
-            } else if (eq && is_const(eq->b) && !or_chain) {
-                // some_expr = const
-                then_case = substitute(eq->a, eq->b, then_case);
-            } else if (ne && is_const(ne->b) && !and_chain) {
-                // some_expr != const
-                else_case = substitute(ne->a, ne->b, else_case);
+            } else {
+                const EQ *eq = next.as<EQ>();
+                const NE *ne = next.as<NE>();
+                const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
+
+                if (eq && var) {
+                    if (!or_chain) {
+                        then_case = substitute(var->name, eq->b, then_case);
+                    }
+                    if (!and_chain && eq->b.type().is_bool()) {
+                        else_case = substitute(var->name, !eq->b, then_case);
+                    }
+                } else if (var) {
+                    if (!or_chain) {
+                        then_case = substitute(var->name, const_true(), then_case);
+                    }
+                    if (!and_chain) {
+                        else_case = substitute(var->name, const_false(), else_case);
+                    }
+                } else if (eq && is_const(eq->b) && !or_chain) {
+                    // some_expr = const
+                    then_case = substitute(eq->a, eq->b, then_case);
+                } else if (ne && is_const(ne->b) && !and_chain) {
+                    // some_expr != const
+                    else_case = substitute(ne->a, ne->b, else_case);
+                }
             }
         }
 
-        then_case = mutate(then_case);
-        else_case = mutate(else_case);
+        // If substitutions have been made, simplify again.
+        if (!then_case.same_as(then_nosubs)) {
+            then_case = mutate(then_case);
+        }
+        if (!else_case.same_as(else_nosubs)) {
+            else_case = mutate(else_case);
+        }
 
         if (condition.same_as(op->condition) &&
             then_case.same_as(op->then_case) &&
@@ -2263,6 +2277,11 @@ private:
             bounds_info.pop(op->name);
         }
 
+        if (is_no_op(new_body)) {
+            stmt = new_body;
+            return;
+        }
+
         if (op->min.same_as(new_min) &&
             op->extent.same_as(new_extent) &&
             op->body.same_as(new_body)) {
@@ -2311,9 +2330,10 @@ private:
             const IfThenElse *if_rest = rest.as<IfThenElse>();
 
             // Check if first is a no-op.
-            const AssertStmt *noop = first.as<AssertStmt>();
-            if (noop && is_const(noop->condition, 1)) {
+            if (is_no_op(first)) {
                 stmt = rest;
+            } else if (is_no_op(rest)) {
+                stmt = first;
             } else if (let_first && let_rest &&
                        equal(let_first->value, let_rest->value)) {
 
@@ -2851,59 +2871,59 @@ void simplify_test() {
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(x + y),
-                           Evaluate::make(x - y)),
+                           Evaluate::make(z + x + y),
+                           Evaluate::make(z + x - y)),
           IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(9),
-                           Evaluate::make(x - y)));
+                           Evaluate::make(z + 9),
+                           Evaluate::make(z + x - y)));
 
     // Check ored conditions apply to the else case only
     Expr b1 = Variable::make(Bool(), "b1");
     Expr b2 = Variable::make(Bool(), "b2");
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(Select::make(b1, 3, 4) + Select::make(b2, 5, 7)),
-                           Evaluate::make(Select::make(b1, 3, 8) - Select::make(b2, 5, 7))),
+                           Evaluate::make(Select::make(b1, x+3, x+4) + Select::make(b2, x+5, x+7)),
+                           Evaluate::make(Select::make(b1, x+3, x+8) - Select::make(b2, x+5, x+7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(Select::make(b1, 3, 4) + Select::make(b2, 5, 7)),
+                           Evaluate::make(Select::make(b1, x+3, x+4) + Select::make(b2, x+5, x+7)),
                            Evaluate::make(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
     check(IfThenElse::make(b1,
-                           Evaluate::make(Select::make(b1, 3, 4)),
-                           Evaluate::make(Select::make(b1, 5, 8))),
+                           Evaluate::make(Select::make(b1, x, y)),
+                           Evaluate::make(Select::make(b1, z, w))),
           IfThenElse::make(b1,
-                           Evaluate::make(3),
-                           Evaluate::make(8)));
+                           Evaluate::make(x),
+                           Evaluate::make(w)));
 
     check(IfThenElse::make(x < y,
-                           IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(0)),
-                           Evaluate::make(0)),
+                           IfThenElse::make(x < y, Evaluate::make(y), Evaluate::make(x)),
+                           Evaluate::make(x)),
           IfThenElse::make(x < y,
-                           Evaluate::make(1),
-                           Evaluate::make(0)));
+                           Evaluate::make(y),
+                           Evaluate::make(x)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(2)),
-                      IfThenElse::make(x < y, Evaluate::make(3), Evaluate::make(4))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
+                      IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(1), Evaluate::make(3)),
-                           Block::make(Evaluate::make(2), Evaluate::make(4))));
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
+                           Block::make(Evaluate::make(x+2), Evaluate::make(x+4))));
 
     // Check conditions involving entire exprs
     Expr foo = x + 3*y;
     Expr foo_simple = x + y*3;
     check(IfThenElse::make(foo == 17,
-                           Evaluate::make(foo+1),
-                           Evaluate::make(foo+2)),
+                           Evaluate::make(x+foo+1),
+                           Evaluate::make(x+foo+2)),
           IfThenElse::make(foo_simple == 17,
-                           Evaluate::make(18),
-                           Evaluate::make(foo_simple+2)));
+                           Evaluate::make(x+18),
+                           Evaluate::make(x+foo_simple+2)));
 
     check(IfThenElse::make(foo != 17,
-                           Evaluate::make(foo+1),
-                           Evaluate::make(foo+2)),
+                           Evaluate::make(x+foo+1),
+                           Evaluate::make(x+foo+2)),
           IfThenElse::make(foo_simple != 17,
-                           Evaluate::make(foo_simple+1),
-                           Evaluate::make(19)));
+                           Evaluate::make(x+foo_simple+1),
+                           Evaluate::make(x+19)));
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);

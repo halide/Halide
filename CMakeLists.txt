@@ -16,48 +16,6 @@ set(LLVM_INCLUDE "llvm3.2/include/"
   CACHE PATH "Path to LLVM include directory")
 set(LLVM_VERSION "32" CACHE STRING "First two digits of LLVM version (omitting '.')")
 
-#message(STATUS "Gathering LLVM information")
-#execute_process(
-#  COMMAND ${LLVM_CONFIG} --components
-#  OUTPUT_VARIABLE LLVM_COMPONENTS)
-#message(STATUS "LLVM_COMPONENTS: ${LLVM_COMPONENTS}")
-
-#execute_process(
-#  COMMAND ${LLVM_CONFIG} --version
-#  OUTPUT_VARIABLE LLVM_VERSION)
-#message(STATUS "LLVM_VERSION: ${LLVM_VERSION}")
-
-#execute_process(
-#  COMMAND ${LLVM_CONFIG} --bindir
-#  OUTPUT_VARIABLE LLVM_BINDIR)
-#message(STATUS "LLVM_BINDIR: ${LLVM_BINDIR}")
-
-#execute_process(
-#  COMMAND ${LLVM_CONFIG} --libdir
-#  OUTPUT_VARIABLE LLVM_LIBDIR)
-#message(STATUS "LLVM_LIBDIR: ${LLVM_LIBDIR}")
-
-# llvm_config doesn't always point to the correct include
-# directory. We haven't figured out why yet.
-#execute_process(
-#  COMMAND ${LLVM_CONFIG} --cppflags
-#  OUTPUT_VARIABLE LLVM_CXX_FLAGS)
-#message(STATUS "LLVM_CXX_FLAGS: ${LLVM_CXX_FLAGS}")
-
-#execute_process(
-#  COMMAND ${CLANG_PATH} --version
-#  OUTPUT_VARIABLE CLANG_VERSION)
-#message(STATUS "CLANG_VERSION: ${CLANG_VERSION}")
-
-set(OPTIMIZE "-O3"
-  CACHE STRING "Optimization level")
-
-#if (${LLVM_COMPONENTS} MATCHES x86)
-#  set(WITH_X86 ON)
-#else()
-#  set(WITH_X86 OFF)
-#endif()
-
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
 file(TO_NATIVE_PATH "${LLVM_BIN}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
@@ -83,6 +41,7 @@ if (WIN32)
   list(APPEND PROJECT_LIBS Kernel32)
   add_definitions("/wd4244 /wd4267 /wd4800 /wd4996 /wd4305 /wd4146")
 endif()
+
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})

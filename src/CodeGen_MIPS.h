@@ -29,6 +29,7 @@ protected:
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
+    int native_vector_bits() const;
 };
 
 }}

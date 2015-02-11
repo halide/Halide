@@ -9,20 +9,9 @@
 #pragma warning(push, 0)
 #endif
 
-// LLVM is moving to MCJIT as the only JIT, however MCJIT doesn't seem
-// to work right on os x for some older versions of llvm, and doesn't
-// work on Windows at all.
-#if LLVM_VERSION >= 36 || (!defined(_WIN32) && !defined(__APPLE__))
-#define USE_MCJIT
-#endif
-
-#ifdef USE_MCJIT
 #include <llvm/ExecutionEngine/MCJIT.h>
-#else
-#include <llvm/ExecutionEngine/JIT.h>
-#endif
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/ExecutionEngine/JITEventListener.h>
-
 
 #if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
@@ -45,7 +34,11 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/DataExtractor.h>
+#if LLVM_VERSION > 36
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#else
 #include <llvm/Target/TargetLibraryInfo.h>
+#endif
 #include <llvm/Target/TargetSubtargetInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>

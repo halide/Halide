@@ -78,7 +78,7 @@ struct ErrorReport {
         msg(NULL), file(f), condition_string(cs), line(l), condition(c), user(u), warning(w), runtime(r) {
         if (condition) return;
         msg = new std::ostringstream;
-        const std::string &source_loc = get_source_location();
+        const std::string &source_loc = Introspection::get_source_location();
 
         if (user) {
             // Only mention where inside of libHalide the error tripped if we have debug level > 0

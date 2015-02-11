@@ -55,9 +55,6 @@ public:
 
     static CodeGen_LLVM *new_for_target(const Target &target);
 
-    /** Initialize internal llvm state for the enabled targets. */
-    static void initialize_llvm();
-
     /** Takes a halide statement and compiles it to an llvm module held
      * internally. Call this before calling compile_to_bitcode or
      * compile_to_native. */
@@ -87,6 +84,13 @@ protected:
     virtual bool use_soft_float_abi() const = 0;
     // @}
 
+    // What's the natural vector bit-width to use for loads, stores, etc.
+    // @{
+    virtual int native_vector_bits() const = 0;
+    // @}
+
+    /** Initialize internal llvm state for the enabled targets. */
+    static void initialize_llvm();
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
@@ -165,6 +169,12 @@ protected:
     Expr wild_f32x2; // 64-bit floats
     Expr wild_f32x4, wild_f64x2; // 128-bit floats
     Expr wild_f32x8, wild_f64x4; // 256-bit floats
+
+    // Wildcards for a varying number of lanes.
+    Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
+    Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
+    Expr wild_f32x_, wild_f64x_;
+
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;
@@ -328,12 +338,54 @@ protected:
      * guarantee their alignment) */
     std::set<std::string> might_be_misaligned;
 
+    /** The user_context argument. May be a constant null if the
+     * function is being compiled without a user context. */
     llvm::Value *get_user_context() const;
 
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(Type, const std::vector<Expr>&);
+    llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+
+    /** Generate a call to a vector intrinsic or runtime inlined
+     * function. The arguments are sliced up into vectors of the width
+     * given by 'intrin_vector_width', the intrinsic is called on each
+     * piece, then the results (if any) are concatenated back together
+     * into the original type 't'. For the version that takes an
+     * llvm::Type *, the type may be void, so the vector width of the
+     * arguments must be specified explicitly as
+     * 'called_vector_width'. */
+    // @{
+    llvm::Value *call_intrin(Type t, int intrin_vector_width,
+                             const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_vector_width,
+                             const std::string &name, std::vector<llvm::Value *>);
+    // @}
+
+    /** Take a slice of lanes out of an llvm vector. Pads with undefs
+     * if you ask for more lanes than the vector has. */
+    llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
+
+    /** Concatenate a bunch of llvm vectors. Must be of the same type. */
+    llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+
+    /** Go looking for a vector version of a runtime function. Will
+     * return the best match. Matches in the following order:
+     *
+     * 1) The requested vector width.
+     *
+     * 2) The width which is the smallest power of two
+     * greater than or equal to the vector width.
+     *
+     * 3) All the factors of 2) greater than one, in decreasing order.
+     *
+     * 4) The smallest power of two not yet tried.
+     *
+     * So for a 5-wide vector, it tries: 5, 8, 4, 2, 16.
+     *
+     * If there's no match, returns (NULL, 0).
+     */
+    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
 
 private:
 
