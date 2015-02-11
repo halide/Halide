@@ -107,17 +107,6 @@ public:
     /** Convert this buffer to an argument to a halide pipeline. */
     EXPORT operator Argument() const;
 
-    /** Declare that this buffer was created by the given jit-compiled
-     * module. Used internally for reference counting the module.
-     * TODO: all source_module support can be removed after gpu_api_naming
-     * branch is merged. */
-    EXPORT void set_source_module(const Internal::JITModule &module);
-
-    /** If this buffer was the output of a jit-compiled realization,
-     * retrieve the module it came from. Otherwise returns a module
-     * struct full of null pointers. */
-    EXPORT const Internal::JITModule &source_module();
-
     /** If this buffer was created *on-device* by a jit-compiled
      * realization, then copy it back to the cpu-side memory. This is
      * usually achieved by casting the Buffer to an Image. */

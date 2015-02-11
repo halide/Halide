@@ -229,7 +229,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     err = clGetPlatformIDs(max_platforms, platforms, &platform_count);
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clGetPlatformIDs failed: "
-                            << get_opencl_error_name(err);
+                            << get_opencl_error_name(err) << " " << err;
         return err;
     }
 
@@ -278,7 +278,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     // Get the types of devices requested.
     cl_device_type device_type = 0;
     const char * dev_type = halide_opencl_get_device_type(user_context);
-    if (dev_type != NULL) {
+    if (dev_type != NULL && *dev_type != '\0') {
         if (strstr(dev_type, "cpu")) {
             device_type |= CL_DEVICE_TYPE_CPU;
         }

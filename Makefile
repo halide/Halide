@@ -236,6 +236,7 @@ SOURCE_FILES = \
   DebugToFile.cpp \
   Deinterleave.cpp \
   Derivative.cpp \
+  DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
   ExprUsesVar.cpp \
@@ -329,6 +330,7 @@ HEADER_FILES = \
   DebugToFile.h \
   Deinterleave.h \
   Derivative.h \
+  DeviceInterface.h \
   EarlyFree.h \
   Error.h \
   ExprUsesVar.h \
