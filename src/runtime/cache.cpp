@@ -420,7 +420,10 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     // The size of buffer_t for pointer math is apparently slightly
     // larger than sizeof(buffer_t) on 32-bit windows. There's some
     // padding between elements when they're in an array that isn't
-    // captured by sizeof.
+    // captured by sizeof. This is presumably because clang evaluates
+    // sizeof at initial module construction, and the math below turns
+    // into a getelementptr llvm instruction. There must be a mismatch
+    // in struct padding settings between the two.
     size_t extra_buffer_t_size = (size_t)(((buffer_t *)0) + 1);
 
     void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + extra_buffer_t_size * (tuple_count - 1));
