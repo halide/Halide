@@ -70,6 +70,8 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
     wild_u64x4(Variable::make(UInt(64, 4), "*")),
 
     wild_i32x16(Variable::make(Int(32, 16), "*")),
+    wild_i8x64(Variable::make(Int(8, 64), "*")),
+
     wild_f32x2(Variable::make(Float(32, 2), "*")),
 
     wild_f32x4(Variable::make(Float(32, 4), "*")),

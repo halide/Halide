@@ -46,6 +46,7 @@ protected:
     /* /\** Nodes for which we want to emit specific neon intrinsics *\/ */
     /* // @{ */
     void visit(const Add *);
+    void visit(const Sub *);
     void visit(const Broadcast *);
 
     /* // @} */

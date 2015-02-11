@@ -55,8 +55,18 @@ using namespace llvm;
   std::vector<Pattern> casts, varith;
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
-  varith.push_back(Pattern(wild_i32x16 + wild_i32x16, Intrinsic::hexagon_V6_vaddw));
-}
+  varith.push_back(Pattern(wild_i32x16 + wild_i32x16,
+                           Intrinsic::hexagon_V6_vaddw));
+  varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
+                           Intrinsic::hexagon_V6_vaddb));
+  varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
+                           Intrinsic::hexagon_V6_vaddb));
+  varith.push_back(Pattern(wild_i32x16 - wild_i32x16,
+                           Intrinsic::hexagon_V6_vsubw));
+  //i8*64 - i8*64 i.e. hexagon_v6_vsubb
+  varith.push_back(Pattern(wild_i8x64 - wild_i8x64,
+                           Intrinsic::hexagon_V6_vsubb));
+ }
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
                           const vector<Argument> &args,
@@ -125,24 +135,33 @@ static bool canUseVadd(const Add *op) {
   return false;
 }
 
+
 void CodeGen_Hexagon::visit(const Add *op) {
-  // if (canUseVadd(op)) {
-  //   Intrinsic::ID ID = Intrinsic::hexagon_V6_vaddw;
-  //   llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-  //   Value *Op1 = codegen(op->a);
-  //   Value *Op2 = codegen(op->b);
-  //   value = builder->CreateCall2(F, Op1, Op2);
-  // }
-  // else
   vector<Expr> matches;
   for (size_t I = 0; I < varith.size(); ++I) {
     const Pattern &P = varith[I];
     if (expr_match(P.pattern, op, matches)) {
         Intrinsic::ID ID = P.ID;
+        bool BitCastNeeded = false;
+        llvm::Type *BitCastBackTo;
         llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-        Value *Op1 = codegen(matches[0]);
-        Value *Op2 = codegen(matches[1]);
-        value = builder->CreateCall2(F, Op1, Op2);
+        llvm::FunctionType *FType = F->getFunctionType();
+        Value *Lt = codegen(matches[0]);
+        Value *Rt = codegen(matches[1]);
+        llvm::Type *T0 = FType->getParamType(0);
+        llvm::Type *T1 = FType->getParamType(1);
+        if (T0 != Lt->getType()) {
+          BitCastBackTo = Lt->getType();
+          Lt = builder->CreateBitCast(Lt, T0);
+          BitCastNeeded = true;
+        }
+        if (T1 != Rt->getType())
+          Rt = builder->CreateBitCast(Rt, T1);
+        Value *Call = builder->CreateCall2(F, Lt, Rt);
+        if (BitCastNeeded)
+          value = builder->CreateBitCast(Call, BitCastBackTo);
+        else
+          value = Call;
         return;
       }
   }
@@ -150,6 +169,38 @@ void CodeGen_Hexagon::visit(const Add *op) {
   return;
 }
 
+void CodeGen_Hexagon::visit(const Sub *op) {
+  vector<Expr> matches;
+  for (size_t I = 0; I < varith.size(); ++I) {
+    const Pattern &P = varith[I];
+    if (expr_match(P.pattern, op, matches)) {
+        Intrinsic::ID ID = P.ID;
+        bool BitCastNeeded = false;
+        llvm::Type *BitCastBackTo;
+        llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+        llvm::FunctionType *FType = F->getFunctionType();
+        Value *Lt = codegen(matches[0]);
+        Value *Rt = codegen(matches[1]);
+        llvm::Type *T0 = FType->getParamType(0);
+        llvm::Type *T1 = FType->getParamType(1);
+        if (T0 != Lt->getType()) {
+          BitCastBackTo = Lt->getType();
+          Lt = builder->CreateBitCast(Lt, T0);
+          BitCastNeeded = true;
+        }
+        if (T1 != Rt->getType())
+          Rt = builder->CreateBitCast(Rt, T1);
+        Value *Call = builder->CreateCall2(F, Lt, Rt);
+        if (BitCastNeeded)
+          value = builder->CreateBitCast(Call, BitCastBackTo);
+        else
+          value = Call;
+        return;
+      }
+  }
+  CodeGen::visit(op);
+  return;
+}
   void CodeGen_Hexagon::visit(const Broadcast *op) {
     //    int Width = op->width;
     Expr WildI32 = Variable::make(Int(32), "*");
