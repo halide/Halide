@@ -71,7 +71,7 @@ WEAK size_t full_extent(const buffer_t &buf) {
 }
 
 WEAK void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
-    size_t buffer_size = full_extent(from);;
+    size_t buffer_size = full_extent(from);
     halide_assert(user_context, from.elem_size == to.elem_size);
     for (int i = 0; i < 4; i++) {
         halide_assert(user_context, from.extent[i] == to.extent[i]);
@@ -417,7 +417,13 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     current_cache_size += added_size;
     prune_cache();
 
-    void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
+    // The size of buffer_t for pointer math is apparently slightly
+    // larger than sizeof(buffer_t) on 32-bit windows. There's some
+    // padding between elements when they're in an array that isn't
+    // captured by sizeof.
+    size_t extra_buffer_t_size = (size_t)(((buffer_t *)0) + 1);
+
+    void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + extra_buffer_t_size * (tuple_count - 1));
 
     CacheEntry *new_entry = (CacheEntry *)entry_storage;
     new_entry->init(cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
