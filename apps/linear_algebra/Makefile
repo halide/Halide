@@ -12,9 +12,17 @@ OPENBLAS_LIBS ?= -lopenblas
 
 # ATLAS should be built and installed locally to get the best performance.
 # It is designed to automatically tune its performance to your machine during
-# the build. Get the source code here: http://math-atlas.sourceforge.net/
-ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
-ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
+# the build. Get the source code here: http://math-atlas.sourceforge.net/,
+# then set the flags below to point to your local build of ATLAS.
+#
+# For example:
+# ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
+# ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
+
+# By default use whatever ATLAS is installed, so that this at least builds.
+$(warning Warning: Defaulting to system ATLAS, which may be slow. See the Makefile for details.)
+ATLAS_FLAGS ?= -DUSE_ATLAS
+ATLAS_LIBS ?= -lcblas
 
 KERNEL_DIR = src/kernels
 KERNELS = \
