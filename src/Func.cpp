@@ -2466,11 +2466,6 @@ void Func::realize(Realization dst, const Target &target) {
     int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
-    // TODO: Remove after Buffer is sorted out.
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
-    }
-
     jit_context.finalize(exit_status);
 }
 
@@ -2627,11 +2622,6 @@ void Func::infer_input_bounds(Realization dst) {
             j++;
             image_param_args[i].second.set_buffer(buffer);
         }
-    }
-
-    // TODO: Remove after Buffer is sorted out.
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
     }
 }
 
