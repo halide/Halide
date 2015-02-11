@@ -740,17 +740,16 @@ Matrix::operator Func() {
         const_size(m, n);
 
         // debug(0) << "Defining expr for " << m << "x" << n << " matrix:\n";
-        Expr mat = cast(type(), 0);
+        vector<Expr> args(2);
+        func.define(matrix_args(*this), vec(undef(type())));
         for (int j = 0; j < n; ++j ) {
-            for (int i = 0; i < n; ++i ) {
-                const int idx = small_offset(i, j);
-                mat = select(row_var() == i && col_var() == j,
-                             coeffs[idx], mat);
-                // debug(0) << "("<<i<<","<<j<<"): " << simplify(mat) << "\n";
+            args[1] = j;
+            for (int i = 0; i < m; ++i ) {
+                args[0] = i;
+                int idx = small_offset(i, j);
+                func.define_update(args, vec(coeffs[idx]));
             }
         }
-
-        func.define(matrix_args(*this), vec(mat));
     }
 
     return Func(func);
@@ -1059,13 +1058,16 @@ Matrix Matrix::col(Expr j) {
 }
 
 Matrix Matrix::transpose() {
-    string result_name = strip(this->name()) + "_t";
+    string result_name = strip(this->name()) + "t";
 
     if (is_large) {
+        Var i = row_var();
+        Var j = col_var();
         Matrix &A = *this;
-        Matrix A_t(ncols, nrows, A.type(), result_name);
-        A_t(row_var(), col_var()) = A(col_var(), row_var());
-        return A_t;
+        Matrix At(ncols, nrows, A.type(), result_name);
+        At(i, j) = A(j, i);
+        At.partition(4).vectorize().unroll_cols();
+        return At;
     } else {
         const int m = *as_const_int(nrows);
         const int n = *as_const_int(ncols);
@@ -1225,10 +1227,15 @@ Matrix operator+(Matrix A, Matrix B) {
     string result_name = strip(A.name()) + "_plus_" + strip(B.name());
 
     if (A.is_large_matrix()) {
+        Expr vec_size = 8;
+
         Matrix sum(A.num_rows(), A.num_cols(), A.type(), result_name);
         Var i = sum.row_var();
         Var j = sum.col_var();
         sum(i, j) = A(i, j) + B(i, j);
+        sum.partition(vec_size).vectorize();
+        A.compute_at_rows(sum.get_partition());
+        B.compute_at_rows(sum.get_partition());
         return sum;
     } else {
         Tuple sum = A;
@@ -1362,87 +1369,82 @@ Matrix operator*(Matrix A, Matrix B) {
     }
 
     const int  vec_size = 8;
-    const int  l1_size = 2;
-    const int  l2_size = 2;
-    // const int  tile_size = 4;
-    const int  block_size = 32;
-
-    const Expr sum_size = A.num_cols();
-    const Expr proxy_size = ((sum_size + block_size - 1) / block_size) * block_size;
 
     Var i = A.row_var();
-    Var j = A.col_var();
-#if 1
-    Var bi("bi"), bj("bj");
-    RDom k(0, proxy_size);
-    RVar ki, kii;
+    Var j = B.col_var();
+    Var k("k");
 
-    Func A_mat("A_mat");
-    A_mat(i, j) = select(i < prod_nrows,
-                  select(j < sum_size, A(i, j),
-                         select(i == j, 1.0f, 0.0f)),
-                         select(i == j, 1.0f, 0.0f));
+    const Expr sum_size = A.num_cols();
+    const Expr sum_size_vec = sum_size / vec_size;
+
+    Matrix At = A.transpose();
+    Func At_mat("At_mat");
+    At_mat(i, j) = At(i, j);
 
     Func B_mat("B_mat");
-    B_mat(i, j) = select(i < sum_size,
-                  select(j < prod_ncols, B(i, j),
-                         select(i == j, 1.0f, 0.0f)),
-                         select(i == j, 1.0f, 0.0f));
+    B_mat(i, j) = B(i, j);
 
     Func prod("prod");
-    prod(i, j) += A_mat(i, k) * B_mat(k, j);
+    prod(k, i, j) = At_mat(k, i) * B_mat(k, j);
 
-    Matrix C(prod_nrows, prod_ncols, prod, result_name);
-    C.partition(vec_size).vectorize()
-        .partition(l1_size)
-        .partition(l2_size).parallel_cols();
+    Func accum_vecs("accum_vecs");
+    RDom rv(0, sum_size_vec, "rv");
+    accum_vecs(k, i, j) += prod(rv * vec_size + k, i, j);
 
-    // prod.tile(i, j, bi, bj, block_size, block_size).parallel(j)
-    //     .vectorize(bi, vec_size).unroll(bi);
+    Func accum_vecs_transpose("accum_vecs_transpose");
+    accum_vecs_transpose(i, j, k) = accum_vecs(k, i, j);
 
-    Partition base = C.get_partition().get_level(0);
-    Partition vecs = C.get_partition().get_level(1);
-    Partition l1 = C.get_partition().get_level(2);
-    Partition l2 = C.get_partition().get_level(3);
-    base.rename_row(l2.row_var());
-    vecs.rename_row(l2.row_var());
-    l1.rename_row(l2.row_var());
-    prod.compute_at(C, l2.row_var())
-        .vectorize(i, vec_size).unroll(i);
-    prod.update(0)
-        .split(k, k, ki, block_size)
-        // .split(ki, ki, kii, l2_size)
-        .reorder(i, ki, j, k)
-        .vectorize(i, vec_size).unroll(i);
+    Func sum_lanes("sum_lanes");
+    RDom lanes(0, vec_size);
+    sum_lanes(i, j) += accum_vecs_transpose(i, j, lanes);
 
-    A_mat.compute_at(prod, k).vectorize(i, vec_size).unroll(i);
-    B_mat.compute_at(prod, k).vectorize(i, vec_size).unroll(i);
+    Func sum_tail("sum_tail");
+    RDom tail(sum_size_vec * vec_size, sum_size - sum_size_vec * vec_size);
+    sum_tail(i, j)  = sum_lanes(i, j);
+    sum_tail(i, j) += prod(tail, i, j);
 
-    // const int vec_size  = 32 / A.type().bytes();
-    // const int tile_size = 4;
-    // // const int block_size = vec_size * tile_size;
-#else
-    Matrix prod(prod_nrows, prod_ncols, A.type(), "prod");
-    Matrix C(prod_nrows, prod_ncols, A.type(), result_name);
+    Func result("result");
+    result(i, j) = sum_tail(i, j);
 
-    RDom k(0, A.num_cols(), "k");
-    prod(i, j) += A(i, k) * B(k, j);
-    C(i, j) = prod(i, j);
+    Matrix C(prod_nrows, prod_ncols, result, result_name);
+    C.partition(32).partition(2).parallel_cols();
 
-    C.partition(block_size)/*.partition(4)*/.parallel_rows();
-    prod.compute_at_rows(C.get_partition().get_level(1))
-        .partition(vec_size).vectorize();
+    Partition blocks = C.get_partition().get_level(0);
+    Var x = blocks.row_var();
 
-    Partition prod_part = prod.get_partition(1);
-    prod_part.partition(vec_size).vectorize()//.unroll_cols()
-             .partition(tile_size);//.unroll_rows();
+    Var ii("ii"), ji("ji");
+    Var bi("bi"), bj("bj");
+    result.compute_at(C, x)
+            .specialize(sum_size == (sum_size / vec_size) * vec_size)
+            .specialize(prod_nrows >= 4 && prod_ncols >= 2)
+            .tile(i, j, ii, ji, 4, 2).vectorize(ii).unroll(ji)
+            .specialize(prod_nrows >= 8 && prod_ncols >= 8)
+            .tile(i, j, bi, bj, i, j, 2, 4);
 
-    A.compute_at_rows(prod_part.get_level(2))
-            .partition(vec_size, 1).vectorize();
+    result.compute_at(C, x)
+            .specialize(prod_nrows >= 4 && prod_ncols >= 2)
+            .tile(i, j, ii, ji, 4, 2).vectorize(ii).unroll(ji)
+            .specialize(prod_nrows >= 8 && prod_ncols >= 8)
+            .tile(i, j, bi, bj, i, j, 2, 4);
 
-    B.compute_at_rows(prod_part.get_level(2))
-            .partition(vec_size, 1).vectorize();
-#endif
+    accum_vecs.compute_at(C, x).unroll(i).unroll(j).vectorize(k)
+            .update().reorder(i, j, rv).unroll(i).unroll(j).vectorize(k);
+    accum_vecs_transpose.compute_at(C, x).unroll(i).unroll(j).vectorize(k);
+
+    Expr can_vectorize = prod_nrows >= 4 && prod_ncols >= 2;
+    sum_lanes.compute_at(C, x);
+    sum_lanes.compute_at(C, x).update().unroll(lanes);
+    // sum_lanes.specialize(can_vectorize).fuse(i, j, k).vectorize(k);
+    // sum_lanes.update().specialize(can_vectorize).fuse(i, j, k).vectorize(k);
+
+    sum_tail.compute_at(C, x);
+    sum_tail.compute_at(C, x).update().reorder(i, j, tail).unroll(i).unroll(j);
+    // sum_tail.specialize(can_vectorize).fuse(i, j, k).vectorize(k);
+    // sum_tail.update().specialize(can_vectorize).fuse(i, j, k).vectorize(k);
+
+    At.compute_at_rows(blocks);
+    B.compute_at_rows(blocks);
+
     return C;
 }
 

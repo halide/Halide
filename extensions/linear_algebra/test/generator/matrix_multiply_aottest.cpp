@@ -3,17 +3,16 @@
 #include <assert.h>
 #include <iomanip>
 #include <iostream>
+#include <iomanip>
 #include <random>
 #include <sstream>
 
 #include <HalideRuntime.h>
 
-#include "matrix_multiply_0.h"
-#include "matrix_multiply_1.h"
-#include "matrix_multiply_2.h"
-#include "matrix_multiply_3.h"
+#include "matrix_multiply_class.h"
+#include "matrix_multiply_explicit.h"
 #include "static_image.h"
-#include "../performance/clock.h"
+#include "performance/clock.h"
 
 #ifdef WITH_BLAS
 # include <cblas.h>
@@ -23,9 +22,34 @@
 # include <Eigen/Dense>
 #endif
 
+enum MatrixMultiplyAlgorithm {
+    kClassMultiply,
+    kExplicitMultiply
+};
+
+void print_matrix(const Image<float>& A, bool transpose=false) {
+    if (!transpose) {
+        for (int i = 0; i < A.width(); ++i) {
+            for (int j = 0; j < A.height(); ++j) {
+                std::cout << std::setprecision(3) << std::setw(10) << A(i, j);
+            }
+
+            std::cout << std::endl;
+        }
+    } else {
+        for (int j = 0; j < A.height(); ++j) {
+            for (int i = 0; i < A.width(); ++i) {
+                std::cout << std::setprecision(3) << std::setw(10) << A(i, j);
+            }
+
+            std::cout << std::endl;
+        }
+    }
+}
+
 void multiply(const Image<float>& A, const Image<float>& B, Image<float>& C) {
-    for (int i = 0; i < A.width(); ++i) {
-        for (int j = 0; j < B.height(); ++j) {
+    for (int j = 0; j < B.height(); ++j) {
+        for (int i = 0; i < A.width(); ++i) {
             C(i, j) = 0.0f;
 
             for (int k = 0; k < A.height(); ++k) {
@@ -46,9 +70,13 @@ bool check_multiply(const Image<float>& A, const Image<float>& B, const Image<fl
         }
     }
 
-    double avg_diff = abs_diff / (A.width() * A.height());
+    double avg_diff = abs_diff / (C.width() * C.height());
     if (avg_diff > tolerance) {
-        std::cerr << "image comparison failed! avg. diff = " << avg_diff << "\n";
+        std::cerr << "matrix comparison failed! avg. diff = " << avg_diff << "\n";
+        std::cerr << "A:\n"; print_matrix(A);
+        std::cerr << "B:\n"; print_matrix(B);
+        std::cerr << "expected:\n"; print_matrix(result);
+        std::cerr << "actual:\n"; print_matrix(C);
         return false;
     }
     return true;
@@ -122,7 +150,7 @@ void eigen_multiply(const int N, const int num_iters) {
 }
 #endif
 
-void halide_multiply(const int N, const int num_iters, const int algorithm, std::string label) {
+void halide_multiply(const int N, const int num_iters, const MatrixMultiplyAlgorithm algorithm, std::string label) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<float> rand(0, 1);
@@ -138,24 +166,19 @@ void halide_multiply(const int N, const int num_iters, const int algorithm, std:
 
     // Call the routine many times.
     float t1, t2;
-    if (algorithm == 0) {
-        t1 = current_time();
-        for (int i = 0; i < num_iters; i++) {
-            matrix_multiply_0(A, B, C);
-        }
-        t2 = current_time();
-    } else if (algorithm == 1) {
-        t1 = current_time();
-        for (int i = 0; i < num_iters; i++) {
-            matrix_multiply_1(A, B, C);
-        }
-        t2 = current_time();
-    } else {
-        t1 = current_time();
-        for (int i = 0; i < num_iters; i++) {
-            matrix_multiply_2(A, B, C);
-        }
-        t2 = current_time();
+    switch(algorithm) {
+        case kClassMultiply:
+            t1 = current_time();
+            for (int i = 0; i < num_iters; i++) {
+                matrix_multiply_class(A, B, C);
+            }
+            t2 = current_time();
+        case kExplicitMultiply:
+            t1 = current_time();
+            for (int i = 0; i < num_iters; i++) {
+                matrix_multiply_explicit(A, B, C);
+            }
+            t2 = current_time();
     }
 
     print_results(N, num_iters, "Halide " + label + ":", t2 - t1);
@@ -175,32 +198,19 @@ bool test_correctness(const int N) {
 
     bool correct = true;
     Image<float> C0(N,N);
-    matrix_multiply_0(A, B, C0);
+    matrix_multiply_class(A, B, C0);
     if (!check_multiply(A, B, C0)) {
-        std::cout << "Algorithm 0 is not correct!\n";
+        std::cout << "Class multiply is not correct!\n";
         correct = false;
     }
 
-    // Image<float> C1(N,N);
-    // matrix_multiply_1(A, B, C1);
-    // if (!check_multiply(A, B, C1)) {
-    //     std::cout << "Algorithm 1 is not correct!\n";
-    //     correct = false;
-    // }
-
-    // Image<float> C2(N,N);
-    // matrix_multiply_2(A, B, C2);
-    // if (!check_multiply(A, B, C2)) {
-    //     std::cout << "Algorithm 2 is not correct!\n";
-    //     correct = false;
-    // }
-
-    // Image<float> C3(N,N);
-    // matrix_multiply_3(A, B, C3);
-    // if (!check_multiply(A, B, C3)) {
-    //     std::cout << "Algorithm 3 is not correct!\n";
-    //     correct = false;
-    // }
+    correct = true;
+    Image<float> C1(N,N);
+    matrix_multiply_explicit(A, B, C1);
+    if (!check_multiply(A, B, C1)) {
+        std::cout << "Explicit multiply is not correct!\n";
+        correct = false;
+    }
 
     return correct;
 }
@@ -210,7 +220,7 @@ int main(int argc, char **argv) {
     const int num_iters = 100;
     const int sizes[] = {
         // /*16,*/ 32, 64, 128, 256, 512, 1024, 0
-        20, 33, 72, 150, 300, 519, 999, 0
+        9, 20, 33, 72, 150, 300, 519, 0
     };
 
     for (int i = 0; i < 5; ++i) {
@@ -218,7 +228,7 @@ int main(int argc, char **argv) {
             std::cerr << "Failure!\n";
             return -1;
         }
-    }
+     }
 
     std::cout << std::setw(25) << "Implementation"
               << std::setw(15) << "Matrix Size"
@@ -226,9 +236,8 @@ int main(int argc, char **argv) {
               << std::setw(20) << "Data Throughput\n";
     for (int i = 0; i < 80; ++i ) std::cout << '='; std::cout << "\n";
     for (int i = 0; sizes[i] != 0; ++i) {
-        halide_multiply(sizes[i], num_iters, 0, "class");
-        // halide_multiply(sizes[i], num_iters, 1, "blocked");
-        // halide_multiply(sizes[i], num_iters, 2, "explicit tile");
+        halide_multiply(sizes[i], num_iters, kClassMultiply, "class");
+        halide_multiply(sizes[i], num_iters, kExplicitMultiply, "explicit");
 #ifdef WITH_EIGEN
         eigen_multiply(sizes[i], num_iters);
 #endif

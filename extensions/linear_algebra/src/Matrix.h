@@ -314,8 +314,18 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat, std::string name)
     init(m, n);
 
     if (is_large) {
-        Matrix &A = *this;
-        A(row_var(), col_var()) = Internal::buildMatrixDef(mat, row_var(), col_var());
+        Image<typename M::Scalar> img(m, n);
+        for (int j = 0; j < n; ++j) {
+            for (int i = 0; i < m; ++i) {
+                img(i, j) = mat(i, j);
+            }
+        }
+
+      Var i = row_var();
+      Var j = col_var();
+      Matrix &A = *this;
+      A(i, j) = img(i, j);
+      // Internal::buildMatrixDef(mat, row_var(), col_var());
     } else {
         coeffs.resize(m * n);
         for (int j = 0; j < n; ++j) {

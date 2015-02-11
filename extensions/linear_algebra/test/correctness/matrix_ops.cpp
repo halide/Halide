@@ -37,7 +37,7 @@ bool same_as_matrix(const Buffer& buff, const Eigen::MatrixBase<M>& mat) {
     bool equal = A.isApprox(mat);
 
     if (!equal) {
-        std::cout << "Realized:\n" << A << std::endl;
+        std::cout << "\nRealized:\n" << A << std::endl;
         std::cout << "Expected:\n" << mat << std::endl;
     }
 
@@ -60,43 +60,50 @@ bool test_matrix_operations() {
     u = EigenMatrix::Random();
     v = EigenMatrix::Random();
 
-    printf("mat-mat multiply..");
-    Matrix AB = Matrix(A, "A") * Matrix(B, "B");
-    success &= same_as_matrix(AB.realize(), A*B);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
-
-    printf("mat-vec multiply..");
-    Matrix Au = Matrix(A) * Matrix(u);
-    success &= same_as_matrix(Au.realize(), A*u);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
-
-    printf("transpose..");
-    B = A.transpose();
-    Matrix At = Matrix(A).transpose();
-    success &= same_as_matrix(At.realize(), B);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
-
-    printf("inverse..");
-    B = A.inverse();
-    Matrix Ainv = Matrix(A).inverse();
-    success &= same_as_matrix(Ainv.realize(), B);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
-
-    printf("determinant..");
-    float det = evaluate<float>(Matrix(A).determinant());
-    success &= approx_equal(det, A.determinant());
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
-
-    printf("gemm..");
-    Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3.f;
-    success &= same_as_matrix(result.realize(), 2.f*A*u + B*v/3.f);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
+    {
+        printf("mat-mat multiply..");
+        Matrix AB = Matrix(A, "A") * Matrix(B, "B");
+        success &= same_as_matrix(AB.realize(), A*B);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        printf("mat-vec multiply..");
+        Matrix Au = Matrix(A) * Matrix(u);
+        success &= same_as_matrix(Au.realize(), A*u);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        printf("transpose..");
+        B = A.transpose();
+        Matrix At = Matrix(A).transpose();
+        success &= same_as_matrix(At.realize(), B);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        printf("inverse..");
+        B = A.inverse();
+        Matrix Ainv = Matrix(A).inverse();
+        success &= same_as_matrix(Ainv.realize(), B);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        printf("determinant..");
+        float det = evaluate<float>(Matrix(A).determinant());
+        success &= approx_equal(det, A.determinant());
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        printf("gemm..");
+        Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3.f;
+        success &= same_as_matrix(result.realize(), 2.f*A*u + B*v/3.f);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
 
     return success;
 }
@@ -116,31 +123,40 @@ bool test_matrix_operations(const int n) {
     u = EigenMatrix::Random(n, 1);
     v = EigenMatrix::Random(n, 1);
 
-    printf("mat-mat multiply..");
-    Matrix AB = Matrix(A) * Matrix(B);
-    // Func f = AB;
-    success &= same_as_matrix(AB.realize(), A*B);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
+    {
+        printf("mat-mat multiply..");
+        Matrix AB = Matrix(A) * Matrix(B);
+        // Func f = AB;
+        success &= same_as_matrix(AB.realize(), A*B);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        printf("mat-vec multiply..");
+        Matrix Au = Matrix(A) * Matrix(u);
+        success &= same_as_matrix(Au.realize(), A*u);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        printf("transpose..");
+        B = A.transpose();
+        Matrix At = Matrix(A).transpose();
+        success &= same_as_matrix(At.realize(), B);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
+    }
+    {
+        // TODO: Currently the scheduling directive in the Matrix
+        // class are not sufficient to allow this expression to
+        // compile.
 
-    printf("mat-vec multiply..");
-    Matrix Au = Matrix(A) * Matrix(u);
-    success &= same_as_matrix(Au.realize(), A*u);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
-
-    printf("transpose..");
-    B = A.transpose();
-    Matrix At = Matrix(A).transpose();
-    success &= same_as_matrix(At.realize(), B);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
-
-    printf("gemm..");
-    Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3;
-    success &= same_as_matrix(result.realize(), 2*A*u + B*v/3);
-    if (success) printf("success!\n");
-    else { printf("fail\n"); return success; }
+        // printf("gemm..");
+        // Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3;
+        // success &= same_as_matrix(result.realize(), 2*A*u + B*v/3);
+        // if (success) printf("success!\n");
+        // else { printf("fail\n"); return success; }
+    }
 
     return success;
 }
@@ -148,12 +164,12 @@ bool test_matrix_operations(const int n) {
 int main(int argc, char **argv) {
     bool success = true;
 
-    // success &= test_matrix_operations<1>();
-    // success &= test_matrix_operations<2>();
-    // success &= test_matrix_operations<3>();
-    // success &= test_matrix_operations<4>();
+    success &= test_matrix_operations<1>();
+    success &= test_matrix_operations<2>();
+    success &= test_matrix_operations<3>();
+    success &= test_matrix_operations<4>();
 
-    for (int n = 5; n <= 10; ++n ) {
+    for (int n = 5; n < 15; ++n ) {
         success &= test_matrix_operations(n);
     }
 

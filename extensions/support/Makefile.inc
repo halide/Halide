@@ -20,6 +20,9 @@ LLVM_CONFIG ?= llvm-config
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 
+HL_TARGET ?= host
+HL_JIT_TARGET ?= host
+
 ifeq ($(USE_LLVM_SHARED_LIB), )
 LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
 LLVM_SHARED_LIBS = 
@@ -51,7 +54,7 @@ CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual
 CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual -fPIC $(OPTIMIZE) -fno-omit-frame-pointer $(BUILD_BIT_SIZE) \
 	-I$(SRCTOP)/src
 
-TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti -I$(SRCTOP)/include
+TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -fno-omit-frame-pointer -fno-rtti -I$(SRCTOP)/include
 ifneq ($(CXX11),)
 TEST_CXX_FLAGS += -std=c++11
 endif
@@ -60,7 +63,7 @@ TEST_CXX_FLAGS += -rdynamic
 HOST_OS=linux
 endif
 
-GENGEN_DEPS ?= $(SRCTOP)/$(BIN_DIR)/libHalide.so $(SRCTOP)/include/Halide.h $(SRCTOP)/tools/GenGen.cpp
+GENGEN_DEPS ?= $(BIN_DIR)/libHalide.so $(SRCTOP)/include/Halide.h $(SRCTOP)/tools/GenGen.cpp
 FILTERS_DIR = $(BUILD_DIR)/filters
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
@@ -70,8 +73,11 @@ STATIC_LIB = $(BIN_DIR)/lib$(EXT_NAME).a
 SHARED_LIB = $(BIN_DIR)/lib$(EXT_NAME).so
 LIB_HEADER = $(SRCTOP)/include/$(EXT_NAME).h
 
+EXT_LDFLAGS = -L$(BIN_DIR) -lHalide -lz -lpthread -ldl
+
 .PHONY: all
 ifneq ($(SOURCE_FILES),)
+EXT_LDFLAGS += -l$(EXT_NAME)
 all: $(LIB_HEADER) $(STATIC_LIB) $(SHARED_LIB)
 else
 all: $(LIB_HEADER)
@@ -153,7 +159,7 @@ $(BIN_DIR)/performance_%: test/performance/%.cpp $(SHARED_LIB) $(LIB_HEADER) $(S
 # usage can just add deps later.
 $(FILTERS_DIR)/%.generator: test/generator/%_generator.cpp $(GENGEN_DEPS)
 	@mkdir -p $(FILTERS_DIR)
-	$(CXX) -std=c++11 -g $(CXX_WARNING_FLAGS) -fno-rtti -Iinclude $(filter %_generator.cpp,$^) tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread -ldl -o $@
+	$(CXX) -std=c++11 -g $(CXX_WARNING_FLAGS) -fno-rtti -I$(SRCTOP)/include $(filter %_generator.cpp,$^) $(SRCTOP)/tools/GenGen.cpp -o $@ $(EXT_LDFLAGS)
 
 # By default, %.o/.h are produced by executing %.generator
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
