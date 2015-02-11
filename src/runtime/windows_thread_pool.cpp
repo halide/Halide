@@ -24,7 +24,7 @@ typedef uint64_t ConditionVariable;
 typedef uint64_t InitOnce;
 typedef void * Thread;
 typedef struct {
-    uint8_t buf[40];
+    uint64_t buf[5];
 } CriticalSection;
 
 extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
@@ -351,6 +351,13 @@ WEAK void halide_shutdown_thread_pool() {
     // DestroyConditionVariable(&halide_work_queue.wakeup_a_team);
     // DestroyConditionVariable(&halide_work_queue.wakeup_b_team);
     halide_thread_pool_initialized = false;
+}
+
+namespace {
+__attribute__((destructor))
+WEAK void halide_posix_thread_pool_cleanup() {
+    halide_shutdown_thread_pool();
+}
 }
 
 WEAK void halide_set_num_threads(int n) {
