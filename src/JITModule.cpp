@@ -15,17 +15,11 @@
 
 #ifdef _WIN32
 #define NOMINMAX
-#ifdef _WIN64
-#define GPU_LIB_CC
-#else
-#define GPU_LIB_CC __stdcall
-#endif
 #include <windows.h>
 static bool have_symbol(const char *s) {
     return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
 }
 #else
-#define GPU_LIB_CC
 #include <dlfcn.h>
 static bool have_symbol(const char *s) {
     return dlsym(NULL, s) != NULL;
@@ -39,10 +33,7 @@ namespace Internal {
 
 namespace {
 
-extern "C" { typedef struct CUctx_st *CUcontext; }
-
-// A single global cuda context to share between jitted functions
-int (GPU_LIB_CC *cuCtxDestroy)(CUctx_st *) = 0;
+typedef struct CUctx_st *CUcontext;
 
 struct SharedCudaContext {
     CUctx_st *ptr;
@@ -54,19 +45,15 @@ struct SharedCudaContext {
 
     // Note that we never free the context, because static destructor
     // order is unpredictable, and we can't free the context before
-    // all JITModules are freed. Users may be stashing Funcs
-    // or Images in globals, and these keep JITModules around.
+    // all JITModules are freed. Users may be stashing Funcs or Images
+    // in globals, and these keep JITModules around.
 } cuda_ctx;
 
-extern "C" {
-    typedef struct cl_context_st *cl_context;
-    typedef struct cl_command_queue_st *cl_command_queue;
-}
+typedef struct cl_context_st *cl_context;
+typedef struct cl_command_queue_st *cl_command_queue;
 
-int (GPU_LIB_CC *clReleaseContext)(cl_context);
-int (GPU_LIB_CC *clReleaseCommandQueue)(cl_command_queue);
-
-// A single global OpenCL context and command queue to share between jitted functions.
+// A single global OpenCL context and command queue to share between
+// jitted functions.
 struct SharedOpenCLContext {
     cl_context context;
     cl_command_queue command_queue;
@@ -111,14 +98,6 @@ void jit_init(llvm::ExecutionEngine *ee, llvm::Module *module, const Target &tar
             user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
         }
         lib_cuda_linked = true;
-
-        // Now dig out cuCtxDestroy_v2 so that we can clean up the
-        // shared context at termination
-        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
-        internal_assert(ptr) << "Could not find cuCtxDestroy_v2 in cuda library\n";
-
-        cuCtxDestroy = reinterpret_bits<int (GPU_LIB_CC *)(CUctx_st *)>(ptr);
-
     } else if (target.has_feature(Target::OpenCL)) {
         // First check if libOpenCL has already been linked
         // in. If so we shouldn't need to set any mappings.
@@ -138,19 +117,6 @@ void jit_init(llvm::ExecutionEngine *ee, llvm::Module *module, const Target &tar
             }
             user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
         }
-
-        // Now dig out clReleaseContext/CommandQueue so that we can clean up the
-        // shared context at termination
-        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
-        internal_assert(ptr) << "Could not find clReleaseContext\n";
-
-        clReleaseContext = reinterpret_bits<int (GPU_LIB_CC *)(cl_context)>(ptr);
-
-        ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseCommandQueue");
-        internal_assert(ptr) << "Could not find clReleaseCommandQueue\n";
-
-        clReleaseCommandQueue = reinterpret_bits<int (GPU_LIB_CC *)(cl_command_queue)>(ptr);
-
     } else if (target.has_feature(Target::OpenGL)) {
         if (target.os == Target::Linux) {
             if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
