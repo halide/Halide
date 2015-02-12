@@ -23,7 +23,7 @@ class Module;
 namespace Internal {
 
 class JITModuleContents;
-class LoweredFunc;
+struct LoweredFunc;
 
 struct JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
