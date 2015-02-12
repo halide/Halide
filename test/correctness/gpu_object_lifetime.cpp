@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
 
     Halide::Internal::JITSharedRuntime::release_all();
 
-    int ret = validate_gpu_object_lifetime(true /* allow_globals */, false /* allow_none */);
+    int ret = validate_gpu_object_lifetime(true /* allow_globals */, false /* allow_none */, 1 /* max_globals */);
     if (ret != 0) {
         return ret;
     }
