@@ -17,15 +17,9 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
 // An OpenCL context/queue/synchronization lock defined in
 // this module with weak linkage
-cl_context WEAK weak_cl_ctx = 0;
-cl_command_queue WEAK weak_cl_q = 0;
-volatile int WEAK weak_cl_lock = 0;
-
-// In the non-JIT case, the context is stored in the weak globals above.
-// JIT modules will call halide_opencl_set_context, changing the pointers below.
-cl_context WEAK *cl_ctx_ptr = NULL;
-cl_command_queue WEAK *cl_q_ptr = NULL;
-volatile int WEAK *cl_lock_ptr = NULL;
+cl_context WEAK context = 0;
+cl_command_queue WEAK command_queue = 0;
+volatile int WEAK thread_lock = 0;
 
 WEAK char platform_name[256];
 WEAK int platform_name_lock = 0;
@@ -93,12 +87,6 @@ WEAK const char *halide_opencl_get_device_type(void *user_context) {
     return device_type;
 }
 
-WEAK void halide_opencl_set_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
-    cl_ctx_ptr = ctx_ptr;
-    cl_q_ptr = q_ptr;
-    cl_lock_ptr = lock_ptr;
-}
-
 // The default implementation of halide_acquire_cl_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
@@ -114,34 +102,27 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     halide_assert(user_context, ctx != NULL);
     halide_assert(user_context, q != NULL);
 
-    // If the context pointers aren't hooked up, use our weak globals.
-    if (cl_ctx_ptr == NULL) {
-        cl_ctx_ptr = &weak_cl_ctx;
-        cl_q_ptr = &weak_cl_q;
-        cl_lock_ptr = &weak_cl_lock;
-    }
-
-    halide_assert(user_context, cl_lock_ptr != NULL);
-    while (__sync_lock_test_and_set(cl_lock_ptr, 1)) { }
+    halide_assert(user_context, &thread_lock != NULL);
+    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
     // If the context has not been initialized, initialize it now.
-    halide_assert(user_context, cl_ctx_ptr != NULL);
-    halide_assert(user_context, cl_q_ptr != NULL);
-    if (!(*cl_ctx_ptr) && create) {
-        cl_int error = create_opencl_context(user_context, cl_ctx_ptr, cl_q_ptr);
+    halide_assert(user_context, &context != NULL);
+    halide_assert(user_context, &command_queue != NULL);
+    if (!context && create) {
+        cl_int error = create_opencl_context(user_context, &context, &command_queue);
         if (error != CL_SUCCESS) {
-            __sync_lock_release(cl_lock_ptr);
+            __sync_lock_release(&thread_lock);
             return error;
         }
     }
 
-    *ctx = *cl_ctx_ptr;
-    *q = *cl_q_ptr;
+    *ctx = context;
+    *q = command_queue;
     return 0;
 }
 
 WEAK int halide_release_cl_context(void *user_context) {
-    __sync_lock_release(cl_lock_ptr);
+    __sync_lock_release(&thread_lock);
     return 0;
 }
 
@@ -628,16 +609,16 @@ WEAK int halide_opencl_device_release(void *user_context) {
         }
 
         // Release the context itself, if we created it.
-        if (ctx == weak_cl_ctx) {
-            debug(user_context) << "    clReleaseCommandQueue " << weak_cl_q << "\n";
-            err = clReleaseCommandQueue(weak_cl_q);
+        if (ctx == context) {
+            debug(user_context) << "    clReleaseCommandQueue " << command_queue << "\n";
+            err = clReleaseCommandQueue(command_queue);
             halide_assert(user_context, err == CL_SUCCESS);
-            weak_cl_q = NULL;
+            command_queue = NULL;
 
-            debug(user_context) << "    clReleaseContext " << weak_cl_ctx << "\n";
-            err = clReleaseContext(weak_cl_ctx);
+            debug(user_context) << "    clReleaseContext " << context << "\n";
+            err = clReleaseContext(context);
             halide_assert(user_context, err == CL_SUCCESS);
-            weak_cl_ctx = NULL;
+            context = NULL;
         }
     }
 
