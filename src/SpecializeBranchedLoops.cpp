@@ -980,10 +980,8 @@ private:
             collect(op->body, body_branches);
             for (size_t i = 0; i < body_branches.size(); ++i) {
                 Branch &branch = body_branches[i];
-                if (branch.content.defined()) {
-                    branch.content = LetOp::make(op->name, op->value, branch.content);
-                    branches.push_back(branch);
-                }
+                branch.content = LetOp::make(op->name, op->value, branch.content);
+                branches.push_back(branch);
             }
 
             linearity.pop(op->name);

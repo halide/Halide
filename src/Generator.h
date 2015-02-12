@@ -372,8 +372,8 @@ public:
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
         EmitOptions()
-            : emit_o(true), emit_h(true), emit_cpp(false), emit_assembly(true),
-              emit_bitcode(true), emit_stmt(false), emit_stmt_html(true) {}
+            : emit_o(true), emit_h(true), emit_cpp(false), emit_assembly(false),
+              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
