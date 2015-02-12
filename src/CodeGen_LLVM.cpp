@@ -233,6 +233,10 @@ CodeGen_LLVM *make_codegen(const Target &target,
 
 }
 
+void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
+    this->context = &context;
+}
+
 CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                            llvm::LLVMContext &context) {
     // The awkward mapping from targets to code generators
@@ -278,12 +282,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     return NULL;
 }
 
-void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
-    this->context = &context;
-    delete builder;
-    builder = new IRBuilder<>(context);
-}
-
 void CodeGen_LLVM::initialize_llvm() {
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
@@ -313,8 +311,10 @@ void CodeGen_LLVM::initialize_llvm() {
 
 void CodeGen_LLVM::init_module() {
     // Start with a module containing the initial module for this target.
-    assert(!module);
+    delete module;
+    delete builder;
     module = get_initial_module_for_target(target, context);
+    builder = new IRBuilder<>(*context);
 
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);

@@ -72,6 +72,8 @@ protected:
     void visit(const LoweredFunc *);
     // @}
 
+    std::string function_name;
+
     llvm::Value *get_module_state(const std::string &api_unique_name,
                                   bool create = true);
 

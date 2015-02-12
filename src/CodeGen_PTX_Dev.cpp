@@ -26,11 +26,18 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
+
+    context = new llvm::LLVMContext();
+}
+
+CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
+    delete context;
 }
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<GPU_Argument> &args) {
+    internal_assert(module != NULL);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 
@@ -399,7 +406,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         module->dump();
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
-
 
     string str = outs.str();
     debug(1) << "PTX kernel:\n" << str.c_str() << "\n";
