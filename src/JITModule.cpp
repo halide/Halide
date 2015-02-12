@@ -150,19 +150,19 @@ void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module, const Target 
     if (target.has_feature(Target::CUDA)) {
         // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
         // CUDA behaves much better when you don't initialize >2 contexts.
-        llvm::Function *fn = module->getFunction("halide_set_cuda_context");
-        internal_assert(fn) << "Could not find halide_set_cuda_context in module\n";
+        llvm::Function *fn = module->getFunction("halide_cuda_set_context");
+        internal_assert(fn) << "Could not find halide_cuda_set_context in module\n";
         void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_set_cuda_context in module\n";
+        internal_assert(f) << "Could not find compiled form of halide_cuda_set_context in module\n";
         void (*set_cuda_context)(CUcontext *, volatile int *) =
             reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
         set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
     } else if (target.has_feature(Target::OpenCL)) {
         // Share the same cl_ctx, cl_q across all OpenCL modules.
-        llvm::Function *fn = module->getFunction("halide_set_cl_context");
-        internal_assert(fn) << "Could not find halide_set_cl_context in module\n";
+        llvm::Function *fn = module->getFunction("halide_opencl_set_context");
+        internal_assert(fn) << "Could not find halide_opencl_set_context in module\n";
         void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_set_cl_context in module\n";
+        internal_assert(f) << "Could not find compiled form of halide_opencl_set_context in module\n";
         void (*set_cl_context)(cl_context *, cl_command_queue *, volatile int *) =
             reinterpret_bits<void (*)(cl_context *, cl_command_queue *, volatile int *)>(f);
         set_cl_context(&cl_ctx.context, &cl_ctx.command_queue, &cl_ctx.lock);
