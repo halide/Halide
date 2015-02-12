@@ -157,7 +157,18 @@ class GEMVGenerator :
             result.output_buffer().set_bounds(0, 0, A_.width());
         }
 
-        return result;
+        Func output("output");
+        output(i) = result(i);
+        result.compute_root();
+
+        const Expr size = x_.width();
+        Var ii("ii");
+        output.specialize(size >= vec_size).vectorize(i, vec_size)
+                .specialize(size >= unroll_size * vec_size).unroll(i, unroll_size)
+                .specialize(size >= block_size_)
+                .split(i, i, ii, block_size_ / (unroll_size * vec_size)).parallel(i);
+
+        return output;
     }
 };
 

@@ -43,29 +43,36 @@ class AXPYGenerator :
         Var i("i"), o("o");
     }
 
+    template<class Arg>
+    Expr calc(Arg i) {
+        if (static_cast<bool>(scale_x_) && static_cast<bool>(add_to_y_)) {
+            return a_ * x_(i) + y_(i);
+        } else if (static_cast<bool>(scale_x_)) {
+            return a_ * x_(i);
+        } else {
+            return x_(i);
+        }
+    }
+
     Func build() {
         SetupTarget();
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
-
-        bool scale_x = scale_x_;
-        bool add_to_y = add_to_y_;
+        Expr size = x_.width();
+        Expr size_vecs = (size / vec_size) * vec_size;
+        Expr size_tail = size - size_vecs;
 
         Var  i("i");
         Func result("result");
-        if (scale_x && add_to_y) {
-            result(i) = a_ * x_(i) + y_(i);
-        } else if (scale_x) {
-            result(i) = a_ * x_(i);
-        } else {
-            result(i) = x_(i);
-        }
+        RDom vecs(0, size_vecs, "vec");
+        RDom tail(size_vecs, size_tail, "tail");
+        result(i) = undef(type_of<T>());
+        result(vecs) = calc(vecs);
+        result(tail) = calc(tail);
 
         if (vectorize_) {
             Var ii("ii");
-            result
-                .specialize(x_.width() >= vec_size).vectorize(i, vec_size)
-                .specialize(x_.width() >= 4 * vec_size).unroll(i, 4);
+            result.update().vectorize(vecs, vec_size);
         }
 
         result.bound(i, 0, x_.width());
@@ -113,29 +120,34 @@ class DotGenerator :
         SetupTarget();
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
+        Expr size = x_.width();
+        Expr size_vecs = size / vec_size;
+        Expr size_tail = size - size_vecs * vec_size;
 
         Var i("i");
         Func result;
         if (vectorize_) {
             Func dot;
 
-            RDom k(0, x_.width()/vec_size);
+            RDom k(0, size_vecs);
             dot(i) += x_(k*vec_size + i) * y_(k*vec_size + i);
 
-            RDom sum_lanes(0, vec_size);
+            RDom lanes(0, vec_size);
+            RDom tail(size_vecs * vec_size, size_tail);
             result(i) = undef<T>();
-            result(0) = sum(dot(sum_lanes));
+            result(0) = sum(dot(lanes));
+            result(0) += sum(x_(tail) * y_(tail));
 
             dot.compute_root().vectorize(i);
             dot.update(0).vectorize(i);
         } else {
-            RDom k(0, x_.width());
+            RDom k(0, size);
             result(i) = undef<T>();
             result(0) = sum(x_(k) * y_(k));
         }
 
         x_.set_min(0, 0);
-        y_.set_bounds(0, 0, x_.width());
+        y_.set_bounds(0, 0, size);
 
         return result;
     }
@@ -175,21 +187,26 @@ class AbsSumGenerator :
         SetupTarget();
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
+        Expr size = x_.width();
+        Expr size_vecs = size / vec_size;
+        Expr size_tail = size - size_vecs * vec_size;
 
         Var i("i");
         Func result;
         if (vectorize_) {
-            Func dot;
+            Func norm;
 
-            RDom k(0, x_.width()/vec_size);
-            dot(i) += abs(x_(k*vec_size + i));
+            RDom k(0, size_vecs);
+            norm(i) += abs(x_(k*vec_size + i));
 
-            RDom sum_lanes(0, vec_size);
+            RDom lanes(0, vec_size);
+            RDom tail(size_vecs * vec_size, size_tail);
             result(i) = undef<T>();
-            result(0) = sum(dot(sum_lanes));
+            result(0) = sum(norm(lanes));
+            result(0) += sum(abs(x_(tail)));
 
-            dot.compute_root().vectorize(i);
-            dot.update(0).vectorize(i);
+            norm.compute_root().vectorize(i);
+            norm.update(0).vectorize(i);
         } else {
             RDom k(0, x_.width());
             result(i) = undef<T>();

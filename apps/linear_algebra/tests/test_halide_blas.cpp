@@ -163,7 +163,7 @@ struct BLASTestBase {
             }
 
             if (!equal) {
-                std::cout << "FAIL! expected = " << x << ", actual = " << y << "\n";
+                std::cerr << "FAIL! expected = " << x << ", actual = " << y << "\n";
             }
 
             return equal;
@@ -172,26 +172,28 @@ struct BLASTestBase {
 
     bool compareVectors(int N, const Vector &x, const Vector &y,
                         Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
+        bool equal = true;
         for (int i = 0; i < N; ++i) {
             if (!compareScalars(x[i], y[i], epsilon)) {
                 std::cerr << "Vectors differ at index: " << i << "\n";
-                return false;
+                equal = false;
+                break;
             }
         }
-
-        return true;
+        return equal;
     }
 
-    bool compareMatrices(int N, const Vector &x, const Vector &y,
+    bool compareMatrices(int N, const Matrix &A, const Matrix &B,
                          Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
+        bool equal = true;
         for (int i = 0; i < N*N; ++i) {
-            if (!compareScalars(x[i], y[i], epsilon)) {
+            if (!compareScalars(A[i], A[i], epsilon)) {
                 std::cerr << "Matrices differ at coords: (" << i%N << ", " << i/N << ")\n";
-                return false;
+                equal = false;
+                break;
             }
         }
-
-        return true;
+        return equal;
     }
 };
 
@@ -294,7 +296,7 @@ int main(int argc, char *argv[]) {
             d.run_tests(size);
         }
     } else {
-        int size = 256;
+        int size = 277;
         std::cout << "Testing halide_blas with N = " << size << ":\n";
         s.run_tests(size);
         d.run_tests(size);
