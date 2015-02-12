@@ -1264,6 +1264,7 @@ void CodeGen_ARM::visit(const Call *op) {
             // Android devices generally have read-cycle-counter
             // disabled in user mode; fall back to calling
             // halide_current_time_ns().
+            internal_assert(op->args.size() == 1);
             Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
             e.accept(this);
             return;
