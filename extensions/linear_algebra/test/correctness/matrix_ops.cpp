@@ -37,7 +37,7 @@ bool same_as_matrix(const Buffer& buff, const Eigen::MatrixBase<M>& mat) {
     bool equal = A.isApprox(mat);
 
     if (!equal) {
-        std::cout << "\nRealized:\n" << A << std::endl;
+        std::cout << "Realized:\n" << A << std::endl;
         std::cout << "Expected:\n" << mat << std::endl;
     }
 
@@ -147,15 +147,11 @@ bool test_matrix_operations(const int n) {
         else { printf("fail\n"); return success; }
     }
     {
-        // TODO: Currently the scheduling directive in the Matrix
-        // class are not sufficient to allow this expression to
-        // compile.
-
-        // printf("gemm..");
-        // Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3;
-        // success &= same_as_matrix(result.realize(), 2*A*u + B*v/3);
-        // if (success) printf("success!\n");
-        // else { printf("fail\n"); return success; }
+        printf("gemm..");
+        Matrix C = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3;
+        success &= same_as_matrix(C.realize(), 2*A*u + B*v/3);
+        if (success) printf("success!\n");
+        else { printf("fail\n"); return success; }
     }
 
     return success;

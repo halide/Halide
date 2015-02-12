@@ -230,7 +230,7 @@ public:
     EXPORT bool const_size(int &m, int &n);
 
     EXPORT Matrix &compute_at_rows(Partition p);
-    EXPORT Matrix &compute_at_columns(Partition p);
+    EXPORT Matrix &compute_at_cols(Partition p);
 
     EXPORT Matrix &partition(Expr size);
     EXPORT Matrix &partition(Expr row_size, Expr col_size);

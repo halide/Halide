@@ -782,7 +782,7 @@ Matrix &Matrix::compute_at_rows(Partition p) {
     return *this;
 }
 
-Matrix &Matrix::compute_at_columns(Partition p) {
+Matrix &Matrix::compute_at_cols(Partition p) {
     if (is_large) {
         // Inject the compute_at variable into all other branches of the
         // specialization tree via renames.
@@ -1067,6 +1067,7 @@ Matrix Matrix::transpose() {
         Matrix At(ncols, nrows, A.type(), result_name);
         At(i, j) = A(j, i);
         At.partition(4).vectorize().unroll_cols();
+        compute_at_cols(At.get_partition());
         return At;
     } else {
         const int m = *as_const_int(nrows);
@@ -1227,15 +1228,15 @@ Matrix operator+(Matrix A, Matrix B) {
     string result_name = strip(A.name()) + "_plus_" + strip(B.name());
 
     if (A.is_large_matrix()) {
-        Expr vec_size = 8;
+        Expr vec_size = 256 / A.type().bits;
 
         Matrix sum(A.num_rows(), A.num_cols(), A.type(), result_name);
         Var i = sum.row_var();
         Var j = sum.col_var();
         sum(i, j) = A(i, j) + B(i, j);
-        sum.partition(vec_size).vectorize();
-        A.compute_at_rows(sum.get_partition());
-        B.compute_at_rows(sum.get_partition());
+        sum.partition(vec_size).vectorize().unroll_cols();
+        A.compute_at_cols(sum.get_partition());
+        B.compute_at_cols(sum.get_partition());
         return sum;
     } else {
         Tuple sum = A;
@@ -1256,10 +1257,15 @@ Matrix operator-(Matrix A, Matrix B) {
     string result_name = strip(A.name()) + "_minus_" + strip(B.name());
 
     if (A.is_large_matrix()) {
+        Expr vec_size = 256 / A.type().bits;
+
         Matrix diff(A.num_rows(), A.num_cols(), A.type(), result_name);
         Var i = diff.row_var();
         Var j = diff.col_var();
         diff(i, j) = A(i, j) - B(i, j);
+        diff.partition(vec_size).vectorize().unroll_cols();
+        A.compute_at_cols(diff.get_partition());
+        B.compute_at_cols(diff.get_partition());
         return diff;
     } else {
         Tuple diff = A;
@@ -1276,10 +1282,14 @@ Matrix operator*(Expr a, Matrix B) {
     string result_name = strip(B.name()) + "_scaled";
 
     if (B.is_large_matrix()) {
+        Expr vec_size = 256 / B.type().bits;
+
         Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
         Var i = scale.row_var();
         Var j = scale.col_var();
         scale(i, j) = a * B(i, j);
+        scale.partition(vec_size).vectorize().unroll_cols();
+        B.compute_at_cols(scale.get_partition());
         return scale;
     } else {
         Tuple scale = B;
@@ -1292,41 +1302,11 @@ Matrix operator*(Expr a, Matrix B) {
 }
 
 Matrix operator*(Matrix B, Expr a) {
-    string result_name = strip(B.name()) + "_scaled";
-
-    if (B.is_large_matrix()) {
-        Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
-        Var i = scale.row_var();
-        Var j = scale.col_var();
-        scale(i, j) = B(i, j) * a;
-        return scale;
-    } else {
-        Tuple scale = B;
-        for (size_t k = 0; k < scale.size(); ++k) {
-            scale[k] *= a;
-        }
-
-        return Matrix(B.num_rows(), B.num_cols(), scale, result_name);
-    }
+    return a * B;
 }
 
 Matrix operator/(Matrix B, Expr a) {
-    string result_name = strip(B.name()) + "_scaled";
-
-    if (B.is_large_matrix()) {
-        Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
-        Var i = scale.row_var();
-        Var j = scale.col_var();
-        scale(i, j) = B(i, j) / a;
-        return scale;
-    } else {
-        Tuple scale = B;
-        for (size_t k = 0; k < scale.size(); ++k) {
-            scale[k] /= a;
-        }
-
-        return Matrix(B.num_rows(), B.num_cols(), scale, result_name);
-    }
+    return (cast(B.type(), 1) / cast(B.type(), a)) * B;
 }
 
 Matrix operator*(Matrix A, Matrix B) {
