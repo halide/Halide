@@ -65,108 +65,79 @@ struct SharedOpenCLContext {
     // We never free the context, for the same reason as above.
 } cl_ctx;
 
-bool lib_cuda_linked = false;
-
-}
-
-void jit_init(llvm::ExecutionEngine *ee, llvm::Module *module, const Target &target) {
-
+void load_libcuda() {
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
     // fine. If not we need to tell llvm to load it.
-    if (target.has_feature(Target::CUDA) && !lib_cuda_linked) {
-        // First check if libCuda has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("cuInit")) {
-            debug(1) << "This program was linked to cuda already\n";
-        } else {
-            debug(1) << "Looking for cuda shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
-            }
-            user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
+    if (have_symbol("cuInit")) {
+        debug(1) << "This program was linked to cuda already\n";
+    } else {
+        debug(1) << "Looking for cuda shared library...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
+        if (!error.empty()) {
+            error.clear();
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
         }
-        lib_cuda_linked = true;
-    } else if (target.has_feature(Target::OpenCL)) {
-        // First check if libOpenCL has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("clCreateContext")) {
-            debug(1) << "This program was linked to OpenCL already\n";
-        } else {
-            debug(1) << "Looking for OpenCL shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
-            }
-            user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
+        if (!error.empty()) {
+            error.clear();
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
         }
-    } else if (target.has_feature(Target::OpenGL)) {
-        if (target.os == Target::Linux) {
-            if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-                user_assert(error.empty()) << "Could not find libGL.so\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-                user_assert(error.empty()) << "Could not find libX11.so\n";
-            }
-        } else if (target.os == Target::OSX) {
-            if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
-                user_assert(error.empty()) << "Could not find AGL.framework\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
-                user_assert(error.empty()) << "Could not find OpenGL.framework\n";
-            }
-        } else {
-            internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
+        if (!error.empty()) {
+            error.clear();
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
         }
+        user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
     }
 }
 
-void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module, const Target &target) {
-    if (target.has_feature(Target::CUDA)) {
-        // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
-        // CUDA behaves much better when you don't initialize >2 contexts.
-        llvm::Function *fn = module->getFunction("halide_cuda_set_context");
-        internal_assert(fn) << "Could not find halide_cuda_set_context in module\n";
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_cuda_set_context in module\n";
-        void (*set_cuda_context)(CUcontext *, volatile int *) =
-            reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
-        set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
-    } else if (target.has_feature(Target::OpenCL)) {
-        // Share the same cl_ctx, cl_q across all OpenCL modules.
-        llvm::Function *fn = module->getFunction("halide_opencl_set_context");
-        internal_assert(fn) << "Could not find halide_opencl_set_context in module\n";
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_opencl_set_context in module\n";
-        void (*set_cl_context)(cl_context *, cl_command_queue *, volatile int *) =
-            reinterpret_bits<void (*)(cl_context *, cl_command_queue *, volatile int *)>(f);
-        set_cl_context(&cl_ctx.context, &cl_ctx.command_queue, &cl_ctx.lock);
+void load_libopencl() {
+    if (have_symbol("clCreateContext")) {
+        debug(1) << "This program was linked to OpenCL already\n";
+    } else {
+        debug(1) << "Looking for OpenCL shared library...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
+        if (!error.empty()) {
+            error.clear();
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
+        }
+        if (!error.empty()) {
+            error.clear();
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
+        }
+        user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
     }
+}
+
+void load_opengl() {
+#if defined(__linux__)
+    if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
+        debug(1) << "OpenGL support code already linked in...\n";
+    } else {
+        debug(1) << "Looking for OpenGL support code...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+        user_assert(error.empty()) << "Could not find libGL.so\n";
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
+        user_assert(error.empty()) << "Could not find libX11.so\n";
+    }
+#elif defined(__APPLE__)
+    if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
+        debug(1) << "OpenGL support code already linked in...\n";
+    } else {
+        debug(1) << "Looking for OpenGL support code...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
+        user_assert(error.empty()) << "Could not find AGL.framework\n";
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
+        user_assert(error.empty()) << "Could not find OpenGL.framework\n";
+    }
+#else
+    internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
+#endif
+}
+
 }
 
 using std::string;
@@ -186,7 +157,7 @@ public:
                                                                                  jit_wrapper_function(NULL) {
     }
 
-JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
+    JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
                   llvm::ExecutionEngine *ee, llvm::Module *m, const std::vector<JITModule> &dependencies,
                   void *main_function = NULL, int (*jit_wrapper_function)(const void **) = NULL) : exports(exports),
                                                                                                    execution_engine(ee),
@@ -361,8 +332,6 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
         ee->RegisterJITEventListener(listeners[i]);
     }
 
-    jit_init(ee, m, target);
-
     // Add exported symbols for all dependencies.
     std::set<std::string> provided_symbols;
     for (size_t i = 0; i < dependencies.size(); i++) {
@@ -409,8 +378,6 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module = new JITModuleContents(exports, ee, m, dependencies, main_fn, wrapper_fn);
     jit_module.ptr->name = function_name;
-
-    jit_finalize(ee, m, target);
 
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
@@ -647,9 +614,22 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         target.set_feature(Target::JIT);
 
         Target one_gpu(target);
-        one_gpu.set_feature(Target::OpenCL, runtime_kind == OpenCL);
-        one_gpu.set_feature(Target::CUDA, runtime_kind == CUDA);
-        one_gpu.set_feature(Target::OpenGL, runtime_kind == OpenGL);
+        switch (runtime_kind) {
+        case OpenCL:
+            one_gpu.set_feature(Target::OpenCL);
+            load_libopencl();
+            break;
+        case CUDA:
+            one_gpu.set_feature(Target::CUDA);
+            load_libcuda();
+            break;
+        case OpenGL:
+            one_gpu.set_feature(Target::OpenGL);
+            load_opengl();
+            break;
+        default:
+            break;
+        }
         llvm::Module *shared_runtime =
             get_initial_module_for_target(target, &llvm_context, true, runtime_kind != MainShared);
         clone_target_options(for_module, shared_runtime);
