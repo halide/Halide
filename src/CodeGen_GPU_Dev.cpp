@@ -1,29 +1,9 @@
 #include "CodeGen_GPU_Dev.h"
-#include "CodeGen_PTX_Dev.h"
-#include "CodeGen_OpenCL_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
 
 namespace Halide {
 namespace Internal {
 
 CodeGen_GPU_Dev::~CodeGen_GPU_Dev() {
-}
-
-CodeGen_GPU_Dev* CodeGen_GPU_Dev::new_for_target(Target t)
-{
-    if (t.has_feature(Target::CUDA)) {
-        debug(1) << "Constructing CUDA device codegen\n";
-        return new CodeGen_PTX_Dev(t);
-    } else if (t.has_feature(Target::OpenCL)) {
-        debug(1) << "Constructing OpenCL device codegen\n";
-        return new CodeGen_OpenCL_Dev(t);
-    } else if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Constructing OpenGL device codegen\n";
-        return new CodeGen_OpenGL_Dev(t);
-    } else {
-        internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
-        return NULL;
-    }
 }
 
 bool CodeGen_GPU_Dev::is_gpu_var(const std::string &name) {
