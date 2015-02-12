@@ -38,6 +38,8 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
+    std::string api_unique_name() { return "cuda"; }
+
 protected:
     using CodeGen_LLVM::visit;
 
