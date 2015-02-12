@@ -22,10 +22,9 @@
 
 namespace Halide {
 
-llvm::Module *codegen_llvm(const Module &module) {
-    Internal::CodeGen_LLVM *cg = Internal::CodeGen_LLVM::new_for_target(module.target());
-    cg->compile(module);
-    llvm::Module *out = cg->take_module();
+llvm::Module *codegen_llvm(const Module &module, llvm::LLVMContext &context) {
+    Internal::CodeGen_LLVM *cg = Internal::CodeGen_LLVM::new_for_target(module.target(), context);
+    llvm::Module *out = cg->compile(module);
     delete cg;
     return out;
 }
@@ -120,7 +119,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
-    module(NULL), owns_module(false),
+    module(NULL),
     function(NULL), context(NULL),
     builder(NULL),
     value(NULL),
@@ -222,29 +221,42 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     initialize_llvm();
 }
 
-CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target) {
+namespace {
+
+template <typename T>
+CodeGen_LLVM *make_codegen(const Target &target,
+                           llvm::LLVMContext &context) {
+    CodeGen_LLVM *ret = new T(target);
+    ret->set_context(context);
+    return ret;
+}
+
+}
+
+CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
+                                           llvm::LLVMContext &context) {
     // The awkward mapping from targets to code generators
     if (target.features_any_of(vec(Target::CUDA,
                                    Target::OpenCL,
                                    Target::OpenGL))) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {
-            return new CodeGen_GPU_Host<CodeGen_X86>(target);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
         }
 #endif
 #if defined(WITH_ARM) || defined(WITH_AARCH64)
         if (target.arch == Target::ARM) {
-            return new CodeGen_GPU_Host<CodeGen_ARM>(target);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM>>(target, context);
         }
 #endif
 #ifdef WITH_MIPS
         if (target.arch == Target::MIPS) {
-            return new CodeGen_GPU_Host<CodeGen_MIPS>(target);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS>>(target, context);
         }
 #endif
 #ifdef WITH_NATIVE_CLIENT
         if (target.arch == Target::PNaCl) {
-            return new CodeGen_GPU_Host<CodeGen_PNaCl>(target);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl>>(target, context);
         }
 #endif
 
@@ -253,17 +265,23 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target) {
         return NULL;
 
     } else if (target.arch == Target::X86) {
-        return new CodeGen_X86(target);
+        return make_codegen<CodeGen_X86>(target, context);
     } else if (target.arch == Target::ARM) {
-        return new CodeGen_ARM(target);
+        return make_codegen<CodeGen_ARM>(target, context);
     } else if (target.arch == Target::MIPS) {
-        return new CodeGen_MIPS(target);
+        return make_codegen<CodeGen_MIPS>(target, context);
     } else if (target.arch == Target::PNaCl) {
-        return new CodeGen_PNaCl(target);
+        return make_codegen<CodeGen_PNaCl>(target, context);
     }
     user_error << "Unknown target architecture: "
                << target.to_string() << "\n";
     return NULL;
+}
+
+void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
+    this->context = &context;
+    delete builder;
+    builder = new IRBuilder<>(context);
 }
 
 void CodeGen_LLVM::initialize_llvm() {
@@ -294,15 +312,8 @@ void CodeGen_LLVM::initialize_llvm() {
 }
 
 void CodeGen_LLVM::init_module() {
-    if (module && owns_module) {
-        delete module;
-        delete context;
-    }
-    delete builder;
-
-    context = new LLVMContext();
-    builder = new IRBuilder<>(*context);
-
+    // Start with a module containing the initial module for this target.
+    assert(!module);
     module = get_initial_module_for_target(target, context);
 
     // Branch weights for very likely branches
@@ -339,15 +350,7 @@ void CodeGen_LLVM::init_module() {
 }
 
 CodeGen_LLVM::~CodeGen_LLVM() {
-    if (module && owns_module) {
-        delete module;
-        module = NULL;
-        delete context;
-        context = NULL;
-        owns_module = false;
-    }
     delete builder;
-    builder = NULL;
 }
 
 bool CodeGen_LLVM::llvm_initialized = false;
@@ -357,7 +360,7 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 
-void CodeGen_LLVM::compile(const Module &input) {
+llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     init_module();
 
     module->setModuleIdentifier(input.name());
@@ -373,7 +376,6 @@ void CodeGen_LLVM::compile(const Module &input) {
     #endif
 
     if (target.has_feature(Target::JIT)) {
-        debug(1) << "Loading JIT shared runtime\n";
         std::vector<JITModule> shared_runtime = JITSharedRuntime::get(module, target);
 
         JITModule::make_externs(shared_runtime, module);
@@ -386,7 +388,6 @@ void CodeGen_LLVM::compile(const Module &input) {
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
-    owns_module = true;
 
     // Start the module off with a definition of a buffer_t
     define_buffer_t();
@@ -408,6 +409,11 @@ void CodeGen_LLVM::compile(const Module &input) {
 
     // Optimize
     CodeGen_LLVM::optimize_module();
+
+    // Disown the module and return it.
+    llvm::Module *m = module;
+    module = NULL;
+    return m;
 }
 
 namespace {
@@ -514,7 +520,7 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
     // Now verify the function is ok
     llvm::verifyFunction(*function);
 
-    add_jit_wrapper(module, *op, name + "_jit_wrapper");
+    add_jit_wrapper(module, *op, name + "_argv");
 }
 
 // Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.
@@ -2921,11 +2927,5 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
 
     return std::make_pair<llvm::Function *, int>(NULL, 0);
 }
-
-template<>
-EXPORT RefCount &ref_count<CodeGen_LLVM>(const CodeGen_LLVM *p) {return p->ref_count;}
-
-template<>
-EXPORT void destroy<CodeGen_LLVM>(const CodeGen_LLVM *p) {delete p;}
 
 }}

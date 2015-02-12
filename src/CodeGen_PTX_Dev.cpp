@@ -124,14 +124,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
-
     CodeGen_LLVM::init_module();
 
     #ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
     #endif
-
-    owns_module = true;
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {

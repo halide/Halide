@@ -192,8 +192,8 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     delete target_machine;
 }
 
-llvm::Module *output_llvm_module(const Module &module) {
-    return codegen_llvm(module);
+llvm::Module *output_llvm_module(const Module &module, llvm::LLVMContext &context) {
+    return codegen_llvm(module, context);
 }
 
 void output_object(llvm::Module *module, const std::string &filename) {

@@ -10,6 +10,7 @@
 namespace llvm {
 class Module;
 class TargetOptions;
+class LLVMContext;
 }
 
 namespace Halide {
@@ -19,7 +20,7 @@ EXPORT void get_target_options(const llvm::Module *module, llvm::TargetOptions &
 EXPORT void clone_target_options(const llvm::Module *from, llvm::Module *to);
 
 /** Generate an LLVM module. */
-EXPORT llvm::Module *output_llvm_module(const Module &module);
+EXPORT llvm::Module *output_llvm_module(const Module &module, llvm::LLVMContext &context);
 
 /** Compile an LLVM module to native targets (objects, native assembly). */
 // @{

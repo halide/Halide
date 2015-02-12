@@ -11,7 +11,8 @@ namespace Halide {
 void output_object(const Module &module, std::string filename) {
     if (filename.empty()) filename = module.name() + ".o";
 
-    llvm::Module *llvm = output_llvm_module(module);
+    llvm::LLVMContext context;
+    llvm::Module *llvm = output_llvm_module(module, context);
     output_object(llvm, filename);
     delete llvm;
 }
@@ -19,7 +20,8 @@ void output_object(const Module &module, std::string filename) {
 void output_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".s";
 
-    llvm::Module *llvm = output_llvm_module(module);
+    llvm::LLVMContext context;
+    llvm::Module *llvm = output_llvm_module(module, context);
     output_assembly(llvm, filename);
     delete llvm;
 }
@@ -30,7 +32,8 @@ void output_native(const Module &module,
     if (object_filename.empty()) object_filename = module.name() + ".o";
     if (assembly_filename.empty()) assembly_filename = module.name() + ".s";
 
-    llvm::Module *llvm = output_llvm_module(module);
+    llvm::LLVMContext context;
+    llvm::Module *llvm = output_llvm_module(module, context);
     output_object(llvm, object_filename);
     output_assembly(llvm, assembly_filename);
     delete llvm;
@@ -39,7 +42,8 @@ void output_native(const Module &module,
 void output_bitcode(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".bc";
 
-    llvm::Module *llvm = output_llvm_module(module);
+    llvm::LLVMContext context;
+    llvm::Module *llvm = output_llvm_module(module, context);
     output_bitcode(llvm, filename);
     delete llvm;
 }
@@ -47,7 +51,8 @@ void output_bitcode(const Module &module, std::string filename)  {
 void output_llvm_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".ll";
 
-    llvm::Module *llvm = output_llvm_module(module);
+    llvm::LLVMContext context;
+    llvm::Module *llvm = output_llvm_module(module, context);
     output_llvm_assembly(llvm, filename);
     delete llvm;
 }
@@ -58,7 +63,8 @@ void output_llvm(const Module &module,
     if (bitcode_filename.empty()) bitcode_filename = module.name() + ".bc";
     if (llvm_assembly_filename.empty()) llvm_assembly_filename = module.name() + ".ll";
 
-    llvm::Module *llvm = output_llvm_module(module);
+    llvm::LLVMContext context;
+    llvm::Module *llvm = output_llvm_module(module, context);
     output_bitcode(llvm, bitcode_filename);
     output_llvm_assembly(llvm, llvm_assembly_filename);
     delete llvm;
