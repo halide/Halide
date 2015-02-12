@@ -19,7 +19,7 @@ bool lookup_runtime_routine(const char *name, const Target &target, fn_type &res
 
     for (size_t i = 0; i < runtime.size(); i++) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
-          runtime[i].exports().find("halide_memoization_cache_set_size");
+          runtime[i].exports().find(name);
         if (f != runtime[i].exports().end()) {
             result = reinterpret_bits<fn_type>(f->second.address);
             return true;
