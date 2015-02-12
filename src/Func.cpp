@@ -2049,7 +2049,8 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
 
     Module m = compile_to_module(args, fn_name, target);
 
-    llvm::Module *llvm_module = output_llvm_module(m);
+    llvm::LLVMContext context;
+    llvm::Module *llvm_module = output_llvm_module(m, context);
 
     if (!output_files.object_name.empty()) {
         output_object(llvm_module, output_files.object_name);
@@ -2676,17 +2677,12 @@ void *Func::compile_jit(const Target &target_arg) {
     LoweredFunc lfn(n, infer_args.arg_types, lowered, LoweredFunc::External);
     module.append(lfn);
 
-
     if (debug::debug_level >= 3) {
         output_native(module, name() + ".bc", name() + ".s");
         output_text(module, name() + ".stmt");
     }
 
-    compiled_module = JITModule();
-    llvm::Module *llvm_module = output_llvm_module(module);
-    std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module, target_arg);
-    compiled_module.compile_module(llvm_module, n, target_arg, shared_runtime);
-
+    compiled_module = JITModule(module, lfn);
     return compiled_module.main_function();
 }
 

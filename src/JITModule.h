@@ -18,10 +18,12 @@ class Type;
 namespace Halide {
 
 struct Target;
+class Module;
 
 namespace Internal {
 
 class JITModuleContents;
+class LoweredFunc;
 
 struct JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
@@ -34,6 +36,7 @@ struct JITModule {
     };
 
     JITModule() {}
+    EXPORT JITModule(const Module &m, const LoweredFunc &fn);
     EXPORT JITModule(const std::map<std::string, Symbol> &exports);
 
     /** The exports map of a JITModule contains all symbols which are

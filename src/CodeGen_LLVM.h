@@ -48,31 +48,23 @@ namespace Internal {
  */
 class CodeGen_LLVM : public IRVisitor {
 public:
-    mutable RefCount ref_count;
+    /** Create an instance of CodeGen_LLVM suitable for the target. */
+    static CodeGen_LLVM *new_for_target(const Target &target,
+                                        llvm::LLVMContext &context);
 
-    CodeGen_LLVM(Target t);
     virtual ~CodeGen_LLVM();
 
-    static CodeGen_LLVM *new_for_target(const Target &target);
+    /** Takes a halide Module and compiles it to an llvm Module. */
+    virtual llvm::Module *compile(const Module &module);
 
-    /** Takes a halide statement and compiles it to an llvm module held
-     * internally. Call this before calling compile_to_bitcode or
-     * compile_to_native. */
-    virtual void compile(const Module &module);
-
+    /** The target we're generating code for */
     const Target &get_target() const { return target; }
 
-    llvm::Module *get_module() {
-        internal_assert(module) << "Module has not yet been built.\n";
-        return module;
-    }
-    llvm::Module *take_module() {
-        internal_assert(owns_module) << "Ownership of module has already been taken.\n";
-        owns_module = false;
-        return module;
-    }
+    /** Tell the code generator which LLVM context to use. */
+    void set_context(llvm::LLVMContext &context);
 
 protected:
+    CodeGen_LLVM(Target t);
 
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
@@ -104,7 +96,6 @@ protected:
     static bool llvm_Mips_enabled;
 
     llvm::Module *module;
-    bool owns_module;
     llvm::Function *function;
     llvm::LLVMContext *context;
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
@@ -404,7 +395,7 @@ private:
 }
 
 /** Given a Halide module, generate an llvm::Module. */
-EXPORT llvm::Module *codegen_llvm(const Module &module);
+EXPORT llvm::Module *codegen_llvm(const Module &module, llvm::LLVMContext &context);
 
 }
 
