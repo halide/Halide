@@ -38,6 +38,8 @@ public:
     
     virtual std::string print_gpu_name(const std::string &name);
 
+    std::string api_unique_name() { return "opencl"; }
+
 protected:
 
     class CodeGen_OpenCL_C : public CodeGen_C {

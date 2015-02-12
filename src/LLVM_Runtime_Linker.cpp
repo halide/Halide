@@ -88,7 +88,6 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
-DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -113,6 +112,7 @@ DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
+DECLARE_CPP_INITMOD(device_interface)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -434,6 +434,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_posix_print(c, bits_64, debug));
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
+            modules.push_back(get_initmod_device_interface(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
@@ -467,7 +468,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
     }
 
     if (module_type == ModuleAOT || module_type == ModuleGPU) {
-      //      Halide::Internal::debug(0) << "Module type GPU\n";
         if (t.has_feature(Target::CUDA)) {
             if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_cuda(c, bits_64, debug));
@@ -491,8 +491,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
-        } else {
-            modules.push_back(get_initmod_nogpu(c, bits_64, debug));
         }
     }
 

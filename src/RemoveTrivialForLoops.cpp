@@ -27,7 +27,7 @@ class RemoveTrivialForLoops : public IRMutator {
         } else if (body.same_as(for_loop->body)) {
             stmt = for_loop;
         } else {
-            stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
+            stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, for_loop->device_api, body);
         }
     }
 };
