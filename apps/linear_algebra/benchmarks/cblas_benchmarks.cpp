@@ -14,16 +14,20 @@
 #include <iostream>
 #include <random>
 #include <string>
-#include <cblas.h>
 #include "Halide.h"
 #include "clock.h"
 
 #if defined(USE_ATLAS)
 # define BLAS_NAME "Atlas"
+extern "C" {
+# include <cblas.h>
+}
 #elif defined(USE_OPENBLAS)
 # define BLAS_NAME "OpenBLAS"
+# include <cblas.h>
 #else
 # define BLAS_NAME "Cblas"
+# include <cblas.h>
 #endif
 
 #include "macros.h"
