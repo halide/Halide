@@ -19,6 +19,53 @@
 
 namespace Halide {
 
+#if __cplusplus > 199711L // C++11 strongly typed enum
+enum class DeviceAPI {
+#else
+struct DeviceAPI {
+enum Values {
+#endif
+
+    Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
+    Host,
+    Default_GPU,
+    CUDA,
+    OpenCL,
+    GLSL
+};
+
+#if __cplusplus <= 199711L // Make references to the enum in declarations compile.
+    int val;
+    DeviceAPI() : val(Parent) { }
+    DeviceAPI(int val) : val(val) { }
+    operator int() const { return val; }
+};
+#endif
+
+inline const char *device_api_to_string(const DeviceAPI &device_api) {
+    switch (device_api) {
+    case DeviceAPI::Host:
+        return "";
+        break;
+    case DeviceAPI::Parent:
+        return "<Parent>";
+        break;
+    case DeviceAPI::Default_GPU:
+        return "<Default_GPU>";
+        break;
+    case DeviceAPI::CUDA:
+        return "<CUDA>";
+        break;
+    case DeviceAPI::OpenCL:
+        return "<OpenCL>";
+        break;
+    case DeviceAPI::GLSL:
+        return "<GLSL>";
+        break;
+    }
+    return "<Unrecognized DeviceAPI>";
+}
+
 namespace Internal {
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
@@ -483,9 +530,10 @@ struct For : public StmtNode<For> {
     Expr min, extent;
     typedef enum {Serial, Parallel, Vectorized, Unrolled} ForType;
     ForType for_type;
+    DeviceAPI device_api;
     Stmt body;
 
-    EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body);
+    EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
 };
 
 /** Store a 'value' to the buffer called 'name' at a given

@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
         Var yo, yi, xo, xi;
         final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4);
         final.tile(x, y, xo, yo, xi, yi, input.width()/8, input.height()/8);
-        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, GPU_Default).unroll(c);
+        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, Device_Default_GPU).unroll(c);
 
         // Start from level 1 to save memory - level zero will be computed on demand
         for (int l = 1; l < levels; ++l) {
@@ -169,8 +169,8 @@ int main(int argc, char **argv) {
                 // Outer loop on CPU for the larger ones.
                 downsampled[l].tile(x, y, xo, yo, x, y, 256, 256);
             }
-            downsampled[l].gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default);
-            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default);
+            downsampled[l].gpu_tile(x, y, c, tile_size, tile_size, 4, Device_Default_GPU);
+            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, Device_Default_GPU);
         }
         break;
     }

@@ -10,6 +10,9 @@
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
 
+#include "IR.h"
+#include <map>
+
 namespace Halide {
 namespace Internal {
 
@@ -25,6 +28,8 @@ public:
      * CodeGen_GPU_Options. Processor features can be enabled using the
      * appropriate flags from Target */
     CodeGen_GPU_Host(Target);
+
+    virtual ~CodeGen_GPU_Host();
 
 protected:
     /** Declare members of the base class that must exist to help the
@@ -67,15 +72,13 @@ protected:
     void visit(const LoweredFunc *);
     // @}
 
+    llvm::Value *get_module_state(const std::string &api_unique_name,
+                                  bool create = true);
+
 private:
-    /** The global module state for the GPU runtime for the current
-     * function being generated. */
-    llvm::Value *module_state;
-
     /** Child code generator for device kernels. */
-    CodeGen_GPU_Dev *cgdev;
+    std::map<DeviceAPI, CodeGen_GPU_Dev *> cgdev;
 };
-
 
 }}
 

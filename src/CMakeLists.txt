@@ -73,55 +73,57 @@ endif()
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
 
 set(RUNTIME_CPP
+  android_clock
+  android_host_cpu_count
   android_io
+  android_opengl_context
+  cache
   cuda
+  device_interface
   fake_thread_pool
   gcd_thread_pool
+  gpu_device_selection
   ios_io
-  android_clock
   linux_clock
-  nogpu
+  linux_host_cpu_count
+  linux_opengl_context
+  module_aot_ref_count
+  module_jit_ref_count
+  nacl_host_cpu_count
   opencl
   opengl
-  gpu_device_selection
+  osx_clock
+  osx_host_cpu_count
   osx_opengl_context
-  linux_opengl_context
-  android_opengl_context
   posix_allocator
   posix_clock
-  osx_clock
-  windows_clock
   posix_error_handler
   posix_io
-  ssp
   posix_math
-  posix_thread_pool
-  windows_thread_pool
-  android_host_cpu_count
-  linux_host_cpu_count
-  osx_host_cpu_count
-  tracing
-  write_debug_image
-  windows_cuda
-  windows_opencl
-  windows_io
   posix_print
+  posix_thread_pool
+  ssp
   to_string
-  cache
-  nacl_host_cpu_count
-  module_jit_ref_count
-  module_aot_ref_count)
+  tracing
+  windows_clock
+  windows_cuda
+  windows_io
+  windows_opencl
+  windows_thread_pool
+  write_debug_image
+
 set (RUNTIME_LL
-  arm
   aarch64
+  arm
+  mips
+  pnacl_math
   posix_math
   ptx_dev
-  x86_avx
-  x86
-  x86_sse41
   win32_math
-  pnacl_math
-  mips)
+  x86
+  x86_avx
+  x86_sse41
+)
 set (RUNTIME_BC
   compute_20
   compute_30
@@ -327,6 +329,9 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   DEPENDS build_halide_h ${HEADER_FILES})
 
 file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
