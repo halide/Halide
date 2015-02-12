@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 #endif
     }
 
-    int ret = validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */);
+    int ret = validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
     if (ret != 0) {
         return ret;
     }

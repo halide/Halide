@@ -13,13 +13,8 @@ WEAK const char *get_error_name(CUresult error);
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
 
 // A cuda context defined in this module with weak linkage
-CUcontext WEAK weak_cuda_context = 0;
-volatile int WEAK weak_lock = 0;
-
-// A pointer to the cuda context to use, which may not be the one
-// above. This pointer is followed at initialize_kernels time.
-CUcontext WEAK *cuda_context_ptr = NULL;
-volatile int WEAK *lock_ptr = NULL;
+CUcontext WEAK context = 0;
+volatile int WEAK thread_lock = 0;
 
 }}}} // namespace Halide::Runtime::Internal::Cuda
 
@@ -35,11 +30,6 @@ extern int halide_start_clock(void *user_context);
 extern int64_t halide_current_time_ns(void *user_context);
 #endif
 
-WEAK void halide_cuda_set_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
-    cuda_context_ptr = ctx_ptr;
-    Halide::Runtime::Internal::Cuda::lock_ptr = lock_ptr;
-}
-
 // The default implementation of halide_cuda_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
@@ -54,30 +44,25 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // not block execution on failure.
     halide_assert(user_context, ctx != NULL);
 
-    if (cuda_context_ptr == NULL) {
-        cuda_context_ptr = &weak_cuda_context;
-        lock_ptr = &weak_lock;
-    }
-
-    halide_assert(user_context, lock_ptr != NULL);
-    while (__sync_lock_test_and_set(lock_ptr, 1)) { }
+    halide_assert(user_context, &thread_lock != NULL);
+    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
     // If the context has not been initialized, initialize it now.
-    halide_assert(user_context, cuda_context_ptr != NULL);
-    if (*cuda_context_ptr == NULL && create) {
-        CUresult error = create_cuda_context(user_context, cuda_context_ptr);
+    halide_assert(user_context, &context != NULL);
+    if (context == NULL && create) {
+        CUresult error = create_cuda_context(user_context, &context);
         if (error != CUDA_SUCCESS) {
-            __sync_lock_release(lock_ptr);
+            __sync_lock_release(&thread_lock);
             return error;
         }
     }
 
-    *ctx = *cuda_context_ptr;
+    *ctx = context;
     return 0;
 }
 
 WEAK int halide_cuda_release_context(void *user_context) {
-    __sync_lock_release(lock_ptr);
+    __sync_lock_release(&thread_lock);
     return 0;
 }
 
@@ -420,11 +405,11 @@ WEAK int halide_cuda_device_release(void *user_context) {
         }
 
         // Only destroy the context if we own it
-        if (ctx == weak_cuda_context) {
-            debug(user_context) << "    cuCtxDestroy " << weak_cuda_context << "\n";
-            err = cuCtxDestroy(weak_cuda_context);
+        if (ctx == context) {
+            debug(user_context) << "    cuCtxDestroy " << context << "\n";
+            err = cuCtxDestroy(context);
             halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-            weak_cuda_context = NULL;
+            context = NULL;
         }
     }
 
