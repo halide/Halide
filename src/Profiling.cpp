@@ -81,7 +81,7 @@ public:
             }
 
             Expr j = Variable::make(Int(32), "j");
-            Stmt do_timings = For::make("j", 0, kIters, For::Serial, ticker_block);
+            Stmt do_timings = For::make("j", 0, kIters, For::Serial, DeviceAPI::Host, ticker_block);
             do_timings = add_ticks(kOverhead, kOverhead, do_timings);
             do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
                 Cast::make(UInt(64), kIters * kUnroll), do_timings);
@@ -99,7 +99,7 @@ public:
 
             // Now that we know the final size, allocate the buffer and init to zero.
             Expr i = Variable::make(Int(32), "i");
-            Stmt init = For::make("i", 0, (int)indices.size(), For::Serial,
+            Stmt init = For::make("i", 0, (int)indices.size(), For::Serial, DeviceAPI::Host,
                 Store::make(kBufName, Cast::make(UInt(64), 0), i));
             s = Block::make(init, s);
 

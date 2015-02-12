@@ -186,17 +186,15 @@ public:
                                                                                  jit_wrapper_function(NULL) {
     }
 
-    JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
-                      const std::map<std::string, void *> &runtime_internal_exports,
-                      llvm::ExecutionEngine *ee, llvm::Module *m, const std::vector<JITModule> &dependencies,
-                      void *main_function = NULL, int (*jit_wrapper_function)(const void **) = NULL) : exports(exports),
-                                                                                                       runtime_internal_exports(runtime_internal_exports),
-                                                                                                       execution_engine(ee),
-                                                                                                       module(m),
-                                                                                                       dependencies(dependencies),
-                                                                                                       context(&m->getContext()),
-                                                                                                       main_function(main_function),
-                                                                                                       jit_wrapper_function(jit_wrapper_function) {
+JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
+                  llvm::ExecutionEngine *ee, llvm::Module *m, const std::vector<JITModule> &dependencies,
+                  void *main_function = NULL, int (*jit_wrapper_function)(const void **) = NULL) : exports(exports),
+                                                                                                   execution_engine(ee),
+                                                                                                   module(m),
+                                                                                                   dependencies(dependencies),
+                                                                                                   context(&m->getContext()),
+                                                                                                   main_function(main_function),
+                                                                                                   jit_wrapper_function(jit_wrapper_function) {
     }
 
     ~JITModuleContents() {
@@ -208,7 +206,6 @@ public:
     }
 
     std::map<std::string, JITModule::Symbol> exports;
-    std::map<std::string, void *> runtime_internal_exports;
 
     ExecutionEngine *execution_engine;
     llvm::Module *module;
@@ -406,35 +403,11 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
         exports[requested_exports[i]] = compile_and_get_function(ee, m, requested_exports[i]);
     }
 
-    const char *runtime_internal_names[] = {
-        "halide_dev_malloc",
-        "halide_dev_free",
-        "halide_copy_to_dev",
-        "halide_copy_to_host",
-        "halide_set_custom_print",
-        "halide_set_error_handler",
-        "halide_set_custom_malloc",
-        "halide_set_custom_free",
-        "halide_set_custom_trace",
-        "halide_set_custom_do_par_for",
-        "halide_set_custom_do_task",
-        "halide_memoization_cache_set_size",
-        NULL
-    };
-
-    std::map<std::string, void *> runtime_internal_exports;
-    for (size_t i = 0; runtime_internal_names[i]; i++) {
-        void *address = compile_and_get_function(ee, m, runtime_internal_names[i], true).address;
-        if (address) {
-            runtime_internal_exports[runtime_internal_names[i]] = address;
-        }
-    }
-
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
-    jit_module = new JITModuleContents(exports, runtime_internal_exports, ee, m, dependencies, main_fn, wrapper_fn);
+    jit_module = new JITModuleContents(exports, ee, m, dependencies, main_fn, wrapper_fn);
     jit_module.ptr->name = function_name;
 
     jit_finalize(ee, m, target);
@@ -466,6 +439,7 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 }
 
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
+    internal_assert(jit_module.ptr != NULL) << "JIT module is undefined\n";
     return jit_module.ptr->exports;
 }
 
@@ -501,45 +475,12 @@ int (*JITModule::jit_wrapper_function() const)(const void **) {
     return (int (*)(const void **))jit_module.ptr->jit_wrapper_function;
 }
 
-int JITModule::copy_to_dev(struct buffer_t *buf) const {
-    if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_dev");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
-        }
-    }
-    return 0;
-}
-
-int JITModule::copy_to_host(struct buffer_t *buf) const {
-    if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_host");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
-        }
-    }
-    return 0;
-}
-
-int JITModule::dev_free(struct buffer_t *buf) const {
-    if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_dev_free");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
-        }
-    }
-    return 0;
-}
-
 void JITModule::memoization_cache_set_size(int64_t size) const {
     if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_memoization_cache_set_size");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<void (*)(int64_t)>(f->second))(size);
+        std::map<std::string, Symbol>::const_iterator f =
+            exports().find("halide_memoization_cache_set_size");
+        if (f != exports().end()) {
+            return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
         }
     }
 }
@@ -677,10 +618,9 @@ std::mutex shared_runtimes_mutex;
 // each target.)
 enum RuntimeKind {
     MainShared,
-    CUDA,
     OpenCL,
+    CUDA,
     OpenGL,
-    NoGPU,
     MaxRuntimeKind
 };
 
@@ -695,11 +635,24 @@ JITModule &shared_runtimes(RuntimeKind k) {
     return m[k];
 }
 
-JITModule &make_module(llvm::Module *m, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
-    if (!shared_runtimes(runtime_kind).jit_module.defined()) {
+JITModule &make_module(llvm::Module *for_module, Target target,
+                       RuntimeKind runtime_kind, const std::vector<JITModule> &deps,
+                       bool create) {
+    if (!shared_runtimes(runtime_kind).jit_module.defined() && create) {
+        // If the module has not yet been defined, we need a module to clone the target options from.
+        internal_assert(for_module != NULL);
+
+        // Ensure that JIT feature is set on target as it must be in
+        // order for the right runtime components to be added.
+        target.set_feature(Target::JIT);
+
+        Target one_gpu(target);
+        one_gpu.set_feature(Target::OpenCL, runtime_kind == OpenCL);
+        one_gpu.set_feature(Target::CUDA, runtime_kind == CUDA);
+        one_gpu.set_feature(Target::OpenGL, runtime_kind == OpenGL);
         llvm::Module *shared_runtime =
             get_initial_module_for_target(target, &llvm_context, true, runtime_kind != MainShared);
-        clone_target_options(m, shared_runtime);
+        clone_target_options(for_module, shared_runtime);
 
         std::set<std::string> halide_exports_unique;
 
@@ -751,6 +704,7 @@ JITModule &make_module(llvm::Module *m, const Target &target, RuntimeKind runtim
 
         uint64_t arg_addr =
             shared_runtimes(runtime_kind).jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
+
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = shared_runtimes(runtime_kind).jit_module.ptr;
 
@@ -771,27 +725,35 @@ JITModule &make_module(llvm::Module *m, const Target &target, RuntimeKind runtim
  * JITSharedRuntime::release_all is called. If
  * JITSharedRuntime::release_all is called, the global state is rest
  * and any newly compiled Funcs will get a new runtime. */
-std::vector<JITModule> JITSharedRuntime::get(llvm::Module *m, const Target &target) {
+std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
     #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     #endif
 
-    // TODO: Thread safety
     std::vector<JITModule> result;
 
-    result.push_back(make_module(m, target, MainShared, result));
+    JITModule m = make_module(for_module, target, MainShared, result, create);
+    if (m.jit_module.defined())
+        result.push_back(m);
 
-    JITModule gpu_runtime;
+    // Add all requested GPU modules, each only depending on the main shared runtime.
+    std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
-        gpu_runtime = make_module(m, target, OpenCL, result);
-    } else if (target.has_feature(Target::CUDA)) {
-        gpu_runtime = make_module(m, target, CUDA, result);
-    } else if (target.has_feature(Target::OpenGL)) {
-        gpu_runtime = make_module(m, target, OpenGL, result);
-    } else {
-        gpu_runtime = make_module(m, target, NoGPU, result);
+        JITModule m = make_module(for_module, target, OpenCL, result, create);
+        if (m.jit_module.defined())
+            result.push_back(m);
     }
-    result.push_back(gpu_runtime);
+    if (target.has_feature(Target::CUDA)) {
+        JITModule m = make_module(for_module, target, CUDA, result, create);
+        if (m.jit_module.defined())
+            result.push_back(m);
+    }
+    if (target.has_feature(Target::OpenGL)) {
+        JITModule m = make_module(for_module, target, OpenGL, result, create);
+        if (m.jit_module.defined())
+            result.push_back(m);
+    }
+
     return result;
 }
 
