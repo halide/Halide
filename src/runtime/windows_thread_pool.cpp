@@ -24,7 +24,7 @@ typedef uint64_t ConditionVariable;
 typedef uint64_t InitOnce;
 typedef void * Thread;
 typedef struct {
-    uint8_t buf[40];
+    uint64_t buf[5];
 } CriticalSection;
 
 extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
@@ -79,8 +79,24 @@ struct halide_work_queue_t {
     // Singly linked list for job stack
     work *jobs;
 
-    // Broadcast whenever items are added to the queue or a job completes.
-    ConditionVariable state_change;
+    // Worker threads are divided into an 'A' team and a 'B' team. The
+    // B team sleeps on the wakeup_b_team condition variable. The A
+    // team does work. Threads transition to the B team if they wake
+    // up and find that a_team_size > target_a_team_size.  Threads
+    // move into the A team whenever they wake up and find that
+    // a_team_size < target_a_team_size.
+    int a_team_size, target_a_team_size;
+
+    // Broadcast when a job completes.
+    ConditionVariable wakeup_owners;
+
+    // Broadcast whenever items are added to the work queue.
+    ConditionVariable wakeup_a_team;
+
+    // May also be broadcast when items are added to the work queue if
+    // more threads are required than are currently in the A team.
+    ConditionVariable wakeup_b_team;
+
     // Keep track of threads so they can be joined at shutdown
     Thread threads[MAX_THREADS];
 
@@ -113,8 +129,6 @@ WEAK int default_do_task(void *user_context, halide_task f, int idx,
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
-    // halide_printf(NULL, "Worker starting\n");
-
     // Grab the lock
     EnterCriticalSection(&halide_work_queue.mutex);
 
@@ -126,11 +140,21 @@ WEAK void *halide_worker_thread(void *void_arg) {
            : halide_work_queue.running()) {
 
         if (halide_work_queue.jobs == NULL) {
-            // There are no jobs pending, though some tasks may still
-            // be in flight from the last job. Release the lock and
-            // wait for something new to happen.
-            // halide_printf(NULL, "Worker sleeping\n");
-            SleepConditionVariableCS(&halide_work_queue.state_change, &halide_work_queue.mutex, -1);
+            if (owned_job) {
+                // There are no jobs pending. Wait for the last worker
+                // to signal that the job is finished.
+                SleepConditionVariableCS(&halide_work_queue.wakeup_owners, &halide_work_queue.mutex, -1);
+            } else if (halide_work_queue.a_team_size <= halide_work_queue.target_a_team_size) {
+                // There are no jobs pending. Wait until more jobs are enqueued.
+                SleepConditionVariableCS(&halide_work_queue.wakeup_a_team, &halide_work_queue.mutex, -1);
+            } else {
+                // There are no jobs pending, and there are too many
+                // threads in the A team. Transition to the B team
+                // until the wakeup_b_team condition is fired.
+                halide_work_queue.a_team_size--;
+                SleepConditionVariableCS(&halide_work_queue.wakeup_b_team, &halide_work_queue.mutex, -1);
+                halide_work_queue.a_team_size++;
+            }
         } else {
             // There are jobs still to do. Grab the next one.
             work *job = halide_work_queue.jobs;
@@ -151,13 +175,10 @@ WEAK void *halide_worker_thread(void *void_arg) {
             job->active_workers++;
 
             // Release the lock and do the task.
-            // halide_printf(NULL, "Worker about to work\n");
             LeaveCriticalSection(&halide_work_queue.mutex);
-            // halide_printf(NULL, "Worker doing work\n");
             int result = halide_do_task(myjob.user_context, myjob.f, myjob.next,
                                         myjob.closure);
             EnterCriticalSection(&halide_work_queue.mutex);
-            // halide_printf(NULL, "Worker done work\n");
 
             // If this task failed, set the exit status on the job.
             if (result) {
@@ -170,8 +191,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
             // If the job is done and I'm not the owner of it, wake up
             // the owner.
             if (!job->running() && job != owned_job) {
-                // halide_printf(NULL, "Job done. Wake up the owner.\n");
-                WakeAllConditionVariable(&halide_work_queue.state_change);
+                WakeAllConditionVariable(&halide_work_queue.wakeup_owners);
             }
         }
     }
@@ -197,7 +217,9 @@ WEAK int default_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *)
 
         //  halide_printf(user_context, "Making condition variable\n");
 
-        InitializeConditionVariable(&halide_work_queue.state_change);
+        InitializeConditionVariable(&halide_work_queue.wakeup_owners);
+        InitializeConditionVariable(&halide_work_queue.wakeup_a_team);
+        InitializeConditionVariable(&halide_work_queue.wakeup_b_team);
         halide_work_queue.jobs = NULL;
 
         if (!halide_num_threads) {
@@ -226,6 +248,8 @@ WEAK int default_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *)
             halide_work_queue.threads[i] = CreateThread(NULL, 0, halide_worker_thread, NULL, 0, NULL);
         }
 
+        halide_work_queue.a_team_size = halide_num_threads;
+
         halide_thread_pool_initialized = true;
     }
 
@@ -239,16 +263,33 @@ WEAK int default_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *)
     job.exit_status = 0;     // The job hasn't failed yet
     job.active_workers = 0;  // Nobody is working on this yet
 
+    if (!halide_work_queue.jobs && size < halide_num_threads) {
+        // If there's no nested parallelism happening and there are
+        // fewer tasks to do than threads, then set the target A team
+        // size so that some threads will put themselves to sleep
+        // until a larger job arrives.
+        halide_work_queue.target_a_team_size = size;
+    } else {
+        halide_work_queue.target_a_team_size = halide_num_threads;
+    }
+
+    // If there are more tasks than threads in the A team, we should
+    // wake up everyone.
+    bool wake_b_team = size > halide_work_queue.a_team_size;
+
     // Push the job onto the stack.
     job.next_job = halide_work_queue.jobs;
     halide_work_queue.jobs = &job;
 
-    // halide_printf(user_context, "Releasing mutex\n");
     LeaveCriticalSection(&halide_work_queue.mutex);
 
-    // Wake up any idle worker threads.
-    // halide_printf(user_context, "Waking up workers\n");
-    WakeAllConditionVariable(&halide_work_queue.state_change);
+    // Wake up our A team.
+    WakeAllConditionVariable(&halide_work_queue.wakeup_a_team);
+
+    if (wake_b_team) {
+        // We need the B team too.
+        WakeAllConditionVariable(&halide_work_queue.wakeup_b_team);
+    }
 
     // Do some work myself.
     halide_worker_thread((void *)(&job));
@@ -291,20 +332,24 @@ WEAK void halide_shutdown_thread_pool() {
     // to go home
     EnterCriticalSection(&halide_work_queue.mutex);
     halide_work_queue.shutdown = true;
-    WakeAllConditionVariable(&halide_work_queue.state_change);
+    WakeAllConditionVariable(&halide_work_queue.wakeup_owners);
+    WakeAllConditionVariable(&halide_work_queue.wakeup_a_team);
+    WakeAllConditionVariable(&halide_work_queue.wakeup_b_team);
     LeaveCriticalSection(&halide_work_queue.mutex);
 
     // Wait until they leave
     for (int i = 0; i < halide_num_threads-1; i++) {
-        //fprintf(stderr, "Waiting for thread %d to exit\n", i);
         WaitForSingleObject(halide_work_queue.threads[i], -1);
     }
 
-    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
     // Tidy up
     DeleteCriticalSection(&halide_work_queue.mutex);
     halide_work_queue.init_once = 0;
-    //DestroyConditionVariable(&halide_work_queue.state_change);
+
+    // Condition variables aren't destroyed on windows.
+    // DestroyConditionVariable(&halide_work_queue.wakeup_owners);
+    // DestroyConditionVariable(&halide_work_queue.wakeup_a_team);
+    // DestroyConditionVariable(&halide_work_queue.wakeup_b_team);
     halide_thread_pool_initialized = false;
 }
 

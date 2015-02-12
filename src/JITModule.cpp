@@ -622,10 +622,19 @@ enum RuntimeKind {
     MaxRuntimeKind
 };
 
-JITModule shared_runtimes[MaxRuntimeKind];
+JITModule &shared_runtimes(RuntimeKind k) {
+    static JITModule *m = NULL;
+    if (!m) {
+        // Note that this is never freed. On windows this would invoke
+        // static destructors that use threading objects, and these
+        // don't work (crash or deadlock) after main exits.
+        m = new JITModule[MaxRuntimeKind];
+    }
+    return m[k];
+}
 
 JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
-    if (!shared_runtimes[runtime_kind].jit_module.defined()) {
+    if (!shared_runtimes(runtime_kind).jit_module.defined()) {
         LLVMContext *llvm_context = new LLVMContext();
 
         llvm::Module *shared_runtime = 
@@ -643,52 +652,52 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
 
-        shared_runtimes[runtime_kind].compile_module(cg, shared_runtime, "", deps, halide_exports);
+        shared_runtimes(runtime_kind).compile_module(cg, shared_runtime, "", deps, halide_exports);
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_print", print_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_print", print_handler);
 
             runtime_internal_handlers.custom_malloc =
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_malloc", malloc_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_malloc", malloc_handler);
 
             runtime_internal_handlers.custom_free =
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_free", free_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_free", free_handler);
 
             runtime_internal_handlers.custom_do_task = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_task", do_task_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_task", do_task_handler);
 
             runtime_internal_handlers.custom_do_par_for = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_par_for", do_par_for_handler);
 
             runtime_internal_handlers.custom_error = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_error_handler", error_handler_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_error_handler", error_handler_handler);
 
             runtime_internal_handlers.custom_trace = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_trace", trace_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
             if (default_cache_size != 0) {
-                shared_runtimes[MainShared].memoization_cache_set_size(default_cache_size);
+                shared_runtimes(MainShared).memoization_cache_set_size(default_cache_size);
             }
 
-            shared_runtimes[runtime_kind].jit_module.ptr->name = "MainShared";
+            shared_runtimes(runtime_kind).jit_module.ptr->name = "MainShared";
         } else {
-            shared_runtimes[runtime_kind].jit_module.ptr->name = "GPU";
+            shared_runtimes(runtime_kind).jit_module.ptr->name = "GPU";
         }
 
         uint64_t arg_addr = 
-            shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
+            shared_runtimes(runtime_kind).jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
         internal_assert(arg_addr != 0);
-        *((void **)arg_addr) = shared_runtimes[runtime_kind].jit_module.ptr;
+        *((void **)arg_addr) = shared_runtimes(runtime_kind).jit_module.ptr;
 
-        uint64_t fun_addr = shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
+        uint64_t fun_addr = shared_runtimes(runtime_kind).jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
         internal_assert(fun_addr != 0);
         *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
     }
-    return shared_runtimes[runtime_kind];
+    return shared_runtimes(runtime_kind);
 }
 
 }  // anonymous namespace
@@ -743,7 +752,7 @@ void JITSharedRuntime::release_all() {
     #endif
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
-        shared_runtimes[(RuntimeKind)(i - 1)].jit_module = NULL;
+        shared_runtimes((RuntimeKind)(i - 1)).jit_module = NULL;
     }
 }
 
@@ -761,9 +770,9 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
     #endif
 
     if (size != default_cache_size &&
-        shared_runtimes[MainShared].jit_module.defined()) {
+        shared_runtimes(MainShared).jit_module.defined()) {
         default_cache_size = size;
-        shared_runtimes[MainShared].memoization_cache_set_size(size);
+        shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
 }
 
