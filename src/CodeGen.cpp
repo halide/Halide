@@ -1929,7 +1929,7 @@ void CodeGen::visit(const Call *op) {
             }
 
         } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 1);
             llvm::Function *fn = Intrinsic::getDeclaration(module,
                 Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
             CallInst *call = builder->CreateCall(fn);
