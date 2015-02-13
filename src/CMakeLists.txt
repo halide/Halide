@@ -111,6 +111,7 @@ set(RUNTIME_CPP
   windows_opencl
   windows_thread_pool
   write_debug_image
+)
 
 set (RUNTIME_LL
   aarch64
@@ -127,7 +128,8 @@ set (RUNTIME_LL
 set (RUNTIME_BC
   compute_20
   compute_30
-  compute_35)
+  compute_35
+)
 
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
@@ -314,7 +316,9 @@ set(HEADER_FILES
   LinearSolve.h
   BranchVisitors.h
   SpecializeBranchedLoops.h
-  RemoveDeadAllocations.h)
+  RemoveDeadAllocations.h
+  DeviceInterface.h
+)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -421,8 +425,10 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BranchVisitors.cpp
   SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
+  DeviceInterface.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
-  ${HEADER_FILES})
+  ${HEADER_FILES}
+)
 
 # CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
 # to target_link_libraries. This makes the CMake generation step take a very
@@ -488,4 +494,5 @@ endif (NOT HALIDE_SHARED_LIBRARY)
 
 add_dependencies(Halide
   InitialModules
-  build_halide_h)
+  build_halide_h
+)
