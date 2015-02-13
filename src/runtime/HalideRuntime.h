@@ -70,7 +70,7 @@ extern void halide_error(void *user_context, const char *);
  * without depending on e.g. C++ constructor logic.
  */
 struct halide_mutex {
-    unsigned char _private[64];
+    uint64_t _private[8];
 };
 
 /** A basic set of mutex functions, which call platform specific code
