@@ -116,7 +116,7 @@ class GEMMGenerator :
         // Add up any leftover elements when the sum size is not a
         // multiple of the vector size.
         Func sum_tail;
-        RDom tail(sum_size_vec, sum_size - sum_size_vec * vec_size);
+        RDom tail(sum_size_vec * vec_size, sum_size - sum_size_vec * vec_size);
         sum_tail(i, j) += prod(tail, i, j);
 
         // Add the two.
