@@ -584,8 +584,13 @@ void CodeGen_LLVM::optimize_module() {
 
     debug(3) << "Optimizing module\n";
 
+    #if LLVM_VERSION < 37
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
+    #else
+    legacy::FunctionPassManager function_pass_manager(module);
+    legacy::PassManager module_pass_manager;
+    #endif
 
     #if LLVM_VERSION >= 36
     internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
