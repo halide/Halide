@@ -361,8 +361,14 @@ void CodeGen::optimize_module() {
 
     debug(3) << "Optimizing module\n";
 
+    #if LLVM_VERSION < 37
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
+    #else
+    legacy::FunctionPassManager function_pass_manager(module);
+    legacy::PassManager module_pass_manager;
+    #endif
+
 
     #if LLVM_VERSION >= 36
     internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
@@ -474,7 +480,11 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     formatted_raw_ostream out(raw_out);
 
     // Build up all of the passes that we want to do to the module.
+    #if LLVM_VERSION < 37
     PassManager pass_manager;
+    #else
+    legacy::PassManager pass_manager;
+    #endif
 
     #if LLVM_VERSION < 37
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
@@ -500,8 +510,12 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     pass_manager.add(createAlwaysInlinerPass());
 
     // Override default to generate verbose assembly.
+    #if LLVM_VERSION < 37
     target_machine->setAsmVerbosityDefault(true);
-
+    #else 
+    target_machine->Options.MCOptions.AsmVerbose = true;
+    #endif
+ 
     // Ask the target to add backend passes as necessary.
     TargetMachine::CodeGenFileType file_type =
         assembly ? TargetMachine::CGFT_AssemblyFile :
