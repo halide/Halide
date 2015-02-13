@@ -220,9 +220,6 @@ int main(int argc, char **argv) {
         // Note that in this case we reused the name 'x' as the new
         // outer variable. Later scheduling calls that refer to x
         // will refer to this new outer variable named x.
-        //
-        // Our snoop function isn't set-up to print out vectors, this
-        // is why we included one called snoopx4 above.
 
         // This time we'll evaluate over an 8x4 box, so that we have
         // more than one vector of work per scanline.
