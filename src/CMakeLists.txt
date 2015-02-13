@@ -113,6 +113,7 @@ set(RUNTIME_CPP
   module_aot_ref_count)
 set (RUNTIME_LL
   arm
+  arm_no_neon
   aarch64
   posix_math
   ptx_dev
