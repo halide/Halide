@@ -233,6 +233,10 @@ CodeGen_LLVM *make_codegen(const Target &target,
 
 }
 
+void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
+    this->context = &context;
+}
+
 CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                            llvm::LLVMContext &context) {
     // The awkward mapping from targets to code generators
@@ -278,12 +282,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     return NULL;
 }
 
-void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
-    this->context = &context;
-    delete builder;
-    builder = new IRBuilder<>(context);
-}
-
 void CodeGen_LLVM::initialize_llvm() {
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
@@ -313,8 +311,10 @@ void CodeGen_LLVM::initialize_llvm() {
 
 void CodeGen_LLVM::init_module() {
     // Start with a module containing the initial module for this target.
-    assert(!module);
+    delete module;
+    delete builder;
     module = get_initial_module_for_target(target, context);
+    builder = new IRBuilder<>(*context);
 
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
@@ -421,12 +421,10 @@ namespace {
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a funtion with an
 // unknown (at compile time) argument list.
-void add_jit_wrapper(llvm::Module *m, const LoweredFunc &fn, const std::string &name) {
+void add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &name) {
     llvm::Type *buffer_t_type = m->getTypeByName("struct.buffer_t");
     llvm::Type *i8 = llvm::Type::getInt8Ty(m->getContext());
     llvm::Type *i32 = llvm::Type::getInt32Ty(m->getContext());
-
-    llvm::Function *function = m->getFunction(fn.name);
 
     llvm::FunctionType *func_t = llvm::FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, m);
@@ -436,22 +434,22 @@ void add_jit_wrapper(llvm::Module *m, const LoweredFunc &fn, const std::string &
 
     llvm::Value *arg_array = wrapper->arg_begin();
 
-    std::vector<llvm::Value *> wrapper_args(fn.args.size());
-    for (size_t i = 0; i < fn.args.size(); i++) {
+    std::vector<llvm::Value *> wrapper_args;
+    for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
-        llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, (int)i);
+        llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, wrapper_args.size());
         ptr = builder.CreateLoad(ptr);
-        if (fn.args[i].is_buffer) {
+        if (i->getType() == buffer_t_type->getPointerTo()) {
             // Cast the argument to a buffer_t *
-            wrapper_args[i] = builder.CreatePointerCast(ptr, buffer_t_type->getPointerTo());
+            wrapper_args.push_back(builder.CreatePointerCast(ptr, buffer_t_type->getPointerTo()));
         } else {
             // Cast to the appropriate type and load
-            ptr = builder.CreatePointerCast(ptr, llvm_type_of(&m->getContext(), fn.args[i].type)->getPointerTo());
-            wrapper_args[i] = builder.CreateLoad(ptr);
+            ptr = builder.CreatePointerCast(ptr, i->getType()->getPointerTo());
+            wrapper_args.push_back(builder.CreateLoad(ptr));
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
-    llvm::Value *result = builder.CreateCall(function, wrapper_args);
+    llvm::Value *result = builder.CreateCall(fn, wrapper_args);
     builder.CreateRet(result);
     llvm::verifyFunction(*wrapper);
 }
@@ -520,7 +518,7 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
     // Now verify the function is ok
     llvm::verifyFunction(*function);
 
-    add_jit_wrapper(module, *op, name + "_argv");
+    add_argv_wrapper(module, function, name + "_argv");
 }
 
 // Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.

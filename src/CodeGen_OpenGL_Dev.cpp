@@ -730,7 +730,7 @@ void check(Expr e, const string &result) {
     }
     Evaluate::make(e).accept(&cg);
     string src = normalize_temporaries(source.str());
-    if (src != result) {
+    if (!ends_with(src, result)) {
         internal_error
             << "Codegen failed for " << e << "\n"
             << "  Correct source code:\n" << result

@@ -24,16 +24,13 @@ struct GPU_Argument : public Argument {
     GPU_Argument(const std::string &_name, bool _is_buffer, Type _type) :
         Argument(_name, _is_buffer, _type), size(0), packed_index(0) {}
     GPU_Argument(const std::string &_name, bool _is_buffer, Type _type,
-                 size_t _size) : 
+                 size_t _size) :
         Argument(_name, _is_buffer, _type), size(_size), packed_index(0) {}
 };
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {
     virtual ~CodeGen_GPU_Dev();
-
-    /** Create a new GPU code generator for the given target. */
-    static CodeGen_GPU_Dev *new_for_target(Target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
@@ -73,10 +70,10 @@ struct CodeGen_GPU_Dev {
     static bool is_block_uniform(Expr expr);
     /** Checks if the buffer is a candidate for constant storage. Most
      * GPUs (APIs) support a constant memory storage class that cannot be
-     * written to and performs well for block uniform accesses. A buffer is a 
-     * candidate for constant storage if it is never written to, and loads are 
+     * written to and performs well for block uniform accesses. A buffer is a
+     * candidate for constant storage if it is never written to, and loads are
      * uniform within the workgroup. */
-    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);    
+    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
 };
 
 }}

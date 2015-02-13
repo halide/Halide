@@ -225,6 +225,8 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
+    function_name = op->name;
+
     // Create a new module for all of the kernels we find in this function.
     std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
@@ -245,7 +247,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
         CodeGen_GPU_Dev *gpu_codegen = iter->second;
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
-        // If the module state for this API did not get created, there were
+        // If the module state for this API/function did not get created, there were
         // no kernels using this API.
         llvm::Value *module_state = get_module_state(api_unique_name, false);
         if (!module_state) {
@@ -256,7 +258,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
 
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
-        Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_" + api_unique_name + "_kernel_src");
+        Value *kernel_src_ptr =
+            CodeGen_CPU::create_constant_binary_blob(kernel_src,
+                                                     "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
         // Insert a new block to run initialization at the beginning of the function.
         BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels" + api_unique_name,
@@ -278,6 +282,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
         // Set the entry for the next init block to the init block just generated
         entry = init_kernels_bb;
     }
+
+    function_name = "";
 }
 
 template<typename CodeGen_CPU>
@@ -487,7 +493,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 template<typename CodeGen_CPU>
 Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name,
                                                        bool create) {
-    GlobalVariable *module_state = module->getGlobalVariable("module_state" + api_unique_name, true);
+    std::string name = "module_state_" + function_name + "_" + api_unique_name;
+    GlobalVariable *module_state = module->getGlobalVariable(name, true);
     if (!module_state && create)
     {
         // Create a global variable to hold the module state
@@ -495,7 +502,7 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_un
         module_state = new GlobalVariable(*module, void_ptr_type,
                                           false, GlobalVariable::InternalLinkage,
                                           ConstantPointerNull::get(void_ptr_type),
-                                          "module_state" + api_unique_name);
+                                          name);
         debug(4) << "Created device module state global variable\n";
     }
 
