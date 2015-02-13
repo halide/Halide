@@ -27,7 +27,11 @@
 #if LLVM_VERSION < 36
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
 #endif
+#if LLVM_VERSION < 37
 #include <llvm/PassManager.h>
+#else
+#include <llvm/IR/LegacyPassManager.h>
+#endif
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/TargetRegistry.h>

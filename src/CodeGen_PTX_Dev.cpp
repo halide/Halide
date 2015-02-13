@@ -314,7 +314,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     TargetMachine &Target = *target.get();
 
     // Set up passes
+    #if LLVM_VERSION < 37
     PassManager PM;
+    #else
+    legacy::PassManager PM;
+    #endif
 
     #if LLVM_VERSION < 37
     PM.add(new TargetLibraryInfo(TheTriple));
@@ -379,7 +383,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     PM.add(createAlwaysInlinerPass());
 
     // Override default to generate verbose assembly.
+    #if LLVM_VERSION < 37
     Target.setAsmVerbosityDefault(true);
+    #else
+    Target.Options.MCOptions.AsmVerbose = true;
+    #endif
 
     // Output string stream
     std::string outstr;
