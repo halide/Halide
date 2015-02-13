@@ -111,6 +111,7 @@ set(RUNTIME_CPP
   windows_opencl
   windows_thread_pool
   write_debug_image
+)
 
 set (RUNTIME_LL
   aarch64
@@ -127,7 +128,8 @@ set (RUNTIME_LL
 set (RUNTIME_BC
   compute_20
   compute_30
-  compute_35)
+  compute_35
+)
 
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
@@ -319,6 +321,7 @@ set(HEADER_FILES
   Output.h
   LLVM_Output.h
   Module.h
+  DeviceInterface.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -430,6 +433,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Output.cpp
   LLVM_Output.cpp
   Module.cpp
+  DeviceInterface.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
 )
@@ -498,4 +502,5 @@ endif (NOT HALIDE_SHARED_LIBRARY)
 
 add_dependencies(Halide
   InitialModules
-  build_halide_h)
+  build_halide_h
+)

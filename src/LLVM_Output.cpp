@@ -154,29 +154,37 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     // Build up all of the passes that we want to do to the module.
+    #if LLVM_VERSION < 37
     llvm::PassManager pass_manager;
+    #else
+    llvm::legacy::PassManager pass_manager;
+    #endif
 
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
     pass_manager.add(new llvm::TargetLibraryInfo(llvm::Triple(module->getTargetTriple())));
 
-#if LLVM_VERSION < 33
+    #if LLVM_VERSION < 33
     pass_manager.add(new llvm::TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
                                                    target_machine->getVectorTargetTransformInfo()));
-#else
+    #else
     target_machine->addAnalysisPasses(pass_manager);
-#endif
+    #endif
 
-#if LLVM_VERSION < 35
+    #if LLVM_VERSION < 35
     llvm::DataLayout *layout = new llvm::DataLayout(module);
     Internal::debug(2) << "Data layout: " << layout->getStringRepresentation();
     pass_manager.add(layout);
-#endif
+    #endif
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerPass());
 
     // Override default to generate verbose assembly.
+    #if LLVM_VERSION < 37
     target_machine->setAsmVerbosityDefault(true);
+    #else
+    target_machine->Options.MCOptions.AsmVerbose = true;
+    #endif
 
     llvm::raw_fd_ostream *raw_out = new_raw_fd_ostream(filename);
     llvm::formatted_raw_ostream *out = new llvm::formatted_raw_ostream(*raw_out);
