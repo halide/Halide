@@ -161,7 +161,7 @@ namespace {
     OpInfoMap::iterator it = op_info_map.find(overhead_qual_name);
     if (it != op_info_map.end()) {
       OpInfo overhead = it->second;
-      overhead_ticks_avg = (double)overhead.ticks / (double)overhead.count;
+      overhead_ticks_avg = (double)overhead.ticks / ((double)overhead.count * 2.0);
       op_info_map.erase(it);
     }
 
