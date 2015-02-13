@@ -49,6 +49,7 @@ struct Target {
         F16C,  ///< Enable x86 16-bit float support
 
         ARMv7s,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+        NoNEON,  ///< Don't generate vectorized code for ARMv7. Only relevant for 32-bit ARM.
 
         CUDA,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
         CUDACapability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
