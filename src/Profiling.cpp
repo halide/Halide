@@ -165,7 +165,9 @@ private:
     }
 
     Stmt add_ticks(const string& op_type, const string& op_name, Stmt s) {
-        Expr ticks = Call::make(UInt(64), Internal::Call::profiling_timer, {dummy + dummy_counter++}, Call::Intrinsic);
+        std::vector<Expr> args;
+        args.push_back(dummy + dummy_counter++);
+        Expr ticks = Call::make(UInt(64), Internal::Call::profiling_timer, args, Call::Intrinsic);
         return add_delta("ticks", op_type, op_name, ticks, ticks, s);
     }
 
