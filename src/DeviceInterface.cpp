@@ -14,7 +14,7 @@ namespace {
 
 template <typename fn_type>
 bool lookup_runtime_routine(const char *name, const Target &target, fn_type &result) {
-    StmtCompiler stmt_compiler(target);
+    StmtCompiler stmt_compiler(target.with_feature(Target::JIT));
     std::vector<JITModule> runtime(JITSharedRuntime::get(stmt_compiler.get_codegen(), target));
 
     for (size_t i = 0; i < runtime.size(); i++) {
@@ -48,6 +48,9 @@ void halide_device_release(void *user_context, const halide_device_interface *in
  * explicitly to copy back the results of a GPU-based filter. */
 int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_host\n";
+    // Skip if there is no device buffer.
+    if (buf->dev == 0)
+        return 0;
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
     if (lookup_runtime_routine("halide_copy_to_host", target, fn)) {
@@ -92,6 +95,9 @@ int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_
 
 int halide_device_free(void *user_context, struct buffer_t *buf) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_free\n";
+    // Skip if there is no device buffer.
+    if (buf->dev == 0)
+        return 0;
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
     if (lookup_runtime_routine("halide_device_free", target, fn)) {
