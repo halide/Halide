@@ -1317,10 +1317,12 @@ string CodeGen_ARM::mcpu() const {
 
 string CodeGen_ARM::mattrs() const {
     if (target.bits == 32) {
-        if (target.has_feature(Target::NoNEON)) {
-          return "-neon";
-        } else {
+        if (target.has_feature(Target::ARMv7s)) {
           return "+neon";
+        } if (!target.has_feature(Target::NoNEON)) {
+          return "+neon";
+        } else {
+          return "-neon";
         }
     } else {
         return "";
