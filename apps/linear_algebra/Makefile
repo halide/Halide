@@ -19,11 +19,6 @@ OPENBLAS_LIBS ?= -lopenblas
 # ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
 # ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
 
-# By default use whatever ATLAS is installed, so that this at least builds.
-$(warning Warning: Defaulting to system ATLAS, which may be slow. See the Makefile for details.)
-ATLAS_FLAGS ?= -DUSE_ATLAS
-ATLAS_LIBS ?= -lcblas
-
 KERNEL_DIR = src/kernels
 KERNELS = \
 	scopy_impl \
@@ -40,6 +35,8 @@ KERNELS = \
 	dgemv_notrans \
 	sgemv_trans \
 	dgemv_trans \
+	sger_impl \
+	dger_impl \
 	sgemm_notrans \
 	dgemm_notrans \
 	sgemm_transA \
@@ -95,7 +92,7 @@ L1_BENCHMARK_SIZES = 16 64 288 1056 2080
 L2_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
 L3_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
 L1_BENCHMARKS = scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum
-L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans
+L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger
 L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB
 
 cblas_l1_benchmark_%: benchmarks/cblas_benchmarks
@@ -254,6 +251,14 @@ $(KERNEL_DIR)/halide_sgemv_trans.o $(KERNEL_DIR)/halide_sgemv_trans.h: $(KERNEL_
 $(KERNEL_DIR)/halide_dgemv_trans.o $(KERNEL_DIR)/halide_dgemv_trans.h: $(KERNEL_DIR)/blas_l2.generator
 	$(LD_PATH_SETUP) $< -g dgemv -f halide_dgemv_trans -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET) parallel=false vectorize=true transpose=true
+
+$(KERNEL_DIR)/halide_sger_impl.o $(KERNEL_DIR)/halide_sger_impl.h: $(KERNEL_DIR)/blas_l2.generator
+	$(LD_PATH_SETUP) $< -g sger -f halide_sger_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true
+
+$(KERNEL_DIR)/halide_dger_impl.o $(KERNEL_DIR)/halide_dger_impl.h: $(KERNEL_DIR)/blas_l2.generator
+	$(LD_PATH_SETUP) $< -g dger -f halide_dger_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true
 
 $(KERNEL_DIR)/halide_sgemm_notrans.o $(KERNEL_DIR)/halide_sgemm_notrans.h: $(KERNEL_DIR)/blas_l3.generator
 	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_notrans -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
