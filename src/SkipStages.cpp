@@ -338,12 +338,7 @@ class MightBeSkippable : public IRVisitor {
         }
         IRVisitor::visit(op);
         if (op->name == func || extern_call_uses_buffer(op, func)) {
-            if (!found_call) {
-                result = guarded;
-                found_call = true;
-            } else {
-                result &= guarded;
-            }
+            result &= guarded;
         }
     }
 
@@ -382,7 +377,10 @@ class MightBeSkippable : public IRVisitor {
 
     void visit(const Pipeline *op) {
         if (op->name == func) {
+            bool old_result = result;
+            result = true;
             op->consume.accept(this);
+            result = result || old_result;
         } else {
             IRVisitor::visit(op);
         }
@@ -393,9 +391,8 @@ class MightBeSkippable : public IRVisitor {
 
 public:
     bool result;
-    bool found_call;
 
-    MightBeSkippable(string f) : func(f), guarded(false), result(false), found_call(false) {}
+    MightBeSkippable(string f) : func(f), guarded(false), result(false) {}
 };
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
