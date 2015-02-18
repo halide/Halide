@@ -1318,11 +1318,11 @@ string CodeGen_ARM::mcpu() const {
 string CodeGen_ARM::mattrs() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
-          return "+neon";
+            return "+neon";
         } if (!target.has_feature(Target::NoNEON)) {
-          return "+neon";
+            return "+neon";
         } else {
-          return "-neon";
+            return "-neon";
         }
     } else {
         return "";
