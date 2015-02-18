@@ -6,6 +6,9 @@
 #include "example.h"
 #include "static_image.h"
 
+// Standard header file doesn't declare the _jit_wrapper entry point.
+extern "C" int example_jit_wrapper(void** args);
+
 const int kSize = 32;
 
 void verify(const Image<int> &img, float compiletime_factor, float runtime_factor, int channels) {
@@ -24,6 +27,7 @@ void verify(const Image<int> &img, float compiletime_factor, float runtime_facto
 
 int main(int argc, char **argv) {
 
+  int result;
   Image<int32_t> output(kSize, kSize, 3);
 
   // For Ahead-of-time compilation, we don't get to customize any GeneratorParams:
@@ -33,11 +37,31 @@ int main(int argc, char **argv) {
   const int channels = 3;
 
   // We can, of course, pass whatever values for Param/ImageParam that we like.
-  example(3.3f, output);
+  result = example(3.3f, output);
+  if (result != 0) {
+    fprintf(stderr, "Result: %d\n", result);
+    exit(-1);
+  }
   verify(output, compiletime_factor, 3.3f, channels);
 
-  example(-1.234f, output);
+  result = example(-1.234f, output);
+  if (result != 0) {
+    fprintf(stderr, "Result: %d\n", result);
+    exit(-1);
+  }
   verify(output, compiletime_factor, -1.234f, channels);
+
+  // verify that calling via the _jit_wrapper entry point
+  // also produces the correct result
+  float arg0 = 1.234f;
+  buffer_t arg1 = *output;
+  void* args[2] = { &arg0, &arg1 };
+  result = example_jit_wrapper(args);
+  if (result != 0) {
+    fprintf(stderr, "Result: %d\n", result);
+    exit(-1);
+  }
+  verify(output, compiletime_factor, 1.234f, channels);
 
   printf("Success!\n");
   return 0;
