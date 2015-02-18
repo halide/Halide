@@ -67,7 +67,6 @@ class RemoveDeadAllocations : public IRMutator {
     }
 };
 
-// Turn for loops of size one into let statements
 Stmt remove_dead_allocations(Stmt s) {
     return RemoveDeadAllocations().mutate(s);
 }
