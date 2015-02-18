@@ -197,10 +197,9 @@ double hblas_dasum(const int N, const double *x, const int incx) {
 // gemv //
 //////////
 
-void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans, const int M, const int N,
-                 const float a, const float *A, const int lda,
-                 const float *x, const int incx, const float b,
-                 float *y, const int incy) {
+void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
+                 const int M, const int N, const float a, const float *A, const int lda,
+                 const float *x, const int incx, const float b, float *y, const int incy) {
     bool t = false;
     switch (trans) {
     case HblasNoTrans:
@@ -223,10 +222,9 @@ void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
     assert_no_error(halide_sgemv(t, a, &buff_A, &buff_x, b, &buff_y));
 }
 
-void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans, const int M, const int N,
-                 const double a, const double *A, const int lda,
-                 const double *x, const int incx, const double b,
-                 double *y, const int incy) {
+void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
+                 const int M, const int N, const double a, const double *A, const int lda,
+                 const double *x, const int incx, const double b, double *y, const int incy) {
     bool t = false;
     switch (trans) {
     case HblasNoTrans:
@@ -248,6 +246,38 @@ void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
 
     assert_no_error(halide_dgemv(t, a, &buff_A, &buff_x, b, &buff_y));
 }
+
+//////////
+// ger  //
+//////////
+
+void hblas_sger(const enum HBLAS_ORDER order, const int M, const int N,
+                const float alpha, const float *x, const int incx,
+                const float *y, const int incy, float *A, const int lda)
+{
+    buffer_t buff_x, buff_y, buff_A;
+    init_vector_buffer(M, x, incx, &buff_x);
+    init_vector_buffer(N, y, incy, &buff_y);
+    init_matrix_buffer(M, N, A, lda, &buff_A);
+
+    assert_no_error(halide_sger(alpha, &buff_x, &buff_y, &buff_A));
+}
+
+void hblas_dger(const enum HBLAS_ORDER order, const int M, const int N,
+                const double alpha, const double *x, const int incx,
+                const double *y, const int incy, double *A, const int lda)
+{
+    buffer_t buff_x, buff_y, buff_A;
+    init_vector_buffer(M, x, incx, &buff_x);
+    init_vector_buffer(N, y, incy, &buff_y);
+    init_matrix_buffer(M, N, A, lda, &buff_A);
+
+    assert_no_error(halide_dger(alpha, &buff_x, &buff_y, &buff_A));
+}
+
+//////////
+// gemm //
+//////////
 
 void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
                  const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
