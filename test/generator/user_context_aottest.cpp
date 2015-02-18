@@ -6,10 +6,6 @@
 #include "static_image.h"
 #include "user_context.h"
 
-// Standard header file doesn't declare the _jit_wrapper entry point.
-// Note that user_context is specified in arg[0].
-extern "C" int user_context_jit_wrapper(void** args);
-
 static const void *context_pointer = (void *)0xf00dd00d;
 
 static bool called_error = false;
@@ -63,7 +59,7 @@ int main(int argc, char **argv) {
     assert(called_malloc && called_free);
     assert(called_trace && !called_error);
 
-    // verify that calling via the _jit_wrapper entry point
+    // verify that calling via the _argv entry point
     // also produces the correct result
     const void* arg0 = context_pointer;
     buffer_t arg1 = *input;
@@ -73,7 +69,7 @@ int main(int argc, char **argv) {
     called_trace = false;
     called_malloc = false;
     called_free = false;
-    result = user_context_jit_wrapper(args);
+    result = user_context_argv(args);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
         exit(-1);
