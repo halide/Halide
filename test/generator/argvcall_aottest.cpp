@@ -24,30 +24,30 @@ void verify(const Image<int32_t> &img, float f1, float f2) {
 
 int main(int argc, char **argv) {
 
-  int result;
-  Image<int32_t> output(kSize, kSize, 3);
+    int result;
+    Image<int32_t> output(kSize, kSize, 3);
 
-  // We can, of course, pass whatever values for Param/ImageParam that we like.
-  result = argvcall(1.2f, 3.4f, output);
-  if (result != 0) {
-    fprintf(stderr, "Result: %d\n", result);
-    exit(-1);
-  }
-  verify(output, 1.2f, 3.4f);
+    // We can, of course, pass whatever values for Param/ImageParam that we like.
+    result = argvcall(1.2f, 3.4f, output);
+    if (result != 0) {
+        fprintf(stderr, "Result: %d\n", result);
+        exit(-1);
+    }
+    verify(output, 1.2f, 3.4f);
 
-  // verify that calling via the _argv entry point
-  // also produces the correct result
-  float arg0 = 1.234f;
-  float arg1 = 3.456f;
-  buffer_t arg2 = *output;
-  void* args[3] = { &arg0, &arg1, &arg2 };
-  result = argvcall_argv(args);
-  if (result != 0) {
-    fprintf(stderr, "Result: %d\n", result);
-    exit(-1);
-  }
-  verify(output, arg0, arg1);
+    // verify that calling via the _argv entry point
+    // also produces the correct result
+    float arg0 = 1.234f;
+    float arg1 = 3.456f;
+    buffer_t arg2 = *output;
+    void* args[3] = { &arg0, &arg1, &arg2 };
+    result = argvcall_argv(args);
+    if (result != 0) {
+        fprintf(stderr, "Result: %d\n", result);
+        exit(-1);
+    }
+    verify(output, arg0, arg1);
 
-  printf("Success!\n");
-  return 0;
+    printf("Success!\n");
+    return 0;
 }
