@@ -81,6 +81,8 @@ struct BenchmarksBase {
             this->bench_gemv_notrans(size);
         } else if (benchmark == "gemv_trans") {
             this->bench_gemv_trans(size);
+        } else if (benchmark == "ger") {
+            this->bench_ger(size);
         } else if (benchmark == "gemm_notrans") {
             this->bench_gemm_notrans(size);
         } else if (benchmark == "gemm_transA") {
@@ -99,6 +101,7 @@ struct BenchmarksBase {
     virtual void bench_asum(int N) =0;
     virtual void bench_gemv_notrans(int N) =0;
     virtual void bench_gemv_trans(int N) =0;
+    virtual void bench_ger(int N) =0;
     virtual void bench_gemm_notrans(int N) =0;
     virtual void bench_gemm_transA(int N) =0;
     virtual void bench_gemm_transB(int N) =0;
@@ -125,6 +128,9 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
     L2Benchmark(gemv_trans, "s", cblas_sgemv(CblasColMajor, CblasTrans, N, N,
                                              alpha, &(A[0]), N, &(x[0]), 1,
                                              beta, &(y[0]), 1))
+
+    L2Benchmark(ger, "s", cblas_sger(CblasColMajor, N, N, alpha, &(x[0]), 1,
+                                     &(y[0]), 1, &(A[0]), N))
 
     L3Benchmark(gemm_notrans, "s", cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N,
                                                alpha, &(A[0]), N, &(B[0]), N,
@@ -163,6 +169,9 @@ struct BenchmarksDouble : public BenchmarksBase<double> {
     L2Benchmark(gemv_trans, "d", cblas_dgemv(CblasColMajor, CblasTrans, N, N,
                                                   alpha, &(A[0]), N, &(x[0]), 1,
                                                   beta, &(y[0]), 1))
+
+    L2Benchmark(ger, "d", cblas_dger(CblasColMajor, N, N, alpha, &(x[0]), 1,
+                                     &(y[0]), 1, &(A[0]), N))
 
     L3Benchmark(gemm_notrans, "d", cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N,
                                                alpha, &(A[0]), N, &(B[0]), N,

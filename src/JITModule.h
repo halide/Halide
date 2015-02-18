@@ -62,7 +62,7 @@ struct JITModule {
      * correspond to the arguments to \ref main_function . This will
      * be NULL for a JITModule which has not yet been compiled or one
      * that is not a Halide Func compilation at all. */
-    EXPORT int (*jit_wrapper_function() const)(const void **);
+    EXPORT int (*argv_function() const)(const void **);
 
     // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will

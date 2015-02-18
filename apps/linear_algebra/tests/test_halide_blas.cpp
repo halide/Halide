@@ -206,6 +206,7 @@ struct BLASFloatTests : public BLASTestBase<float> {
         RUN_TEST(sasum);
         RUN_TEST(sgemv_notrans);
         RUN_TEST(sgemv_trans);
+        RUN_TEST(sger);
         RUN_TEST(sgemm_notrans);
         RUN_TEST(sgemm_transA);
         RUN_TEST(sgemm_transB);
@@ -225,6 +226,9 @@ struct BLASFloatTests : public BLASTestBase<float> {
     L2_TEST(sgemv_trans,
             cblas_sgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
             hblas_sgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
+    L2_TEST(sger,
+            cblas_sger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
+            hblas_sger(HblasColMajor, N, N, alpha, x, 1, y, 1, A, N));
 
     L3_TEST(sgemm_notrans,
             cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
@@ -249,6 +253,7 @@ struct BLASDoubleTests : public BLASTestBase<double> {
         RUN_TEST(dasum);
         RUN_TEST(dgemv_notrans);
         RUN_TEST(dgemv_trans);
+        RUN_TEST(dger);
         RUN_TEST(dgemm_notrans);
         RUN_TEST(dgemm_transA);
         RUN_TEST(dgemm_transB);
@@ -268,6 +273,9 @@ struct BLASDoubleTests : public BLASTestBase<double> {
     L2_TEST(dgemv_trans,
             cblas_dgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
             hblas_dgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
+    L2_TEST(dger,
+            cblas_dger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
+            hblas_dger(HblasColMajor, N, N, alpha, x, 1, y, 1, A, N));
 
     L3_TEST(dgemm_notrans,
             cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
