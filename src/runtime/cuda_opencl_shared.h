@@ -1,3 +1,8 @@
+#ifndef HALIDE_CUDA_OPENCL_SHARED_H
+#define HALIDE_CUDA_OPENCL_SHARED_H
+
+#include "device_interface.h"
+
 namespace Halide { namespace Runtime { namespace Internal {
 
 // Compute the total amount of memory we'd need to allocate on gpu to
@@ -29,14 +34,14 @@ WEAK size_t buf_size(void *user_context, buffer_t *buf) {
 // all, so the strides could be in any order.
 //
 // We solve it by representing a copy job we need to perform as a
-// dev_copy struct. It describes a 4D array of copies to
+// device_copy struct. It describes a 4D array of copies to
 // perform. Initially it describes copying over a single pixel at a
 // time. We then try to discover contiguous groups of copies that can
 // be coalesced into a single larger copy.
 
 // The struct that describes a host <-> dev copy to perform.
 #define MAX_COPY_DIMS 4
-struct dev_copy {
+struct device_copy {
     uint64_t src, dst;
     // The multidimensional array of contiguous copy tasks that need to be done.
     uint64_t extent[MAX_COPY_DIMS];
@@ -46,11 +51,11 @@ struct dev_copy {
     uint64_t chunk_size;
 };
 
-WEAK dev_copy make_host_to_dev_copy(const buffer_t *buf) {
+WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     // Make a copy job representing copying the first pixel only.
-    dev_copy c;
+    device_copy c;
     c.src = (uint64_t)buf->host;
-    c.dst = buf->dev;
+    c.dst = halide_get_device_handle(buf->dev);
     c.chunk_size = buf->elem_size;
     for (int i = 0; i < MAX_COPY_DIMS; i++) {
         c.extent[i] = 1;
@@ -60,7 +65,7 @@ WEAK dev_copy make_host_to_dev_copy(const buffer_t *buf) {
     if (buf->elem_size == 0) {
         // This buffer apparently represents no memory. Return a zero'd copy
         // task.
-        dev_copy zero = {0};
+        device_copy zero = {0};
         return zero;
     }
 
@@ -107,9 +112,9 @@ WEAK dev_copy make_host_to_dev_copy(const buffer_t *buf) {
     return c;
 }
 
-WEAK dev_copy make_dev_to_host_copy(const buffer_t *buf) {
+WEAK device_copy make_device_to_host_copy(const buffer_t *buf) {
     // Just make a host to dev copy and swap src and dst
-    dev_copy c = make_host_to_dev_copy(buf);
+    device_copy c = make_host_to_device_copy(buf);
     uint64_t tmp = c.src;
     c.src = c.dst;
     c.dst = tmp;
@@ -117,4 +122,6 @@ WEAK dev_copy make_dev_to_host_copy(const buffer_t *buf) {
 }
 
 }}} // namespace Halide::Runtime::Internal
+
+#endif // HALIDE_CUDA_OPENCL_SHARED_H
 

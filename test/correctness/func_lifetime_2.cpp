@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         f(x, y) = x*y + 1.0f;
 
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 8, 8, GPU_Default);
+            f.gpu_tile(x, y, 8, 8);
         }
 
         {
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
         g(x, y) = x*y + 2.0f;
 
         if (target.has_gpu_feature()) {
-            g.gpu_tile(x, y, 8, 8, GPU_Default);
+            g.gpu_tile(x, y, 8, 8);
         }
 
         printf("Realizing function g...\n");

@@ -7,17 +7,14 @@ HALIDE_LIB := $(TOP)/$(LIB_HALIDE)
 $(HALIDE_LIB): $(TOP)
 	$(MAKE) -C $(TOP) $(LIB_HALIDE)
 
-CXXFLAGS += -g -O0 -I../../include
+CXXFLAGS += -g -O0
 
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
 OPENGL_LIBS = -lX11 -lGL
 endif
-ifeq ($(UNAME), Darwin)
-OPENGL_LIBS = -framework AGL
-endif
 
-HALIDE_LIBS = $(HALIDE_LIB) -ldl -lpthread -lcurses
+HALIDE_LIBS = $(HALIDE_LIB) -ldl $(LLVM_LDFLAGS)
 
 all: opengl_test
 
@@ -34,10 +31,10 @@ ycc.h ycc.o: halide_ycc
 	HL_TARGET=host-opengl-gpu_debug ./halide_ycc
 
 halide_blur: halide_blur.o $(HALIDE_LIB)
-	$(CXX) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
 
 halide_ycc: halide_ycc.o $(HALIDE_LIB)
-	$(CXX) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
 
 .PHONY: clean
 clean:

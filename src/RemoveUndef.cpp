@@ -268,7 +268,7 @@ private:
             body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, min, extent, op->for_type, body);
+            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
         }
     }
 
