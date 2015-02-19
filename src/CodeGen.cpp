@@ -303,7 +303,7 @@ void CodeGen::compile(Stmt stmt, string name,
     verifyFunction(*function);
 
     // Now we need to make the wrapper function (useful for calling from jit)
-    string wrapper_name = name + "_jit_wrapper";
+    string wrapper_name = name + "_argv";
     func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
     block = BasicBlock::Create(*context, "entry", wrapper);
@@ -512,10 +512,10 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Override default to generate verbose assembly.
     #if LLVM_VERSION < 37
     target_machine->setAsmVerbosityDefault(true);
-    #else 
+    #else
     target_machine->Options.MCOptions.AsmVerbose = true;
     #endif
- 
+
     // Ask the target to add backend passes as necessary.
     TargetMachine::CodeGenFileType file_type =
         assembly ? TargetMachine::CGFT_AssemblyFile :
