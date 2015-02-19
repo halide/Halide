@@ -300,7 +300,7 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(2) << module << "\n";
 
     // Now verify the function is ok
-    verifyFunction(*function);
+    internal_assert(verifyFunction(*function) == false);
 
     // Now we need to make the wrapper function (useful for calling from jit)
     string wrapper_name = name + "_argv";
@@ -328,10 +328,10 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(4) << "Creating call from wrapper to actual function\n";
     Value *result = builder->CreateCall(function, wrapper_args);
     builder->CreateRet(result);
-    verifyFunction(*wrapper);
+    internal_assert(verifyFunction(*wrapper) == false);       
 
     // Finally, verify the module is ok
-    verifyModule(*module);
+    internal_assert(verifyModule(*module) == false);
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it
