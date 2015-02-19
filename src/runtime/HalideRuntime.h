@@ -287,6 +287,56 @@ extern void halide_memoization_cache_store(void *user_context, const uint8_t *ca
  */
 extern void halide_memoization_cache_cleanup();
 
+#ifndef BUFFER_T_DEFINED
+#define BUFFER_T_DEFINED
+
+/**
+ * The raw representation of an image passed around by generated
+ * Halide code. It includes some stuff to track whether the image is
+ * not actually in main memory, but instead on a device (like a
+ * GPU). */
+typedef struct buffer_t {
+  /** A device-handle for e.g. GPU memory used to back this buffer. */
+  uint64_t dev;
+
+  /** A pointer to the start of the data in main memory. */
+  uint8_t* host;
+
+  /** The size of the buffer in each dimension. */
+  int32_t extent[4];
+
+  /** Gives the spacing in memory between adjacent elements in the
+   * given dimension.  The correct memory address for a load from
+   * this buffer at position x, y, z, w is:
+   * host + (x * stride[0] + y * stride[1] + z * stride[2] + w * stride[3]) * elem_size
+   * By manipulating the strides and extents you can lazily crop,
+   * transpose, and even flip buffers without modifying the data.
+   */
+  int32_t stride[4];
+
+  /** Buffers often represent evaluation of a Func over some
+   * domain. The min field encodes the top left corner of the
+   * domain. */
+  int32_t min[4];
+
+  /** How many bytes does each buffer element take. This may be
+   * replaced with a more general type code in the future. */
+  int32_t elem_size;
+
+  /** This should be true if there is an existing device allocation
+   * mirroring this buffer, and the data has been modified on the
+   * host side. */
+  bool host_dirty;
+
+  /** This should be true if there is an existing device allocation
+   mirroring this buffer, and the data has been modified on the
+   device side. */
+  bool dev_dirty;
+} buffer_t;
+
+#endif
+
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif
