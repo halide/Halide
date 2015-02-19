@@ -2287,7 +2287,7 @@ private:
             op->body.same_as(new_body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, new_min, new_extent, op->for_type, new_body);
+            stmt = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
         }
     }
 

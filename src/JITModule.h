@@ -76,9 +76,9 @@ struct JITModule {
     EXPORT static void make_externs(const std::vector<JITModule> &deps, llvm::Module *mod);
 
     /** Encapsulate device (GPU) and buffer interactions. */
-    EXPORT int copy_to_dev(struct buffer_t *buf) const;
+    EXPORT int copy_to_device(struct buffer_t *buf) const;
     EXPORT int copy_to_host(struct buffer_t *buf) const;
-    EXPORT int dev_free(struct buffer_t *buf) const;
+    EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
 };
 

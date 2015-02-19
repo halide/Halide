@@ -273,7 +273,7 @@ public:
 
             Stmt branch_stmt = branch.content;
             branch_stmt = simplify(branch_stmt, true, bounds_info);
-            branch_stmt = For::make(name, branch_min, branch_extent, For::Serial, branch_stmt);
+            branch_stmt = For::make(name, branch_min, branch_extent, For::Serial, DeviceAPI::Parent, branch_stmt);
             if (!stmt.defined()) {
                 stmt = branch_stmt;
             } else {
@@ -1027,7 +1027,7 @@ private:
             return Stmt();
         }
 
-        return For::make(op->name, args[0], args[1], op->for_type, args[2]);
+        return For::make(op->name, args[0], args[1], op->for_type, op->device_api, args[2]);
     }
 
     void visit(const For *op) {
@@ -1214,7 +1214,7 @@ private:
 
         if (!branched) {
             if (!body.same_as(op->body)) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             } else {
                 stmt = op;
             }
@@ -1339,7 +1339,7 @@ void specialize_branched_loops_test() {
         Expr cond = 1 <= x && x < 9;
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, For::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         Interval ivals[] = {Interval(0,1), Interval(1,8), Interval(9,1)};
         check_num_branches(branched, "x", 3);
@@ -1351,7 +1351,7 @@ void specialize_branched_loops_test() {
         Expr cond = x == 5;
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, For::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         Interval ivals[] = {Interval(0,5), Interval(5,1), Interval(6,4)};
         check_num_branches(branched, "x", 3);
@@ -1364,12 +1364,12 @@ void specialize_branched_loops_test() {
         Expr cond = 1 <= x && x < 9;
         Stmt branch = IfThenElse::make(cond, Store::make("out", tmp + 1, x),
                                        Store::make("out", tmp, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, For::Serial, DeviceAPI::Parent, branch);
 
         cond = 1 <= y && y < 9;
         branch = IfThenElse::make(cond, LetStmt::make("tmp", 1, stmt),
                                   LetStmt::make("tmp", 0, stmt));
-        stmt = For::make("y", 0, 10, For::Serial, branch);
+        stmt = For::make("y", 0, 10, For::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 9);
     }
@@ -1379,7 +1379,7 @@ void specialize_branched_loops_test() {
         Expr cond = (1 <= x && x < 4) || (7 <= x && x < 10);
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 11, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 11, For::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         Interval ivals[] = {Interval(0,1), Interval(1,3), Interval(4,3),
                             Interval(7,3), Interval(10,1)};
@@ -1396,7 +1396,7 @@ void specialize_branched_loops_test() {
         Expr cond = !Cast::make(UInt(1), Select::make(x == 0 || x > 5, 0, 1));
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, For::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 3);
     }
@@ -1407,7 +1407,7 @@ void specialize_branched_loops_test() {
         Expr cond = x > 5;
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Parallel, branch);
+        Stmt stmt = For::make("x", 0, 10, For::Parallel, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 1);
     }
@@ -1422,7 +1422,7 @@ void specialize_branched_loops_test() {
         Stmt b3 = IfThenElse::make(x < 7, Store::make("out", 100*load, x),
                                    Store::make("out", 100*load + 1, x));
         Stmt branch = Block::make(b1, Block::make(b2, b3));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, For::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 4);
     }
@@ -1433,8 +1433,8 @@ void specialize_branched_loops_test() {
         Stmt branch = Store::make("out", Select::make(cond,
                                                       Ramp::make(x, 1, 4),
                                                       Broadcast::make(0, 4)), y);
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
-        stmt = For::make("y", 0, 11, For::Serial, stmt);
+        Stmt stmt = For::make("x", 0, 10, For::Serial, DeviceAPI::Parent, branch);
+        stmt = For::make("y", 0, 11, For::Serial, DeviceAPI::Parent, stmt);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "y", 3);
         Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
@@ -1451,8 +1451,8 @@ void specialize_branched_loops_test() {
                                                       Ramp::make(x, 1, 4),
                                                       Broadcast::make(0, 4)), y);
         Stmt stmt = LetStmt::make("cond", cond, branch);
-        stmt = For::make("x", 0, 10, For::Serial, stmt);
-        stmt = For::make("y", 0, 11, For::Serial, stmt);
+        stmt = For::make("x", 0, 10, For::Serial, DeviceAPI::Parent, stmt);
+        stmt = For::make("y", 0, 11, For::Serial, DeviceAPI::Parent, stmt);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "y", 3);
         Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
