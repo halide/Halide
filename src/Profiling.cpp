@@ -244,7 +244,7 @@ private:
             IRMutator::visit(op);
         }
         // We only instrument loops at profiling level 2 or higher
-        if (level >= 2 && current_loop_level <= maximum_loop_level) {
+        if ((level >= 2) && (current_loop_level <= maximum_loop_level) && (op->for_type != For::Vectorized)) {
             stmt = add_count_and_ticks("forloop", op->name, stmt);
         }
         current_loop_level--;
