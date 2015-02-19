@@ -761,7 +761,7 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << ")";
         } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 1);
             rhs << "halide_profiling_timer(";
             rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ")";
