@@ -153,11 +153,7 @@ WEAK void CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 WEAK void CacheEntry::destroy() {
     halide_free(NULL, key);
     for (int32_t i = 0; i < tuple_count; i++) {
-// TODO: Fix this. Probably when merging with the gpu_api_naming branch.
-// Currently I doubt caching on the GPU is ever used anyway.
-#if 0
-        halide_dev_free(NULL, &buffer(i));
-#endif
+        halide_device_free(NULL, &buffer(i));
         halide_free(NULL, buffer(i).host);
     }
 }

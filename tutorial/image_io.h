@@ -341,7 +341,7 @@ Image<T> load_ppm(std::string filename) {
 
 template<typename T>
 void save_ppm(Image<T> im, std::string filename) {
-	unsigned int bit_depth = sizeof(T) == 1 ? 8: 16;
+    unsigned int bit_depth = sizeof(T) == 1 ? 8: 16;
 
     FILE *f = fopen(filename.c_str(), "wb");
     _assert(f, "File %s could not be opened for writing\n", filename.c_str());

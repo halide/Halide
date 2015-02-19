@@ -763,7 +763,7 @@ public:
 
         in_stages.pop(stage_name);
 
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 
     void visit(const Pipeline *p) {
@@ -787,7 +787,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order,
     }
 
     // Add an outermost bounds inference marker
-    s = For::make("<outermost>", 0, 1, For::Serial, s);
+    s = For::make("<outermost>", 0, 1, For::Serial, DeviceAPI::Parent, s);
     s = BoundsInference(funcs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }
