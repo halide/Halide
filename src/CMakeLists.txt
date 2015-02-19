@@ -428,12 +428,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BranchVisitors.cpp
   SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
-<<<<<<< HEAD
   LLVM_Runtime_Linker.cpp
   CodeGen.cpp
-=======
   DeviceInterface.cpp
->>>>>>> gpu_api_naming
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
 )
