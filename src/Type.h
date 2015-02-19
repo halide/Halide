@@ -2,6 +2,7 @@
 #define HALIDE_TYPE_H
 
 #include <stdint.h>
+#include "runtime/HalideRuntime.h"
 #include "Util.h"
 
 /** \file
@@ -18,12 +19,17 @@ struct Expr;
  * larger than one). Front-end code shouldn't use vector
  * types. Instead vectorize a function. */
 struct Type {
-    /** The basic type code: signed integer, unsigned integer, or floating point */
+    /** The basic type code: signed integer, unsigned integer, or floating point.
+     *
+     * Note that TypeCode is guaranteed to have values identical to those of
+     * halide_type_code_t (HalideRuntime.h), but exists as a separate typedef
+     * to preserve source code compatibility.
+     */
     enum TypeCode {
-        Int,  //!< signed integers
-        UInt, //!< unsigned integers
-        Float, //!< floating point numbers
-        Handle //!< opaque pointer type (void *)
+        Int = HalideType_Int,
+        UInt = HalideType_UInt,
+        Float = HalideType_Float,
+        Handle = HalideType_Handle
     } code;
 
     /** The number of bits of precision of a single scalar value of this type. */
