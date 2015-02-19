@@ -287,6 +287,18 @@ extern void halide_memoization_cache_store(void *user_context, const uint8_t *ca
  */
 extern void halide_memoization_cache_cleanup();
 
+/** Types in the halide type system. They can be ints, unsigned ints,
+ * or floats (of various bit-widths), or a handle (which is always pointer-sized).
+ * Note that the int/uint/float values do not imply a specific bit width
+ * (the bit width is expected to be encoded in a separate value).
+ */
+typedef enum halide_type_code_t {
+    HalideType_Int = 0,   //!< signed integers
+    HalideType_UInt = 1,  //!< unsigned integers
+    HalideType_Float = 2, //!< floating point numbers
+    HalideType_Handle = 3 //!< opaque pointer type (void *)
+} halide_type_code_t;
+
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
