@@ -116,6 +116,7 @@ set(RUNTIME_CPP
 set (RUNTIME_LL
   aarch64
   arm
+  arm_no_neon
   mips
   pnacl_math
   posix_math
