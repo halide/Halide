@@ -277,6 +277,12 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     }
     stream << ") HALIDE_FUNCTION_ATTRS;\n";
 
+    // And also the function prototype for the _argv call
+    stream << "#ifdef __cplusplus\n";
+    stream << "extern \"C\"\n";
+    stream << "#endif\n";
+    stream << "int " << name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+
     stream << "#endif\n";
 }
 
