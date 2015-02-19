@@ -300,7 +300,7 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(2) << module << "\n";
 
     // Now verify the function is ok
-    verifyFunction(*function);
+    internal_assert(verifyFunction(*function) == false);
 
     // Now we need to make the wrapper function (useful for calling from jit)
     string wrapper_name = name + "_argv";
@@ -328,10 +328,10 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(4) << "Creating call from wrapper to actual function\n";
     Value *result = builder->CreateCall(function, wrapper_args);
     builder->CreateRet(result);
-    verifyFunction(*wrapper);
+    internal_assert(verifyFunction(*wrapper) == false);       
 
     // Finally, verify the module is ok
-    verifyModule(*module);
+    internal_assert(verifyModule(*module) == false);
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it
@@ -1376,26 +1376,31 @@ Expr unbroadcast(Expr e) {
 bool CodeGen::function_takes_user_context(const string &name) {
     static const char *user_context_runtime_funcs[] = {
         "halide_copy_to_host",
-        "halide_copy_to_dev",
+        "halide_copy_to_device",
         "halide_current_time_ns",
         "halide_debug_to_file",
-        "halide_dev_free",
-        "halide_dev_malloc",
-        "halide_dev_run",
-        "halide_dev_sync",
+        "halide_device_free",
+        "halide_device_malloc",
+        "halide_device_sync",
         "halide_do_par_for",
         "halide_do_task",
         "halide_error",
         "halide_free",
-        "halide_init_kernels",
         "halide_malloc",
         "halide_print",
         "halide_profiling_timer",
-        "halide_release",
+        "halide_device_release",
         "halide_start_clock",
         "halide_trace",
         "halide_memoization_cache_lookup",
-        "halide_memoization_cache_store"
+        "halide_memoization_cache_store",
+        "halide_cuda_run",
+        "halide_opencl_run",
+        "halide_opengl_run",
+        "halide_cuda_initialize_kernels",
+        "halide_opencl_initialize_kernels",
+        "halide_opengl_initialize_kernels"
+        "halide_get_gpu_device",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
@@ -1943,7 +1948,7 @@ void CodeGen::visit(const Call *op) {
             }
 
         } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 1);
             llvm::Function *fn = Intrinsic::getDeclaration(module,
                 Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
             CallInst *call = builder->CreateCall(fn);
