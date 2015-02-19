@@ -58,6 +58,13 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
+
+    // On 64-bit ARM, the NEON instrinsics do not work as the syntax
+    // changed from 32-bit and this has not been updated.
+    // On 32-bit, NEON can be disabled for older processors.
+    bool neon_intrinsics_disabled() {
+        return target.bits == 64 || target.has_feature(Target::NoNEON);
+    }
 };
 
 }}

@@ -264,6 +264,8 @@ bool Target::merge_string(const std::string &target) {
             set_features(vec(Target::SSE41, Target::AVX, Target::AVX2));
         } else if (tok == "armv7s") {
             set_feature(Target::ARMv7s);
+        } else if (tok == "no_neon") {
+            set_feature(Target::NoNEON);
         } else if (tok == "cuda" || tok == "ptx") {
             set_feature(Target::CUDA);
         } else if (tok == "cuda_capability_30") {
@@ -348,7 +350,7 @@ std::string Target::to_string() const {
   const char* const feature_names[] = {
       "jit", "debug", "no_asserts", "no_bounds_query",
       "sse41", "avx", "avx2", "fma", "fma4", "f16c",
-      "armv7s",
+      "armv7s", "no_neon",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
       "opengl",
