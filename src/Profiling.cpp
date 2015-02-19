@@ -38,7 +38,9 @@ public:
         : level(profiling_level()),
           maximum_loop_level(profiling_loop_level()),
           current_loop_level(0),
-          func_name(sanitize(func_name)) {
+          func_name(sanitize(func_name)),
+          dummy(Variable::make(Int(32), "dummy")),
+          dummy_counter(0) {
     }
 
     Stmt inject(Stmt s) {
@@ -71,6 +73,8 @@ public:
             //
             // NOTE: we deliberately do this *after* measuring
             // the total, so this should *not* be included in "kToplevel".
+            Expr j = Variable::make(Int(32), "j");
+
             const int kIters = 1000000;
             const int kUnroll = 4;
             Stmt ticker_block = Stmt();
@@ -80,7 +84,6 @@ public:
                         ticker_block);
             }
 
-            Expr j = Variable::make(Int(32), "j");
             Stmt do_timings = For::make("j", 0, kIters, For::Serial, DeviceAPI::Host, ticker_block);
             do_timings = add_ticks(kOverhead, kOverhead, do_timings);
             do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
@@ -119,6 +122,9 @@ private:
     const string func_name;
     map<string, int> indices;   // map name -> index in buffer.
     vector<string> call_stack;  // names of the nodes upstream
+
+    Expr dummy;
+    int dummy_counter;
 
     class PushCallStack {
     public:
@@ -159,7 +165,9 @@ private:
     }
 
     Stmt add_ticks(const string& op_type, const string& op_name, Stmt s) {
-        Expr ticks = Call::make(UInt(64), Internal::Call::profiling_timer, vector<Expr>(), Call::Intrinsic);
+        std::vector<Expr> args;
+        args.push_back(dummy + dummy_counter++);
+        Expr ticks = Call::make(UInt(64), Internal::Call::profiling_timer, args, Call::Intrinsic);
         return add_delta("ticks", op_type, op_name, ticks, ticks, s);
     }
 
@@ -236,8 +244,12 @@ private:
             IRMutator::visit(op);
         }
         // We only instrument loops at profiling level 2 or higher
-        if (level >= 2 && current_loop_level <= maximum_loop_level) {
-            stmt = add_count_and_ticks("forloop", op->name, stmt);
+        if ((level >= 2) && (current_loop_level <= maximum_loop_level)) {
+            // for loop with Vectorized type is unrolled into vectorized ops,
+            // which usually is too short to profile individually
+            if (op->for_type != For::Vectorized) {
+                stmt = add_count_and_ticks("forloop", op->name, stmt);
+            }
         }
         current_loop_level--;
     }
