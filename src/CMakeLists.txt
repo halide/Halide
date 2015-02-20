@@ -319,7 +319,6 @@ set(HEADER_FILES
   SpecializeBranchedLoops.h
   RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
-  CodeGen.h
   DeviceInterface.h
 )
 
@@ -429,7 +428,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
   LLVM_Runtime_Linker.cpp
-  CodeGen.cpp
   DeviceInterface.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

@@ -107,6 +107,9 @@ llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
  * assertion message. */
 bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size);
 
+/** Which built-in functions require a user-context first argument? */
+bool function_takes_user_context(const std::string &name);
+
 }}
 
 #endif
