@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     input.set_host_dirty();
 #if defined(TEST_OPENCL)
     input.copy_to_device(halide_opencl_device_interface());
-#else if defined(TEST_CUDA)
+#elif defined(TEST_CUDA)
     input.copy_to_device(halide_cuda_device_interface());
 #endif
 
