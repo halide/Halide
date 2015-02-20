@@ -2,7 +2,6 @@
 #include <iostream>
 #include <limits>
 
-#include "CodeGen.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Substitute.h"

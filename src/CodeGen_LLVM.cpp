@@ -2,7 +2,6 @@
 #include <sstream>
 
 #include "IRPrinter.h"
-#include "CodeGen.h"
 #include "CodeGen_LLVM.h"
 #include "IROperator.h"
 #include "Debug.h"
