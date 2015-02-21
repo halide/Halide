@@ -41,6 +41,11 @@ struct Type {
     /** How many elements (if a vector type). Should be 1 for scalar types. */
     int width;
 
+    // Default ctor initializes everything to predictable-but-unlikely values
+    Type() : code(Handle), bits(0), width(0) {}
+
+    Type(TypeCode _code, int _bits, int _width) : code(_code), bits(_bits), width(_width) {}
+
     /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code == UInt && bits == 1;}
 
