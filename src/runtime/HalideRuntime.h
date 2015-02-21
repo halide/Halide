@@ -293,10 +293,10 @@ extern void halide_memoization_cache_cleanup();
  * (the bit width is expected to be encoded in a separate value).
  */
 typedef enum halide_type_code_t {
-    HalideType_Int = 0,   //!< signed integers
-    HalideType_UInt = 1,  //!< unsigned integers
-    HalideType_Float = 2, //!< floating point numbers
-    HalideType_Handle = 3 //!< opaque pointer type (void *)
+    halide_type_int = 0,   //!< signed integers
+    halide_type_uint = 1,  //!< unsigned integers
+    halide_type_float = 2, //!< floating point numbers
+    halide_type_handle = 3 //!< opaque pointer type (void *)
 } halide_type_code_t;
 
 #ifndef BUFFER_T_DEFINED
