@@ -142,12 +142,14 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         break;
 
     case 6:
+    {
         // Get a random type that isn't T or int32 (int32 can overflow and we don't care about that).
         Type subT;
         do {
             subT = random_type(T.width);
         } while (subT == T || (subT.is_int() && subT.bits == 32));
         return Cast::make(T, random_expr(subT, depth, overflow_undef));
+    }
 
     default:
         make_bin_op_fn maker;
