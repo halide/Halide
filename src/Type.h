@@ -79,14 +79,12 @@ struct Type {
 
     /** Produce a vector of this type, with 'width' elements */
     Type vector_of(int w) const {
-        Type type = {code, bits, w};
-        return type;
+        return Type(code, bits, w);
     }
 
     /** Produce the type of a single element of this vector type */
     Type element_of() const {
-        Type type = {code, bits, 1};
-        return type;
+        return Type(code, bits, 1);
     }
 
     /** Can this type represent all values of another type? */
