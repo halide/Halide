@@ -26,10 +26,10 @@ struct Type {
      * to preserve source code compatibility.
      */
     enum TypeCode {
-        Int = HalideType_Int,
-        UInt = HalideType_UInt,
-        Float = HalideType_Float,
-        Handle = HalideType_Handle
+        Int = halide_type_int,
+        UInt = halide_type_uint,
+        Float = halide_type_float,
+        Handle = halide_type_handle
     } code;
 
     /** The number of bits of precision of a single scalar value of this type. */
