@@ -1937,7 +1937,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     }
 
     // This is envisioned as a catch all pass to propagate attributes
-    // which are inhereited from a parent node by a child node so
+    // which are inherited from a parent node by a child node so
     // every CodeGen backend does not have to keep track of these
     // attributes as the IR tree is traversed. At present, only the
     // GPU device attribute on For nodes is propagated (to contained
