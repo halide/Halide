@@ -163,7 +163,7 @@ class NormalizeDimensionality : public IRMutator {
         }
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, For::Parallel, device_api, s);
+            s = For::make("." + name, 0, 1, ForType::Parallel, device_api, s);
             max_depth++;
         }
         return s;
@@ -419,7 +419,7 @@ class FuseGPUThreadLoops : public IRMutator {
             return;
         }
 
-        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name))) 
+        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "
             << "This schedule is malformed. There must be a GPU block "
@@ -466,12 +466,12 @@ class FuseGPUThreadLoops : public IRMutator {
 
             // Rewrap the whole thing in the loop over threads
             for (int i = 0; i < e.dimensions(); i++) {
-                body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, op->device_api, body);
+                body = For::make("." + thread_names[i], 0, e.extent(i), ForType::Parallel, op->device_api, body);
             }
 
             // There at least needs to be a loop over __thread_id_x as a marker for codegen
             if (e.dimensions() == 0) {
-                body = For::make(".__thread_id_x", 0, 1, For::Parallel, op->device_api, body);
+                body = For::make(".__thread_id_x", 0, 1, ForType::Parallel, op->device_api, body);
             }
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";

@@ -16,57 +16,6 @@
 #include "Util.h"
 
 namespace Halide {
-
-#if __cplusplus > 199711L // C++11 strongly typed enum
-enum class DeviceAPI {
-    Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
-    Host,
-    Default_GPU,
-    CUDA,
-    OpenCL,
-    GLSL
-};
-#else
-struct DeviceAPI {
-    enum Values {
-        Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
-        Host,
-        Default_GPU,
-        CUDA,
-        OpenCL,
-        GLSL
-    };
-    int val;
-    DeviceAPI() : val(Parent) { }
-    DeviceAPI(int val) : val(val) { }
-    operator int() const { return val; }
-};
-#endif
-
-inline const char *device_api_to_string(const DeviceAPI &device_api) {
-    switch (device_api) {
-    case DeviceAPI::Host:
-        return "";
-        break;
-    case DeviceAPI::Parent:
-        return "<Parent>";
-        break;
-    case DeviceAPI::Default_GPU:
-        return "<Default_GPU>";
-        break;
-    case DeviceAPI::CUDA:
-        return "<CUDA>";
-        break;
-    case DeviceAPI::OpenCL:
-        return "<OpenCL>";
-        break;
-    case DeviceAPI::GLSL:
-        return "<GLSL>";
-        break;
-    }
-    return "<Unrecognized DeviceAPI>";
-}
-
 namespace Internal {
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
@@ -269,9 +218,60 @@ struct ExprCompare {
     }
 };
 
-// The Stmt and For structs don't really belong here, but putting them here
-// greatly simplifies the include paths for Function.h
+/** An enum describing a type of device API. Used by schedules, and in
+ * the For loop IR node. */
+#if __cplusplus > 199711L // C++11 strongly typed enum
+enum class DeviceAPI {
+    Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
+    Host,
+    Default_GPU,
+    CUDA,
+    OpenCL,
+    GLSL
+};
+#else
+struct DeviceAPI {
+    enum Values {
+        Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
+        Host,
+        Default_GPU,
+        CUDA,
+        OpenCL,
+        GLSL
+    };
+    int val;
+    DeviceAPI() : val(Parent) { }
+    DeviceAPI(int val) : val(val) { }
+    operator int() const { return val; }
+};
+#endif
+
 namespace Internal {
+
+/** An enum describing a type of loop traversal. Used in schedules,
+ * and in the For loop IR node. */
+#if __cplusplus > 199711L // C++11 strongly typed enum
+enum class ForType {
+    Serial,
+    Parallel,
+    Vectorized,
+    Unrolled
+};
+#else
+struct ForType {
+    enum Values {
+        Serial,
+        Parallel,
+        Vectorized,
+        Unrolled
+    };
+    int val;
+    ForType() : val(Serial) { }
+    ForType(int val) : val(val) { }
+    operator int() const { return val; }
+};
+#endif
+
 
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {
@@ -287,28 +287,6 @@ struct Stmt : public IRHandle {
     };
 };
 
-/** A for loop. Execute the 'body' statement for all values of the
- * variable 'name' from 'min' to 'min + extent'. There are four
- * types of For nodes. A 'Serial' for loop is a conventional
- * one. In a 'Parallel' for loop, each iteration of the loop
- * happens in parallel or in some unspecified order. In a
- * 'Vectorized' for loop, each iteration maps to one SIMD lane,
- * and the whole loop is executed in one shot. For this case,
- * 'extent' must be some small integer constant (probably 4, 8, or
- * 16). An 'Unrolled' for loop compiles to a completely unrolled
- * version of the loop. Each iteration becomes its own
- * statement. Again in this case, 'extent' should be a small
- * integer constant. */
-struct For : public StmtNode<For> {
-    std::string name;
-    Expr min, extent;
-    typedef enum {Serial, Parallel, Vectorized, Unrolled} ForType;
-    ForType for_type;
-    DeviceAPI device_api;
-    Stmt body;
-
-    EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
-};
 
 }  // namespace Internal
 }  // namespace Halide

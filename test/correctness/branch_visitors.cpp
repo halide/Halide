@@ -90,7 +90,7 @@ bool test_branches_in_var() {
         return false;
     }
 
-    Stmt s4 = LetStmt::make("z", e3, For::make("w", 0, 10, For::Serial, DeviceAPI::Host, Store::make("s", 0, z)));
+    Stmt s4 = LetStmt::make("z", e3, For::make("w", 0, 10, ForType::Serial, DeviceAPI::Host, Store::make("s", 0, z)));
 
     if (!branches_linearly_in_var(s4, "x", linearity)) {
         std::cout << "Expected to branch in x: " << s4 << "\n";
