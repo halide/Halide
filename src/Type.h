@@ -46,6 +46,15 @@ struct Type {
 
     Type(TypeCode _code, int _bits, int _width) : code(_code), bits(_bits), width(_width) {}
 
+    Type(const Type &that) : code(that.code), bits(that.bits), width(that.width) {}
+
+    Type& operator=(const Type& that) {
+        this->code = that.code;
+        this->bits = that.bits;
+        this->width = that.width;
+        return *this;
+    }
+
     /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code == UInt && bits == 1;}
 
