@@ -2,6 +2,7 @@
 #define HALIDE_ARGUMENT_H
 
 #include <string>
+#include "Expr.h"
 #include "Type.h"
 
 /** \file
