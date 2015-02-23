@@ -43,7 +43,7 @@ void verify(const Image<InputType> &input, float float_arg, int int_arg, const I
 }
 
 template<typename T>
-bool ConstantExprEquals(Expr expr, T value) {
+bool constant_expr_equals(Expr expr, T value) {
     using Halide::Internal::Cast;
     using Halide::Internal::FloatImm;
     using Halide::Internal::IntImm;
@@ -58,7 +58,7 @@ bool ConstantExprEquals(Expr expr, T value) {
         return f->value == value;
     }
     if (const Cast* c = expr.as<Cast>()) {
-        return ConstantExprEquals(c->value, value);
+        return constant_expr_equals(c->value, value);
     }
     return false;
 }
@@ -126,13 +126,13 @@ int main(int argc, char **argv) {
             fprintf(stderr, "get_filter_arguments is incorrect\n");
             exit(-1);
         }
-        if (!ConstantExprEquals<float>(args[1].def, 1.f) ||
-            !ConstantExprEquals<float>(args[1].min, 0.f) ||
-            !ConstantExprEquals<float>(args[1].max, 100.f)) {
+        if (!constant_expr_equals<float>(args[1].def, 1.f) ||
+            !constant_expr_equals<float>(args[1].min, 0.f) ||
+            !constant_expr_equals<float>(args[1].max, 100.f)) {
             fprintf(stderr, "constraints for float_arg are incorrect\n");
             exit(-1);
         }
-        if (!ConstantExprEquals<int32_t>(args[2].def, 1) ||
+        if (!constant_expr_equals<int32_t>(args[2].def, 1) ||
             args[2].min.defined() ||
             args[2].max.defined()) {
             fprintf(stderr, "constraints for int_arg are incorrect\n");

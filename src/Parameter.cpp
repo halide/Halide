@@ -1,4 +1,5 @@
 #include "IR.h"
+#include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
 
@@ -138,7 +139,7 @@ Expr Parameter::get_scalar_expr() const {
       switch (t.bits) {
         case 32: return Expr(get_scalar<float>());
         // Note that we lose precision here, since Expr can only
-        // represent 32-bit ints or floats.
+        // represent 32-bit floats.
         case 64: return Expr((float) get_scalar<double>());
       }
     } else if (t.is_int()) {
@@ -146,21 +147,28 @@ Expr Parameter::get_scalar_expr() const {
         case 8: return Expr(get_scalar<int8_t>());
         case 16: return Expr(get_scalar<int16_t>());
         case 32: return Expr(get_scalar<int32_t>());
-        // Note that we lose precision here, since Expr can only
-        // represent 32-bit ints or floats.
-        case 64: return Expr((float) get_scalar<int64_t>());
+        // Expr can only represent 32-bit int directly, so use a more
+        // complex expression:
+        case 64: {
+            int64_t i = get_scalar<int64_t>();
+            Expr lo = Expr((int32_t) i);
+            Expr hi = Expr((int32_t) (i >> 32));
+            return (Cast::make(Int(64), hi) << Expr(32)) | Cast::make(Int(64), lo);
+        }
       }
     } else if (t.is_uint()) {
       switch (t.bits) {
         case 8: return Expr(get_scalar<uint8_t>());
         case 16: return Expr(get_scalar<uint16_t>());
-        // Fudge this a little bit: Expr handles 32-bit signed ints;
-        // cast uint32 to int32 with the assumption the destination
-        // will do the right thing.
         case 32: return Expr((int32_t) get_scalar<uint32_t>());
-        // Note that we lose precision here, since Expr can only
-        // represent 32-bit ints or floats.
-        case 64: return Expr((float) get_scalar<uint64_t>());
+        // Expr can only represent 32-bit int directly, so use a more
+        // complex expression:
+        case 64: {
+            uint64_t i = get_scalar<uint64_t>();
+            Expr lo = Expr((int32_t) i);
+            Expr hi = Expr((int32_t) (i >> 32));
+            return (Cast::make(UInt(64), hi) << Expr(32)) | Cast::make(UInt(64), lo);
+        }
       }
     }
     return Expr();
