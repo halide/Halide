@@ -787,7 +787,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     }
     // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
     // from the tutorials.
-    modules.push_back(get_initmod_to_string(c, bits_64, debug));
+    if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
+      modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
     // These modules are optional
     if (t.arch == Target::X86) {

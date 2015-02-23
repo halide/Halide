@@ -61,7 +61,8 @@ user_warning << target.os   << " " << Target::OSUnknown << "\n";
         contents = new CodeGen_PNaCl(target);
     } else if (target.arch == Target::Hexagon) {
       user_warning << "Invoking codegen hexagon\n";
-      if (target.os != Target::OSUnknown)
+      if (target.os != Target::OSUnknown
+          && target.os != Target::HexagonStandalone)
         user_error << "Hexagon not setup yet" << target.os << "\n";
       contents = new CodeGen_Hexagon(target);
     }
