@@ -4,7 +4,7 @@
 using namespace Halide;
 
 template<typename T>
-bool ConstantExprEquals(Expr expr, T value) {
+bool constant_expr_equals(Expr expr, T value) {
     using Halide::Internal::Cast;
     using Halide::Internal::FloatImm;
     using Halide::Internal::IntImm;
@@ -19,7 +19,7 @@ bool ConstantExprEquals(Expr expr, T value) {
         return f->value == value;
     }
     if (const Cast* c = expr.as<Cast>()) {
-        return ConstantExprEquals(c->value, value);
+        return constant_expr_equals(c->value, value);
     }
     return false;
 }
@@ -69,32 +69,32 @@ int main(int argc, char **argv) {
         EXPECT(false, args[0].def.defined());
         EXPECT(false, args[1].def.defined());
         EXPECT(true, args[2].def.defined());
-        EXPECT(true, ConstantExprEquals<float>(args[2].def, 22.5f));
+        EXPECT(true, constant_expr_equals<float>(args[2].def, 22.5f));
         EXPECT(true, args[3].def.defined());
         EXPECT(true, args[4].def.defined());
         EXPECT(true, args[5].def.defined());
         EXPECT(true, args[6].def.defined());
-        EXPECT(true, ConstantExprEquals<uint32_t>(args[6].def, 0xdeadbeef));
+        EXPECT(true, constant_expr_equals<uint32_t>(args[6].def, 0xdeadbeef));
 
         EXPECT(false, args[0].min.defined());
         EXPECT(false, args[1].min.defined());
         EXPECT(true, args[2].min.defined());
-        EXPECT(true, ConstantExprEquals<float>(args[2].min, 11.25f));
+        EXPECT(true, constant_expr_equals<float>(args[2].min, 11.25f));
         EXPECT(false, args[3].min.defined());
         EXPECT(false, args[4].min.defined());
         EXPECT(false, args[5].min.defined());
         EXPECT(true, args[6].min.defined());
-        EXPECT(true, ConstantExprEquals<uint32_t>(args[6].min, 0x1));
+        EXPECT(true, constant_expr_equals<uint32_t>(args[6].min, 0x1));
 
         EXPECT(false, args[0].max.defined());
         EXPECT(false, args[1].max.defined());
         EXPECT(true, args[2].max.defined());
-        EXPECT(true, ConstantExprEquals<float>(args[2].max, 1e30f));
+        EXPECT(true, constant_expr_equals<float>(args[2].max, 1e30f));
         EXPECT(false, args[3].max.defined());
         EXPECT(false, args[4].max.defined());
         EXPECT(false, args[5].max.defined());
         EXPECT(true, args[6].max.defined());
-        EXPECT(true, ConstantExprEquals<uint32_t>(args[6].max, 0xfffffeed));
+        EXPECT(true, constant_expr_equals<uint32_t>(args[6].max, 0xfffffeed));
 
         EXPECT(3, args[0].dimensions);
         EXPECT(2, args[1].dimensions);
