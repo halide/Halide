@@ -468,6 +468,28 @@ struct Variable : public ExprNode<Variable> {
     EXPORT static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain);
 };
 
+/** A for loop. Execute the 'body' statement for all values of the
+ * variable 'name' from 'min' to 'min + extent'. There are four
+ * types of For nodes. A 'Serial' for loop is a conventional
+ * one. In a 'Parallel' for loop, each iteration of the loop
+ * happens in parallel or in some unspecified order. In a
+ * 'Vectorized' for loop, each iteration maps to one SIMD lane,
+ * and the whole loop is executed in one shot. For this case,
+ * 'extent' must be some small integer constant (probably 4, 8, or
+ * 16). An 'Unrolled' for loop compiles to a completely unrolled
+ * version of the loop. Each iteration becomes its own
+ * statement. Again in this case, 'extent' should be a small
+ * integer constant. */
+struct For : public StmtNode<For> {
+    std::string name;
+    Expr min, extent;
+    ForType for_type;
+    DeviceAPI device_api;
+    Stmt body;
+
+    EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
+};
+
 }
 }
 

@@ -787,7 +787,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order,
     }
 
     // Add an outermost bounds inference marker
-    s = For::make("<outermost>", 0, 1, For::Serial, DeviceAPI::Parent, s);
+    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
     s = BoundsInference(funcs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }
