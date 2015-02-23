@@ -243,6 +243,7 @@ set(HEADER_FILES
   Derivative.h
   OneToOne.h
   Extern.h
+  Expr.h
   FindCalls.h
   Func.h
   Function.h
