@@ -61,11 +61,17 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                            Intrinsic::hexagon_V6_vaddb));
   varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
                            Intrinsic::hexagon_V6_vaddb));
+  varith.push_back(Pattern(wild_u8x64 + wild_u8x64,
+                           Intrinsic::hexagon_V6_vaddb));
+
   varith.push_back(Pattern(wild_i32x16 - wild_i32x16,
                            Intrinsic::hexagon_V6_vsubw));
   //i8*64 - i8*64 i.e. hexagon_v6_vsubb
   varith.push_back(Pattern(wild_i8x64 - wild_i8x64,
                            Intrinsic::hexagon_V6_vsubb));
+  varith.push_back(Pattern(wild_u8x64 - wild_u8x64,
+                           Intrinsic::hexagon_V6_vsubb));
+
  }
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
