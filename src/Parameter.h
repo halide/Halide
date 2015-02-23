@@ -6,6 +6,7 @@
  */
 
 #include <string>
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
