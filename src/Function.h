@@ -5,7 +5,9 @@
  * Defines the internal representation of a halide function and related classes
  */
 
+#include "Expr.h"
 #include "IntrusivePtr.h"
+#include "Parameter.h"
 #include "Schedule.h"
 #include "Reduction.h"
 

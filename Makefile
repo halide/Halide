@@ -333,6 +333,7 @@ HEADER_FILES = \
   DeviceInterface.h \
   EarlyFree.h \
   Error.h \
+  Expr.h \
   ExprUsesVar.h \
   Extern.h \
   FastIntegerDivide.h \
