@@ -231,7 +231,7 @@ const std::string &Buffer::name() const {
 }
 
 Buffer::operator Argument() const {
-    return Argument(name(), true, type());
+    return Argument(name(), Argument::Buffer, type(), dimensions());
 }
 
 int Buffer::copy_to_host() {

@@ -5,6 +5,7 @@
 #include "paramtest_generator.cpp"
 
 using Halide::Argument;
+using Halide::Expr;
 using Halide::Func;
 using Halide::Image;
 using Halide::Internal::GeneratorParamValues;
@@ -39,6 +40,27 @@ void verify(const Image<InputType> &input, float float_arg, int int_arg, const I
             }
         }
     }
+}
+
+template<typename T>
+bool ConstantExprEquals(Expr expr, T value) {
+    using Halide::Internal::Cast;
+    using Halide::Internal::FloatImm;
+    using Halide::Internal::IntImm;
+
+    if (!expr.defined() || !expr.type().is_scalar()) {
+        return false;
+    }
+    if (const IntImm* i = expr.as<IntImm>()) {
+        return i->value == value;
+    }
+    if (const FloatImm* f = expr.as<FloatImm>()) {
+        return f->value == value;
+    }
+    if (const Cast* c = expr.as<Cast>()) {
+        return ConstantExprEquals(c->value, value);
+    }
+    return false;
 }
 
 int main(int argc, char **argv) {
@@ -104,11 +126,23 @@ int main(int argc, char **argv) {
             fprintf(stderr, "get_filter_arguments is incorrect\n");
             exit(-1);
         }
+        if (!ConstantExprEquals<float>(args[1].def, 1.f) ||
+            !ConstantExprEquals<float>(args[1].min, 0.f) ||
+            !ConstantExprEquals<float>(args[1].max, 100.f)) {
+            fprintf(stderr, "constraints for float_arg are incorrect\n");
+            exit(-1);
+        }
+        if (!ConstantExprEquals<int32_t>(args[2].def, 1) ||
+            args[2].min.defined() ||
+            args[2].max.defined()) {
+            fprintf(stderr, "constraints for int_arg are incorrect\n");
+            exit(-1);
+        }
         if (params.size() != 3 || params[0].name() != "input" || params[1].name() != "float_arg" || params[2].name() != "int_arg") {
             fprintf(stderr, "get_filter_parameters is incorrect\n");
             exit(-1);
         }
-        // Default value for param[0] should be UInt(8)
+        // Default type for param[0] should be UInt(8)
         if (params[0].type() != Halide::UInt(8)) {
             fprintf(stderr, "params[0].type() should be uint8\n");
             exit(-1);

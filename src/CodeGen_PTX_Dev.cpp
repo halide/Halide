@@ -36,7 +36,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
@@ -50,7 +50,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             function->setDoesNotAlias(i+1);
         }
     }
@@ -69,7 +69,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
              iter++) {
 
             string arg_sym_name = args[i].name;
-            if (args[i].is_buffer) {
+            if (args[i].is_buffer()) {
                 // HACK: codegen expects a load from foo to use base
                 // address 'foo.host', so we store the device pointer
                 // as foo.host in this scope.
