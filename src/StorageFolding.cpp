@@ -67,7 +67,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     }
 
     void visit(const For *op) {
-        if (op->for_type != For::Serial && op->for_type != For::Unrolled) {
+        if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
             // We can't proceed into a parallel for loop.
 
             // TODO: If there's no overlap between the region touched

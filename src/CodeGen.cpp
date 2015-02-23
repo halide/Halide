@@ -328,7 +328,7 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(4) << "Creating call from wrapper to actual function\n";
     Value *result = builder->CreateCall(function, wrapper_args);
     builder->CreateRet(result);
-    internal_assert(verifyFunction(*wrapper) == false);       
+    internal_assert(verifyFunction(*wrapper) == false);
 
     // Finally, verify the module is ok
     internal_assert(verifyModule(*module) == false);
@@ -2419,7 +2419,7 @@ void CodeGen::visit(const For *op) {
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
 
-    if (op->for_type == For::Serial) {
+    if (op->for_type == ForType::Serial) {
         Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
@@ -2458,7 +2458,7 @@ void CodeGen::visit(const For *op) {
 
         // Pop the loop variable from the scope
         sym_pop(op->name);
-    } else if (op->for_type == For::Parallel) {
+    } else if (op->for_type == ForType::Parallel) {
 
         debug(3) << "Entering parallel for loop over " << op->name << "\n";
 

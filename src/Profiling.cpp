@@ -84,7 +84,7 @@ public:
                         ticker_block);
             }
 
-            Stmt do_timings = For::make("j", 0, kIters, For::Serial, DeviceAPI::Host, ticker_block);
+            Stmt do_timings = For::make("j", 0, kIters, ForType::Serial, DeviceAPI::Host, ticker_block);
             do_timings = add_ticks(kOverhead, kOverhead, do_timings);
             do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
                 Cast::make(UInt(64), kIters * kUnroll), do_timings);
@@ -102,7 +102,7 @@ public:
 
             // Now that we know the final size, allocate the buffer and init to zero.
             Expr i = Variable::make(Int(32), "i");
-            Stmt init = For::make("i", 0, (int)indices.size(), For::Serial, DeviceAPI::Host,
+            Stmt init = For::make("i", 0, (int)indices.size(), ForType::Serial, DeviceAPI::Host,
                 Store::make(kBufName, Cast::make(UInt(64), 0), i));
             s = Block::make(init, s);
 
@@ -234,7 +234,7 @@ private:
 
     void visit(const For *op) {
         current_loop_level++;
-        if (op->for_type == For::Parallel && level >= 1) {
+        if (op->for_type == ForType::Parallel && level >= 1) {
             std::cerr << "Warning: The Halide profiler does not yet support "
                       << "parallel schedules. Not profiling inside the loop over "
                       << op->name << "\n";
@@ -247,7 +247,7 @@ private:
         if ((level >= 2) && (current_loop_level <= maximum_loop_level)) {
             // for loop with Vectorized type is unrolled into vectorized ops,
             // which usually is too short to profile individually
-            if (op->for_type != For::Vectorized) {
+            if (op->for_type != ForType::Vectorized) {
                 stmt = add_count_and_ticks("forloop", op->name, stmt);
             }
         }
