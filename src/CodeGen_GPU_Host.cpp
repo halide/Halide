@@ -511,7 +511,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
         user_assert(gpu_codegen != NULL)
-            << "Loop is scheduled on device " << loop->device_api
+            << "Loop is scheduled on device " << (int)loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
 
