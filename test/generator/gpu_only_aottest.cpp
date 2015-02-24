@@ -3,8 +3,8 @@
 #include <HalideRuntime.h>
 #include <assert.h>
 #if defined(TEST_OPENCL)
-#include <HalideRuntimeOpencl.h>
-#else if defined(TEST_CUDA)
+#include <HalideRuntimeOpenCL.h>
+#elif defined(TEST_CUDA)
 #include <HalideRuntimeCuda.h>
 #endif
 
