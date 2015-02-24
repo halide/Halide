@@ -17,7 +17,7 @@
 // g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05
 // DYLD_LIBRARY_PATH=../bin ./lesson_05
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 using namespace Halide;
 

@@ -1,11 +1,11 @@
 #include <math.h>
 #include <stdio.h>
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include <assert.h>
 #if defined(TEST_OPENCL)
-#include <HalideRuntimeOpenCL.h>
+#include "HalideRuntimeOpenCL.h"
 #elif defined(TEST_CUDA)
-#include <HalideRuntimeCuda.h>
+#include "HalideRuntimeCuda.h"
 #endif
 
 #include "gpu_only.h"

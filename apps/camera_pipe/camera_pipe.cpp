@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdint.h>
 
 using namespace Halide;
@@ -13,7 +13,7 @@ Func hot_pixel_suppression(Func input) {
                  max(input(x, y-2), input(x, y+2)));
     Expr b = min(min(input(x-2, y), input(x+2, y)),
                  min(input(x, y-2), input(x, y+2)));
-    
+
     Func denoised;
     denoised(x, y) = clamp(input(x, y), b, a);
 
@@ -36,9 +36,9 @@ Func deinterleave(Func raw) {
     // Deinterleave the color channels
     Func deinterleaved;
 
-    deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y), 
+    deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
                                     select(c == 1, raw(2*x+1, 2*y),
-                                           select(c == 2, raw(2*x, 2*y+1), 
+                                           select(c == 2, raw(2*x, 2*y+1),
                                                   raw(2*x+1, 2*y+1))));
     return deinterleaved;
 }
@@ -125,7 +125,7 @@ Func demosaic(Func deinterleaved) {
     Expr bn_r  = correction + (b_b(x+1, y) + b_b(x, y-1))/2;
     Expr bnd_r = absd(b_b(x+1, y), b_b(x, y-1));
 
-    b_r(x, y)  =  select(bpd_r < bnd_r, bp_r, bn_r);    
+    b_r(x, y)  =  select(bpd_r < bnd_r, bp_r, bn_r);
 
     // Interleave the resulting channels
     Func r = interleave_y(interleave_x(r_gr, r_r),
@@ -137,11 +137,11 @@ Func demosaic(Func deinterleaved) {
 
 
     Func output;
-    output(x, y, c) = select(c == 0, r(x, y), 
+    output(x, y, c) = select(c == 0, r(x, y),
                              select(c == 1, g(x, y), b(x, y)));
 
 
-    /* THE SCHEDULE */    
+    /* THE SCHEDULE */
     if (schedule == 0) {
         // optimized for ARM
         // Compute these in chunks over tiles, vectorized by 8
@@ -226,7 +226,7 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
     Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
     Expr g = pow(xf, 1.0f/gamma);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
-    Expr a = 2.0f - 2.0f*b; 
+    Expr a = 2.0f - 2.0f*b;
     Expr z = select(g > 0.5f,
                     1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
                     a*g*g + b*g);
@@ -242,7 +242,7 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
 }
 
 Func process(Func raw, Type result_type,
-             ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp, 
+             ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp,
              Param<float> gamma, Param<float> contrast) {
 
     Var xi, yi;
@@ -296,16 +296,16 @@ int main(int argc, char **argv) {
     // to make a 2560x1920 output image, just like the FCam pipe, so
     // shift by 16, 12
     Func shifted;
-    shifted(x, y) = input(x+16, y+12); 
-    
+    shifted(x, y) = input(x+16, y+12);
+
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
     int bit_width = atoi(argv[1]);
     Type result_type = UInt(bit_width);
-    
-    // Pick a schedule   
+
+    // Pick a schedule
     schedule = atoi(argv[2]);
-    
+
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
