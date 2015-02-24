@@ -208,19 +208,32 @@ foreach ($d in "32_trunk","64_trunk", "64_pnacl","32_pnacl") {
   }
 
   cd $ROOT
-  rm -rf distrib
-  mkdir distrib
+  if (! (Test-Path distrib)) {
+    mkdir distrib
+  }
   cd distrib
+  
+  $DISTRIB_DIR = "distrib_${d}_${COMMIT}_${DATE}"
+  if (Test-Path $DISTRIB_DIR) {
+    rm $DISTRIB_DIR -r -Force
+  }
+  mkdir $DISTRIB_DIR
+  cd $DISTRIB_DIR
+  
   mkdir include
   mkdir Release
   mkdir Debug
 
-  cp ..\build_${d}_Release\include\Halide.h include\
+  cp $ROOT\build_${d}_Release\include\Halide.h include\
   cp $ROOT\src\runtime\HalideRuntim*.h include\
-  cp ..\build_${d}_Release\lib\Release\Halide.lib Release\
-  cp ..\build_${d}_Release\bin\Release\Halide.dll Release\
-  cp ..\build_${d}_Debug\lib\Debug\Halide.lib Debug\
-  cp ..\build_${d}_Debug\bin\Debug\Halide.dll Debug\
-  cp ..\README.md .
+  cp $ROOT\build_${d}_Release\lib\Release\Halide.lib Release\
+  cp $ROOT\build_${d}_Release\bin\Release\Halide.dll Release\
+  cp $ROOT\build_${d}_Debug\lib\Debug\Halide.lib Debug\
+  cp $ROOT\build_${d}_Debug\bin\Debug\Halide.dll Debug\
+  cp $ROOT\README.md .
   &7z a Halide_Windows_${d}_${COMMIT}_${DATE}.zip *
+  mv Halide_Windows_${d}_${COMMIT}_${DATE}.zip ..
+  
+  cd ..
+  rm $DISTRIB_DIR -r -Force
 }
