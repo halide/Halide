@@ -52,13 +52,7 @@ struct Argument {
     Type type;
 
     /** If this is a scalar parameter, then these are its default, min, max values.
-     * By default, they are left unset, implying "no default, no min, no max".
-     *
-     * TODO: Expr is constrained to a 32-bit value (either int or float),
-     * so this constrains the default for int64 and double. (The same constraint
-     * has always applied to min and max, since they've always been expressed
-     * as Expr, so this is quite possibly a restriction which matters little
-     * in practice.) */
+     * By default, they are left unset, implying "no default, no min, no max". */
     Expr def, min, max;
 
     Argument() : kind(Scalar), dimensions(0) {}
