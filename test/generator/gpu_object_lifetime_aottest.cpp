@@ -1,6 +1,6 @@
 #include <math.h>
 #include <stdio.h>
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include <assert.h>
 
 #if COMPILING_FOR_CUDA

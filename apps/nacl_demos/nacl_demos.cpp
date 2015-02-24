@@ -37,7 +37,7 @@
 #include <string.h>
 #include <sstream>
 
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 
 #include "game_of_life_init.h"
 #include "game_of_life_update.h"
