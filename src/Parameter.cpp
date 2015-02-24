@@ -2,6 +2,7 @@
 #include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -153,7 +154,7 @@ Expr Parameter::get_scalar_expr() const {
             int64_t i = get_scalar<int64_t>();
             Expr lo = Expr((int32_t) i);
             Expr hi = Expr((int32_t) (i >> 32));
-            return (Cast::make(Int(64), hi) << Expr(32)) | Cast::make(Int(64), lo);
+            return simplify((Cast::make(Int(64), hi) << Expr(32)) | Cast::make(Int(64), lo));
         }
       }
     } else if (t.is_uint()) {
@@ -167,7 +168,7 @@ Expr Parameter::get_scalar_expr() const {
             uint64_t i = get_scalar<uint64_t>();
             Expr lo = Expr((int32_t) i);
             Expr hi = Expr((int32_t) (i >> 32));
-            return (Cast::make(UInt(64), hi) << Expr(32)) | Cast::make(UInt(64), lo);
+            return simplify((Cast::make(UInt(64), hi) << Expr(32)) | Cast::make(UInt(64), lo));
         }
       }
     }
