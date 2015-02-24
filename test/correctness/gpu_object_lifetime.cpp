@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <iostream>
 
 #include "../common/gpu_object_lifetime.h"
