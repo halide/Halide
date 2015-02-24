@@ -8,7 +8,7 @@
 
 #include "halide_generated.h"
 #include "HalideRuntime.h"
-#include <HalideRuntimeOpenCL.h>
+#include "HalideRuntimeOpenCL.h"
 
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
