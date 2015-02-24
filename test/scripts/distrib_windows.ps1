@@ -208,18 +208,19 @@ foreach ($d in "32_trunk","64_trunk", "64_pnacl","32_pnacl") {
   }
 
   cd $ROOT
-  if (! (Test-Path distrib)) {
-    mkdir distrib
-  }
+  rm -rf distrib
+  mkdir distrib
   cd distrib
+  mkdir include
+  mkdir Release
+  mkdir Debug
 
-  foreach (${configuration} in "Release", "Debug") {
-    rm Halide.h
-    rm Halide.lib
-    rm Halide.dll
-    cp ..\build_${d}_${configuration}\include\Halide.h .
-    cp ..\build_${d}_${configuration}\lib\${configuration}\Halide.lib .
-    cp ..\build_${d}_${configuration}\bin\${configuration}\Halide.dll .
-    &7z a Halide_Windows_${d}_${configuration}_${COMMIT}_${DATE}.zip Halide.h Halide.lib Halide.dll
-  }
+  cp ..\build_${d}_Release\include\Halide.h include\
+  cp $ROOT\src\runtime\HalideRuntim*.h include\
+  cp ..\build_${d}_Release\lib\Release\Halide.lib Release\
+  cp ..\build_${d}_Release\bin\Release\Halide.dll Release\
+  cp ..\build_${d}_Debug\lib\Debug\Halide.lib Debug\
+  cp ..\build_${d}_Debug\bin\Debug\Halide.dll Debug\
+  cp ..\README.md .
+  &7z a Halide_Windows_${d}_${COMMIT}_${DATE}.zip *
 }
