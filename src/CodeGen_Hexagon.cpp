@@ -52,7 +52,7 @@ using namespace llvm;
     Pattern() {}
     Pattern(Expr p, llvm::Intrinsic::ID id, PatternType t = Simple) : pattern(p), ID(id), type(t) {}
   };
-  std::vector<Pattern> casts, varith;
+  std::vector<Pattern> casts, varith, averages;
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
   varith.push_back(Pattern(wild_i32x16 + wild_i32x16,
@@ -71,7 +71,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                            Intrinsic::hexagon_V6_vsubb));
   varith.push_back(Pattern(wild_u8x64 - wild_u8x64,
                            Intrinsic::hexagon_V6_vsubb));
-
+  averages.push_back(Pattern(((wild_u8x64 + wild_u8x64)/2),
+                             Intrinsic::hexagon_V6_vavgub));
  }
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
@@ -170,6 +171,41 @@ void CodeGen_Hexagon::visit(const Add *op) {
           value = Call;
         return;
       }
+  }
+  CodeGen::visit(op);
+  return;
+}
+
+void CodeGen_Hexagon::visit(const Div *op) {
+  vector<Expr> matches;
+  for (size_t I = 0; I < averages.size(); ++I) {
+    const Pattern &P = averages[I];
+    if (expr_match(P.pattern, op, matches)) {
+      Intrinsic::ID ID = P.ID;
+      bool BitCastNeeded = false;
+      llvm::Type *BitCastBackTo;
+      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      llvm::FunctionType *FType = F->getFunctionType();
+      internal_assert(matches.size() == 2);
+      Value *Lt = codegen(matches[0]);
+      Value *Rt = codegen(matches[1]);
+      llvm::Type *T0 = FType->getParamType(0);
+      llvm::Type *T1 = FType->getParamType(1);
+      if (T0 != Lt->getType()) {
+        BitCastBackTo = Lt->getType();
+        Lt = builder->CreateBitCast(Lt, T0);
+        BitCastNeeded = true;
+      }
+      if (T1 != Rt->getType())
+          Rt = builder->CreateBitCast(Rt, T1);
+      Value *Call = builder->CreateCall2(F, Lt, Rt);
+      if (BitCastNeeded)
+        value = builder->CreateBitCast(Call, BitCastBackTo);
+      else
+        value = Call;
+
+      return;
+    }
   }
   CodeGen::visit(op);
   return;

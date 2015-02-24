@@ -48,7 +48,7 @@ protected:
     void visit(const Add *);
     void visit(const Sub *);
     void visit(const Broadcast *);
-
+    void visit(const Div *);
     /* // @} */
 
 
