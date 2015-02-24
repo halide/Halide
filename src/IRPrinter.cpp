@@ -42,6 +42,29 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     return stream;
 }
 
+ostream &operator<<(ostream &out, const DeviceAPI &api) {
+    switch (api) {
+    case DeviceAPI::Host:
+        break;
+    case DeviceAPI::Parent:
+        out << "<Parent>";
+        break;
+    case DeviceAPI::Default_GPU:
+        out << "<Default_GPU>";
+        break;
+    case DeviceAPI::CUDA:
+        out << "<CUDA>";
+        break;
+    case DeviceAPI::OpenCL:
+        out << "<OpenCL>";
+        break;
+    case DeviceAPI::GLSL:
+        out << "<GLSL>";
+        break;
+    }
+    return out;
+}
+
 namespace Internal {
 
 void IRPrinter::test() {
@@ -101,29 +124,6 @@ ostream &operator<<(ostream &out, const ForType &type) {
         break;
     case ForType::Vectorized:
         out << "vectorized";
-        break;
-    }
-    return out;
-}
-
-ostream &operator<<(ostream &out, const DeviceAPI &api) {
-    switch (api) {
-    case DeviceAPI::Host:
-        break;
-    case DeviceAPI::Parent:
-        out << "<Parent>";
-        break;
-    case DeviceAPI::Default_GPU:
-        out << "<Default_GPU>";
-        break;
-    case DeviceAPI::CUDA:
-        out << "<CUDA>";
-        break;
-    case DeviceAPI::OpenCL:
-        out << "<OpenCL>";
-        break;
-    case DeviceAPI::GLSL:
-        out << "<GLSL>";
         break;
     }
     return out;
