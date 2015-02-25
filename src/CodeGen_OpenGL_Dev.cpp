@@ -248,7 +248,7 @@ void CodeGen_GLSL::visit(const For *loop) {
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
         loop->body.accept(this);
     } else {
-        user_assert(loop->for_type != For::Parallel) << "GLSL: parallel loops aren't allowed inside kernel.\n";
+        user_assert(loop->for_type != ForType::Parallel) << "GLSL: parallel loops aren't allowed inside kernel.\n";
         CodeGen_C::visit(loop);
     }
 }

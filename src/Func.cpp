@@ -363,7 +363,7 @@ const std::string &Stage::name() const {
     return stage_name;
 }
 
-void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
+void Stage::set_dim_type(VarOrRVar var, ForType t) {
     bool found = false;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -373,7 +373,7 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
+            if (!dims[i].pure && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
                 user_assert(schedule.allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -388,8 +388,8 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
 
-        } else if (t == For::Vectorized) {
-            user_assert(dims[i].for_type != For::Vectorized)
+        } else if (t == ForType::Vectorized) {
+            user_assert(dims[i].for_type != ForType::Vectorized)
                 << "In schedule for " << stage_name
                 << ", can't vectorize across " << var.name()
                 << " because Func is already vectorized across " << dims[i].var << "\n";
@@ -660,22 +660,22 @@ Stage &Stage::allow_race_conditions() {
 }
 
 Stage &Stage::serial(VarOrRVar var) {
-    set_dim_type(var, For::Serial);
+    set_dim_type(var, ForType::Serial);
     return *this;
 }
 
 Stage &Stage::parallel(VarOrRVar var) {
-    set_dim_type(var, For::Parallel);
+    set_dim_type(var, ForType::Parallel);
     return *this;
 }
 
 Stage &Stage::vectorize(VarOrRVar var) {
-    set_dim_type(var, For::Vectorized);
+    set_dim_type(var, ForType::Vectorized);
     return *this;
 }
 
 Stage &Stage::unroll(VarOrRVar var) {
-    set_dim_type(var, For::Unrolled);
+    set_dim_type(var, ForType::Unrolled);
     return *this;
 }
 

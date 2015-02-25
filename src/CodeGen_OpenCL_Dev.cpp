@@ -123,7 +123,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
+        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
         internal_assert(is_zero(loop->min));
 
         do_indent();
@@ -133,7 +133,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         loop->body.accept(this);
 
     } else {
-        user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
+        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
         CodeGen_C::visit(loop);
     }
 }
