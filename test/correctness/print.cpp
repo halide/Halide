@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 #include <limits>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 

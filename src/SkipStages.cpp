@@ -249,14 +249,14 @@ private:
         bool old_in_vector_loop = in_vector_loop;
 
         // We want to be sure that the predicate doesn't vectorize.
-        if (op->for_type == For::Vectorized) {
+        if (op->for_type == ForType::Vectorized) {
             vector_vars.push(op->name, 0);
             in_vector_loop = true;
         }
 
         IRMutator::visit(op);
 
-        if (op->for_type == For::Vectorized) {
+        if (op->for_type == ForType::Vectorized) {
             vector_vars.pop(op->name);
         }
 

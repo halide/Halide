@@ -836,7 +836,7 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so includ
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
-	cp include/HalideRuntime.h $(DISTRIB_DIR)/include
+	cp include/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp README.md $(DISTRIB_DIR)

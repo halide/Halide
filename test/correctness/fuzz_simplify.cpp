@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <time.h>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
