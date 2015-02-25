@@ -638,7 +638,8 @@ private:
             }
         }
 
-        // Now we have branched all the child branch points and contents and we need to build the branches.
+        // Now we have branched all the child branch points and
+        // contents and we need to build the branches.
         for (size_t i = 0; i < args.size(); ++i) {
             Expr branch_min = branch_points[i];
             Expr branch_max = simplify(branch_points[i+1] - 1);
@@ -940,7 +941,10 @@ private:
             collect(op->value, value_branches);
             for (size_t i = 0; i < value_branches.size(); ++i) {
                 Branch &branch = value_branches[i];
-                string new_name = op->name + "." + int_to_string(i);
+                string new_name = op->name;
+                if (value_branches.size() > 1) {
+                    new_name += "." + int_to_string(i);
+                }
                 Expr value = branch.content;
                 int value_linearity = expr_linearity(value, free_vars, linearity);
                 linearity.push(new_name, value_linearity);
@@ -956,18 +960,26 @@ private:
                 // Add all the value branch let bindings.
                 for (size_t j = 0; j < value_branches.size(); ++j) {
                     Branch &val_branch = value_branches[j];
-                    string new_name = op->name + "." + int_to_string(j);
+                    string new_name = op->name;
+                    if (value_branches.size() > 1) {
+                        new_name += "." + int_to_string(j);
+                    }
                     branch.content = LetOp::make(new_name, val_branch.content, branch.content);
                 }
                 // Add back the original let binding as well, in case we had to bailout somewhere.
-                branch.content = LetOp::make(op->name, op->value, branch.content);
+                if (value_branches.size() > 1) {
+                    branch.content = LetOp::make(op->name, op->value, branch.content);
+                }
                 branches.push_back(branch);
             }
             let_branches.pop(op->name);
             let_num_branches.pop(op->name);
 
             for (size_t i = 0; i < value_branches.size(); ++i) {
-                string new_name = op->name + "." + int_to_string(i);
+                string new_name = op->name;
+                if (value_branches.size() > 1) {
+                    new_name += "." + int_to_string(i);
+                }
                 linearity.pop(new_name);
                 scope.pop(new_name);
             }
@@ -1233,7 +1245,7 @@ private:
 Stmt specialize_branched_loops(Stmt s) {
     // debug(0) << "Specializing branched loops on Stmt:\n" << s << "\n";
     s = SpecializeBranchedLoops().mutate(s);
-    // debug(0) << "Specialized Stmt:\n" << s << "\n\n";
+    // debug(0) << "\nSpecialized Stmt:\n" << s << "\n\n";
     return s;
 }
 
