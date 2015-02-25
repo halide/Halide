@@ -26,11 +26,11 @@ struct GPU_Argument : public Argument {
     bool write;
 
     GPU_Argument() : size(0), packed_index(0), read(false), write(false) {}
-    GPU_Argument(const std::string &_name, bool _is_buffer, Type _type) :
-        Argument(_name, _is_buffer, _type), size(0), packed_index(0), read(_is_buffer), write(_is_buffer) {}
-    GPU_Argument(const std::string &_name, bool _is_buffer, Type _type,
+    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions) :
+        Argument(_name, _kind, _type, _dimensions), size(0), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
+    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions,
                  size_t _size) :
-        Argument(_name, _is_buffer, _type), size(_size), packed_index(0), read(_is_buffer), write(_is_buffer) {}
+        Argument(_name, _kind, _type, _dimensions), size(_size), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
 };
 
 /** A code generator that emits GPU code from a given Halide stmt. */
