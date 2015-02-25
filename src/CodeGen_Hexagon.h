@@ -11,6 +11,8 @@
 namespace Halide {
 namespace Internal {
 
+struct Pattern;
+
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_Hexagon : public CodeGen_Posix {
 public:
@@ -51,7 +53,8 @@ protected:
     void visit(const Div *);
     /* // @} */
 
-
+    llvm::Value *emitBinaryOp(const BaseExprNode *op,
+                              std::vector<Pattern> &Patterns);
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;

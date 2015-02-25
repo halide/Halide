@@ -58,6 +58,17 @@ void testAvg(Target& target) {
   args[1] = inputTwo;
   //  Avgb.compile_to_bitcode("vavgub.bc", args, target);
   COMPILE(Avgb);
+
+  //CHECK: Navgb,
+  //CHECK: vnavg
+  Halide::Func Navgb;
+  Navgb (x, y) = (inputOne(x, y) - inputTwo(x, y))/2;
+  Navgb.split(x, x_outer, x_inner, 64);
+  Navgb.vectorize(x_inner);
+  args[0]  = inputOne;
+  args[1] = inputTwo;
+  //  Navgb.compile_to_bitcode("vavgub.bc", args, target);
+  COMPILE(Navgb);
 }
 int main(int argc, char **argv) {
   Target target;

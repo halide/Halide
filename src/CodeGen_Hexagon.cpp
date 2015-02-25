@@ -73,6 +73,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                            Intrinsic::hexagon_V6_vsubb));
   averages.push_back(Pattern(((wild_u8x64 + wild_u8x64)/2),
                              Intrinsic::hexagon_V6_vavgub));
+  averages.push_back(Pattern(((wild_u8x64 - wild_u8x64)/2),
+                             Intrinsic::hexagon_V6_vnavgub));
  }
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
@@ -142,11 +144,11 @@ static bool canUseVadd(const Add *op) {
   return false;
 }
 
-
-void CodeGen_Hexagon::visit(const Add *op) {
+llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
+                                           std::vector<Pattern> &Patterns) {
   vector<Expr> matches;
-  for (size_t I = 0; I < varith.size(); ++I) {
-    const Pattern &P = varith[I];
+  for (size_t I = 0; I < Patterns.size(); ++I) {
+    const Pattern &P = Patterns[I];
     if (expr_match(P.pattern, op, matches)) {
         Intrinsic::ID ID = P.ID;
         bool BitCastNeeded = false;
@@ -166,81 +168,31 @@ void CodeGen_Hexagon::visit(const Add *op) {
           Rt = builder->CreateBitCast(Rt, T1);
         Value *Call = builder->CreateCall2(F, Lt, Rt);
         if (BitCastNeeded)
-          value = builder->CreateBitCast(Call, BitCastBackTo);
+          return builder->CreateBitCast(Call, BitCastBackTo);
         else
-          value = Call;
-        return;
+          return Call;
       }
   }
-  CodeGen::visit(op);
+  return NULL;
+}
+void CodeGen_Hexagon::visit(const Add *op) {
+  value = emitBinaryOp(op, varith);
+  if (!value)
+    CodeGen::visit(op);
   return;
 }
 
 void CodeGen_Hexagon::visit(const Div *op) {
-  vector<Expr> matches;
-  for (size_t I = 0; I < averages.size(); ++I) {
-    const Pattern &P = averages[I];
-    if (expr_match(P.pattern, op, matches)) {
-      Intrinsic::ID ID = P.ID;
-      bool BitCastNeeded = false;
-      llvm::Type *BitCastBackTo;
-      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-      llvm::FunctionType *FType = F->getFunctionType();
-      internal_assert(matches.size() == 2);
-      Value *Lt = codegen(matches[0]);
-      Value *Rt = codegen(matches[1]);
-      llvm::Type *T0 = FType->getParamType(0);
-      llvm::Type *T1 = FType->getParamType(1);
-      if (T0 != Lt->getType()) {
-        BitCastBackTo = Lt->getType();
-        Lt = builder->CreateBitCast(Lt, T0);
-        BitCastNeeded = true;
-      }
-      if (T1 != Rt->getType())
-          Rt = builder->CreateBitCast(Rt, T1);
-      Value *Call = builder->CreateCall2(F, Lt, Rt);
-      if (BitCastNeeded)
-        value = builder->CreateBitCast(Call, BitCastBackTo);
-      else
-        value = Call;
-
-      return;
-    }
-  }
-  CodeGen::visit(op);
+  value = emitBinaryOp(op, averages);
+  if (!value)
+    CodeGen::visit(op);
   return;
 }
 
 void CodeGen_Hexagon::visit(const Sub *op) {
-  vector<Expr> matches;
-  for (size_t I = 0; I < varith.size(); ++I) {
-    const Pattern &P = varith[I];
-    if (expr_match(P.pattern, op, matches)) {
-        Intrinsic::ID ID = P.ID;
-        bool BitCastNeeded = false;
-        llvm::Type *BitCastBackTo;
-        llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-        llvm::FunctionType *FType = F->getFunctionType();
-        Value *Lt = codegen(matches[0]);
-        Value *Rt = codegen(matches[1]);
-        llvm::Type *T0 = FType->getParamType(0);
-        llvm::Type *T1 = FType->getParamType(1);
-        if (T0 != Lt->getType()) {
-          BitCastBackTo = Lt->getType();
-          Lt = builder->CreateBitCast(Lt, T0);
-          BitCastNeeded = true;
-        }
-        if (T1 != Rt->getType())
-          Rt = builder->CreateBitCast(Rt, T1);
-        Value *Call = builder->CreateCall2(F, Lt, Rt);
-        if (BitCastNeeded)
-          value = builder->CreateBitCast(Call, BitCastBackTo);
-        else
-          value = Call;
-        return;
-      }
-  }
-  CodeGen::visit(op);
+  value = emitBinaryOp(op, varith);
+  if (!value)
+    CodeGen::visit(op);
   return;
 }
   void CodeGen_Hexagon::visit(const Broadcast *op) {
