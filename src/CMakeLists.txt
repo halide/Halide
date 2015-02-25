@@ -229,7 +229,6 @@ set(HEADER_FILES
   Bounds.h
   BoundsInference.h
   Buffer.h
-  buffer_t.h
   CodeGen_C.h
   CodeGen.h
   CodeGen_X86.h
@@ -320,6 +319,7 @@ set(HEADER_FILES
   SpecializeBranchedLoops.h
   RemoveDeadAllocations.h
   DeviceInterface.h
+  runtime/HalideRuntime.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")

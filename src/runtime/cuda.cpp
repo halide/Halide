@@ -1,6 +1,5 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
-#include "../buffer_t.h"
 #include "HalideRuntimeCuda.h"
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
