@@ -266,7 +266,7 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << "int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) stream << ", ";
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             stream << "buffer_t *" << print_name(args[i].name);
         } else {
             stream << "const "
@@ -401,7 +401,7 @@ void CodeGen_C::compile(Stmt s, string name,
     // Emit the function prototype
     stream << "extern \"C\" int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             stream << "buffer_t *"
                    << print_name(args[i].name)
                    << "_buffer";
@@ -419,7 +419,7 @@ void CodeGen_C::compile(Stmt s, string name,
 
     // Unpack the buffer_t's
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             unpack_buffer(args[i].type, args[i].name);
         }
     }
@@ -1092,11 +1092,11 @@ void CodeGen_C::visit(const Pipeline *op) {
 }
 
 void CodeGen_C::visit(const For *op) {
-    if (op->for_type == For::Parallel) {
+    if (op->for_type == ForType::Parallel) {
         do_indent();
         stream << "#pragma omp parallel for\n";
     } else {
-        internal_assert(op->for_type == For::Serial)
+        internal_assert(op->for_type == ForType::Serial)
             << "Can only emit serial or parallel for loops to C\n";
     }
 
@@ -1262,10 +1262,10 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", true, Int(32));
-    Argument float_arg("alpha", false, Float(32));
-    Argument int_arg("beta", false, Int(32));
-    Argument user_context_arg("__user_context", false, Handle());
+    Argument buffer_arg("buf", Argument::Buffer, Int(32), 3);
+    Argument float_arg("alpha", Argument::Scalar, Float(32), 0);
+    Argument int_arg("beta", Argument::Scalar, Int(32), 0);
+    Argument user_context_arg("__user_context", Argument::Scalar, Handle(), 0);
     vector<Argument> args(4);
     args[0] = buffer_arg;
     args[1] = float_arg;

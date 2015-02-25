@@ -314,7 +314,6 @@ HEADER_FILES = \
   BoundsInference.h \
   BranchVisitors.h \
   Buffer.h \
-  buffer_t.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
@@ -335,6 +334,7 @@ HEADER_FILES = \
   DeviceInterface.h \
   EarlyFree.h \
   Error.h \
+  Expr.h \
   ExprUsesVar.h \
   Extern.h \
   FastIntegerDivide.h \
@@ -343,6 +343,7 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  runtime/HalideRuntime.h \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
@@ -838,7 +839,7 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so includ
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
-	cp include/HalideRuntime.h $(DISTRIB_DIR)/include
+	cp include/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp README.md $(DISTRIB_DIR)

@@ -229,7 +229,6 @@ set(HEADER_FILES
   Bounds.h
   BoundsInference.h
   Buffer.h
-  buffer_t.h
   CodeGen_C.h
   CodeGen_LLVM.h
   CodeGen_X86.h
@@ -243,6 +242,7 @@ set(HEADER_FILES
   Derivative.h
   OneToOne.h
   Extern.h
+  Expr.h
   FindCalls.h
   Func.h
   Function.h
@@ -320,6 +320,7 @@ set(HEADER_FILES
   RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
   DeviceInterface.h
+  runtime/HalideRuntime.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")

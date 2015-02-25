@@ -11,7 +11,7 @@ public:
     GeneratorParam<Type> output_type{ "output_type", Float(32) };
 
     ImageParam input{ UInt(8), 3, "input" };
-    Param<float> float_arg{ "float_arg", 1.0 };
+    Param<float> float_arg{ "float_arg", 1.0f, 0.0f, 100.0f };
     Param<int32_t> int_arg{ "int_arg", 1 };
 
     Func build() override {

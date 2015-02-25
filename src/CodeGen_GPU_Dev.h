@@ -19,12 +19,18 @@ struct GPU_Argument : public Argument {
      * type, such as packing scalar floats into vec4 for GLSL. */
     size_t packed_index;
 
-    GPU_Argument() : size(0), packed_index(0) {}
-    GPU_Argument(const std::string &_name, bool _is_buffer, Type _type) :
-        Argument(_name, _is_buffer, _type), size(0), packed_index(0) {}
-    GPU_Argument(const std::string &_name, bool _is_buffer, Type _type,
-                 size_t _size) : 
-        Argument(_name, _is_buffer, _type), size(_size), packed_index(0) {}
+    /** For buffers, these two variables can be used to specify whether the
+     * buffer is read or written. By default, we assume that the argument
+     * buffer is read-write and set both flags. */
+    bool read;
+    bool write;
+
+    GPU_Argument() : size(0), packed_index(0), read(false), write(false) {}
+    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions) :
+        Argument(_name, _kind, _type, _dimensions), size(0), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
+    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions,
+                 size_t _size) :
+        Argument(_name, _kind, _type, _dimensions), size(_size), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
 };
 
 /** A code generator that emits GPU code from a given Halide stmt. */
@@ -69,10 +75,10 @@ struct CodeGen_GPU_Dev {
     static bool is_block_uniform(Expr expr);
     /** Checks if the buffer is a candidate for constant storage. Most
      * GPUs (APIs) support a constant memory storage class that cannot be
-     * written to and performs well for block uniform accesses. A buffer is a 
-     * candidate for constant storage if it is never written to, and loads are 
+     * written to and performs well for block uniform accesses. A buffer is a
+     * candidate for constant storage if it is never written to, and loads are
      * uniform within the workgroup. */
-    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);    
+    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
 };
 
 }}
