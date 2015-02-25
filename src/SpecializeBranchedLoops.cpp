@@ -638,8 +638,7 @@ private:
             }
         }
 
-        // Now we have branched all the child branch points and
-        // contents and we need to build the branches.
+        // Now we have branched all the child branch points and contents and we need to build the branches.
         for (size_t i = 0; i < args.size(); ++i) {
             Expr branch_min = branch_points[i];
             Expr branch_max = simplify(branch_points[i+1] - 1);
@@ -1245,7 +1244,7 @@ private:
 Stmt specialize_branched_loops(Stmt s) {
     // debug(0) << "Specializing branched loops on Stmt:\n" << s << "\n";
     s = SpecializeBranchedLoops().mutate(s);
-    // debug(0) << "\nSpecialized Stmt:\n" << s << "\n\n";
+    // debug(0) << "Specialized Stmt:\n" << s << "\n\n";
     return s;
 }
 
