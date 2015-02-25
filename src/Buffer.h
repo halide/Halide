@@ -2,7 +2,7 @@
 #define HALIDE_BUFFER_H
 
 #include <stdint.h>
-#include "buffer_t.h"
+#include "runtime/HalideRuntime.h" // For buffer_t
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Argument.h"

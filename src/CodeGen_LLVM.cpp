@@ -310,7 +310,7 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
@@ -324,7 +324,7 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             function->setDoesNotAlias(i+1);
         }
     }
@@ -340,7 +340,7 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
              iter != function->arg_end();
              iter++) {
 
-            if (args[i].is_buffer) {
+            if (args[i].is_buffer()) {
                 unpack_buffer(args[i].name, iter);
             } else {
                 sym_push(args[i].name, iter);
@@ -440,7 +440,7 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
         // Get the address of the nth argument
         Value *ptr = builder->CreateConstGEP1_32(arg_array, (int)i);
         ptr = builder->CreateLoad(ptr);
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             // Cast the argument to a buffer_t *
             wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo());
         } else {
@@ -452,7 +452,7 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     debug(4) << "Creating call from wrapper to actual function\n";
     Value *result = builder->CreateCall(function, wrapper_args);
     builder->CreateRet(result);
-    internal_assert(verifyFunction(*wrapper) == false);       
+    internal_assert(verifyFunction(*wrapper) == false);
 
     // Finally, verify the module is ok
     internal_assert(verifyModule(*module) == false);
@@ -2503,7 +2503,7 @@ void CodeGen_LLVM::visit(const For *op) {
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
 
-    if (op->for_type == For::Serial) {
+    if (op->for_type == ForType::Serial) {
         Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
@@ -2542,7 +2542,7 @@ void CodeGen_LLVM::visit(const For *op) {
 
         // Pop the loop variable from the scope
         sym_pop(op->name);
-    } else if (op->for_type == For::Parallel) {
+    } else if (op->for_type == ForType::Parallel) {
 
         debug(3) << "Entering parallel for loop over " << op->name << "\n";
 

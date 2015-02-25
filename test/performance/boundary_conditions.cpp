@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 #include "clock.h"
@@ -44,7 +44,7 @@ struct Test {
 int main(int argc, char **argv) {
     ImageParam input(Float(32), 2);
     ImageParam padded_input(Float(32), 2);
-    
+
     // We use image params bound to concrete images. Using images
     // directly lets Halide assume things about the width and height,
     // and we don't want that to pollute the timings.

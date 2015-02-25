@@ -42,6 +42,7 @@ void Closure::visit(const Load *op) {
 
         // If reading an image/buffer, compute the size.
         if (op->image.defined()) {
+            ref.dimensions = op->image.dimensions();
             ref.size = 1;
             for (int i = 0; i < op->image.dimensions(); i++) {
                 ref.size += (op->image.extent(i) - 1)*op->image.stride(i);
@@ -60,6 +61,7 @@ void Closure::visit(const Store *op) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];
         ref.type = op->value.type(); // TODO: Validate type is the same as existing refs?
+        // TODO: do we need to set ref.dimensions?
         ref.write = true;
     } else {
         debug(3) << "Not adding " << op->name << " to closure\n";

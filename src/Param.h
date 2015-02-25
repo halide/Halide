@@ -144,11 +144,11 @@ public:
         param.set_max_value(max);
     }
 
-    Expr get_min_value() {
+    Expr get_min_value() const {
         return param.get_min_value();
     }
 
-    Expr get_max_value() {
+    Expr get_max_value() const {
         return param.get_max_value();
     }
     // @}
@@ -169,7 +169,8 @@ public:
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
     operator Argument() const {
-        return Argument(name(), false, type());
+        return Argument(name(), Argument::Scalar, type(), 0,
+            param.get_scalar_expr(), param.get_min_value(), param.get_max_value());
     }
 };
 

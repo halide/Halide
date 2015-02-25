@@ -382,10 +382,16 @@ public:
         int id = unique_id();
         stream << open_expand_button(id);
         stream << open_span("Matched");
-        if (op->for_type == 0) {
+        if (op->for_type == ForType::Serial) {
             stream << keyword("for");
-        } else {
+        } else if (op->for_type == ForType::Parallel) {
             stream << keyword("parallel");
+        } else if (op->for_type == ForType::Vectorized) {
+            stream << keyword("vectorized");
+        } else if (op->for_type == ForType::Unrolled) {
+            stream << keyword("unrolled");
+        } else {
+            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
         stream << " (";
         stream << close_span();

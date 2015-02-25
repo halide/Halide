@@ -49,7 +49,7 @@ vector<Argument> add_user_context_arg(vector<Argument> args, const Target& targe
         internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
     }
     if (target.has_feature(Target::UserContext)) {
-        args.insert(args.begin(), Argument("__user_context", false, Halide::Handle()));
+        args.insert(args.begin(), Argument("__user_context", Argument::Scalar, Halide::Handle(), 0));
     }
     return args;
 }
@@ -363,7 +363,7 @@ const std::string &Stage::name() const {
     return stage_name;
 }
 
-void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
+void Stage::set_dim_type(VarOrRVar var, ForType t) {
     bool found = false;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -373,7 +373,7 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
+            if (!dims[i].pure && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
                 user_assert(schedule.allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -388,8 +388,8 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
 
-        } else if (t == For::Vectorized) {
-            user_assert(dims[i].for_type != For::Vectorized)
+        } else if (t == ForType::Vectorized) {
+            user_assert(dims[i].for_type != ForType::Vectorized)
                 << "In schedule for " << stage_name
                 << ", can't vectorize across " << var.name()
                 << " because Func is already vectorized across " << dims[i].var << "\n";
@@ -660,22 +660,22 @@ Stage &Stage::allow_race_conditions() {
 }
 
 Stage &Stage::serial(VarOrRVar var) {
-    set_dim_type(var, For::Serial);
+    set_dim_type(var, ForType::Serial);
     return *this;
 }
 
 Stage &Stage::parallel(VarOrRVar var) {
-    set_dim_type(var, For::Parallel);
+    set_dim_type(var, ForType::Parallel);
     return *this;
 }
 
 Stage &Stage::vectorize(VarOrRVar var) {
-    set_dim_type(var, For::Vectorized);
+    set_dim_type(var, ForType::Vectorized);
     return *this;
 }
 
 Stage &Stage::unroll(VarOrRVar var) {
-    set_dim_type(var, For::Unrolled);
+    set_dim_type(var, ForType::Unrolled);
     return *this;
 }
 
@@ -1893,7 +1893,14 @@ private:
     void include_parameter(Internal::Parameter p) {
         if (!p.defined()) return;
         if (already_have(p.name())) return;
-        arg_types.push_back(Argument(p.name(), p.is_buffer(), p.type()));
+        Expr def, min, max;
+        if (!p.is_buffer()) {
+            def = p.get_scalar_expr();
+            min = p.get_min_value();
+            max = p.get_max_value();
+        }
+        arg_types.push_back(Argument(p.name(), p.is_buffer() ? Argument::Buffer : Argument::Scalar,
+            p.type(), p.dimensions(), def, min, max));
         if (p.is_buffer()) {
             Buffer b = p.get_buffer();
             int idx = (int)arg_values.size();
@@ -1913,7 +1920,7 @@ private:
         if (!b.defined()) return;
         if (already_have(b.name())) return;
         image_args.push_back(make_pair((int)arg_types.size(), b));
-        arg_types.push_back(Argument(b.name(), true, b.type()));
+        arg_types.push_back(Argument(b.name(), Argument::Buffer, b.type(), b.dimensions()));
         arg_values.push_back(b.raw_buffer());
     }
 
@@ -1974,7 +1981,7 @@ void validate_arguments(const string &output,
         } else if (!found) {
             std::ostringstream err;
             err << "Generated code refers to ";
-            if (arg.is_buffer) err << "image ";
+            if (arg.is_buffer()) err << "image ";
             err << "parameter " << arg.name
                 << ", which was not found in the argument list.\n";
 
@@ -1996,8 +2003,8 @@ void validate_arguments(const string &output,
 // followed by all non-buffers (alphabetical by name).
 struct ArgumentComparator {
     bool operator()(const Argument& a, const Argument& b) {
-        if (a.is_buffer != b.is_buffer)
-            return a.is_buffer;
+        if (a.is_buffer() != b.is_buffer())
+            return a.is_buffer();
         else
             return a.name < b.name;
     }
@@ -2652,7 +2659,7 @@ void *Func::compile_jit(const Target &target_arg) {
             buffer_name = buffer_name + '.' + int_to_string(i);
         }
         Type t = func.output_types()[i];
-        Argument me(buffer_name, true, t);
+        Argument me(buffer_name, Argument::Buffer, t, dimensions());
         infer_args.arg_types.push_back(me);
         arg_values.push_back(NULL); // A spot to put the address of this output buffer
     }
@@ -2662,7 +2669,7 @@ void *Func::compile_jit(const Target &target_arg) {
     for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
         Internal::debug(2) << infer_args.arg_types[i].name << ", "
                            << infer_args.arg_types[i].type << ", "
-                           << infer_args.arg_types[i].is_buffer << "\n";
+                           << infer_args.arg_types[i].is_buffer() << "\n";
     }
 
     StmtCompiler cg(target);

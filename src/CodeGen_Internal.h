@@ -45,6 +45,9 @@ public:
         /** The type of the buffer referenced. */
         Type type;
 
+        /** The dimensionality of the buffer. */
+        uint8_t dimensions;
+
         /** The buffer is read from. */
         bool read;
 
@@ -54,7 +57,7 @@ public:
         /** The size of the buffer if known, otherwise zero. */
         size_t size;
 
-        BufferRef() : read(false), write(false), size(0) { }
+        BufferRef() : dimensions(0), read(false), write(false), size(0) { }
     };
 
 public:
