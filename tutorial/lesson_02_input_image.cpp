@@ -16,7 +16,7 @@
 // DYLD_LIBRARY_PATH=../bin ./lesson_02
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
-#include <Halide.h>
+#include "Halide.h"
 
 // Include some support code for loading pngs. It assumes there's an
 // Image type, so we'll pull the one from Halide namespace;

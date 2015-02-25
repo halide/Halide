@@ -3,7 +3,6 @@
 #include "CodeGen_X86.h"
 #include "JITModule.h"
 #include "IROperator.h"
-#include "buffer_t.h"
 #include "IRMatch.h"
 #include "Debug.h"
 #include "Util.h"
@@ -11,7 +10,6 @@
 #include "Param.h"
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
-#include "CodeGen.h"
 #include "IRMutator.h"
 
 namespace Halide {

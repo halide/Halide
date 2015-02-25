@@ -1059,7 +1059,7 @@ public:
             // Add a let statement for the for-loop name variable
             Stmt loop_var = LetStmt::make(op->name, coord_expr, mutated_body);
 
-            stmt = For::make(name, 0, (int)dim.size(), For::Serial, DeviceAPI::Parent, loop_var);
+            stmt = For::make(name, 0, (int)dim.size(), ForType::Serial, DeviceAPI::Parent, loop_var);
 
         } else {
             IRFilter::visit(op);

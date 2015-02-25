@@ -41,7 +41,7 @@ struct VarOrRVar {
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
     Internal::Schedule schedule;
-    void set_dim_type(VarOrRVar var, Internal::For::ForType t);
+    void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
     std::string stage_name;

@@ -2,7 +2,6 @@
 #include <sstream>
 
 #include "IRPrinter.h"
-#include "CodeGen.h"
 #include "CodeGen_LLVM.h"
 #include "IROperator.h"
 #include "Debug.h"
@@ -463,7 +462,7 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
@@ -476,10 +475,12 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             function->setDoesNotAlias(i+1);
         }
     }
+
+    debug(1) << "Generating llvm bitcode for function " << name << "...\n";
 
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
@@ -493,15 +494,13 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
              iter++) {
 
             sym_push(args[i].name, iter);
-            if (args[i].is_buffer) {
+            if (args[i].is_buffer()) {
                 push_buffer(args[i].name, iter);
             }
 
             i++;
         }
     }
-
-    debug(1) << "Generating llvm bitcode for function " << name << "...\n";
 
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
@@ -510,15 +509,22 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
     // Remove the arguments from the symbol table
     for (size_t i = 0; i < args.size(); i++) {
         sym_pop(args[i].name);
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             pop_buffer(args[i].name);
         }
     }
 
-    // Now verify the function is ok
-    llvm::verifyFunction(*function);
+    module->setModuleIdentifier("halide_module_" + name);
+    debug(2) << module << "\n";
 
-    add_argv_wrapper(module, function, name + "_argv");
+    // Now verify the function is ok
+    internal_assert(verifyFunction(*function) == false);
+
+    // If the Func is externally visible, also create the argv wrapper
+    // (useful for calling from JIT and other machine interfaces).
+    if (op->linkage == LoweredFunc::External) {
+        add_argv_wrapper(module, function, name + "_argv");
+    }
 }
 
 // Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.
@@ -2019,7 +2025,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
 
         } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 1);
             llvm::Function *fn = Intrinsic::getDeclaration(module,
                 Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
             CallInst *call = builder->CreateCall(fn);
@@ -2490,7 +2496,7 @@ void CodeGen_LLVM::visit(const For *op) {
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
 
-    if (op->for_type == For::Serial) {
+    if (op->for_type == ForType::Serial) {
         Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
@@ -2529,7 +2535,7 @@ void CodeGen_LLVM::visit(const For *op) {
 
         // Pop the loop variable from the scope
         sym_pop(op->name);
-    } else if (op->for_type == For::Parallel) {
+    } else if (op->for_type == ForType::Parallel) {
 
         debug(3) << "Entering parallel for loop over " << op->name << "\n";
 

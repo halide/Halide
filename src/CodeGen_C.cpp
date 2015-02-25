@@ -1,7 +1,6 @@
 #include <iostream>
 #include <limits>
 
-#include "CodeGen.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Substitute.h"
@@ -276,7 +275,6 @@ string CodeGen_C::print_name(const string &name) {
     return oss.str();
 }
 
-
 namespace {
 class ExternCallPrototypes : public IRGraphVisitor {
     std::set<string> emitted;
@@ -371,7 +369,7 @@ void CodeGen_C::visit(const LoweredFunc *op) {
     }
     stream << "HALIDE_EXTERN_C int " << op->name << "(";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             stream << "buffer_t *"
                    << print_name(args[i].name)
                    << "_buffer";
@@ -393,7 +391,7 @@ void CodeGen_C::visit(const LoweredFunc *op) {
 
         // Unpack the buffer_t's
         for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer) {
+            if (args[i].is_buffer()) {
                 push_buffer(args[i].type, args[i].name);
             }
         }
@@ -405,10 +403,16 @@ void CodeGen_C::visit(const LoweredFunc *op) {
 
         // Done with the buffer_t's, pop the associated symbols.
         for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer) {
+            if (args[i].is_buffer()) {
                 pop_buffer(args[i].name);
             }
         }
+    }
+
+    if (is_header) {
+        // If this is a header and we are here, we know this is an externally visible Func, so
+        // declare the argv function.
+        stream << "HALIDE_EXTERN_C int " << op->name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
     }
 }
 
@@ -794,7 +798,7 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << ")";
         } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 1);
             rhs << "halide_profiling_timer(";
             rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ")";
@@ -1126,11 +1130,11 @@ void CodeGen_C::visit(const Pipeline *op) {
 }
 
 void CodeGen_C::visit(const For *op) {
-    if (op->for_type == For::Parallel) {
+    if (op->for_type == ForType::Parallel) {
         do_indent();
         stream << "#pragma omp parallel for\n";
     } else {
-        internal_assert(op->for_type == For::Serial)
+        internal_assert(op->for_type == ForType::Serial)
             << "Can only emit serial or parallel for loops to C\n";
     }
 
@@ -1302,10 +1306,10 @@ void CodeGen_C::visit(const Return *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", true, Int(32));
-    Argument float_arg("alpha", false, Float(32));
-    Argument int_arg("beta", false, Int(32));
-    Argument user_context_arg("__user_context", false, Handle());
+    Argument buffer_arg("buf", Argument::Buffer, Int(32), 3);
+    Argument float_arg("alpha", Argument::Scalar, Float(32), 0);
+    Argument int_arg("beta", Argument::Scalar, Int(32), 0);
+    Argument user_context_arg("__user_context", Argument::Scalar, Handle(), 0);
     vector<Argument> args(4);
     args[0] = buffer_arg;
     args[1] = float_arg;

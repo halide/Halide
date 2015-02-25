@@ -116,8 +116,10 @@ DECLARE_CPP_INITMOD(device_interface)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
+DECLARE_LL_INITMOD(arm_no_neon)
 #else
 DECLARE_NO_INITMOD(arm)
+DECLARE_NO_INITMOD(arm_no_neon)
 #endif
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
@@ -445,8 +447,12 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
                   modules.push_back(get_initmod_aarch64_ll(c));
+                } else if (t.has_feature(Target::ARMv7s)) {
+                    modules.push_back(get_initmod_arm_ll(c));
+                } else if (!t.has_feature(Target::NoNEON)) {
+                    modules.push_back(get_initmod_arm_ll(c));
                 } else {
-                  modules.push_back(get_initmod_arm_ll(c));
+                    modules.push_back(get_initmod_arm_no_neon_ll(c));
                 }
             }
             if (t.arch == Target::MIPS) {

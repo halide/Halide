@@ -67,6 +67,8 @@ struct Benchmarks {
             bench_gemv_notrans(size);
         } else if (benchmark == "gemv_trans") {
             bench_gemv_trans(size);
+        } else if (benchmark == "ger") {
+            bench_ger(size);
         } else if (benchmark == "gemm_notrans") {
             bench_gemm_notrans(size);
         } else if (benchmark == "gemm_transA") {
@@ -88,6 +90,7 @@ struct Benchmarks {
 
     L2Benchmark(gemv_notrans, type_name<T>(), y = alpha * A * x + beta * y);
     L2Benchmark(gemv_trans,   type_name<T>(), y = alpha * A.transpose() * x + beta * y);
+    L2Benchmark(ger,          type_name<T>(), A = alpha * x * y.transpose() + A);
 
     L3Benchmark(gemm_notrans, type_name<T>(), C = alpha * A * B + beta * C);
     L3Benchmark(gemm_transA, type_name<T>(), C = alpha * A.transpose() * B + beta * C);

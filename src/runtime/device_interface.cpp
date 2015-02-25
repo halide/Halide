@@ -1,8 +1,5 @@
 #include "runtime_internal.h"
-
 #include "device_interface.h"
-
-#include "../buffer_t.h"
 #include "HalideRuntime.h"
 #include "scoped_mutex_lock.h"
 
@@ -131,7 +128,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
         interface = buf_dev_interface;
     }
 
-    if (buf_dev_interface != interface) {
+    if (buf->dev && buf_dev_interface != interface) {
         debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer to new device\n";
         if (buf_dev_interface != NULL && buf->dev_dirty) {
             halide_assert(user_context, !buf->host_dirty);
@@ -177,7 +174,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-WEAK int halide_device_sync(void *user_context, struct buffer_t *buf) { 
+WEAK int halide_device_sync(void *user_context, struct buffer_t *buf) {
     const halide_device_interface *interface = NULL;
     if (buf) {
         interface = halide_get_device_interface(buf->dev);
@@ -192,7 +189,7 @@ WEAK int halide_device_sync(void *user_context, struct buffer_t *buf) {
 WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
     const halide_device_interface *current_interface = halide_get_device_interface(buf->dev);
     debug(user_context) << "halide_device_malloc: " << buf << " interface " << interface <<
-        " host: " << buf->host << ", dev: " << buf->dev << ", host_dirty: " << buf->host_dirty << ", dev_dirty:" << buf->dev_dirty << 
+        " host: " << buf->host << ", dev: " << buf->dev << ", host_dirty: " << buf->host_dirty << ", dev_dirty:" << buf->dev_dirty <<
         " buf current interface: " << current_interface << "\n";
 
     // halide_device_malloc does not support switching interfaces.

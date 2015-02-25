@@ -219,7 +219,6 @@ SOURCE_FILES = \
   BoundsInference.cpp \
   BranchVisitors.cpp \
   Buffer.cpp \
-  CodeGen.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
@@ -317,13 +316,10 @@ HEADER_FILES = \
   BoundsInference.h \
   BranchVisitors.h \
   Buffer.h \
-  buffer_t.h \
-  CodeGen.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
-  CodeGen.h \
   CodeGen_LLVM.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
@@ -340,6 +336,7 @@ HEADER_FILES = \
   DeviceInterface.h \
   EarlyFree.h \
   Error.h \
+  Expr.h \
   ExprUsesVar.h \
   Extern.h \
   FastIntegerDivide.h \
@@ -348,6 +345,7 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  runtime/HalideRuntime.h \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
@@ -415,7 +413,7 @@ OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
 RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image windows_cuda windows_opencl windows_io windows_thread_pool ssp opengl linux_opengl_context osx_opengl_context android_opengl_context posix_print gpu_device_selection cache nacl_host_cpu_count to_string module_jit_ref_count module_aot_ref_count device_interface
-RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips
+RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips arm_no_neon
 
 RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h
 
@@ -845,7 +843,7 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so includ
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
-	cp include/HalideRuntime.h $(DISTRIB_DIR)/include
+	cp include/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp README.md $(DISTRIB_DIR)

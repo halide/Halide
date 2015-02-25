@@ -466,7 +466,7 @@ Expr try_narrow(Expr a, Type target) {
 
 void CodeGen_ARM::visit(const Cast *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -568,7 +568,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
 void CodeGen_ARM::visit(const Mul *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -621,7 +621,7 @@ void CodeGen_ARM::visit(const Mul *op) {
 
 void CodeGen_ARM::visit(const Div *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -806,7 +806,7 @@ void CodeGen_ARM::visit(const Add *op) {
 
 void CodeGen_ARM::visit(const Sub *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -847,7 +847,7 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -902,7 +902,7 @@ void CodeGen_ARM::visit(const Min *op) {
 
 void CodeGen_ARM::visit(const Max *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -957,7 +957,7 @@ void CodeGen_ARM::visit(const Max *op) {
 
 void CodeGen_ARM::visit(const Store *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1102,7 +1102,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
 void CodeGen_ARM::visit(const Load *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1234,6 +1234,7 @@ void CodeGen_ARM::visit(const Call *op) {
             // Android devices generally have read-cycle-counter
             // disabled in user mode; fall back to calling
             // halide_current_time_ns().
+            internal_assert(op->args.size() == 1);
             Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
             e.accept(this);
             return;
@@ -1287,7 +1288,13 @@ string CodeGen_ARM::mcpu() const {
 
 string CodeGen_ARM::mattrs() const {
     if (target.bits == 32) {
-        return "+neon";
+        if (target.has_feature(Target::ARMv7s)) {
+            return "+neon";
+        } if (!target.has_feature(Target::NoNEON)) {
+            return "+neon";
+        } else {
+            return "-neon";
+        }
     } else {
         return "";
     }

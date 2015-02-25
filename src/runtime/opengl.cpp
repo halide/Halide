@@ -1,6 +1,5 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
-#include "../buffer_t.h"
 #include "HalideRuntimeOpenGL.h"
 #include "mini_opengl.h"
 
@@ -216,7 +215,7 @@ WEAK const char *input_marker  = "/// IN_BUFFER ";
 WEAK const char *output_marker = "/// OUT_BUFFER ";
 WEAK const char *uniform_marker    = "/// UNIFORM ";
 WEAK const char *varying_marker    = "/// VARYING ";
-    
+
 // ---------- Helper functions ----------
 
 WEAK char *strndup(const char *s, size_t n) {
@@ -982,7 +981,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
             vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
             vertex_src << "varying   vec4 _varyingf" << i << ";\n";
         }
-        
+
         vertex_src << "uniform ivec2 output_min;\n"
                    << "uniform ivec2 output_extent;\n"
                    << "void main() {\n"
@@ -1008,7 +1007,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
             error(user_context) << "Vertex shader source truncated";
             return 1;
         }
-        
+
         // Initialize vertex shader.
         GLuint vertex_shader_id = make_shader(user_context,
                                               GL_VERTEX_SHADER, vertex_src.buf, NULL);
@@ -1016,7 +1015,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
             halide_error(user_context, "Failed to create vertex shader");
             return 1;
         }
-        
+
         // Create the fragment shader
         GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
                                                 kernel->source, NULL);
@@ -1029,7 +1028,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         // Release the individual shaders
         global_state.DeleteShader(vertex_shader_id);
         global_state.DeleteShader(fragment_shader_id);
-        
+
         GLint status;
         global_state.GetProgramiv(program, GL_LINK_STATUS, &status);
         if (!status) {
@@ -1280,7 +1279,7 @@ extern "C" {
 class IndexSorter {
 public:
     IndexSorter(float* values_) : values(values_) {  }
-    
+
     bool operator()(int a, int b) { return values[a] < values[b]; }
     float* values;
 };
@@ -1409,7 +1408,7 @@ WEAK int halide_opengl_run(void *user_context,
             global_state.Uniform1iv(loc, 1, &num_active_textures);
 
             // Textures not created by the Halide runtime might not have
-            // parameters set, or might have had parameters set differently 
+            // parameters set, or might have had parameters set differently
             global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1624,7 +1623,7 @@ WEAK int halide_opengl_run(void *user_context,
 
     int element_buffer_size = (width-1)*(height-1)*6;
     int element_buffer[element_buffer_size];
-    
+
     int idx = 0;
     for (int h=0;h!=(height-1);++h) {
         for (int w=0;w!=(width-1);++w) {
@@ -1634,13 +1633,13 @@ WEAK int halide_opengl_run(void *user_context,
             element_buffer[idx++] = v;
             element_buffer[idx++] = v+1;
             element_buffer[idx++] = v+width+1;
-            
+
             element_buffer[idx++] = v+width+1;
             element_buffer[idx++] = v+width;
             element_buffer[idx++] = v;
         }
     }
-    
+
 
 #if 0 // DEBUG_RUNTIME
     debug(user_context) << "Vertex buffer:";
@@ -1652,17 +1651,17 @@ WEAK int halide_opengl_run(void *user_context,
     }
     debug(user_context) << "\n";
     debug(user_context) << "\n";
-    
+
     debug(user_context) << "Element buffer:";
     for (int i=0;i!=element_buffer_size;++i) {
         if (!(i%3)) {
             debug(user_context) << "\n";
-        }        
+        }
         debug(user_context) << element_buffer[i] << " ";
     }
     debug(user_context) << "\n";
-#endif 
-    
+#endif
+
     // Setup viewport
     global_state.Viewport(0, 0, output_extent[0], output_extent[1]);
 
@@ -1680,7 +1679,7 @@ WEAK int halide_opengl_run(void *user_context,
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run vertex BufferData et al")) {
         return 1;
     }
-    
+
     GLuint element_buffer_id;
     global_state.GenBuffers(1,&element_buffer_id);
     global_state.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_id);
@@ -1718,7 +1717,7 @@ WEAK int halide_opengl_run(void *user_context,
         if (global_state.CheckAndReportError(user_context, "halide_opengl_run VertexAttribPointer et al")) {
             return 1;
         }
-        
+
         global_state.EnableVertexAttribArray(attrib_id);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_run EnableVertexAttribArray et al")) {
             return 1;
@@ -1731,7 +1730,7 @@ WEAK int halide_opengl_run(void *user_context,
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run DrawElements et al")) {
         return 1;
     }
-    
+
     for (int i=0;i!=num_packed_attributes;++i) {
         if (attrib_ids[i] != -1)
             global_state.DisableVertexAttribArray(attrib_ids[i]);
@@ -1826,7 +1825,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
             vertex_src << "varying   vec4 _varyingf" << i << ";\n";
         }
-        
+
         vertex_src << "uniform ivec2 output_min;\n"
                    << "uniform ivec2 output_extent;\n"
                    << "void main() {\n"
@@ -1852,7 +1851,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             error(user_context) << "Vertex shader source truncated";
             return 1;
         }
-        
+
         // Initialize vertex shader.
         GLuint vertex_shader_id = make_shader(user_context,
                                               GL_VERTEX_SHADER, vertex_src.buf, NULL);
@@ -1860,7 +1859,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             halide_error(user_context, "Failed to create vertex shader");
             return 1;
         }
-        
+
         // Create the fragment shader
         GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
                                                 kernel->source, NULL);
@@ -1873,7 +1872,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         // Release the individual shaders
         global_state.DeleteShader(vertex_shader_id);
         global_state.DeleteShader(fragment_shader_id);
-        
+
         GLint status;
         global_state.GetProgramiv(program, GL_LINK_STATUS, &status);
         if (!status) {
