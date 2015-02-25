@@ -153,6 +153,7 @@ protected:
             string bufname = string_imm->value;
             BufferRef &ref = buffers[bufname];
             ref.type = op->type;
+            // TODO: do we need to set ref.dimensions?
 
             if (op->name == Call::glsl_texture_load) {
                 ref.read = true;
@@ -179,7 +180,7 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
     vector<GPU_Argument> res;
     for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         debug(2) << "var: " << iter->first << "\n";
-        res.push_back(GPU_Argument(iter->first, false, iter->second));
+        res.push_back(GPU_Argument(iter->first, Argument::Scalar, iter->second, 0));
     }
     for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
         debug(2) << "buffer: " << iter->first << " " << iter->second.size;
@@ -187,7 +188,7 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
         if (iter->second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        GPU_Argument arg(iter->first, true, iter->second.type, iter->second.size);
+        GPU_Argument arg(iter->first, Argument::Buffer, iter->second.type, iter->second.dimensions, iter->second.size);
         arg.read = iter->second.read;
         arg.write = iter->second.write;
         res.push_back(arg);
@@ -491,7 +492,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // Pack scalar parameters into vec4
             for (size_t i = 0; i < closure_args.size(); i++) {
-                if (closure_args[i].is_buffer) {
+                if (closure_args[i].is_buffer()) {
                     continue;
                 } else if (ends_with(closure_args[i].name, ".varying")) {
                     closure_args[i].packed_index = num_varying_floats++;
@@ -504,7 +505,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         }
 
         for (size_t i = 0; i < closure_args.size(); i++) {
-            if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
+            if (closure_args[i].is_buffer() && allocations.contains(closure_args[i].name)) {
                 closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
             }
         }
@@ -548,7 +549,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             string name = closure_args[i].name;
             Value *val;
 
-            if (closure_args[i].is_buffer) {
+            if (closure_args[i].is_buffer()) {
                 // If it's a buffer, dereference the dev handle
                 val = buffer_dev(sym_get(name + ".buffer"));
             } else if (ends_with(name, ".varying")) {
@@ -575,11 +576,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                  builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
 
             // store the size of the argument
-            int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
+            int size_bits = (closure_args[i].is_buffer()) ? target.bits : closure_args[i].type.bits;
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
 
-            builder->CreateStore(ConstantInt::get(i8, closure_args[i].is_buffer),
+            builder->CreateStore(ConstantInt::get(i8, closure_args[i].is_buffer()),
                                  builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, i));
         }
         // NULL-terminate the lists

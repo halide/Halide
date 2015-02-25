@@ -43,27 +43,16 @@ void check(const char *op, int vector_width, Expr e) {
     f.vectorize(x, vector_width);
 
     vector<Argument> arg_types;
-    Argument arg("", true, Int(1));
-    arg.name = "in_f32";
-    arg_types.push_back(arg);
-    arg.name = "in_f64";
-    arg_types.push_back(arg);
-    arg.name = "in_i8";
-    arg_types.push_back(arg);
-    arg.name = "in_u8";
-    arg_types.push_back(arg);
-    arg.name = "in_i16";
-    arg_types.push_back(arg);
-    arg.name = "in_u16";
-    arg_types.push_back(arg);
-    arg.name = "in_i32";
-    arg_types.push_back(arg);
-    arg.name = "in_u32";
-    arg_types.push_back(arg);
-    arg.name = "in_i64";
-    arg_types.push_back(arg);
-    arg.name = "in_u64";
-    arg_types.push_back(arg);
+    arg_types.push_back(Argument("in_f32", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_f64", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i8", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u8", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i16", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u16", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i32", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u32", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i64", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u64", Argument::Buffer, Int(1), 1));
 
     char *module = new char[1024];
     snprintf(module, 1024, "test_%s_%s", op, f.name().c_str());

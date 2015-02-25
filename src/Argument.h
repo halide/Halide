@@ -2,6 +2,7 @@
 #define HALIDE_ARGUMENT_H
 
 #include <string>
+#include "Error.h"
 #include "Expr.h"
 #include "Type.h"
 
@@ -22,19 +23,57 @@ struct Argument {
     std::string name;
 
     /** An argument is either a primitive type (for parameters), or a
-     * buffer pointer. If 'is_buffer' is true, then 'type' should be
-     * ignored.
+     * buffer pointer.
+     *
+     * If kind == Scalar, then type fully encodes the expected type
+     * of the scalar argument.
+     *
+     * If kind == Buffer, then type.bytes() should be used to determine
+     * elem_size of the buffer; additionally, type.code *should* reflect
+     * the expected interpretation of the buffer data (e.g. float vs int),
+     * but there is no runtime enforcement of this at present.
      */
-    bool is_buffer;
+    enum Kind {
+        Scalar,
+        Buffer
+    };
+    Kind kind;
 
-    /** If this is a scalar parameter, then this is its type */
+    /** If kind == Buffer is true, this is the dimensionality of the buffer.
+     * If kind == Scalar is false, this value is ignored (and should always be set to zero) */
+    uint8_t dimensions;
+
+    /** If this is a scalar parameter, then this is its type.
+     *
+     * If this is a buffer parameter, this is used to determine elem_size
+     * of the buffer_t.
+     *
+     * Note that type.width should always be 1 here. */
     Type type;
 
-    Argument() : is_buffer(false) {}
-    Argument(const std::string &_name, bool _is_buffer, Type _type) :
-        name(_name), is_buffer(_is_buffer), type(_type) {
+    /** If this is a scalar parameter, then these are its default, min, max values.
+     * By default, they are left unset, implying "no default, no min, no max". */
+    Expr def, min, max;
+
+    Argument() : kind(Scalar), dimensions(0) {}
+    Argument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions,
+                Expr _def = Expr(),
+                Expr _min = Expr(),
+                Expr _max = Expr()) :
+        name(_name), kind(_kind), dimensions(_dimensions), type(_type), def(_def), min(_min), max(_max) {
+        user_assert(!(kind == Scalar && dimensions != 0))
+            << "Scalar Arguments must specify dimensions of 0";
+        user_assert(!(kind == Buffer && def.defined()))
+            << "Scalar default must not be defined for Buffer Arguments";
+        user_assert(!(kind == Buffer && min.defined()))
+            << "Scalar min must not be defined for Buffer Arguments";
+        user_assert(!(kind == Buffer && max.defined()))
+            << "Scalar max must not be defined for Buffer Arguments";
     }
+
+    bool is_buffer() const { return kind == Buffer; }
 };
+
 }
 
 #endif
