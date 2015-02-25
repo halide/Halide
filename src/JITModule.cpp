@@ -5,7 +5,6 @@
 #include <mutex>
 #endif
 
-#include "buffer_t.h"
 #include "JITModule.h"
 #include "CodeGen.h"
 #include "LLVM_Headers.h"

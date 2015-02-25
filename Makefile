@@ -312,7 +312,6 @@ HEADER_FILES = \
   BoundsInference.h \
   BranchVisitors.h \
   Buffer.h \
-  buffer_t.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
@@ -342,6 +341,7 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  runtime/HalideRuntime.h \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
