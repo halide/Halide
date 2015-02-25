@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <cassert>
 
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
@@ -135,7 +135,7 @@ public:
 
     void copy_to_device(const struct halide_device_interface *device_interface) {
         if (contents->buf.host_dirty) {
-            // If host 
+            // If host
             halide_copy_to_device(NULL, &contents->buf, device_interface);
             contents->buf.host_dirty = false;
         }

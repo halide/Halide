@@ -45,6 +45,9 @@ public:
         /** The type of the buffer referenced. */
         Type type;
 
+        /** The dimensionality of the buffer. */
+        uint8_t dimensions;
+
         /** The buffer is read from. */
         bool read;
 
@@ -54,7 +57,7 @@ public:
         /** The size of the buffer if known, otherwise zero. */
         size_t size;
 
-        BufferRef() : read(false), write(false), size(0) { }
+        BufferRef() : dimensions(0), read(false), write(false), size(0) { }
     };
 
 public:
@@ -106,6 +109,9 @@ llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
  * but overflows, this routine asserts. The name parameter is used in the
  * assertion message. */
 bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size);
+
+/** Which built-in functions require a user-context first argument? */
+bool function_takes_user_context(const std::string &name);
 
 }}
 

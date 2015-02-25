@@ -727,7 +727,7 @@ private:
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
             func.schedule().compute_level().is_inline() &&
-            for_loop->for_type == For::Vectorized &&
+            for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
@@ -931,8 +931,8 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
-        Site s = {f->for_type == For::Parallel ||
-                  f->for_type == For::Vectorized,
+        Site s = {f->for_type == ForType::Parallel ||
+                  f->for_type == ForType::Vectorized,
                   LoopLevel(func, var)};
         sites.push_back(s);
         f->body.accept(this);
@@ -1145,7 +1145,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
-    s = For::make(root_var, 0, 1, For::Serial, DeviceAPI::Host, s);
+    s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, s);
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1937,7 +1937,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     }
 
     // This is envisioned as a catch all pass to propagate attributes
-    // which are inhereited from a parent node by a child node so
+    // which are inherited from a parent node by a child node so
     // every CodeGen backend does not have to keep track of these
     // attributes as the IR tree is traversed. At present, only the
     // GPU device attribute on For nodes is propagated (to contained

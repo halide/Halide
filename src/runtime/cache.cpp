@@ -1,5 +1,4 @@
 #include "runtime_internal.h"
-#include "../buffer_t.h"
 #include "HalideRuntime.h"
 #include "scoped_mutex_lock.h"
 

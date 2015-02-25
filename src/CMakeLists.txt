@@ -116,6 +116,7 @@ set(RUNTIME_CPP
 set (RUNTIME_LL
   aarch64
   arm
+  arm_no_neon
   mips
   pnacl_math
   posix_math
@@ -228,7 +229,6 @@ set(HEADER_FILES
   Bounds.h
   BoundsInference.h
   Buffer.h
-  buffer_t.h
   CodeGen_C.h
   CodeGen_LLVM.h
   CodeGen_X86.h
@@ -242,6 +242,7 @@ set(HEADER_FILES
   Derivative.h
   OneToOne.h
   Extern.h
+  Expr.h
   FindCalls.h
   Func.h
   Function.h
@@ -317,11 +318,11 @@ set(HEADER_FILES
   SpecializeBranchedLoops.h
   RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
-  CodeGen.h
   Output.h
   LLVM_Output.h
   Module.h
   DeviceInterface.h
+  runtime/HalideRuntime.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -429,7 +430,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
   LLVM_Runtime_Linker.cpp
-  CodeGen.cpp
   Output.cpp
   LLVM_Output.cpp
   Module.cpp

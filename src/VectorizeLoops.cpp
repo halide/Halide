@@ -284,7 +284,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 // Otherwise create a new Let containing the original value
-                // expression plus the widened expression 
+                // expression plus the widened expression
                 expr = Let::make(op->name, op->value, mutated_body);
 
                 if (was_vectorized) {
@@ -425,12 +425,12 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const For *op) {
-            For::ForType for_type = op->for_type;
-            if (for_type == For::Vectorized) {
+            ForType for_type = op->for_type;
+            if (for_type == ForType::Vectorized) {
                 std::cerr << "Warning: Encountered vector for loop over " << op->name
                           << " inside vector for loop over " << var << "."
                           << " Ignoring the vectorize directive for the inner for loop.\n";
-                for_type = For::Serial;
+                for_type = ForType::Serial;
             }
 
             Expr min = mutate(op->min);
@@ -577,7 +577,7 @@ class VectorizeLoops : public IRMutator {
 
             replacement = old_replacement;
             scalarized = false;
-            
+
             return result;
         }
 
@@ -593,7 +593,7 @@ class VectorizeLoops : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *for_loop) {
-        if (for_loop->for_type == For::Vectorized) {
+        if (for_loop->for_type == ForType::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
                 user_error << "Loop over " << for_loop->name

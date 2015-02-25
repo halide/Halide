@@ -12,11 +12,11 @@ class RemoveTrivialForLoops : public IRMutator {
     void visit(const For *for_loop) {
         Stmt body = mutate(for_loop->body);
         if (is_one(for_loop->extent) && !CodeGen_GPU_Dev::is_gpu_var(for_loop->name)) {
-            if (for_loop->for_type == For::Parallel) {
+            if (for_loop->for_type == ForType::Parallel) {
                 std::cerr << "Warning: Parallel for loop over "
                           << for_loop->name << " has extent one. "
                           << "Can't do one piece of work in parallel.\n";
-            } else if (for_loop->for_type == For::Vectorized) {
+            } else if (for_loop->for_type == ForType::Vectorized) {
                 std::cerr << "Warning: Vectorized for loop over "
                           << for_loop->name << " has extent one. "
                           << "Not vectorizing.\n";

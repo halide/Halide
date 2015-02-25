@@ -1,6 +1,5 @@
 #include "JITModule.h"
 #include "Target.h"
-#include "buffer_t.h"
 
 #include "runtime/HalideRuntime.h"
 #include "runtime/HalideRuntimeCuda.h"
@@ -14,8 +13,9 @@ namespace {
 
 template <typename fn_type>
 bool lookup_runtime_routine(const char *name, const Target &target,
-                            fn_type &result, bool create) {
-    std::vector<JITModule> runtime(JITSharedRuntime::get(NULL, target, create));
+                            fn_type &result) {
+    std::vector<JITModule> runtime(
+        JITSharedRuntime::get(NULL, target.with_feature(Target::JIT)));
 
     for (size_t i = 0; i < runtime.size(); i++) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
@@ -39,7 +39,7 @@ void halide_device_release(void *user_context, const halide_device_interface *in
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_release\n";
     Target target(get_host_target());
     void (*fn)(void *user_context, const halide_device_interface *interface);
-    if (lookup_runtime_routine("halide_device_release", target, fn, false)) {
+    if (lookup_runtime_routine("halide_device_release", target, fn)) {
         (*fn)(user_context, interface);
     }
 }
@@ -48,9 +48,12 @@ void halide_device_release(void *user_context, const halide_device_interface *in
  * explicitly to copy back the results of a GPU-based filter. */
 int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_host\n";
+    // Skip if there is no device buffer.
+    if (buf->dev == 0)
+        return 0;
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
-    if (lookup_runtime_routine("halide_copy_to_host", target, fn, false)) {
+    if (lookup_runtime_routine("halide_copy_to_host", target, fn)) {
         return (*fn)(user_context, buf);
     }
     return -1;
@@ -67,7 +70,7 @@ int halide_copy_to_device(void *user_context, struct buffer_t *buf,
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_device\n";
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
-    if (lookup_runtime_routine("halide_copy_to_device", target, fn, true)) {
+    if (lookup_runtime_routine("halide_copy_to_device", target, fn)) {
       return (*fn)(user_context, buf, interface);
     }
     return -1;
@@ -84,7 +87,7 @@ int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_malloc\n";
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
-    if (lookup_runtime_routine("halide_device_malloc", target, fn, true)) {
+    if (lookup_runtime_routine("halide_device_malloc", target, fn)) {
       return (*fn)(user_context, buf, interface);
     }
     return -1;
@@ -92,9 +95,12 @@ int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_
 
 int halide_device_free(void *user_context, struct buffer_t *buf) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_free\n";
+    // Skip if there is no device buffer.
+    if (buf->dev == 0)
+        return 0;
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
-    if (lookup_runtime_routine("halide_device_free", target, fn, false)) {
+    if (lookup_runtime_routine("halide_device_free", target, fn)) {
         return (*fn)(user_context, buf);
     }
     if (buf->dev != 0) {
@@ -108,7 +114,7 @@ const struct halide_device_interface *halide_cuda_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::CUDA);
     struct halide_device_interface *(*fn)();
-    if (lookup_runtime_routine("halide_cuda_device_interface", target, fn, true)) {
+    if (lookup_runtime_routine("halide_cuda_device_interface", target, fn)) {
         return (*fn)();
     }
     return NULL;
@@ -118,7 +124,7 @@ const struct halide_device_interface *halide_opencl_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::OpenCL);
     struct halide_device_interface *(*fn)();
-    if (lookup_runtime_routine("halide_opencl_device_interface", target, fn, true)) {
+    if (lookup_runtime_routine("halide_opencl_device_interface", target, fn)) {
         return (*fn)();
     }
     return NULL;
@@ -128,7 +134,7 @@ const struct halide_device_interface *halide_opengl_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::OpenGL);
     struct halide_device_interface *(*fn)();
-    if (lookup_runtime_routine("halide_opengl_device_interface", target, fn, true)) {
+    if (lookup_runtime_routine("halide_opengl_device_interface", target, fn)) {
         return (*fn)();
     }
     return NULL;

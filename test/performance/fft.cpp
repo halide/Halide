@@ -4,7 +4,7 @@
 // algorithms.
 
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <vector>
 #include "clock.h"
 

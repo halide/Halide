@@ -5,7 +5,6 @@
 #include <mutex>
 #endif
 
-#include "buffer_t.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
@@ -154,18 +153,18 @@ public:
                                                                                  module(NULL),
                                                                                  context(NULL),
                                                                                  main_function(NULL),
-                                                                                 jit_wrapper_function(NULL) {
+                                                                                 argv_function(NULL) {
     }
 
     JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
-                  llvm::ExecutionEngine *ee, llvm::Module *m, const std::vector<JITModule> &dependencies,
-                  void *main_function = NULL, int (*jit_wrapper_function)(const void **) = NULL) : exports(exports),
-                                                                                                   execution_engine(ee),
-                                                                                                   module(m),
-                                                                                                   dependencies(dependencies),
-                                                                                                   context(&m->getContext()),
-                                                                                                   main_function(main_function),
-                                                                                                   jit_wrapper_function(jit_wrapper_function) {
+                      llvm::ExecutionEngine *ee, llvm::Module *m, const std::vector<JITModule> &dependencies,
+                      void *main_function = NULL, int (*argv_function)(const void **) = NULL) : exports(exports),
+                                                                                                execution_engine(ee),
+                                                                                                module(m),
+                                                                                                dependencies(dependencies),
+                                                                                                context(&m->getContext()),
+                                                                                                main_function(main_function),
+                                                                                                argv_function(argv_function) {
     }
 
     ~JITModuleContents() {
@@ -183,7 +182,7 @@ public:
     std::vector<JITModule> dependencies;
     LLVMContext *context;
     void *main_function;
-    int (*jit_wrapper_function)(const void **);
+    int (*argv_function)(const void **);
 
     std::string name;
 };
@@ -435,11 +434,11 @@ void *JITModule::main_function() const {
     return jit_module.ptr->main_function;
 }
 
-int (*JITModule::jit_wrapper_function() const)(const void **) {
+int (*JITModule::argv_function() const)(const void **) {
     if (!jit_module.defined()) {
         return NULL;
     }
-    return (int (*)(const void **))jit_module.ptr->jit_wrapper_function;
+    return (int (*)(const void **))jit_module.ptr->argv_function;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {

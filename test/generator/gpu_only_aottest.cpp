@@ -1,11 +1,11 @@
 #include <math.h>
 #include <stdio.h>
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include <assert.h>
 #if defined(TEST_OPENCL)
-#include <HalideRuntimeOpencl.h>
-#else if defined(TEST_CUDA)
-#include <HalideRuntimeCuda.h>
+#include "HalideRuntimeOpenCL.h"
+#elif defined(TEST_CUDA)
+#include "HalideRuntimeCuda.h"
 #endif
 
 #include "gpu_only.h"
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     input.set_host_dirty();
 #if defined(TEST_OPENCL)
     input.copy_to_device(halide_opencl_device_interface());
-#else if defined(TEST_CUDA)
+#elif defined(TEST_CUDA)
     input.copy_to_device(halide_cuda_device_interface());
 #endif
 

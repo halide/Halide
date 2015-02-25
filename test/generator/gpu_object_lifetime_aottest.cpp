@@ -1,12 +1,12 @@
 #include <math.h>
 #include <stdio.h>
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include <assert.h>
 
 #if COMPILING_FOR_CUDA
-#include <HalideRuntimeCuda.h>
+#include "HalideRuntimeCuda.h"
 #elif COMPILING_FOR_OPENCL
-#include <HalideRuntimeOpenCL.h>
+#include "HalideRuntimeOpenCL.h"
 #endif
 
 #include "gpu_object_lifetime.h"

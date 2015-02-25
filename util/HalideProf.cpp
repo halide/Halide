@@ -128,9 +128,8 @@ namespace {
   typedef std::map<std::string, std::vector<OpInfo*> > ChildMap;
 
   int64_t AdjustOverhead(OpInfo& op_info, ChildMap& child_map, double overhead_ticks_avg) {
-    int64_t overhead_ticks = op_info.count * overhead_ticks_avg;
-
-    op_info.ticks_only -= overhead_ticks;
+    int64_t overhead_local = op_info.count * overhead_ticks_avg;
+    int64_t overhead_ticks = overhead_local;
 
     std::string qual_name = qualified_name(op_info.op_type, op_info.op_name);
     const std::vector<OpInfo*>& children = child_map[qual_name];
@@ -142,7 +141,8 @@ namespace {
 
     op_info.ticks -= overhead_ticks;
 
-    return overhead_ticks;
+    // double the overhead of this level
+    return overhead_ticks + overhead_local;
   }
 
   void FinishOpInfo(OpInfoMap& op_info_map, bool adjust_for_overhead) {
@@ -161,7 +161,7 @@ namespace {
     OpInfoMap::iterator it = op_info_map.find(overhead_qual_name);
     if (it != op_info_map.end()) {
       OpInfo overhead = it->second;
-      overhead_ticks_avg = (double)overhead.ticks / (double)overhead.count;
+      overhead_ticks_avg = (double)overhead.ticks / ((double)overhead.count * 2.0);
       op_info_map.erase(it);
     }
 
@@ -172,6 +172,11 @@ namespace {
       child_map[parent_qual_name].push_back(&op_info);
     }
 
+    if (adjust_for_overhead) {
+      // Adjust values to account for profiling overhead
+      AdjustOverhead(total, child_map, overhead_ticks_avg);
+    }
+
     for (OpInfoMap::iterator o = op_info_map.begin(); o != op_info_map.end(); ++o) {
       OpInfo& op_info = o->second;
       op_info.ticks_only = op_info.ticks;
@@ -180,11 +185,6 @@ namespace {
         OpInfo* c = *it;
         op_info.ticks_only -= c->ticks;
       }
-    }
-
-    if (adjust_for_overhead) {
-      // Adjust values to account for profiling overhead
-      AdjustOverhead(total, child_map, overhead_ticks_avg);
     }
 
     // Calc the derived fields
