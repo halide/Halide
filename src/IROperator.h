@@ -437,6 +437,15 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
         false_value = cast(true_value.type(), false_value);
     }
 
+    user_assert(condition.type().is_bool())
+        << "The first argument to a select must be a boolean:\n"
+        << "  " << condition << " has type " << condition.type() << "\n";
+
+    user_assert(true_value.type() == false_value.type())
+        << "The second and third arguments to a select do not have a matching type:\n"
+        << "  " << true_value << " has type " << true_value.type() << "\n"
+        << "  " << false_value << " has type " << false_value.type() << "\n";
+
     return Internal::Select::make(condition, true_value, false_value);
 }
 

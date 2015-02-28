@@ -70,7 +70,7 @@ extern void halide_error(void *user_context, const char *);
  * without depending on e.g. C++ constructor logic.
  */
 struct halide_mutex {
-    unsigned char _private[64];
+    uint64_t _private[8];
 };
 
 /** A basic set of mutex functions, which call platform specific code
@@ -200,87 +200,37 @@ extern int halide_get_trace_file(void *user_context);
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
 
+/** All Halide GPU or device backend implementations much provide an interface
+ * to be used with halide_device_malloc, etc.
+ */
+struct halide_device_interface;
+
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_release(void *user_context);
+extern void halide_device_release(void *user_context, const halide_device_interface *interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
 extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
 
-/** Copy image data from host memory to device memory. This should not be
- * called directly; Halide handles copying to the device automatically. */
-extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
+/** Copy image data from host memory to device memory. This should not
+ * be called directly; Halide handles copying to the device
+ * automatically.  If interface is NULL and the bug has a non-zero dev
+ * field, the device associated with the dev handle will be
+ * used. Otherwise if the dev field is 0 and interface is NULL, an
+ * error is returned. */
+extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
+                                 const halide_device_interface *interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-extern int halide_dev_sync(void *user_context);
+extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 
 /** Allocate device memory to back a buffer_t. */
-extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
+extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
 
-/** Free any device memory associated with a buffer_t. */
-extern int halide_dev_free(void *user_context, struct buffer_t *buf);
-
-/** These are forward declared here to ensure they have the same
- * signature across different Halide gpu backends. Do not call
- * them. */
-// @{
-extern int halide_init_kernels(void *user_context, void **state_ptr,
-                               const char *src, int size);
-extern int halide_dev_run(void *user_context,
-                          void *state_ptr,
-                          const char *entry_name,
-                          int blocksX, int blocksY, int blocksZ,
-                          int threadsX, int threadsY, int threadsZ,
-                          int shared_mem_bytes,
-                          size_t arg_sizes[],
-                          void *args[],
-                          int num_attributes,
-                          float* vertex_buffer,
-                          int num_coords_dim0,
-                          int num_coords_dim1);
-// @}
-
-/** This function is called to populate the buffer_t.dev field with a constant
- * indicating that the OpenGL object corresponding to the buffer_t is bound by
- * the app and not by the Halide runtime. For example, the buffer_t may be
- * backed by an FBO already bound by the application. */
-extern uint64_t halide_opengl_output_client_bound();
-
-/** Forget all state associated with the previous OpenGL context.  This is
- * similar to halide_opengl_release, except that we assume that all OpenGL
- * resources have already been reclaimed by the OS. */
-extern void halide_opengl_context_lost(void *user_context);
-
-/** Set the platform name for OpenCL to use (e.g. "Intel" or
- * "NVIDIA"). The argument is copied internally. The opencl runtime
- * will select a platform that includes this as a substring. If never
- * called, Halide uses the environment variable HL_OCL_PLATFORM_NAME,
- * or defaults to the first available platform. */
-extern void halide_set_ocl_platform_name(const char *n);
-
-/** Halide calls this to get the desired OpenCL platform
- * name. Implement this yourself to use a different platform per
- * user_context. The default implementation returns the value set by
- * halide_set_ocl_platform_name, or the value of the environment
- * variable HL_OCL_PLATFORM_NAME. The output is valid until the next
- * call to halide_set_ocl_platform_name. */
-extern const char *halide_get_ocl_platform_name(void *user_context);
-
-/** Set the device type for OpenCL to use. The argument is copied
- * internally. It must be "cpu", "gpu", or "acc". If never called,
- * Halide uses the environment variable HL_OCL_DEVICE_TYPE. */
-extern void halide_set_ocl_device_type(const char *n);
-
-/** Halide calls this to gets the desired OpenCL device
- * type. Implement this yourself to use a different device type per
- * user_context. The default implementation returns the value set by
- * halide_set_ocl_device_type, or the environment variable
- * HL_OCL_DEVICE_TYPE. The result is valid until the next call to
- * halide_set_ocl_device_type. */
-extern const char *halide_get_ocl_device_type(void *user_context);
+extern int halide_device_free(void *user_context, struct buffer_t *buf);
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
@@ -332,11 +282,72 @@ extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *c
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                            buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
-
 /** Free all memory and resources associated with the memoization cache.
  * Must be called at a time when no other threads are accessing the cache.
  */
 extern void halide_memoization_cache_cleanup();
+
+/** Types in the halide type system. They can be ints, unsigned ints,
+ * or floats (of various bit-widths), or a handle (which is always pointer-sized).
+ * Note that the int/uint/float values do not imply a specific bit width
+ * (the bit width is expected to be encoded in a separate value).
+ */
+typedef enum halide_type_code_t {
+    halide_type_int = 0,   //!< signed integers
+    halide_type_uint = 1,  //!< unsigned integers
+    halide_type_float = 2, //!< floating point numbers
+    halide_type_handle = 3 //!< opaque pointer type (void *)
+} halide_type_code_t;
+
+#ifndef BUFFER_T_DEFINED
+#define BUFFER_T_DEFINED
+
+/**
+ * The raw representation of an image passed around by generated
+ * Halide code. It includes some stuff to track whether the image is
+ * not actually in main memory, but instead on a device (like a
+ * GPU). */
+typedef struct buffer_t {
+  /** A device-handle for e.g. GPU memory used to back this buffer. */
+  uint64_t dev;
+
+  /** A pointer to the start of the data in main memory. */
+  uint8_t* host;
+
+  /** The size of the buffer in each dimension. */
+  int32_t extent[4];
+
+  /** Gives the spacing in memory between adjacent elements in the
+   * given dimension.  The correct memory address for a load from
+   * this buffer at position x, y, z, w is:
+   * host + (x * stride[0] + y * stride[1] + z * stride[2] + w * stride[3]) * elem_size
+   * By manipulating the strides and extents you can lazily crop,
+   * transpose, and even flip buffers without modifying the data.
+   */
+  int32_t stride[4];
+
+  /** Buffers often represent evaluation of a Func over some
+   * domain. The min field encodes the top left corner of the
+   * domain. */
+  int32_t min[4];
+
+  /** How many bytes does each buffer element take. This may be
+   * replaced with a more general type code in the future. */
+  int32_t elem_size;
+
+  /** This should be true if there is an existing device allocation
+   * mirroring this buffer, and the data has been modified on the
+   * host side. */
+  bool host_dirty;
+
+  /** This should be true if there is an existing device allocation
+   mirroring this buffer, and the data has been modified on the
+   device side. */
+  bool dev_dirty;
+} buffer_t;
+
+#endif
+
 
 #ifdef __cplusplus
 } // End extern "C"

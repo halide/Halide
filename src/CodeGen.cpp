@@ -186,7 +186,7 @@ void CodeGen::compile(Stmt stmt, string name,
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
@@ -200,7 +200,7 @@ void CodeGen::compile(Stmt stmt, string name,
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             function->setDoesNotAlias(i+1);
         }
     }
@@ -216,7 +216,7 @@ void CodeGen::compile(Stmt stmt, string name,
              iter != function->arg_end();
              iter++) {
 
-            if (args[i].is_buffer) {
+            if (args[i].is_buffer()) {
                 unpack_buffer(args[i].name, iter);
             } else {
                 sym_push(args[i].name, iter);
@@ -300,10 +300,10 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(2) << module << "\n";
 
     // Now verify the function is ok
-    verifyFunction(*function);
+    internal_assert(verifyFunction(*function) == false);
 
     // Now we need to make the wrapper function (useful for calling from jit)
-    string wrapper_name = name + "_jit_wrapper";
+    string wrapper_name = name + "_argv";
     func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
     block = BasicBlock::Create(*context, "entry", wrapper);
@@ -316,7 +316,7 @@ void CodeGen::compile(Stmt stmt, string name,
         // Get the address of the nth argument
         Value *ptr = builder->CreateConstGEP1_32(arg_array, (int)i);
         ptr = builder->CreateLoad(ptr);
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             // Cast the argument to a buffer_t *
             wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo());
         } else {
@@ -328,10 +328,10 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(4) << "Creating call from wrapper to actual function\n";
     Value *result = builder->CreateCall(function, wrapper_args);
     builder->CreateRet(result);
-    verifyFunction(*wrapper);
+    internal_assert(verifyFunction(*wrapper) == false);
 
     // Finally, verify the module is ok
-    verifyModule(*module);
+    internal_assert(verifyModule(*module) == false);
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it
@@ -361,8 +361,14 @@ void CodeGen::optimize_module() {
 
     debug(3) << "Optimizing module\n";
 
+    #if LLVM_VERSION < 37
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
+    #else
+    legacy::FunctionPassManager function_pass_manager(module);
+    legacy::PassManager module_pass_manager;
+    #endif
+
 
     #if LLVM_VERSION >= 36
     internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
@@ -474,7 +480,11 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     formatted_raw_ostream out(raw_out);
 
     // Build up all of the passes that we want to do to the module.
+    #if LLVM_VERSION < 37
     PassManager pass_manager;
+    #else
+    legacy::PassManager pass_manager;
+    #endif
 
     #if LLVM_VERSION < 37
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
@@ -500,7 +510,11 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     pass_manager.add(createAlwaysInlinerPass());
 
     // Override default to generate verbose assembly.
+    #if LLVM_VERSION < 37
     target_machine->setAsmVerbosityDefault(true);
+    #else
+    target_machine->Options.MCOptions.AsmVerbose = true;
+    #endif
 
     // Ask the target to add backend passes as necessary.
     TargetMachine::CodeGenFileType file_type =
@@ -1362,26 +1376,31 @@ Expr unbroadcast(Expr e) {
 bool CodeGen::function_takes_user_context(const string &name) {
     static const char *user_context_runtime_funcs[] = {
         "halide_copy_to_host",
-        "halide_copy_to_dev",
+        "halide_copy_to_device",
         "halide_current_time_ns",
         "halide_debug_to_file",
-        "halide_dev_free",
-        "halide_dev_malloc",
-        "halide_dev_run",
-        "halide_dev_sync",
+        "halide_device_free",
+        "halide_device_malloc",
+        "halide_device_sync",
         "halide_do_par_for",
         "halide_do_task",
         "halide_error",
         "halide_free",
-        "halide_init_kernels",
         "halide_malloc",
         "halide_print",
         "halide_profiling_timer",
-        "halide_release",
+        "halide_device_release",
         "halide_start_clock",
         "halide_trace",
         "halide_memoization_cache_lookup",
-        "halide_memoization_cache_store"
+        "halide_memoization_cache_store",
+        "halide_cuda_run",
+        "halide_opencl_run",
+        "halide_opengl_run",
+        "halide_cuda_initialize_kernels",
+        "halide_opencl_initialize_kernels",
+        "halide_opengl_initialize_kernels"
+        "halide_get_gpu_device",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
@@ -1929,7 +1948,7 @@ void CodeGen::visit(const Call *op) {
             }
 
         } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 1);
             llvm::Function *fn = Intrinsic::getDeclaration(module,
                 Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
             CallInst *call = builder->CreateCall(fn);
@@ -2400,7 +2419,7 @@ void CodeGen::visit(const For *op) {
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
 
-    if (op->for_type == For::Serial) {
+    if (op->for_type == ForType::Serial) {
         Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
@@ -2439,7 +2458,7 @@ void CodeGen::visit(const For *op) {
 
         // Pop the loop variable from the scope
         sym_pop(op->name);
-    } else if (op->for_type == For::Parallel) {
+    } else if (op->for_type == ForType::Parallel) {
 
         debug(3) << "Entering parallel for loop over " << op->name << "\n";
 

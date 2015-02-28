@@ -1,6 +1,8 @@
 #include "IR.h"
+#include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -129,6 +131,49 @@ bool Parameter::is_buffer() const {
     return contents.ptr->is_buffer;
 }
 
+Expr Parameter::get_scalar_expr() const {
+    check_is_scalar();
+    const Type t = type();
+    if (t.is_bool()) {
+      return Expr(get_scalar<bool>());
+    } else if (t.is_float()) {
+      switch (t.bits) {
+        case 32: return Expr(get_scalar<float>());
+        // Note that we lose precision here, since Expr can only
+        // represent 32-bit floats.
+        case 64: return Expr((float) get_scalar<double>());
+      }
+    } else if (t.is_int()) {
+      switch (t.bits) {
+        case 8: return Expr(get_scalar<int8_t>());
+        case 16: return Expr(get_scalar<int16_t>());
+        case 32: return Expr(get_scalar<int32_t>());
+        // Expr can only represent 32-bit int directly, so use a more
+        // complex expression:
+        case 64: {
+            int64_t i = get_scalar<int64_t>();
+            Expr lo = Expr((int32_t) i);
+            Expr hi = Expr((int32_t) (i >> 32));
+            return simplify((Cast::make(Int(64), hi) << Expr(32)) | Cast::make(Int(64), lo));
+        }
+      }
+    } else if (t.is_uint()) {
+      switch (t.bits) {
+        case 8: return Expr(get_scalar<uint8_t>());
+        case 16: return Expr(get_scalar<uint16_t>());
+        case 32: return Expr((int32_t) get_scalar<uint32_t>());
+        // Expr can only represent 32-bit int directly, so use a more
+        // complex expression:
+        case 64: {
+            uint64_t i = get_scalar<uint64_t>();
+            Expr lo = Expr((int32_t) i);
+            Expr hi = Expr((int32_t) (i >> 32));
+            return simplify((Cast::make(UInt(64), hi) << Expr(32)) | Cast::make(UInt(64), lo));
+        }
+      }
+    }
+    return Expr();
+}
 
 Buffer Parameter::get_buffer() const {
     check_is_buffer();

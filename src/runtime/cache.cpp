@@ -1,5 +1,4 @@
 #include "runtime_internal.h"
-#include "../buffer_t.h"
 #include "HalideRuntime.h"
 #include "scoped_mutex_lock.h"
 
@@ -71,7 +70,7 @@ WEAK size_t full_extent(const buffer_t &buf) {
 }
 
 WEAK void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
-    size_t buffer_size = full_extent(from);;
+    size_t buffer_size = full_extent(from);
     halide_assert(user_context, from.elem_size == to.elem_size);
     for (int i = 0; i < 4; i++) {
         halide_assert(user_context, from.extent[i] == to.extent[i]);
@@ -153,11 +152,7 @@ WEAK void CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 WEAK void CacheEntry::destroy() {
     halide_free(NULL, key);
     for (int32_t i = 0; i < tuple_count; i++) {
-// TODO: Fix this. Probably when merging with the gpu_api_naming branch.
-// Currently I doubt caching on the GPU is ever used anyway.
-#if 0
-        halide_dev_free(NULL, &buffer(i));
-#endif
+        halide_device_free(NULL, &buffer(i));
         halide_free(NULL, buffer(i).host);
     }
 }
@@ -417,7 +412,16 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     current_cache_size += added_size;
     prune_cache();
 
-    void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
+    // The size of buffer_t for pointer math is apparently slightly
+    // larger than sizeof(buffer_t) on 32-bit windows. There's some
+    // padding between elements when they're in an array that isn't
+    // captured by sizeof. This is presumably because clang evaluates
+    // sizeof at initial module construction, and the math below turns
+    // into a getelementptr llvm instruction. There must be a mismatch
+    // in struct padding settings between the two.
+    size_t extra_buffer_t_size = (size_t)(((buffer_t *)0) + 1);
+
+    void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + extra_buffer_t_size * (tuple_count - 1));
 
     CacheEntry *new_entry = (CacheEntry *)entry_storage;
     new_entry->init(cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);

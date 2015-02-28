@@ -1,7 +1,13 @@
 #include <math.h>
 #include <stdio.h>
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include <assert.h>
+
+#if COMPILING_FOR_CUDA
+#include "HalideRuntimeCuda.h"
+#elif COMPILING_FOR_OPENCL
+#include "HalideRuntimeOpenCL.h"
+#endif
 
 #include "gpu_object_lifetime.h"
 #include "static_image.h"
@@ -31,10 +37,14 @@ int main(int argc, char **argv) {
             }
         }
 
-        halide_release(NULL);
+#if COMPILING_FOR_CUDA
+        halide_device_release(NULL, halide_cuda_device_interface());
+#elif COMPILING_FOR_OPENCL
+        halide_device_release(NULL, halide_opencl_device_interface());
+#endif
     }
 
-    int ret = validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */);
+    int ret = validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
     if (ret != 0) {
         return ret;
     }

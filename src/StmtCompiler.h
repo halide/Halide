@@ -55,6 +55,9 @@ public:
      * fails.
      */
     JITModule compile_to_function_pointers();
+
+    /** Get underlying CodeGen object. */
+    CodeGen *get_codegen() { return contents.ptr; }
 };
 
 }

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <math.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <iostream>
 #include <limits>
 
@@ -63,7 +63,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Buffer in_buffer(type_of<type>(), in_buf);                            \
         input.set(in_buffer);                                                 \
         if (target.has_gpu_feature()) {                                       \
-            test_##name.gpu_tile(x, 8, GPU_Default);                          \
+            test_##name.gpu_tile(x, 8);                                       \
         }                                                                     \
         Image<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
         for (int i = 0; i < in_buf->extent[0]; i++) {                         \
@@ -89,7 +89,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Buffer in_buffer(type_of<type>(), in_buf);                                  \
         input.set(in_buffer);                                                       \
         if (target.has_gpu_feature()) {                                             \
-          test_##name.gpu_tile(x, 8, GPU_Default);                                  \
+          test_##name.gpu_tile(x, 8);                                               \
         }                                                                           \
         Image<type_ret> result = test_##name.realize(in_buf->extent[1], target); \
         for (int i = 0; i < in_buf->extent[1]; i++) {                               \

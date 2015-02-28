@@ -62,7 +62,10 @@ struct JITModule {
      * correspond to the arguments to \ref main_function . This will
      * be NULL for a JITModule which has not yet been compiled or one
      * that is not a Halide Func compilation at all. */
-    EXPORT int (*jit_wrapper_function() const)(const void **);
+    // @{
+    typedef int (*argv_wrapper)(const void **args);
+    EXPORT argv_wrapper argv_function() const;
+    // @}
 
     // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will
@@ -76,9 +79,9 @@ struct JITModule {
     EXPORT static void make_externs(const std::vector<JITModule> &deps, llvm::Module *mod);
 
     /** Encapsulate device (GPU) and buffer interactions. */
-    EXPORT int copy_to_dev(struct buffer_t *buf) const;
+    EXPORT int copy_to_device(struct buffer_t *buf) const;
     EXPORT int copy_to_host(struct buffer_t *buf) const;
-    EXPORT int dev_free(struct buffer_t *buf) const;
+    EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
 };
 

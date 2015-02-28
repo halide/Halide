@@ -62,6 +62,16 @@ bool should_extract(Expr e) {
     return true;
 }
 
+bool is_extent_var(const Variable *v) {
+    std::vector<std::string> parts = split_string(v->name, ".");
+    for (size_t i = 1; i < parts.size(); ++i) {
+        if (parts[i] == "extent") {
+            return true;
+        }
+    }
+    return false;
+}
+
 Expr branch_point(Expr cond, Expr min, Expr extent, bool &swap) {
     const LE *le = cond.as<LE>();
     const GE *ge = cond.as<GE>();
@@ -215,7 +225,7 @@ class BranchCollector : public IRVisitor {
 public:
     BranchCollector(const string &n, Expr min, Expr extent, const Scope<Expr> *s,
                     const Scope<int> *lv, const Scope<Interval> *bi) :
-            name(n), branching_vars(false), branches()
+            name(n), branches()
     {
         free_vars.set_containing_scope(lv);
         bounds_info.set_containing_scope(bi);
@@ -263,7 +273,7 @@ public:
 
             Stmt branch_stmt = branch.content;
             branch_stmt = simplify(branch_stmt, true, bounds_info);
-            branch_stmt = For::make(name, branch_min, branch_extent, For::Serial, branch_stmt);
+            branch_stmt = For::make(name, branch_min, branch_extent, ForType::Serial, DeviceAPI::Parent, branch_stmt);
             if (!stmt.defined()) {
                 stmt = branch_stmt;
             } else {
@@ -294,7 +304,6 @@ private:
 
     Scope<int> free_vars;
     Scope<Interval> bounds_info;
-    bool branching_vars;
 
     // These variables store the actual branches.
     vector<Branch> branches;
@@ -338,6 +347,8 @@ private:
     }
 
     void push_bounds(Expr min, Expr extent) {
+        min = simplify(min, true, bounds_info);
+        extent = simplify(extent, true, bounds_info);
         Expr max = simplify(min + extent - 1);
         curr_min.push(min);
         curr_extent.push(extent);
@@ -362,8 +373,8 @@ private:
         }
 
         Branch branch;
-        branch.min = curr_min.top();
-        branch.extent = curr_extent.top();
+        branch.min = simplify(curr_min.top(), true, bounds_info);
+        branch.extent = simplify(curr_extent.top(), true, bounds_info);
         branch.content = content;
         branches.push_back(branch);
 
@@ -399,11 +410,33 @@ private:
         return can_prove_expr(test, in_range);
     }
 
+    Expr clamp_bound(Expr bound, Expr min, Expr max) {
+        Expr expr = simplify(bound);
+        bool is_true;
+        if (can_prove_expr(bound <= max, is_true)) {
+            if (!is_true) {
+                expr = max;
+            }
+        } else {
+            expr = Min::make(expr, max);
+        }
+
+        if (can_prove_expr(bound >= min, is_true)) {
+            if (!is_true) {
+                expr = min;
+            }
+        } else {
+            expr = Max::make(expr, min);
+        }
+
+        return expr;
+    }
+
     // Build a pair of branches for 2 exprs, based on a simple inequality conditional.
     // It is assumed that the inequality has been solved and so the variable of interest
     // is on the left hand side.
     bool add_branches(Expr cond, StmtOrExpr a, StmtOrExpr b) {
-        debug(3) << "Branching on condition: " << cond << "\n";
+        debug(3) << "Branching on condition: " << cond << "\n\n";
 
         Expr min = curr_min.top();
         Expr extent = curr_extent.top();
@@ -440,7 +473,7 @@ private:
             }
         } else {
             min1 = min;
-            ext1 = simplify(clamp(point - min, 0, extent));
+            ext1 = simplify(clamp_bound(point - min, 0, extent));
             min2 = simplify(min + ext1);
             ext2 = simplify(extent - ext1);
         }
@@ -592,7 +625,7 @@ private:
                             Expr max = simplify(branch_points[j+1] - 1);
                             for (size_t k = 0; k < child_branches[i].size(); ++k) {
                                 Branch branch = child_branches[i][k];
-                                new_branch_points.push_back(simplify(clamp(branch.min, min, max)));
+                                new_branch_points.push_back(simplify(clamp_bound(branch.min, min, max)));
                                 new_args.push_back(args[j]);
                                 new_args.back().push_back(branch.content);
                             }
@@ -686,6 +719,10 @@ private:
     }
 
     void visit(const Variable *op) {
+        if (is_extent_var(op) && !bounds_info.contains(op->name)) {
+            bounds_info.push(op->name, Interval(0, Expr()));
+        }
+
         if (let_branches.contains(op->name)) {
             vector<Branch> &var_branches = let_branches.ref(op->name);
 
@@ -740,30 +777,33 @@ private:
     void visit_min_or_max(const Op *op) {
         visit_binary_op(op);
 
-        if (!branching_vars) {
-            vector<Branch> child_branches;
-            branches.swap(child_branches);
-            for (size_t i = 0; i < child_branches.size(); ++i) {
-                Branch &branch = child_branches[i];
-                const Op *min_or_max = branch.content.as<Op>();
-                if (min_or_max) {
-                    Expr a = min_or_max->a;
-                    Expr b = min_or_max->b;
-                    if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
-                        push_bounds(branch.min, branch.extent);
-                        Expr cond = Cmp::make(a, b);
-                        if (!visit_simple_cond(cond, a, b)) {
-                            branches.push_back(branch);
-                        }
-                        pop_bounds();
-
-                        continue;
+        vector<Branch> child_branches;
+        branches.swap(child_branches);
+        for (size_t i = 0; i < child_branches.size(); ++i) {
+            Branch &branch = child_branches[i];
+            const Op *min_or_max = branch.content.as<Op>();
+            if (min_or_max) {
+                Expr a = min_or_max->a;
+                Expr b = min_or_max->b;
+                if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
+                    // Ensure that the variable appears in a for consistency with other min/max exprs.
+                    if (!expr_uses_var(b, name, scope)) {
+                        std::swap(a, b);
                     }
-                }
 
-                // We did not branch, so add current branch as is.
-                branches.push_back(branch);
+                    push_bounds(branch.min, branch.extent);
+                    Expr cond = Cmp::make(a, b);
+                    if (!visit_simple_cond(cond, a, b)) {
+                        branches.push_back(branch);
+                    }
+                    pop_bounds();
+
+                    continue;
+                }
             }
+
+            // We did not branch, so add current branch as is.
+            branches.push_back(branch);
         }
     }
 
@@ -773,7 +813,7 @@ private:
     void visit(const Div *op) {visit_binary_op(op);}
     void visit(const Mod *op) {visit_binary_op(op);}
 
-    void visit(const Min *op) {visit_min_or_max<Min, LE>(op);}
+    void visit(const Min *op) {visit_min_or_max<Min, LT>(op);}
     void visit(const Max *op) {visit_min_or_max<Max, GE>(op);}
 
     void visit(const EQ *op)  {visit_binary_op(op);}
@@ -900,7 +940,10 @@ private:
             collect(op->value, value_branches);
             for (size_t i = 0; i < value_branches.size(); ++i) {
                 Branch &branch = value_branches[i];
-                string new_name = op->name + "." + int_to_string(i);
+                string new_name = op->name;
+                if (value_branches.size() > 1) {
+                    new_name += "." + int_to_string(i);
+                }
                 Expr value = branch.content;
                 int value_linearity = expr_linearity(value, free_vars, linearity);
                 linearity.push(new_name, value_linearity);
@@ -916,18 +959,26 @@ private:
                 // Add all the value branch let bindings.
                 for (size_t j = 0; j < value_branches.size(); ++j) {
                     Branch &val_branch = value_branches[j];
-                    string new_name = op->name + "." + int_to_string(j);
+                    string new_name = op->name;
+                    if (value_branches.size() > 1) {
+                        new_name += "." + int_to_string(j);
+                    }
                     branch.content = LetOp::make(new_name, val_branch.content, branch.content);
                 }
                 // Add back the original let binding as well, in case we had to bailout somewhere.
-                branch.content = LetOp::make(op->name, op->value, branch.content);
+                if (value_branches.size() > 1) {
+                    branch.content = LetOp::make(op->name, op->value, branch.content);
+                }
                 branches.push_back(branch);
             }
             let_branches.pop(op->name);
             let_num_branches.pop(op->name);
 
             for (size_t i = 0; i < value_branches.size(); ++i) {
-                string new_name = op->name + "." + int_to_string(i);
+                string new_name = op->name;
+                if (value_branches.size() > 1) {
+                    new_name += "." + int_to_string(i);
+                }
                 linearity.pop(new_name);
                 scope.pop(new_name);
             }
@@ -987,7 +1038,7 @@ private:
             return Stmt();
         }
 
-        return For::make(op->name, args[0], args[1], op->for_type, args[2]);
+        return For::make(op->name, args[0], args[1], op->for_type, op->device_api, args[2]);
     }
 
     void visit(const For *op) {
@@ -1162,7 +1213,7 @@ private:
         Stmt body = mutate(op->body);
 
         bool branched = false;
-        if (op->for_type == For::Serial && branches_linearly_in_var(body, op->name)) {
+        if (op->for_type == ForType::Serial && branches_linearly_in_var(body, op->name)) {
             BranchCollector collector(op->name, op->min, op->extent, &scope, &loop_vars, &bounds_info);
             body.accept(&collector);
 
@@ -1174,7 +1225,7 @@ private:
 
         if (!branched) {
             if (!body.same_as(op->body)) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             } else {
                 stmt = op;
             }
@@ -1299,7 +1350,7 @@ void specialize_branched_loops_test() {
         Expr cond = 1 <= x && x < 9;
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, ForType::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         Interval ivals[] = {Interval(0,1), Interval(1,8), Interval(9,1)};
         check_num_branches(branched, "x", 3);
@@ -1311,7 +1362,7 @@ void specialize_branched_loops_test() {
         Expr cond = x == 5;
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, ForType::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         Interval ivals[] = {Interval(0,5), Interval(5,1), Interval(6,4)};
         check_num_branches(branched, "x", 3);
@@ -1324,12 +1375,12 @@ void specialize_branched_loops_test() {
         Expr cond = 1 <= x && x < 9;
         Stmt branch = IfThenElse::make(cond, Store::make("out", tmp + 1, x),
                                        Store::make("out", tmp, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, ForType::Serial, DeviceAPI::Parent, branch);
 
         cond = 1 <= y && y < 9;
         branch = IfThenElse::make(cond, LetStmt::make("tmp", 1, stmt),
                                   LetStmt::make("tmp", 0, stmt));
-        stmt = For::make("y", 0, 10, For::Serial, branch);
+        stmt = For::make("y", 0, 10, ForType::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 9);
     }
@@ -1339,7 +1390,7 @@ void specialize_branched_loops_test() {
         Expr cond = (1 <= x && x < 4) || (7 <= x && x < 10);
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 11, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 11, ForType::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         Interval ivals[] = {Interval(0,1), Interval(1,3), Interval(4,3),
                             Interval(7,3), Interval(10,1)};
@@ -1356,7 +1407,7 @@ void specialize_branched_loops_test() {
         Expr cond = !Cast::make(UInt(1), Select::make(x == 0 || x > 5, 0, 1));
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, ForType::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 3);
     }
@@ -1367,7 +1418,7 @@ void specialize_branched_loops_test() {
         Expr cond = x > 5;
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Parallel, branch);
+        Stmt stmt = For::make("x", 0, 10, ForType::Parallel, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 1);
     }
@@ -1382,7 +1433,7 @@ void specialize_branched_loops_test() {
         Stmt b3 = IfThenElse::make(x < 7, Store::make("out", 100*load, x),
                                    Store::make("out", 100*load + 1, x));
         Stmt branch = Block::make(b1, Block::make(b2, b3));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt stmt = For::make("x", 0, 10, ForType::Serial, DeviceAPI::Parent, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 4);
     }
@@ -1393,8 +1444,8 @@ void specialize_branched_loops_test() {
         Stmt branch = Store::make("out", Select::make(cond,
                                                       Ramp::make(x, 1, 4),
                                                       Broadcast::make(0, 4)), y);
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
-        stmt = For::make("y", 0, 11, For::Serial, stmt);
+        Stmt stmt = For::make("x", 0, 10, ForType::Serial, DeviceAPI::Parent, branch);
+        stmt = For::make("y", 0, 11, ForType::Serial, DeviceAPI::Parent, stmt);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "y", 3);
         Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
@@ -1411,8 +1462,8 @@ void specialize_branched_loops_test() {
                                                       Ramp::make(x, 1, 4),
                                                       Broadcast::make(0, 4)), y);
         Stmt stmt = LetStmt::make("cond", cond, branch);
-        stmt = For::make("x", 0, 10, For::Serial, stmt);
-        stmt = For::make("y", 0, 11, For::Serial, stmt);
+        stmt = For::make("x", 0, 10, ForType::Serial, DeviceAPI::Parent, stmt);
+        stmt = For::make("y", 0, 11, ForType::Serial, DeviceAPI::Parent, stmt);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "y", 3);
         Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};

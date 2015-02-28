@@ -5,7 +5,6 @@
 #include <mutex>
 #endif
 
-#include "buffer_t.h"
 #include "JITModule.h"
 #include "CodeGen.h"
 #include "LLVM_Headers.h"
@@ -122,20 +121,19 @@ public:
                                                                                  module(NULL),
                                                                                  context(NULL),
                                                                                  main_function(NULL),
-                                                                                 jit_wrapper_function(NULL) {
+                                                                                 argv_function(NULL) {
     }
 
+
     JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
-                      const std::map<std::string, void *> &runtime_internal_exports,
                       llvm::ExecutionEngine *ee, llvm::Module *m, const std::vector<JITModule> &dependencies,
-                      void *main_function = NULL, int (*jit_wrapper_function)(const void **) = NULL) : exports(exports),
-                                                                                                       runtime_internal_exports(runtime_internal_exports),
-                                                                                                       execution_engine(ee),
-                                                                                                       module(m),
-                                                                                                       dependencies(dependencies),
-                                                                                                       context(&m->getContext()),
-                                                                                                       main_function(main_function),
-                                                                                                       jit_wrapper_function(jit_wrapper_function) {
+                      void *main_function = NULL, int (*argv_function)(const void **) = NULL) : exports(exports),
+                                                                                                execution_engine(ee),
+                                                                                                module(m),
+                                                                                                dependencies(dependencies),
+                                                                                                context(&m->getContext()),
+                                                                                                main_function(main_function),
+                                                                                                argv_function(argv_function) {
     }
 
     ~JITModuleContents() {
@@ -148,14 +146,13 @@ public:
     }
 
     std::map<std::string, JITModule::Symbol> exports;
-    std::map<std::string, void *> runtime_internal_exports;
 
     ExecutionEngine *execution_engine;
     Module *module;
     std::vector<JITModule> dependencies;
     LLVMContext *context;
     void *main_function;
-    int (*jit_wrapper_function)(const void **);
+    int (*argv_function)(const void **);
 
     std::string name;
 };
@@ -335,7 +332,7 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
         Symbol temp;
         exports[function_name] = temp = compile_and_get_function(ee, m, function_name);
         main_fn = temp.address;
-        exports[function_name + "_jit_wrapper"] = temp = compile_and_get_function(ee, m, function_name + "_jit_wrapper");
+        exports[function_name + "_argv"] = temp = compile_and_get_function(ee, m, function_name + "_argv");
         wrapper_fn = reinterpret_bits<int (*)(const void **)>(temp.address);
     }
 
@@ -343,35 +340,11 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
         exports[requested_exports[i]] = compile_and_get_function(ee, m, requested_exports[i]);
     }
 
-    const char *runtime_internal_names[] = {
-        "halide_dev_malloc",
-        "halide_dev_free",
-        "halide_copy_to_dev",
-        "halide_copy_to_host",
-        "halide_set_custom_print",
-        "halide_set_error_handler",
-        "halide_set_custom_malloc",
-        "halide_set_custom_free",
-        "halide_set_custom_trace",
-        "halide_set_custom_do_par_for",
-        "halide_set_custom_do_task",
-        "halide_memoization_cache_set_size",
-        NULL
-    };
-
-    std::map<std::string, void *> runtime_internal_exports;
-    for (size_t i = 0; runtime_internal_names[i]; i++) {
-        void *address = compile_and_get_function(ee, m, runtime_internal_names[i], true).address;
-        if (address) {
-            runtime_internal_exports[runtime_internal_names[i]] = address;
-        }
-    }
-
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
-    jit_module = new JITModuleContents(exports, runtime_internal_exports, ee, m, dependencies, main_fn, wrapper_fn);
+    jit_module = new JITModuleContents(exports, ee, m, dependencies, main_fn, wrapper_fn);
     jit_module.ptr->name = function_name;
 
     // Do any target-specific post-compilation module meddling
@@ -412,7 +385,7 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
                 gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_module(module, s.llvm_type));
             } else {
                 gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_module(module, s.llvm_type));
-            }            
+            }
             gv->setLinkage(GlobalValue::ExternalWeakLinkage);
         }
     }
@@ -425,52 +398,19 @@ void *JITModule::main_function() const {
     return jit_module.ptr->main_function;
 }
 
-int (*JITModule::jit_wrapper_function() const)(const void **) {
+int (*JITModule::argv_function() const)(const void **) {
     if (!jit_module.defined()) {
         return NULL;
     }
-    return (int (*)(const void **))jit_module.ptr->jit_wrapper_function;
-}
-
-int JITModule::copy_to_dev(struct buffer_t *buf) const {
-    if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_dev");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
-        }
-    }
-    return 0;
-}
-
-int JITModule::copy_to_host(struct buffer_t *buf) const {
-    if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_host");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
-        }
-    }
-    return 0;
-}
-
-int JITModule::dev_free(struct buffer_t *buf) const {
-    if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_dev_free");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
-        }
-    }
-    return 0;
+    return (int (*)(const void **))jit_module.ptr->argv_function;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {
     if (jit_module.defined()) {
-        std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_memoization_cache_set_size");
-        if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return (reinterpret_bits<void (*)(int64_t)>(f->second))(size);
+        std::map<std::string, Symbol>::const_iterator f =
+            exports().find("halide_memoization_cache_set_size");
+        if (f != exports().end()) {
+            return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
         }
     }
 }
@@ -582,7 +522,7 @@ template <typename function_t>
 function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const char *hook_name, function_t hook) {
     std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
-    function_t (*hook_setter)(function_t) = 
+    function_t (*hook_setter)(function_t) =
         reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
     return (*hook_setter)(hook);
 }
@@ -615,21 +555,38 @@ std::mutex shared_runtimes_mutex;
 // each target.)
 enum RuntimeKind {
     MainShared,
-    CUDA,
     OpenCL,
+    CUDA,
     OpenGL,
-    NoGPU,
     MaxRuntimeKind
 };
 
-JITModule shared_runtimes[MaxRuntimeKind];
+JITModule &shared_runtimes(RuntimeKind k) {
+    static JITModule *m = NULL;
+    if (!m) {
+        // Note that this is never freed. On windows this would invoke
+        // static destructors that use threading objects, and these
+        // don't work (crash or deadlock) after main exits.
+        m = new JITModule[MaxRuntimeKind];
+    }
+    return m[k];
+}
 
-JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
-    if (!shared_runtimes[runtime_kind].jit_module.defined()) {
+JITModule &make_module(CodeGen *cg, const Target &target_arg, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
+    if (!shared_runtimes(runtime_kind).jit_module.defined()) {
+        // Ensure that JIT feature is set on target as it must be in
+        // order for the right runtime components to be added.
+        Target target(target_arg);
+        target.set_feature(Target::JIT);
+
         LLVMContext *llvm_context = new LLVMContext();
 
-        llvm::Module *shared_runtime = 
-            get_initial_module_for_target(target, llvm_context, true, runtime_kind != MainShared);
+        Target one_gpu(target);
+        one_gpu.set_feature(Target::OpenCL, runtime_kind == OpenCL);
+        one_gpu.set_feature(Target::CUDA, runtime_kind == CUDA);
+        one_gpu.set_feature(Target::OpenGL, runtime_kind == OpenGL);
+        llvm::Module *shared_runtime =
+            get_initial_module_for_target(one_gpu, llvm_context, true, runtime_kind != MainShared);
 
         std::set<std::string> halide_exports_unique;
 
@@ -643,52 +600,53 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
 
-        shared_runtimes[runtime_kind].compile_module(cg, shared_runtime, "", deps, halide_exports);
+        shared_runtimes(runtime_kind).compile_module(cg, shared_runtime, "", deps, halide_exports);
 
         if (runtime_kind == MainShared) {
-            runtime_internal_handlers.custom_print = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_print", print_handler);
+            runtime_internal_handlers.custom_print =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_print", print_handler);
 
             runtime_internal_handlers.custom_malloc =
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_malloc", malloc_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_malloc", malloc_handler);
 
             runtime_internal_handlers.custom_free =
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_free", free_handler);
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_free", free_handler);
 
-            runtime_internal_handlers.custom_do_task = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_task", do_task_handler);
+            runtime_internal_handlers.custom_do_task =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_task", do_task_handler);
 
-            runtime_internal_handlers.custom_do_par_for = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+            runtime_internal_handlers.custom_do_par_for =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_par_for", do_par_for_handler);
 
-            runtime_internal_handlers.custom_error = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_error_handler", error_handler_handler);
+            runtime_internal_handlers.custom_error =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_error_handler", error_handler_handler);
 
-            runtime_internal_handlers.custom_trace = 
-                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_trace", trace_handler);
+            runtime_internal_handlers.custom_trace =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
             if (default_cache_size != 0) {
-                shared_runtimes[MainShared].memoization_cache_set_size(default_cache_size);
+                shared_runtimes(MainShared).memoization_cache_set_size(default_cache_size);
             }
 
-            shared_runtimes[runtime_kind].jit_module.ptr->name = "MainShared";
+            shared_runtimes(runtime_kind).jit_module.ptr->name = "MainShared";
         } else {
-            shared_runtimes[runtime_kind].jit_module.ptr->name = "GPU";
+            shared_runtimes(runtime_kind).jit_module.ptr->name = "GPU";
         }
 
-        uint64_t arg_addr = 
-            shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
-        internal_assert(arg_addr != 0);
-        *((void **)arg_addr) = shared_runtimes[runtime_kind].jit_module.ptr;
+        uint64_t arg_addr =
+            shared_runtimes(runtime_kind).jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
 
-        uint64_t fun_addr = shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
+        internal_assert(arg_addr != 0);
+        *((void **)arg_addr) = shared_runtimes(runtime_kind).jit_module.ptr;
+
+        uint64_t fun_addr = shared_runtimes(runtime_kind).jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
         internal_assert(fun_addr != 0);
         *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
     }
-    return shared_runtimes[runtime_kind];
+    return shared_runtimes(runtime_kind);
 }
 
 }  // anonymous namespace
@@ -706,22 +664,23 @@ std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) 
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     #endif
 
-    // TODO: Thread safety
     std::vector<JITModule> result;
 
     result.push_back(make_module(cg, target, MainShared, result));
 
-    JITModule gpu_runtime;
+    // Add all requested GPU modules, each only depending on the main shared runtime.
+    std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
-        gpu_runtime = make_module(cg, target, OpenCL, result);
-    } else if (target.has_feature(Target::CUDA)) {
-        gpu_runtime = make_module(cg, target, CUDA, result);
-    } else if (target.has_feature(Target::OpenGL)) {
-        gpu_runtime = make_module(cg, target, OpenGL, result);
-    } else {
-        gpu_runtime = make_module(cg, target, NoGPU, result);
+        gpu_modules.push_back(make_module(cg, target, OpenCL, result));
     }
-    result.push_back(gpu_runtime);
+    if (target.has_feature(Target::CUDA)) {
+        gpu_modules.push_back(make_module(cg, target, CUDA, result));
+    }
+    if (target.has_feature(Target::OpenGL)) {
+        gpu_modules.push_back(make_module(cg, target, OpenGL, result));
+    }
+    result.insert(result.end(), gpu_modules.begin(), gpu_modules.end());
+
     return result;
 }
 
@@ -743,7 +702,7 @@ void JITSharedRuntime::release_all() {
     #endif
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
-        shared_runtimes[(RuntimeKind)(i - 1)].jit_module = NULL;
+        shared_runtimes((RuntimeKind)(i - 1)).jit_module = NULL;
     }
 }
 
@@ -761,9 +720,9 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
     #endif
 
     if (size != default_cache_size &&
-        shared_runtimes[MainShared].jit_module.defined()) {
+        shared_runtimes(MainShared).jit_module.defined()) {
         default_cache_size = size;
-        shared_runtimes[MainShared].memoization_cache_set_size(size);
+        shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
 }
 

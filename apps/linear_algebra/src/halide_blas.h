@@ -18,8 +18,16 @@
 #include "halide_dgemv_notrans.h"
 #include "halide_sgemv_trans.h"
 #include "halide_dgemv_trans.h"
+#include "halide_sger_impl.h"
+#include "halide_dger_impl.h"
 #include "halide_sgemm_notrans.h"
 #include "halide_dgemm_notrans.h"
+#include "halide_sgemm_transA.h"
+#include "halide_dgemm_transA.h"
+#include "halide_sgemm_transB.h"
+#include "halide_dgemm_transB.h"
+#include "halide_sgemm_transAB.h"
+#include "halide_dgemm_transAB.h"
 
 inline int halide_scopy(buffer_t *x, buffer_t *y) {
     return halide_scopy_impl(0, x, nullptr, y);
@@ -61,34 +69,36 @@ inline int halide_dgemv(bool trans, double a, buffer_t *A, buffer_t *x, double b
     }
 }
 
+inline int halide_sger(float a, buffer_t *x, buffer_t *y, buffer_t *A) {
+    return halide_sger_impl(a, x, y, A, A);
+}
+
+inline int halide_dger(float a, buffer_t *x, buffer_t *y, buffer_t *A) {
+    return halide_dger_impl(a, x, y, A, A);
+}
+
 inline int halide_sgemm(bool transA, bool transB, float a, buffer_t *A, buffer_t *B, float b, buffer_t *C) {
-    if (!transA && !transB) {
-        return halide_sgemm_notrans(a, A, B, b, C, C);
+    if (transA && transB) {
+        return halide_sgemm_transAB(a, A, B, b, C, C);
     } else if (transA) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_sgemv_trans_A(a, A, B, b, C, C);
+        return halide_sgemm_transA(a, A, B, b, C, C);
     } else if (transB) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_sgemv_trans_B(a, A, B, b, C, C);
+        return halide_sgemm_transB(a, A, B, b, C, C);
     } else {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_sgemv_trans_AB(a, A, B, b, C, C);
+        return halide_sgemm_notrans(a, A, B, b, C, C);
     }
     return -1;
 }
 
 inline int halide_dgemm(bool transA, bool transB, double a, buffer_t *A, buffer_t *B, double b, buffer_t *C) {
-    if (!transA && !transB) {
-        return halide_dgemm_notrans(a, A, B, b, C, C);
+    if (transA && transB) {
+        return halide_dgemm_transAB(a, A, B, b, C, C);
     } else if (transA) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_dgemv_trans_A(a, A, B, b, C, C);
+        return halide_dgemm_transA(a, A, B, b, C, C);
     } else if (transB) {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_dgemv_trans_B(a, A, B, b, C, C);
+        return halide_dgemm_transB(a, A, B, b, C, C);
     } else {
-        // TODO: transposed multiplication not implemented yet.
-        // return halide_dgemv_trans_AB(a, A, B, b, C, C);
+        return halide_dgemm_notrans(a, A, B, b, C, C);
     }
     return -1;
 }
@@ -204,6 +214,14 @@ void hblas_dgemv(const enum HBLAS_ORDER order,
                  const double alpha, const double *A, const int lda,
                  const double *X, const int incX, const double beta,
                  double *Y, const int incY);
+
+void hblas_sger(const enum HBLAS_ORDER order, const int M, const int N,
+                const float alpha, const float *X, const int incX,
+                const float *Y, const int incY, float *A, const int lda);
+
+void hblas_dger(const enum HBLAS_ORDER order, const int M, const int N,
+                const double alpha, const double *X, const int incX,
+                const double *Y, const int incY, double *A, const int lda);
 
 /*
  * ===========================================================================

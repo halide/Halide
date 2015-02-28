@@ -49,7 +49,7 @@ vector<Argument> add_user_context_arg(vector<Argument> args, const Target& targe
         internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
     }
     if (target.has_feature(Target::UserContext)) {
-        args.insert(args.begin(), Argument("__user_context", false, Halide::Handle()));
+        args.insert(args.begin(), Argument("__user_context", Argument::Scalar, Halide::Handle(), 0));
     }
     return args;
 }
@@ -363,7 +363,7 @@ const std::string &Stage::name() const {
     return stage_name;
 }
 
-void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
+void Stage::set_dim_type(VarOrRVar var, ForType t) {
     bool found = false;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -373,7 +373,7 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
+            if (!dims[i].pure && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
                 user_assert(schedule.allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -388,8 +388,8 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
 
-        } else if (t == For::Vectorized) {
-            user_assert(dims[i].for_type != For::Vectorized)
+        } else if (t == ForType::Vectorized) {
+            user_assert(dims[i].for_type != ForType::Vectorized)
                 << "In schedule for " << stage_name
                 << ", can't vectorize across " << var.name()
                 << " because Func is already vectorized across " << dims[i].var << "\n";
@@ -401,6 +401,26 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
                    << ", could not find dimension "
                    << var.name()
                    << " to mark as " << t
+                   << " in vars for function\n"
+                   << dump_argument_list();
+    }
+}
+
+void Stage::set_dim_device_api(VarOrRVar var, DeviceAPI device_api) {
+    bool found = false;
+    vector<Dim> &dims = schedule.dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, var.name())) {
+            found = true;
+            dims[i].device_api = device_api;
+        }
+    }
+
+    if (!found) {
+        user_error << "In schedule for " << stage_name
+                   << ", could not find dimension "
+                   << var.name()
+                   << " to set to device API " << static_cast<int>(device_api)
                    << " in vars for function\n"
                    << dump_argument_list();
     }
@@ -640,22 +660,22 @@ Stage &Stage::allow_race_conditions() {
 }
 
 Stage &Stage::serial(VarOrRVar var) {
-    set_dim_type(var, For::Serial);
+    set_dim_type(var, ForType::Serial);
     return *this;
 }
 
 Stage &Stage::parallel(VarOrRVar var) {
-    set_dim_type(var, For::Parallel);
+    set_dim_type(var, ForType::Parallel);
     return *this;
 }
 
 Stage &Stage::vectorize(VarOrRVar var) {
-    set_dim_type(var, For::Vectorized);
+    set_dim_type(var, ForType::Vectorized);
     return *this;
 }
 
 Stage &Stage::unroll(VarOrRVar var) {
-    set_dim_type(var, For::Unrolled);
+    set_dim_type(var, ForType::Unrolled);
     return *this;
 }
 
@@ -735,7 +755,7 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size, con
         user_assert(found)
             << "In schedule for " << stage.name()
             << ", could not find var " << vars[i].name()
-            << " to reorder in the argumemt list.\n"
+            << " to reorder in the argument list.\n"
             << stage.dump_argument_list();
     }
 
@@ -826,13 +846,16 @@ Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrR
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
     parallel(tx);
     rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
     parallel(tx);
     parallel(ty);
     rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
@@ -840,7 +863,10 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
+    set_dim_device_api(tz, device_api);
     parallel(tx);
     parallel(ty);
     parallel(tz);
@@ -850,13 +876,16 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gp
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_blocks(VarOrRVar tx, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
     parallel(tx);
     rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
     parallel(tx);
     parallel(ty);
     rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
@@ -864,7 +893,10 @@ Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
+    set_dim_device_api(tz, device_api);
     parallel(tx);
     parallel(ty);
     parallel(tz);
@@ -874,31 +906,34 @@ Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu
     return *this;
 }
 
-Stage &Stage::gpu_single_thread(GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_single_thread(DeviceAPI device_api) {
     split(Var::outermost(), Var::outermost(), Var::gpu_blocks(), 1);
+    set_dim_device_api(Var::gpu_blocks(), device_api);
     parallel(Var::gpu_blocks());
     return *this;
 }
 
-Stage &Stage::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu(VarOrRVar bx, VarOrRVar tx, DeviceAPI device_api) {
     return gpu_blocks(bx).gpu_threads(tx);
 }
 
 Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by,
-                  VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
+                  VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     return gpu_blocks(bx, by).gpu_threads(tx, ty);
 }
 
 Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
                   VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                  GPUAPI /* gpu_api */) {
+                  DeviceAPI device_api) {
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, DeviceAPI device_api) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         tx("__thread_id_x", x.is_rvar);
     split(x, bx, tx, x_size);
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(tx, device_api);
     parallel(bx);
     parallel(tx);
     return *this;
@@ -907,12 +942,16 @@ Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, GPUAPI /* gpu_api */) {
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
                        Expr x_size, Expr y_size,
-                       GPUAPI /* gpu_api */) {
+                       DeviceAPI device_api) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         by("__block_id_y", y.is_rvar),
         tx("__thread_id_x", x.is_rvar),
         ty("__thread_id_y", y.is_rvar);
     tile(x, y, bx, by, tx, ty, x_size, y_size);
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(by, device_api);
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
     parallel(bx);
     parallel(by);
     parallel(tx);
@@ -922,7 +961,7 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        Expr x_size, Expr y_size, Expr z_size,
-                       GPUAPI /* gpu_api */) {
+                       DeviceAPI device_api) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         by("__block_id_y", y.is_rvar),
         bz("__block_id_z", z.is_rvar),
@@ -940,6 +979,12 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     // tx ty tz by bx bz
     reorder(bx, by);
     // tx ty tz bx by bz
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(by, device_api);
+    set_dim_device_api(bz, device_api);
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
+    set_dim_device_api(tz, device_api);
     parallel(bx);
     parallel(by);
     parallel(bz);
@@ -1129,81 +1174,81 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, GPUAPI gpu_api) {
+Func &Func::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_threads(tx, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, device_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_threads(tx, ty, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, ty, device_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_threads(tx, ty, tz, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, ty, tz, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, GPUAPI gpu_api) {
+Func &Func::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_blocks(bx, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, GPUAPI gpu_api) {
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_blocks(bx, by, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, by, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, GPUAPI gpu_api) {
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_blocks(bx, by, bz, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, by, bz, device_api);
     return *this;
 }
 
-Func &Func::gpu_single_thread(GPUAPI gpu_api) {
+Func &Func::gpu_single_thread(DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_single_thread(gpu_api);
+    Stage(func.schedule(), name()).gpu_single_thread(device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI gpu_api) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu(bx, tx, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, tx, device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu(bx, by, tx, ty, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, by, tx, ty, device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu(bx, by, bz, tx, ty, tz, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, by, bz, tx, ty, tz, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api) {
+Func &Func::gpu_tile(VarOrRVar x, int x_size, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_tile(x, x_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, x_size, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_tile(x, y, x_size, y_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, y, x_size, y_size, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, GPUAPI gpu_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_tile(x, y, z, x_size, y_size, z_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, y, z, x_size, y_size, z_size, device_api);
     return *this;
 }
 
@@ -1216,7 +1261,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule(), name()).gpu_blocks(x, y);
+    Stage(func.schedule(), name()).gpu_blocks(x, y, DeviceAPI::GLSL);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
@@ -1848,7 +1893,14 @@ private:
     void include_parameter(Internal::Parameter p) {
         if (!p.defined()) return;
         if (already_have(p.name())) return;
-        arg_types.push_back(Argument(p.name(), p.is_buffer(), p.type()));
+        Expr def, min, max;
+        if (!p.is_buffer()) {
+            def = p.get_scalar_expr();
+            min = p.get_min_value();
+            max = p.get_max_value();
+        }
+        arg_types.push_back(Argument(p.name(), p.is_buffer() ? Argument::Buffer : Argument::Scalar,
+            p.type(), p.dimensions(), def, min, max));
         if (p.is_buffer()) {
             Buffer b = p.get_buffer();
             int idx = (int)arg_values.size();
@@ -1868,7 +1920,7 @@ private:
         if (!b.defined()) return;
         if (already_have(b.name())) return;
         image_args.push_back(make_pair((int)arg_types.size(), b));
-        arg_types.push_back(Argument(b.name(), true, b.type()));
+        arg_types.push_back(Argument(b.name(), Argument::Buffer, b.type(), b.dimensions()));
         arg_values.push_back(b.raw_buffer());
     }
 
@@ -1929,7 +1981,7 @@ void validate_arguments(const string &output,
         } else if (!found) {
             std::ostringstream err;
             err << "Generated code refers to ";
-            if (arg.is_buffer) err << "image ";
+            if (arg.is_buffer()) err << "image ";
             err << "parameter " << arg.name
                 << ", which was not found in the argument list.\n";
 
@@ -1951,8 +2003,8 @@ void validate_arguments(const string &output,
 // followed by all non-buffers (alphabetical by name).
 struct ArgumentComparator {
     bool operator()(const Argument& a, const Argument& b) {
-        if (a.is_buffer != b.is_buffer)
-            return a.is_buffer;
+        if (a.is_buffer() != b.is_buffer())
+            return a.is_buffer();
         else
             return a.name < b.name;
     }
@@ -2361,11 +2413,11 @@ struct JITFuncCallContext {
 }  // namespace Internal
 
 void Func::realize(Realization dst, const Target &target) {
-    if (!compiled_module.jit_wrapper_function()) {
+    if (!compiled_module.argv_function()) {
         compile_jit(target);
     }
 
-    internal_assert(compiled_module.jit_wrapper_function());
+    internal_assert(compiled_module.argv_function());
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2418,13 +2470,8 @@ void Func::realize(Realization dst, const Target &target) {
     // (If there is a user-set error handler, it will be called as well.)
 
     Internal::debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
+    int exit_status = compiled_module.argv_function()(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
-
-    // TODO: Remove after Buffer is sorted out.
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
-    }
 
     jit_context.finalize(exit_status);
 }
@@ -2434,11 +2481,11 @@ void Func::infer_input_bounds(Buffer dst) {
 }
 
 void Func::infer_input_bounds(Realization dst) {
-    if (!compiled_module.jit_wrapper_function()) {
+    if (!compiled_module.argv_function()) {
         compile_jit();
     }
 
-    internal_assert(compiled_module.jit_wrapper_function());
+    internal_assert(compiled_module.argv_function());
 
     JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
@@ -2511,7 +2558,7 @@ void Func::infer_input_bounds(Realization dst) {
             old_buffer[j] = *tracked_buffers[j];
         }
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
+        int exit_status = compiled_module.argv_function()(&(arg_values[0]));
 
         jit_context.report_if_error(exit_status);
 
@@ -2583,11 +2630,6 @@ void Func::infer_input_bounds(Realization dst) {
             image_param_args[i].second.set_buffer(buffer);
         }
     }
-
-    // TODO: Remove after Buffer is sorted out.
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
-    }
 }
 
 void *Func::compile_jit(const Target &target_arg) {
@@ -2617,7 +2659,7 @@ void *Func::compile_jit(const Target &target_arg) {
             buffer_name = buffer_name + '.' + int_to_string(i);
         }
         Type t = func.output_types()[i];
-        Argument me(buffer_name, true, t);
+        Argument me(buffer_name, Argument::Buffer, t, dimensions());
         infer_args.arg_types.push_back(me);
         arg_values.push_back(NULL); // A spot to put the address of this output buffer
     }
@@ -2627,7 +2669,7 @@ void *Func::compile_jit(const Target &target_arg) {
     for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
         Internal::debug(2) << infer_args.arg_types[i].name << ", "
                            << infer_args.arg_types[i].type << ", "
-                           << infer_args.arg_types[i].is_buffer << "\n";
+                           << infer_args.arg_types[i].is_buffer() << "\n";
     }
 
     StmtCompiler cg(target);

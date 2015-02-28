@@ -248,7 +248,7 @@ void CodeGen_GLSL::visit(const For *loop) {
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
         loop->body.accept(this);
     } else {
-        user_assert(loop->for_type != For::Parallel) << "GLSL: parallel loops aren't allowed inside kernel.\n";
+        user_assert(loop->for_type != ForType::Parallel) << "GLSL: parallel loops aren't allowed inside kernel.\n";
         CodeGen_C::visit(loop);
     }
 }
@@ -613,7 +613,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     ostringstream header;
     header << "/// KERNEL " << name << "\n";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             Type t = args[i].type.element_of();
 
             user_assert(args[i].read != args[i].write) <<
@@ -673,7 +673,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer && args[i].read) {
+        if (args[i].is_buffer() && args[i].read) {
             stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
         }
     }
@@ -695,7 +695,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 
     // Unpack the uniform and varying parameters
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             continue;
         } else if (ends_with(args[i].name, ".varying")) {
             do_indent();

@@ -123,7 +123,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
+        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
         internal_assert(is_zero(loop->min));
 
         do_indent();
@@ -133,7 +133,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         loop->body.accept(this);
 
     } else {
-        user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
+        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
         CodeGen_C::visit(loop);
     }
 }
@@ -406,7 +406,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     // declaration.
     vector<BufferSize> constants;
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer &&
+        if (args[i].is_buffer() &&
             CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
             args[i].size > 0) {
             constants.push_back(BufferSize(args[i].name, args[i].size));
@@ -427,7 +427,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     // Create preprocessor replacements for the address spaces of all our buffers.
     stream << "// Address spaces for " << name << "\n";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             vector<BufferSize>::iterator constant = constants.begin();
             while (constant != constants.end() &&
                    constant->name != args[i].name) {
@@ -450,7 +450,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     // Emit the function prototype
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             stream << " " << get_memory_space(args[i].name) << " ";
             if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
@@ -475,14 +475,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     for (size_t i = 0; i < args.size(); i++) {
         // Remove buffer arguments from allocation scope
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             allocations.pop(args[i].name);
         }
     }
 
     // Undef all the buffer address spaces, in case they're different in another kernel.
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             stream << "#undef " << get_memory_space(args[i].name) << "\n";
         }
     }
@@ -621,7 +621,7 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 void CodeGen_OpenCL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
 }
-    
+
 std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
     return name;
 }

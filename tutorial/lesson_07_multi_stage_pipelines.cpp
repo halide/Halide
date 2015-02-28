@@ -15,7 +15,7 @@
 // g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;

@@ -1,16 +1,28 @@
 include ../support/Makefile.inc
 
-CXXFLAGS += -O3 -fopenmp -Wall -std=c++11
+CXXFLAGS += -O3 -fopenmp -Wall -std=c++11 -march=native
 HL_TARGET ?= host
 LIBHALIDE_BLAS = src/libhalide_blas.a
 EMIT_OPTIONS = stmt,assembly
 
 EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
-ATLAS_FLAGS ?= -DUSE_ATLAS
-ATLAS_LIBS ?= -L/usr/lib/atlas-base -lcblas -latlas
 OPENBLAS_FLAGS ?= -DUSE_OPENBLAS
 OPENBLAS_LIBS ?= -lopenblas
+
+# ATLAS should be built and installed locally to get the best performance.
+# It is designed to automatically tune its performance to your machine during
+# the build. Get the source code here: http://math-atlas.sourceforge.net/,
+# then set the flags below to point to your local build of ATLAS.
+#
+# For example:
+# ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
+# ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
+
+# By default use whatever ATLAS is installed, so that this at least builds.
+$(warning Warning: Defaulting to system ATLAS, which may be slow. See the Makefile for details.)
+ATLAS_FLAGS ?= -DUSE_ATLAS
+ATLAS_LIBS ?= -lcblas
 
 KERNEL_DIR = src/kernels
 KERNELS = \
@@ -28,8 +40,16 @@ KERNELS = \
 	dgemv_notrans \
 	sgemv_trans \
 	dgemv_trans \
+	sger_impl \
+	dger_impl \
 	sgemm_notrans \
 	dgemm_notrans \
+	sgemm_transA \
+	dgemm_transA \
+	sgemm_transB \
+	dgemm_transB \
+	sgemm_transAB \
+	dgemm_transAB \
 
 BENCHMARKS = \
 	benchmarks/cblas_benchmarks \
@@ -71,12 +91,14 @@ tests/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -Wno-unused-variable -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
 	$(CBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
-L1_BENCHMARK_SIZES = 16 64 256 1024 4096 16384
-L2_BENCHMARK_SIZES = 8 32 128 512 1024
-L3_BENCHMARK_SIZES = 8 32 128 512
+# Large powers of two are a pathological case for the cache, so avoid
+# them for the benchmarks.
+L1_BENCHMARK_SIZES = 16 64 288 1056 2080
+L2_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
+L3_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
 L1_BENCHMARKS = scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum
-L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans
-L3_BENCHMARKS = sgemm_notrans dgemm_notrans
+L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger
+L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB
 
 cblas_l1_benchmark_%: benchmarks/cblas_benchmarks
 	@$(foreach size,$(L1_BENCHMARK_SIZES),benchmarks/cblas_benchmarks $(@:cblas_l1_benchmark_%=%) $(size);)
@@ -155,23 +177,23 @@ benchmarks.csv: $(BENCHMARKS)
 	make --no-print-directory run_benchmarks > benchmarks.dat
 	awk '{printf("%s,%s,%s,%s,%s\n",$$1,$$2,$$3,$$4,$$5)}' benchmarks.dat > benchmarks.csv
 
-benchmarks/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(CBLAS_FLAGS) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(ATLAS_FLAGS) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(ATLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(OPENBLAS_FLAGS) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(OPENBLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(EIGEN_INCLUDES) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(LLVM_LDFLAGS)
 
-benchmarks/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+benchmarks/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
 	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(LLVM_LDFLAGS)
 
@@ -235,6 +257,14 @@ $(KERNEL_DIR)/halide_dgemv_trans.o $(KERNEL_DIR)/halide_dgemv_trans.h: $(KERNEL_
 	$(LD_PATH_SETUP) $< -g dgemv -f halide_dgemv_trans -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET) parallel=false vectorize=true transpose=true
 
+$(KERNEL_DIR)/halide_sger_impl.o $(KERNEL_DIR)/halide_sger_impl.h: $(KERNEL_DIR)/blas_l2.generator
+	$(LD_PATH_SETUP) $< -g sger -f halide_sger_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true
+
+$(KERNEL_DIR)/halide_dger_impl.o $(KERNEL_DIR)/halide_dger_impl.h: $(KERNEL_DIR)/blas_l2.generator
+	$(LD_PATH_SETUP) $< -g dger -f halide_dger_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true
+
 $(KERNEL_DIR)/halide_sgemm_notrans.o $(KERNEL_DIR)/halide_sgemm_notrans.h: $(KERNEL_DIR)/blas_l3.generator
 	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_notrans -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=false transpose_B=false
@@ -242,3 +272,27 @@ $(KERNEL_DIR)/halide_sgemm_notrans.o $(KERNEL_DIR)/halide_sgemm_notrans.h: $(KER
 $(KERNEL_DIR)/halide_dgemm_notrans.o $(KERNEL_DIR)/halide_dgemm_notrans.h: $(KERNEL_DIR)/blas_l3.generator
 	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_notrans -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
 	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=false transpose_B=false
+
+$(KERNEL_DIR)/halide_sgemm_transA.o $(KERNEL_DIR)/halide_sgemm_transA.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_transA -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=false
+
+$(KERNEL_DIR)/halide_dgemm_transA.o $(KERNEL_DIR)/halide_dgemm_transA.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_transA -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=false
+
+$(KERNEL_DIR)/halide_sgemm_transB.o $(KERNEL_DIR)/halide_sgemm_transB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_transB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=false transpose_B=true
+
+$(KERNEL_DIR)/halide_dgemm_transB.o $(KERNEL_DIR)/halide_dgemm_transB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_transB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=false transpose_B=true
+
+$(KERNEL_DIR)/halide_sgemm_transAB.o $(KERNEL_DIR)/halide_sgemm_transAB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g sgemm -f halide_sgemm_transAB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=true
+
+$(KERNEL_DIR)/halide_dgemm_transAB.o $(KERNEL_DIR)/halide_dgemm_transAB.h: $(KERNEL_DIR)/blas_l3.generator
+	$(LD_PATH_SETUP) $< -g dgemm -f halide_dgemm_transAB -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
+	target=$(HL_TARGET) parallel=false vectorize=true transpose_A=true transpose_B=true

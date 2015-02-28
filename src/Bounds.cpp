@@ -376,13 +376,8 @@ private:
     }
 
     void visit(const Div *op) {
-
         op->a.accept(this);
         Expr min_a = min, max_a = max;
-        if (!min_a.defined() || !max_a.defined()) {
-            min = Expr(); max = Expr(); return;
-        }
-
         op->b.accept(this);
         Expr min_b = min, max_b = max;
         if (!min_b.defined() || !max_b.defined()) {
@@ -401,12 +396,16 @@ private:
                 min = Expr();
                 max = Expr();
             } else if (is_positive_const(min_b) || op->type.is_uint()) {
-                min = min_a / min_b;
-                max = max_a / min_b;
+                min = min_a.defined()? min_a / min_b: Expr();
+                max = max_a.defined()? max_a / min_b: Expr();
             } else if (is_negative_const(min_b)) {
-                min = max_a / min_b;
-                max = min_a / min_b;
+                min = max_a.defined()? max_a / min_b: Expr();
+                max = min_a.defined()? min_a / min_b: Expr();
             } else {
+                if (!min_a.defined() || !max_a.defined()) {
+                    min = Expr(); max = Expr(); return;
+                }
+
                 // Sign of b is unknown
                 Expr a = min_a / min_b;
                 Expr b = max_a / max_b;
@@ -415,6 +414,10 @@ private:
                 max = select(cmp, b, a);
             }
         } else {
+            if (!min_a.defined() || !max_a.defined()) {
+                min = Expr(); max = Expr(); return;
+            }
+
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
             int min_sign = static_sign(min_b);
             int max_sign = static_sign(max_b);
@@ -686,7 +689,7 @@ private:
             // Probably more conservative than necessary
             Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
             equivalent_select.accept(this);
-        } else if (op->call_type == Call::Intrinsic && 
+        } else if (op->call_type == Call::Intrinsic &&
                    (op->name == Call::shift_left || op->name == Call::shift_right || op->name == Call::bitwise_and)) {
             Expr simplified = simplify(op);
             if (!simplified.same_as(op)) {
@@ -897,11 +900,14 @@ void merge_boxes(Box &a, const Box &b) {
     bool a_maybe_unused = a.maybe_unused();
     bool b_maybe_unused = b.maybe_unused();
 
+    bool complementary = a_maybe_unused && b_maybe_unused &&
+        (equal(a.used, !b.used) || equal(!a.used, b.used));
+
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].min.defined() && b[i].min.defined()) {
                 if (a_maybe_unused && b_maybe_unused) {
-                    if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
+                    if (complementary) {
                         a[i].min = select(a.used, a[i].min, b[i].min);
                     } else {
                         a[i].min = select(a.used && b.used, simple_min(a[i].min, b[i].min),
@@ -922,7 +928,7 @@ void merge_boxes(Box &a, const Box &b) {
         if (!a[i].max.same_as(b[i].max)) {
             if (a[i].max.defined() && b[i].max.defined()) {
                 if (a_maybe_unused && b_maybe_unused) {
-                    if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
+                    if (complementary) {
                         a[i].max = select(a.used, a[i].max, b[i].max);
                     } else {
                         a[i].max = select(a.used && b.used, simple_max(a[i].max, b[i].max),
@@ -1141,7 +1147,7 @@ private:
                 else_boxes.swap(boxes);
             }
 
-            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
+            // debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
@@ -1157,7 +1163,7 @@ private:
                 Box &then_box = then_boxes[iter->first];
                 Box &orig_box = boxes[iter->first];
 
-                //debug(0) << " Merging boxes for " << iter->first << "\n";
+                // debug(0) << " Merging boxes for " << iter->first << "\n";
 
                 if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
@@ -1171,8 +1177,8 @@ private:
                     else_box.used = !op->condition;
                 }
 
+                merge_boxes(then_box, else_box);
                 merge_boxes(orig_box, then_box);
-                merge_boxes(orig_box, else_box);
             }
         }
 
@@ -1398,7 +1404,7 @@ void bounds_test() {
 
     Buffer in(Int(32), vec(10), NULL, "input");
 
-    Stmt loop = For::make("x", 3, 10, For::Serial,
+    Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
                           Provide::make("output",
                                         vec(Add::make(
                                                 Call::make(in, input_site_1),

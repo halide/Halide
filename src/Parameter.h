@@ -6,6 +6,7 @@
  */
 
 #include <string>
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -75,6 +76,10 @@ public:
             << "> as scalar of type " << type_of<T>() << "\n";
         return *((const T *)(get_scalar_address()));
     }
+
+    /** This returns the current value of get_scalar<type()>()
+     * as an Expr. */
+    EXPORT Expr get_scalar_expr() const;
 
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */

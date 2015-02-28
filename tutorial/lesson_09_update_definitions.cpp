@@ -15,7 +15,7 @@
 // g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 // We're going to be using x86 SSE intrinsics later on in this lesson.
