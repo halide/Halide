@@ -45,6 +45,8 @@ protected:
     Expr wild_f32x2; // 64-bit floats
     Expr wild_f32x4, wild_f64x2; // 128-bit floats
     Expr wild_f32x8, wild_f64x4; // 256-bit floats
+    Expr wild_i32x32;
+    Expr wild_i8x128, wild_u8x128, wild_i16x64, wild_u16x64;
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;

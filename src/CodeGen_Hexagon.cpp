@@ -66,9 +66,23 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                            Intrinsic::hexagon_V6_vaddh));
   varith.push_back(Pattern(wild_u16x32 + wild_u16x32,
                            Intrinsic::hexagon_V6_vadduhsat));
-  // World Vectors.
+  // Word Vectors.
   varith.push_back(Pattern(wild_i32x16 + wild_i32x16,
                            Intrinsic::hexagon_V6_vaddw));
+  // Double Vectors
+  // Byte Double Vectors
+  varith.push_back(Pattern(wild_i8x128 + wild_i8x128,
+                           Intrinsic::hexagon_V6_vaddb_dv));
+  varith.push_back(Pattern(wild_u8x128 + wild_u8x128,
+                           Intrinsic::hexagon_V6_vaddubsat_dv));
+  // Half Double Vectors
+  varith.push_back(Pattern(wild_i16x64 + wild_i16x64,
+                           Intrinsic::hexagon_V6_vaddh_dv));
+  varith.push_back(Pattern(wild_u16x64 + wild_u16x64,
+                           Intrinsic::hexagon_V6_vadduhsat_dv));
+  // Word Double Vectors.
+  varith.push_back(Pattern(wild_i32x32 + wild_i32x32,
+                           Intrinsic::hexagon_V6_vaddw_dv));
 
   // "Sub"
   // Byte Vectors
@@ -84,6 +98,20 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
   // Word Vectors.
   varith.push_back(Pattern(wild_i32x16 - wild_i32x16,
                            Intrinsic::hexagon_V6_vsubw));
+  // Double Vectors
+  // Byte Double Vectors
+  varith.push_back(Pattern(wild_i8x128 - wild_i8x128,
+                           Intrinsic::hexagon_V6_vsubb_dv));
+  varith.push_back(Pattern(wild_u8x128 - wild_u8x128,
+                           Intrinsic::hexagon_V6_vsububsat_dv));
+  // Half Double Vectors
+  varith.push_back(Pattern(wild_i16x64 - wild_i16x64,
+                           Intrinsic::hexagon_V6_vsubh_dv));
+  varith.push_back(Pattern(wild_u16x64 - wild_u16x64,
+                           Intrinsic::hexagon_V6_vsubuhsat_dv));
+  // Word Double Vectors.
+  varith.push_back(Pattern(wild_i32x32 - wild_i32x32,
+                           Intrinsic::hexagon_V6_vsubw_dv));
 
   averages.push_back(Pattern(((wild_u8x64 + wild_u8x64)/2),
                              Intrinsic::hexagon_V6_vavgub));
