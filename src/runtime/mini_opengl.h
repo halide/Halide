@@ -161,5 +161,6 @@ typedef void (*PFNGLGENVERTEXARRAYS)(GLsizei n, GLuint *arrays);
 typedef void (*PFNGLBINDVERTEXARRAY)(GLuint array);
 typedef void (*PFNGLDELETEVERTEXARRAYS)(GLsizei n, const GLuint *arrays);
 typedef const GLubyte *(*PFNGLGETSTRINGI)(GLenum name, GLuint index);
+typedef void (*PFNDRAWBUFFERS)(GLsizei n, const GLenum *bufs);
 
 #endif  // MINI_OPENGL_H

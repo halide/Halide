@@ -42,6 +42,29 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     return stream;
 }
 
+ostream &operator<<(ostream &out, const DeviceAPI &api) {
+    switch (api) {
+    case DeviceAPI::Host:
+        break;
+    case DeviceAPI::Parent:
+        out << "<Parent>";
+        break;
+    case DeviceAPI::Default_GPU:
+        out << "<Default_GPU>";
+        break;
+    case DeviceAPI::CUDA:
+        out << "<CUDA>";
+        break;
+    case DeviceAPI::OpenCL:
+        out << "<OpenCL>";
+        break;
+    case DeviceAPI::GLSL:
+        out << "<GLSL>";
+        break;
+    }
+    return out;
+}
+
 namespace Internal {
 
 void IRPrinter::test() {
@@ -54,11 +77,11 @@ void IRPrinter::test() {
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
-    Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, store);
+    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x);
-    Stmt for_loop2 = For::make("x", 0, y, For::Vectorized , store2);
+    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
     Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
     Stmt assertion = AssertStmt::make(y > 3, vec<Expr>(Expr("y is greater than "), 3));
     Stmt block = Block::make(assertion, pipeline);
@@ -88,18 +111,18 @@ void IRPrinter::test() {
     std::cout << "IRPrinter test passed\n";
 }
 
-ostream &operator<<(ostream &out, const For::ForType &type) {
+ostream &operator<<(ostream &out, const ForType &type) {
     switch (type) {
-    case For::Serial:
+    case ForType::Serial:
         out << "for";
         break;
-    case For::Parallel:
+    case ForType::Parallel:
         out << "parallel";
         break;
-    case For::Unrolled:
+    case ForType::Unrolled:
         out << "unrolled";
         break;
-    case For::Vectorized:
+    case ForType::Vectorized:
         out << "vectorized";
         break;
     }
@@ -417,7 +440,7 @@ void IRPrinter::visit(const Pipeline *op) {
 void IRPrinter::visit(const For *op) {
 
     do_indent();
-    stream << op->for_type << " (" << op->name << ", ";
+    stream << op->for_type << op->device_api << " (" << op->name << ", ";
     print(op->min);
     stream << ", ";
     print(op->extent);

@@ -296,7 +296,7 @@ Stmt build_provide_loop_nest(Function f,
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt);
         }
     }
 
@@ -727,7 +727,7 @@ private:
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
             func.schedule().compute_level().is_inline() &&
-            for_loop->for_type == For::Vectorized &&
+            for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
@@ -768,10 +768,11 @@ private:
             stmt = for_loop;
         } else {
             stmt = For::make(for_loop->name,
-                           for_loop->min,
-                           for_loop->extent,
-                           for_loop->for_type,
-                           body);
+                             for_loop->min,
+                             for_loop->extent,
+                             for_loop->for_type,
+                             for_loop->device_api,
+                             body);
         }
     }
 
@@ -930,8 +931,8 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
-        Site s = {f->for_type == For::Parallel ||
-                  f->for_type == For::Vectorized,
+        Site s = {f->for_type == ForType::Parallel ||
+                  f->for_type == ForType::Vectorized,
                   LoopLevel(func, var)};
         sites.push_back(s);
         f->body.accept(this);
@@ -1144,7 +1145,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
-    s = For::make(root_var, 0, 1, For::Serial, s);
+    s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, s);
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1739,6 +1740,42 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
     return s;
 }
 
+class PropagateInheritedAttributes : public IRMutator {
+    using IRMutator::visit;
+
+    DeviceAPI for_device;
+
+    void visit(const For *op) {
+        DeviceAPI save_device = for_device;
+        for_device = (op->device_api == DeviceAPI::Parent) ? for_device : op->device_api;
+
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        Stmt body = mutate(op->body);
+
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body) &&
+            for_device == op->device_api) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
+        }
+
+        for_device = save_device;
+    }
+
+public:
+    PropagateInheritedAttributes() : for_device(DeviceAPI::Host) {
+    }
+};
+
+Stmt propagate_inherited_attributes(Stmt s) {
+    PropagateInheritedAttributes propagator;
+
+    return propagator.mutate(s);
+}
+
 Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes) {
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
@@ -1833,7 +1870,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
 
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
-        s = inject_host_dev_buffer_copies(s);
+        s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
     }
 
@@ -1898,6 +1935,16 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         s = setup_gpu_vertex_buffer(s);
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
+
+    // This is envisioned as a catch all pass to propagate attributes
+    // which are inherited from a parent node by a child node so
+    // every CodeGen backend does not have to keep track of these
+    // attributes as the IR tree is traversed. At present, only the
+    // GPU device attribute on For nodes is propagated (to contained
+    // For nodes which have their device set to DeviceAPI::Parent).
+    debug(1) << "Propagating inherited attributes downward.\n";
+    s = propagate_inherited_attributes(s);
+    debug(1) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";
 
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";

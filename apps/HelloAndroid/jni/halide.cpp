@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
     curved.store_at(result, y).compute_at(result, yi);
 
     /*
-      curved.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, GPU_OpenCL);
-      result.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, GPU_OpenCL);
+      curved.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, Device_OpenCL);
+      result.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, Device_OpenCL);
     */
 
     std::vector<Argument> args;

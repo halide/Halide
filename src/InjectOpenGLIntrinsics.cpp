@@ -93,10 +93,10 @@ private:
                     min = Expr(0);
                 }
             }
-            
+
             // Inject intrinsics into the call argument
             Expr arg = mutate(call_args[i]);
-            
+
             if (i < 2) {
                 // Convert spatial coordinates x,y into texture coordinates by normalization.
                 args[i + 2] = (Cast::make(Float(32), arg - min) + 0.5f) / extent;
@@ -138,8 +138,8 @@ private:
 
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
-        if (loop->for_type == For::Parallel &&
-            CodeGen_GPU_Dev::is_gpu_block_var(loop->name)) {
+        if (loop->for_type == ForType::Parallel &&
+            loop->device_api == DeviceAPI::GLSL) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);

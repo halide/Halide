@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <iostream>
 
 using namespace Halide;
@@ -17,9 +17,9 @@ int main(int argc, char *argv[]) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        kernel1.gpu_tile(x, 32, GPU_Default).compute_root();
-        kernel2.gpu_tile(x, 32, GPU_Default).compute_root();
-        kernel3.gpu_tile(x, 32, GPU_Default);
+        kernel1.gpu_tile(x, 32).compute_root();
+        kernel2.gpu_tile(x, 32).compute_root();
+        kernel3.gpu_tile(x, 32);
     }
 
     Image<int32_t> result = kernel3.realize(256, target);

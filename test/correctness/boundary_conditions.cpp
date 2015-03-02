@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;

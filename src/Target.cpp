@@ -265,6 +265,8 @@ bool Target::merge_string(const std::string &target) {
             set_features(vec(Target::SSE41, Target::AVX, Target::AVX2));
         } else if (tok == "armv7s") {
             set_feature(Target::ARMv7s);
+        } else if (tok == "no_neon") {
+            set_feature(Target::NoNEON);
         } else if (tok == "cuda" || tok == "ptx") {
             set_feature(Target::CUDA);
         } else if (tok == "cuda_capability_30") {
@@ -349,7 +351,7 @@ std::string Target::to_string() const {
   const char* const feature_names[] = {
       "jit", "debug", "no_asserts", "no_bounds_query",
       "sse41", "avx", "avx2", "fma", "fma4", "f16c",
-      "armv7s",
+      "armv7s", "no_neon",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
       "opengl",
@@ -443,7 +445,6 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
-DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -468,11 +469,14 @@ DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
+DECLARE_CPP_INITMOD(device_interface)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
+DECLARE_LL_INITMOD(arm_no_neon)
 #else
 DECLARE_NO_INITMOD(arm)
+DECLARE_NO_INITMOD(arm_no_neon)
 #endif
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
@@ -789,6 +793,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_posix_print(c, bits_64, debug));
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
+            modules.push_back(get_initmod_device_interface(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
@@ -798,9 +803,13 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
-                  modules.push_back(get_initmod_aarch64_ll(c));
+                    modules.push_back(get_initmod_aarch64_ll(c));
+                } else if (t.has_feature(Target::ARMv7s)) {
+                    modules.push_back(get_initmod_arm_ll(c));
+                } else if (!t.has_feature(Target::NoNEON)) {
+                    modules.push_back(get_initmod_arm_ll(c));
                 } else {
-                  modules.push_back(get_initmod_arm_ll(c));
+                    modules.push_back(get_initmod_arm_no_neon_ll(c));
                 }
             }
             if (t.arch == Target::MIPS) {
@@ -822,7 +831,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
     }
 
     if (module_type == ModuleAOT || module_type == ModuleGPU) {
-      //      Halide::Internal::debug(0) << "Module type GPU\n";
         if (t.has_feature(Target::CUDA)) {
             if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_cuda(c, bits_64, debug));
@@ -846,8 +854,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
-        } else {
-            modules.push_back(get_initmod_nogpu(c, bits_64, debug));
         }
     }
 

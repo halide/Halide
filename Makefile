@@ -243,6 +243,7 @@ SOURCE_FILES = \
   DebugToFile.cpp \
   Deinterleave.cpp \
   Derivative.cpp \
+  DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
   ExprUsesVar.cpp \
@@ -319,7 +320,6 @@ HEADER_FILES = \
   BoundsInference.h \
   BranchVisitors.h \
   Buffer.h \
-  buffer_t.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
@@ -338,8 +338,10 @@ HEADER_FILES = \
   DebugToFile.h \
   Deinterleave.h \
   Derivative.h \
+  DeviceInterface.h \
   EarlyFree.h \
   Error.h \
+  Expr.h \
   ExprUsesVar.h \
   Extern.h \
   FastIntegerDivide.h \
@@ -348,6 +350,7 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  runtime/HalideRuntime.h \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
@@ -412,13 +415,15 @@ HEADER_FILES = \
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image windows_cuda windows_opencl windows_io windows_thread_pool ssp opengl linux_opengl_context osx_opengl_context android_opengl_context posix_print gpu_device_selection cache nacl_host_cpu_count to_string module_jit_ref_count module_aot_ref_count
-RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips
+RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image windows_cuda windows_opencl windows_io windows_thread_pool ssp opengl linux_opengl_context osx_opengl_context android_opengl_context posix_print gpu_device_selection cache nacl_host_cpu_count to_string module_jit_ref_count module_aot_ref_count device_interface
+RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips arm_no_neon
+
+RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
 .PHONY: all
-all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
+all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
 $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
@@ -451,9 +456,10 @@ include/Halide.h: $(HEADERS) src/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p include
 	cd src; ../$(BIN_DIR)/build_halide_h $(HEADER_FILES) HalideFooter.h > ../include/Halide.h; cd ..
 
-include/HalideRuntime.h: src/runtime/HalideRuntime.h
+include/HalideRuntime%: src/runtime/HalideRuntime%
+	echo Copying $<
 	mkdir -p include
-	cp src/runtime/HalideRuntime.h include/
+	cp $< include/
 
 $(BIN_DIR)/build_halide_h: tools/build_halide_h.cpp
 	g++ $< -o $@
@@ -840,7 +846,7 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so includ
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
-	cp include/HalideRuntime.h $(DISTRIB_DIR)/include
+	cp include/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp README.md $(DISTRIB_DIR)

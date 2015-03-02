@@ -5,7 +5,7 @@ using namespace Halide;
 
 namespace {
 
-// Generator class for BLAS gemv operations.
+// Generator class for BLAS gemv (GEneralized Matrix-Vector product) operations.
 template<class T>
 class GEMVGenerator :
         public Generator<GEMVGenerator<T>> {
@@ -172,7 +172,74 @@ class GEMVGenerator :
     }
 };
 
-RegisterGenerator<GEMVGenerator<float>>    register_sgemv("sgemv");
-RegisterGenerator<GEMVGenerator<double>>   register_dgemv("dgemv");
+
+// Generator class for BLAS ger (GEneralized Rank-1 update) operations.
+template<class T>
+class GERGenerator :
+        public Generator<GERGenerator<T>> {
+  public:
+    typedef Generator<GERGenerator<T>> Base;
+    using Base::target;
+    using Base::get_target;
+    using Base::natural_vector_size;
+
+    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
+    GeneratorParam<bool> vectorize_ = {"vectorize", true};
+    GeneratorParam<bool> parallel_ = {"parallel", true};
+    GeneratorParam<int>  block_size_ = {"block_size", 1 << 5};
+
+    // Standard ordering of parameters in GEMV functions.
+    Param<T>   a_ = {"a", 1.0};
+    ImageParam x_ = {type_of<T>(), 1, "x"};
+    ImageParam y_ = {type_of<T>(), 1, "y"};
+    ImageParam A_ = {type_of<T>(), 2, "A"};
+
+    void SetupTarget() {
+        if (!assertions_enabled_) {
+            target.set(get_target()
+                       .with_feature(Target::NoAsserts)
+                       .with_feature(Target::NoBoundsQuery));
+        }
+    }
+
+    Func build() {
+        SetupTarget();
+
+        const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
+        const int unroll_size = 4;
+
+        Expr num_rows = A_.width();
+        Expr num_cols = A_.height();
+
+        Var i("i"), j("j");
+        Func result("result");
+        result(i, j) = A_(i, j) + a_ * x_(i) * y_(j);
+
+        Var ii("ii"), ji("ji");
+        Var ti("ti"), tj("tj"), t("t");
+        result.specialize(num_rows >= vec_size).vectorize(i, vec_size)
+                .specialize(num_cols >= unroll_size).unroll(j, unroll_size)
+                .specialize(num_rows >= block_size_ && num_cols >= block_size_)
+                .tile(i, j, ii, ji, block_size_ / vec_size, block_size_ / unroll_size)
+                .specialize(num_rows >= 2 * block_size_ && num_cols >= 2 * block_size_)
+                .tile(i, j, ti, tj, i, j, 2, 2).fuse(ti, tj, t).parallel(t);
+
+        A_.set_min(0, 0).set_min(1, 0);
+        x_.set_bounds(0, 0, A_.width());
+        y_.set_bounds(0, 0, A_.height());
+
+        result.output_buffer()
+                .set_bounds(0, 0, A_.width())
+                .set_bounds(1, 0, A_.height());
+
+        return result;
+    }
+};
+
+
+RegisterGenerator<GEMVGenerator<float>>   register_sgemv("sgemv");
+RegisterGenerator<GEMVGenerator<double>>  register_dgemv("dgemv");
+RegisterGenerator<GERGenerator<float>>    register_sger("sger");
+RegisterGenerator<GERGenerator<double>>   register_dger("dger");
 
 }  // namespace

@@ -1,7 +1,6 @@
 include ../support/Makefile.inc
 
 HALIDE_LD_FLAGS=../../$(LIB_HALIDE) -lpthread -ldl -lz $(LDFLAGS)
-HALIDE_CXX_FLAGS=-I../../include -g
 
 all: out.png
 
@@ -11,7 +10,7 @@ my_library_impl.a: vignette_impl.o flip_impl.o
 
 # A library that contains the stub functions the generator uses.
 my_library.a: my_library/my_library.cpp
-	$(CXX) -c my_library/my_library.cpp -o my_library.o $(HALIDE_CXX_FLAGS)
+	$(CXX) $(CXXFLAGS) -c my_library/my_library.cpp -o my_library.o
 	ar q my_library.a my_library.o
 
 # A generated library function
@@ -20,7 +19,7 @@ vignette_impl.o: my_library/vignette
 
 # A library function generator
 my_library/vignette: my_library/vignette.cpp
-	$(CXX) my_library/vignette.cpp -o my_library/vignette $(HALIDE_CXX_FLAGS) $(HALIDE_LD_FLAGS)
+	$(CXX) $(CXXFLAGS) my_library/vignette.cpp -o my_library/vignette $(HALIDE_LD_FLAGS)
 
 # A generated library function
 flip_impl.o: my_library/flip
@@ -28,11 +27,11 @@ flip_impl.o: my_library/flip
 
 # A library function generator
 my_library/flip: my_library/flip.cpp
-	$(CXX) my_library/flip.cpp -o my_library/flip $(HALIDE_CXX_FLAGS) $(HALIDE_LD_FLAGS)
+	$(CXX) $(CXXFLAGS) my_library/flip.cpp -o my_library/flip $(HALIDE_LD_FLAGS)
 
 # The generator for the output pipeline
 generate_pipeline: generate_pipeline.cpp my_library.a
-	$(CXX) generate_pipeline.cpp my_library.a -o generate_pipeline $(HALIDE_CXX_FLAGS) $(HALIDE_LD_FLAGS)
+	$(CXX) $(CXXFLAGS) generate_pipeline.cpp my_library.a -o generate_pipeline $(HALIDE_LD_FLAGS)
 
 # The output pipeline
 pipeline.o: generate_pipeline
@@ -45,7 +44,7 @@ pipeline.a: pipeline.o my_library_impl.a
 
 # A binary that runs the output pipeline on an image
 run_pipeline: run_pipeline.cpp pipeline.a
-	$(CXX) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support -lpthread $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support -lpthread $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 out.png: run_pipeline
 	./run_pipeline ../images/gray.png out.png

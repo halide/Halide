@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
