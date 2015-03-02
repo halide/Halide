@@ -48,6 +48,7 @@ WITH_OPENCL ?= not-empty
 WITH_OPENGL ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
+WITH_JAVASCRIPT_V8 = not-empty
 
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
@@ -93,6 +94,10 @@ AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
+V8_PATH=
+JAVASCRIPT_CXX_FLAGS=$(if $(WITH_JAVASCRIPT_V8), -DWITH_JAVASCRIPT_V8 -I$(V8_PATH))
+JAVASCRIPT_LDFLAGS=$(if $(WITH_JAVASCRIPT_V8), $(V8_PATH)/out/native/lib*.a)
+
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual
 CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual -fPIC $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
@@ -106,6 +111,7 @@ CXX_FLAGS += $(OPENGL_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
+CXX_FLAGS += $(JAVASCRIPT_CXX_FLAGS)
 
 LLVM_35_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34 35)
 ifneq ($(LLVM_35_OR_OLDER), )
@@ -261,6 +267,7 @@ SOURCE_FILES = \
   IROperator.cpp \
   IRPrinter.cpp \
   IRVisitor.cpp \
+  JavaScriptExecutor.cpp \
   JITModule.cpp \
   Lerp.cpp \
   LinearSolve.cpp \
@@ -357,6 +364,7 @@ HEADER_FILES = \
   IROperator.h \
   IRPrinter.h \
   IRVisitor.h \
+  JavaScriptExecutor.h \
   JITModule.h \
   Lambda.h \
   Lerp.h \
@@ -437,7 +445,7 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 endif
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LDFLAGS) $(LLVM_SHARED_LIBS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LDFLAGS) $(LLVM_SHARED_LIBS) $(JAVASCRIPT_LDFLAGS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
 
 include/Halide.h: $(HEADERS) src/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p include

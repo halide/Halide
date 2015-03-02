@@ -412,6 +412,9 @@ class Func {
      * we don't have to rejit every time we want to evaluated it. */
     Internal::JITModule compiled_module;
 
+    /** Cache compiled JavaScript is JITting with Target::JavaScript. */
+    std::string cached_javascript;
+
     /** Invalidate the cached lowered stmt and compiled module. */
     void invalidate_cache();
 
@@ -597,7 +600,10 @@ public:
 
     /** Statically compile this function to JavaScript source code. At
      * present vectorization will fail, and parallelization will
-     * produce serial code. */
+     * produce serial code. 
+     * TODO: Make the string vs. stream API here consistent across other source code
+     * compilation methods. (Stream output is needed internally to realize for JS, so
+     * it is provided here.) */
     EXPORT void compile_to_javascript(const std::string &filename,
                                       std::vector<Argument>,
                                       const std::string &fn_name = "",
@@ -718,11 +724,10 @@ public:
      * normally happens on the first call to realize. If you're
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
-     * then you can call this ahead of time. Returns the raw function
-     * pointer to the compiled pipeline. Default is to use the Target
+     * then you can call this ahead of time. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-     EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
+     EXPORT void compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling

@@ -7,6 +7,9 @@
 
 #include <string>
 
+#include "Buffer.h"
+#include "IntrusivePtr.h"
+
 namespace Halide {
 namespace Internal {
 

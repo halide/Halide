@@ -19,6 +19,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_JavaScript.h"
 #include "Image.h"
+#include "JavaScriptExecutor.h"
 #include "Param.h"
 #include "Debug.h"
 #include "Target.h"
@@ -1359,6 +1360,7 @@ Stage Func::update(int idx) {
 void Func::invalidate_cache() {
     lowered = Stmt();
     compiled_module = JITModule();
+    cached_javascript.clear();
 }
 
 Func::operator Stage() const {
@@ -2075,8 +2077,8 @@ void Func::compile_to_javascript(const string &filename, vector<Argument> args,
         args.push_back(output_buffers()[i]);
     }
 
-    ofstream src(filename.c_str());
-    CodeGen_JavaScript cg(src);
+    ofstream src_out(filename.c_str());
+    CodeGen_JavaScript cg(src_out);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
 }
 
@@ -2380,11 +2382,24 @@ struct JITFuncCallContext {
 }  // namespace Internal
 
 void Func::realize(Realization dst, const Target &target) {
-    if (!compiled_module.jit_wrapper_function()) {
-        compile_jit(target);
-    }
+    // TODO: see if JS and non-JS can share more code.
+    if (target.has_feature(Target::JavaScript)) {
+    #if WITH_JAVASCRIPT_V8
+        if (cached_javascript.empty()) {
+            compile_jit(target);
+        }
 
-    internal_assert(compiled_module.jit_wrapper_function());
+        internal_assert(!cached_javascript.empty());
+    #else
+        user_error << "Cannot JIT JavaScript without a JavaScript execution engine (e.g. V8) configured at compile time.\n";
+    #endif
+    } else {
+        if (!compiled_module.jit_wrapper_function()) {
+            compile_jit(target);
+        }
+
+        internal_assert(compiled_module.jit_wrapper_function());
+    }
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2436,9 +2451,26 @@ void Func::realize(Realization dst, const Target &target) {
     // Always add a custom error handler to capture any error messages.
     // (If there is a user-set error handler, it will be called as well.)
 
-    Internal::debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
-    Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
+    #if WITH_JAVASCRIPT_V8
+    if (target.has_feature(Target::JavaScript)) {
+        // Sanitise the name of the generated function
+        string n = name();
+        for (size_t i = 0; i < n.size(); i++) {
+            if (!isalnum(n[i])) {
+                n[i] = '_';
+            }
+        }
+
+        Internal::debug(2) << "Calling jitted JavaScript function\n";
+        int exit_status = run_javascript(cached_javascript, n, &(arg_values[0]));
+        Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
+    } else
+    #endif
+    {
+        Internal::debug(2) << "Calling jitted function\n";
+        int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
+        Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
+      }
 
     // TODO: Remove after Buffer is sorted out.
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2609,7 +2641,7 @@ void Func::infer_input_bounds(Realization dst) {
     }
 }
 
-void *Func::compile_jit(const Target &target_arg) {
+void Func::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Can't jit-compile undefined Func.\n";
 
     Target target(target_arg);
@@ -2628,7 +2660,6 @@ void *Func::compile_jit(const Target &target_arg) {
     uc_expr.accept(&infer_args);
 
     arg_values = infer_args.arg_values;
-
 
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
@@ -2649,8 +2680,6 @@ void *Func::compile_jit(const Target &target_arg) {
                            << infer_args.arg_types[i].is_buffer << "\n";
     }
 
-    StmtCompiler cg(target);
-
     // Sanitise the name of the generated function
     string n = name();
     for (size_t i = 0; i < n.size(); i++) {
@@ -2659,18 +2688,29 @@ void *Func::compile_jit(const Target &target_arg) {
         }
     }
 
-    cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+    if (target.has_feature(Target::JavaScript)) {
+        std::stringstream out(std::ios_base::out);
+        CodeGen_JavaScript cg(out);
+        cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+        cached_javascript = out.str();
+        if (debug::debug_level >= 3) {
+            ofstream js_debug((name() + ".js").c_str());
+            js_debug << cached_javascript;
+        }
+    } else {
+        StmtCompiler cg(target);
 
-    if (debug::debug_level >= 3) {
-        cg.compile_to_native(name() + ".s", true);
-        cg.compile_to_bitcode(name() + ".bc");
-        ofstream stmt_debug((name() + ".stmt").c_str());
-        stmt_debug << lowered;
+        cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+
+        if (debug::debug_level >= 3) {
+            cg.compile_to_native(name() + ".s", true);
+            cg.compile_to_bitcode(name() + ".bc");
+            ofstream stmt_debug((name() + ".stmt").c_str());
+            stmt_debug << lowered;
+        }
+
+        compiled_module = cg.compile_to_function_pointers();
     }
-
-    compiled_module = cg.compile_to_function_pointers();
-
-    return compiled_module.main_function();
 }
 
 void Func::test() {
