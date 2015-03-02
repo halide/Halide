@@ -55,27 +55,47 @@ using namespace llvm;
   std::vector<Pattern> casts, varith, averages;
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
-  varith.push_back(Pattern(wild_i32x16 + wild_i32x16,
-                           Intrinsic::hexagon_V6_vaddw));
-  varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
-                           Intrinsic::hexagon_V6_vaddb));
+  // "Add"
+  // Byte Vectors
   varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
                            Intrinsic::hexagon_V6_vaddb));
   varith.push_back(Pattern(wild_u8x64 + wild_u8x64,
-                           Intrinsic::hexagon_V6_vaddb));
+                           Intrinsic::hexagon_V6_vaddubsat));
+  // Half Vectors
+  varith.push_back(Pattern(wild_i16x32 + wild_i16x32,
+                           Intrinsic::hexagon_V6_vaddh));
+  varith.push_back(Pattern(wild_u16x32 + wild_u16x32,
+                           Intrinsic::hexagon_V6_vadduhsat));
+  // World Vectors.
+  varith.push_back(Pattern(wild_i32x16 + wild_i32x16,
+                           Intrinsic::hexagon_V6_vaddw));
 
-  varith.push_back(Pattern(wild_i32x16 - wild_i32x16,
-                           Intrinsic::hexagon_V6_vsubw));
-  //i8*64 - i8*64 i.e. hexagon_v6_vsubb
+  // "Sub"
+  // Byte Vectors
   varith.push_back(Pattern(wild_i8x64 - wild_i8x64,
                            Intrinsic::hexagon_V6_vsubb));
   varith.push_back(Pattern(wild_u8x64 - wild_u8x64,
-                           Intrinsic::hexagon_V6_vsubb));
+                           Intrinsic::hexagon_V6_vsububsat));
+  // Half Vectors
+  varith.push_back(Pattern(wild_i16x32 - wild_i16x32,
+                           Intrinsic::hexagon_V6_vsubh));
+  varith.push_back(Pattern(wild_u16x32 - wild_u16x32,
+                           Intrinsic::hexagon_V6_vsubuhsat));
+  // Word Vectors.
+  varith.push_back(Pattern(wild_i32x16 - wild_i32x16,
+                           Intrinsic::hexagon_V6_vsubw));
+
   averages.push_back(Pattern(((wild_u8x64 + wild_u8x64)/2),
                              Intrinsic::hexagon_V6_vavgub));
   averages.push_back(Pattern(((wild_u8x64 - wild_u8x64)/2),
                              Intrinsic::hexagon_V6_vnavgub));
- }
+  averages.push_back(Pattern(((wild_u16x32 + wild_u16x32)/2),
+                             Intrinsic::hexagon_V6_vavguh));
+  averages.push_back(Pattern(((wild_i16x32 + wild_i16x32)/2),
+                             Intrinsic::hexagon_V6_vavgh));
+  averages.push_back(Pattern(((wild_i16x32 - wild_i16x32)/2),
+                             Intrinsic::hexagon_V6_vnavgh));
+}
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
                           const vector<Argument> &args,

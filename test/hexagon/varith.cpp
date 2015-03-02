@@ -1,81 +1,49 @@
 #include <Halide.h>
 #include "halide-hexagon-setup.h"
+#include "varith.h"
 #include <stdio.h>
 using namespace Halide;
 
 // RUN: ./varith.out | FileCheck %s
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
 
-//CHECK: Subt,
-//CHECK: vsub
-void testSub(Target& target) {
-  Halide::Var x("x"), y("y");
-  ImageParam inputOne (type_of<int8_t>(), 2);
-  ImageParam inputTwo (type_of<int8_t>(), 2);
-  Halide::Func Subt;
-  Subt (x, y) = inputOne(x, y) - inputTwo(x, y);
-  Var x_outer, x_inner;
-  Subt.split(x, x_outer, x_inner, 64);
-  Subt.vectorize(x_inner);
-  std::vector<Argument> args(2);
-  args[0]  = inputOne;
-  args[1] = inputTwo;
-  //  Subt.compile_to_bitcode("vsubb.bc", args, target);
-  //  Subt.compile_to_assembly("/dev/stdout", args, target);
-  COMPILE(Subt);
-}
-//CHECK: Addb,
-//CHECK: vadd
-void testAdd(Target& target) {
-  Halide::Var x("x"), y("y");
-  ImageParam inputOne (type_of<int8_t>(), 2);
-  ImageParam inputTwo (type_of<int8_t>(), 2);
-  Halide::Func Addb;
-  Addb (x, y) = inputOne(x, y) + inputTwo(x, y);
-  Var x_outer, x_inner;
-  Addb.split(x, x_outer, x_inner, 64);
-  Addb.vectorize(x_inner);
-  std::vector<Argument> args(2);
-  args[0]  = inputOne;
-  args[1] = inputTwo;
-  //  Addb.compile_to_bitcode("vaddb.bc", args, target);
-  COMPILE(Addb);
-}
-
-//CHECK: Avgb,
-//CHECK: vavg
-void testAvg(Target& target) {
-  Halide::Var x("x"), y("y");
-  ImageParam inputOne (type_of<uint8_t>(), 2);
-  ImageParam inputTwo (type_of<uint8_t>(), 2);
-  Halide::Func Avgb;
-  Avgb (x, y) = (inputOne(x, y) + inputTwo(x, y))/2;
-  Var x_outer, x_inner;
-  Avgb.split(x, x_outer, x_inner, 64);
-  Avgb.vectorize(x_inner);
-  std::vector<Argument> args(2);
-  args[0]  = inputOne;
-  args[1] = inputTwo;
-  //  Avgb.compile_to_bitcode("vavgub.bc", args, target);
-  COMPILE(Avgb);
-
-  //CHECK: Navgb,
-  //CHECK: vnavg
-  Halide::Func Navgb;
-  Navgb (x, y) = (inputOne(x, y) - inputTwo(x, y))/2;
-  Navgb.split(x, x_outer, x_inner, 64);
-  Navgb.vectorize(x_inner);
-  args[0]  = inputOne;
-  args[1] = inputTwo;
-  //  Navgb.compile_to_bitcode("vavgub.bc", args, target);
-  COMPILE(Navgb);
-}
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
-  testSub(target);
-  testAdd(target);
-  testAvg(target);
+
+  /* Test variants of vector add */
+  //CHECK: vadd(v{{[0-9]+}}.b,v{{[0-9]+}}.b)
+  testAdd<int8_t>(target);
+  //CHECK: vadd(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub):sat
+  testAdd<uint8_t>(target);
+
+  //CHECK: vadd(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
+  testAdd<int16_t>(target);
+  //CHECK: vadd(v{{[0-9]+}}.uh,v{{[0-9]+}}.uh):sat
+  testAdd<uint16_t>(target);
+
+  //CHECK: vadd(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
+  testAdd<int32_t>(target);
+
+
+  /* Test variants of vector sub */
+  //CHECK: vsub(v{{[0-9]+}}.b,v{{[0-9]+}}.b)
+  testSub<int8_t>(target);
+  //CHECK: vsub(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub):sat
+  testSub<uint8_t>(target);
+
+  //CHECK: vsub(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
+  testSub<int16_t>(target);
+  //CHECK: vsub(v{{[0-9]+}}.uh,v{{[0-9]+}}.uh):sat
+  testSub<uint16_t>(target);
+
+  //CHECK: vsub(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
+  testSub<int32_t>(target);
+
+  //CHECK: vavg(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
+  //CHECK: vnavg(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
+  testAvg<uint8_t>(target);
+  //testAvg for ub, h, and w.
+  // no vnavg for uh.
   printf ("Done\n");
 
   return 0;
