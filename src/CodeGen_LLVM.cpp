@@ -2,7 +2,7 @@
 #include <sstream>
 
 #include "IRPrinter.h"
-#include "CodeGen.h"
+#include "CodeGen_LLVM.h"
 #include "IROperator.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -11,6 +11,7 @@
 #include "CodeGen_Internal.h"
 #include "Lerp.h"
 #include "Util.h"
+#include "LLVM_Runtime_Linker.h"
 
 namespace Halide {
 namespace Internal {
@@ -85,7 +86,7 @@ using std::stack;
 #define InitializeMipsAsmPrinter()   InitializeAsmPrinter(Mips)
 #endif
 
-CodeGen::CodeGen(Target t) :
+CodeGen_LLVM::CodeGen_LLVM(Target t) :
     module(NULL), owns_module(false),
     function(NULL), context(NULL),
     builder(NULL),
@@ -94,14 +95,104 @@ CodeGen::CodeGen(Target t) :
     target(t),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
-    buffer_t_type(NULL) {
+    buffer_t_type(NULL),
+
+    // Vector types. These need an LLVMContext before they can be initialized.
+    i8x8(NULL),
+    i8x16(NULL),
+    i8x32(NULL),
+    i16x4(NULL),
+    i16x8(NULL),
+    i16x16(NULL),
+    i32x2(NULL),
+    i32x4(NULL),
+    i32x8(NULL),
+    i64x2(NULL),
+    i64x4(NULL),
+    f32x2(NULL),
+    f32x4(NULL),
+    f32x8(NULL),
+    f64x2(NULL),
+    f64x4(NULL),
+
+    // Wildcards for pattern matching
+    wild_i8x8(Variable::make(Int(8, 8), "*")),
+    wild_i16x4(Variable::make(Int(16, 4), "*")),
+    wild_i32x2(Variable::make(Int(32, 2), "*")),
+
+    wild_u8x8(Variable::make(UInt(8, 8), "*")),
+    wild_u16x4(Variable::make(UInt(16, 4), "*")),
+    wild_u32x2(Variable::make(UInt(32, 2), "*")),
+
+    wild_i8x16(Variable::make(Int(8, 16), "*")),
+    wild_i16x8(Variable::make(Int(16, 8), "*")),
+    wild_i32x4(Variable::make(Int(32, 4), "*")),
+    wild_i64x2(Variable::make(Int(64, 2), "*")),
+
+    wild_u8x16(Variable::make(UInt(8, 16), "*")),
+    wild_u16x8(Variable::make(UInt(16, 8), "*")),
+    wild_u32x4(Variable::make(UInt(32, 4), "*")),
+    wild_u64x2(Variable::make(UInt(64, 2), "*")),
+
+    wild_i8x32(Variable::make(Int(8, 32), "*")),
+    wild_i16x16(Variable::make(Int(16, 16), "*")),
+    wild_i32x8(Variable::make(Int(32, 8), "*")),
+    wild_i64x4(Variable::make(Int(64, 4), "*")),
+
+    wild_u8x32(Variable::make(UInt(8, 32), "*")),
+    wild_u16x16(Variable::make(UInt(16, 16), "*")),
+    wild_u32x8(Variable::make(UInt(32, 8), "*")),
+    wild_u64x4(Variable::make(UInt(64, 4), "*")),
+
+    wild_f32x2(Variable::make(Float(32, 2), "*")),
+
+    wild_f32x4(Variable::make(Float(32, 4), "*")),
+    wild_f64x2(Variable::make(Float(64, 2), "*")),
+
+    wild_f32x8(Variable::make(Float(32, 8), "*")),
+    wild_f64x4(Variable::make(Float(64, 4), "*")),
+
+    wild_u1x_ (Variable::make(UInt(1, -1), "*")),
+    wild_i8x_ (Variable::make(Int(8, -1), "*")),
+    wild_u8x_ (Variable::make(UInt(8, -1), "*")),
+    wild_i16x_(Variable::make(Int(16, -1), "*")),
+    wild_u16x_(Variable::make(UInt(16, -1), "*")),
+    wild_i32x_(Variable::make(Int(32, -1), "*")),
+    wild_u32x_(Variable::make(UInt(32, -1), "*")),
+    wild_i64x_(Variable::make(Int(64, -1), "*")),
+    wild_u64x_(Variable::make(UInt(64, -1), "*")),
+    wild_f32x_(Variable::make(Float(32, -1), "*")),
+    wild_f64x_(Variable::make(Float(64, -1), "*")),
+
+    // Bounds of types
+    min_i8(Int(8).min()),
+    max_i8(Int(8).max()),
+    max_u8(UInt(8).max()),
+
+    min_i16(Int(16).min()),
+    max_i16(Int(16).max()),
+    max_u16(UInt(16).max()),
+
+    min_i32(Int(32).min()),
+    max_i32(Int(32).max()),
+    max_u32(UInt(32).max()),
+
+    min_i64(Int(64).min()),
+    max_i64(Int(64).max()),
+    max_u64(UInt(64).max()),
+
+    min_f32(Float(32).min()),
+    max_f32(Float(32).max()),
+
+    min_f64(Float(64).min()),
+    max_f64(Float(64).max()) {
     initialize_llvm();
 }
 
-void CodeGen::jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module) {
+void CodeGen_LLVM::jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module) {
 }
 
-void CodeGen::initialize_llvm() {
+void CodeGen_LLVM::initialize_llvm() {
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
     if (!llvm_initialized) {
@@ -128,7 +219,7 @@ void CodeGen::initialize_llvm() {
     }
 }
 
-void CodeGen::init_module() {
+void CodeGen_LLVM::init_module() {
     if (module && owns_module) {
         delete module;
         delete context;
@@ -152,9 +243,26 @@ void CodeGen::init_module() {
     f16 = llvm::Type::getHalfTy(*context);
     f32 = llvm::Type::getFloatTy(*context);
     f64 = llvm::Type::getDoubleTy(*context);
+
+    i8x8 = VectorType::get(i8, 8);
+    i8x16 = VectorType::get(i8, 16);
+    i8x32 = VectorType::get(i8, 32);
+    i16x4 = VectorType::get(i16, 4);
+    i16x8 = VectorType::get(i16, 8);
+    i16x16 = VectorType::get(i16, 16);
+    i32x2 = VectorType::get(i32, 2);
+    i32x4 = VectorType::get(i32, 4);
+    i32x8 = VectorType::get(i32, 8);
+    i64x2 = VectorType::get(i64, 2);
+    i64x4 = VectorType::get(i64, 4);
+    f32x2 = VectorType::get(f32, 2);
+    f32x4 = VectorType::get(f32, 4);
+    f32x8 = VectorType::get(f32, 8);
+    f64x2 = VectorType::get(f64, 2);
+    f64x4 = VectorType::get(f64, 4);
 }
 
-CodeGen::~CodeGen() {
+CodeGen_LLVM::~CodeGen_LLVM() {
     if (module && owns_module) {
         delete module;
         module = NULL;
@@ -166,18 +274,34 @@ CodeGen::~CodeGen() {
     builder = NULL;
 }
 
-bool CodeGen::llvm_initialized = false;
-bool CodeGen::llvm_X86_enabled = false;
-bool CodeGen::llvm_ARM_enabled = false;
-bool CodeGen::llvm_AArch64_enabled = false;
-bool CodeGen::llvm_NVPTX_enabled = false;
-bool CodeGen::llvm_Mips_enabled = false;
+bool CodeGen_LLVM::llvm_initialized = false;
+bool CodeGen_LLVM::llvm_X86_enabled = false;
+bool CodeGen_LLVM::llvm_ARM_enabled = false;
+bool CodeGen_LLVM::llvm_AArch64_enabled = false;
+bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
+bool CodeGen_LLVM::llvm_Mips_enabled = false;
 
-void CodeGen::compile(Stmt stmt, string name,
+void CodeGen_LLVM::compile(Stmt stmt, string name,
                       const vector<Argument> &args,
                       const vector<Buffer> &images_to_embed) {
+    init_module();
+
+    // Fix the target triple
+    module = get_initial_module_for_target(target, context);
+
+    if (target.has_feature(Target::JIT)) {
+        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
+
+        JITModule::make_externs(shared_runtime, module);
+    }
+
+    llvm::Triple triple = get_target_triple();
+    module->setTargetTriple(triple.str());
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
     internal_assert(module && context && builder)
-        << "The CodeGen subclass should have made an initial module before calling CodeGen::compile\n";
+        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
     owns_module = true;
 
     // Start the module off with a definition of a buffer_t
@@ -334,15 +458,17 @@ void CodeGen::compile(Stmt stmt, string name,
     internal_assert(verifyModule(*module) == false);
     debug(2) << "Done generating llvm bitcode\n";
 
-    // Optimize it
-    // optimize_module();
+    compile_for_device(stmt, name, args,images_to_embed);
+
+    // Optimize
+    CodeGen_LLVM::optimize_module();
 }
 
-llvm::Type *CodeGen::llvm_type_of(Type t) {
+llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
 
-JITModule CodeGen::compile_to_function_pointers() {
+JITModule CodeGen_LLVM::compile_to_function_pointers() {
     internal_assert(module) << "No module defined. Must call compile before calling compile_to_function_pointer.\n";
 
     JITModule m;
@@ -357,7 +483,7 @@ JITModule CodeGen::compile_to_function_pointers() {
     return m;
 }
 
-void CodeGen::optimize_module() {
+void CodeGen_LLVM::optimize_module() {
 
     debug(3) << "Optimizing module\n";
 
@@ -368,7 +494,6 @@ void CodeGen::optimize_module() {
     legacy::FunctionPassManager function_pass_manager(module);
     legacy::PassManager module_pass_manager;
     #endif
-
 
     #if LLVM_VERSION >= 36
     internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
@@ -399,7 +524,7 @@ void CodeGen::optimize_module() {
     }
 }
 
-void CodeGen::compile_to_bitcode(const string &filename) {
+void CodeGen_LLVM::compile_to_bitcode(const string &filename) {
     internal_assert(module) << "No module defined. Must call compile before calling compile_to_bitcode.\n";
 
     string error_string;
@@ -418,7 +543,7 @@ void CodeGen::compile_to_bitcode(const string &filename) {
     WriteBitcodeToFile(module, out);
 }
 
-void CodeGen::compile_to_native(const string &filename, bool assembly) {
+void CodeGen_LLVM::compile_to_native(const string &filename, bool assembly) {
     internal_assert(module) << "No module defined. Must call compile before calling compile_to_native\n";
 
     // Get the target specific parser.
@@ -465,15 +590,15 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     // Figure out where we are going to send the output.
-#if LLVM_VERSION < 35
+    #if LLVM_VERSION < 35
     raw_fd_ostream raw_out(filename.c_str(), error_string);
-#elif LLVM_VERSION == 35
+    #elif LLVM_VERSION == 35
     raw_fd_ostream raw_out(filename.c_str(), error_string, llvm::sys::fs::F_None);
-#else // llvm 3.6
+    #else // llvm 3.6
     std::error_code err;
     raw_fd_ostream raw_out(filename.c_str(), err, llvm::sys::fs::F_None);
     if (err) error_string = err.message();
-#endif
+    #endif
     internal_assert(error_string.empty())
         << "Error opening output " << filename << ": " << error_string << "\n";
 
@@ -485,6 +610,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     #else
     legacy::PassManager pass_manager;
     #endif
+
 
     #if LLVM_VERSION < 37
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
@@ -527,16 +653,16 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     delete target_machine;
 }
 
-void CodeGen::sym_push(const string &name, llvm::Value *value) {
+void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {
     value->setName(name);
     symbol_table.push(name, value);
 }
 
-void CodeGen::sym_pop(const string &name) {
+void CodeGen_LLVM::sym_pop(const string &name) {
     symbol_table.pop(name);
 }
 
-llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) const {
+llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const {
     // look in the symbol table
     if (!symbol_table.contains(name)) {
         if (must_succeed) {
@@ -556,13 +682,13 @@ llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) const {
     return symbol_table.get(name);
 }
 
-bool CodeGen::sym_exists(const string &name) const {
+bool CodeGen_LLVM::sym_exists(const string &name) const {
     return symbol_table.contains(name);
 }
 
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
-void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
+void CodeGen_LLVM::unpack_buffer(string name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
 
@@ -613,61 +739,61 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
 }
 
 // Add a definition of buffer_t to the module if it isn't already there
-void CodeGen::define_buffer_t() {
+void CodeGen_LLVM::define_buffer_t() {
     buffer_t_type = module->getTypeByName("struct.buffer_t");
     internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
-Value *CodeGen::buffer_host(Value *buffer) {
+Value *CodeGen_LLVM::buffer_host(Value *buffer) {
     return builder->CreateLoad(buffer_host_ptr(buffer));
 }
 
-Value *CodeGen::buffer_dev(Value *buffer) {
+Value *CodeGen_LLVM::buffer_dev(Value *buffer) {
     return builder->CreateLoad(buffer_dev_ptr(buffer));
 }
 
-Value *CodeGen::buffer_host_dirty(Value *buffer) {
+Value *CodeGen_LLVM::buffer_host_dirty(Value *buffer) {
     return builder->CreateLoad(buffer_host_dirty_ptr(buffer));
 }
 
-Value *CodeGen::buffer_dev_dirty(Value *buffer) {
+Value *CodeGen_LLVM::buffer_dev_dirty(Value *buffer) {
     return builder->CreateLoad(buffer_dev_dirty_ptr(buffer));
 }
 
-Value *CodeGen::buffer_extent(Value *buffer, int i) {
+Value *CodeGen_LLVM::buffer_extent(Value *buffer, int i) {
     return builder->CreateLoad(buffer_extent_ptr(buffer, i));
 }
 
-Value *CodeGen::buffer_stride(Value *buffer, int i) {
+Value *CodeGen_LLVM::buffer_stride(Value *buffer, int i) {
     return builder->CreateLoad(buffer_stride_ptr(buffer, i));
 }
 
-Value *CodeGen::buffer_min(Value *buffer, int i) {
+Value *CodeGen_LLVM::buffer_min(Value *buffer, int i) {
     return builder->CreateLoad(buffer_min_ptr(buffer, i));
 }
 
-Value *CodeGen::buffer_elem_size(Value *buffer) {
+Value *CodeGen_LLVM::buffer_elem_size(Value *buffer) {
     return builder->CreateLoad(buffer_elem_size_ptr(buffer));
 }
 
-Value *CodeGen::buffer_host_ptr(Value *buffer) {
+Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(buffer, 0, 1, "buf_host");
 }
 
-Value *CodeGen::buffer_dev_ptr(Value *buffer) {
+Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(buffer, 0, 0, "buf_dev");
 }
 
-Value *CodeGen::buffer_host_dirty_ptr(Value *buffer) {
+Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(buffer, 0, 6, "buffer_host_dirty");
 }
 
-Value *CodeGen::buffer_dev_dirty_ptr(Value *buffer) {
+Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7, "buffer_dev_dirty");
 }
 
-Value *CodeGen::buffer_extent_ptr(Value *buffer, int i) {
+Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 2);
     llvm::Value *idx = ConstantInt::get(i32, i);
@@ -675,7 +801,7 @@ Value *CodeGen::buffer_extent_ptr(Value *buffer, int i) {
     return builder->CreateInBoundsGEP(buffer, args, "buf_extent");
 }
 
-Value *CodeGen::buffer_stride_ptr(Value *buffer, int i) {
+Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 3);
     llvm::Value *idx = ConstantInt::get(i32, i);
@@ -683,7 +809,7 @@ Value *CodeGen::buffer_stride_ptr(Value *buffer, int i) {
     return builder->CreateInBoundsGEP(buffer, args, "buf_stride");
 }
 
-Value *CodeGen::buffer_min_ptr(Value *buffer, int i) {
+Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
@@ -691,11 +817,11 @@ Value *CodeGen::buffer_min_ptr(Value *buffer, int i) {
     return builder->CreateInBoundsGEP(buffer, args, "buf_min");
 }
 
-Value *CodeGen::buffer_elem_size_ptr(Value *buffer) {
+Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(buffer, 0, 5, "buf_elem_size");
 }
 
-Value *CodeGen::codegen(Expr e) {
+Value *CodeGen_LLVM::codegen(Expr e) {
     internal_assert(e.defined());
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = NULL;
@@ -704,26 +830,26 @@ Value *CodeGen::codegen(Expr e) {
     return value;
 }
 
-void CodeGen::codegen(Stmt s) {
+void CodeGen_LLVM::codegen(Stmt s) {
     internal_assert(s.defined());
     debug(3) << "Codegen: " << s << "\n";
     value = NULL;
     s.accept(this);
 }
 
-void CodeGen::visit(const IntImm *op) {
+void CodeGen_LLVM::visit(const IntImm *op) {
     value = ConstantInt::getSigned(i32, op->value);
 }
 
-void CodeGen::visit(const FloatImm *op) {
+void CodeGen_LLVM::visit(const FloatImm *op) {
     value = ConstantFP::get(*context, APFloat(op->value));
 }
 
-void CodeGen::visit(const StringImm *op) {
+void CodeGen_LLVM::visit(const StringImm *op) {
     value = create_string_constant(op->value);
 }
 
-void CodeGen::visit(const Cast *op) {
+void CodeGen_LLVM::visit(const Cast *op) {
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
 
@@ -755,11 +881,11 @@ void CodeGen::visit(const Cast *op) {
     }
 }
 
-void CodeGen::visit(const Variable *op) {
+void CodeGen_LLVM::visit(const Variable *op) {
     value = sym_get(op->name);
 }
 
-void CodeGen::visit(const Add *op) {
+void CodeGen_LLVM::visit(const Add *op) {
     if (op->type.is_float()) {
         value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
     } else if (op->type.is_int()) {
@@ -771,7 +897,7 @@ void CodeGen::visit(const Add *op) {
     }
 }
 
-void CodeGen::visit(const Sub *op) {
+void CodeGen_LLVM::visit(const Sub *op) {
     if (op->type.is_float()) {
         value = builder->CreateFSub(codegen(op->a), codegen(op->b));
     } else if (op->type.is_int()) {
@@ -783,7 +909,7 @@ void CodeGen::visit(const Sub *op) {
     }
 }
 
-void CodeGen::visit(const Mul *op) {
+void CodeGen_LLVM::visit(const Mul *op) {
     if (op->type.is_float()) {
         value = builder->CreateFMul(codegen(op->a), codegen(op->b));
     } else if (op->type.is_int()) {
@@ -795,7 +921,7 @@ void CodeGen::visit(const Mul *op) {
     }
 }
 
-void CodeGen::visit(const Div *op) {
+void CodeGen_LLVM::visit(const Div *op) {
     if (op->type.is_float()) {
         value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
     } else if (op->type.is_uint()) {
@@ -840,7 +966,7 @@ void CodeGen::visit(const Div *op) {
     }
 }
 
-void CodeGen::visit(const Mod *op) {
+void CodeGen_LLVM::visit(const Mod *op) {
     // To match our definition of division, mod should be between 0
     // and |b|.
 
@@ -879,7 +1005,7 @@ void CodeGen::visit(const Mod *op) {
     }
 }
 
-void CodeGen::visit(const Min *op) {
+void CodeGen_LLVM::visit(const Min *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Value *cmp;
@@ -896,7 +1022,7 @@ void CodeGen::visit(const Min *op) {
     value = builder->CreateSelect(cmp, a, b);
 }
 
-void CodeGen::visit(const Max *op) {
+void CodeGen_LLVM::visit(const Max *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Value *cmp;
@@ -913,7 +1039,7 @@ void CodeGen::visit(const Max *op) {
     value = builder->CreateSelect(cmp, b, a);
 }
 
-void CodeGen::visit(const EQ *op) {
+void CodeGen_LLVM::visit(const EQ *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
@@ -924,7 +1050,7 @@ void CodeGen::visit(const EQ *op) {
     }
 }
 
-void CodeGen::visit(const NE *op) {
+void CodeGen_LLVM::visit(const NE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
@@ -935,7 +1061,7 @@ void CodeGen::visit(const NE *op) {
     }
 }
 
-void CodeGen::visit(const LT *op) {
+void CodeGen_LLVM::visit(const LT *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
 
@@ -949,7 +1075,7 @@ void CodeGen::visit(const LT *op) {
     }
 }
 
-void CodeGen::visit(const LE *op) {
+void CodeGen_LLVM::visit(const LE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
@@ -962,7 +1088,7 @@ void CodeGen::visit(const LE *op) {
     }
 }
 
-void CodeGen::visit(const GT *op) {
+void CodeGen_LLVM::visit(const GT *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
@@ -975,7 +1101,7 @@ void CodeGen::visit(const GT *op) {
     }
 }
 
-void CodeGen::visit(const GE *op) {
+void CodeGen_LLVM::visit(const GE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
@@ -988,20 +1114,20 @@ void CodeGen::visit(const GE *op) {
     }
 }
 
-void CodeGen::visit(const And *op) {
+void CodeGen_LLVM::visit(const And *op) {
     value = builder->CreateAnd(codegen(op->a), codegen(op->b));
 }
 
-void CodeGen::visit(const Or *op) {
+void CodeGen_LLVM::visit(const Or *op) {
     value = builder->CreateOr(codegen(op->a), codegen(op->b));
 }
 
-void CodeGen::visit(const Not *op) {
+void CodeGen_LLVM::visit(const Not *op) {
     value = builder->CreateNot(codegen(op->a));
 }
 
 
-void CodeGen::visit(const Select *op) {
+void CodeGen_LLVM::visit(const Select *op) {
     // For now we always generate select nodes, but the code is here
     // for if then elses if we need it
     if (false && op->condition.type().is_scalar()) {
@@ -1064,7 +1190,7 @@ Expr promote_64(Expr e) {
 }
 }
 
-Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
+Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module);
     if (d.getPointerSize() == 8) {
@@ -1075,7 +1201,7 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Expr in
 }
 
 
-Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
+Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
     // Find the base address from the symbol table
     Value *base_address = symbol_table.get(buffer + ".host");
     llvm::Type *base_address_type = base_address->getType();
@@ -1108,7 +1234,7 @@ int next_power_of_two(int x) {
 }
 }
 
-void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
+void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
 
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
@@ -1163,7 +1289,7 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr ind
     inst->setMetadata("tbaa", tbaa);
 }
 
-void CodeGen::visit(const Load *op) {
+void CodeGen_LLVM::visit(const Load *op) {
 
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
 
@@ -1319,7 +1445,7 @@ void CodeGen::visit(const Load *op) {
 
 }
 
-void CodeGen::visit(const Ramp *op) {
+void CodeGen_LLVM::visit(const Ramp *op) {
     if (is_const(op->stride) && !is_const(op->base)) {
         // If the stride is const and the base is not (e.g. ramp(x, 1,
         // 4)), we can lift out the stride and broadcast the base so
@@ -1348,7 +1474,7 @@ void CodeGen::visit(const Ramp *op) {
     }
 }
 
-llvm::Value *CodeGen::create_broadcast(llvm::Value *v, int width) {
+llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int width) {
     Constant *undef = UndefValue::get(VectorType::get(v->getType(), width));
     Constant *zero = ConstantInt::get(i32, 0);
     v = builder->CreateInsertElement(undef, v, zero);
@@ -1356,7 +1482,7 @@ llvm::Value *CodeGen::create_broadcast(llvm::Value *v, int width) {
     return builder->CreateShuffleVector(v, undef, zeros);
 }
 
-void CodeGen::visit(const Broadcast *op) {
+void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->width);
 }
 
@@ -1371,48 +1497,7 @@ Expr unbroadcast(Expr e) {
     }
 }
 
-// Returns true if the given function name is one of the Halide runtime
-// functions that takes a user_context pointer as its first parameter.
-bool CodeGen::function_takes_user_context(const string &name) {
-    static const char *user_context_runtime_funcs[] = {
-        "halide_copy_to_host",
-        "halide_copy_to_device",
-        "halide_current_time_ns",
-        "halide_debug_to_file",
-        "halide_device_free",
-        "halide_device_malloc",
-        "halide_device_sync",
-        "halide_do_par_for",
-        "halide_do_task",
-        "halide_error",
-        "halide_free",
-        "halide_malloc",
-        "halide_print",
-        "halide_profiling_timer",
-        "halide_device_release",
-        "halide_start_clock",
-        "halide_trace",
-        "halide_memoization_cache_lookup",
-        "halide_memoization_cache_store",
-        "halide_cuda_run",
-        "halide_opencl_run",
-        "halide_opengl_run",
-        "halide_cuda_initialize_kernels",
-        "halide_opencl_initialize_kernels",
-        "halide_opengl_initialize_kernels"
-        "halide_get_gpu_device",
-    };
-    const int num_funcs = sizeof(user_context_runtime_funcs) /
-        sizeof(user_context_runtime_funcs[0]);
-    for (int i = 0; i < num_funcs; ++i) {
-        if (name == user_context_runtime_funcs[i]) {
-            return true;
-        }
-    }
-    return false;
-}
-
-Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
+Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
     if(vecs.size() == 1) {
         return codegen(vecs[0]);
     } else if(vecs.size() == 2) {
@@ -1569,7 +1654,7 @@ Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
     }
 }
 
-void CodeGen::scalarize(Expr e) {
+void CodeGen_LLVM::scalarize(Expr e) {
     llvm::Type *result_type = llvm_type_of(e.type());
 
     Value *result = UndefValue::get(result_type);
@@ -1581,7 +1666,7 @@ void CodeGen::scalarize(Expr e) {
     value = result;
 }
 
-void CodeGen::visit(const Call *op) {
+void CodeGen_LLVM::visit(const Call *op) {
     internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
         << "Can only codegen extern calls and intrinsics\n";
 
@@ -1753,7 +1838,6 @@ void CodeGen::visit(const Call *op) {
                 // Use a select instead
                 codegen(Select::make(a < b, b - a, a - b));
             }
-
         } else if (op->name == Call::copy_buffer_t) {
             // Make some memory for this buffer_t
             Value *dst = create_alloca_at_entry(buffer_t_type, 1);
@@ -2288,7 +2372,7 @@ void CodeGen::visit(const Call *op) {
     }
 }
 
-void CodeGen::visit(const Let *op) {
+void CodeGen_LLVM::visit(const Let *op) {
     sym_push(op->name, codegen(op->value));
     if (op->value.type() == Int(32)) {
         alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
@@ -2300,7 +2384,7 @@ void CodeGen::visit(const Let *op) {
     sym_pop(op->name);
 }
 
-void CodeGen::visit(const LetStmt *op) {
+void CodeGen_LLVM::visit(const LetStmt *op) {
     sym_push(op->name, codegen(op->value));
 
     if (op->value.type() == Int(32)) {
@@ -2313,11 +2397,11 @@ void CodeGen::visit(const LetStmt *op) {
     sym_pop(op->name);
 }
 
-void CodeGen::visit(const AssertStmt *op) {
+void CodeGen_LLVM::visit(const AssertStmt *op) {
     create_assertion(codegen(op->condition), op->message);
 }
 
-Constant *CodeGen::create_string_constant(const string &s) {
+Constant *CodeGen_LLVM::create_string_constant(const string &s) {
     map<string, Constant *>::iterator iter = string_constants.find(s);
     if (iter == string_constants.end()) {
         vector<char> data;
@@ -2332,7 +2416,7 @@ Constant *CodeGen::create_string_constant(const string &s) {
     }
 }
 
-Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const string &name) {
+Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, const string &name) {
 
     llvm::Type *type = ArrayType::get(i8, data.size());
     GlobalVariable *global = new GlobalVariable(*module, type,
@@ -2347,7 +2431,7 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
     return ptr;
 }
 
-void CodeGen::create_assertion(Value *cond, Expr message) {
+void CodeGen_LLVM::create_assertion(Value *cond, Expr message) {
 
     if (target.has_feature(Target::NoAsserts)) return;
 
@@ -2396,7 +2480,7 @@ void CodeGen::create_assertion(Value *cond, Expr message) {
     builder->SetInsertPoint(assert_succeeds_bb);
 }
 
-void CodeGen::visit(const Pipeline *op) {
+void CodeGen_LLVM::visit(const Pipeline *op) {
     BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
     builder->CreateBr(produce);
     builder->SetInsertPoint(produce);
@@ -2415,7 +2499,7 @@ void CodeGen::visit(const Pipeline *op) {
     codegen(op->consume);
 }
 
-void CodeGen::visit(const For *op) {
+void CodeGen_LLVM::visit(const For *op) {
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
 
@@ -2545,7 +2629,7 @@ void CodeGen::visit(const For *op) {
     }
 }
 
-void CodeGen::visit(const Store *op) {
+void CodeGen_LLVM::visit(const Store *op) {
     Value *val = codegen(op->value);
     Halide::Type value_type = op->value.type();
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
@@ -2625,20 +2709,20 @@ void CodeGen::visit(const Store *op) {
 }
 
 
-void CodeGen::visit(const Block *op) {
+void CodeGen_LLVM::visit(const Block *op) {
     codegen(op->first);
     if (op->rest.defined()) codegen(op->rest);
 }
 
-void CodeGen::visit(const Realize *op) {
+void CodeGen_LLVM::visit(const Realize *op) {
     internal_error << "Realize encountered during codegen\n";
 }
 
-void CodeGen::visit(const Provide *op) {
+void CodeGen_LLVM::visit(const Provide *op) {
     internal_error << "Provide encountered during codegen\n";
 }
 
-void CodeGen::visit(const IfThenElse *op) {
+void CodeGen_LLVM::visit(const IfThenElse *op) {
     BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
     BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
     BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
@@ -2657,14 +2741,14 @@ void CodeGen::visit(const IfThenElse *op) {
     builder->SetInsertPoint(after_bb);
 }
 
-void CodeGen::visit(const Evaluate *op) {
+void CodeGen_LLVM::visit(const Evaluate *op) {
     codegen(op->value);
 
     // Discard result
     value = NULL;
 }
 
-Value *CodeGen::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
+Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
     llvm::BasicBlock *here = builder->GetInsertBlock();
     llvm::BasicBlock *entry = &here->getParent()->getEntryBlock();
     if (entry->empty()) {
@@ -2678,7 +2762,7 @@ Value *CodeGen::create_alloca_at_entry(llvm::Type *t, int n, const string &name)
     return ptr;
 }
 
-Value *CodeGen::get_user_context() const {
+Value *CodeGen_LLVM::get_user_context() const {
     Value *ctx = sym_get("__user_context", false);
     if (!ctx) {
         ctx = ConstantPointerNull::get(i8->getPointerTo()); // void*
@@ -2686,9 +2770,8 @@ Value *CodeGen::get_user_context() const {
     return ctx;
 }
 
-
-Value *CodeGen::call_intrin(Type result_type, int intrin_vector_width,
-                            const string &name, vector<Expr> args) {
+Value *CodeGen_LLVM::call_intrin(Type result_type, int intrin_vector_width,
+                                 const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         arg_values[i] = codegen(args[i]);
@@ -2699,8 +2782,8 @@ Value *CodeGen::call_intrin(Type result_type, int intrin_vector_width,
                        name, arg_values);
 }
 
-Value *CodeGen::call_intrin(llvm::Type *result_type, int intrin_vector_width,
-                            const string &name, vector<Value *> arg_values) {
+Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_vector_width,
+                                 const string &name, vector<Value *> arg_values) {
     int arg_vector_width = (int)result_type->getVectorNumElements();
 
     if (intrin_vector_width != arg_vector_width) {
@@ -2749,7 +2832,7 @@ Value *CodeGen::call_intrin(llvm::Type *result_type, int intrin_vector_width,
     return call;
 }
 
-Value *CodeGen::slice_vector(Value *vec, int start, int size) {
+Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
     int vec_lanes = vec->getType()->getVectorNumElements();
 
     if (start == 0 && size == vec_lanes) {
@@ -2770,7 +2853,7 @@ Value *CodeGen::slice_vector(Value *vec, int start, int size) {
     return builder->CreateShuffleVector(vec, undefs, indices_vec);
 }
 
-Value *CodeGen::concat_vectors(const vector<Value *> &v) {
+Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     if (v.size() == 1) return v[0];
 
     internal_assert(!v.empty());
@@ -2823,7 +2906,7 @@ Value *CodeGen::concat_vectors(const vector<Value *> &v) {
     return vecs[0];
 }
 
-std::pair<llvm::Function *, int> CodeGen::find_vector_runtime_function(const std::string &name, int width) {
+std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(const std::string &name, int width) {
     // Check if a vector version of the function already
     // exists at some useful width. We use the naming
     // convention that a N-wide version of a function foo is
@@ -2856,9 +2939,9 @@ std::pair<llvm::Function *, int> CodeGen::find_vector_runtime_function(const std
 }
 
 template<>
-EXPORT RefCount &ref_count<CodeGen>(const CodeGen *p) {return p->ref_count;}
+EXPORT RefCount &ref_count<CodeGen_LLVM>(const CodeGen_LLVM *p) {return p->ref_count;}
 
 template<>
-EXPORT void destroy<CodeGen>(const CodeGen *p) {delete p;}
+EXPORT void destroy<CodeGen_LLVM>(const CodeGen_LLVM *p) {delete p;}
 
 }}

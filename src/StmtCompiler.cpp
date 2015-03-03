@@ -1,5 +1,4 @@
 #include "StmtCompiler.h"
-#include "CodeGen.h"
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
