@@ -65,9 +65,9 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t
             in->extent[i] = out->extent[i];
             in->stride[i] = out->stride[i];
         }
-      in->elem_size = out->elem_size;
+        in->elem_size = out->elem_size;
     } else if (out->host) {
-        assert(stage < sizeof(call_count_staged)/sizeof(call_count_staged[0]));
+        assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
         for (int32_t i = 0; i < out->extent[0]; i++) {
             for (int32_t j = 0; j < out->extent[1]; j++) {

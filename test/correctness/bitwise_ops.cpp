@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
     for (int x = 0; x < 256; x++) {
         float y = im1(x);
-        uint32_t output = *((int *)(&y));
+        uint32_t output = Halide::Internal::reinterpret_bits<uint32_t>(y);
         if (input(x) != output) {
             printf("Reinterpret cast turned %x into %x!", input(x), output);
             return -1;
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
     f8(x) = a >> (b & 0xf);
     Image<int> im8 = f8.realize(128);
     for (int x = 0; x < 128; x++) {
-        uint32_t correct = ((int)(input(x))) >> (((int)(input(x+1))) & 0xf);
+        int correct = ((int)(input(x))) >> (((int)(input(x+1))) & 0xf);
         if (im8(x) != correct) {
             printf("%x >> (%x & 0xf) -> %x instead of %x\n",
                    input(x), input(x+1), im8(x), correct);
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
     f9(x) = a32 >> b8;
     Image<int> im9 = f9.realize(128);
     for (int x = 0; x < 128; x++) {
-        uint32_t correct = ((int)(input(x))) >> ((uint8_t)(input(x+1)));
+        int correct = ((int)(input(x))) >> ((uint8_t)(input(x+1)));
         if (im9(x) != correct) {
             printf("%x >> (uint8_t)%x -> %x instead of %x\n",
                    input(x), input(x+1), im9(x), correct);
