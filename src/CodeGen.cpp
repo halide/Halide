@@ -174,7 +174,7 @@ bool CodeGen::llvm_NVPTX_enabled = false;
 bool CodeGen::llvm_Mips_enabled = false;
 
 void CodeGen::compile(Stmt stmt, string name,
-                      const vector<Argument> &args,
+                      const ArgInfo &arg_info,
                       const vector<Buffer> &images_to_embed) {
     internal_assert(module && context && builder)
         << "The CodeGen subclass should have made an initial module before calling CodeGen::compile\n";
@@ -184,12 +184,12 @@ void CodeGen::compile(Stmt stmt, string name,
     define_buffer_t();
 
     // Now deduce the types of the arguments to our function
-    vector<llvm::Type *> arg_types(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+    vector<llvm::Type *> arg_types(arg_info.args.size());
+    for (size_t i = 0; i < arg_info.args.size(); i++) {
+        if (arg_info.args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
-            arg_types[i] = llvm_type_of(args[i].type);
+            arg_types[i] = llvm_type_of(arg_info.args[i].type);
         }
     }
 
@@ -199,8 +199,8 @@ void CodeGen::compile(Stmt stmt, string name,
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 
     // Mark the buffer args as no alias
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+    for (size_t i = 0; i < arg_info.args.size(); i++) {
+        if (arg_info.args[i].is_buffer()) {
             function->setDoesNotAlias(i+1);
         }
     }
@@ -216,10 +216,10 @@ void CodeGen::compile(Stmt stmt, string name,
              iter != function->arg_end();
              iter++) {
 
-            if (args[i].is_buffer()) {
-                unpack_buffer(args[i].name, iter);
+            if (arg_info.args[i].is_buffer()) {
+                unpack_buffer(arg_info.args[i].name, iter);
             } else {
-                sym_push(args[i].name, iter);
+                sym_push(arg_info.args[i].name, iter);
             }
 
             i++;
@@ -311,12 +311,12 @@ void CodeGen::compile(Stmt stmt, string name,
 
     Value *arg_array = wrapper->arg_begin();
 
-    vector<Value *> wrapper_args(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
+    vector<Value *> wrapper_args(arg_info.args.size());
+    for (size_t i = 0; i < arg_info.args.size(); i++) {
         // Get the address of the nth argument
         Value *ptr = builder->CreateConstGEP1_32(arg_array, (int)i);
         ptr = builder->CreateLoad(ptr);
-        if (args[i].is_buffer()) {
+        if (arg_info.args[i].is_buffer()) {
             // Cast the argument to a buffer_t *
             wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo());
         } else {

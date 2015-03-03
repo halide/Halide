@@ -18,6 +18,7 @@ namespace Internal {
 
 struct CodeGen_GPU_Dev;
 struct GPU_Argument;
+struct GPU_ArgInfo;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 template<typename CodeGen_CPU>
@@ -38,7 +39,7 @@ public:
      * CodeGen::compile_to_function_pointer to get at the generated machine
      * code. */
     void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
+                 const ArgInfo &arg_info,
                  const std::vector<Buffer> &images_to_embed);
 
 protected:

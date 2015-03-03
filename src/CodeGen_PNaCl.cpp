@@ -31,7 +31,7 @@ llvm::Triple CodeGen_PNaCl::get_target_triple() const {
 }
 
 void CodeGen_PNaCl::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
+                          const ArgInfo &arg_info,
                           const vector<Buffer> &images_to_embed) {
     #if (WITH_NATIVE_CLIENT)
 
@@ -51,7 +51,7 @@ void CodeGen_PNaCl::compile(Stmt stmt, string name,
     module->setDataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
 
     // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
+    CodeGen::compile(stmt, name, arg_info, images_to_embed);
 
     // Optimize
     CodeGen::optimize_module();

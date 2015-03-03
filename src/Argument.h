@@ -2,6 +2,8 @@
 #define HALIDE_ARGUMENT_H
 
 #include <string>
+#include <vector>
+
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
@@ -73,6 +75,28 @@ struct Argument {
 
     bool is_buffer() const { return kind == Buffer; }
 };
+
+namespace Internal {
+
+/** struct to pass information about Arguments around internally. */
+struct ArgInfo {
+    /** The Arguments to a halide statement; these must
+     * always be the input Arguments (if any) followed by the
+     * output Arguments (>= 1) */
+    std::vector<Argument> args;
+
+    /** It is expected that the final "num_outputs"
+     * entries in args are outputs (should be 1 unless the statement
+     * returns a Tuple) */
+    int num_outputs;
+
+    // Note that since all valid pipelines have at least one output,
+    // initializing to zero makes for a known invalid value
+    ArgInfo() : num_outputs(0) {}
+};
+
+
+}  // namespace Internal
 
 }
 
