@@ -257,11 +257,8 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
-                                            const vector<Argument> &args,
-                                            const vector<Buffer> &images_to_embed) {
-
-    init_module();
+void CodeGen_GPU_Host<CodeGen_CPU>::init_module() {
+    CodeGen_CPU::init_module();
 
     // also set up the child codegenerator - this is set up once per
     // PTX_Host::compile, and reused across multiple PTX_Dev::compile
@@ -270,26 +267,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
         iter->second->init_module();
     }
+}
 
-    module = get_initial_module_for_target(target, context);
-
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
-
-        JITModule::make_externs(shared_runtime, module);
-    }
-
-    // Fix the target triple
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = CodeGen_CPU::get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::compile_for_device(Stmt stmt, string name,
+                                                       const vector<Argument> &args,
+                                                       const vector<Buffer> &images_to_embed) {
     // Unset constant flag for embedded image global variables
     for (size_t i = 0; i < images_to_embed.size(); i++) {
         string name = images_to_embed[i].name();
@@ -301,6 +284,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     // Remember the entry block so we can branch to it upon init success.
     BasicBlock *entry = &function->getEntryBlock();
 
+    std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
         if (iter->first == DeviceAPI::Default_GPU) {
             continue;
@@ -335,7 +319,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     }
 
     // Optimize the module
-    CodeGen::optimize_module();
+    CodeGen_CPU::optimize_module();
 }
 
 template<typename CodeGen_CPU>
@@ -443,7 +427,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
-        Value *null_float_ptr = ConstantPointerNull::get(CodeGen::f32->getPointerTo());
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32->getPointerTo());
         Value *zero_int32 = codegen(Expr(cast<int>(0)));
 
         Value *gpu_num_padded_attributes  = zero_int32;
@@ -469,8 +453,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // right type
             gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen::f32->getPointerTo());
-
+                                                           CodeGen_LLVM::f32->getPointerTo());
         }
 
         // compute a closure over the state passed into the kernel
