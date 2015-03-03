@@ -32,6 +32,100 @@ namespace Internal {
 
 namespace {
 
+llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_type) {
+    llvm::LLVMContext &context(to_module->getContext());
+    if (&from_type->getContext() == &context) {
+        return from_type;
+    }
+
+    switch (from_type->getTypeID()) {
+    case llvm::Type::VoidTyID:
+        return llvm::Type::getVoidTy(context);
+        break;
+    case llvm::Type::HalfTyID:
+        return llvm::Type::getHalfTy(context);
+        break;
+    case llvm::Type::FloatTyID:
+        return llvm::Type::getFloatTy(context);
+        break;
+    case llvm::Type::DoubleTyID:
+        return llvm::Type::getDoubleTy(context);
+        break;
+    case llvm::Type::X86_FP80TyID:
+        return llvm::Type::getX86_FP80Ty(context);
+        break;
+    case llvm::Type::FP128TyID:
+        return llvm::Type::getFP128Ty(context);
+        break;
+    case llvm::Type::PPC_FP128TyID:
+        return llvm::Type::getPPC_FP128Ty(context);
+        break;
+    case llvm::Type::LabelTyID:
+        return llvm::Type::getLabelTy(context);
+        break;
+    case llvm::Type::MetadataTyID:
+        return llvm::Type::getMetadataTy(context);
+        break;
+    case llvm::Type::X86_MMXTyID:
+        return llvm::Type::getX86_MMXTy(context);
+        break;
+    case llvm::Type::IntegerTyID:
+        return llvm::Type::getIntNTy(context, from_type->getIntegerBitWidth());
+        break;
+    case llvm::Type::FunctionTyID: {
+        llvm::FunctionType *f = llvm::cast<llvm::FunctionType>(from_type);
+        llvm::Type *return_type = copy_llvm_type_to_module(to_module, f->getReturnType());
+        std::vector<llvm::Type *> arg_types;
+        for (size_t i = 0; i < f->getNumParams(); i++) {
+            arg_types.push_back(copy_llvm_type_to_module(to_module, f->getParamType(i)));
+        }
+        return llvm::FunctionType::get(return_type, arg_types, f->isVarArg());
+    } break;
+    case llvm::Type::StructTyID: {
+        llvm::StructType *result;
+        llvm::StructType *s = llvm::cast<llvm::StructType>(from_type);
+        std::vector<llvm::Type *> element_types;
+        for (size_t i = 0; i < s->getNumElements(); i++) {
+            element_types.push_back(copy_llvm_type_to_module(to_module, s->getElementType(i)));
+        }
+        if (s->isLiteral()) {
+            result = llvm::StructType::get(context, element_types, s->isPacked());
+        } else {
+            result = to_module->getTypeByName(s->getName());
+            if (result == NULL) {
+                result = llvm::StructType::create(context, s->getName());
+                if (!element_types.empty()) {
+                    result->setBody(element_types, s->isPacked());
+                }
+            } else {
+                if (result->isOpaque() &&
+                    !element_types.empty()) {
+                    result->setBody(element_types, s->isPacked());
+                }
+            }
+        }
+        return result;
+    } break;
+    case llvm::Type::ArrayTyID: {
+        llvm::ArrayType *a = llvm::cast<llvm::ArrayType>(from_type);
+        return llvm::ArrayType::get(copy_llvm_type_to_module(to_module, a->getElementType()), a->getNumElements());
+    } break;
+    case llvm::Type::PointerTyID: {
+        llvm::PointerType *p = llvm::cast<llvm::PointerType>(from_type);
+        return llvm::PointerType::get(copy_llvm_type_to_module(to_module, p->getElementType()), p->getAddressSpace());
+    } break;
+    case llvm::Type::VectorTyID: {
+        llvm::VectorType *v = llvm::cast<llvm::VectorType>(from_type);
+        return llvm::VectorType::get(copy_llvm_type_to_module(to_module, v->getElementType()), v->getNumElements());
+    } break;
+    default: {
+        internal_error << "Unhandled LLVM type\n";
+        return NULL;
+    }
+    }
+
+}
+
 typedef struct CUctx_st *CUcontext;
 
 struct SharedCudaContext {
@@ -151,7 +245,6 @@ public:
     JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports) : exports(exports),
                                                                                  execution_engine(NULL),
                                                                                  module(NULL),
-                                                                                 context(NULL),
                                                                                  main_function(NULL),
                                                                                  argv_function(NULL) {
     }
@@ -162,17 +255,18 @@ public:
                                                                                                 execution_engine(ee),
                                                                                                 module(m),
                                                                                                 dependencies(dependencies),
-                                                                                                context(&m->getContext()),
                                                                                                 main_function(main_function),
                                                                                                 argv_function(argv_function) {
     }
 
     ~JITModuleContents() {
+        llvm::LLVMContext *to_delete = module ? &module->getContext() : NULL;
         if (execution_engine != NULL) {
             execution_engine->runStaticConstructorsDestructors(true);
             delete execution_engine;
             // No need to delete the module - deleting the execution engine should take care of that.
         }
+        delete to_delete;
     }
 
     std::map<std::string, JITModule::Symbol> exports;
@@ -180,7 +274,6 @@ public:
     ExecutionEngine *execution_engine;
     llvm::Module *module;
     std::vector<JITModule> dependencies;
-    LLVMContext *context;
     void *main_function;
     int (*argv_function)(const void **);
 
@@ -194,9 +287,6 @@ template <>
 EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
 
 namespace {
-
-// TODO: Make this thread safe.
-LLVMContext llvm_context;
 
 #ifdef __arm__
 // On ARM we need to track the addresses of all the functions we
@@ -269,7 +359,8 @@ public:
 }
 
 JITModule::JITModule(const Module &m, const LoweredFunc &fn) {
-    llvm::Module *llvm_module = output_llvm_module(m, llvm_context);
+    llvm::LLVMContext *llvm_context = new llvm::LLVMContext();
+    llvm::Module *llvm_module = output_llvm_module(m, *llvm_context);
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module, m.target());
     compile_module(llvm_module, fn.name, m.target(), shared_runtime);
 }
@@ -340,10 +431,11 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
             const std::string &name(iter->first);
             const Symbol &s(iter->second);
             if (provided_symbols.find(iter->first) == provided_symbols.end()) {
-                if (s.llvm_type->isFunctionTy()) {
-                    m->getOrInsertFunction(name, cast<FunctionType>(s.llvm_type));
+                llvm::Type *llvm_type = copy_llvm_type_to_module(m, s.llvm_type);
+                if (llvm_type->isFunctionTy()) {
+                    m->getOrInsertFunction(name, cast<FunctionType>(llvm_type));
                 } else {
-                    m->getOrInsertGlobal(name, s.llvm_type);
+                    m->getOrInsertGlobal(name, llvm_type);
                 }
                 debug(3) << "Global value " << name << " is at address " << s.address << "\n";
                 provided_symbols.insert(name);
@@ -417,10 +509,11 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
             const std::string &name(iter->first);
             const Symbol &s(iter->second);
             GlobalValue *gv;
-            if (s.llvm_type->isFunctionTy()) {
-                gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)s.llvm_type);
+            llvm::Type *llvm_type = copy_llvm_type_to_module(module, s.llvm_type);
+            if (llvm_type->isFunctionTy()) {
+                gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)llvm_type);
             } else {
-                gv = (GlobalValue *)module->getOrInsertGlobal(name, s.llvm_type);
+                gv = (GlobalValue *)module->getOrInsertGlobal(name, llvm_type);
             }
             gv->setLinkage(GlobalValue::ExternalWeakLinkage);
         }
@@ -629,8 +722,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         default:
             break;
         }
+
+        // This function is protected by a mutex so this is thread safe.
+        static llvm::LLVMContext runtime_llvm_context;
         llvm::Module *shared_runtime =
-            get_initial_module_for_target(target, &llvm_context, true, runtime_kind != MainShared);
+            get_initial_module_for_target(target, &runtime_llvm_context, true, runtime_kind != MainShared);
         clone_target_options(for_module, shared_runtime);
 
         std::set<std::string> halide_exports_unique;
