@@ -51,6 +51,8 @@ protected:
     void visit(const Sub *);
     void visit(const Broadcast *);
     void visit(const Div *);
+    void visit(const Max *);
+    void visit(const Min *);
     /* // @} */
 
     llvm::Value *emitBinaryOp(const BaseExprNode *op,

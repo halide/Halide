@@ -113,6 +113,26 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
   varith.push_back(Pattern(wild_i32x32 - wild_i32x32,
                            Intrinsic::hexagon_V6_vsubw_dv));
 
+  // "Max"
+  varith.push_back(Pattern(max(wild_u8x64, wild_u8x64),
+                           Intrinsic::hexagon_V6_vmaxub));
+  varith.push_back(Pattern(max(wild_i16x32, wild_i16x32),
+                           Intrinsic::hexagon_V6_vmaxh));
+  varith.push_back(Pattern(max(wild_u16x32, wild_u16x32),
+                           Intrinsic::hexagon_V6_vmaxuh));
+  varith.push_back(Pattern(max(wild_i32x16, wild_i32x16),
+                           Intrinsic::hexagon_V6_vmaxw));
+  // "Min"
+  varith.push_back(Pattern(min(wild_u8x64, wild_u8x64),
+                           Intrinsic::hexagon_V6_vminub));
+  varith.push_back(Pattern(min(wild_i16x32, wild_i16x32),
+                           Intrinsic::hexagon_V6_vminh));
+  varith.push_back(Pattern(min(wild_u16x32, wild_u16x32),
+                           Intrinsic::hexagon_V6_vminuh));
+  varith.push_back(Pattern(min(wild_i32x16, wild_i32x16),
+                           Intrinsic::hexagon_V6_vminw));
+
+
   averages.push_back(Pattern(((wild_u8x64 + wild_u8x64)/2),
                              Intrinsic::hexagon_V6_vavgub));
   averages.push_back(Pattern(((wild_u8x64 - wild_u8x64)/2),
@@ -238,6 +258,18 @@ void CodeGen_Hexagon::visit(const Div *op) {
 }
 
 void CodeGen_Hexagon::visit(const Sub *op) {
+  value = emitBinaryOp(op, varith);
+  if (!value)
+    CodeGen::visit(op);
+  return;
+}
+void CodeGen_Hexagon::visit(const Max *op) {
+  value = emitBinaryOp(op, varith);
+  if (!value)
+    CodeGen::visit(op);
+  return;
+}
+void CodeGen_Hexagon::visit(const Min *op) {
   value = emitBinaryOp(op, varith);
   if (!value)
     CodeGen::visit(op);
