@@ -16,13 +16,13 @@ OPENBLAS_LIBS ?= -lopenblas
 # then set the flags below to point to your local build of ATLAS.
 #
 # For example:
-# ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
-# ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
+ATLAS_FLAGS ?= -DUSE_ATLAS -I/opt/ATLAS/include
+ATLAS_LIBS ?= -L/opt/ATLAS/lib -lptcblas -latlas
 
 # By default use whatever ATLAS is installed, so that this at least builds.
-$(warning Warning: Defaulting to system ATLAS, which may be slow. See the Makefile for details.)
-ATLAS_FLAGS ?= -DUSE_ATLAS
-ATLAS_LIBS ?= -lcblas
+#$(warning Warning: Defaulting to system ATLAS, which may be slow. See the Makefile for details.)
+#ATLAS_FLAGS ?= -DUSE_ATLAS
+#ATLAS_LIBS ?= -lcblas
 
 KERNEL_DIR = src/kernels
 KERNELS = \
@@ -167,7 +167,7 @@ l3_benchmarks: \
 	$(L3_BENCHMARKS:%=halide_l3_benchmark_%)
 
 run_benchmarks: $(BENCHMARKS)
-	@echo " Package     Subroutine    Size             Runtime     Data throughput"
+	@echo " Package     Subroutine    Size             Runtime     GFLOPS"
 #	@echo "======================================================================="
 	@make --no-print-directory l1_benchmarks
 	@make --no-print-directory l2_benchmarks
