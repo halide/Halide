@@ -6,8 +6,9 @@
 #endif
 
 #include "JITModule.h"
-#include "CodeGen.h"
 #include "LLVM_Headers.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Runtime_Linker.h"
 #include "Debug.h"
 
 namespace Halide {
@@ -235,7 +236,7 @@ public:
 
 }
 
-void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name,
+void JITModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const string &function_name,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
@@ -572,7 +573,7 @@ JITModule &shared_runtimes(RuntimeKind k) {
     return m[k];
 }
 
-JITModule &make_module(CodeGen *cg, const Target &target_arg, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
+JITModule &make_module(CodeGen_LLVM *cg, const Target &target_arg, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
     if (!shared_runtimes(runtime_kind).jit_module.defined()) {
         // Ensure that JIT feature is set on target as it must be in
         // order for the right runtime components to be added.
@@ -659,7 +660,7 @@ JITModule &make_module(CodeGen *cg, const Target &target_arg, RuntimeKind runtim
  * JITSharedRuntime::release_all is called. If
  * JITSharedRuntime::release_all is called, the global state is rest
  * and any newly compiled Funcs will get a new runtime. */
-std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) {
+std::vector<JITModule> JITSharedRuntime::get(CodeGen_LLVM *cg, const Target &target) {
     #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     #endif
