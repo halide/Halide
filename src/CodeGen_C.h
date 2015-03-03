@@ -34,12 +34,12 @@ public:
     /** Emit source code equivalent to the given statement, wrapped in
      * a function with the given type signature */
     void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
+                 const ArgInfo &arg_info,
                  const std::vector<Buffer> &images_to_embed);
 
     /** Emit a header file defining a halide pipeline with the given
      * type signature */
-    void compile_header(const std::string &name, const std::vector<Argument> &args);
+    void compile_header(const std::string &name, const ArgInfo &arg_info);
 
     static void test();
 

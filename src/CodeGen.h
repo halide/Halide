@@ -57,9 +57,9 @@ public:
 
     /** Take a halide statement and compiles it to an llvm module held
      * internally. Call this before calling compile_to_bitcode or
-     * compile_to_native. */
+     * compile_to_native. . */
     virtual void compile(Stmt stmt, std::string name,
-                         const std::vector<Argument> &args,
+                         const ArgInfo &arg_info,
                          const std::vector<Buffer> &images_to_embed);
 
     /** Emit a compiled halide statement as llvm bitcode. Call this

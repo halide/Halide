@@ -90,7 +90,7 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
 }
 
 void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
+                          const ArgInfo &arg_info,
                           const vector<Buffer> &images_to_embed) {
 
     init_module();
@@ -110,7 +110,7 @@ void CodeGen_X86::compile(Stmt stmt, string name,
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
+    CodeGen::compile(stmt, name, arg_info, images_to_embed);
 
     // Optimize
     CodeGen::optimize_module();

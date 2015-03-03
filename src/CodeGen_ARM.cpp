@@ -426,7 +426,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
 }
 
 void CodeGen_ARM::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
+                          const ArgInfo &arg_info,
                           const vector<Buffer> &images_to_embed) {
 
     init_module();
@@ -448,7 +448,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name,
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
-    CodeGen_Posix::compile(stmt, name, args, images_to_embed);
+    CodeGen_Posix::compile(stmt, name, arg_info, images_to_embed);
 
     // Optimize
     CodeGen_Posix::optimize_module();

@@ -57,9 +57,9 @@ StmtCompiler::StmtCompiler(Target target) {
 }
 
 void StmtCompiler::compile(Stmt stmt, string name,
-                           const vector<Argument> &args,
+                           const ArgInfo &arg_info,
                            const vector<Buffer> &images_to_embed) {
-    contents.ptr->compile(stmt, name, args, images_to_embed);
+    contents.ptr->compile(stmt, name, arg_info, images_to_embed);
 }
 
 void StmtCompiler::compile_to_bitcode(const string &filename) {

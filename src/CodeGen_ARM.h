@@ -24,7 +24,7 @@ public:
      * CodeGen::compile_to_function_pointer to get at the ARM machine
      * code. */
     void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
+                 const ArgInfo &arg_info,
                  const std::vector<Buffer> &images_to_embed);
 
     llvm::Triple get_target_triple() const;

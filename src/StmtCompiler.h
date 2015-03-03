@@ -5,6 +5,7 @@
  * Defines a compiler that produces native code from halide statements
  */
 
+#include "CodeGen.h"
 #include "IR.h"
 #include "JITModule.h"
 #include "Target.h"
@@ -20,7 +21,6 @@ namespace Internal {
 /** A handle to a generic statement compiler. Can take Halide
  * statements and turn them into assembly, bitcode, machine code, or a
  * jit-compiled module. */
-class CodeGen;
 class StmtCompiler {
     IntrusivePtr<CodeGen> contents;
 public:
@@ -33,7 +33,7 @@ public:
      * inside it. The module is stored internally until one of the
      * later functions is called: */
     void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
+                 const ArgInfo &arg_info,
                  const std::vector<Buffer> &images_to_embed);
 
     /** Write the module to an llvm bitcode file */

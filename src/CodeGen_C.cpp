@@ -247,7 +247,7 @@ string CodeGen_C::print_name(const string &name) {
     return oss.str();
 }
 
-void CodeGen_C::compile_header(const string &name, const vector<Argument> &args) {
+void CodeGen_C::compile_header(const string &name, const ArgInfo &arg_info) {
     stream << "#ifndef HALIDE_" << name << '\n'
            << "#define HALIDE_" << name << '\n';
 
@@ -265,14 +265,14 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << "extern \"C\"\n";
     stream << "#endif\n";
     stream << "int " << name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
+    for (size_t i = 0; i < arg_info.args.size(); i++) {
         if (i > 0) stream << ", ";
-        if (args[i].is_buffer()) {
-            stream << "buffer_t *" << print_name(args[i].name);
+        if (arg_info.args[i].is_buffer()) {
+            stream << "buffer_t *" << print_name(arg_info.args[i].name);
         } else {
             stream << "const "
-                   << print_type(args[i].type)
-                   << " " << print_name(args[i].name);
+                   << print_type(arg_info.args[i].type)
+                   << " " << print_name(arg_info.args[i].name);
         }
     }
     stream << ") HALIDE_FUNCTION_ATTRS;\n";
@@ -343,7 +343,7 @@ public:
 }
 
 void CodeGen_C::compile(Stmt s, string name,
-                        const vector<Argument> &args,
+                        const ArgInfo &arg_info,
                         const vector<Buffer> &images_to_embed) {
     stream << preamble;
 
@@ -386,9 +386,9 @@ void CodeGen_C::compile(Stmt s, string name,
     }
 
     have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
+    for (size_t i = 0; i < arg_info.args.size(); i++) {
         // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
+        have_user_context |= (arg_info.args[i].name == "__user_context");
     }
 
     // Emit prototypes for any extern calls used.
@@ -401,27 +401,27 @@ void CodeGen_C::compile(Stmt s, string name,
 
     // Emit the function prototype
     stream << "extern \"C\" int " << name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+    for (size_t i = 0; i < arg_info.args.size(); i++) {
+        if (arg_info.args[i].is_buffer()) {
             stream << "buffer_t *"
-                   << print_name(args[i].name)
+                   << print_name(arg_info.args[i].name)
                    << "_buffer";
         } else {
             stream << "const "
-                   << print_type(args[i].type)
+                   << print_type(arg_info.args[i].type)
                    << " "
-                   << print_name(args[i].name);
+                   << print_name(arg_info.args[i].name);
         }
 
-        if (i < args.size()-1) stream << ", ";
+        if (i < arg_info.args.size()-1) stream << ", ";
     }
 
     stream << ") {\n";
 
     // Unpack the buffer_t's
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            unpack_buffer(args[i].type, args[i].name);
+    for (size_t i = 0; i < arg_info.args.size(); i++) {
+        if (arg_info.args[i].is_buffer()) {
+            unpack_buffer(arg_info.args[i].type, arg_info.args[i].name);
         }
     }
     for (size_t i = 0; i < images_to_embed.size(); i++) {
@@ -1267,11 +1267,11 @@ void CodeGen_C::test() {
     Argument float_arg("alpha", Argument::Scalar, Float(32), 0);
     Argument int_arg("beta", Argument::Scalar, Int(32), 0);
     Argument user_context_arg("__user_context", Argument::Scalar, Handle(), 0);
-    vector<Argument> args(4);
-    args[0] = buffer_arg;
-    args[1] = float_arg;
-    args[2] = int_arg;
-    args[3] = user_context_arg;
+    ArgInfo arg_info;
+    arg_info.args.push_back(buffer_arg);
+    arg_info.args.push_back(float_arg);
+    arg_info.args.push_back(int_arg);
+    arg_info.args.push_back(user_context_arg);
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
@@ -1285,7 +1285,7 @@ void CodeGen_C::test() {
 
     ostringstream source;
     CodeGen_C cg(source);
-    cg.compile(s, "test1", args, vector<Buffer>());
+    cg.compile(s, "test1", arg_info, vector<Buffer>());
 
     string src = source.str();
     string correct_source = preamble +

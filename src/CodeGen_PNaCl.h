@@ -24,7 +24,7 @@ public:
      * CodeGen::compile_to_file or CodeGen::compile_to_bitcode to get
      * at the pnacl bitcode. */
     void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
+                 const ArgInfo &arg_info,
                  const std::vector<Buffer> &images_to_embed);
 
     /** The PNaCl backend overrides compile_to_native to

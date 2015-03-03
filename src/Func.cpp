@@ -2040,19 +2040,21 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
                       const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
-    args = add_user_context_arg(args, target);
+    ArgInfo arg_info;
+    arg_info.args = add_user_context_arg(args, target);
 
     lower(target);
 
     vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
+    validate_arguments(name(), arg_info.args, lowered, images_to_embed);
 
     for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
+        arg_info.args.push_back(output_buffers()[i]);
     }
+    arg_info.num_outputs = outputs();
 
     StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, arg_info, images_to_embed);
 
     if (!output_files.object_name.empty()) {
         cg.compile_to_native(output_files.object_name, false);
@@ -2084,33 +2086,37 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
 }
 
 void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
+    ArgInfo arg_info;
+    arg_info.args = add_user_context_arg(args, target);
 
     for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
+        arg_info.args.push_back(output_buffers()[i]);
     }
+    arg_info.num_outputs = outputs();
 
     ofstream header(filename.c_str());
     CodeGen_C cg(header);
-    cg.compile_header(fn_name.empty() ? name() : fn_name, args);
+    cg.compile_header(fn_name.empty() ? name() : fn_name, arg_info);
 }
 
 void Func::compile_to_c(const string &filename, vector<Argument> args,
                         const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
+    ArgInfo arg_info;
+    arg_info.args = add_user_context_arg(args, target);
 
     lower(target);
 
     vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
+    validate_arguments(name(), arg_info.args, lowered, images_to_embed);
 
     for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
+        arg_info.args.push_back(output_buffers()[i]);
     }
+    arg_info.num_outputs = outputs();
 
     ofstream src(filename.c_str());
     CodeGen_C cg(src);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, arg_info, images_to_embed);
 }
 
 void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
@@ -2682,7 +2688,10 @@ void *Func::compile_jit(const Target &target_arg) {
         }
     }
 
-    cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+    ArgInfo arg_info;
+    arg_info.args = infer_args.arg_types;
+    arg_info.num_outputs = func.outputs();
+    cg.compile(lowered, n, arg_info, vector<Buffer>());
 
     if (debug::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);
