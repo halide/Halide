@@ -27,10 +27,9 @@ function(halide_add_generator_dependency target gen_target gen_name func_name)
 
   # Add a custom target to output the Halide generated static library
   if (WIN32)
-    # TODO(srj): this has not yet been tested on Windows.
     add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
       DEPENDS "${gen_target}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/${BUILD_TYPE}/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${SCRATCH_DIR}" ${ARGN}
+      COMMAND "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${SCRATCH_DIR}" ${ARGN}
       COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${SCRATCH_DIR}\\${func_name}.o"
       WORKING_DIRECTORY "${SCRATCH_DIR}"
       )
