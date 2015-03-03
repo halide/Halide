@@ -19,18 +19,11 @@ struct GPU_Argument : public Argument {
      * type, such as packing scalar floats into vec4 for GLSL. */
     size_t packed_index;
 
-    /** For buffers, these two variables can be used to specify whether the
-     * buffer is read or written. By default, we assume that the argument
-     * buffer is read-write and set both flags. */
-    bool read;
-    bool write;
-
-    GPU_Argument() : size(0), packed_index(0), read(false), write(false) {}
+    GPU_Argument() : size(0), packed_index(0) {}
     GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions) :
-        Argument(_name, _kind, _type, _dimensions), size(0), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
-    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions,
-                 size_t _size) :
-        Argument(_name, _kind, _type, _dimensions), size(_size), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
+        Argument(_name, _kind, _type, _dimensions), size(0), packed_index(0) {}
+    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions, size_t _size) :
+        Argument(_name, _kind, _type, _dimensions), size(_size), packed_index(0) {}
 };
 
 /** A code generator that emits GPU code from a given Halide stmt. */

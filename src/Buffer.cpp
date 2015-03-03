@@ -230,8 +230,8 @@ const std::string &Buffer::name() const {
     return contents.ptr->name;
 }
 
-Buffer::operator Argument() const {
-    return Argument(name(), Argument::Buffer, type(), dimensions());
+Argument Buffer::as_input() const {
+    return Argument(name(), Argument::InputBuffer, type(), dimensions());
 }
 
 int Buffer::copy_to_host() {

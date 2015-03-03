@@ -188,9 +188,13 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
         if (iter->second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        GPU_Argument arg(iter->first, Argument::Buffer, iter->second.type, iter->second.dimensions, iter->second.size);
-        arg.read = iter->second.read;
-        arg.write = iter->second.write;
+        // TODO: read+write textures were already prohibited in the GLSL backend,
+        // but not other GPU backends. Will this break existing functionality?
+        internal_assert(iter->second.read != iter->second.write)
+            << "BufferRef should not read and write the same texture: " << iter->first;
+
+        GPU_Argument arg(iter->first, iter->second.write ? Argument::OutputBuffer : Argument::InputBuffer,
+            iter->second.type, iter->second.dimensions, iter->second.size);
         res.push_back(arg);
     }
     return res;

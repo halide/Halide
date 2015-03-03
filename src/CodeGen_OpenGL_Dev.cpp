@@ -597,8 +597,6 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
         if (args[i].is_buffer()) {
             Type t = args[i].type.element_of();
 
-            user_assert(args[i].read != args[i].write) <<
-                "GLSL: buffers may only be read OR written inside a kernel loop.\n";
             std::string type_name;
             if (t == UInt(8)) {
                 type_name = "uint8_t";
@@ -609,7 +607,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             } else {
                 user_error << "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
             }
-            header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
+            header << "/// " << (args[i].is_input() ? "IN_BUFFER " : "OUT_BUFFER ")
                    << type_name << " " << print_name(args[i].name) << "\n";
         } else if (ends_with(args[i].name, ".varying")) {
             header << "/// VARYING "
@@ -654,7 +652,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer() && args[i].read) {
+        if (args[i].is_buffer() && args[i].is_input()) {
             stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
         }
     }

@@ -12,7 +12,7 @@ Image<uint16_t> output;
 #define MAX 1020
 
 double test(Func f, bool test_correctness = true) {
-    f.compile_to_assembly(f.name() + ".s", Internal::vec<Argument>(input), f.name());
+    f.compile_to_assembly(f.name() + ".s", Internal::vec<Argument>(Buffer(input).as_input()), f.name());
     f.compile_jit();
     f.realize(output);
 

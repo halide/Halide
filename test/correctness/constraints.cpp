@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     error_occurred = false;
     h.realize(image1);
     // Also check it compiles ok without an inferred argument list
-    h.compile_to_assembly("h.s", Internal::vec<Argument>(image1), "h");
+    h.compile_to_assembly("h.s", Internal::vec<Argument>(Buffer(image1).as_input()), "h");
     if (error_occurred) {
         printf("Error incorrectly raised when constraining output buffer\n");
         return -1;

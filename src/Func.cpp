@@ -1899,7 +1899,7 @@ private:
             min = p.get_min_value();
             max = p.get_max_value();
         }
-        arg_types.push_back(Argument(p.name(), p.is_buffer() ? Argument::Buffer : Argument::Scalar,
+        arg_types.push_back(Argument(p.name(), p.is_buffer() ? Argument::InputBuffer : Argument::Scalar,
             p.type(), p.dimensions(), def, min, max));
         if (p.is_buffer()) {
             Buffer b = p.get_buffer();
@@ -1920,7 +1920,7 @@ private:
         if (!b.defined()) return;
         if (already_have(b.name())) return;
         image_args.push_back(make_pair((int)arg_types.size(), b));
-        arg_types.push_back(Argument(b.name(), Argument::Buffer, b.type(), b.dimensions()));
+        arg_types.push_back(Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions()));
         arg_values.push_back(b.raw_buffer());
     }
 
@@ -1957,6 +1957,8 @@ void validate_arguments(const string &output,
 
     for (size_t i = 0; i < required_args.size(); i++) {
         const Argument &arg = required_args[i];
+
+        internal_assert(arg.is_input()) << "Expected only input Arguments here";
 
         Buffer buf;
         for (size_t j = 0; !buf.defined() && j < infer_args.image_args.size(); j++) {
@@ -2049,6 +2051,7 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
 
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
+        internal_assert(args.back().is_output()) << "Expected only output Arguments here";
     }
 
     StmtCompiler cg(target);
@@ -2106,6 +2109,7 @@ void Func::compile_to_c(const string &filename, vector<Argument> args,
 
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
+        internal_assert(args.back().is_output()) << "Expected only output Arguments here";
     }
 
     ofstream src(filename.c_str());
@@ -2659,7 +2663,7 @@ void *Func::compile_jit(const Target &target_arg) {
             buffer_name = buffer_name + '.' + int_to_string(i);
         }
         Type t = func.output_types()[i];
-        Argument me(buffer_name, Argument::Buffer, t, dimensions());
+        Argument me(buffer_name, Argument::OutputBuffer, t, dimensions());
         infer_args.arg_types.push_back(me);
         arg_values.push_back(NULL); // A spot to put the address of this output buffer
     }

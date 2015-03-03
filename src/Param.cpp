@@ -119,7 +119,7 @@ Internal::Parameter OutputImageParam::parameter() const {
 }
 
 OutputImageParam::operator Argument() const {
-    return Argument(name(), Argument::Buffer, type(), dimensions());
+    return Argument(name(), Argument::OutputBuffer, type(), dimensions());
 }
 
 OutputImageParam::operator ExternFuncArgument() const {
@@ -222,6 +222,10 @@ Expr ImageParam::operator()(std::vector<Var> args_passed) const {
 
     Internal::check_call_arg_types(name(), &args, dimensions());
     return Internal::Call::make(param, args);
+}
+
+ImageParam::operator Argument() const {
+    return Argument(name(), Argument::InputBuffer, type(), dimensions());
 }
 
 }

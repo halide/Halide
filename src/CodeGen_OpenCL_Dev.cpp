@@ -452,7 +452,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
             stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
+            if (!args[i].is_output()) stream << "const ";
             stream << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
             allocations.push(args[i].name, args[i].type);
