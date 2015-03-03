@@ -53,6 +53,7 @@ protected:
     void visit(const Div *);
     void visit(const Max *);
     void visit(const Min *);
+    void visit(const Cast *);
     /* // @} */
 
     llvm::Value *emitBinaryOp(const BaseExprNode *op,

@@ -55,6 +55,14 @@ using namespace llvm;
   std::vector<Pattern> casts, varith, averages;
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
+  casts.push_back(Pattern(cast(UInt(16, 64), wild_u8x64),
+                          Intrinsic::hexagon_V6_vzb));
+  casts.push_back(Pattern(cast(UInt(32, 32), wild_u16x32),
+                          Intrinsic::hexagon_V6_vzh));
+  casts.push_back(Pattern(cast(Int(16, 64), wild_i8x64),
+                          Intrinsic::hexagon_V6_vsb));
+  casts.push_back(Pattern(cast(Int(32, 32), wild_i16x32),
+                          Intrinsic::hexagon_V6_vsh));
   // "Add"
   // Byte Vectors
   varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
@@ -273,6 +281,32 @@ void CodeGen_Hexagon::visit(const Min *op) {
   value = emitBinaryOp(op, varith);
   if (!value)
     CodeGen::visit(op);
+  return;
+}
+void CodeGen_Hexagon::visit(const Cast *op) {
+  vector<Expr> matches;
+  for (size_t I = 0; I < casts.size(); ++I) {
+    const Pattern &P = casts[I];
+    if (expr_match(P.pattern, op, matches)) {
+        Intrinsic::ID ID = P.ID;
+        llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+        llvm::FunctionType *FType = F->getFunctionType();
+        Value *Op0 = codegen(matches[0]);
+        const Cast *C = P.pattern.as<Cast>();
+        internal_assert (C);
+        internal_assert(FType->getNumParams() == 1);
+        Halide::Type DestType = C->type;
+        llvm::Type *DestLLVMType = llvm_type_of(DestType);
+        llvm::Type *T0 = FType->getParamType(0);
+        if (T0 != Op0->getType()) {
+          Op0 = builder->CreateBitCast(Op0, T0);
+        }
+        Value *Call = builder->CreateCall(F, Op0);
+        value = builder->CreateBitCast(Call, DestLLVMType);
+        return;
+      }
+  }
+  CodeGen::visit(op);
   return;
 }
   void CodeGen_Hexagon::visit(const Broadcast *op) {
