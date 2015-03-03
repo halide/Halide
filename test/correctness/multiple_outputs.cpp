@@ -38,8 +38,8 @@ int main(int argc, char **argv) {
                            Tuple(best_x, best_y, best_so_far));
 
         Realization result = g.realize();
-        int result_x = Image<int>(result[0])(0);
-        int result_y = Image<int>(result[1])(0);
+        // int result_x = Image<int>(result[0])(0);
+        // int result_y = Image<int>(result[1])(0);
         float result_val = Image<float>(result[2])(0);
         if (result_val < 0.9999) {
             printf("Argmax of sin(x*y) is underwhelming: %f. We expected it to be closer to one.\n", result_val);
