@@ -151,6 +151,10 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                              Intrinsic::hexagon_V6_vavgh));
   averages.push_back(Pattern(((wild_i16x32 - wild_i16x32)/2),
                              Intrinsic::hexagon_V6_vnavgh));
+  averages.push_back(Pattern(((wild_i32x16 + wild_i32x16)/2),
+                             Intrinsic::hexagon_V6_vavgw));
+  averages.push_back(Pattern(((wild_i32x16 - wild_i32x16)/2),
+                             Intrinsic::hexagon_V6_vnavgw));
 }
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,

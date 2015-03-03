@@ -67,7 +67,10 @@ int main(int argc, char **argv) {
   //CHECK: vavg(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
   //CHECK: vnavg(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
   testAvg<uint8_t>(target);
-  //testAvg for ub, h, and w.
+  //CHECK: vavg(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
+  //CHECK: vnavg(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
+  testAvg<int32_t>(target);
+  //Todo: testAvg for 'h'
   // no vnavg for uh.
   printf ("Done\n");
 
