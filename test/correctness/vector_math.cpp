@@ -469,13 +469,6 @@ bool test(int vec_width) {
         Image<float> im19 = f19.realize(W, H);
         Image<float> im20 = f20.realize(W, H);
 
-        float worst_log_error = 1e20f;
-        float worst_exp_error = 1e20f;
-        float worst_pow_error = 1e20f;
-        float worst_fast_log_error = 1e20f;
-        float worst_fast_exp_error = 1e20f;
-        float worst_fast_pow_error = 1e20f;
-
         int worst_log_mantissa = 0;
         int worst_exp_mantissa = 0;
         int worst_pow_mantissa = 0;
