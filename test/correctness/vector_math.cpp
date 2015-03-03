@@ -255,7 +255,6 @@ bool test(int vec_width) {
     // Scatter
     if (verbose) printf("Scatter\n");
     Func f6;
-    RDom i(0, H);
     // Set one entry in each column high
     f6(x, y) = 0;
     f6(x, clamp(x*x, 0, H-1)) = 1;
