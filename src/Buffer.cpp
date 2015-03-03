@@ -230,7 +230,7 @@ const std::string &Buffer::name() const {
     return contents.ptr->name;
 }
 
-Argument Buffer::as_input() const {
+Buffer::operator Argument() const {
     return Argument(name(), Argument::InputBuffer, type(), dimensions());
 }
 

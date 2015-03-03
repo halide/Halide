@@ -26,7 +26,7 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
         f.reorder(c, x, y).fuse(c, x, fused).vectorize(fused, 16);
     }
 
-    f.compile_to_assembly(std::string("copy_") + f.name() + ".s", Internal::vec<Argument>(Buffer(src).as_input()), "copy");
+    f.compile_to_assembly(std::string("copy_") + f.name() + ".s", Internal::vec<Argument>(src), "copy");
 
     f.realize(dst);
 

@@ -104,8 +104,8 @@ public:
     /** Get the runtime name of this buffer used for debugging. */
     EXPORT const std::string &name() const;
 
-    /** Convert this buffer to an input argument to a halide pipeline. */
-    EXPORT Argument as_input() const;
+    /** Convert this buffer to an argument to a halide pipeline. */
+    EXPORT operator Argument() const;
 
     /** If this buffer was created *on-device* by a jit-compiled
      * realization, then copy it back to the cpu-side memory. This is
