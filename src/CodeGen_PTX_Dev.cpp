@@ -336,6 +336,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         #endif
     }
 
+    #if LLVM_VERSION < 37
     #if LLVM_VERSION == 36
     const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
     #else
@@ -356,6 +357,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     PM.add(new DataLayoutPass(module));
     #else // llvm >= 3.6
     PM.add(new DataLayoutPass);
+    #endif
     #endif
     #endif
 
