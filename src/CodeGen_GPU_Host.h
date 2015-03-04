@@ -32,6 +32,8 @@ public:
     virtual ~CodeGen_GPU_Host();
 
 protected:
+    void compile(const LoweredFunc &func);
+
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
      * compiler doesn't know that CodeGen_CPU will in fact inherit
@@ -69,7 +71,6 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
-    void visit(const LoweredFunc *);
     // @}
 
     std::string function_name;

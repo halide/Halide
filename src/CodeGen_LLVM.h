@@ -66,6 +66,12 @@ public:
 protected:
     CodeGen_LLVM(Target t);
 
+    /** Compile a specific halide declaration into the llvm Module. */
+    // @{
+    virtual void compile(const LoweredFunc &func);
+    virtual void compile(const Buffer &buffer);
+    // @}
+
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
      * define these. */
@@ -288,12 +294,6 @@ protected:
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Return *);
-    // @}
-
-    /** A few more visitors for non-IR nodes. */
-    // @{
-    virtual void visit(const LoweredFunc *);
-    virtual void visit(const Buffer *);
     // @}
 
     /** Generate code for an allocate node. It has no default

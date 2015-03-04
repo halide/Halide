@@ -394,10 +394,10 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
     for (size_t i = 0; i < input.buffers.size(); i++) {
-        visit(&input.buffers[i]);
+        compile(input.buffers[i]);
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
-        visit(&input.functions[i]);
+        compile(input.functions[i]);
     }
 
     debug(2) << module << "\n";
@@ -455,9 +455,9 @@ void add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &na
 
 }
 
-void CodeGen_LLVM::visit(const LoweredFunc *op) {
-    const std::string &name = op->name;
-    const std::vector<Argument> &args = op->args;
+void CodeGen_LLVM::compile(const LoweredFunc &f) {
+    const std::string &name = f.name;
+    const std::vector<Argument> &args = f.args;
 
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
@@ -471,7 +471,7 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(op->linkage), name, module);
+    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -504,7 +504,7 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
 
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
-    op->body.accept(this);
+    f.body.accept(this);
 
     // Remove the arguments from the symbol table
     for (size_t i = 0; i < args.size(); i++) {
@@ -522,7 +522,7 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
 
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
-    if (op->linkage == LoweredFunc::External) {
+    if (f.linkage == LoweredFunc::External) {
         add_argv_wrapper(module, function, name + "_argv");
     }
 }
@@ -537,16 +537,15 @@ std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
     return ret;
 }
 
-void CodeGen_LLVM::visit(const Buffer *op) {
+void CodeGen_LLVM::compile(const Buffer &buf) {
     // Embed the buffer declaration as a global.
-    Buffer buffer = *op;
-    internal_assert(buffer.defined());
+    internal_assert(buf.defined());
 
-    buffer_t b = *(buffer.raw_buffer());
+    buffer_t b = *(buf.raw_buffer());
     user_assert(b.host)
-        << "Can't embed buffer " << buffer.name() << " because it has a null host pointer.\n";
+        << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
     user_assert(!b.dev_dirty)
-        << "Can't embed Image \"" << buffer.name() << "\""
+        << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
     // Figure out the offset of the last pixel.
@@ -559,12 +558,12 @@ void CodeGen_LLVM::visit(const Buffer *op) {
     // Embed the buffer_t and make it point to the data array.
     GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
                                                 false, GlobalValue::PrivateLinkage,
-                                                0, buffer.name() + ".buffer");
+                                                0, buf.name() + ".buffer");
     llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
-        create_constant_binary_blob(array, buffer.name() + ".data"), // host
+        create_constant_binary_blob(array, buf.name() + ".data"), // host
         ConstantArray::get(i32_array, get_constants(i32, b.extent, b.extent + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
@@ -579,7 +578,7 @@ void CodeGen_LLVM::visit(const Buffer *op) {
     // Finally, dump it in the symbol table
     Constant *zero = ConstantInt::get(i32, 0);
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
-    sym_push(buffer.name(), global_ptr);
+    sym_push(buf.name(), global_ptr);
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
