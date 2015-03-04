@@ -35,7 +35,7 @@ void check(const char *op, int vector_width, Expr e) {
     printf("%s %d\n", op, vector_width);
 
     std::string name = std::string("test_") + op + Internal::unique_name('_');
-    for (int i = 0; i < name.size(); i++) {
+    for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.') name[i] = '_';
     }
     Func f(name);

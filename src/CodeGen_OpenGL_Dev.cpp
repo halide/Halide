@@ -594,7 +594,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     ostringstream header;
     header << "/// KERNEL " << name << "\n";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+        if (args[i].is_buffer) {
             Type t = args[i].type.element_of();
 
             std::string type_name;
@@ -607,7 +607,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             } else {
                 user_error << "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
             }
-            header << "/// " << (args[i].is_input() ? "IN_BUFFER " : "OUT_BUFFER ")
+            header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << type_name << " " << print_name(args[i].name) << "\n";
         } else if (ends_with(args[i].name, ".varying")) {
             header << "/// VARYING "
@@ -652,7 +652,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer() && args[i].is_input()) {
+        if (args[i].is_buffer && args[i].read) {
             stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
         }
     }
@@ -674,7 +674,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 
     // Unpack the uniform and varying parameters
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+        if (args[i].is_buffer) {
             continue;
         } else if (ends_with(args[i].name, ".varying")) {
             do_indent();

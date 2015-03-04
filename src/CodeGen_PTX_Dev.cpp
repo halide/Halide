@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "Target.h"
 #include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
@@ -20,7 +21,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen(host) {
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
     #if !(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
@@ -36,7 +37,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+        if (args[i].is_buffer) {
             arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
@@ -50,7 +51,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+        if (args[i].is_buffer) {
             function->setDoesNotAlias(i+1);
         }
     }
@@ -69,7 +70,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
              iter++) {
 
             string arg_sym_name = args[i].name;
-            if (args[i].is_buffer()) {
+            if (args[i].is_buffer) {
                 // HACK: codegen expects a load from foo to use base
                 // address 'foo.host', so we store the device pointer
                 // as foo.host in this scope.
@@ -125,7 +126,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
 void CodeGen_PTX_Dev::init_module() {
 
-    CodeGen::init_module();
+    CodeGen_LLVM::init_module();
 
     #ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
@@ -164,7 +165,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
         codegen(loop->body);
         sym_pop(loop->name);
     } else {
-        CodeGen::visit(loop);
+        CodeGen_LLVM::visit(loop);
     }
 }
 

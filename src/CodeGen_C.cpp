@@ -3,7 +3,6 @@
 #include <limits>
 
 #include "CodeGen_C.h"
-#include "CodeGen.h"
 #include "CodeGen_Internal.h"
 #include "Substitute.h"
 #include "IROperator.h"
@@ -298,7 +297,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (!emitted.count(op->name)) {
                 stream << "extern \"C\" " << type_to_c_type(op->type)
                        << " " << op->name << "(";
-                if (CodeGen::function_takes_user_context(op->name)) {
+                if (function_takes_user_context(op->name)) {
                     stream << "void *";
                     if (op->args.size()) {
                         stream << ", ";
@@ -963,7 +962,7 @@ void CodeGen_C::visit(const Call *op) {
         }
         rhs << op->name << "(";
 
-        if (CodeGen::function_takes_user_context(op->name)) {
+        if (function_takes_user_context(op->name)) {
             rhs << (have_user_context ? "__user_context_, " : "NULL, ");
         }
 
