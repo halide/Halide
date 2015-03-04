@@ -418,7 +418,7 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
 namespace {
 
 // Make a wrapper to call the function with an array of pointer
-// args. This is easier for the JIT to call than a funtion with an
+// args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
 void add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &name) {
     llvm::Type *buffer_t_type = m->getTypeByName("struct.buffer_t");
