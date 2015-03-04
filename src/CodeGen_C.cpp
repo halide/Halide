@@ -1337,8 +1337,10 @@ void CodeGen_C::test() {
     m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
 
     ostringstream source;
-    CodeGen_C cg(source, false);
-    cg.compile(m);
+    {
+        CodeGen_C cg(source, false);
+        cg.compile(m);
+    }
 
     string src = source.str();
     string correct_source =
@@ -1417,7 +1419,11 @@ void CodeGen_C::test() {
         "  halide_free(__user_context_, _tmp_heap);\n"
         " } // alloc _tmp_heap\n"
         " return 0;\n"
-        "}\n";
+        "}\n"
+        "#ifdef __cplusplus\n"
+        "}  // extern \"C\"\n"
+        "#endif\n";
+;
     if (src != correct_source) {
         int diff = 0;
         while (src[diff] == correct_source[diff]) diff++;
