@@ -339,20 +339,20 @@ public:
 
 void CodeGen_C::compile(const Module &input) {
     for (size_t i = 0; i < input.buffers.size(); i++) {
-        visit(&input.buffers[i]);
+        compile(input.buffers[i]);
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
-        visit(&input.functions[i]);
+        compile(input.functions[i]);
     }
 }
 
-void CodeGen_C::visit(const LoweredFunc *op) {
+void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
-    if (is_header && op->linkage != LoweredFunc::External) {
+    if (is_header && f.linkage != LoweredFunc::External) {
         return;
     }
 
-    const std::vector<Argument> &args = op->args;
+    const std::vector<Argument> &args = f.args;
 
     have_user_context = false;
     for (size_t i = 0; i < args.size(); i++) {
@@ -364,16 +364,16 @@ void CodeGen_C::visit(const LoweredFunc *op) {
     if (!is_header) {
         stream << "\n";
         ExternCallPrototypes e(stream);
-        op->body.accept(&e);
+        f.body.accept(&e);
         stream << "\n";
     }
 
     // Emit the function prototype
-    if (op->linkage != LoweredFunc::External) {
+    if (f.linkage != LoweredFunc::External) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
-    stream << "int " << op->name << "(";
+    stream << "int " << f.name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
             stream << "buffer_t *"
@@ -402,7 +402,7 @@ void CodeGen_C::visit(const LoweredFunc *op) {
             }
         }
         // Emit the body
-        print(op->body);
+        print(f.body);
 
         indent -= 1;
         stream << "}\n";
@@ -418,17 +418,16 @@ void CodeGen_C::visit(const LoweredFunc *op) {
     if (is_header) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
-        stream << "int " << op->name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+        stream << "int " << f.name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
     }
 }
 
-void CodeGen_C::visit(const Buffer *op) {
+void CodeGen_C::compile(const Buffer &buffer) {
     // Don't define buffers in headers.
     if (is_header) {
         return;
     }
 
-    Buffer buffer = *op;
     string name = print_name(buffer.name());
     buffer_t b = *(buffer.raw_buffer());
 

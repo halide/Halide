@@ -39,6 +39,12 @@ public:
     static void test();
 
 protected:
+    /** Emit a declaration. */
+    // @{
+    virtual void compile(const LoweredFunc &func);
+    virtual void compile(const Buffer &buffer);
+    // @}
+
     /** An ID for the most recently generated ssa variable */
     std::string id;
 
@@ -128,8 +134,6 @@ protected:
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
     void visit(const Return *);
-    void visit(const LoweredFunc *);
-    void visit(const Buffer *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };

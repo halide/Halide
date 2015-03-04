@@ -225,8 +225,8 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
-    function_name = op->name;
+void CodeGen_GPU_Host<CodeGen_CPU>::compile(const LoweredFunc &f) {
+    function_name = f.name;
 
     // Create a new module for all of the kernels we find in this function.
     std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
@@ -235,7 +235,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
     }
 
     // Call the base implementation to create the function.
-    CodeGen_CPU::visit(op);
+    CodeGen_CPU::compile(f);
 
     // Remember the entry block so we can branch to it upon init success.
     BasicBlock *entry = &function->getEntryBlock();
