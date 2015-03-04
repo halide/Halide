@@ -37,30 +37,31 @@ const string buffer_t_definition =
     "} buffer_t;\n"
     "#endif\n";
 
-const string preamble =
+const string headers =
     "#include <iostream>\n"
     "#include <math.h>\n"
     "#include <float.h>\n"
     "#include <assert.h>\n"
     "#include <string.h>\n"
     "#include <stdio.h>\n"
-    "#include <stdint.h>\n"
-    "\n"
-    "HALIDE_EXTERN_C void *halide_malloc(void *ctx, size_t);\n"
-    "HALIDE_EXTERN_C void halide_free(void *ctx, void *ptr);\n"
-    "HALIDE_EXTERN_C void *halide_print(void *ctx, const void *str);\n"
-    "HALIDE_EXTERN_C void *halide_error(void *ctx, const void *str);\n"
-    "HALIDE_EXTERN_C int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
-    "HALIDE_EXTERN_C int halide_start_clock(void *ctx);\n"
-    "HALIDE_EXTERN_C int64_t halide_current_time_ns(void *ctx);\n"
-    "HALIDE_EXTERN_C uint64_t halide_profiling_timer(void *ctx);\n"
+    "#include <stdint.h>\n";
+
+const string globals =
+    "void *halide_malloc(void *ctx, size_t);\n"
+    "void halide_free(void *ctx, void *ptr);\n"
+    "void *halide_print(void *ctx, const void *str);\n"
+    "void *halide_error(void *ctx, const void *str);\n"
+    "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
+    "int halide_start_clock(void *ctx);\n"
+    "int64_t halide_current_time_ns(void *ctx);\n"
+    "uint64_t halide_profiling_timer(void *ctx);\n"
     "\n"
 
     // TODO: this next chunk is copy-pasted from posix_math.cpp. A
     // better solution for the C runtime would be nice.
     "#ifdef _WIN32\n"
-    "HALIDE_EXTERN_C float roundf(float);\n"
-    "HALIDE_EXTERN_C double round(double);\n"
+    "float roundf(float);\n"
+    "double round(double);\n"
     "#else\n"
     "inline float asinh_f32(float x) {return asinhf(x);}\n"
     "inline float acosh_f32(float x) {return acoshf(x);}\n"
@@ -186,14 +187,16 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
                << "#define HALIDE_" << print_name(guard) << '\n';
     }
 
+    if (!is_header) {
+        stream << headers;
+    }
+
     stream << "#ifdef __cplusplus\n";
-    stream << "#define HALIDE_EXTERN_C extern \"C\"\n";
-    stream << "#else\n";
-    stream << "#define HALIDE_EXTERN_C\n";
+    stream << "extern \"C\" {\n";
     stream << "#endif\n";
 
     if (!is_header) {
-        stream << preamble;
+        stream << globals;
     }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
@@ -207,6 +210,10 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
 }
 
 CodeGen_C::~CodeGen_C() {
+    stream << "#ifdef __cplusplus\n";
+    stream << "}  // extern \"C\"\n";
+    stream << "#endif\n";
+
     if (is_header) {
         stream << "#endif\n";
     }
@@ -285,8 +292,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
         if (op->call_type == Call::Extern) {
             if (!emitted.count(op->name)) {
-                stream << "HALIDE_EXTERN_C " << type_to_c_type(op->type)
-                       << " " << op->name << "(";
+                stream << type_to_c_type(op->type) << " " << op->name << "(";
                 if (function_takes_user_context(op->name)) {
                     stream << "void *";
                     if (op->args.size()) {
@@ -309,12 +315,12 @@ public:
     ostream &stream;
     ExternCallPrototypes(ostream &s) : stream(s) {
         size_t j = 0;
-        // Make sure we don't catch calls that are already in the preamble
-        for (size_t i = 0; i < preamble.size(); i++) {
-            char c = preamble[i];
+        // Make sure we don't catch calls that are already in the global declarations
+        for (size_t i = 0; i < globals.size(); i++) {
+            char c = globals[i];
             if (c == '(' && i > j+1) {
                 // Could be the end of a function_name.
-                emitted.insert(preamble.substr(j+1, i-j-1));
+                emitted.insert(globals.substr(j+1, i-j-1));
             }
 
             if (('A' <= c && c <= 'Z') ||
@@ -367,7 +373,7 @@ void CodeGen_C::visit(const LoweredFunc *op) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
-    stream << "HALIDE_EXTERN_C int " << op->name << "(";
+    stream << "int " << op->name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
             stream << "buffer_t *"
@@ -412,7 +418,7 @@ void CodeGen_C::visit(const LoweredFunc *op) {
     if (is_header) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
-        stream << "HALIDE_EXTERN_C int " << op->name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+        stream << "int " << op->name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
     }
 }
 
@@ -1336,18 +1342,17 @@ void CodeGen_C::test() {
 
     string src = source.str();
     string correct_source =
+        headers +
         "#ifdef __cplusplus\n"
-        "#define HALIDE_EXTERN_C extern \"C\"\n"
-        "#else\n"
-        "#define HALIDE_EXTERN_C\n"
+        "extern \"C\" {\n"
         "#endif\n"
-        + preamble +
+        + globals +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
         "#endif\n"
         + buffer_t_definition +
         "\n\n"
-        "HALIDE_EXTERN_C int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
         " (void)_buf_host_and_dev_are_null;\n"
