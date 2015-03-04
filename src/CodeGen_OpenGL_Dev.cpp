@@ -176,7 +176,18 @@ string CodeGen_GLSL::print_type(Type type) {
 // Identifiers containing double underscores '__' are reserved in GLSL, so we
 // have to use a different name mangling scheme than in the C code generator.
 std::string CodeGen_GLSL::print_name(const std::string &name) {
-    std::string mangled = CodeGen_C::print_name(name);
+
+    std::string mangled;
+
+    // Check if this variable is tagged as a buffer for an image. If so, remove
+    // the tag e.g. the sampler for "i0.buffer" will be "_i0".
+    if (ends_with(name, ".buffer")) {
+       internal_assert(name.length() > 7);
+       mangled = CodeGen_C::print_name(name.substr(0,name.length()-7));
+    } else {
+        mangled = CodeGen_C::print_name(name);
+    }
+
     return replace_all(mangled, "__", "XX");
 }
 
@@ -385,7 +396,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             // parameters, these may be passed in the other arguments to the
             // intrinsic to prevent the parameters from being simplified out of
             // the IR tree.
-            internal_assert(op->args[0].as<StringImm>());
+            internal_assert(op->args[0].as<Variable>());
             id = op->args[0].as<StringImm>()->value;
             return;
         } else if (op->name == Call::glsl_texture_load) {

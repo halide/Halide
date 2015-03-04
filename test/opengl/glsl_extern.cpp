@@ -35,13 +35,21 @@ Expr vec2(Expr x, Expr y) {
 
 template<typename ImageT>
 Expr texture2D(ImageT input, Expr x, Expr y) {
+  using Halide::Internal::Variable;
+  using Halide::Internal::Parameter;
+  std::string name = input.name();
+
+  Type type = Buffer(input).type();
+  Parameter param(type, true, 4, name);
+  param.set_buffer(input);
+
+  Expr v = Variable::make(Handle(),
+                          name + ".buffer",
+                          param);
+
   return Call::make(Float(32,4),
                     "texture2D",
-                    vec<Expr>(Call::make(Handle(),
-                                         Call::glsl_inline,
-                                         vec<Expr>(std::string("_") + input.name()),
-                                         Call::Intrinsic),
-                              vec2(x,y)),
+                    vec<Expr>(v, vec2(x,y)),
                     Call::Extern);
 }
 
@@ -70,7 +78,7 @@ int main(int argc, char** argv) {
 
 
   // Call a scalar built-in function
-  {
+  if (0) {
       int N = 4;
       Image<uint8_t> out(N, N, 3);
 
@@ -121,22 +129,38 @@ int main(int argc, char** argv) {
         }
       }
 
-      int M = 8;
+      // Check the input
+      for (int c = 0; c < input.channels(); ++c) {
+          for (int y=0; y<input.height(); y++) {
+              for (int x=0; x<input.width(); x++) {
+                  printf("%f, ",input(x,y,c));
+              }
+              printf("\n");
+          }
+          printf("\n");
+      }
+
+      int M = 16;
       Image<float> out(M, M, 4);
 
-      float offset = 0.0625f;
+      float offset = (1.0f/float(M)) * 0.5f;
 
       // Define the test function expression:
       Func g;
-      g(x, y, c) = select(c == 0,
-        // TODO: There appears to be a bug where certain select constructs drop
-        // the vector type of the expression and we end up producing bad code.
+#if 1
+      g(x, y, c) =
         shuffle_vector(texture2D(input,
                                  cast<float>(x)/(float)(M) + offset,
                                  cast<float>(y)/(float)(M) + offset),
-                       c),
-        input(x/2,y/2,max(0,c-1)));
-
+                       c)/* + input(x/2,y/2,c)*/;
+#else
+      g(x, y, c) = select(c == 0, cast<float>(x)/(float)(M) + offset,
+                          c == 1, cast<float>(y)/(float)(M) + offset,
+                          shuffle_vector(texture2D(input,
+                                                   cast<float>(x)/(float)(M) + offset,
+                                                   cast<float>(y)/(float)(M) + offset),
+                                         c));
+#endif
       // Schedule the function for GLSL
       g.bound(c, 0, out.channels());
       g.glsl(x, y, c);
@@ -144,7 +168,6 @@ int main(int argc, char** argv) {
       out.copy_to_host();
 
       // Check the output
-
       for (int c = 0; c < out.channels(); ++c) {
           for (int y=0; y<out.height(); y++) {
               for (int x=0; x<out.width(); x++) {

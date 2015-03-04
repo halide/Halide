@@ -808,7 +808,21 @@ public:
     using IRGraphVisitor::visit;
 
     void visit(const Call *op) {
-        IRGraphVisitor::visit(op);
+
+        if (op->call_type == Call::Extern) {
+            // Check if we are passing a variable tagged with ".buffer" to an
+            // extern call node, directly. If so, don't attempt to track access
+            // to the buffer.
+            for (int i = 0; i != op->args.size(); ++i) {
+                const Variable *buffer_var = op->args[i].as<Variable>();
+                if (buffer_var && ends_with(buffer_var->name, ".buffer")) {
+                    continue;
+                }
+                include(op->args[i]);
+            }
+        } else {
+            IRGraphVisitor::visit(op);
+        }
         if (op->image.defined()) {
             Result r;
             r.image = op->image;
@@ -1434,7 +1448,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             Expr actual_min = Variable::make(Int(32), actual_min_name, image, param, rdom);
             Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
-            if (!touched[j].min.defined() || !touched[j].max.defined()) {
+            if (touched.empty() || !touched[j].min.defined() || !touched[j].max.defined()) {
                 user_error << "Buffer " << name
                            << " may be accessed in an unbounded way in dimension "
                            << j << "\n";
