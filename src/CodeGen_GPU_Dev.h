@@ -10,8 +10,41 @@
 namespace Halide {
 namespace Internal {
 
-/** A bit more information attached to an argument useful for GPU backends. */
-struct GPU_Argument : public Argument {
+/** A GPU_Argument looks similar to an Halide::Argument, but has behavioral
+ * differences that make it specific to the GPU pipeline; the fact that
+ * neither is-a nor has-a Halide::Argument is deliberate. In particular, note
+ * that a Halide::Argument that is a buffer can be read or write, but not both,
+ * while a GPU_Argument that is a buffer can be read *and* write for some GPU
+ * backends. */
+struct GPU_Argument {
+    /** The name of the argument */
+    std::string name;
+
+    /** An argument is either a primitive type (for parameters), or a
+     * buffer pointer.
+     *
+     * If is_buffer == false, then type fully encodes the expected type
+     * of the scalar argument.
+     *
+     * If is_buffer == true, then type.bytes() should be used to determine
+     * elem_size of the buffer; additionally, type.code *should* reflect
+     * the expected interpretation of the buffer data (e.g. float vs int),
+     * but there is no runtime enforcement of this at present.
+     */
+    bool is_buffer;
+
+    /** If is_buffer is true, this is the dimensionality of the buffer.
+     * If is_buffer is false, this value is ignored (and should always be set to zero) */
+    uint8_t dimensions;
+
+    /** If this is a scalar parameter, then this is its type.
+     *
+     * If this is a buffer parameter, this is used to determine elem_size
+     * of the buffer_t.
+     *
+     * Note that type.width should always be 1 here. */
+    Type type;
+
     /** The static size of the argument if known, or zero otherwise. */
     size_t size;
 
@@ -25,12 +58,27 @@ struct GPU_Argument : public Argument {
     bool read;
     bool write;
 
-    GPU_Argument() : size(0), packed_index(0), read(false), write(false) {}
-    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions) :
-        Argument(_name, _kind, _type, _dimensions), size(0), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
-    GPU_Argument(const std::string &_name, Kind _kind, Type _type, uint8_t _dimensions,
-                 size_t _size) :
-        Argument(_name, _kind, _type, _dimensions), size(_size), packed_index(0), read(_kind == Buffer), write(_kind == Buffer) {}
+    GPU_Argument() :
+        is_buffer(false),
+        dimensions(0),
+        size(0),
+        packed_index(0),
+        read(false),
+        write(false) {}
+
+    GPU_Argument(const std::string &_name,
+                 bool _is_buffer,
+                 Type _type,
+                 uint8_t _dimensions,
+                 size_t _size = 0) :
+        name(_name),
+        is_buffer(_is_buffer),
+        dimensions(_dimensions),
+        type(_type),
+        size(_size),
+        packed_index(0),
+        read(_is_buffer),
+        write(_is_buffer) {}
 };
 
 /** A code generator that emits GPU code from a given Halide stmt. */
