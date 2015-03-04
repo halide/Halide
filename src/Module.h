@@ -16,7 +16,7 @@ namespace Halide {
 
 namespace Internal {
 
-/** Definition of a lowered funciton. This object provides a concrete
+/** Definition of a lowered function. This object provides a concrete
  * mapping between parameters used in the function body and their
  * declarations in the argument list. */
 struct LoweredFunc {
