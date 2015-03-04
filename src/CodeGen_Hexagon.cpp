@@ -49,11 +49,31 @@ using namespace llvm;
     enum PatternType {Simple = 0, LeftShift, RightShift, NarrowArgs};
     Intrinsic::ID ID;
     PatternType type;
+    bool InvertOperands;
     Pattern() {}
-    Pattern(Expr p, llvm::Intrinsic::ID id, PatternType t = Simple) : pattern(p), ID(id), type(t) {}
+    Pattern(Expr p, llvm::Intrinsic::ID id, PatternType t = Simple,
+            bool Invert = false) : pattern(p), ID(id), type(t),
+                                   InvertOperands(Invert) {}
   };
-  std::vector<Pattern> casts, varith, averages;
+  std::vector<Pattern> casts, varith, averages, combiners;
 
+namespace {
+Expr sat_h_ub(Expr A) {
+  return max(min(A, 255), 0);
+}
+Expr sat_w_h(Expr A) {
+  return max(min(A, 32767), -32768);
+}
+
+Expr bitwiseOr(Expr A, Expr B) {
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_or, vec(A, B),
+                              Internal::Call::Intrinsic);
+}
+Expr shiftLeft(Expr A, Expr B) {
+  return Internal::Call::make(A.type(), Internal::Call::shift_left, vec(A, B),
+                              Internal::Call::Intrinsic);
+}
+}
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
   casts.push_back(Pattern(cast(UInt(16, 64), wild_u8x64),
                           Intrinsic::hexagon_V6_vzb));
@@ -63,6 +83,25 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                           Intrinsic::hexagon_V6_vsb));
   casts.push_back(Pattern(cast(Int(32, 32), wild_i16x32),
                           Intrinsic::hexagon_V6_vsh));
+
+  // "shift_left (x, 8)" is converted to x*256 by Simplify.cpp
+  combiners.push_back(Pattern(bitwiseOr(sat_h_ub(wild_i16x32),
+                                        (sat_h_ub(wild_i16x32) * 256)),
+                              Intrinsic::hexagon_V6_vsathub, Pattern::Simple,
+                              true));
+  combiners.push_back(Pattern(bitwiseOr((sat_h_ub(wild_i16x32) * 256),
+                                        sat_h_ub(wild_i16x32)),
+                              Intrinsic::hexagon_V6_vsathub, Pattern::Simple,
+                              false));
+  combiners.push_back(Pattern(bitwiseOr(sat_w_h(wild_i32x16),
+                                        (sat_w_h(wild_i32x16) * 65536)),
+                              Intrinsic::hexagon_V6_vsatwh, Pattern::Simple,
+                              true));
+  combiners.push_back(Pattern(bitwiseOr((sat_w_h(wild_i32x16) * 65536),
+                                        sat_w_h(wild_i32x16)),
+                              Intrinsic::hexagon_V6_vsatwh, Pattern::Simple,
+                              false));
+
   // "Add"
   // Byte Vectors
   varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
@@ -312,6 +351,42 @@ void CodeGen_Hexagon::visit(const Cast *op) {
   }
   CodeGen::visit(op);
   return;
+}
+void CodeGen_Hexagon::visit(const Call *op) {
+  vector<Expr> matches;
+  std::cerr << "Op is\n" << op << "\n";
+  for (size_t I = 0; I < combiners.size(); ++I) {
+    const Pattern &P = combiners[I];
+    if (expr_match(P.pattern, op, matches)) {
+      Intrinsic::ID ID = P.ID;
+      bool InvertOperands = P.InvertOperands;
+      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      llvm::FunctionType *FType = F->getFunctionType();
+      size_t NumMatches = matches.size();
+      internal_assert(NumMatches == 2);
+      internal_assert(FType->getNumParams() == NumMatches);
+      Value *Op0 = codegen(matches[0]);
+      Value *Op1 = codegen(matches[1]);
+      llvm::Type *T0 = FType->getParamType(0);
+      llvm::Type *T1 = FType->getParamType(1);
+      Halide::Type DestType = op->type;
+      llvm::Type *DestLLVMType = llvm_type_of(DestType);
+      if (T0 != Op0->getType()) {
+        Op0 = builder->CreateBitCast(Op0, T0);
+      }
+      if (T1 != Op1->getType()) {
+        Op1 = builder->CreateBitCast(Op1, T1);
+      }
+      Value *Call;
+      if (InvertOperands)
+        Call = builder->CreateCall2(F, Op1, Op0);
+      else
+        Call = builder->CreateCall2(F, Op0, Op1);
+      value = builder->CreateBitCast(Call, DestLLVMType);
+      return;
+    }
+  }
+  CodeGen::visit(op);
 }
   void CodeGen_Hexagon::visit(const Broadcast *op) {
     //    int Width = op->width;
