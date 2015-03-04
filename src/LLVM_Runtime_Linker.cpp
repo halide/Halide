@@ -160,7 +160,11 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // datalayout of the first module that has one for all modules.
     const llvm::DataLayout *data_layout = NULL;
     for (size_t i = 0; data_layout == NULL && i < modules.size(); i++) {
+        #if LLVM_VERSION >= 37
         data_layout = &modules[i]->getDataLayout();
+        #else
+        data_layout = modules[i]->getDataLayout();
+        #endif
     }
 
     // If LLVM is 3.5 or greater, we have C++11.
@@ -174,8 +178,10 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
-        #if LLVM_VERSION >= 35
+        #if LLVM_VERSION >= 37
         modules[i]->setDataLayout(*data_layout);
+        #elif LLVM_VERSION >= 35
+        modules[i]->setDataLayout(data_layout);
         #endif
         // This is a workaround to silence some linkage warnings during
         // tests: normally all modules will have the same triple,
