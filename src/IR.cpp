@@ -597,6 +597,7 @@ const string Call::make_struct = "make_struct";
 const string Call::stringify = "stringify";
 const string Call::memoize_expr = "memoize_expr";
 const string Call::copy_memory = "copy_memory";
+const string Call::likely = "likely";
 
 }
 }
