@@ -546,13 +546,6 @@ private:
         stream << close_div();
     }
 
-    void visit(const Return *op) {
-        stream << open_div("Return");
-        stream << keyword("return");
-        print(op->value);
-        stream << close_div();
-    }
-
 public:
     void print(Expr ir) {
         ir.accept(this);

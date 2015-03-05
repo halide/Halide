@@ -293,7 +293,6 @@ protected:
     virtual void visit(const Block *);
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
-    virtual void visit(const Return *);
     // @}
 
     /** Generate code for an allocate node. It has no default

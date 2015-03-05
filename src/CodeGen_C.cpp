@@ -404,6 +404,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // Emit the body
         print(f.body);
 
+        // Return success.
+        do_indent();
+        stream << "return 0;\n";
+
         indent -= 1;
         stream << "}\n";
 
@@ -1304,12 +1308,6 @@ void CodeGen_C::visit(const Evaluate *op) {
     stream << "(void)" << id << ";\n";
 }
 
-void CodeGen_C::visit(const Return *op) {
-    string id = print_expr(op->value);
-    do_indent();
-    stream << "return " << id << ";\n";
-}
-
 void CodeGen_C::test() {
     Argument buffer_arg("buf", Argument::Buffer, Int(32), 3);
     Argument float_arg("alpha", Argument::Scalar, Float(32), 0);
@@ -1330,7 +1328,6 @@ void CodeGen_C::test() {
     s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
     s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), s);
-    s = Block::make(s, Return::make(0));
 
     Module m("", get_host_target());
     m.append(LoweredFunc("test1", args, s, LoweredFunc::External));

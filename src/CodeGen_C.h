@@ -133,7 +133,6 @@ protected:
     void visit(const Realize *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-    void visit(const Return *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };

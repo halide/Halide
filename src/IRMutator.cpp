@@ -313,14 +313,5 @@ void IRMutator::visit(const Evaluate *op) {
     }
 }
 
-void IRMutator::visit(const Return *op) {
-    Expr v = mutate(op->value);
-    if (v.same_as(op->value)) {
-        stmt = op;
-    } else {
-        stmt = Return::make(v);
-    }
-}
-
 }
 }

@@ -619,11 +619,4 @@ void IRPrinter::visit(const Evaluate *op) {
     stream << "\n";
 }
 
-void IRPrinter::visit(const Return *op) {
-    do_indent();
-    stream << "return ";
-    print(op->value);
-    stream << "\n";
-}
-
 }}

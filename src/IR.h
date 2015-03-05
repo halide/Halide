@@ -337,14 +337,6 @@ struct Evaluate : public StmtNode<Evaluate> {
     EXPORT static Stmt make(Expr v);
 };
 
-/** Returns an expression from a function. This statement is only
- * valid in the body of a LoweredFunc. */
-struct Return : public StmtNode<Return> {
-    Expr value;
-
-    EXPORT static Stmt make(Expr v);
-};
-
 /** A function call. This can represent a call to some extern
  * function (like sin), but it's also our multi-dimensional
  * version of a Load, so it can be a load from an input image, or

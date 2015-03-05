@@ -2088,7 +2088,8 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
             private_params.push_back(Variable::make(arg.type, arg.name));
         }
     }
-    Stmt public_body = Return::make(Call::make(Int(32), private_name, private_params, Call::Extern));
+    Expr call_private = Call::make(Int(32), private_name, private_params, Call::Extern);
+    Stmt public_body = AssertStmt::make(call_private == 0, private_name + " failed");
     module.append(LoweredFunc(public_name, public_args, public_body, LoweredFunc::External));
 
     return module;

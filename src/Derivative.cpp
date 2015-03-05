@@ -373,10 +373,6 @@ class Monotonic : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Return *op) {
-        internal_error << "Monotonic of statement\n";
-    }
-
 public:
     MonotonicResult result;
 

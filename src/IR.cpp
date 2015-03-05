@@ -472,14 +472,6 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Stmt Return::make(Expr v) {
-    internal_assert(v.defined()) << "Return of undefined\n";
-
-    Return *node = new Return;
-    node->value = v;
-    return node;
-}
-
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                 Function func, int value_index,
                 Buffer image, Parameter param) {
@@ -564,7 +556,6 @@ template<> EXPORT IRNodeType StmtNode<Realize>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Block>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<IfThenElse>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Evaluate>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Return>::_type_info = {};
 
 using std::string;
 const string Call::debug_to_file = "debug_to_file";

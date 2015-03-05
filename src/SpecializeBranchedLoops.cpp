@@ -1192,20 +1192,6 @@ private:
         }
     }
 
-    void visit(const Return *op) {
-        vector<Branch> value_branches;
-        collect(op->value, value_branches);
-        for (size_t i = 0; i < value_branches.size(); ++i) {
-            Branch &branch = value_branches[i];
-            Expr value = branch.content;
-            if (value.same_as(op->value)) {
-                branch.content = Stmt(op);
-            } else {
-                branch.content = Return::make(value);
-            }
-            branches.push_back(branch);
-        }
-    }
 };
 
 
