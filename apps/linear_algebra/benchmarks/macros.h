@@ -13,7 +13,7 @@
         }                                           \
     }
 
-#define L1BytesUsed(N) 2 * N * sizeof(Scalar)
+#define L1GFLOPS(N) 2 * N * 1e-3 / elapsed
 #define L1Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \
@@ -26,11 +26,11 @@
                   << std::setw(15) << type << #benchmark                \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed)           \
-                  << std::setw(20) << 1000 * L1BytesUsed(N) / elapsed   \
+                  << std::setw(20) << L1GFLOPS(N)                       \
                   << std::endl;                                         \
     }
 
-#define L2BytesUsed(N) (2 + N) * N * sizeof(Scalar)
+#define L2GFLOPS(N) (2 + N) * N * 1e-3 / elapsed
 #define L2Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \
@@ -45,11 +45,11 @@
         << std::setw(15) << type << #benchmark                          \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed)           \
-                  << std::setw(20) << 1000 * L2BytesUsed(N) / elapsed   \
+                  << std::setw(20) << L2GFLOPS(N)                       \
                   << std::endl;                                         \
     }
 
-#define L3BytesUsed(N) 3 * N * N * sizeof(Scalar)
+#define L3GFLOPS(N) (3 + N) * N * N * 1e-3 / elapsed
 #define L3Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \
@@ -64,6 +64,6 @@
                   << std::setw(15) << type << #benchmark                \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed)           \
-                  << std::setw(20) << 1000 * L3BytesUsed(N) / elapsed   \
+                  << std::setw(20) << L3GFLOPS(N)                       \
                   << std::endl;                                         \
     }

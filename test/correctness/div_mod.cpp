@@ -348,8 +348,6 @@ template<typename T,typename BIG,int bits>
 bool f_mod() {
     int i, j;
     Type t = type_of<T>();
-    BIG minval = 0.0;
-    BIG maxval = 1.0;
     bool success = true;
 
     std::cout << "Test mod of " << t << '\n';

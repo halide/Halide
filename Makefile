@@ -28,7 +28,9 @@ OPTIMIZE ?= -O3
 #  but that is difficult in some testing situations because it requires having
 #  such a compiler handy. One still needs to have 32-bit llvm libraries, etc.)
 BUILD_BIT_SIZE ?=
-TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
+TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti $(CXX_WARNING_FLAGS)
+# The tutorials contain example code with warnings that we don't want to be flagged as errors.
+TUTORIAL_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
 GENGEN_DEPS ?=$(BIN_DIR)/libHalide.so include/Halide.h tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -157,7 +159,6 @@ TEST_OPENCL = 1
 endif
 endif
 
-TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
 ifneq ($(TEST_PTX), )
@@ -210,6 +211,7 @@ DISTRIB_DIR=distrib
 endif
 
 FILTERS_DIR = $(BUILD_DIR)/filters
+
 SOURCE_FILES = \
   AllocationBoundsInference.cpp \
   BlockFlattening.cpp \
@@ -220,10 +222,10 @@ SOURCE_FILES = \
   Buffer.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
-  CodeGen.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
   CodeGen_Internal.cpp \
+  CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
@@ -264,6 +266,7 @@ SOURCE_FILES = \
   JITModule.cpp \
   Lerp.cpp \
   LinearSolve.cpp \
+  LLVM_Runtime_Linker.cpp \
   Lower.cpp \
   Memoization.cpp \
   ModulusRemainder.cpp \
@@ -316,7 +319,7 @@ HEADER_FILES = \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
-  CodeGen.h \
+  CodeGen_LLVM.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_OpenGL_Dev.h \
@@ -362,6 +365,7 @@ HEADER_FILES = \
   Lambda.h \
   Lerp.h \
   LinearSolve.h \
+  LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
   Memoization.h \
@@ -674,10 +678,10 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 		export TUTORIAL=$* ;\
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make tutorial_$${TUTORIAL/run/generate}; \
-		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
+		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) $(STATIC_TEST_LIBS) -o $@; \
 	else \
-		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
+		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 		-Iinclude -L$(BIN_DIR) -lHalide $(STATIC_TEST_LIBS) $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
 
