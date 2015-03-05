@@ -4,7 +4,7 @@
 /** \file
  *
  * Defines functionality that's useful to multiple target-specific
- * CodeGen paths, but shouldn't live in CodeGen.h (because that's the
+ * CodeGen paths, but shouldn't live in CodeGen_LLVM.h (because that's the
  * front-end-facing interface to CodeGen).
  */
 
@@ -109,6 +109,9 @@ llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
  * but overflows, this routine asserts. The name parameter is used in the
  * assertion message. */
 bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size);
+
+/** Which built-in functions require a user-context first argument? */
+bool function_takes_user_context(const std::string &name);
 
 }}
 

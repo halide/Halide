@@ -167,7 +167,7 @@ l3_benchmarks: \
 	$(L3_BENCHMARKS:%=halide_l3_benchmark_%)
 
 run_benchmarks: $(BENCHMARKS)
-	@echo " Package     Subroutine    Size             Runtime     Data throughput"
+	@echo " Package     Subroutine    Size             Runtime     GFLOPS"
 #	@echo "======================================================================="
 	@make --no-print-directory l1_benchmarks
 	@make --no-print-directory l2_benchmarks
