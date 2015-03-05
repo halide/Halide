@@ -324,12 +324,19 @@ private:
                                        select_a->false_value + select_b->false_value));
         } else if (add_a && is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
-            if (is_simple_const(b)) expr = mutate(add_a->a + (add_a->b + b));
-            else expr = mutate((add_a->a + b) + add_a->b);
+            if (is_simple_const(b)) {
+                expr = mutate(add_a->a + (add_a->b + b));
+            } else {
+                expr = mutate((add_a->a + b) + add_a->b);
+            }
         } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a + add_b->a) + add_b->b);
-        } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
-            expr = mutate((sub_a->a + b) - sub_a->b);
+        } else if (sub_a && is_simple_const(sub_a->a)) {
+            if (is_simple_const(b)) {
+                expr = mutate((sub_a->a + b) - sub_a->b);
+            } else {
+                expr = mutate((b - sub_a->b) + sub_a->a);
+            }
 
         } else if (sub_a && equal(b, sub_a->b)) {
             // Additions that cancel an inner term
@@ -340,9 +347,9 @@ private:
         } else if (sub_b && equal(a, sub_b->b)) {
             // a + (b - a)
             expr = sub_b->a;
-        } else if (sub_b && is_zero(sub_b->a)) {
-            // a + (0 - b)
-            expr = a - sub_b->b;
+        } else if (sub_b && is_simple_const(sub_b->a)) {
+            // a + (7 - b) -> (a - b) + 7
+            expr = mutate((a - sub_b->b) + sub_b->a);
         } else if (sub_a && sub_b && equal(sub_a->b, sub_b->a)) {
             // (a - b) + (b - c) -> a - c
             expr = mutate(sub_a->a - sub_b->b);

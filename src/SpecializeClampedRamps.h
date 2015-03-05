@@ -2,7 +2,9 @@
 #define HALIDE_SPECIALIZE_CLAMPED_RAMPS_H
 
 /** \file
- * Defines a lowering pass that simplifies code using clamped ramps.
+ * Defines a lowering pass that splits loop bodies into three
+ * to handle boundary conditions: A prologue, a simplified
+ * steady-stage, and an epilogue.
  */
 
 #include "IR.h"
@@ -10,9 +12,9 @@
 namespace Halide {
 namespace Internal {
 
-/** Take a statement with multi-dimensional Realize, Provide, and Call
- * nodes, and turn it into a statement with single-dimensional
- * Allocate, Store, and Load nodes respectively. */
+/** Split loop bodies into a prologue, a steady state, and an
+ * epilogue. Finds the steady state by hunting for use of the 'likely'
+ * intrinsic. */
 Stmt specialize_clamped_ramps(Stmt s);
 
 }
