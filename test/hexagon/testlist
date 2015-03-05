@@ -3,3 +3,4 @@ vminmax
 vext
 vsat
 haar_halide
+vbitwise

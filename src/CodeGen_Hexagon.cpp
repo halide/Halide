@@ -30,6 +30,7 @@ extern llvm::cl::opt<bool> ReserveR9;
 #endif
 #endif
 
+#define HEXAGON_SINGLE_MODE_VECTOR_SIZE 64
 namespace Halide {
 namespace Internal {
 
@@ -55,7 +56,7 @@ using namespace llvm;
             bool Invert = false) : pattern(p), ID(id), type(t),
                                    InvertOperands(Invert) {}
   };
-  std::vector<Pattern> casts, varith, averages, combiners;
+  std::vector<Pattern> casts, varith, averages, combiners, vbitwise;
 
 namespace {
 Expr sat_h_ub(Expr A) {
@@ -67,6 +68,18 @@ Expr sat_w_h(Expr A) {
 
 Expr bitwiseOr(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_or, vec(A, B),
+                              Internal::Call::Intrinsic);
+}
+Expr bitwiseAnd(Expr A, Expr B) {
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_and, vec(A, B),
+                              Internal::Call::Intrinsic);
+}
+Expr bitwiseXor(Expr A, Expr B) {
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_xor, vec(A, B),
+                              Internal::Call::Intrinsic);
+}
+Expr bitwiseNot(Expr A) {
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_not, vec(A),
                               Internal::Call::Intrinsic);
 }
 Expr shiftLeft(Expr A, Expr B) {
@@ -101,6 +114,37 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                                         sat_w_h(wild_i32x16)),
                               Intrinsic::hexagon_V6_vsatwh, Pattern::Simple,
                               false));
+  // Our bitwise operations are all type agnostic; all they need are vectors
+  // of 64 bytes (single mode) or 128 bytes (double mode). Over 4 types -
+  // unsigned bytes, signed and unsigned half-word, and signed word, we have
+  // 12 such patterns for each operation. But, we'll stick to only like types
+  // here.
+  vbitwise.push_back(Pattern(bitwiseAnd(wild_u8x64, wild_u8x64),
+                             Intrinsic::hexagon_V6_vand));
+  vbitwise.push_back(Pattern(bitwiseAnd(wild_i16x32, wild_i16x32),
+                             Intrinsic::hexagon_V6_vand));
+  vbitwise.push_back(Pattern(bitwiseAnd(wild_u16x32, wild_u16x32),
+                             Intrinsic::hexagon_V6_vand));
+  vbitwise.push_back(Pattern(bitwiseAnd(wild_i32x16, wild_i32x16),
+                             Intrinsic::hexagon_V6_vand));
+
+  vbitwise.push_back(Pattern(bitwiseXor(wild_u8x64, wild_u8x64),
+                             Intrinsic::hexagon_V6_vxor));
+  vbitwise.push_back(Pattern(bitwiseXor(wild_i16x32, wild_i16x32),
+                             Intrinsic::hexagon_V6_vxor));
+  vbitwise.push_back(Pattern(bitwiseXor(wild_u16x32, wild_u16x32),
+                             Intrinsic::hexagon_V6_vxor));
+  vbitwise.push_back(Pattern(bitwiseXor(wild_i32x16, wild_i32x16),
+                             Intrinsic::hexagon_V6_vxor));
+
+  vbitwise.push_back(Pattern(bitwiseOr(wild_u8x64, wild_u8x64),
+                             Intrinsic::hexagon_V6_vor));
+  vbitwise.push_back(Pattern(bitwiseOr(wild_i16x32, wild_i16x32),
+                             Intrinsic::hexagon_V6_vor));
+  vbitwise.push_back(Pattern(bitwiseOr(wild_u16x32, wild_u16x32),
+                             Intrinsic::hexagon_V6_vor));
+  vbitwise.push_back(Pattern(bitwiseOr(wild_i32x16, wild_i32x16),
+                             Intrinsic::hexagon_V6_vor));
 
   // "Add"
   // Byte Vectors
@@ -386,7 +430,34 @@ void CodeGen_Hexagon::visit(const Call *op) {
       return;
     }
   }
-  CodeGen::visit(op);
+  value = emitBinaryOp(op, vbitwise);
+  if (!value) {
+    if (op->name == Call::bitwise_not) {
+      if (op->type.is_vector() &&
+          ((op->type.bytes() * op->type.width) ==
+           HEXAGON_SINGLE_MODE_VECTOR_SIZE)) {
+        llvm::Function *F =
+          Intrinsic::getDeclaration(module,
+                                    Intrinsic::hexagon_V6_vnot);
+        llvm::FunctionType *FType = F->getFunctionType();
+        llvm::Type *T0 = FType->getParamType(0);
+        Value *Op0 = codegen(op->args[0]);
+        if (T0 != Op0->getType()) {
+          Op0 = builder->CreateBitCast(Op0, T0);
+        }
+        Halide::Type DestType = op->type;
+        llvm::Type *DestLLVMType = llvm_type_of(DestType);
+        Value *Call = builder->CreateCall(F, Op0);
+        if (DestLLVMType != Call->getType())
+          value = builder->CreateBitCast(Call, DestLLVMType);
+        else
+          value = Call;
+        return;
+      }
+
+    }
+    CodeGen::visit(op);
+  }
 }
   void CodeGen_Hexagon::visit(const Broadcast *op) {
     //    int Width = op->width;
