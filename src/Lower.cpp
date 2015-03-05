@@ -1957,8 +1957,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         }
     }
 
-    s = Block::make(s, Return::make(0));
-
     return s;
 }
 

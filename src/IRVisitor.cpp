@@ -217,10 +217,6 @@ void IRVisitor::visit(const Evaluate *op) {
     op->value.accept(this);
 }
 
-void IRVisitor::visit(const Return *op) {
-    op->value.accept(this);
-}
-
 void IRGraphVisitor::include(const Expr &e) {
     if (visited.count(e.ptr)) {
         return;
@@ -435,10 +431,6 @@ void IRGraphVisitor::visit(const IfThenElse *op) {
 }
 
 void IRGraphVisitor::visit(const Evaluate *op) {
-    include(op->value);
-}
-
-void IRGraphVisitor::visit(const Return *op) {
     include(op->value);
 }
 

@@ -58,7 +58,6 @@ public:
     void visit(const IfThenElse *);
     void visit(const Free *);
     void visit(const Evaluate *);
-    void visit(const Return *);
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -407,10 +406,6 @@ void ComputeModulusRemainder::visit(const IfThenElse *) {
 }
 
 void ComputeModulusRemainder::visit(const Evaluate *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
-}
-
-void ComputeModulusRemainder::visit(const Return *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 

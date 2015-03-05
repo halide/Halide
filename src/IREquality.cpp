@@ -86,7 +86,6 @@ private:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-    void visit(const Return *);
 };
 
 template<typename T>
@@ -428,12 +427,6 @@ void IRComparer::visit(const Evaluate *op) {
     compare_expr(s->value, op->value);
 }
 
-void IRComparer::visit(const Return *op) {
-    const Return *s = stmt.as<Return>();
-
-    compare_expr(s->value, op->value);
-}
-
 } // namespace
 
 
@@ -511,7 +504,7 @@ void ir_equality_test() {
     check_not_equal(x, Variable::make(Int(32), "y"));
 
     // Something that will hang if IREquality has poor computational
-    // complexity.    
+    // complexity.
     Expr e1 = x, e2 = x;
     for (int i = 0; i < 100; i++) {
         e1 = e1*e1 + e1;

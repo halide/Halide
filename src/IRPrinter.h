@@ -113,7 +113,6 @@ protected:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-    void visit(const Return *);
 };
 }
 }

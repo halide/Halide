@@ -506,6 +506,9 @@ void CodeGen_LLVM::compile(const LoweredFunc &f) {
     // pointing at a brand new basic block. We're good to go.
     f.body.accept(this);
 
+    // Return success
+    builder->CreateRet(ConstantInt::get(i32, 0));
+
     // Remove the arguments from the symbol table
     for (size_t i = 0; i < args.size(); i++) {
         sym_pop(args[i].name);
@@ -2738,12 +2741,6 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 
     // Discard result
     value = NULL;
-}
-
-void CodeGen_LLVM::visit(const Return *op) {
-    llvm::Value *value = codegen(op->value);
-
-    builder->CreateRet(value);
 }
 
 Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
