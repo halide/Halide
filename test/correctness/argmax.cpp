@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
         100,
         101,
     };
-    for (int i = 0; i < sizeof(starts)/sizeof(starts[0]); i++) {
+    for (size_t i = 0; i < sizeof(starts)/sizeof(starts[0]); i++) {
         int init = starts[i];
         Func h;
         r = RDom(0, 100);

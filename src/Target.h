@@ -13,11 +13,6 @@
 #include "Type.h"
 #include "Util.h"
 
-namespace llvm {
-class Module;
-class LLVMContext;
-}
-
 namespace Halide {
 
 /** A struct representing a target machine and os to generate code for. */
@@ -251,17 +246,6 @@ EXPORT Target get_jit_target_from_environment();
  */
 EXPORT Target parse_target_string(const std::string &target);
 
-namespace Internal {
-
-/** Create an llvm module containing the support code for a given target. */
-llvm::Module *get_initial_module_for_target(Target, llvm::LLVMContext *, bool for_shared_jit_runtime = false, bool just_gpu = false);
-
-/** Create an llvm module containing the support code for ptx device. */
-llvm::Module *get_initial_module_for_ptx_device(Target, llvm::LLVMContext *c);
-
 }
-
-}
-
 
 #endif
