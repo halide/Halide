@@ -5,6 +5,7 @@
 #include "CodeGen_JavaScript.h"
 #include "CodeGen.h"
 #include "CodeGen_Internal.h"
+#include "Deinterleave.h"
 #include "Substitute.h"
 #include "IROperator.h"
 #include "Param.h"
@@ -25,20 +26,121 @@ using std::map;
 namespace {
 // TODO: Fill in preamble...
 const string preamble =
-    "function halide_error(msg) { alert(msg); }"
+    "if (typeof(halide_print) != \"function\") { halide_print = function (user_context, msg) { Console.log(msg); } }\n"
+    "if (typeof(halide_error) != \"function\") { halide_error = function (user_context, msg) { halide_print(user_context, msg); } }\n"
+    "if (typeof(halide_trace) != \"function\") { var id = 0; halide_trace = function (user_context, event) { return id++; } }\n"
+    "if (typeof(halide_shutdown_trace) != \"function\") { halide_shutdown_trace = function () { return 0; } }\n"
+    "function halide_rewrite_buffer(b, elem_size,\n"
+    "                           min0, extent0, stride0,\n"
+    "                           min1, extent1, stride1,\n"
+    "                           min2, extent2, stride2,\n"
+    "                           min3, extent3, stride3) {\n"
+    " b.min[0] = min0;\n"
+    " b.min[1] = min1;\n"
+    " b.min[2] = min2;\n"
+    " b.min[3] = min3;\n"
+    " b.extent[0] = extent0;\n"
+    " b.extent[1] = extent1;\n"
+    " b.extent[2] = extent2;\n"
+    " b.extent[3] = extent3;\n"
+    " b.stride[0] = stride0;\n"
+    " b.stride[1] = stride1;\n"
+    " b.stride[2] = stride2;\n"
+    " b.stride[3] = stride3;\n"
+    " return true;\n"
+    "}\n"
   //...
     "";
 }
 
 CodeGen_JavaScript::CodeGen_JavaScript(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
 
+string CodeGen_JavaScript::make_js_int_cast(string value, bool src_unsigned, int src_bits, bool dst_unsigned, int dst_bits) {
+    // TODO: Do we us print_assignment to cache constants?
+    string result;
+    if ((src_bits <= dst_bits) && (src_unsigned == dst_unsigned)) {
+        result = value;
+    } else {
+        string mask;
+        switch (dst_bits) {
+        case 1:
+            mask = "1";
+            break;
+        case 8:
+            mask = "0xff";
+            break;
+        case 16:
+            mask = "0xffff";
+            break;
+        case 32:
+            mask = "0xffffffff";
+            break;
+        default:
+            internal_error << "Unknown bit width making JavaScript cast.\n";
+            break;
+        }
+
+        result = print_assignment(Int(32), value + " & " + mask);
+        string shift_op = dst_unsigned ? ">>>" : ">>";
+        string shift_amount = int_to_string(32 - dst_bits);
+        result = print_assignment(Int(32), "(" + result + " << " + shift_amount + ") " + shift_op + " " + shift_amount);
+    }
+    return result;
+}
+
+string javascript_type_array_name_fragment(Type type) {
+    string typed_array_name;
+    if (type.is_float()) {
+        if (type.bits == 32) {
+            typed_array_name = "Float32";
+        } else if (type.bits == 64) {
+            typed_array_name = "Float64";
+        } else {
+            user_error << "Only 32-bit and 64-bit floating-point types are supported in JavaScript.\n";
+        }
+    } else {
+        if (type.is_uint()) {
+            typed_array_name = "Ui";
+        } else {
+            typed_array_name = "I";
+        }
+        switch (type.bits) {
+            case 8:
+              typed_array_name += "nt8";
+              break;
+            case 16:
+              typed_array_name += "nt16";
+              break;
+            case 32:
+              typed_array_name += "nt32";
+              break;
+            case 64:
+              user_error << "64-bit integers are not supported in JavaScript.\n";
+              break;
+            default:
+              break;
+        }
+    }
+    return typed_array_name;
+}
+
 string CodeGen_JavaScript::print_reinterpret(Type type, Expr e) {
-#if 0
-    ostringstream oss;
-    oss << "reinterpret<" << print_type(type) << ">(" << print_expr(e) << ")";
-    return oss.str();
-#endif
-    return print_expr(e);
+    if (e.type() == type) {
+        return print_expr(e);
+    } else if ((type.is_int() || type.is_int()) && (e.type().is_int() || e.type().is_int())) {
+        return make_js_int_cast(print_expr(e), e.type().is_uint(), e.type().bits, type.is_uint(), type.bits);
+    } else {
+        int32_t bytes_needed = (std::max(type.bits, e.type().bits) + 7) / 8;
+        string dataview = unique_name("r");
+        do_indent();
+        stream << "var " << dataview << "= new DataView(new ArrayBuffer(" << bytes_needed << "));\n";
+        string setter = "set" + javascript_type_array_name_fragment(e.type());
+        string getter = "get" + javascript_type_array_name_fragment(type);
+        string val = print_expr(e);
+        do_indent();
+        stream << dataview << "." << setter << "(0, " << val << ", true);\n";
+        return dataview + "." + getter + "(0, true)";
+    }
 }
 
 string CodeGen_JavaScript::print_name(const string &name) {
@@ -110,14 +212,13 @@ void CodeGen_JavaScript::compile(Stmt s, string name,
 
     have_user_context = false;
     for (size_t i = 0; i < args.size(); i++) {
-        // TODO: check that its type is void *?
         have_user_context |= (args[i].name == "__user_context");
     }
 
     // Emit the function prototype
     stream << "function " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+      if (args[i].is_buffer()) {
             stream << print_name(args[i].name)
                    << "_buffer";
         } else {
@@ -131,7 +232,7 @@ void CodeGen_JavaScript::compile(Stmt s, string name,
 
     // Unpack the buffer_t's
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+      if (args[i].is_buffer()) {
             unpack_buffer(args[i].type, args[i].name);
         }
     }
@@ -237,21 +338,6 @@ void CodeGen_JavaScript::visit(const Variable *op) {
     id = print_name(op->name);
 }
 
-string CodeGen_JavaScript::make_js_int_cast(string value, bool src_unsigned, int src_bits, bool dst_unsigned, int dst_bits) {
-    // TODO: Do we us print_assignment to cache constants?
-    string result;
-    if ((src_bits <= dst_bits) && (src_unsigned == dst_unsigned)) {
-        result = value;
-    } else {
-        result = print_assignment(Int(32), value + " & " + print_assignment(Int(32), int_to_string(1 << dst_bits)));
-        if (!dst_unsigned) {
-            string shift_amount = int_to_string(32 - dst_bits);
-            result = print_assignment(Int(32), "(" + result + " << " + shift_amount + ") >> " + shift_amount);
-        }
-    }
-    return result;
-}
-
 void CodeGen_JavaScript::visit(const Cast *op) {
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
@@ -280,9 +366,29 @@ void CodeGen_JavaScript::visit(const Cast *op) {
 }
 
 void CodeGen_JavaScript::visit_binop(Type t, Expr a, Expr b, const char * op) {
-    string sa = print_expr(a);
-    string sb = print_expr(b);
-    print_assignment(t, sa + " " + op + " " + sb);
+    ostringstream rhs;
+    if (t.width == 1) {
+        string sa = print_expr(a);
+        string sb = print_expr(b);
+        rhs << sa << " " << op << " " << sb;
+    } else {
+        std::vector<string> sa;
+        std::vector<string> sb;
+
+        for (int32_t i = 0; i < t.width; i++) {
+            sa.push_back(print_expr(extract_lane(a, i)));
+            sb.push_back(print_expr(extract_lane(b, i)));
+        }
+        rhs << "[";
+        for (int32_t i = 0; i < t.width; i++) {
+            if (i != 0) {
+                rhs << ", ";
+            }
+            rhs << sa[i] << " " << op << " " << sb[i];
+        }
+        rhs << "]";
+    }
+    print_assignment(t, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Add *op) {
@@ -299,7 +405,8 @@ void CodeGen_JavaScript::visit(const Mul *op) {
 
 void CodeGen_JavaScript::visit(const Div *op) {
     int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
+    // TODO: Support optimization on vectors
+    if (op->type.width == 1 && is_const_power_of_two(op->b, &bits)) {
         ostringstream oss;
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
@@ -314,7 +421,8 @@ void CodeGen_JavaScript::visit(const Div *op) {
 
 void CodeGen_JavaScript::visit(const Mod *op) {
     int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
+    // TODO: Support optimization on vectors
+    if (op->type.width == 1 && is_const_power_of_two(op->b, &bits)) {
         ostringstream oss;
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
@@ -450,7 +558,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
             }
 
             rhs << "halide_debug_to_file(";
-            rhs << (have_user_context ? "__user_context_" : "null");
+            rhs << (have_user_context ? "__user_context" : "null");
             rhs << ", \"" + filename + "\", " + func;
             for (size_t i = 0; i < args.size(); i++) {
                 rhs << ", " << args[i];
@@ -512,11 +620,8 @@ void CodeGen_JavaScript::visit(const Call *op) {
         } else if (op->name == Call::profiling_timer) {
             internal_assert(op->args.size() == 0);
             rhs << "halide_profiling_timer(";
-            rhs << (have_user_context ? "__user_context_" : "null");
+            rhs << (have_user_context ? "__user_context" : "null");
             rhs << ")";
-        } else if (op->name == Call::lerp) {
-            Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
-            rhs << print_expr(e);
         } else if (op->name == Call::null_handle) {
             rhs << "null";
         } else if (op->name == Call::address_of) {
@@ -524,6 +629,97 @@ void CodeGen_JavaScript::visit(const Call *op) {
             const Load *l = op->args[0].as<Load>();
             internal_assert(op->args.size() == 1 && l);
             rhs << print_name(l->name) << ".subarray(" << print_expr(l->index) << ")";
+        } else if (op->name == Call::trace || op->name == Call::trace_expr) {
+            int int_args = (int)(op->args.size()) - 5;
+            internal_assert(int_args >= 0);
+
+            Type type = op->args[4].type();
+
+            ostringstream value_stream;
+            value_stream << "[";
+            for (int32_t v_index = 0; v_index < type.width; v_index++) {
+                if (v_index != 0) {
+                    value_stream << ", ";
+                }
+                if (type.width == 1) {
+                    value_stream << print_expr(op->args[4]);
+                } else {
+                    value_stream << print_expr(extract_lane(op->args[4], v_index));
+                }
+            }
+            value_stream << "]";
+
+            ostringstream coordinates_stream;
+            coordinates_stream << "[";
+            for (int32_t c_index = 0; c_index < int_args; c_index++) {
+                if (c_index != 0) {
+                  coordinates_stream << ", ";
+                }
+                coordinates_stream << print_expr(op->args[5 + c_index]);
+            }
+            coordinates_stream << "]";
+
+            string event_name = unique_name("e");
+            do_indent();
+            stream << "var " << event_name << " = { func: " << op->args[0] << ", ";
+            stream << "event: " << op->args[1] << ", ";
+            stream << "parent_id: " << op->args[2] << ", ";
+            stream << "type_code: " << type.code << ", bits: " << type.bits << ", vector_width: " << type.width << ", ";
+            stream << "value_index: " << op->args[3] << ", ";
+            stream << "value: " << value_stream.str() << ", ";
+            stream << "dimensions: " << int_args * type.width << ", ";
+            stream << "coordinates: " << coordinates_stream.str() << " }\n";
+
+            if (op->name == Call::trace_expr) {
+                do_indent();
+                rhs << "halide_trace(__user_context, " << event_name << ")";
+            } else {
+                stream << "halide_trace(__user_context, " << event_name << ");\n";
+                rhs << print_expr(op->args[4]);
+            }
+        } else if (op->name == Call::lerp) {
+            Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+            rhs << print_expr(e);
+        } else if (op->name == Call::popcount) {
+            Expr e = cast<uint32_t>(op->args[0]);
+            e = e - ((e >> 1) & 0x55555555);
+            e = (e & 0x33333333) + ((e >> 2) & 0x33333333);
+            e = (e & 0x0f0f0f0f) + ((e >> 4) & 0x0f0f0f0f);
+            e = (e * 0x1010101) >> 24;
+            rhs << print_expr(e);
+        } else if (op->name == Call::count_leading_zeros) {
+            // TODO: Should this be a print_assignment?
+            string e = print_expr(op->args[0]);
+            int32_t bits = op->args[0].type().bits;
+            rhs << "((" << e << "< 0) ? 0 : ((" << e << " == 0) ? " << bits << ": " << (bits - 1) << " - ((Math.log(" << e << ")  / Math.LN2) >> 0)))";
+        } else if (op->name == Call::count_trailing_zeros) {
+            Expr e = op->args[0];
+            int32_t bits = op->args[0].type().bits;
+
+            e = e & -e;
+            Expr ctz = bits;
+            if (bits > 16) {
+                ctz = ctz - select((e & 0x0000ffff) != 0, 16, 0);
+                ctz = ctz - select((e & 0x00ff00ff) != 0, 8, 0);
+                ctz = ctz - select((e & 0x0f0f0f0f) != 0, 4, 0);
+                ctz = ctz - select((e & 0x33333333) != 0, 2, 0);
+                ctz = ctz - select((e & 0x55555555) != 0, 1, 0);
+                ctz = ctz - select(e != 0, 1, 0);
+            } else if (bits > 8) {
+                ctz = ctz - select((e & 0x00ff) != 0, 8, 0);
+                ctz = ctz - select((e & 0x0f0f) != 0, 4, 0);
+                ctz = ctz - select((e & 0x3333) != 0, 2, 0);
+                ctz = ctz - select((e & 0x5555) != 0, 1, 0);
+                ctz = ctz - select(e != 0, 1, 0);
+            } else if (bits > 1) {
+                ctz = ctz - select((e & 0x0f) != 0, 4, 0);
+                ctz = ctz - select((e & 0x33) != 0, 2, 0);
+                ctz = ctz - select((e & 0x55) != 0, 1, 0);
+                ctz = ctz - select(e != 0, 1, 0);
+            } else {
+                ctz = ctz - select(e, 1, 0);
+            }
+            rhs << print_expr(ctz);
         } else if (op->name == Call::return_second) {
             internal_assert(op->args.size() == 2);
             string arg0 = print_expr(op->args[0]);
@@ -627,6 +823,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
             do_indent();
             stream << "dev_dirty: false,\n";
             stream << "],\n};";
+            rhs << buf_id;
         } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
@@ -703,17 +900,18 @@ void CodeGen_JavaScript::visit(const Call *op) {
                 Type t = op->args[i].type();
 
                 if (op->args[i].as<StringImm>()) {
-                    stream << buf_name << ".concat(" << op->args[i] << ");\n";
+                  stream << buf_name << " = " << buf_name << ".concat(" << op->args[i] << ");\n";
                 } else if (t.is_handle()) {
-                    stream << buf_name << ".concat(\"<Object>\");\n";
+                    stream << buf_name << " = " << buf_name << ".concat(\"<Object>\");\n";
                 } else {
-                    stream << buf_name << ".concat(" << op->args[i] << ".toString());\n";
+                  string arg = print_expr(op->args[i]);
+                    stream << buf_name << " = " << buf_name << ".concat(" << arg << ".toString());\n";
                 }
             }
             rhs << buf_name;
         } else {
             // TODO: other intrinsics
-            internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
+            internal_error << "Unhandled intrinsic in JavaScript backend: " << op->name << '\n';
         }
 
     } else {
@@ -725,7 +923,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
         rhs << op->name << "(";
 
         if (CodeGen::function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context_, " : "null, ");
+            rhs << (have_user_context ? "__user_context, " : "null, ");
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -744,11 +942,56 @@ void CodeGen_JavaScript::visit(const Load *op) {
                               allocations.get(op->name) == op->type);
 #endif
     ostringstream rhs;
-    rhs << print_name(op->name);
-    rhs << "["
-        << print_expr(op->index)
-        << "]";
+    if (op->type.width == 1) {
+        rhs << print_name(op->name);
+        rhs << "["
+            << print_expr(op->index)
+            << "]";
+    } else {
+        std::vector<string> indices;
 
+        for (int32_t i = 0; i < op->type.width; i++) {
+            indices.push_back(print_expr(extract_lane(op->index, i)));
+        }
+        rhs << "[";
+        for (int32_t i = 0; i < op->type.width; i++) {
+            if (i != 0) {
+                rhs << ", ";
+            }
+            rhs << print_name(op->name) << "[" << indices[i] << "]";
+        }
+        rhs << "]";
+    }
+
+    print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::visit(const Ramp *op) {
+    ostringstream rhs;
+    string base = print_expr(op->base);
+    string stride = print_expr(op->stride);
+    rhs << "[";
+    for (int32_t i = 0; i < op->width; i++) {
+        if (i != 0) {
+            rhs << ", ";
+        }
+        rhs << base << " + " << stride << " * " << i;
+    }
+    rhs << "]";
+    print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::visit(const Broadcast *op) {
+    ostringstream rhs;
+    string value = print_expr(op->value);
+    rhs << "[";
+    for (int32_t i = 0; i < op->width; i++) {
+        if (i != 0) {
+            rhs << ", ";
+        }
+        rhs << value;
+    }
+    rhs << "]";
     print_assignment(op->type, rhs.str());
 }
 
@@ -760,17 +1003,36 @@ void CodeGen_JavaScript::visit(const Store *op) {
                               allocations.get(op->name) == t);
 #endif
 
-    string id_index = print_expr(op->index);
-    string id_value = print_expr(op->value);
-    do_indent();
+    int32_t width = op->value.type().width;
+    if (width == 1) {
+        string id_index = print_expr(op->index);
+        string id_value = print_expr(op->value);
+        do_indent();
 
-    stream << print_name(op->name);
-    stream << "["
-           << id_index
-           << "] = "
-           << id_value
-           << ";\n";
+        stream << print_name(op->name);
+        stream << "["
+               << id_index
+               << "] = "
+               << id_value
+               << ";\n";
+    } else {
+        std::vector<string> indices;
+        std::vector<string> values;
 
+        for (int32_t i = 0; i < width; i++) {
+            indices.push_back(print_expr(extract_lane(op->index, i)));
+            values.push_back(print_expr(extract_lane(op->value, i)));
+        }
+        for (int32_t i = 0; i < width; i++) {
+            stream << print_name(op->name);
+            stream << "["
+                   << indices[i]
+                   << "] = "
+                   << values[i]
+                   << ";\n";
+
+        }
+    }
     cache.clear();
 }
 
@@ -814,7 +1076,7 @@ void CodeGen_JavaScript::visit(const AssertStmt *op) {
     string id_msg = print_expr(op->message);
     do_indent();
     stream << "halide_error("
-           << (have_user_context ? "__user_context_, " : "null, ")
+           << (have_user_context ? "__user_context, " : "null, ")
            << id_msg
            << ");\n";
     do_indent();
@@ -879,47 +1141,25 @@ void CodeGen_JavaScript::visit(const Allocate *op) {
     open_scope(); // TODO: this probably doesn't work right as JavaScript has ridiculous scoping. Either use Let or explicitly deallocate...
 
     allocations.push(op->name, op->type);
-    string typed_array_name;
     
     internal_assert(op->type.is_float() || op->type.is_int() || op->type.is_uint()) << "Cannot allocate numeric type in JavaScript codegen.\n";
     internal_assert(op->type.width == 1) << "Vector types not supported in JavaScript codegen.\n";
-    if (op->type.is_float()) {
-        if (op->type.bits == 32) {
-            typed_array_name = "Float32Array";
-        } else if (op->type.bits == 64) {
-            typed_array_name = "Float64Array";
-        } else {
-            user_error << "Only 32-bit and 64-bit floating-point types are supported in JavaScript.\n";
-        }
+
+    string typed_array_name = javascript_type_array_name_fragment(op->type) + "Array";
+    std::string allocation_size;
+    int32_t constant_size;
+    // This both potentially does strength reduction at compile time, but also handles the zero extents case.
+    if (constant_allocation_size(op->extents, op->name, constant_size)) {
+        allocation_size = print_expr(static_cast<int32_t>(constant_size));
     } else {
-        if (op->type.is_uint()) {
-            typed_array_name = "U";
-        }
-        switch (op->type.bits) {
-            case 8:
-              typed_array_name += "Int8Array";
-              break;
-            case 16:
-              typed_array_name += "Int16Array";
-              break;
-            case 32:
-              typed_array_name += "Int32Array";
-              break;
-            case 64:
-              user_error << "64-bit integers are not supported in JavaScript.\n";
-              break;
-            default:
-              break;
+        // TODO: Verify overflow is not a concern.
+        allocation_size = print_expr(op->extents[0]);
+        for (size_t i = 1; i < op->extents.size(); i++) {
+            allocation_size = print_assignment(Float(64), allocation_size + " * " + print_expr(op->extents[i]));
         }
     }
 
-    // TODO: Verify overflow is not a concern.
-    string allocation_size = print_expr(op->extents[0]);
-    for (size_t i = 1; i < op->extents.size(); i++) {
-        allocation_size = print_assignment(Float(64), allocation_size + " * " + print_expr(op->extents[i]));
-    }
-
-    stream << "var " << op->name << " = new " << typed_array_name << "(" << allocation_size << ");\n";
+    stream << "var " << print_name(op->name) << " = new " << typed_array_name << "(" << allocation_size << ");\n";
     // TODO: Error handling?
     heap_allocations.push(op->name, 0);
     do_indent();
@@ -1031,11 +1271,11 @@ void CodeGen_JavaScript::test() {
         " int64_t _1 = _0 * _beta;\n"
         " if ((_1 > ((int64_t(1) << 31) - 1)) || ((_1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         " {\n"
-        "  halide_error(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        "  halide_error(__user_context, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
         "  return -1;\n"
         " } // overflow test tmp.heap\n"
         " int64_t _2 = _1;\n"
-        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_2);\n"
+        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context, sizeof(int32_t)*_2);\n"
         " {\n"
         "  int32_t _tmp_stack[127];\n"
         "  int32_t _3 = _beta + 1;\n"
@@ -1046,7 +1286,7 @@ void CodeGen_JavaScript::test() {
         "   char b0[1024];\n"
         "   snprintf(b0, 1024, \"%lld%s\", (long long)(3), \"\\n\");\n"
         "   void * _6 = b0;\n"
-        "   int32_t _7 = halide_print(__user_context_, _6);\n"
+        "   int32_t _7 = halide_print(__user_context, _6);\n"
         "   int32_t _8 = (_7, 3);\n"
         "   _4 = _8;\n"
         "  } // if _5\n"
@@ -1059,7 +1299,7 @@ void CodeGen_JavaScript::test() {
         "  int32_t _11 = (int32_t)(_10 ? _9 : 2);\n"
         "  _buf[_3] = _11;\n"
         " } // alloc _tmp_stack\n"
-        " halide_free(__user_context_, _tmp_heap);\n"
+        " halide_free(__user_context, _tmp_heap);\n"
         "} // alloc _tmp_heap\n"
         "return 0;\n"
         "}\n";

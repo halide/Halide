@@ -6,7 +6,8 @@
 
 namespace Halide { namespace Internal {
 
-EXPORT int run_javascript(const std::string &source, const std::string &fn_name, std::vector<Parameter> args);
+EXPORT int run_javascript(const std::string &source, const std::string &fn_name,
+                          std::vector<std::pair<Argument, const void *> > args);
 
 }}
 

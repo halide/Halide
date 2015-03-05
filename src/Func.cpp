@@ -2357,6 +2357,9 @@ struct ErrorBuffer {
     }
 
     void concat(const char *message) {
+        if (*message == '\0') {
+            message = "<Empty error message>";
+        }
         size_t len = strlen(message);
 
         if (len && message[len-1] != '\n') {
@@ -2453,6 +2456,8 @@ void Func::realize(Realization dst, const Target &target) {
         internal_assert(compiled_module.argv_function());
     }
 
+    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
+
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
         user_assert(dst[i].dimensions() == dimensions())
@@ -2470,8 +2475,6 @@ void Func::realize(Realization dst, const Target &target) {
             << ", but Func \"" << name()
             << "\" has type " << func.output_types()[i] << ".\n";
     }
-
-    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2503,25 +2506,31 @@ void Func::realize(Realization dst, const Target &target) {
     // Always add a custom error handler to capture any error messages.
     // (If there is a user-set error handler, it will be called as well.)
 
+    int exit_status = 0;
     #if WITH_JAVASCRIPT_V8
     if (target.has_feature(Target::JavaScript)) {
         // Sanitise the name of the generated function
-        string n = name();
-        for (size_t i = 0; i < n.size(); i++) {
-            if (!isalnum(n[i])) {
-                n[i] = '_';
+        string js_fn_name = name();
+        for (size_t i = 0; i < js_fn_name.size(); i++) {
+            if (!isalnum(js_fn_name[i])) {
+                js_fn_name[i] = '_';
             }
         }
 
-        Internal::debug(2) << "Calling jitted JavaScript function\n";
-        int exit_status = run_javascript(cached_javascript, n, &(arg_values[0]));
+        std::vector<std::pair<Argument, const void *> > js_args;
+        for (size_t i = 0; i < arg_types.size(); i++) {
+            js_args.push_back(std::make_pair(arg_types[i], arg_values[i]));
+        }
+
+        Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
+        exit_status = run_javascript(cached_javascript, js_fn_name, js_args);
         Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
     } else
     #endif
     {
-	Internal::debug(2) << "Calling jitted function\n";
-	int exit_status = compiled_module.argv_function()(&(arg_values[0]));
-	Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
+        Internal::debug(2) << "Calling jitted function\n";
+        exit_status = compiled_module.argv_function()(&(arg_values[0]));
+        Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
     }
 
     jit_context.finalize(exit_status);
@@ -2532,11 +2541,26 @@ void Func::infer_input_bounds(Buffer dst) {
 }
 
 void Func::infer_input_bounds(Realization dst) {
-    if (!compiled_module.argv_function()) {
-        compile_jit();
-    }
+    Target target = get_jit_target_from_environment();
 
-    internal_assert(compiled_module.argv_function());
+    // TODO: see if JS and non-JS can share more code.
+    if (target.has_feature(Target::JavaScript)) {
+    #if WITH_JAVASCRIPT_V8
+        if (cached_javascript.empty()) {
+            compile_jit(target);
+        }
+
+        internal_assert(!cached_javascript.empty());
+    #else
+        user_error << "Cannot JIT JavaScript without a JavaScript execution engine (e.g. V8) configured at compile time.\n";
+    #endif
+    } else {
+        if (!compiled_module.argv_function()) {
+            compile_jit(target);
+        }
+
+        internal_assert(compiled_module.argv_function());
+    }
 
     JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
@@ -2608,8 +2632,33 @@ void Func::infer_input_bounds(Realization dst) {
         for (size_t j = 0; j < tracked_buffers.size(); j++) {
             old_buffer[j] = *tracked_buffers[j];
         }
-        Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = compiled_module.argv_function()(&(arg_values[0]));
+
+        int exit_status = 0;
+        #if WITH_JAVASCRIPT_V8
+        if (target.has_feature(Target::JavaScript)) {
+            // Sanitise the name of the generated function
+            string js_fn_name = name();
+            for (size_t i = 0; i < js_fn_name.size(); i++) {
+                if (!isalnum(js_fn_name[i])) {
+                    js_fn_name[i] = '_';
+                }
+            }
+
+            std::vector<std::pair<Argument, const void *> > js_args;
+            for (size_t i = 0; i < arg_types.size(); i++) {
+                js_args.push_back(std::make_pair(arg_types[i], arg_values[i]));
+            }
+
+            Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
+            exit_status = run_javascript(cached_javascript, js_fn_name, js_args);
+            Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
+        } else
+        #endif
+        {
+            Internal::debug(2) << "Calling jitted function\n";
+            exit_status = compiled_module.argv_function()(&(arg_values[0]));
+            Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
+        }
 
         jit_context.report_if_error(exit_status);
 
@@ -2702,6 +2751,7 @@ void Func::compile_jit(const Target &target_arg) {
     uc_expr.accept(&infer_args);
 
     arg_values = infer_args.arg_values;
+    arg_types = infer_args.arg_types;
 
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
@@ -2711,6 +2761,7 @@ void Func::compile_jit(const Target &target_arg) {
         Type t = func.output_types()[i];
         Argument me(buffer_name, Argument::Buffer, t, dimensions());
         infer_args.arg_types.push_back(me);
+        arg_types.push_back(me);
         arg_values.push_back(NULL); // A spot to put the address of this output buffer
     }
     image_param_args = infer_args.image_param_args;

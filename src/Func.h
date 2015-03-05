@@ -417,13 +417,16 @@ class Func {
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
 
-    /** Pointers to current values of the automatically inferred
-     * arguments (buffers and scalars) used to realize this
-     * function. Only relevant when jitting. We can hold these things
-     * with raw pointers instead of reference-counted handles, because
-     * func indirectly holds onto them with reference-counted handles
-     * via its value Expr. */
+    /** Pointers to current types (via Argument) and values of the
+     * automatically inferred arguments (buffers and scalars) used to
+     * realize this function. Only relevant when jitting. We can hold
+     * these things with raw pointers instead of reference-counted
+     * handles, because func indirectly holds onto them with
+     * reference-counted handles via its value Expr. */
+    // @{
+    std::vector<Argument> arg_types;
     std::vector<const void *> arg_values;
+    // @}
 
     /** Some of the arg_values need to be rebound on every call if the
      * image params change. The pointers for the scalar params will
