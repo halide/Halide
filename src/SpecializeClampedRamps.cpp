@@ -391,8 +391,8 @@ class SpecializeClampedRamps : public IRMutator {
         Stmt body = mutate(op->body);
 
         // Conservatively only apply this optimization at one loop
-        // level, and only apply it to serial for loops.
-        if (!body.same_as(op->body) || op->for_type != ForType::Serial) {
+        // level.
+        if (!body.same_as(op->body)) {
             stmt = For::make(op->name, op->min, op->extent,
                              op->for_type, op->device_api, body);
             return;
@@ -435,21 +435,41 @@ class SpecializeClampedRamps : public IRMutator {
                 max_steady = op->extent + op->min;
             }
 
+
             debug(3) << "\nSimpler body: " << simpler_body << "\n";
             // Steady state
-            Stmt new_loop = For::make(op->name, min_steady, max_steady - min_steady,
-                                      op->for_type, op->device_api, simpler_body);
+            Stmt new_loop;
 
-            if (make_prologue) {
-                Stmt prologue = For::make(op->name, op->min, min_steady - op->min,
-                                          op->for_type, op->device_api, body);
-                new_loop = Block::make(prologue, new_loop);
-            }
+            if (op->for_type == ForType::Serial) {
+                new_loop = For::make(op->name, min_steady, max_steady - min_steady,
+                                          op->for_type, op->device_api, simpler_body);
 
-            if (make_epilogue) {
-                Stmt epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
-                                          op->for_type, op->device_api, body);
-                new_loop = Block::make(new_loop, epilogue);
+                if (make_prologue) {
+                    Stmt prologue = For::make(op->name, op->min, min_steady - op->min,
+                                              op->for_type, op->device_api, body);
+                    new_loop = Block::make(prologue, new_loop);
+                }
+
+                if (make_epilogue) {
+                    Stmt epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
+                                              op->for_type, op->device_api, body);
+                    new_loop = Block::make(new_loop, epilogue);
+                }
+            } else {
+                //internal_assert(op->for_type == ForType::Parallel);
+                Expr loop_var = Variable::make(Int(32), op->name);
+                Expr in_steady;
+                if (make_prologue) {
+                    in_steady = loop_var >= min_steady;
+                }
+                if (make_epilogue) {
+                    Expr cond = loop_var < max_steady;
+                    in_steady = in_steady.defined() ? (in_steady && cond) : cond;
+                }
+                if (in_steady.defined()) {
+                    body = IfThenElse::make(in_steady, simpler_body, body);
+                }
+                new_loop = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             }
 
             while (!lets.empty()) {
