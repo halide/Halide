@@ -314,6 +314,9 @@ void CodeGen_GLSL::visit(const Select *op) {
         // directly without lowering to a sequence of "if" statements.
         internal_assert(op->condition.type().width == op->type.width);
         int width = op->type.width;
+
+        // Note that the Deinterleaver is used by evaluate_vector_select and it
+        // only has special cases for specific intrinsics and extern calls.
         std::vector<Expr> result = evaluate_vector_select(op);
         std::vector<std::string> ids(width);
         for (int i = 0; i < width; i++) {

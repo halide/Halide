@@ -287,10 +287,15 @@ private:
                 args.push_back(op->args[idx]);
             }
             expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
-        } else if (op->name == Call::glsl_texture_load &&
-                   op->call_type == Call::Intrinsic) {
+        } else if ((op->name == Call::glsl_texture_load &&
+                    op->call_type == Call::Intrinsic) ||
+                   (op->call_type == Call::Extern)) {
             // glsl_texture_load returns a <uint x 4> result. Deinterleave by
             // wrapping the call in a shuffle_vector
+
+            // Call::Extern type calls are C functions and we cannot find or
+            // call overloaded variants that take deinterleaved arguments.
+
             std::vector<Expr> args;
             args.push_back(op);
             for (int i = 0; i < new_width; i++) {
@@ -298,9 +303,10 @@ private:
             }
             expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
         } else {
-
             // Vector calls are always parallel across the lanes, so we
-            // can just deinterleave the args.
+            // can just deinterleave the args. We assert that the call return
+            // type and its arguments are all the same width.
+            int call_width = op->type.width;
 
             // Beware of other intrinsics for which this is not true!
             // Currently there's only interleave_vectors and
@@ -308,6 +314,13 @@ private:
 
             std::vector<Expr> args(op->args.size());
             for (size_t i = 0; i < args.size(); i++) {
+                // Check that the argument has the same number of lanes as the
+                // call return value.
+                int arg_width = op->args[i].type().width;
+                internal_assert(arg_width == call_width)
+                  << "Cannot deinterleave " << op->name
+                  << " argument " << i << " mismatched widths\n";
+
                 args[i] = mutate(op->args[i]);
             }
 

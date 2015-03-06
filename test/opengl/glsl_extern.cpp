@@ -123,9 +123,8 @@ int main(int argc, char** argv) {
         for (int x=0; x<input.width(); x++) {
           input(x, y, 0) = x;
           input(x, y, 1) = y;
-          for (int c=2; c<input.channels(); c++) {
-            input(x, y, c) = 1.0f;
-          }
+          input(x, y, 2) = 0.0f;
+          input(x, y, 3) = 0.0f;
         }
       }
 
@@ -140,27 +139,20 @@ int main(int argc, char** argv) {
           printf("\n");
       }
 
-      int M = 16;
+      int M = 8;
       Image<float> out(M, M, 4);
 
       float offset = (1.0f/float(M)) * 0.5f;
 
       // Define the test function expression:
       Func g;
-#if 1
-      g(x, y, c) =
-        shuffle_vector(texture2D(input,
-                                 cast<float>(x)/(float)(M) + offset,
-                                 cast<float>(y)/(float)(M) + offset),
-                       c)/* + input(x/2,y/2,c)*/;
-#else
       g(x, y, c) = select(c == 0, cast<float>(x)/(float)(M) + offset,
                           c == 1, cast<float>(y)/(float)(M) + offset,
                           shuffle_vector(texture2D(input,
                                                    cast<float>(x)/(float)(M) + offset,
                                                    cast<float>(y)/(float)(M) + offset),
-                                         c));
-#endif
+                                         c-2));
+
       // Schedule the function for GLSL
       g.bound(c, 0, out.channels());
       g.glsl(x, y, c);
