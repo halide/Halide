@@ -6,8 +6,7 @@
 #include "Simplify.h"
 #include "LinearSolve.h"
 #include "IREquality.h"
-
-
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -61,6 +60,7 @@ private:
     string loop_var;
     Scope<Expr> bound_vars;
     Scope<int> free_vars;
+    Scope<int> inner_loop_vars;
 
     bool likely;
 
@@ -234,6 +234,16 @@ private:
         Expr solved = solve_for_linear_variable(cond, loop_var, free_vars, bound_vars);
         debug(3) << "Solved condition: " << solved << "\n";
 
+        // The solve failed.
+        if (solved.same_as(cond)) {
+            return cond;
+        }
+
+        // Conditions in terms of an inner loop var can't be pulled outside
+        if (expr_uses_vars(cond, inner_loop_vars)) {
+            return cond;
+        }
+
         if (const LT *lt = solved.as<LT>()) {
             if (is_loop_var(lt->a)) {
                 max_vals.push_back(lt->b);
@@ -269,6 +279,19 @@ private:
         likely = false;
         Expr b = mutate(op_b);
         bool b_likely = likely;
+
+        // To handle code that doesn't use the boundary condition
+        // helpers, but instead just clamps to edge with "clamp", we
+        // always consider a ramp inside a min or max to be likely.
+        if (op.type().element_of() == Int(32)) {
+            if (op_a.as<Ramp>()) {
+                a_likely = true;
+            }
+            if (op_b.as<Ramp>()) {
+                b_likely = true;
+            }
+        }
+
         likely = old_likely || a_likely || b_likely;
 
         if (b_likely && !a_likely) {
@@ -380,6 +403,23 @@ private:
         } else {
             stmt = LetStmt::make(op->name, value, body);
         }
+    }
+
+    void visit(const For *op) {
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        inner_loop_vars.push(op->name, 0);
+        Stmt body = mutate(op->body);
+        inner_loop_vars.pop(op->name);
+
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
+        }
+
     }
 };
 
