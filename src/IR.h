@@ -148,8 +148,7 @@ struct Not : public ExprNode<Not> {
 };
 
 /** A ternary operator. Evalutes 'true_value' and 'false_value',
- * then selects between them based on 'condition'. Equivalent to
- * the ternary operator in C. */
+ * then selects between them based on 'condition'. */
 struct Select : public ExprNode<Select> {
     Expr condition, true_value, false_value;
 
