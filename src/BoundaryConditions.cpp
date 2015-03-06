@@ -70,13 +70,15 @@ Func repeat_image(const Func &source,
         coord = coord % extent;      // Range is 0 to w-1
         coord = coord + min;         // Restore correct min
 
+
         coord = select(arg_var < min || arg_var >= min + extent, coord,
                        clamp(likely(arg_var), min, min + extent - 1));
+
         actuals.push_back(coord);
     }
 
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
-    assert(args.begin() + actuals.size() == args.end());
+    internal_assert(args.begin() + actuals.size() == args.end());
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
     Func bounded;
