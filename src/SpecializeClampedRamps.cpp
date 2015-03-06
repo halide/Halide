@@ -136,7 +136,7 @@ private:
         if (is_zero(b)) return a;
         if (is_one(a)) return a;
         if (is_one(b)) return b;
-        return a && b;
+        return a || b;
     }
 
     Expr make_not(Expr a) {
