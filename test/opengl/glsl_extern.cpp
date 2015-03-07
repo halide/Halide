@@ -6,6 +6,8 @@ using namespace Halide;
 using Halide::Internal::Call;
 using Halide::Internal::vec;
 
+// TODO: Wrap the Extern call invocations in a macro similar to HalideExtern
+
 // The second parameter to texture2D is a vec2. There is no way to produce a
 // Float(32,2) directly. Instead, we define and call a helper function to
 // explicitly call the GLSL vec2 constructor, and pass this to the texture2D
@@ -47,6 +49,25 @@ Expr shuffle_vector(Expr v, Expr c) {
                       Halide::Internal::Call::Intrinsic);
 }
 
+// Define a function using GLSL source code
+Expr my_function(Expr x) {
+    std::string my_function_code =
+        "float my_function(int x) {\n"
+        "     return float(x * x * x);\n"
+        "}\n";
+
+    Halide::Type my_function_ret = Float(32);
+
+    return Call::make(my_function_ret,
+                      Halide::Internal::Call::glsl_code_and_call,
+                      vec<Expr>(my_function_code,
+                                Call::make(my_function_ret,
+                                           "my_function",
+                                           vec<Expr>(x),
+                                           Halide::Internal::Call::Extern)),
+                      Call::Intrinsic);
+}
+
 int main(int argc, char **argv) {
 
     // This test must be run with an OpenGL target
@@ -67,7 +88,7 @@ int main(int argc, char **argv) {
     int errors = 0;
 
     // Call a scalar built-in function
-    {
+    if (0) {
         int N = 4;
         Image<uint8_t> out(N, N, 3);
 
@@ -103,7 +124,7 @@ int main(int argc, char **argv) {
     }
 
     // Using normalized texture coordinates via GLSL texture2D:
-    {
+    if (0) {
         // Create an input image
         int N = 2;
         Image<float> input(N, N, 4);
@@ -168,6 +189,50 @@ int main(int argc, char **argv) {
             for (int x = 0; x < out.width(); x++) {
                 float result = out(x, y, 1);
                 float expected = float(N - 1) / float(M - 1) * y;
+                if (expected != result) {
+                    printf("Error %d,%d,%d value %f should be %f",
+                           x, y, 1, result, expected);
+                    ++errors;
+                }
+            }
+        }
+    }
+
+    // Include a custom GLSL source code function definition in the generated
+    // output.
+    {
+        int N = 4;
+        Image<float> out(N, N, 3);
+
+        // Define the test function expression
+        Func g;
+        g(x, y, c) = select(c == 0, my_function(x),
+                            c == 1, my_function(y),
+                            0.0f);
+
+        // Schedule the function for GLSL
+        g.bound(c, 0, out.channels());
+        g.glsl(x, y, c);
+        g.realize(out);
+        out.copy_to_host();
+
+        // Check the output
+        for (int y = 0; y < out.height(); y++) {
+            for (int x = 0; x < out.width(); x++) {
+                float expected = float(x*x*x);
+                float result = out(x, y, 0);
+                if (expected != result) {
+                    printf("Error %d,%d,%d value %f should be %f",
+                           x, y, 0, result, expected);
+                    ++errors;
+                }
+            }
+        }
+
+        for (int y = 0; y < out.height(); y++) {
+            for (int x = 0; x < out.width(); x++) {
+                float expected = float(y*y*y);
+                float result = out(x, y, 1);
                 if (expected != result) {
                     printf("Error %d,%d,%d value %f should be %f",
                            x, y, 1, result, expected);

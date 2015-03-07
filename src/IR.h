@@ -382,7 +382,7 @@ struct Call : public ExprNode<Call> {
         if_then_else,
         trace,
         trace_expr,
-        glsl_inline,
+        glsl_code_and_call,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
