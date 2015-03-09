@@ -54,4 +54,81 @@
         return Halide::Internal::Call::make(Halide::type_of<rt>(), #name, vec(a1, a2, a3, a4, a5), Halide::Internal::Call::Extern); \
   }
 
+/**
+ * Convenience macros that create Halide Extern call nodes for inlined GLSL 
+ * code and perform type checking on Halide Exprs passed as arguments.
+ */
+
+#define HalideExternGLSL_1(rt, name, t1, code)                                                              \
+    Halide::Expr name(Halide::Expr a1) {                                                                    \
+        _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                         \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
+            Halide::Internal::Call::glsl_code_and_call,                                                     \
+            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+                #name,                                                                                      \
+                vec<Expr>(a1),                                                                              \
+                Halide::Internal::Call::Extern)),                                                           \
+            Call::Intrinsic);                                                                               \
+    }
+
+#define HalideExternGLSL_2(rt, name, t1, t2, code)                                                          \
+    Halide::Expr name(Halide::Expr a1, Halide::Expr a2) {                                                   \
+        _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                         \
+        _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                         \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
+            Halide::Internal::Call::glsl_code_and_call,                                                     \
+            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+                #name,                                                                                      \
+                vec<Expr>(a1, a2),                                                                          \
+                Halide::Internal::Call::Extern)),                                                           \
+            Call::Intrinsic);                                                                               \
+    }
+
+#define HalideExternGLSL_3(rt, name, t1, t2, t3, code)                                                      \
+    Halide::Expr name(Halide::Expr a1, Halide::Expr a2, Halide::Expr a3) {                                  \
+        _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                         \
+        _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                         \
+        _halide_check_arg_type(Halide::type_of<t3>(), name, a3, 3);                                         \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
+            Halide::Internal::Call::glsl_code_and_call,                                                     \
+            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+                #name,                                                                                      \
+                vec<Expr>(a1, a2, a3),                                                                      \
+                Halide::Internal::Call::Extern)),                                                           \
+            Call::Intrinsic);                                                                               \
+    }
+
+
+#define HalideExternGLSL_4(rt, name, t1, t2, t3, t4, code)                                                  \
+    Halide::Expr name(Halide::Expr a1, Halide::Expr a2, Halide::Expr a3, Halide::Expr a4) {                 \
+        _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                         \
+        _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                         \
+        _halide_check_arg_type(Halide::type_of<t3>(), name, a3, 3);                                         \
+        _halide_check_arg_type(Halide::type_of<t4>(), name, a4, 4);                                         \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
+            Halide::Internal::Call::glsl_code_and_call,                                                     \
+            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+                #name,                                                                                      \
+                vec<Expr>(a1, a2, a3, a4),                                                                  \
+                Halide::Internal::Call::Extern)),                                                           \
+            Call::Intrinsic);                                                                               \
+    }
+
+
+#define HalideExternGLSL_5(rt, name, t1, t2, t3, t4, t5, code)                                              \
+    Halide::Expr name(Halide::Expr a1, Halide::Expr a2, Halide::Expr a3, Halide::Expr a4, Halide::Expr a5) {\
+        _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                         \
+        _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                         \
+        _halide_check_arg_type(Halide::type_of<t3>(), name, a3, 3);                                         \
+        _halide_check_arg_type(Halide::type_of<t4>(), name, a4, 4);                                         \
+        _halide_check_arg_type(Halide::type_of<t5>(), name, a5, 5);                                         \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
+            Halide::Internal::Call::glsl_code_and_call,                                                     \
+            vec<Expr>(code,Halide::Internal::Call::make(Halide::type_of<rt>(),                              \
+                #name,                                                                                      \
+                vec<Expr>(a1, a2, a3, a4, a5),                                                              \
+                Halide::Internal::Call::Extern)),                                                           \
+            Call::Intrinsic);                                                                               \
+    }
+
 #endif

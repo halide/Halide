@@ -6,7 +6,21 @@ using namespace Halide;
 using Halide::Internal::Call;
 using Halide::Internal::vec;
 
-// TODO: Wrap the Extern call invocations in a macro similar to HalideExtern
+// The easiest way to use GLSL source inside a Halide filter is with the
+// HalideExternGLSL_* macros. You can declare a helper function that takes C/C++
+// native types like this:
+HalideExternGLSL_1(float, my_function, int,
+        "float my_function(int x) {\n"
+        "  return float(x * x * x);\n"
+        "}\n");
+
+// TODO: The existing HalideExtern* perform type checking between Exprs and
+// C/C++ native types. In GLSL, user defined code, or builtin functions may use
+// types like vec2, vec4, etc. that are not directly representable as C/C++
+// native types. In the code below we construct Halide IR nodes manually and
+// specify the corresponding Halide types for the arguments. Once we have
+// standard static C++ types corresponding to the Halide Type instances, we can
+// switch to using the HalideExternGLSL_* macros and get type checking.
 
 // The second parameter to texture2D is a vec2. There is no way to produce a
 // Float(32,2) directly. Instead, we define and call a helper function to
@@ -47,25 +61,6 @@ Expr shuffle_vector(Expr v, Expr c) {
     return Call::make(Float(32), Call::shuffle_vector,
                       vec<Expr>(v, c),
                       Halide::Internal::Call::Intrinsic);
-}
-
-// Define a function using GLSL source code
-Expr my_function(Expr x) {
-    std::string my_function_code =
-        "float my_function(int x) {\n"
-        "     return float(x * x * x);\n"
-        "}\n";
-
-    Halide::Type my_function_ret = Float(32);
-
-    return Call::make(my_function_ret,
-                      Halide::Internal::Call::glsl_code_and_call,
-                      vec<Expr>(my_function_code,
-                                Call::make(my_function_ret,
-                                           "my_function",
-                                           vec<Expr>(x),
-                                           Halide::Internal::Call::Extern)),
-                      Call::Intrinsic);
 }
 
 int main(int argc, char **argv) {
