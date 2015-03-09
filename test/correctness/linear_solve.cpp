@@ -22,16 +22,16 @@ void print_term(const Term &t) {
 
 void print_terms(const std::vector<Term> &terms) {
     std::cout << "{";
-    for (int i = 0; i < terms.size(); ++i) {
+    for (size_t i = 0; i < terms.size(); ++i) {
         print_term(terms[i]);
-        if (i < terms.size()-1)
+        if (i + 1 < terms.size())
             std::cout << ", ";
     }
     std::cout << "}";
 }
 
 int find_term(const Variable *v, const std::vector<Term> &terms) {
-    for (int i = 0; i < terms.size(); ++i) {
+    for (size_t i = 0; i < terms.size(); ++i) {
         if ((!v && !terms[i].var) ||
             (v && terms[i].var &&
              terms[i].var->name == v->name)) {
@@ -50,7 +50,7 @@ bool check_terms(const std::vector<Term> &expected_terms, const std::vector<Term
     }
 
     std::vector<bool> found_term(expected_terms.size(), false);
-    for (int i = 0; i < actual_terms.size(); ++i) {
+    for (size_t i = 0; i < actual_terms.size(); ++i) {
         const Term &t = actual_terms[i];
 
         int idx = find_term(t.var, expected_terms);
@@ -66,7 +66,7 @@ bool check_terms(const std::vector<Term> &expected_terms, const std::vector<Term
         }
     }
 
-    for (int i = 0; i < found_term.size(); ++i) {
+    for (size_t i = 0; i < found_term.size(); ++i) {
         if (!found_term[i]) {
             std::cout << "Could not find expected term ";
             print_term(expected_terms[i]);
@@ -182,6 +182,17 @@ bool test_linear_solve() {
                   << "Actual solution:   " << ans << "\n";
         return false;
     }
+
+    {
+        Param<int> q;
+        Scope<Expr> scope;
+        Scope<int> free_vars;
+        scope.push("z", 2*x-2*q);
+        scope.push("y", z+7);
+        free_vars.push("x", 0);
+        debug(0) << solve_for_linear_variable(y > 3, x, free_vars, scope) << "\n";
+    }
+
 
     return true;
 }

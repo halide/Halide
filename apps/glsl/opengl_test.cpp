@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../../src/buffer_t.h"
+#include "HalideRuntime.h"
 
 // TODO: use custom version to test use of user-created OpenGL context.
 extern "C" int halide_opengl_create_context();

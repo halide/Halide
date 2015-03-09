@@ -64,7 +64,7 @@
         _halide_check_arg_type(Halide::type_of<t1>(), name, a1, 1);                                         \
         return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
             Halide::Internal::Call::glsl_code_and_call,                                                     \
-            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+            vec<Expr>(std::string(code), Halide::Internal::Call::make(Halide::type_of<rt>(),                \
                 #name,                                                                                      \
                 vec<Expr>(a1),                                                                              \
                 Halide::Internal::Call::Extern)),                                                           \
@@ -77,7 +77,7 @@
         _halide_check_arg_type(Halide::type_of<t2>(), name, a2, 2);                                         \
         return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
             Halide::Internal::Call::glsl_code_and_call,                                                     \
-            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+            vec<Expr>(std::string(code), Halide::Internal::Call::make(Halide::type_of<rt>(),                \
                 #name,                                                                                      \
                 vec<Expr>(a1, a2),                                                                          \
                 Halide::Internal::Call::Extern)),                                                           \
@@ -91,7 +91,7 @@
         _halide_check_arg_type(Halide::type_of<t3>(), name, a3, 3);                                         \
         return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
             Halide::Internal::Call::glsl_code_and_call,                                                     \
-            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+            vec<Expr>(std::string(code), Halide::Internal::Call::make(Halide::type_of<rt>(),                \
                 #name,                                                                                      \
                 vec<Expr>(a1, a2, a3),                                                                      \
                 Halide::Internal::Call::Extern)),                                                           \
@@ -107,7 +107,7 @@
         _halide_check_arg_type(Halide::type_of<t4>(), name, a4, 4);                                         \
         return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
             Halide::Internal::Call::glsl_code_and_call,                                                     \
-            vec<Expr>(code, Halide::Internal::Call::make(Halide::type_of<rt>(),                             \
+            vec<Expr>(std::string(code), Halide::Internal::Call::make(Halide::type_of<rt>(),                \
                 #name,                                                                                      \
                 vec<Expr>(a1, a2, a3, a4),                                                                  \
                 Halide::Internal::Call::Extern)),                                                           \
@@ -124,7 +124,7 @@
         _halide_check_arg_type(Halide::type_of<t5>(), name, a5, 5);                                         \
         return Halide::Internal::Call::make(Halide::type_of<rt>(),                                          \
             Halide::Internal::Call::glsl_code_and_call,                                                     \
-            vec<Expr>(code,Halide::Internal::Call::make(Halide::type_of<rt>(),                              \
+            vec<Expr>(std::string(code), Halide::Internal::Call::make(Halide::type_of<rt>(),                \
                 #name,                                                                                      \
                 vec<Expr>(a1, a2, a3, a4, a5),                                                              \
                 Halide::Internal::Call::Extern)),                                                           \

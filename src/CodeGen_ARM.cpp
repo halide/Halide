@@ -425,35 +425,6 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_ARM::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
-
-        JITModule::make_externs(shared_runtime, module);
-    }
-
-    // Fix the target triple.
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen_Posix::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen_Posix::optimize_module();
-}
-
 namespace {
 
 // Try to losslessly narrow an integer expression to the target type
@@ -983,7 +954,6 @@ void CodeGen_ARM::visit(const Max *op) {
 
     CodeGen_Posix::visit(op);
 }
-
 
 void CodeGen_ARM::visit(const Store *op) {
     // AArch64 SIMD not yet supported

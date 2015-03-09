@@ -316,7 +316,7 @@ bool div_mod() {
             if (qi*bi + ri != ai && (ecount++) < 10) {
                 std::cout << "(a/b)*b + a%b != a; a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
                 success = false;
-            } else if (!(0 <= ri && (bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
+            } else if (!(0 <= ri && ((int64_t)bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
                 std::cout << "ri is not in the range [0, |b|); a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
                 success = false;
             }
@@ -348,8 +348,6 @@ template<typename T,typename BIG,int bits>
 bool f_mod() {
     int i, j;
     Type t = type_of<T>();
-    BIG minval = 0.0;
-    BIG maxval = 1.0;
     bool success = true;
 
     std::cout << "Test mod of " << t << '\n';
