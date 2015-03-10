@@ -183,6 +183,17 @@ bool test_linear_solve() {
         return false;
     }
 
+    {
+        Param<int> q;
+        Scope<Expr> scope;
+        Scope<int> free_vars;
+        scope.push("z", 2*x-2*q);
+        scope.push("y", z+7);
+        free_vars.push("x", 0);
+        debug(0) << solve_for_linear_variable(y > 3, x, free_vars, scope) << "\n";
+    }
+
+
     return true;
 }
 
