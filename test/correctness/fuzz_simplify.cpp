@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
 
     int max_fuzz_vector_width = 4;
 
-    for (size_t i = 0; i < fuzz_type_count; i++) {
+    for (int i = 0; i < fuzz_type_count; i++) {
         Type T = fuzz_types[i];
         for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
             Type VT = T.vector_of(w);
