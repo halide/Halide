@@ -223,6 +223,8 @@ void CodeGen_LLVM::init_module() {
     if (module && owns_module) {
         delete module;
         delete context;
+        module = NULL;
+        context = NULL;
     }
     delete builder;
 
@@ -284,9 +286,10 @@ bool CodeGen_LLVM::llvm_Mips_enabled = false;
 void CodeGen_LLVM::compile(Stmt stmt, string name,
                       const vector<Argument> &args,
                       const vector<Buffer> &images_to_embed) {
+    // Initialize the context, IR builder, and other codegen state.
     init_module();
 
-    // Fix the target triple
+    internal_assert(!module);
     module = get_initial_module_for_target(target, context);
 
     if (target.has_feature(Target::JIT)) {
