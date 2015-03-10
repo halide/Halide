@@ -225,7 +225,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::compile(const LoweredFunc &f) {
+void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
     function_name = f.name;
 
     // Create a new module for all of the kernels we find in this function.
@@ -235,7 +235,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(const LoweredFunc &f) {
     }
 
     // Call the base implementation to create the function.
-    CodeGen_CPU::compile(f);
+    CodeGen_CPU::compile_func(f);
 
     // Remember the entry block so we can branch to it upon init success.
     BasicBlock *entry = &function->getEntryBlock();

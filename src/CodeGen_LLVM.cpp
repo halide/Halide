@@ -394,10 +394,10 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
     for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile(input.buffers[i]);
+        compile_buffer(input.buffers[i]);
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
-        compile(input.functions[i]);
+        compile_func(input.functions[i]);
     }
 
     debug(2) << module << "\n";
@@ -455,7 +455,7 @@ void add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &na
 
 }
 
-void CodeGen_LLVM::compile(const LoweredFunc &f) {
+void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     const std::string &name = f.name;
     const std::vector<Argument> &args = f.args;
 
@@ -540,7 +540,7 @@ std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
     return ret;
 }
 
-void CodeGen_LLVM::compile(const Buffer &buf) {
+void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
