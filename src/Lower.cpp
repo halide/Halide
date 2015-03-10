@@ -1911,7 +1911,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = specialize_branched_loops(s);
     s = remove_dead_allocations(s);
     s = simplify(s);
-    s = remove_trivial_for_loops(s);
     debug(2) << "Lowering after specializing branched loops:\n" << s << "\n\n";
     */
 
@@ -1948,6 +1947,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = propagate_inherited_attributes(s);
     debug(2) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";
 
+    s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
