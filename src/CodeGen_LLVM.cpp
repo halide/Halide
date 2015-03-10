@@ -223,6 +223,8 @@ void CodeGen_LLVM::init_module() {
     if (module && owns_module) {
         delete module;
         delete context;
+        module = NULL;
+        context = NULL;
     }
     delete builder;
 
