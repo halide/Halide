@@ -438,11 +438,6 @@ class SpecializeClampedRamps : public IRMutator {
             return;
         }
 
-        // TODO: If we have task parallel blocks, then we can do this
-        // to parallel loops too. Could be a big win on the GPU
-        // (generating separate kernels for the nasty cases near the
-        // boundaries).
-
         FindSteadyState f(op->name);
         Stmt simpler_body = f.mutate(body);
         if (!body.same_as(simpler_body)) {
@@ -496,7 +491,13 @@ class SpecializeClampedRamps : public IRMutator {
                     new_loop = Block::make(new_loop, epilogue);
                 }
             } else {
-                //internal_assert(op->for_type == ForType::Parallel);
+                // TODO: If we have task parallel blocks, then we
+                // could split out the different bodies as we do above
+                // instead of injecting an if statement.  Could be a
+                // big win on the GPU (generating separate kernels for
+                // the nasty cases near the boundaries).
+
+                internal_assert(op->for_type == ForType::Parallel);
                 Expr loop_var = Variable::make(Int(32), op->name);
                 Expr in_steady;
                 if (make_prologue) {
