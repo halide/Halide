@@ -17,11 +17,11 @@ namespace Halide {
  * name of the module with the default extension for the target type
  * (.o for objects, .s for assembly). */
 // @{
-EXPORT void output_object(const Module &module, std::string filename = "");
-EXPORT void output_assembly(const Module &module, std::string filename = "");
-EXPORT void output_native(const Module &module,
-                          std::string object_filename = "",
-                          std::string assembly_filename = "");
+EXPORT void compile_halide_module_to_object(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_assembly(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_native(const Module &module,
+                                            std::string object_filename = "",
+                                            std::string assembly_filename = "");
 // @}
 
 /** Compile a halide Module to an LLVM target (bitcode file, llvm
@@ -30,30 +30,30 @@ EXPORT void output_native(const Module &module,
  * name of the module with the default extension for the target type
  * (.bc for bitcode, .ll for llvm assembly). */
 // @{
-EXPORT void output_bitcode(const Module &module, std::string filename = "");
-EXPORT void output_llvm_assembly(const Module &module, std::string filename = "");
-EXPORT void output_llvm(const Module &module,
-                        std::string bitcode_filename = "",
-                        std::string llvm_assembly_filename = "");
+EXPORT void compile_halide_module_to_bitcode(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_llvm_assembly(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_llvm(const Module &module,
+                                          std::string bitcode_filename = "",
+                                          std::string llvm_assembly_filename = "");
 // @}
 
 /** Output the module to C header/source code. The default filename is
  * the name of the module with the appropriate extension (.h/.c). */
 // @{
-EXPORT void output_c_header(const Module &module, std::string filename = "");
-EXPORT void output_c_source(const Module &module, std::string filename = "");
-EXPORT void output_c(const Module &module,
-                     std::string h_filename = "",
-                     std::string c_filename = "");
+EXPORT void compile_halide_module_to_c_header(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_c_source(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_c(const Module &module,
+                                       std::string h_filename = "",
+                                       std::string c_filename = "");
 // @}
 
 /** Output the module to HTML. The default filename is the name of the
  * module with the extension .html. */
-EXPORT void output_html(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_html(const Module &module, std::string filename = "");
 
 /** Output the module to a text statement file. The default filename
  * is the name of the module with the extension .stmt. */
-EXPORT void output_text(const Module &module, std::string filename = "");
+EXPORT void compile_halide_module_to_text(const Module &module, std::string filename = "");
 
 }
 

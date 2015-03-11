@@ -204,32 +204,32 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     delete target_machine;
 }
 
-llvm::Module *output_llvm_module(const Module &module, llvm::LLVMContext &context) {
+llvm::Module *compile_halide_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
     return codegen_llvm(module, context);
 }
 
-void output_object(llvm::Module *module, const std::string &filename) {
+void compile_llvm_module_to_object(llvm::Module *module, const std::string &filename) {
     emit_file(module, filename, llvm::TargetMachine::CGFT_ObjectFile);
 }
 
-void output_assembly(llvm::Module *module, const std::string &filename) {
+void compile_llvm_module_to_assembly(llvm::Module *module, const std::string &filename) {
     emit_file(module, filename, llvm::TargetMachine::CGFT_AssemblyFile);
 }
 
-void output_native(llvm::Module *module,
-                   const std::string &object_filename,
-                   const std::string &assembly_filename) {
+void compile_llvm_module_to_native(llvm::Module *module,
+                                   const std::string &object_filename,
+                                   const std::string &assembly_filename) {
     emit_file(module, object_filename, llvm::TargetMachine::CGFT_ObjectFile);
     emit_file(module, assembly_filename, llvm::TargetMachine::CGFT_AssemblyFile);
 }
 
-void output_bitcode(llvm::Module *module, const std::string &filename) {
+void compile_llvm_module_to_bitcode(llvm::Module *module, const std::string &filename) {
     llvm::raw_fd_ostream *file = new_raw_fd_ostream(filename);
     WriteBitcodeToFile(module, *file);
     delete file;
 }
 
-void output_llvm_assembly(llvm::Module *module, const std::string &filename) {
+void compile_llvm_module_to_llvm_assembly(llvm::Module *module, const std::string &filename) {
     llvm::raw_fd_ostream *file = new_raw_fd_ostream(filename);
     module->print(*file, NULL);
     delete file;
