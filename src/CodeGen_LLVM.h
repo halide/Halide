@@ -68,8 +68,8 @@ protected:
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
-    virtual void compile(const LoweredFunc &func);
-    virtual void compile(const Buffer &buffer);
+    virtual void compile_func(const LoweredFunc &func);
+    virtual void compile_buffer(const Buffer &buffer);
     // @}
 
     /** What should be passed as -mcpu, -mattrs, and related for
