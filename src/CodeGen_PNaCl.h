@@ -22,9 +22,6 @@ protected:
 
     using CodeGen_Posix::visit;
 
-    /** Initialize internal state to compile a fresh module. */
-    virtual void init_module();
-
     /* override */ virtual llvm::Triple get_target_triple() const;
 
     std::string mcpu() const;
