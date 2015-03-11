@@ -67,7 +67,9 @@ void RDom::init_vars(string name) {
 }
 
 RDom::RDom(ReductionDomain d) : dom(d) {
-    init_vars("");
+    if (d.defined()) {
+        init_vars("");
+    }
 }
 
 // We suffix all RVars with $r to prevent unintentional name matches with pure vars called x, y, z, w.

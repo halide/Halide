@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 #include <limits>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
             int scan_count = sscanf(messages[i].c_str(), "%lld the answer is %f unsigned %llu",
                                     &square, &forty_two, &one_forty_five);
             assert(scan_count == 3);
-            assert(square == i * i);
+            assert(square == static_cast<long long>(i * i));
             assert(forty_two == 42.0f);
             assert(one_forty_five == 145);
         }

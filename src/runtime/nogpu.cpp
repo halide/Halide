@@ -1,6 +1,5 @@
 #include "runtime_internal.h"
-#include "HalideRuntime.h"
-#include "../buffer_t.h"
+#include "HalideRuntime.h"  // has buffer_t
 
 // Architectures that do not distinguish between device and host
 // (i.e. not gpus), don't need a definition of copy_to_host

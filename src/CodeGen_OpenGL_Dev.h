@@ -26,13 +26,23 @@ public:
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt, const std::string &name,
                     const std::vector<GPU_Argument> &args);
+
     void init_module();
+
     std::vector<char> compile_to_src();
+
     std::string get_current_kernel_name();
+
     void dump();
+
+    std::string api_unique_name() { return "opengl"; }
 
 private:
     CodeGen_GLSL *glc;
+
+    virtual std::string print_gpu_name(const std::string &name);
+    
+private:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     Target target;
@@ -50,14 +60,17 @@ public:
 
     EXPORT static void test();
 
+    
+    std::string print_name(const std::string &);
+
 protected:
     using CodeGen_C::visit;
     std::string print_type(Type type);
-    std::string print_name(const std::string &);
 
     void visit(const FloatImm *);
 
     void visit(const Cast *);
+    void visit(const Let *);
     void visit(const For *);
     void visit(const Select *);
 
@@ -71,6 +84,7 @@ protected:
 
     void visit(const Call *);
     void visit(const AssertStmt *);
+    void visit(const Ramp *op);
     void visit(const Broadcast *);
 
     void visit(const Evaluate *);

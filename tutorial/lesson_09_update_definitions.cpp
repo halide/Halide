@@ -15,7 +15,7 @@
 // g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 // We're going to be using x86 SSE intrinsics later on in this lesson.
@@ -777,7 +777,9 @@ int main(int argc, char **argv) {
         // Don't include the time required to allocate the output buffer.
         Image<uint8_t> c_result(input.width(), input.height());
 
+        #ifdef _OPENMP
         double t1 = current_time();
+        #endif
 
         // Run this one hundred times so we can average the timing results.
         for (int iters = 0; iters < 100; iters++) {
@@ -867,11 +869,10 @@ int main(int argc, char **argv) {
             }
         }
 
-        double t2 = current_time();
-
         // Skip the timing comparison if we don't have openmp
         // enabled. Otherwise it's unfair to C.
         #ifdef _OPENMP
+        double t2 = current_time();
 
         // Now run the Halide version again without the
         // jit-compilation overhead. Also run it one hundred times.

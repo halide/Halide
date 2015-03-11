@@ -11,6 +11,8 @@
 // we need our own portable once implementation. For now, threadpool
 // only works on platforms where PTHREAD_MUTEX_INITIALIZER is zero.
 
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+
 extern "C" {
 
 extern long sysconf(int);
@@ -26,12 +28,12 @@ typedef struct {
 typedef long pthread_t;
 typedef struct {
     // 48 bytes is enough for a cond on 64-bit and 32-bit systems
-    unsigned char _private[48];
+    uint64_t _private[6];
 } pthread_cond_t;
 typedef long pthread_condattr_t;
 typedef struct {
     // 64 bytes is enough for a mutex on 64-bit and 32-bit systems
-    unsigned char _private[64];
+    uint64_t _private[8];
 } pthread_mutex_t;
 typedef long pthread_mutexattr_t;
 extern int pthread_create(pthread_t *thread, pthread_attr_t const * attr,
@@ -49,14 +51,15 @@ extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 extern char *getenv(const char *);
 extern int atoi(const char *);
 
+extern int halide_host_cpu_count();
+
+WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+                        uint8_t *closure);
+
 } // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
-WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
-WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
 WEAK int halide_num_threads;
 WEAK bool halide_thread_pool_initialized = false;
 
@@ -80,8 +83,24 @@ struct halide_work_queue_t {
     // Singly linked list for job stack
     work *jobs;
 
-    // Broadcast whenever items are added to the queue or a job completes.
-    pthread_cond_t state_change;
+    // Worker threads are divided into an 'A' team and a 'B' team. The
+    // B team sleeps on the wakeup_b_team condition variable. The A
+    // team does work. Threads transition to the B team if they wake
+    // up and find that a_team_size > target_a_team_size.  Threads
+    // move into the A team whenever they wake up and find that
+    // a_team_size < target_a_team_size.
+    int a_team_size, target_a_team_size;
+
+    // Broadcast when a job completes.
+    pthread_cond_t wakeup_owners;
+
+    // Broadcast whenever items are added to the work queue.
+    pthread_cond_t wakeup_a_team;
+
+    // May also be broadcast when items are added to the work queue if
+    // more threads are required than are currently in the A team.
+    pthread_cond_t wakeup_b_team;
+
     // Keep track of threads so they can be joined at shutdown
     pthread_t threads[MAX_THREADS];
 
@@ -95,86 +114,11 @@ struct halide_work_queue_t {
 };
 WEAK halide_work_queue_t halide_work_queue;
 
-}}} // namespace Halide::Runtime::Internal
-
-extern "C" {
-
-WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
-    pthread_mutex_destroy(mutex);
-    memset(mutex_arg, 0, sizeof(halide_mutex));
-}
-
-WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
-    pthread_mutex_lock(mutex);
-}
-
-WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
-    pthread_mutex_unlock(mutex);
-}
-
-
-WEAK void halide_shutdown_thread_pool() {
-    if (!halide_thread_pool_initialized) return;
-
-    // Wake everyone up and tell them the party's over and it's time
-    // to go home
-    pthread_mutex_lock(&halide_work_queue.mutex);
-    halide_work_queue.shutdown = true;
-    pthread_cond_broadcast(&halide_work_queue.state_change);
-    pthread_mutex_unlock(&halide_work_queue.mutex);
-
-    // Wait until they leave
-    for (int i = 0; i < halide_num_threads-1; i++) {
-        //fprintf(stderr, "Waiting for thread %d to exit\n", i);
-        void *retval;
-        pthread_join(halide_work_queue.threads[i], &retval);
-    }
-
-    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
-    // Tidy up
-    pthread_mutex_destroy(&halide_work_queue.mutex);
-    // Reinitialize in case we call another do_par_for
-    pthread_mutex_init(&halide_work_queue.mutex, NULL);
-    pthread_cond_destroy(&halide_work_queue.state_change);
-    halide_thread_pool_initialized = false;
-}
-
-WEAK void halide_set_num_threads(int n) {
-    if (halide_num_threads == n) {
-        return;
-    }
-
-    if (halide_thread_pool_initialized) {
-        halide_shutdown_thread_pool();
-    }
-
-    halide_num_threads = n;
-}
-
-WEAK void halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)) {
-    halide_custom_do_task = f;
-}
-
-
-WEAK void halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)) {
-    halide_custom_do_par_for = f;
-}
-
-WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+WEAK int default_do_task(void *user_context, halide_task f, int idx,
                         uint8_t *closure) {
-    if (halide_custom_do_task) {
-        return (*halide_custom_do_task)(user_context, f, idx, closure);
-    } else {
-        return f(user_context, idx, closure);
-    }
+    return f(user_context, idx, closure);
 }
 
-} // extern "C"
-
-namespace Halide { namespace Runtime { namespace Internal {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
@@ -189,12 +133,23 @@ WEAK void *halide_worker_thread(void *void_arg) {
            : halide_work_queue.running()) {
 
         if (halide_work_queue.jobs == NULL) {
-            // There are no jobs pending, though some tasks may still
-            // be in flight from the last job. Release the lock and
-            // wait for something new to happen.
-            pthread_cond_wait(&halide_work_queue.state_change, &halide_work_queue.mutex);
+            if (owned_job) {
+                // There are no jobs pending. Wait for the last worker
+                // to signal that the job is finished.
+                pthread_cond_wait(&halide_work_queue.wakeup_owners, &halide_work_queue.mutex);
+            } else if (halide_work_queue.a_team_size <= halide_work_queue.target_a_team_size) {
+                // There are no jobs pending. Wait until more jobs are enqueued.
+                pthread_cond_wait(&halide_work_queue.wakeup_a_team, &halide_work_queue.mutex);
+            } else {
+                // There are no jobs pending, and there are too many
+                // threads in the A team. Transition to the B team
+                // until the wakeup_b_team condition is fired.
+                halide_work_queue.a_team_size--;
+                pthread_cond_wait(&halide_work_queue.wakeup_b_team, &halide_work_queue.mutex);
+                halide_work_queue.a_team_size++;
+            }
         } else {
-            // There are jobs still to do. Grab the next one.
+            // Grab the next job.
             work *job = halide_work_queue.jobs;
 
             // Claim a task from it.
@@ -229,24 +184,16 @@ WEAK void *halide_worker_thread(void *void_arg) {
             // If the job is done and I'm not the owner of it, wake up
             // the owner.
             if (!job->running() && job != owned_job) {
-                pthread_cond_broadcast(&halide_work_queue.state_change);
+                pthread_cond_broadcast(&halide_work_queue.wakeup_owners);
             }
         }
     }
     pthread_mutex_unlock(&halide_work_queue.mutex);
     return NULL;
 }
-}}} // namespace Halide::Runtime::Internal
 
-extern "C" {
-extern int halide_host_cpu_count();
-
-WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
-                           int min, int size, uint8_t *closure) {
-    if (halide_custom_do_par_for) {
-        return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
-    }
-
+WEAK int default_do_par_for(void *user_context, halide_task f,
+                            int min, int size, uint8_t *closure) {
     // Grab the lock. If it hasn't been initialized yet, then the
     // field will be zero-initialized because it's a static
     // global. pthreads helpfully interprets zero-valued mutex objects
@@ -255,7 +202,9 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
 
     if (!halide_thread_pool_initialized) {
         halide_work_queue.shutdown = false;
-        pthread_cond_init(&halide_work_queue.state_change, NULL);
+        pthread_cond_init(&halide_work_queue.wakeup_owners, NULL);
+        pthread_cond_init(&halide_work_queue.wakeup_a_team, NULL);
+        pthread_cond_init(&halide_work_queue.wakeup_b_team, NULL);
         halide_work_queue.jobs = NULL;
 
         if (!halide_num_threads) {
@@ -280,6 +229,8 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
             //fprintf(stderr, "Creating thread %d\n", i);
             pthread_create(halide_work_queue.threads + i, NULL, halide_worker_thread, NULL);
         }
+        // Everyone starts on the a team.
+        halide_work_queue.a_team_size = halide_num_threads;
 
         halide_thread_pool_initialized = true;
     }
@@ -294,13 +245,33 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     job.exit_status = 0;     // The job hasn't failed yet
     job.active_workers = 0;  // Nobody is working on this yet
 
+    if (!halide_work_queue.jobs && size < halide_num_threads) {
+        // If there's no nested parallelism happening and there are
+        // fewer tasks to do than threads, then set the target A team
+        // size so that some threads will put themselves to sleep
+        // until a larger job arrives.
+        halide_work_queue.target_a_team_size = size;
+    } else {
+        halide_work_queue.target_a_team_size = halide_num_threads;
+    }
+
+    // If there are more tasks than threads in the A team, we should
+    // wake up everyone.
+    bool wake_b_team = size > halide_work_queue.a_team_size;
+
     // Push the job onto the stack.
     job.next_job = halide_work_queue.jobs;
     halide_work_queue.jobs = &job;
+
     pthread_mutex_unlock(&halide_work_queue.mutex);
 
-    // Wake up any idle worker threads.
-    pthread_cond_broadcast(&halide_work_queue.state_change);
+    // Wake up our A team.
+    pthread_cond_broadcast(&halide_work_queue.wakeup_a_team);
+
+    if (wake_b_team) {
+        // We need the B team too.
+        pthread_cond_broadcast(&halide_work_queue.wakeup_b_team);
+    }
 
     // Do some work myself.
     halide_worker_thread((void *)(&job));
@@ -308,6 +279,104 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     // Return zero if the job succeeded, otherwise return the exit
     // status of one of the failing jobs (whichever one failed last).
     return job.exit_status;
+}
+
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *) = default_do_task;
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *) = default_do_par_for;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_destroy(mutex);
+    memset(mutex_arg, 0, sizeof(halide_mutex));
+}
+
+WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_lock(mutex);
+}
+
+WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_unlock(mutex);
+}
+
+
+WEAK void halide_shutdown_thread_pool() {
+    if (!halide_thread_pool_initialized) return;
+
+    // Wake everyone up and tell them the party's over and it's time
+    // to go home
+    pthread_mutex_lock(&halide_work_queue.mutex);
+    halide_work_queue.shutdown = true;
+    pthread_cond_broadcast(&halide_work_queue.wakeup_owners);
+    pthread_cond_broadcast(&halide_work_queue.wakeup_a_team);
+    pthread_cond_broadcast(&halide_work_queue.wakeup_b_team);
+    pthread_mutex_unlock(&halide_work_queue.mutex);
+
+    // Wait until they leave
+    for (int i = 0; i < halide_num_threads-1; i++) {
+        //fprintf(stderr, "Waiting for thread %d to exit\n", i);
+        void *retval;
+        pthread_join(halide_work_queue.threads[i], &retval);
+    }
+
+    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
+    // Tidy up
+    pthread_mutex_destroy(&halide_work_queue.mutex);
+    // Reinitialize in case we call another do_par_for
+    pthread_mutex_init(&halide_work_queue.mutex, NULL);
+    pthread_cond_destroy(&halide_work_queue.wakeup_owners);
+    pthread_cond_destroy(&halide_work_queue.wakeup_a_team);
+    pthread_cond_destroy(&halide_work_queue.wakeup_b_team);
+    halide_thread_pool_initialized = false;
+}
+
+namespace {
+__attribute__((destructor))
+WEAK void halide_posix_thread_pool_cleanup() {
+    halide_shutdown_thread_pool();
+}
+}
+
+WEAK void halide_set_num_threads(int n) {
+    if (halide_num_threads == n) {
+        return;
+    }
+
+    if (halide_thread_pool_initialized) {
+        halide_shutdown_thread_pool();
+    }
+
+    halide_num_threads = n;
+}
+
+WEAK int (*halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)))
+          (void *, halide_task, int, uint8_t *) {
+    int (*result)(void *, halide_task, int, uint8_t *) = halide_custom_do_task;
+    halide_custom_do_task = f;
+    return result;
+}
+
+
+WEAK int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)))
+          (void *, halide_task, int, int, uint8_t *) {
+    int (*result)(void *, halide_task, int, int, uint8_t *) = halide_custom_do_par_for;
+    halide_custom_do_par_for = f;
+    return result;
+}
+
+WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+                        uint8_t *closure) {
+    return (*halide_custom_do_task)(user_context, f, idx, closure);
+}
+
+WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
+                           int min, int size, uint8_t *closure) {
+  return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
 }
 
 } // extern "C"

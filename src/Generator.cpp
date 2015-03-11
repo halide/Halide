@@ -48,10 +48,12 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR]  "
-                          "target=target-string [generator_arg=value [...]]\n";
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-e EMIT_OPTIONS] "
+                          "target=target-string [generator_arg=value [...]]\n\n"
+                          "  -e  A comma separated list of optional files to emit. Accepted values are "
+                          "[assembly, bitcode, stmt, html]\n";
 
-    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" } };
+    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" }, { "-e", "" } };
     std::map<std::string, std::string> generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -115,6 +117,22 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
+    GeneratorBase::EmitOptions emit_options;
+    std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    for (const std::string &opt : emit_flags) {
+        if (opt == "assembly") {
+            emit_options.emit_assembly = true;
+        } else if (opt == "bitcode") {
+            emit_options.emit_bitcode = true;
+        } else if (opt == "stmt") {
+            emit_options.emit_stmt = true;
+        } else if (opt == "html") {
+            emit_options.emit_stmt_html = true;
+        } else if (!opt.empty()) {
+            cerr << "Unrecognized emit option: " << opt
+                 << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+        }
+    }
 
     std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
     if (gen == nullptr) {
@@ -122,13 +140,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name);
+    gen->emit_filter(output_dir, function_name, function_name, emit_options);
     return 0;
 }
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
-                                              this);
+                                              this, nullptr);
 }
 
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
@@ -180,8 +198,8 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     return result;
 }
 
-GeneratorBase::GeneratorBase(size_t size) : size(size), params_built(false) {
-    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this);
+GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper) : size(size), params_built(false) {
+    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
 }
 
 GeneratorBase::~GeneratorBase() { ObjectInstanceRegistry::unregister_instance(this); }
@@ -197,8 +215,16 @@ void GeneratorBase::build_params() {
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
             user_assert(filter_params.find(param->name()) == filter_params.end())
                 << "Duplicate Param name: " << param->name();
+            Expr def, min, max;
+            if (!param->is_buffer()) {
+                def = param->get_scalar_expr();
+                min = param->get_min_value();
+                max = param->get_max_value();
+            }
             filter_params[param->name()] = param;
-            filter_arguments.push_back(Argument(param->name(), param->is_buffer(), param->type()));
+            filter_arguments.push_back(Argument(param->name(),
+                param->is_buffer() ? Argument::Buffer : Argument::Scalar,
+                param->type(), param->dimensions(), def, min, max));
         }
 
         std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
@@ -284,7 +310,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
 }
 
 Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                 std::string function_name){
+                                std::string function_name){
     Func f = build();
     Func f_extern;
     if (function_name.empty()) {

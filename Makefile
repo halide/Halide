@@ -7,7 +7,7 @@
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 # 'make time_compilation_tests' records the compile time for each test module into a csv file.
 #     For correctness and performance tests this include halide build time and run time. For
-#     the tests in test/static/ and test/generator/ this times only the halide build time.
+#     the tests in test/generator/ this times only the halide build time.
 
 SHELL = bash
 CXX ?= g++
@@ -23,13 +23,14 @@ LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer -Wcovered-switch-default -Wno-maybe-uninitialized, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
-CXX11 ?=
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
 #  but that is difficult in some testing situations because it requires having
 #  such a compiler handy. One still needs to have 32-bit llvm libraries, etc.)
 BUILD_BIT_SIZE ?=
-TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
+TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti $(CXX_WARNING_FLAGS)
+# The tutorials contain example code with warnings that we don't want to be flagged as errors.
+TUTORIAL_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
 GENGEN_DEPS ?=$(BIN_DIR)/libHalide.so include/Halide.h tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -60,17 +61,10 @@ ifneq ($(LLVM_VERSION), 3.2)
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 endif
 
-# turn on c++11 for llvm 3.5
-ifeq ($(LLVM_VERSION_TIMES_10), 35)
-CXX11 = true
-endif
+# turn on c++11 for llvm 3.5+
+CXX11 ?= $(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39 40)
 
-# turn on c++11 for llvm 3.6
-ifeq ($(LLVM_VERSION_TIMES_10), 36)
-CXX11 = true
-endif
-
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 LLVM_CXX_FLAGS += -std=c++11
 TEST_CXX_FLAGS += -std=c++11
 endif
@@ -155,9 +149,6 @@ OPENGL_LDFLAGS = -framework OpenGL -framework AGL
 endif
 endif
 
-# Remove some non-llvm libs that llvm-config has helpfully included
-LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_STATIC_LIBS))
-
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
 TEST_PTX = 1
@@ -203,11 +194,6 @@ ifneq ($(TEST_PTX), )
 TEST_CXX_FLAGS += -DTEST_PTX
 endif
 
-# Note that we don't include -g in the static test flags. OS X's
-# dsymutil can't seem to generate a dSYM folder from the binaries that
-# trunk llvm produces.
-STATIC_TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -fno-omit-frame-pointer
-
 # Compiling the tutorials requires libpng
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
@@ -230,39 +216,252 @@ DISTRIB_DIR=distrib
 endif
 
 FILTERS_DIR = $(BUILD_DIR)/filters
-SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_GPU_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_OpenCL_Dev.cpp CodeGen_GPU_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp CodeGen_Hexagon.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp FindCalls.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp OneToOne.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Debug.cpp Parameter.cpp Reduction.cpp RDom.cpp Profiling.cpp Tracing.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp IntegerDivisionTable.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp UniquifyVariableNames.cpp CSE.cpp Tuple.cpp Lerp.cpp Target.cpp SkipStages.cpp SpecializeClampedRamps.cpp RemoveUndef.cpp FastIntegerDivide.cpp AllocationBoundsInference.cpp Inline.cpp Qualify.cpp UnifyDuplicateLets.cpp CodeGen_PNaCl.cpp ExprUsesVar.cpp Random.cpp Introspection.cpp Buffer.cpp Param.cpp Image.cpp Error.cpp CodeGen_OpenGL_Dev.cpp InjectOpenGLIntrinsics.cpp Schedule.cpp FuseGPUThreadLoops.cpp InjectHostDevBufferCopies.cpp ParallelRVar.cpp BoundaryConditions.cpp Memoization.cpp HumanReadableStmt.cpp StmtToHtml.cpp CodeGen_MIPS.cpp ObjectInstanceRegistry.cpp Generator.cpp BlockFlattening.cpp LinearSolve.cpp BranchVisitors.cpp
+
+SOURCE_FILES = \
+  AllocationBoundsInference.cpp \
+  BlockFlattening.cpp \
+  BoundaryConditions.cpp \
+  Bounds.cpp \
+  BoundsInference.cpp \
+  BranchVisitors.cpp \
+  Buffer.cpp \
+  CodeGen_ARM.cpp \
+  CodeGen_C.cpp \
+  CodeGen_GPU_Dev.cpp \
+  CodeGen_GPU_Host.cpp \
+  CodeGen_Hexagon.cpp \
+  CodeGen_Internal.cpp \
+  CodeGen_LLVM.cpp \
+  CodeGen_MIPS.cpp \
+  CodeGen_OpenCL_Dev.cpp \
+  CodeGen_OpenGL_Dev.cpp \
+  CodeGen_PNaCl.cpp \
+  CodeGen_Posix.cpp \
+  CodeGen_PTX_Dev.cpp \
+  CodeGen_X86.cpp \
+  CSE.cpp \
+  Debug.cpp \
+  DebugToFile.cpp \
+  Deinterleave.cpp \
+  Derivative.cpp \
+  DeviceInterface.cpp \
+  EarlyFree.cpp \
+  Error.cpp \
+  ExprUsesVar.cpp \
+  FastIntegerDivide.cpp \
+  FindCalls.cpp \
+  Func.cpp \
+  Function.cpp \
+  FuseGPUThreadLoops.cpp \
+  Generator.cpp \
+  HumanReadableStmt.cpp \
+  Image.cpp \
+  InjectHostDevBufferCopies.cpp \
+  InjectOpenGLIntrinsics.cpp \
+  Inline.cpp \
+  InlineReductions.cpp \
+  IntegerDivisionTable.cpp \
+  Introspection.cpp \
+  IR.cpp \
+  IREquality.cpp \
+  IRMatch.cpp \
+  IRMutator.cpp \
+  IROperator.cpp \
+  IRPrinter.cpp \
+  IRVisitor.cpp \
+  JITModule.cpp \
+  Lerp.cpp \
+  LinearSolve.cpp \
+  LLVM_Runtime_Linker.cpp \
+  Lower.cpp \
+  Memoization.cpp \
+  ModulusRemainder.cpp \
+  ObjectInstanceRegistry.cpp \
+  OneToOne.cpp \
+  ParallelRVar.cpp \
+  Param.cpp \
+  Parameter.cpp \
+  Profiling.cpp \
+  Qualify.cpp \
+  Random.cpp \
+  RDom.cpp \
+  Reduction.cpp \
+  RemoveDeadAllocations.cpp \
+  RemoveTrivialForLoops.cpp \
+  RemoveUndef.cpp \
+  Schedule.cpp \
+  Simplify.cpp \
+  SkipStages.cpp \
+  SlidingWindow.cpp \
+  SpecializeBranchedLoops.cpp \
+  SpecializeClampedRamps.cpp \
+  StmtCompiler.cpp \
+  StmtToHtml.cpp \
+  StorageFlattening.cpp \
+  StorageFolding.cpp \
+  Substitute.cpp \
+  Target.cpp \
+  Tracing.cpp \
+  Tuple.cpp \
+  Type.cpp \
+  UnifyDuplicateLets.cpp \
+  UniquifyVariableNames.cpp \
+  UnrollLoops.cpp \
+  Util.cpp \
+  VaryingAttributes.cpp \
+  VectorizeLoops.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
-HEADER_FILES = Introspection.h Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h IntegerDivisionTable.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h FindCalls.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h CodeGen_Hexagon.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h SkipStages.h SpecializeClampedRamps.h RemoveUndef.h FastIntegerDivide.h AllocationBoundsInference.h Inline.h Qualify.h UnifyDuplicateLets.h CodeGen_PNaCl.h ExprUsesVar.h Random.h Error.h CodeGen_OpenGL_Dev.h InjectOpenGLIntrinsics.h FuseGPUThreadLoops.h InjectHostDevBufferCopies.h ParallelRVar.h BoundaryConditions.h Memoization.h HumanReadableStmt.h  StmtToHtml.h CodeGen_MIPS.h Generator.h ObjectInstanceRegistry.h BlockFlattening.h LinearSolve.h BranchVisitors.h
+HEADER_FILES = \
+  AllocationBoundsInference.h \
+  Argument.h \
+  BlockFlattening.h \
+  BoundaryConditions.h \
+  Bounds.h \
+  BoundsInference.h \
+  BranchVisitors.h \
+  Buffer.h \
+  CodeGen_ARM.h \
+  CodeGen_Hexagon.h \
+  CodeGen_C.h \
+  CodeGen_GPU_Dev.h \
+  CodeGen_GPU_Host.h \
+  CodeGen_LLVM.h \
+  CodeGen_MIPS.h \
+  CodeGen_OpenCL_Dev.h \
+  CodeGen_OpenGL_Dev.h \
+  CodeGen_PNaCl.h \
+  CodeGen_Posix.h \
+  CodeGen_PTX_Dev.h \
+  CodeGen_X86.h \
+  CSE.h \
+  Debug.h \
+  DebugToFile.h \
+  Deinterleave.h \
+  Derivative.h \
+  DeviceInterface.h \
+  EarlyFree.h \
+  Error.h \
+  Expr.h \
+  ExprUsesVar.h \
+  Extern.h \
+  FastIntegerDivide.h \
+  FindCalls.h \
+  Func.h \
+  Function.h \
+  FuseGPUThreadLoops.h \
+  Generator.h \
+  runtime/HalideRuntime.h \
+  HumanReadableStmt.h \
+  Image.h \
+  InjectHostDevBufferCopies.h \
+  InjectOpenGLIntrinsics.h \
+  Inline.h \
+  InlineReductions.h \
+  IntegerDivisionTable.h \
+  Introspection.h \
+  IntrusivePtr.h \
+  IREquality.h \
+  IR.h \
+  IRMatch.h \
+  IRMutator.h \
+  IROperator.h \
+  IRPrinter.h \
+  IRVisitor.h \
+  JITModule.h \
+  Lambda.h \
+  Lerp.h \
+  LinearSolve.h \
+  LLVM_Runtime_Linker.h \
+  Lower.h \
+  MainPage.h \
+  Memoization.h \
+  ModulusRemainder.h \
+  ObjectInstanceRegistry.h \
+  OneToOne.h \
+  ParallelRVar.h \
+  Parameter.h \
+  Param.h \
+  Profiling.h \
+  Qualify.h \
+  Random.h \
+  RDom.h \
+  Reduction.h \
+  RemoveDeadAllocations.h \
+  RemoveTrivialForLoops.h \
+  RemoveUndef.h \
+  Schedule.h \
+  Scope.h \
+  Simplify.h \
+  SkipStages.h \
+  SlidingWindow.h \
+  SpecializeBranchedLoops.h \
+  SpecializeClampedRamps.h \
+  StmtCompiler.h \
+  StmtToHtml.h \
+  StorageFlattening.h \
+  StorageFolding.h \
+  Substitute.h \
+  Target.h \
+  Tracing.h \
+  Tuple.h \
+  Type.h \
+  UnifyDuplicateLets.h \
+  UniquifyVariableNames.h \
+  UnrollLoops.h \
+  Util.h \
+  Var.h \
+  VectorizeLoops.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image windows_cuda windows_opencl windows_io windows_thread_pool ssp opengl linux_opengl_context osx_opengl_context android_opengl_context posix_print gpu_device_selection cache nacl_host_cpu_count to_string
-RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips hexagon
+RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image windows_cuda windows_opencl windows_io windows_thread_pool ssp opengl linux_opengl_context osx_opengl_context android_opengl_context posix_print nogpu gpu_device_selection cache nacl_host_cpu_count to_string module_jit_ref_count module_aot_ref_count device_interface
+RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips arm_no_neon hexagon
+
+RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
 .PHONY: all
-all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
+all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
 
+ifeq ($(USE_LLVM_SHARED_LIB), )
+$(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
+	# Determine the relevant object files from llvm with a dummy
+	# compilation. Passing -t to the linker gets it to list which
+	# object files in which archives it uses to resolve
+	# symbols. We only care about the libLLVM ones.
+	@rm -rf $(BUILD_DIR)/llvm_objects
+	@mkdir -p $(BUILD_DIR)/llvm_objects
+	@echo -$(LLVM_STATIC_LIBS)-
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_LIBDIR)/*.a -ldl -lz -lpthread | grep libLLVM | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
+	# Extract the necessary object files from the llvm archives.
+	cd $(BUILD_DIR)/llvm_objects; xargs -n2 ar x < list
+	# Archive together all the halide and llvm object files
+	@-mkdir -p $(BIN_DIR)
+	@rm -f $(BIN_DIR)/libHalide.a
+	ar q $(BIN_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/*.o
+	ranlib $(BIN_DIR)/libHalide.a
+else
 $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p $(BIN_DIR)
-	$(LD) -r -o $(BUILD_DIR)/Halide.o $(OBJECTS) $(INITIAL_MODULES) $(LIBS)
-	rm -f $(BIN_DIR)/libHalide.a
-	ar q $(BIN_DIR)/libHalide.a $(BUILD_DIR)/Halide.o
+	@rm -f $(BIN_DIR)/libHalide.a
+	ar q $(BIN_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES)
 	ranlib $(BIN_DIR)/libHalide.a
+endif
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) $(LLVM_SHARED_LIBS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LDFLAGS) $(LLVM_SHARED_LIBS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
 
 include/Halide.h: $(HEADERS) src/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p include
 	cd src; ../$(BIN_DIR)/build_halide_h $(HEADER_FILES) HalideFooter.h > ../include/Halide.h; cd ..
 
-include/HalideRuntime.h: src/runtime/HalideRuntime.h
+include/HalideRuntime%: src/runtime/HalideRuntime%
+	echo Copying $<
 	mkdir -p include
-	cp src/runtime/HalideRuntime.h include/
+	cp $< include/
 
 $(BIN_DIR)/build_halide_h: tools/build_halide_h.cpp
 	g++ $< -o $@
@@ -278,11 +477,11 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 # -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -m32 -target "i386-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target "i386-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
 
 $(BUILD_DIR)/initmod.%_64_debug.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
@@ -330,7 +529,6 @@ clean:
 .SECONDARY:
 
 CORRECTNESS_TESTS = $(shell ls test/correctness/*.cpp)
-STATIC_TESTS = $(shell ls test/static/*_generate.cpp)
 PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
@@ -338,39 +536,35 @@ OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
 GENERATOR_TESTS := $(shell ls test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
 
-STATIC_TEST_CXX ?= $(CXX)
-
 LD_PATH_SETUP = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../$(BIN_DIR)
 LD_PATH_SETUP2 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../$(BIN_DIR)
 LD_PATH_SETUP3 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../../$(BIN_DIR)
 
 test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
-test_static: $(STATIC_TESTS:test/static/%_generate.cpp=static_%)
 test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
 test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 test_generators: $(GENERATOR_TESTS:test/generator/%_aottest.cpp=generator_aot_%) $(GENERATOR_TESTS:test/generator/%_jittest.cpp=generator_jit_%)
 else
 test_generators: ;
 endif
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_static test_warnings
+ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings
 
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 ALL_TESTS += test_generators
 endif
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For static and generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=time_compilation_test_%)
-time_compilation_static: init_time_compilation_static $(STATIC_TESTS:test/static/%_generate.cpp=time_compilation_static_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=time_compilation_generator_%)
 else
 time_compilation_generators: ;
@@ -387,8 +581,7 @@ run_tests: $(ALL_TESTS)
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
-	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
-	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
+	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%)
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
 
@@ -410,16 +603,10 @@ $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.
 $(BIN_DIR)/opengl_%: test/opengl/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
-$(BIN_DIR)/static_%_generate: test/static/%_generate.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
-
 tmp/static/%/%.o: $(BIN_DIR)/static_%_generate
 	@-mkdir -p tmp/static/$*
 	cd tmp/static/$*; $(LD_PATH_SETUP3) ../../../$<
 	@-echo
-
-$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%/%.o include/HalideRuntime.h
-	$(STATIC_TEST_CXX) $(STATIC_TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static/$* -I apps/support -I src/runtime tmp/static/$*/*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
 
 # TODO(srj): this doesn't auto-delete, why not?
 .INTERMEDIATE: $(FILTERS_DIR)/%.generator
@@ -429,7 +616,7 @@ $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tm
 # usage can just add deps later.
 $(FILTERS_DIR)/%.generator: test/generator/%_generator.cpp $(GENGEN_DEPS)
 	@mkdir -p $(FILTERS_DIR)
-	$(CXX) -std=c++11 -fno-rtti -Iinclude $(filter %_generator.cpp,$^) tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread -ldl -o $@
+	$(CXX) -std=c++11 -g $(CXX_WARNING_FLAGS) -fno-rtti -Iinclude $(filter %_generator.cpp,$^) tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread -ldl -o $@
 
 # By default, %.o/.h are produced by executing %.generator
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
@@ -499,21 +686,16 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 		export TUTORIAL=$* ;\
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make tutorial_$${TUTORIAL/run/generate}; \
-		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
+		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) $(STATIC_TEST_LIBS) -o $@; \
 	else \
-		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
+		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 		-Iinclude -L$(BIN_DIR) -lHalide $(STATIC_TEST_LIBS) $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
 	cd tmp ; $(LD_PATH_SETUP) ../$<
-	@-echo
-
-static_%: $(BIN_DIR)/static_%_test
-	@-mkdir -p tmp
-	cd tmp ; $(LD_PATH_SETUP) $(STATIC_TEST_RUNNER) ../$<
 	@-echo
 
 valgrind_%: $(BIN_DIR)/test_%
@@ -666,7 +848,7 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so includ
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
-	cp include/HalideRuntime.h $(DISTRIB_DIR)/include
+	cp include/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp README.md $(DISTRIB_DIR)
@@ -681,4 +863,3 @@ $(BIN_DIR)/HalideProf: util/HalideProf.cpp
 
 $(BIN_DIR)/HalideTrace: util/HalideTrace.cpp
 	$(CXX) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -o $@
-

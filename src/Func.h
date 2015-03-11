@@ -12,19 +12,12 @@
 #include "Param.h"
 #include "Argument.h"
 #include "RDom.h"
-#include "JITCompiledModule.h"
+#include "JITModule.h"
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
 
 namespace Halide {
-
-enum GPUAPI {
-    GPU_Default,
-    GPU_CUDA,
-    GPU_OpenCL,
-    GPU_GLSL
-};
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -47,7 +40,8 @@ struct VarOrRVar {
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
     Internal::Schedule schedule;
-    void set_dim_type(VarOrRVar var, Internal::For::ForType t);
+    void set_dim_type(VarOrRVar var, Internal::ForType t);
+    void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
     std::string stage_name;
 public:
@@ -106,27 +100,27 @@ public:
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
 
-    EXPORT Stage &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    EXPORT Stage &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y,
                                VarOrRVar thread_x, VarOrRVar thread_y,
-                               GPUAPI gpu_api = GPU_Default);
+                               DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
-                               GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
+                               DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
-                                    GPUAPI gpu_api = GPU_Default);
+                                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                    Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
+                                    Expr x_size, Expr y_size, Expr z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &allow_race_conditions();
     // @}
@@ -410,43 +404,12 @@ class Func {
 
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
-    Internal::JITCompiledModule compiled_module;
+    Internal::JITModule compiled_module;
 
     /** Invalidate the cached lowered stmt and compiled module. */
     void invalidate_cache();
 
-    /** The current error handler used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    void (*error_handler)(void *user_context, const char *);
-
-    /** The current custom allocator used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    // @{
-    void *(*custom_malloc)(void *user_context, size_t);
-    void (*custom_free)(void *user_context, void *ptr);
-    // @}
-
-    /** The current custom parallel task launcher and handler for
-     * realizing this function. May be NULL. */
-    // @{
-    int (*custom_do_par_for)(void *user_context,
-                             int (*)(void *, int, uint8_t *),
-                             int, int, uint8_t *);
-    int (*custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
-                          int, uint8_t *);
-    // @}
-
-    /** The current custom tracing function. May be NULL. */
-    // @{
-    int32_t (*custom_trace)(void *, const halide_trace_event *);
-
-    // @}
-
-    /** The current print function used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    void (*custom_print)(void *user_context, const char *);
-
-    uint64_t cache_size;
+    Halide::Internal::JITHandlers jit_handlers;
 
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
@@ -477,10 +440,6 @@ class Func {
 
     /** A set of custom passes to use when lowering this Func. */
     std::vector<CustomLoweringPass> custom_lowering_passes;
-
-    /** Some infrastructure that helps Funcs catch and handle runtime
-     * errors in JIT-compiled code. */
-    bool prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf);
 
 public:
 
@@ -837,7 +796,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
+    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your
@@ -848,12 +807,6 @@ public:
      * This will clobber Halide's version.
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
-
-    /** Set the maximum number of bytes used by memoization caching.
-     * If you are compiling statically, you should include HalideRuntime.h
-     * and call halide_memoization_cache_set_size() instead.
-     */
-    EXPORT void memoization_cache_set_size(uint64_t size);
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
@@ -1336,16 +1289,16 @@ public:
      * threads. If the selected target is not an appropriate GPU, this
      * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** Tell Halide to run this stage using a single gpu thread and
      * block. This is not an efficient use of your GPU, but it can be
      * useful to avoid copy-back for intermediate update stages that
      * touch a very small part of your Func. */
-    EXPORT Func &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     /** \deprecated Old name for #gpu_threads. */
     // @{
@@ -1365,9 +1318,9 @@ public:
      * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** \deprecated Old name for #gpu_blocks. */
@@ -1389,11 +1342,11 @@ public:
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y,
-                     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+                     VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** \deprecated Old name for #gpu. */
@@ -1416,10 +1369,10 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          int x_size, int y_size, int z_size, GPUAPI gpu_api = GPU_Default);
+                          int x_size, int y_size, int z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** \deprecated Old name for #gpu_tile. */

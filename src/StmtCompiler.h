@@ -6,7 +6,7 @@
  */
 
 #include "IR.h"
-#include "JITCompiledModule.h"
+#include "JITModule.h"
 #include "Target.h"
 
 #include <string>
@@ -20,9 +20,9 @@ namespace Internal {
 /** A handle to a generic statement compiler. Can take Halide
  * statements and turn them into assembly, bitcode, machine code, or a
  * jit-compiled module. */
-class CodeGen;
+class CodeGen_LLVM;
 class StmtCompiler {
-    IntrusivePtr<CodeGen> contents;
+    IntrusivePtr<CodeGen_LLVM> contents;
 public:
 
     /** Build a code generator for the given target. */
@@ -54,7 +54,10 @@ public:
      * such as a hook for setting the function to call when an assert
      * fails.
      */
-    JITCompiledModule compile_to_function_pointers();
+    JITModule compile_to_function_pointers();
+
+    /** Get underlying CodeGen object. */
+    CodeGen_LLVM *get_codegen() { return contents.ptr; }
 };
 
 }

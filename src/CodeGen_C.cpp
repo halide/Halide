@@ -3,7 +3,6 @@
 #include <limits>
 
 #include "CodeGen_C.h"
-#include "CodeGen.h"
 #include "CodeGen_Internal.h"
 #include "Substitute.h"
 #include "IROperator.h"
@@ -267,7 +266,7 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << "int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) stream << ", ";
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             stream << "buffer_t *" << print_name(args[i].name);
         } else {
             stream << "const "
@@ -276,6 +275,12 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
         }
     }
     stream << ") HALIDE_FUNCTION_ATTRS;\n";
+
+    // And also the function prototype for the _argv call
+    stream << "#ifdef __cplusplus\n";
+    stream << "extern \"C\"\n";
+    stream << "#endif\n";
+    stream << "int " << name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
     stream << "#endif\n";
 }
@@ -292,7 +297,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (!emitted.count(op->name)) {
                 stream << "extern \"C\" " << type_to_c_type(op->type)
                        << " " << op->name << "(";
-                if (CodeGen::function_takes_user_context(op->name)) {
+                if (function_takes_user_context(op->name)) {
                     stream << "void *";
                     if (op->args.size()) {
                         stream << ", ";
@@ -346,6 +351,7 @@ void CodeGen_C::compile(Stmt s, string name,
         Buffer buffer = images_to_embed[i];
         string name = print_name(buffer.name());
         buffer_t b = *(buffer.raw_buffer());
+        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
 
         // Figure out the offset of the last pixel.
         size_t num_elems = 1;
@@ -362,7 +368,6 @@ void CodeGen_C::compile(Stmt s, string name,
         stream << "};\n";
 
         // Emit the buffer_t
-        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
         user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
         stream << "static buffer_t " << name << "_buffer = {"
                << "0, " // dev
@@ -396,7 +401,7 @@ void CodeGen_C::compile(Stmt s, string name,
     // Emit the function prototype
     stream << "extern \"C\" int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             stream << "buffer_t *"
                    << print_name(args[i].name)
                    << "_buffer";
@@ -414,7 +419,7 @@ void CodeGen_C::compile(Stmt s, string name,
 
     // Unpack the buffer_t's
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+        if (args[i].is_buffer()) {
             unpack_buffer(args[i].type, args[i].name);
         }
     }
@@ -755,12 +760,19 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << ")";
         } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 1);
             rhs << "halide_profiling_timer(";
             rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ")";
         } else if (op->name == Call::lerp) {
+            internal_assert(op->args.size() == 3);
             Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+            rhs << print_expr(e);
+        } else if (op->name == Call::absd) {
+            internal_assert(op->args.size() == 2);
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            Expr e = select(a < b, b - a, a - b);
             rhs << print_expr(e);
         } else if (op->name == Call::null_handle) {
             rhs << "NULL";
@@ -950,7 +962,7 @@ void CodeGen_C::visit(const Call *op) {
         }
         rhs << op->name << "(";
 
-        if (CodeGen::function_takes_user_context(op->name)) {
+        if (function_takes_user_context(op->name)) {
             rhs << (have_user_context ? "__user_context_, " : "NULL, ");
         }
 
@@ -1080,11 +1092,11 @@ void CodeGen_C::visit(const Pipeline *op) {
 }
 
 void CodeGen_C::visit(const For *op) {
-    if (op->for_type == For::Parallel) {
+    if (op->for_type == ForType::Parallel) {
         do_indent();
         stream << "#pragma omp parallel for\n";
     } else {
-        internal_assert(op->for_type == For::Serial)
+        internal_assert(op->for_type == ForType::Serial)
             << "Can only emit serial or parallel for loops to C\n";
     }
 
@@ -1250,10 +1262,10 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", true, Int(32));
-    Argument float_arg("alpha", false, Float(32));
-    Argument int_arg("beta", false, Int(32));
-    Argument user_context_arg("__user_context", false, Handle());
+    Argument buffer_arg("buf", Argument::Buffer, Int(32), 3);
+    Argument float_arg("alpha", Argument::Scalar, Float(32), 0);
+    Argument int_arg("beta", Argument::Scalar, Int(32), 0);
+    Argument user_context_arg("__user_context", Argument::Scalar, Handle(), 0);
     vector<Argument> args(4);
     args[0] = buffer_arg;
     args[1] = float_arg;

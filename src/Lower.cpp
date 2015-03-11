@@ -21,12 +21,14 @@
 #include "SlidingWindow.h"
 #include "StorageFolding.h"
 #include "RemoveTrivialForLoops.h"
+#include "RemoveDeadAllocations.h"
 #include "Deinterleave.h"
 #include "DebugToFile.h"
 #include "EarlyFree.h"
 #include "UniquifyVariableNames.h"
 #include "SkipStages.h"
 #include "CSE.h"
+#include "SpecializeBranchedLoops.h"
 #include "SpecializeClampedRamps.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
@@ -40,6 +42,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
 #include "Memoization.h"
+#include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
@@ -293,7 +296,7 @@ Stmt build_provide_loop_nest(Function f,
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt);
         }
     }
 
@@ -724,7 +727,7 @@ private:
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
             func.schedule().compute_level().is_inline() &&
-            for_loop->for_type == For::Vectorized &&
+            for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
@@ -765,10 +768,11 @@ private:
             stmt = for_loop;
         } else {
             stmt = For::make(for_loop->name,
-                           for_loop->min,
-                           for_loop->extent,
-                           for_loop->for_type,
-                           body);
+                             for_loop->min,
+                             for_loop->extent,
+                             for_loop->for_type,
+                             for_loop->device_api,
+                             body);
         }
     }
 
@@ -848,6 +852,25 @@ public:
     }
 };
 
+void realization_order_dfs(string current, map<string, set<string> > &graph, set<string> &visited, set<string> &result_set, vector<string> &order) {
+    set<string> &inputs = graph[current];
+    visited.insert(current);
+
+    for (set<string>::const_iterator i = inputs.begin();
+        i != inputs.end(); ++i) {
+
+        if (visited.find(*i) == visited.end()) {
+            realization_order_dfs(*i, graph, visited, result_set, order);
+        } else if (*i != current) {
+            internal_assert(result_set.find(*i) != result_set.end())
+                << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
+        }
+    }
+
+    result_set.insert(current);
+    order.push_back(current);
+}
+
 vector<string> realization_order(string output, const map<string, Function> &env, map<string, set<string> > &graph) {
     // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
     // Populate the graph
@@ -861,42 +884,13 @@ vector<string> realization_order(string output, const map<string, Function> &env
         }
     }
 
-    vector<string> result;
+    vector<string> order;
     set<string> result_set;
+    set<string> visited;
 
-    while (true) {
-        // Find a function not in result_set, for which all its inputs are
-        // in result_set. Stop when we reach the output function.
-        bool scheduled_something = false;
-        // Inject a dummy use of this var in case asserts are off.
-        (void)scheduled_something;
-        for (map<string, Function>::const_iterator iter = env.begin();
-             iter != env.end(); ++iter) {
-            const string &f = iter->first;
-            if (result_set.find(f) == result_set.end()) {
-                bool good_to_schedule = true;
-                const set<string> &inputs = graph[f];
-                for (set<string>::const_iterator i = inputs.begin();
-                     i != inputs.end(); ++i) {
-                    if (*i != f && result_set.find(*i) == result_set.end()) {
-                        good_to_schedule = false;
-                    }
-                }
+    realization_order_dfs(output, graph, visited, result_set, order);
 
-                if (good_to_schedule) {
-                    scheduled_something = true;
-                    result_set.insert(f);
-                    result.push_back(f);
-                    debug(4) << "Realization order: " << f << "\n";
-                    if (f == output) return result;
-                }
-            }
-        }
-
-        internal_assert(scheduled_something)
-            << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
-    }
-
+    return order;
 }
 
 Stmt create_initial_loop_nest(Function f, const Target &t) {
@@ -937,8 +931,8 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
-        Site s = {f->for_type == For::Parallel ||
-                  f->for_type == For::Vectorized,
+        Site s = {f->for_type == ForType::Parallel ||
+                  f->for_type == ForType::Vectorized,
                   LoopLevel(func, var)};
         sites.push_back(s);
         f->body.accept(this);
@@ -1116,7 +1110,29 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     void visit(const For *op) {
         if (ends_with(op->name, ".__outermost")) {
-            stmt = op->body;
+            stmt = mutate(op->body);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent")) {
+            expr = 1;
+        } else if (ends_with(op->name, ".__outermost.loop_min")) {
+            expr = 0;
+        } else if (ends_with(op->name, ".__outermost.loop_max")) {
+            expr = 1;
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent") ||
+            ends_with(op->name, ".__outermost.loop_min") ||
+            ends_with(op->name, ".__outermost.loop_max")) {
+            stmt = mutate(op->body);
         } else {
             IRMutator::visit(op);
         }
@@ -1129,7 +1145,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
-    s = For::make(root_var, 0, 1, For::Serial, s);
+    s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, s);
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1724,6 +1740,42 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
     return s;
 }
 
+class PropagateInheritedAttributes : public IRMutator {
+    using IRMutator::visit;
+
+    DeviceAPI for_device;
+
+    void visit(const For *op) {
+        DeviceAPI save_device = for_device;
+        for_device = (op->device_api == DeviceAPI::Parent) ? for_device : op->device_api;
+
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        Stmt body = mutate(op->body);
+
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body) &&
+            for_device == op->device_api) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
+        }
+
+        for_device = save_device;
+    }
+
+public:
+    PropagateInheritedAttributes() : for_device(DeviceAPI::Host) {
+    }
+};
+
+Stmt propagate_inherited_attributes(Stmt s) {
+    PropagateInheritedAttributes propagator;
+
+    return propagator.mutate(s);
+}
+
 Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes) {
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
@@ -1779,6 +1831,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = allocation_bounds_inference(s, env, func_bounds);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
+    debug(1) << "Removing code that depends on undef values...\n";
+    s = remove_undef(s);
+    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
+
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
     // equivalence means semantic equivalence.
@@ -1814,7 +1870,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
 
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
-        s = inject_host_dev_buffer_copies(s);
+        s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
     }
 
@@ -1823,10 +1879,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
-
-    debug(1) << "Removing code that depends on undef values...\n";
-    s = remove_undef(s);
-    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
@@ -1854,6 +1906,13 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = simplify(s);
     debug(2) << "Lowering after specializing clamped ramps:\n" << s << "\n\n";
 
+    debug(1) << "Specializing branched loops...\n";
+    s = specialize_branched_loops(s);
+    s = remove_dead_allocations(s);
+    s = simplify(s);
+    s = remove_trivial_for_loops(s);
+    debug(2) << "Lowering after specializing branched loops:\n" << s << "\n\n";
+
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
@@ -1866,6 +1925,27 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
+
+    if (t.has_feature(Target::OpenGL)) {
+        debug(1) << "Detecting varying attributes...\n";
+        s = find_linear_expressions(s);
+        debug(2) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
+
+        debug(1) << "Moving varying attribute expressions out of the shader...\n";
+        s = setup_gpu_vertex_buffer(s);
+        debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
+    }
+
+    // This is envisioned as a catch all pass to propagate attributes
+    // which are inherited from a parent node by a child node so
+    // every CodeGen backend does not have to keep track of these
+    // attributes as the IR tree is traversed. At present, only the
+    // GPU device attribute on For nodes is propagated (to contained
+    // For nodes which have their device set to DeviceAPI::Parent).
+    debug(1) << "Propagating inherited attributes downward.\n";
+    s = propagate_inherited_attributes(s);
+    debug(1) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";
+
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
@@ -1876,7 +1956,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
             debug(1) << "Lowering after custom pass " << i << ":\n" << s << "\n\n";
         }
     }
-
 
     return s;
 }

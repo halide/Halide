@@ -240,6 +240,7 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                              Intrinsic::hexagon_V6_vnavgw));
 }
 
+#if 0
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
                           const vector<Argument> &args,
                           const vector<Buffer> &images_to_embed) {
@@ -265,6 +266,7 @@ void CodeGen_Hexagon::compile(Stmt stmt, string name,
     // Optimize
     CodeGen::optimize_module();
 }
+#endif
 
 llvm::Triple CodeGen_Hexagon::get_target_triple() const {
     llvm::Triple triple;
@@ -286,6 +288,10 @@ bool CodeGen_Hexagon::use_soft_float_abi() const {
   return false;
 }
 
+int CodeGen_Hexagon::native_vector_bits() const {
+  return 64;
+  // will need 128 at some point
+}
 
 static bool canUseVadd(const Add *op) {
   const Ramp *RampA = op->a.as<Ramp>();
@@ -341,33 +347,33 @@ llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
 void CodeGen_Hexagon::visit(const Add *op) {
   value = emitBinaryOp(op, varith);
   if (!value)
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
   return;
 }
 
 void CodeGen_Hexagon::visit(const Div *op) {
   value = emitBinaryOp(op, averages);
   if (!value)
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
   return;
 }
 
 void CodeGen_Hexagon::visit(const Sub *op) {
   value = emitBinaryOp(op, varith);
   if (!value)
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
   return;
 }
 void CodeGen_Hexagon::visit(const Max *op) {
   value = emitBinaryOp(op, varith);
   if (!value)
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
   return;
 }
 void CodeGen_Hexagon::visit(const Min *op) {
   value = emitBinaryOp(op, varith);
   if (!value)
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
   return;
 }
 void CodeGen_Hexagon::visit(const Cast *op) {
@@ -393,7 +399,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         return;
       }
   }
-  CodeGen::visit(op);
+  CodeGen_Posix::visit(op);
   return;
 }
 void CodeGen_Hexagon::visit(const Call *op) {
@@ -456,7 +462,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
       }
 
     }
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
   }
 }
   void CodeGen_Hexagon::visit(const Broadcast *op) {
@@ -472,7 +478,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
       value = builder->CreateCall(F, Op1);
       return;
     }
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
   }
 }}
 

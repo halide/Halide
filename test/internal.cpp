@@ -10,6 +10,7 @@
 #include "Deinterleave.h"
 #include "ModulusRemainder.h"
 #include "OneToOne.h"
+#include "SpecializeBranchedLoops.h"
 #include "CSE.h"
 #include "IREquality.h"
 
@@ -18,11 +19,6 @@ using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
     IRPrinter::test();
-
-    #ifdef __i386__
-    CodeGen_X86::test();
-    #endif
-
     CodeGen_C::test();
     ir_equality_test();
     bounds_test();
@@ -32,7 +28,9 @@ int main(int argc, const char **argv) {
     deinterleave_vector_test();
     modulus_remainder_test();
     is_one_to_one_test();
+    specialize_branched_loops_test();
     cse_test();
     simplify_test();
+
     return 0;
 }

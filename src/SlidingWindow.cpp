@@ -297,14 +297,14 @@ class SlidingWindowOnFunction : public IRMutator {
 
         new_body = mutate(new_body);
 
-        if (op->for_type == For::Serial || op->for_type == For::Unrolled) {
+        if (op->for_type == ForType::Serial || op->for_type == ForType::Unrolled) {
             new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);
         }
 
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, new_body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
         }
     }
 

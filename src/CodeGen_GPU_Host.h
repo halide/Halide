@@ -10,6 +10,9 @@
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
 
+#include "IR.h"
+#include <map>
+
 namespace Halide {
 namespace Internal {
 
@@ -27,16 +30,6 @@ public:
     CodeGen_GPU_Host(Target);
 
     virtual ~CodeGen_GPU_Host();
-
-    /** Compile to an internally-held llvm module. Takes a halide
-     * statement, the name of the function produced, and the arguments
-     * to the function produced. After calling this, call
-     * CodeGen::compile_to_file or
-     * CodeGen::compile_to_function_pointer to get at the generated machine
-     * code. */
-    void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
-                 const std::vector<Buffer> &images_to_embed);
 
 protected:
     /** Declare members of the base class that must exist to help the
@@ -78,25 +71,29 @@ protected:
     void visit(const For *);
     // @}
 
-    /** Finds and links in the CUDA runtime symbols prior to jitting */
-    void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
+    /** Initialize the CodeGen_GPU_Host internal state to compile a fresh
+     * module. Also initializes the device specific module. */
+    virtual void init_module();
 
-    /** Reaches inside the module at sets it to use a single shared
-     * cuda context */
-    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod,
-                      std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines);
+    /** Extend the already generated LLVM IR for the host code with
+     * the device specific part of the host code. */
+    void compile_for_device(Stmt stmt, std::string name,
+                            const std::vector<Argument> &args,
+                            const std::vector<Buffer> &images_to_embed);
+
+    /** Finds and links in the necessary runtime symbols prior to jitting */
+    void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
 
     static bool lib_cuda_linked;
 
-    static CodeGen_GPU_Dev* make_dev(Target);
+    static std::map<DeviceAPI, CodeGen_GPU_Dev *> make_devices(Target);
 
-    llvm::Value *get_module_state();
+    llvm::Value *get_module_state(const std::string &api_unique_name);
 
 private:
     /** Child code generator for device kernels. */
-    CodeGen_GPU_Dev *cgdev;
+    std::map<DeviceAPI, CodeGen_GPU_Dev *> cgdev;
 };
-
 
 }}
 

@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #include <algorithm>
 #include "clock.h"
@@ -75,6 +75,7 @@ int main(int argc, char **argv) {
         f(x, y) = g(x, y) * 3 + g(x+1, y);
 
         f.vectorize(x, 8);
+        f.compile_to_lowered_stmt("debug_clamped_vector_load.stmt");
 
         t_clamped = test(f);
     }

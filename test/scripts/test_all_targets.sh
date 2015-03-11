@@ -73,19 +73,14 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -stdlib=libc++"
     export GXX="clang++ -stdlib=libc++"
     export CC="clang"
-    export LLVMS="trunk release-3.5 release-3.4 pnacl"
+    export LLVMS="trunk release-3.5 release-3.6 pnacl"
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
-    export LLVMS="release-3.5 trunk release-3.4 pnacl"
+    export LLVMS="release-3.5 trunk release-3.6 pnacl"
 fi
-
-
-# We also need the nacl sdk. For now we assume the existence under ~/nacl_sdk
-export NATIVE_CLIENT_X86_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_x86_glibc/x86_64-nacl/include/
-export NATIVE_CLIENT_ARM_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_arm_newlib/include/
 
 # link testing/reports/head to the current head
 rm -rf testing/reports/head/*
@@ -98,23 +93,27 @@ for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
         LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
         CLANG_REPO=http://git.chromium.org/native_client/pnacl-clang.git
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == trunk ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.3 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.4 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.5 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+    elif [[ "$LLVM" == release-3.6 ]]; then
+        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_36
+        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_36
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     fi
 
     # Check out llvm if necessary
@@ -175,7 +174,7 @@ pwd
 
 for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
-        TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
+        TARGETS="x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     elif [[ "$LLVM" == trunk ]]; then
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx opencl"
     else

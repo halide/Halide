@@ -14,6 +14,7 @@ else()
   add_definitions("-D__STDC_LIMIT_MACROS")
   add_definitions("-D__STDC_CONSTANT_MACROS")
   add_definitions("-std=c++11")
+  add_definitions("-fno-rtti")
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
@@ -72,57 +73,65 @@ endif()
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
 
 set(RUNTIME_CPP
+  android_clock
+  android_host_cpu_count
   android_io
+  android_opengl_context
+  cache
   cuda
+  device_interface
   fake_thread_pool
   gcd_thread_pool
+  gpu_device_selection
   ios_io
-  android_clock
   linux_clock
+  linux_host_cpu_count
+  linux_opengl_context
+  module_aot_ref_count
+  module_jit_ref_count
+  nacl_host_cpu_count
   nogpu
   opencl
   opengl
-  gpu_device_selection
+  osx_clock
+  osx_host_cpu_count
   osx_opengl_context
-  linux_opengl_context
-  android_opengl_context
   posix_allocator
   posix_clock
-  osx_clock
-  windows_clock
   posix_error_handler
   posix_io
-  ssp
   posix_math
-  posix_thread_pool
-  windows_thread_pool
-  android_host_cpu_count
-  linux_host_cpu_count
-  osx_host_cpu_count
-  tracing
-  write_debug_image
-  windows_cuda
-  windows_opencl
-  windows_io
   posix_print
+  posix_thread_pool
+  ssp
   to_string
-  cache
-  nacl_host_cpu_count)
+  tracing
+  windows_clock
+  windows_cuda
+  windows_io
+  windows_opencl
+  windows_thread_pool
+  write_debug_image
+)
+
 set (RUNTIME_LL
-  arm
   aarch64
+  arm
+  arm_no_neon
+  mips
+  pnacl_math
   posix_math
   ptx_dev
-  x86_avx
-  x86
-  x86_sse41
   win32_math
-  pnacl_math
-  mips)
+  x86
+  x86_avx
+  x86_sse41
+)
 set (RUNTIME_BC
   compute_20
   compute_30
-  compute_35)
+  compute_35
+)
 
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
@@ -157,11 +166,11 @@ foreach (i ${RUNTIME_CPP} )
 
     add_custom_command(OUTPUT "${LL_D}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                        COMMENT "${SOURCE} -> ${LL_D}")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
 
     add_custom_command(OUTPUT "${BC_D}"
@@ -221,9 +230,8 @@ set(HEADER_FILES
   Bounds.h
   BoundsInference.h
   Buffer.h
-  buffer_t.h
   CodeGen_C.h
-  CodeGen.h
+  CodeGen_LLVM.h
   CodeGen_X86.h
   CodeGen_GPU_Host.h
   CodeGen_PTX_Dev.h
@@ -235,6 +243,7 @@ set(HEADER_FILES
   Derivative.h
   OneToOne.h
   Extern.h
+  Expr.h
   FindCalls.h
   Func.h
   Function.h
@@ -252,7 +261,7 @@ set(HEADER_FILES
   IRVisitor.h
   InjectOpenGLIntrinsics.h
   InjectHostDevBufferCopies.h
-  JITCompiledModule.h
+  JITModule.h
   Lambda.h
   Debug.h
   Lower.h
@@ -275,6 +284,7 @@ set(HEADER_FILES
   Tracing.h
   UnrollLoops.h
   Var.h
+  VaryingAttributes.h
   VectorizeLoops.h
   CodeGen_Posix.h
   CodeGen_ARM.h
@@ -302,11 +312,17 @@ set(HEADER_FILES
   StmtToHtml.h
   Memoization.h
   CodeGen_MIPS.h
-  Generator.h 
+  Generator.h
   ObjectInstanceRegistry.h
   BlockFlattening.h
   LinearSolve.h
-  BranchVisitors.h)
+  BranchVisitors.h
+  SpecializeBranchedLoops.h
+  RemoveDeadAllocations.h
+  LLVM_Runtime_Linker.h
+  DeviceInterface.h
+  runtime/HalideRuntime.h
+)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -316,11 +332,14 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   DEPENDS build_halide_h ${HEADER_FILES})
 
 file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
-  CodeGen.cpp
+  CodeGen_LLVM.cpp
   CodeGen_Internal.cpp
   CodeGen_X86.cpp
   CodeGen_GPU_Host.cpp
@@ -370,7 +389,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Deinterleave.cpp
   DebugToFile.cpp
   Type.cpp
-  JITCompiledModule.cpp
+  JITModule.cpp
   EarlyFree.cpp
   UniquifyVariableNames.cpp
   CSE.cpp
@@ -385,6 +404,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Inline.cpp
   Qualify.cpp
   UnifyDuplicateLets.cpp
+  VaryingAttributes.cpp
   ExprUsesVar.cpp
   Introspection.cpp
   Buffer.cpp
@@ -402,15 +422,28 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   StmtToHtml.cpp
   Memoization.cpp
   CodeGen_MIPS.cpp
-  Generator.cpp 
+  Generator.cpp
   ObjectInstanceRegistry.cpp
   BlockFlattening.cpp
   LinearSolve.cpp
   BranchVisitors.cpp
+  SpecializeBranchedLoops.cpp
+  RemoveDeadAllocations.cpp
+  LLVM_Runtime_Linker.cpp
+  DeviceInterface.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
-  ${HEADER_FILES})
+  ${HEADER_FILES}
+)
 
-target_link_libraries(Halide InitialModules ${LIBS})
+# CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
+# to target_link_libraries. This makes the CMake generation step take a very
+# long time. Instead, since we add the libs to the extra.LinkFileList passed to
+# Xcode below it is not necessary to pass them to target_link_libraries as well.
+if (XCODE)
+  target_link_libraries(Halide InitialModules)
+else()
+  target_link_libraries(Halide InitialModules ${LIBS})
+endif()
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
@@ -435,7 +468,7 @@ if (NOT HALIDE_SHARED_LIBRARY)
 
 if (XCODE)
 
-# Create a
+# Create a link file list
 set(EXTRA_LINKFILELIST "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/extra.LinkFileList")
 
 # Determine the location of libInitialModules.a so we can include the path to it
@@ -466,4 +499,5 @@ endif (NOT HALIDE_SHARED_LIBRARY)
 
 add_dependencies(Halide
   InitialModules
-  build_halide_h)
+  build_halide_h
+)
