@@ -134,6 +134,7 @@ void CodeGen_PTX_Dev::init_module() {
     CodeGen_LLVM::init_module();
 
     #ifdef WITH_PTX
+    internal_assert(!module);
     module = get_initial_module_for_ptx_device(target, context);
     #endif
 }
