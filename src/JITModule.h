@@ -35,7 +35,7 @@ struct JITModule {
         Symbol(void *address, llvm::Type *llvm_type) : address(address), llvm_type(llvm_type) {}
     };
 
-    JITModule() {}
+    EXPORT JITModule();
     EXPORT JITModule(const Module &m, const LoweredFunc &fn);
     EXPORT JITModule(const std::map<std::string, Symbol> &exports);
 
@@ -84,6 +84,9 @@ struct JITModule {
     EXPORT int copy_to_host(struct buffer_t *buf) const;
     EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
+
+    /** Check if this JIT module has a definition.. */
+    EXPORT bool defined() const;
 };
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
