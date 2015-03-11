@@ -160,13 +160,17 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     llvm::legacy::PassManager pass_manager;
     #endif
 
+    #if LLVM_VERSION < 37
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
     pass_manager.add(new llvm::TargetLibraryInfo(llvm::Triple(module->getTargetTriple())));
+    #else
+    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
+    #endif
 
     #if LLVM_VERSION < 33
     pass_manager.add(new llvm::TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
                                                    target_machine->getVectorTargetTransformInfo()));
-    #else
+    #elif LLVM_VERSION < 37
     target_machine->addAnalysisPasses(pass_manager);
     #endif
 
