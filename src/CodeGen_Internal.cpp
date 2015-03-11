@@ -59,7 +59,7 @@ void Closure::visit(const Store *op) {
     op->value.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
-        BufferRef & ref = buffers[op->name];
+        BufferRef &ref = buffers[op->name];
         ref.type = op->value.type(); // TODO: Validate type is the same as existing refs?
         // TODO: do we need to set ref.dimensions?
         ref.write = true;
@@ -83,9 +83,9 @@ void Closure::visit(const Variable *op) {
     } else {
         // Check if variable is a buffer, used outside of a load or store node
         if (ends_with(op->name, ".buffer")) {
-            std::string name = op->name.substr(0,op->name.length()-7);
+            std::string name = op->name.substr(0, op->name.length()-7);
             debug(3) << "Adding buffer " << name << " to closure\n";
-            BufferRef & ref = buffers[name];
+            BufferRef &ref = buffers[name];
             ref.type = op->param.type();
             ref.read = true;
         } else {

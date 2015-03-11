@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     int errors = 0;
 
     // Call a scalar built-in function
-    if (0) {
+    {
         int N = 4;
         Image<uint8_t> out(N, N, 3);
 
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
     }
 
     // Using normalized texture coordinates via GLSL texture2D:
-    if (0) {
+    {
         // Create an input image
         int N = 2;
         Image<float> input(N, N, 4);

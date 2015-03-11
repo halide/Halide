@@ -819,7 +819,12 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
             return 1;
         }
 
-        // Set parameters for this texture: no interpolation and clamp to edges.
+        // Set parameters for this texture: linear interpolation and clamp to
+        // edges. Ordinary lookups from glsl_texture_load intriniscs will always
+        // be placed on texel centers in normalized coordinates. Setting the
+        // interpolation mode to GL_LINEAR allows developers to use extern calls
+        //  to GLSL texture2D to perform bilinear interpolation on textures
+        // created by the halide runtime.
         global_state.BindTexture(GL_TEXTURE_2D, tex);
         global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
