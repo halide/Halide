@@ -308,11 +308,9 @@ void CodeGen_LLVM::initialize_llvm() {
     }
 }
 
-void CodeGen_LLVM::init_module() {
-    // Start with a module containing the initial module for this target.
-    delete module;
+void CodeGen_LLVM::init_context() {
+    // Ensure our IRBuilder is using the current context.
     delete builder;
-    module = get_initial_module_for_target(target, context);
     builder = new IRBuilder<>(*context);
 
     // Branch weights for very likely branches
@@ -346,6 +344,15 @@ void CodeGen_LLVM::init_module() {
     f32x8 = VectorType::get(f32, 8);
     f64x2 = VectorType::get(f64, 2);
     f64x4 = VectorType::get(f64, 4);
+}
+
+
+void CodeGen_LLVM::init_module() {
+    init_context();
+
+    // Start with a module containing the initial module for this target.
+    delete module;
+    module = get_initial_module_for_target(target, context);
 }
 
 CodeGen_LLVM::~CodeGen_LLVM() {

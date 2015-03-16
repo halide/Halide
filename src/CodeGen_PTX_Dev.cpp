@@ -131,10 +131,10 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
-    CodeGen_LLVM::init_module();
+    init_context();
 
     #ifdef WITH_PTX
-    internal_assert(!module);
+    delete module;
     module = get_initial_module_for_ptx_device(target, context);
     #endif
 }

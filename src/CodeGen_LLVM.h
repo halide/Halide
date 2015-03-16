@@ -112,6 +112,8 @@ protected:
     /** The target we're generating code for */
     Halide::Target target;
 
+    /** Grab all the context specific internal state. */
+    virtual void init_context();
     /** Initialize the CodeGen_LLVM internal state to compile a fresh
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
