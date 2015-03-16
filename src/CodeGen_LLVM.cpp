@@ -589,6 +589,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     Constant *zero = ConstantInt::get(i32, 0);
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
     sym_push(buf.name(), global_ptr);
+    sym_push(buf.name() + ".buffer", global_ptr);
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
