@@ -1,5 +1,5 @@
 
-NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_39
+NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_41
 
 WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I ../../include
@@ -46,6 +46,8 @@ nacl_demos.zip: nacl_demos_64.nexe nacl_demos_32.nexe nacl_demos_arm.nexe nacl_d
 	zip nacl_demos.zip nacl_demos.html nacl_demos.nmf nacl_demos_pnacl.html nacl_demos_pnacl.nmf nacl_demos_32.nexe nacl_demos_64.nexe nacl_demos_pnacl.pexe nacl_demos_arm.nexe
 
 nacl_demos_64.nexe: nacl_demos_64.o
+	# Workaround for apparent nacl toolchain bug - empty dtors sections of size 12 are being generated.
+	for f in build_64/*.o; do strip -g -R .dtors $$f; done
 	$(CXX_64) -o $@ -m64 $(OBJECTS_64) $(LDFLAGS_64)
 
 nacl_demos_32.nexe: nacl_demos_32.o
