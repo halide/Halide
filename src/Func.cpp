@@ -329,7 +329,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && Var::is_implicit(var->name))
+        if (var && var->name == _.name())
             break;
         iter++;
     }

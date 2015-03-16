@@ -67,13 +67,7 @@ inline const Func &func_like_to_func(const Func &func) {
 
 template <typename T>
 inline NO_INLINE Func func_like_to_func(T func_like) {
-    std::vector<Var> args;
-    for (int i = 0; i < func_like.dimensions(); i++) {
-        args.push_back(Var::implicit(i));
-    }
-    Func func;
-    func(args) = func_like(args);
-    return func;
+    return lambda(_, func_like(_));
 }
 
 }
