@@ -223,7 +223,7 @@ void GeneratorBase::build_params() {
             }
             filter_params[param->name()] = param;
             filter_arguments.push_back(Argument(param->name(),
-                param->is_buffer() ? Argument::Buffer : Argument::Scalar,
+                param->is_buffer() ? Argument::InputBuffer : Argument::Scalar,
                 param->type(), param->dimensions(), def, min, max));
         }
 

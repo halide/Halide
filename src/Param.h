@@ -295,7 +295,7 @@ public:
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
-    EXPORT operator Argument() const;
+    EXPORT virtual operator Argument() const;
 
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
@@ -356,6 +356,10 @@ public:
         return (*this)(_);
     }
 
+    /** Construct the appropriate argument matching this parameter,
+     * for the purpose of generating the right type signature when
+     * statically compiling halide pipelines. */
+    EXPORT virtual operator Argument() const;
 };
 
 }

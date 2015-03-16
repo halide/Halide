@@ -1262,7 +1262,7 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", Argument::Buffer, Int(32), 3);
+    Argument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
     Argument float_arg("alpha", Argument::Scalar, Float(32), 0);
     Argument int_arg("beta", Argument::Scalar, Int(32), 0);
     Argument user_context_arg("__user_context", Argument::Scalar, Handle(), 0);
