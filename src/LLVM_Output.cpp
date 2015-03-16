@@ -204,7 +204,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     delete target_machine;
 }
 
-llvm::Module *compile_halide_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
+llvm::Module *compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
     return codegen_llvm(module, context);
 }
 
@@ -223,7 +223,7 @@ void compile_llvm_module_to_native(llvm::Module *module,
     emit_file(module, assembly_filename, llvm::TargetMachine::CGFT_AssemblyFile);
 }
 
-void compile_llvm_module_to_bitcode(llvm::Module *module, const std::string &filename) {
+void compile_llvm_module_to_llvm_bitcode(llvm::Module *module, const std::string &filename) {
     llvm::raw_fd_ostream *file = new_raw_fd_ostream(filename);
     WriteBitcodeToFile(module, *file);
     delete file;
