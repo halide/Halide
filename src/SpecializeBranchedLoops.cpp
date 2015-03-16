@@ -622,7 +622,7 @@ private:
                         vector<vector<StmtOrExpr> > new_args;
                         for (size_t j = 0; j < args.size(); ++j) {
                             Expr min = branch_points[j];
-                            Expr max = simplify(branch_points[j+1] - 1);
+                            Expr max = branch_points[j+1];
                             for (size_t k = 0; k < child_branches[i].size(); ++k) {
                                 Branch branch = child_branches[i][k];
                                 new_branch_points.push_back(simplify(clamp_bound(branch.min, min, max)));
