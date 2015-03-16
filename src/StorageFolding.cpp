@@ -29,7 +29,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
             internal_assert(dim < (int)args.size());
-            args[dim] = args[dim] % factor;
+            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }
@@ -41,7 +41,7 @@ class FoldStorageOfFunction : public IRMutator {
         internal_assert(op);
         if (op->name == func) {
             vector<Expr> args = op->args;
-            args[dim] = args[dim] % factor;
+            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
             stmt = Provide::make(op->name, op->values, args);
         }
     }
@@ -84,10 +84,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
-            Expr min = box[i-1].min;
-            Expr max = box[i-1].max;
+            Expr min = simplify(box[i-1].min);
+            Expr max = simplify(box[i-1].max);
 
-            debug(3) << "Considering folding " << func << " over for loop over " << op->name << '\n'
+            debug(3) << "\nConsidering folding " << func << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n';
 
@@ -109,15 +109,28 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 const IntImm *max_extent_int = max_extent.as<IntImm>();
                 if (max_extent_int) {
                     int extent = max_extent_int->value;
-                    debug(3) << "Proceeding...\n";
 
                     int factor = 1;
                     while (factor <= extent) factor *= 2;
 
-                    dim_folded = (int)i - 1;
-                    fold_factor = factor;
-                    stmt = FoldStorageOfFunction(func, (int)i - 1, factor).mutate(result);
-                    return;
+                    debug(3) << "Proceeding with factor " << factor << "\n";
+
+                    Fold fold = {(int)i - 1, factor};
+                    dims_folded.push_back(fold);
+                    result = FoldStorageOfFunction(func, (int)i - 1, factor).mutate(result);
+
+                    Expr step = finite_difference(min, op->name);
+
+                    if (is_one(simplify(extent < step))) {
+                        // There's no overlapping usage between loop
+                        // iterations, so we can continue to search
+                        // for further folding opportinities
+                        // recursively.
+                    } else {
+                        stmt = result;
+                        return;
+                    }
+
                 } else {
                     debug(3) << "Not folding because extent not bounded by a constant\n"
                              << "extent = " << extent << "\n"
@@ -130,14 +143,28 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             }
         }
 
-        stmt = result;
+        // Any folds that took place folded dimensions away entirely, so we can proceed recursively.
+        if (const For *f = result.as<For>()) {
+            Stmt body = mutate(f->body);
+            if (body.same_as(f->body)) {
+                stmt = result;
+            } else {
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            }
+        } else {
+            stmt = result;
+        }
 
     }
 
 public:
-    int dim_folded;
-    Expr fold_factor;
-    AttemptStorageFoldingOfFunction(string f) : func(f), dim_folded(-1) {}
+    struct Fold {
+        int dim;
+        Expr factor;
+    };
+    vector<Fold> dims_folded;
+
+    AttemptStorageFoldingOfFunction(string f) : func(f) {}
 };
 
 /** Check if a buffer's allocated is referred to directly via an
@@ -190,10 +217,14 @@ class StorageFolding : public IRMutator {
             } else {
                 Region bounds = op->bounds;
 
-                internal_assert(folder.dim_folded >= 0 &&
-                                folder.dim_folded < (int)bounds.size());
+                for (size_t i = 0; i < folder.dims_folded.size(); i++) {
+                    int d = folder.dims_folded[i].dim;
+                    Expr f = folder.dims_folded[i].factor;
+                    internal_assert(d >= 0 &&
+                                    d < (int)bounds.size());
 
-                bounds[folder.dim_folded] = Range(0, folder.fold_factor);
+                    bounds[d] = Range(0, f);
+                }
 
                 stmt = Realize::make(op->name, op->types, bounds, op->condition, new_body);
             }
