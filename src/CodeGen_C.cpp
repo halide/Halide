@@ -47,6 +47,7 @@ const string headers =
     "#include <stdint.h>\n";
 
 const string globals =
+    "extern \"C\" {\n"
     "void *halide_malloc(void *ctx, size_t);\n"
     "void halide_free(void *ctx, void *ptr);\n"
     "void *halide_print(void *ctx, const void *str);\n"
@@ -55,6 +56,7 @@ const string globals =
     "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
     "uint64_t halide_profiling_timer(void *ctx);\n"
+    "}\n"
     "\n"
 
     // TODO: this next chunk is copy-pasted from posix_math.cpp. A
@@ -191,9 +193,8 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
         stream << headers;
     }
 
-    stream << "#ifdef __cplusplus\n";
-    stream << "extern \"C\" {\n";
-    stream << "#endif\n";
+    // Throw in a definition of a buffer_t
+    stream << buffer_t_definition;
 
     if (!is_header) {
         stream << globals;
@@ -205,8 +206,10 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
     stream << "#define HALIDE_FUNCTION_ATTRS\n";
     stream << "#endif\n";
 
-    // Throw in a definition of a buffer_t
-    stream << buffer_t_definition;
+    // Everything from here on out is extern "C".
+    stream << "#ifdef __cplusplus\n";
+    stream << "extern \"C\" {\n";
+    stream << "#endif\n";
 }
 
 CodeGen_C::~CodeGen_C() {
@@ -284,7 +287,8 @@ string CodeGen_C::print_name(const string &name) {
 
 namespace {
 class ExternCallPrototypes : public IRGraphVisitor {
-    std::set<string> emitted;
+    ostream &stream;
+    std::set<string> &emitted;
     using IRGraphVisitor::visit;
 
     void visit(const Call *op) {
@@ -312,8 +316,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
 public:
-    ostream &stream;
-    ExternCallPrototypes(ostream &s) : stream(s) {
+    ExternCallPrototypes(ostream &s, std::set<string> &emitted) : stream(s), emitted(emitted) {
         size_t j = 0;
         // Make sure we don't catch calls that are already in the global declarations
         for (size_t i = 0; i < globals.size(); i++) {
@@ -352,6 +355,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         return;
     }
 
+    internal_assert(emitted.count(f.name) == 0)
+        << "Function '" << f.name << "'  has already been emitted.\n";
+    emitted.insert(f.name);
+
     const std::vector<Argument> &args = f.args;
 
     have_user_context = false;
@@ -363,7 +370,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     // Emit prototypes for any extern calls used.
     if (!is_header) {
         stream << "\n";
-        ExternCallPrototypes e(stream);
+        ExternCallPrototypes e(stream, emitted);
         f.body.accept(&e);
         stream << "\n";
     }
@@ -1341,14 +1348,14 @@ void CodeGen_C::test() {
     string src = source.str();
     string correct_source =
         headers +
-        "#ifdef __cplusplus\n"
-        "extern \"C\" {\n"
-        "#endif\n"
-        + globals +
+        buffer_t_definition +
+        globals +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
         "#endif\n"
-        + buffer_t_definition +
+        "#ifdef __cplusplus\n"
+        "extern \"C\" {\n"
+        "#endif\n"
         "\n\n"
         "int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"

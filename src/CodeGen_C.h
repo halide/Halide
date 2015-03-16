@@ -10,6 +10,7 @@
 #include <vector>
 #include <ostream>
 #include <map>
+#include <set>
 
 #include "IRPrinter.h"
 #include "Module.h"
@@ -54,6 +55,9 @@ protected:
 
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
+
+    /** Remember already emitted funcitons. */
+    std::set<std::string> emitted;
 
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
