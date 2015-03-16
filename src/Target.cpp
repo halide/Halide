@@ -269,7 +269,7 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "cuda") {
             set_feature(Target::CUDA);
         } else if (tok == "ptx") {
-            internal_error << "The ptx target feature flag is deprecated, use 'cuda' instead\n";
+            internal_error << "The 'ptx' target feature flag is deprecated, use 'cuda' instead\n";
         } else if (tok == "cuda_capability_30") {
             set_features(vec(Target::CUDA, Target::CUDACapability30));
         } else if (tok == "cuda_capability_32") {
