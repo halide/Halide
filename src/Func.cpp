@@ -2083,7 +2083,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
     for (size_t i = 0; i < private_args.size(); i++) {
         const Argument &arg = private_args[i];
         if (arg.is_buffer()) {
-            private_params.push_back(Variable::make(type_of<void*>(), arg.name));
+            private_params.push_back(Variable::make(type_of<void*>(), arg.name + ".buffer"));
         } else {
             private_params.push_back(Variable::make(arg.type, arg.name));
         }
