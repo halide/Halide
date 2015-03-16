@@ -266,8 +266,10 @@ bool Target::merge_string(const std::string &target) {
             set_feature(Target::ARMv7s);
         } else if (tok == "no_neon") {
             set_feature(Target::NoNEON);
-        } else if (tok == "cuda" || tok == "ptx") {
+        } else if (tok == "cuda") {
             set_feature(Target::CUDA);
+        } else if (tok == "ptx") {
+            user_error << "The 'ptx' target feature flag is deprecated, use 'cuda' instead\n";
         } else if (tok == "cuda_capability_30") {
             set_features(vec(Target::CUDA, Target::CUDACapability30));
         } else if (tok == "cuda_capability_32") {
