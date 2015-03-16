@@ -2103,7 +2103,7 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
     Module m = compile_to_module(args, fn_name, target);
 
     llvm::LLVMContext context;
-    llvm::Module *llvm_module = compile_halide_module_to_llvm_module(m, context);
+    llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
 
     if (!output_files.object_name.empty()) {
         compile_llvm_module_to_object(llvm_module, output_files.object_name);
@@ -2112,7 +2112,7 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
         compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
     }
     if (!output_files.bitcode_name.empty()) {
-        compile_llvm_module_to_bitcode(llvm_module, output_files.bitcode_name);
+        compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
     }
 
     delete llvm_module;
@@ -2120,7 +2120,7 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
 
 void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
                               const Target &target) {
-    compile_halide_module_to_bitcode(compile_to_module(args, fn_name, target), filename);
+    compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const Target &target) {
@@ -2129,7 +2129,7 @@ void Func::compile_to_bitcode(const string &filename, const vector<Argument> &ar
 
 void Func::compile_to_object(const string &filename, const vector<Argument> &args,
                              const string &fn_name, const Target &target) {
-    compile_halide_module_to_object(compile_to_module(args, fn_name, target), filename);
+    compile_module_to_object(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_object(const string &filename, const vector<Argument> &args, const Target &target) {
@@ -2137,20 +2137,20 @@ void Func::compile_to_object(const string &filename, const vector<Argument> &arg
 }
 
 void Func::compile_to_header(const string &filename, const vector<Argument> &args, const string &fn_name, const Target &target) {
-    compile_halide_module_to_c_header(compile_to_module(args, fn_name, target), filename);
+    compile_module_to_c_header(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_c(const string &filename, const vector<Argument> &args,
                         const string &fn_name, const Target &target) {
-    compile_halide_module_to_c_source(compile_to_module(args, fn_name, target), filename);
+    compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
     Module m = compile_to_module(infer_arguments(), "", target);
     if (fmt == HTML) {
-        compile_halide_module_to_html(m, filename);
+        compile_module_to_html(m, filename);
     } else {
-        compile_halide_module_to_text(m, filename);
+        compile_module_to_text(m, filename);
     }
 }
 
@@ -2190,9 +2190,9 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
     m.append(LoweredFunc(name(), infer_arguments(), s, LoweredFunc::External));
 
     if (fmt == HTML) {
-        compile_halide_module_to_html(m, filename);
+        compile_module_to_html(m, filename);
     } else {
-        compile_halide_module_to_text(m, filename);
+        compile_module_to_text(m, filename);
     }
 }
 
@@ -2272,8 +2272,8 @@ void Func::compile_to_file(const string &filename_prefix, const vector<Argument>
     // existing behavior, we need to pass filename_prefix as the new
     // function name.
     Module m = compile_to_module(args, filename_prefix, target);
-    compile_halide_module_to_c_header(m, filename_prefix + ".h");
-    compile_halide_module_to_object(m, filename_prefix + ".o");
+    compile_module_to_c_header(m, filename_prefix + ".h");
+    compile_module_to_object(m, filename_prefix + ".o");
 }
 
 void Func::compile_to_file(const string &filename_prefix, const Target &target) {
@@ -2307,7 +2307,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
-    compile_halide_module_to_assembly(compile_to_module(args, fn_name, target), filename);
+    compile_module_to_assembly(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
@@ -2721,8 +2721,8 @@ void *Func::compile_jit(const Target &target_arg) {
     module.append(lfn);
 
     if (debug::debug_level >= 3) {
-        compile_halide_module_to_native(module, name() + ".bc", name() + ".s");
-        compile_halide_module_to_text(module, name() + ".stmt");
+        compile_module_to_native(module, name() + ".bc", name() + ".s");
+        compile_module_to_text(module, name() + ".stmt");
     }
 
     compiled_module = JITModule(module, lfn);

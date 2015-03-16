@@ -351,7 +351,7 @@ JITModule::JITModule() {
 
 JITModule::JITModule(const Module &m, const LoweredFunc &fn) {
     jit_module = new JITModuleContents();
-    llvm::Module *llvm_module = compile_halide_module_to_llvm_module(m, jit_module.ptr->context);
+    llvm::Module *llvm_module = compile_module_to_llvm_module(m, jit_module.ptr->context);
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module, m.target());
     compile_module(llvm_module, fn.name, m.target(), shared_runtime);
 }
