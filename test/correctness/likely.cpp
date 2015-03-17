@@ -96,8 +96,8 @@ int main(int argc, char **argv) {
     }
 
     // If you vectorize or otherwise split, then the last vector
-    // (which gets shifted leftwards) is its own partition. This removes
-    // some clamping logic from the inner loop.
+    // (which gets shifted leftwards) is its own partition. This
+    // removes some clamping logic from the inner loop.
 
     {
         Func g;
@@ -122,8 +122,8 @@ int main(int argc, char **argv) {
     // multiple boundary conditions at play (e.g. because you're
     // blurring an inlined Func that uses a boundary condition), then
     // there are still only three partitions. The steady state is the
-    // partition where *all* of the boundary conditions and splitting
-    // logic simplify away.
+    // slice of the loop where *all* of the boundary conditions and
+    // splitting logic simplify away.
     {
         Func g = BoundaryConditions::mirror_interior(f, 0, 10);
         Func h;
@@ -134,10 +134,10 @@ int main(int argc, char **argv) {
     }
 
     // You can manually control the splitting behavior using the
-    // 'likely' intrinsic. When used on one side of a select, min, or
-    // max, it tags the select, min, or max as likely to simplify to
-    // that expression in the steady state case, and tries to solve
-    // for loop variable values for which this is true.
+    // 'likely' intrinsic. When used on one side of a select, min,
+    // max, or clamp, it tags the select, min, max, or clamp as likely
+    // to simplify to that expression in the steady state case, and
+    // tries to solve for loop variable values for which this is true.
     {
         // So this code should produce a prologue that evaluates to sin(x), and
         // a steady state that evaluates to 1:
@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
     // condition manually using clamp.
     {
         Func g;
-        g(x) = f(clamp(x, 0, 10));
+        g(x) = f(clamp(x, 0, 10)); // treated as clamp(likely(x), 0, 10)
         g.vectorize(x, 8);
         count_partitions(g, 3);
     }
