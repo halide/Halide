@@ -17,6 +17,12 @@ using std::pair;
 using std::make_pair;
 
 namespace {
+
+// Simplify an expression by assuming that certain mins, maxes, and
+// select statements always evaluate down one path for the bulk of a
+// loop body - the "steady state". Also solves for the bounds of the
+// steady state. The likely path is deduced by looking for clamped
+// ramps, or the 'likely' intrinsic.
 class FindSteadyState : public IRMutator {
 public:
 
@@ -423,7 +429,173 @@ private:
     }
 };
 
-class SpecializeClampedRamps : public IRMutator {
+// Aggressively simplify an expression given bounds on a particular
+// variable. Used to simplify the prologue and epilogue.
+class BoundsBasedSimplify : public IRMutator {
+    Scope<Interval> scope;
+
+    using IRMutator::visit;
+
+    void visit_min_or_max(Expr e, Expr orig_a, Expr orig_b, bool is_min) {
+        Expr a = mutate(orig_a);
+        Expr b = mutate(orig_b);
+
+        Interval ia = bounds_of_expr_in_scope(a, scope);
+        Interval ib = bounds_of_expr_in_scope(b, scope);
+
+        bool depends_on_loop_var =
+            !ia.max.same_as(ia.min) ||
+            !ib.max.same_as(ib.min);
+
+        Expr use_b = ia.min >= ib.max;
+        Expr use_a = ia.max <= ib.min;
+        if (!is_min) {
+            std::swap(use_a, use_b);
+        }
+
+        if (depends_on_loop_var && is_one(simplify(use_a))) {
+            expr = a;
+        } else if (depends_on_loop_var && is_one(simplify(use_b))) {
+            expr = b;
+        } else if (a.same_as(orig_a) && b.same_as(orig_b)) {
+            expr = e;
+        } else if (is_min) {
+            expr = Min::make(a, b);
+        } else {
+            expr = Max::make(a, b);
+        }
+    }
+
+    void visit(const Min *op) {
+        if (op->type != Int(32)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        visit_min_or_max(op, op->a, op->b, true);
+    }
+
+    void visit(const Max *op) {
+        if (op->type != Int(32)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        visit_min_or_max(op, op->a, op->b, false);
+    }
+
+    void visit_cmp(Expr e, Expr orig_a, Expr orig_b) {
+        const LT *lt = e.as<LT>();
+        const LE *le = e.as<LE>();
+        const GT *gt = e.as<GT>();
+        const GE *ge = e.as<GE>();
+        internal_assert(lt || le || gt || ge);
+
+        if (orig_a.type() != Int(32)) {
+            if (lt) IRMutator::visit(lt);
+            else if (le) IRMutator::visit(le);
+            else if (gt) IRMutator::visit(gt);
+            else if (ge) IRMutator::visit(ge);
+            return;
+        }
+
+        Expr a = mutate(orig_a), b = mutate(orig_b);
+        Interval ia = bounds_of_expr_in_scope(a, scope);
+        Interval ib = bounds_of_expr_in_scope(b, scope);
+
+        bool depends_on_loop_var =
+            !ia.max.same_as(ia.min) ||
+            !ib.max.same_as(ib.min);
+
+        Expr is_true;
+        Expr is_false;
+
+        if (lt) {
+            is_true = ia.max < ib.min;
+            is_false = ia.min >= ib.max;
+        } else if (le) {
+            is_true = ia.max <= ib.min;
+            is_false = ia.min > ib.max;
+        } else if (gt) {
+            is_true = ia.min > ib.max;
+            is_false = ia.max <= ib.min;
+        } else if (ge) {
+            is_true = ia.min >= ib.max;
+            is_false = ia.max < ib.min;
+        }
+
+        internal_assert(is_true.defined() && is_false.defined());
+
+        if (depends_on_loop_var && is_one(simplify(is_true))) {
+            expr = const_true();
+        } else if (depends_on_loop_var && is_one(simplify(is_false))) {
+            expr = const_false();
+        } else if (a.same_as(orig_a) && b.same_as(orig_b)) {
+            expr = e;
+        } else if (lt) {
+            expr = LT::make(a, b);
+        } else if (le) {
+            expr = LE::make(a, b);
+        } else if (gt) {
+            expr = GT::make(a, b);
+        } else if (ge) {
+            expr = GE::make(a, b);
+        }
+
+    }
+
+    void visit(const LT *op) {
+        visit_cmp(op, op->a, op->b);
+    }
+
+    void visit(const LE *op) {
+        visit_cmp(op, op->a, op->b);
+    }
+
+    void visit(const GT *op) {
+        visit_cmp(op, op->a, op->b);
+    }
+
+    void visit(const GE *op) {
+        visit_cmp(op, op->a, op->b);
+    }
+
+    template<typename LetOrLetStmt, typename StmtOrExpr>
+    void visit_let(const LetOrLetStmt *op, StmtOrExpr &result) {
+        Expr value = mutate(op->value);
+
+        StmtOrExpr body;
+        if (value.type() == Int(32)) {
+            Interval i = bounds_of_expr_in_scope(op->value, scope);
+            scope.push(op->name, i);
+            body = mutate(op->body);
+            scope.pop(op->name);
+        } else {
+            body = mutate(op->body);
+        }
+
+        if (value.same_as(op->value) && body.same_as(op->body)) {
+            result = op;
+        } else {
+            result = LetOrLetStmt::make(op->name, value, body);
+        }
+    }
+
+    void visit(const Let *op) {
+        visit_let(op, expr);
+    }
+
+    void visit(const LetStmt *op) {
+        visit_let(op, stmt);
+    }
+
+public:
+    BoundsBasedSimplify(const string &loop_var, Expr min, Expr max) {
+        scope.push(loop_var, Interval(min, max));
+    }
+};
+
+class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
@@ -438,30 +610,57 @@ class SpecializeClampedRamps : public IRMutator {
             return;
         }
 
+
         FindSteadyState f(op->name);
         Stmt simpler_body = f.mutate(body);
         if (!body.same_as(simpler_body)) {
             debug(3) << "\nOld body: " << body << "\n";
 
+            // Ask for the start and end of the steady state.
             Expr min_steady = f.min_steady_val();
             Expr max_steady = f.max_steady_val();
 
+            // They're undefined if there's no prologue or epilogue.
             bool make_prologue = min_steady.defined();
             bool make_epilogue = max_steady.defined();
 
+            // Accrue a stack of let statements defining the steady state start and end.
             vector<pair<string, Expr> > lets;
 
+            // The steady state was simplified by
+            // FindSteadyState. It's not safe to simplify the prologue
+            // and epilogue at the same time - FindSteadyState uses
+            // already found simplifications to make new ones,
+            // including potentially using a simplification of the
+            // prologue end to assist the epilogue start. Instead we
+            // do a bounds-based simplification of the prologue and
+            // epilogue as a later pass.
+            //
+            // Note that the bounds we use are actually slightly
+            // conservative. E.g. we claim the prologue can run up
+            // till min_steady, where it actually runs to
+            // clamp(min_steady, loop_min, loop_max). Fortunately, the
+            // case where our bound is incorrect is the case where the
+            // prologue or epilogue have extent zero, so the incorrect
+            // simplification doesn't matter.
+            BoundsBasedSimplify simplify_prologue(op->name, op->min, min_steady.defined() ? min_steady - 1 : Expr());
+            BoundsBasedSimplify simplify_epilogue(op->name, max_steady, op->min + op->extent - 1);
+
             if (make_prologue) {
+                // Clamp the prologue end to within the existing loop bounds,
+                // then pull that out as a let statement.
                 min_steady = clamp(min_steady, op->min, op->min + op->extent);
                 string min_steady_name = op->name + ".prologue";
                 lets.push_back(make_pair(min_steady_name, min_steady));
                 min_steady = Variable::make(Int(32), min_steady_name);
-
             } else {
                 min_steady = op->min;
             }
 
             if (make_epilogue) {
+                // Clamp the epilogue start to be between the prologue
+                // end and the loop end, then pull it out as a let
+                // statement.
                 max_steady = clamp(max_steady, min_steady, op->min + op->extent);
                 string max_steady_name = op->name + ".epilogue";
                 lets.push_back(make_pair(max_steady_name, max_steady));
@@ -472,31 +671,43 @@ class SpecializeClampedRamps : public IRMutator {
 
 
             debug(3) << "\nSimpler body: " << simpler_body << "\n";
-            // Steady state
+
             Stmt new_loop;
 
             if (op->for_type == ForType::Serial) {
+                // Steady state.
                 new_loop = For::make(op->name, min_steady, max_steady - min_steady,
-                                          op->for_type, op->device_api, simpler_body);
+                                     op->for_type, op->device_api, simpler_body);
 
                 if (make_prologue) {
                     Stmt prologue = For::make(op->name, op->min, min_steady - op->min,
                                               op->for_type, op->device_api, body);
+                    prologue = simplify_prologue.mutate(prologue);
                     new_loop = Block::make(prologue, new_loop);
                 }
 
                 if (make_epilogue) {
                     Stmt epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
                                               op->for_type, op->device_api, body);
+                    epilogue = simplify_epilogue.mutate(epilogue);
                     new_loop = Block::make(new_loop, epilogue);
                 }
             } else {
+                // For parallel for loops, we inject an if statement
+                // instead of splitting up the loop.
+                //
                 // TODO: If we have task parallel blocks, then we
-                // could split out the different bodies as we do above
-                // instead of injecting an if statement.  Could be a
-                // big win on the GPU (generating separate kernels for
-                // the nasty cases near the boundaries).
-
+                // could split out the different bodies as we do
+                // above. Could be a big win on the GPU (generating
+                // separate kernels for the nasty cases near the
+                // boundaries).
+                //
+                //
+                // Rather than having a three-way if for prologue,
+                // steady state, or epilogue, we have a two-way if
+                // (steady-state or not), and don't bother doing
+                // bounds-based simplification of the prologue and
+                // epilogue.
                 internal_assert(op->for_type == ForType::Parallel);
                 Expr loop_var = Variable::make(Int(32), op->name);
                 Expr in_steady;
@@ -511,8 +722,11 @@ class SpecializeClampedRamps : public IRMutator {
                     body = IfThenElse::make(in_steady, simpler_body, body);
                 }
                 new_loop = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+
             }
 
+            // Wrap the statements in the let expressions that define
+            // the steady state start and end.
             while (!lets.empty()) {
                 new_loop = LetStmt::make(lets.back().first, lets.back().second, new_loop);
                 lets.pop_back();
@@ -529,6 +743,8 @@ class SpecializeClampedRamps : public IRMutator {
 };
 }
 
+// Remove any remaining 'likely' intrinsics. There may be some left
+// behind if we didn't successfully simplify something.
 class RemoveLikelyTags : public IRMutator {
     using IRMutator::visit;
 
@@ -542,8 +758,10 @@ class RemoveLikelyTags : public IRMutator {
     }
 };
 
-Stmt specialize_clamped_ramps(Stmt s) {
-    return RemoveLikelyTags().mutate(SpecializeClampedRamps().mutate(s));
+Stmt partition_loops(Stmt s) {
+    s = PartitionLoops().mutate(s);
+    s = RemoveLikelyTags().mutate(s);
+    return s;
 }
 
 }
