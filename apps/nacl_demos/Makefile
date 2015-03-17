@@ -27,6 +27,7 @@ CXX_64 := $(TC)/bin/x86_64-nacl-g++ -m64 -O3 -Wall -s -Wl,--gc-sections
 CXX_32 := $(TC)/bin/i686-nacl-g++ -m32 -O3 -Wall -s -Wl,--gc-sections
 CXX_ARM := $(ARM_TC)/bin/arm-nacl-g++ -O3 -Wall -s -Wl,--gc-sections -fstack-protector
 CXX_PNACL := $(PNACL_TC)/bin/pnacl-clang++ -O3
+STRIP_64 := $(TC)/bin/x86_64-nacl-strip
 LDFLAGS_64 := -L $(LIBDIR_64) -lppapi_cpp -lppapi
 LDFLAGS_32 := -L $(LIBDIR_32) -lppapi_cpp -lppapi
 LDFLAGS_ARM := -L $(LIBDIR_ARM) -lppapi_cpp -lppapi
@@ -47,7 +48,7 @@ nacl_demos.zip: nacl_demos_64.nexe nacl_demos_32.nexe nacl_demos_arm.nexe nacl_d
 
 nacl_demos_64.nexe: nacl_demos_64.o
 	# Workaround for apparent nacl toolchain bug - empty dtors sections of size 12 are being generated.
-	for f in build_64/*.o; do strip -g -R .dtors $$f; done
+	for f in build_64/*.o; do $(STRIP_64) -g -R .dtors $$f; done
 	$(CXX_64) -o $@ -m64 $(OBJECTS_64) $(LDFLAGS_64)
 
 nacl_demos_32.nexe: nacl_demos_32.o
