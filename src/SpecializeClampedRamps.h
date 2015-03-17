@@ -15,7 +15,7 @@ namespace Internal {
 /** Split loop bodies into a prologue, a steady state, and an
  * epilogue. Finds the steady state by hunting for use of the 'likely'
  * intrinsic. */
-Stmt specialize_clamped_ramps(Stmt s);
+Stmt partition_loops(Stmt s);
 
 }
 }
