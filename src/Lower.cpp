@@ -28,8 +28,7 @@
 #include "UniquifyVariableNames.h"
 #include "SkipStages.h"
 #include "CSE.h"
-#include "SpecializeBranchedLoops.h"
-#include "SpecializeClampedRamps.h"
+#include "PartitionLoops.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
 #include "Inline.h"
@@ -1905,14 +1904,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = partition_loops(s);
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
-
-    /*
-    debug(1) << "Specializing branched loops...\n";
-    s = specialize_branched_loops(s);
-    s = remove_dead_allocations(s);
-    s = simplify(s);
-    debug(2) << "Lowering after specializing branched loops:\n" << s << "\n\n";
-    */
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);

@@ -1,6 +1,6 @@
 #include <algorithm>
 
-#include "SpecializeClampedRamps.h"
+#include "PartitionLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
