@@ -1351,10 +1351,10 @@ void CodeGen_LLVM::visit(const Load *op) {
             // odd-numbered-lanes.
             bool shifted_a = false, shifted_b = false;
 
-            bool internal = op->param.defined() || op->image.defined();
+            bool external = op->param.defined() || op->image.defined();
 
             // Don't read beyond the end of an external buffer.
-            if (!internal) {
+            if (external) {
                 base_b -= 1;
                 shifted_b = true;
             } else {
