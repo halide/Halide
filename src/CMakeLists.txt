@@ -268,6 +268,7 @@ set(HEADER_FILES
   ModulusRemainder.h
   Parameter.h
   Param.h
+  PartitionLoops.h
   RDom.h
   Reduction.h
   RemoveTrivialForLoops.h
@@ -296,7 +297,6 @@ set(HEADER_FILES
   Target.h
   SkipStages.h
   RemoveUndef.h
-  SpecializeClampedRamps.h
   FastIntegerDivide.h
   AllocationBoundsInference.h
   Error.h
@@ -315,8 +315,6 @@ set(HEADER_FILES
   ObjectInstanceRegistry.h
   BlockFlattening.h
   LinearSolve.h
-  BranchVisitors.h
-  SpecializeBranchedLoops.h
   RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
   DeviceInterface.h
@@ -369,6 +367,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Lower.cpp
   Debug.cpp
   Parameter.cpp
+  PartitionLoops.cpp
   Reduction.cpp
   Random.cpp
   RDom.cpp
@@ -397,7 +396,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Target.cpp
   SkipStages.cpp
   RemoveUndef.cpp
-  SpecializeClampedRamps.cpp
   FastIntegerDivide.cpp
   AllocationBoundsInference.cpp
   Inline.cpp
@@ -425,8 +423,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ObjectInstanceRegistry.cpp
   BlockFlattening.cpp
   LinearSolve.cpp
-  BranchVisitors.cpp
-  SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
   LLVM_Runtime_Linker.cpp
   DeviceInterface.cpp
