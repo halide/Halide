@@ -20,6 +20,8 @@ $env:PATH += ";C:\Program Files (x86)\CMake 2.8\bin"
 $env:PATH += ";C:\Program Files (x86)\Git\bin"
 $env:PATH += ";C:\Program Files (x86)\7-Zip"
 $env:PATH += ";C:\Program Files (x86)\MSBuild\12.0\bin"
+$env:PATH += ";C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin"
+
 
 # Get llvm
 #svn co http://llvm.org/svn/llvm-project/llvm/trunk $ROOT\llvm
@@ -119,12 +121,12 @@ foreach (${configuration} in "Release", "Debug") {
   }
   cd build_64_pnacl_${configuration}
   # nacl-sdk-bin contains clang.exe, llvm-as.exe, and the required dlls scavenged from the nacl sdk version pepper_35
-  cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-64\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-64\lib\${configuration} -D LLVM_VERSION=34 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D WITH_TEST_GENERATORS=OFF -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12 Win64" ..
+  cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-64\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-64\${configuration}\lib -D LLVM_VERSION=36 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D WITH_TEST_GENERATORS=OFF -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12 Win64" ..
   MSBuild.exe /m /t:Build /p:Configuration="${configuration}" .\All_BUILD.vcxproj
   if ($LastExitCode) {
    echo "Build failed!"
    exit $LastExitCode
-  }
+  } 
 
   cd $ROOT
   if (! (Test-Path build_32_pnacl_${configuration})) {
@@ -132,7 +134,7 @@ foreach (${configuration} in "Release", "Debug") {
   }
   cd build_32_pnacl_${configuration}
   # nacl-sdk-bin contains clang.exe, llvm-as.exe, and the required dlls scavenged from the nacl sdk version pepper_35
-  cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-32\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-32\lib\${configuration} -D LLVM_VERSION=34 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D WITH_TEST_GENERATORS=OFF -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12" ..
+  cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-32\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-32\${configuration}\lib -D LLVM_VERSION=36 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D WITH_TEST_GENERATORS=OFF -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12" ..
   MSBuild.exe /m /t:Build /p:Configuration="${configuration}" .\All_BUILD.vcxproj
   if ($LastExitCode) {
    echo "Build failed!"
@@ -237,3 +239,4 @@ foreach ($d in "32_trunk","64_trunk", "64_pnacl","32_pnacl") {
   cd ..
   rm $DISTRIB_DIR -r -Force
 }
+ 
