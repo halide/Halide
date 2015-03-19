@@ -75,6 +75,10 @@
 #include <llvm/IR/MDBuilder.h>
 #endif
 
+#if WITH_NATIVE_CLIENT
+#include <llvm/Transforms/NaCl.h>
+#endif
+
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(pop)
