@@ -91,8 +91,8 @@ ln -s ${HEAD} testing/reports/head
 for LLVM in ${LLVMS}; do
 
     if [[ "$LLVM" == pnacl ]]; then
-        LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
-        CLANG_REPO=http://git.chromium.org/native_client/pnacl-clang.git
+        LLVM_REPO=https://chromium.googlesource.com/native_client/pnacl-llvm.git
+        CLANG_REPO=https://chromium.googlesource.com/native_client/pnacl-clang.git
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == trunk ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
