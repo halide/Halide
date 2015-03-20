@@ -289,8 +289,8 @@ bool CodeGen_Hexagon::use_soft_float_abi() const {
 }
 
 int CodeGen_Hexagon::native_vector_bits() const {
-  return 64;
-  // will need 128 at some point
+  return 64*8;
+  // will need 128*8 at some point
 }
 
 static bool canUseVadd(const Add *op) {

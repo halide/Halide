@@ -284,9 +284,7 @@ void JITModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const string &
     HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
     engine_builder.setMCJITMemoryManager(memory_manager);
 #else
-    HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
-    engine_builder.setMCJITMemoryManager(memory_manager);
-    //engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
+    engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
 #endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(cg->mcpu());

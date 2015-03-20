@@ -478,6 +478,9 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     internal_assert(verifyModule(*module) == false);
     debug(2) << "Done generating llvm bitcode\n";
 
+    cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
+                                "Halide HVX internal compiler\n");
+
     compile_for_device(stmt, name, args,images_to_embed);
 
     // Optimize

@@ -167,7 +167,8 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     const llvm::DataLayout *data_layout = NULL;
     for (size_t i = 0; data_layout == NULL && i < modules.size(); i++) {
         #if LLVM_VERSION >= 37
-        data_layout = &modules[i]->getDataLayout();
+        //data_layout = &modules[i]->getDataLayout();
+        data_layout = modules[i]->getDataLayout();
         #else
         data_layout = modules[i]->getDataLayout();
         #endif
@@ -185,7 +186,8 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
         #if LLVM_VERSION >= 37
-        modules[i]->setDataLayout(*data_layout);
+        //modules[i]->setDataLayout(*data_layout);
+        modules[i]->setDataLayout(data_layout);
         #elif LLVM_VERSION >= 35
         modules[i]->setDataLayout(data_layout);
         #endif
@@ -452,8 +454,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
             modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
             modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-            modules.push_back(get_initmod_cache(c, bits_64, debug));
           }
+          modules.push_back(get_initmod_cache(c, bits_64, debug));
           // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
           // from the tutorials.
           if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
