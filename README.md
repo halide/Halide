@@ -178,7 +178,7 @@ To enable all Halide targets, build it like so:
 
     % mkdir build
     % cd build
-    % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+    % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_TERMINFO=OFF -DCMAKE_BUILD_TYPE=Release ..
     % make -j8
 
 It will possibly be helpful to get the entire dev tree for
