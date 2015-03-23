@@ -1,4 +1,5 @@
 #include "Bounds.h"
+#include "Expr.h"
 #include "FindCalls.h"
 #include "ScheduleOptimizationLevels.h"
 #include "Simplify.h"
@@ -117,6 +118,43 @@ private:
     }
 };
 
+/** Recursively reset the schedules for the given function and all of
+ * the functions it calls. */
+class ResetSchedules {
+public:
+    ResetSchedules(Function root) {
+        reset_schedule(root);
+        CallGraph cg(root);
+        vector<Function> calls = cg.transitive_calls(root);
+        for (std::vector<Function>::iterator I = calls.begin(), E = calls.end(); I != E; ++I) {
+            reset_schedule(*I);
+        }
+    }
+    
+private:
+    /** Hackish way of resetting a function schedule to the
+     * default. Mostly yanked from Function::define(). */
+    void reset_schedule(Function f) {
+        Schedule &olds = f.schedule();
+        std::vector<Bound> oldbounds(olds.bounds().begin(), olds.bounds().end());
+        f.schedule() = Schedule();
+        Schedule &s = f.schedule();
+        s.bounds().insert(s.bounds().begin(), oldbounds.begin(), oldbounds.end());
+
+        for (size_t i = 0; i < f.args().size(); i++) {
+            Dim d = {f.args()[i], ForType::Serial, DeviceAPI::Parent, true};
+            f.schedule().dims().push_back(d);
+            f.schedule().storage_dims().push_back(f.args()[i]);
+        }
+
+        // Add the dummy outermost dim
+        {
+            Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
+            f.schedule().dims().push_back(d);
+        }
+    }
+};
+
 /** Return min/max bounds for each dimension of the given function
  * across all callsites. If the bounds cannot be computed, returns an
  * empty vector. */
@@ -187,6 +225,8 @@ unsigned calculate_footprint_size(Function f, CallGraph &cg) {
 
 void OptimizationLevel1::apply(Func func) {
     Function root = func.function();
+    // Reset all user-specified schedules.
+    ResetSchedules reset(root);
     // Construct a callgraph for the pipeline.
     CallGraph cg(root);
     vector<Function> all_functions = cg.transitive_calls(root);
