@@ -331,6 +331,7 @@ private:
             t.bits = t.bytes() * 8;
 
             Expr idx = mutate(flatten_args(name, call->args,
+                                           call->name != output &&
                                            env.find(call->name) != env.end()));
             expr = Load::make(t, name, idx, call->image, call->param);
 
