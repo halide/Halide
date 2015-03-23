@@ -60,7 +60,7 @@ public:
         Counter c(func);
         s.accept(&c);
         if (c.store_count != correct) {
-            printf("There were %d stores to %s calls instead of %d\n", c.store_count, func.c_str(), correct);
+            printf("There were %d stores to %s instead of %d\n", c.store_count, func.c_str(), correct);
             exit(-1);
         }
         return s;
@@ -181,6 +181,37 @@ int main(int argc, char **argv) {
         g(x) = f(clamp(x, 0, 10)); // treated as clamp(likely(x), 0, 10)
         g.vectorize(x, 8);
         count_partitions(g, 3);
+    }
+
+    // Using the likely intrinsic pulls some IR relating to the
+    // condition outside of the loop. We'd better check that this
+    // respects lets and doesn't do any combinatorial expansion. We'll
+    // do this with a nasty comparison:
+    {
+        Func g;
+        Var y;
+        // Make some nasty expressions to compare to.
+        Expr e[10];
+        e[0] = y;
+        for (int i = 1; i < 6; i++) {
+            e[i] = e[i-1] * e[i-1] + y;
+        }
+        // Make a nasty condition that uses all of these.
+        Expr nasty = cast<bool>(1);
+        for (int i = 0; i < 6; i++) {
+            nasty = nasty && (x*(i+1) < e[i]);
+        }
+        // Have an innermost loop over c to complicate things.
+        Var c;
+        g(c, x, y) = select(nasty, likely(10), c);
+
+        // Check that it doesn't take the age of the world to compile,
+        // and that it produces the right number of partitions.
+        count_partitions(g, 2);
+
+        // Note: The loops above would be larger, but the above code
+        // sails through Halide then triggers exponential behavior
+        // inside of LLVM :(
     }
 
     // The performance of this behavior is tested in
