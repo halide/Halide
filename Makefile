@@ -264,7 +264,6 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lerp.cpp \
-  LinearSolve.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
   Memoization.cpp \
@@ -287,6 +286,7 @@ SOURCE_FILES = \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
+  Solve.cpp \
   StmtCompiler.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
@@ -361,7 +361,6 @@ HEADER_FILES = \
   JITModule.h \
   Lambda.h \
   Lerp.h \
-  LinearSolve.h \
   LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
@@ -386,6 +385,7 @@ HEADER_FILES = \
   Simplify.h \
   SkipStages.h \
   SlidingWindow.h \
+  Solve.h \
   StmtCompiler.h \
   StmtToHtml.h \
   StorageFlattening.h \

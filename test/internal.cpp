@@ -12,6 +12,7 @@
 #include "OneToOne.h"
 #include "CSE.h"
 #include "IREquality.h"
+#include "Solve.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -29,6 +30,7 @@ int main(int argc, const char **argv) {
     is_one_to_one_test();
     cse_test();
     simplify_test();
+    solve_test();
 
     return 0;
 }
