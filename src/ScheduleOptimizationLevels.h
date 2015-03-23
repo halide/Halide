@@ -19,7 +19,7 @@ public:
 
 class OptimizationLevel0 : public ScheduleOptimization {
 public:
-    virtual void apply(Func func) {}
+    virtual void apply(Func func) { }
 };
 
 /** Apply schedule optimizations, controled by the HL_SCHED_OPT
