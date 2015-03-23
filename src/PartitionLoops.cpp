@@ -748,15 +748,14 @@ class PartitionLoops : public IRMutator {
             return;
         }
 
-
         FindSteadyState f(op->name);
         Stmt simpler_body = f.mutate(body);
-        if (!body.same_as(simpler_body)) {
-            debug(3) << "\nOld body: " << body << "\n";
+        // Ask for the start and end of the steady state.
+        Expr min_steady = f.min_steady_val();
+        Expr max_steady = f.max_steady_val();
 
-            // Ask for the start and end of the steady state.
-            Expr min_steady = f.min_steady_val();
-            Expr max_steady = f.max_steady_val();
+        if (min_steady.defined() || max_steady.defined()) {
+            debug(3) << "\nOld body: " << body << "\n";
 
             // They're undefined if there's no prologue or epilogue.
             bool make_prologue = min_steady.defined();
