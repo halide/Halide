@@ -4,9 +4,10 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "LinearSolve.h"
+#include "Solve.h"
 #include "IREquality.h"
 #include "ExprUsesVar.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -67,6 +68,15 @@ private:
     Scope<Expr> bound_vars;
     Scope<int> free_vars;
     Scope<int> inner_loop_vars;
+
+    struct Replacement {
+        Expr old_expr, new_expr;
+    };
+    vector<Replacement> prologue_replacements, epilogue_replacements;
+
+    // A set of let statements for common subexpressions inside the
+    // min_vals and max_vals.
+    vector<pair<string, Expr> > containing_lets;
 
     bool likely;
 
@@ -236,12 +246,16 @@ private:
         // Determine the minimum or maximum value of the loop var for
         // which this condition is true, and update min_max and
         // max_val accordingly.
+
         debug(3) << "Condition: " << cond << "\n";
-        Expr solved = solve_for_linear_variable(cond, loop_var, free_vars, bound_vars);
-        debug(3) << "Solved condition: " << solved << "\n";
+
+        Expr solved = solve_expression(cond, loop_var, bound_vars);
+
+        //Expr solved = solve_for_linear_variable(cond, loop_var, free_vars, bound_vars);
+        debug(3) << "Solved condition for " <<  loop_var << ": " << solved << "\n";
 
         // The solve failed.
-        if (solved.same_as(cond)) {
+        if (!solved.defined()) {
             return cond;
         }
 
@@ -250,34 +264,42 @@ private:
             return cond;
         }
 
+        // Peel off lets.
+        vector<pair<string, Expr> > new_lets;
+        while (const Let *let = solved.as<Let>()) {
+            new_lets.push_back(make_pair(let->name, let->value) );
+            solved = let->body;
+        }
+
         if (const LT *lt = solved.as<LT>()) {
             if (is_loop_var(lt->a)) {
                 max_vals.push_back(lt->b);
-                return const_true();
             }
         } else if (const LE *le = solved.as<LE>()) {
             if (is_loop_var(le->a)) {
                 max_vals.push_back(le->b + 1);
-                return const_true();
             }
         } else if (const GE *ge = solved.as<GE>()) {
             if (is_loop_var(ge->a)) {
                 min_vals.push_back(ge->b);
-                return const_true();
             }
         } else if (const GT *gt = solved.as<GT>()) {
             if (is_loop_var(gt->a)) {
                 min_vals.push_back(gt->b + 1);
-                return const_true();
             }
+        } else {
+            debug(3) << "Failed to apply constraint (3): " << cond << "\n";
+            return cond;
         }
 
-        debug(3) << "Failed to apply constraint (3): " << cond << "\n";
-
-        return cond;
+        containing_lets.insert(containing_lets.end(), new_lets.begin(), new_lets.end());
+        return const_true();
     }
 
     void visit_min_or_max(Expr op, Expr op_a, Expr op_b, bool is_min) {
+        size_t orig_num_min_vals = min_vals.size();
+        size_t orig_num_max_vals = max_vals.size();
+
         bool old_likely = likely;
         likely = false;
         Expr a = mutate(op_a);
@@ -731,6 +753,10 @@ class PartitionLoops : public IRMutator {
                 new_loop = LetStmt::make(lets.back().first, lets.back().second, new_loop);
                 lets.pop_back();
             }
+
+            // Wrap the statements in the lets that the steady state
+            // start and end depend on.
+            new_loop = f.add_containing_lets(new_loop);
 
             stmt = new_loop;
         } else if (body.same_as(op->body)) {

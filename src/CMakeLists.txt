@@ -276,6 +276,7 @@ set(HEADER_FILES
   Scope.h
   Simplify.h
   SlidingWindow.h
+  Solve.h
   StmtCompiler.h
   StorageFlattening.h
   StorageFolding.h
@@ -314,7 +315,6 @@ set(HEADER_FILES
   Generator.h
   ObjectInstanceRegistry.h
   BlockFlattening.h
-  LinearSolve.h
   RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
   DeviceInterface.h
@@ -371,6 +371,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Reduction.cpp
   Random.cpp
   RDom.cpp
+  Solve.cpp
   Profiling.cpp
   Tracing.cpp
   StorageFlattening.cpp
@@ -422,7 +423,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Generator.cpp
   ObjectInstanceRegistry.cpp
   BlockFlattening.cpp
-  LinearSolve.cpp
   RemoveDeadAllocations.cpp
   LLVM_Runtime_Linker.cpp
   DeviceInterface.cpp
