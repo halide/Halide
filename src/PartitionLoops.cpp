@@ -60,6 +60,57 @@ public:
         free_vars.push(l, 0);
     }
 
+    Stmt simplify_prologue(Stmt s) {
+        if (min_vals.size() == 1 &&
+            prologue_replacements.size() == 1) {
+            // If there is more than one min_val, then the boundary
+            // between the prologue and steady state is not tight for
+            // the prologue. The steady state starts at the max of
+            // multiple min_vals, so is the intersection of multiple
+            // conditions, which means the prologue is the union of
+            // multiple negated conditions, so any individual one of
+            // them might not apply.
+            return substitute(prologue_replacements[0].old_expr,
+                              prologue_replacements[0].new_expr,
+                              s);
+        } else {
+            return s;
+        }
+    }
+
+    Stmt simplify_epilogue(Stmt s) {
+        if (max_vals.size() == 1 &&
+            epilogue_replacements.size() == 1) {
+            return substitute(epilogue_replacements[0].old_expr,
+                              epilogue_replacements[0].new_expr,
+                              s);
+        } else {
+            return s;
+        }
+    }
+
+    /** Wrap a statement in any common subexpressions used by the
+     * minvals or maxvals. */
+    Stmt add_containing_lets(Stmt s) {
+        for (size_t i = containing_lets.size(); i > 0; i--) {
+            const string &name = containing_lets[i-1].first;
+            Expr value = containing_lets[i-1].second;
+
+            // Subexpressions are commonly shared between minval
+            // expressions and the maxval expressions.
+            for (size_t j = 0; j < i-1; j++) {
+                // Just refer to the other let.
+                if (equal(containing_lets[j].second, value)) {
+                    value = Variable::make(value.type(), containing_lets[j].first);
+                    break;
+                }
+            }
+
+            s = LetStmt::make(name, value, s);
+        }
+        return s;
+    }
+
 private:
 
     vector<Expr> min_vals, max_vals;
@@ -308,6 +359,10 @@ private:
         Expr b = mutate(op_b);
         bool b_likely = likely;
 
+        bool found_simplification_in_children =
+            (min_vals.size() != orig_num_min_vals) ||
+            (max_vals.size() != orig_num_max_vals);
+
         // To handle code that doesn't use the boundary condition
         // helpers, but instead just clamps to edge with "clamp", we
         // always consider a ramp inside a min or max to be likely.
@@ -323,6 +378,7 @@ private:
         likely = old_likely || a_likely || b_likely;
 
         if (b_likely && !a_likely) {
+            std::swap(op_a, op_b);
             std::swap(a, b);
             std::swap(b_likely, a_likely);
         }
@@ -332,8 +388,24 @@ private:
             // simplify the min to just the case marked as likely.
             Expr condition = (is_min ? a <= b : b <= a);
 
+            size_t old_num_min_vals = min_vals.size();
+            size_t old_num_max_vals = max_vals.size();
+
             if (is_one(simplify_to_true(condition))) {
                 expr = a;
+
+                if (!found_simplification_in_children) {
+                    // If there were no inner mutations and we found a
+                    // new min_val, then we have a simplification that
+                    // we can apply to the prologue.
+                    Replacement r = {op, op_b};
+                    if (min_vals.size() > old_num_min_vals) {
+                        prologue_replacements.push_back(r);
+                    }
+                    if (max_vals.size() > old_num_max_vals) {
+                        epilogue_replacements.push_back(r);
+                    }
+                }
             } else {
                 if (is_min) {
                     expr = Min::make(a, b);
@@ -361,16 +433,30 @@ private:
         visit_min_or_max(op, op->a, op->b, true);
     }
 
-    void visit(const Select *op) {
+    template<typename SelectOrIf, typename StmtOrExpr>
+    StmtOrExpr visit_select_or_if(const SelectOrIf *op,
+                                  StmtOrExpr orig_true_value,
+                                  StmtOrExpr orig_false_value) {
+
+        size_t orig_num_min_vals = min_vals.size();
+        size_t orig_num_max_vals = max_vals.size();
+
         Expr condition = mutate(op->condition);
         bool old_likely = likely;
         likely = false;
-        Expr true_value = mutate(op->true_value);
+        StmtOrExpr true_value = mutate(orig_true_value);
         bool a_likely = likely;
         likely = false;
-        Expr false_value = mutate(op->false_value);
+        StmtOrExpr false_value = mutate(orig_false_value);
         bool b_likely = likely;
         likely = old_likely || a_likely || b_likely;
+
+        bool found_simplification_in_children =
+            (min_vals.size() != orig_num_min_vals) ||
+            (max_vals.size() != orig_num_max_vals);
+
+        size_t old_num_min_vals = min_vals.size();
+        size_t old_num_max_vals = max_vals.size();
 
         if (a_likely && !b_likely) {
             // Figure out bounds on the loop var which makes the condition true.
@@ -379,28 +465,53 @@ private:
             debug(3) << "Attempted to make this condition true: " << condition << " Got: " << new_condition << "\n";
             if (is_one(new_condition)) {
                 // We succeeded!
-                expr = true_value;
+                if (!found_simplification_in_children) {
+                    Replacement r = {op->condition, const_false()};
+                    if (min_vals.size() > old_num_min_vals) {
+                        prologue_replacements.push_back(r);
+                    }
+                    if (max_vals.size() > old_num_max_vals) {
+                        epilogue_replacements.push_back(r);
+                    }
+                }
+                return true_value;
             } else {
                 // Might have partially succeeded, so still use the new condition.
-                expr = Select::make(new_condition, true_value, false_value);
+                return SelectOrIf::make(new_condition, true_value, false_value);
             }
         } else if (b_likely && !a_likely) {
             debug(3) << "Attempting to make this condition false: " << condition << "\n";
             Expr new_condition = simplify_to_false(condition);
             debug(3) << "Attempted to make this condition false: " << condition << " Got: " << new_condition << "\n";
             if (is_zero(new_condition)) {
-                expr = false_value;
+                if (!found_simplification_in_children) {
+                    Replacement r = {op->condition, const_true()};
+                    if (min_vals.size() > old_num_min_vals) {
+                        prologue_replacements.push_back(r);
+                    }
+                    if (max_vals.size() > old_num_max_vals) {
+                        epilogue_replacements.push_back(r);
+                    }
+                }
+                return false_value;
             } else {
-                expr = Select::make(new_condition, true_value, false_value);
+                return SelectOrIf::make(new_condition, true_value, false_value);
             }
         } else if (condition.same_as(op->condition) &&
-                   true_value.same_as(op->true_value) &&
-                   false_value.same_as(op->false_value)) {
-            expr = op;
+                   true_value.same_as(orig_true_value) &&
+                   false_value.same_as(orig_false_value)) {
+            return op;
         } else {
-            expr = Select::make(condition, true_value, false_value);
+            return SelectOrIf::make(condition, true_value, false_value);
         }
+    }
 
+    void visit(const Select *op) {
+        expr = visit_select_or_if(op, op->true_value, op->false_value);
+    }
+
+    void visit(const IfThenElse *op) {
+        stmt = visit_select_or_if(op, op->then_case, op->else_case);
     }
 
     void visit(const Let *op) {
@@ -704,14 +815,16 @@ class PartitionLoops : public IRMutator {
                 if (make_prologue) {
                     Stmt prologue = For::make(op->name, op->min, min_steady - op->min,
                                               op->for_type, op->device_api, body);
-                    prologue = simplify_prologue.mutate(prologue);
+                    //prologue = simplify_prologue.mutate(prologue);
+                    prologue = f.simplify_prologue(prologue);
                     new_loop = Block::make(prologue, new_loop);
                 }
 
                 if (make_epilogue) {
                     Stmt epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
                                               op->for_type, op->device_api, body);
-                    epilogue = simplify_epilogue.mutate(epilogue);
+                    // epilogue = simplify_epilogue.mutate(epilogue);
+                    epilogue = f.simplify_epilogue(epilogue);
                     new_loop = Block::make(new_loop, epilogue);
                 }
             } else {
