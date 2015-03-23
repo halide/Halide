@@ -284,6 +284,7 @@ SOURCE_FILES = \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
+  ScheduleOptimizationLevels.cpp \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -384,6 +385,7 @@ HEADER_FILES = \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
   Schedule.h \
+  ScheduleOptimizationLevels.h \
   Scope.h \
   Simplify.h \
   SkipStages.h \
