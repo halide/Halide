@@ -14,7 +14,7 @@ namespace Internal {
 class ScheduleOptimization {
 public:
     /** Level of optimization. */
-    typedef enum { LEVEL_0, LEVEL_1 } Level;
+    typedef enum { LEVEL_0, LEVEL_1, LEVEL_2 } Level;
     /** Apply the schedule optimization to the pipeline. 'func' should
      * be the output of the pipeline. */
     virtual void apply(Func func) = 0;
@@ -33,6 +33,19 @@ public:
 class OptimizationLevel1 : public ScheduleOptimization {
 public:
     virtual void apply(Func func);
+};
+
+/** Optimization level 2 performs the following optimization:
+ * - Run optimization level 1.
+ * - For all compute_root functions, vectorize the innermost dimension
+ *   and parallelize the outermost dimension.
+ */
+class OptimizationLevel2 : public ScheduleOptimization {
+public:
+    virtual void apply(Func func);
+private:
+    void parallelize_outer(Function f);
+    void vectorize_inner(Function f);
 };
 
 /** Apply schedule optimizations, controled by the HL_SCHED_OPT

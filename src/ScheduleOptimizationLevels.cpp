@@ -1,6 +1,7 @@
 #include "Bounds.h"
 #include "Expr.h"
 #include "FindCalls.h"
+#include "Schedule.h"
 #include "ScheduleOptimizationLevels.h"
 #include "Simplify.h"
 #include <map>
@@ -30,7 +31,10 @@ ScheduleOptimization::Level get_optimization_level() {
         return ScheduleOptimization::LEVEL_0;
     case 1:
         return ScheduleOptimization::LEVEL_1;
+    case 2:
+        return ScheduleOptimization::LEVEL_2;
     default:
+        internal_assert(false);
         return ScheduleOptimization::LEVEL_0;
     }
 }
@@ -42,6 +46,8 @@ ScheduleOptimization *get_optimization(ScheduleOptimization::Level level) {
         return new OptimizationLevel0();
     case ScheduleOptimization::LEVEL_1:
         return new OptimizationLevel1();
+    case ScheduleOptimization::LEVEL_2:
+        return new OptimizationLevel2();
     }
     return NULL;
 }
@@ -240,6 +246,39 @@ void OptimizationLevel1::apply(Func func) {
             wrapper.store_root().compute_root();
         }
     }
+}
+
+void OptimizationLevel2::apply(Func func) {
+    Function root = func.function();
+    OptimizationLevel1 *lvl1 = new OptimizationLevel1();
+    lvl1->apply(func);
+    // Construct a callgraph for the pipeline.
+    CallGraph cg(root);
+    vector<Function> all_functions = cg.transitive_calls(root);
+    parallelize_outer(root);
+    vectorize_inner(root);
+    for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
+        Function f = *I;
+        if (f.schedule().compute_level() == LoopLevel::root()) {
+            parallelize_outer(f);
+            vectorize_inner(f);
+        }
+    }
+}
+
+void OptimizationLevel2::parallelize_outer(Function f) {
+    Func wrapper(f);
+    Dim outer = f.schedule().dims()[f.schedule().dims().size() - 1];
+    Var v(outer.var);
+    wrapper.parallel(v);
+}
+
+void OptimizationLevel2::vectorize_inner(Function f) {
+    Func wrapper(f);
+    Dim inner = f.schedule().dims()[0];
+    Var v(inner.var);
+    unsigned factor = 128 / f.output_types()[0].bits;
+    wrapper.vectorize(v, factor);
 }
 
 void apply_schedule_optimization(Func func) {
