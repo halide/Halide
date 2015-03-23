@@ -161,17 +161,17 @@ Native Client targets.
 In order to build Halide with Native Client support, one will need the
 PNaCl llvm tree from:
 
-    http://git.chromium.org/native_client/pnacl-llvm.git
+    https://chromium.googlesource.com/native_client/pnacl-llvm.git
 
 and, for good measure, PNaCl's version of clang:
 
-    http://git.chromium.org/native_client/pnacl-clang.git
+    https://chromium.googlesource.com/native_client/pnacl-clang.git
 
 To check these out:
 
-    % git clone http://git.chromium.org/native_client/pnacl-llvm.git pnacl-llvm
+    % git clone https://chromium.googlesource.com/native_client/pnacl-llvm.git pnacl-llvm
     % cd pnacl-llvm/tools
-    % git clone http://git.chromium.org/native_client/pnacl-clang.git clang
+    % git clone https://chromium.googlesource.com/native_client/pnacl-clang.git clang
     % cd ../..
 
 To enable all Halide targets, build it like so:
