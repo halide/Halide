@@ -408,10 +408,12 @@ private:
             if (is_one(simplify_to_true(condition))) {
                 expr = a;
 
-                if (!found_simplification_in_children) {
+                if (!found_simplification_in_children && condition.type().is_scalar()) {
                     // If there were no inner mutations and we found a
                     // new min_val, then we have a simplification that
-                    // we can apply to the prologue.
+                    // we can apply to the prologue. Vector conditions
+                    // don't produce tight bounds though, so they're
+                    // not suitable for this.
                     Replacement r = {op, op_b};
                     if (min_vals.size() > old_num_min_vals) {
                         prologue_replacements.push_back(r);
@@ -479,7 +481,10 @@ private:
             debug(3) << "Attempted to make this condition true: " << condition << " Got: " << new_condition << "\n";
             if (is_one(new_condition)) {
                 // We succeeded!
-                if (!found_simplification_in_children) {
+                if (!found_simplification_in_children && condition.type().is_scalar()) {
+                    // Vector conditions are not tight bounds, so we
+                    // can't simplify the prologue and epilogue using
+                    // them.
                     Replacement r = {op->condition, const_false()};
                     if (min_vals.size() > old_num_min_vals) {
                         prologue_replacements.push_back(r);
@@ -498,7 +503,7 @@ private:
             Expr new_condition = simplify_to_false(condition);
             debug(3) << "Attempted to make this condition false: " << condition << " Got: " << new_condition << "\n";
             if (is_zero(new_condition)) {
-                if (!found_simplification_in_children) {
+                if (!found_simplification_in_children && condition.type().is_scalar()) {
                     Replacement r = {op->condition, const_true()};
                     if (min_vals.size() > old_num_min_vals) {
                         prologue_replacements.push_back(r);
