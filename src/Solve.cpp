@@ -79,7 +79,7 @@ private:
     // to avoid injecting pointless -1s.
     Expr negate(Expr e) {
         const Mul *mul = e.as<Mul>();
-        if (is_const(mul->b)) {
+        if (mul && is_const(mul->b)) {
             return mul->a * simplify(-1*mul->b);
         } else {
             return e * -1;
