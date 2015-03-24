@@ -1,27 +1,34 @@
 #include "Error.h"
 #include "JavaScriptExecutor.h"
 #include "JITModule.h"
+#include "Target.h"
 
 #include "runtime/HalideRuntime.h"
 #include <vector>
 
-#if !WITH_JAVASCRIPT_V8
-namespace Halide { namespace Internal {
+namespace {
 
-int run_javascript(const std::string &source, const std::string &fn_name, std::vector<Type> arg_types,
-                   std::vector<std::pair<Argument, const void *> >args) {
-    user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
-    return -1;
+int32_t buffer_total_size(const buffer_t *buf) {
+    int32_t total_size = 1;
+    for (int i = 0; i < 4; i++) {
+        int32_t stride = buf->stride[i];
+        if (stride < 0) stride = -stride;
+        if ((buf->extent[i] * stride) > total_size) {
+            total_size = buf->extent[i] * stride;
+        }
+    }
+    return total_size;
 }
 
-}} // close Halide::Internal namespace
-
-#else
+}
+#if WITH_JAVASCRIPT_V8
 
 #include "include/v8.h"
 #include "include/libplatform/libplatform.h"
 
 namespace Halide { namespace Internal {
+
+namespace JS_V8 {
 
 using namespace v8;
 
@@ -37,14 +44,7 @@ void get_host_array(Local<String> property,
     if (buf->host == NULL) {
         info.GetReturnValue().SetNull();  
     } else {
-        int32_t total_size = 1;
-        for (int i = 0; i < 4; i++) {
-            int32_t stride = buf->stride[i];
-            if (stride < 0) stride = -stride;
-            if ((buf->extent[i] * stride) > total_size) {
-                total_size = buf->extent[i] * stride;
-            }
-        }
+        int32_t total_size = buffer_total_size(buf);
         Local<ArrayBuffer> array_buf = ArrayBuffer::New(info.GetIsolate(), buf->host, total_size * buf->elem_size);
         Local<T> value = T::New(array_buf, 0, total_size);
         info.GetReturnValue().Set(value);  
@@ -111,40 +111,40 @@ void get_buffer_t_array_field(Local<String> property,
 }
 
 Local<ObjectTemplate> make_buffer_t_template(Isolate* isolate, ExternalArrayType element_type) {
-#if 0
-  /** Allocates a new string from UTF-8 data.*/
-  static Local<String> NewFromUtf8(Isolate* isolate,
-                                  const char* data,
-                                  ingType type = kNormalString,
-                                  int length = -1);
-#endif
-
     Local<ObjectTemplate> object_template = ObjectTemplate::New(isolate);
 
     AccessorGetterCallback host_getter = NULL;
     switch (element_type) {
     case kExternalInt8Array:
+      debug(0) << "Making Int8Array.\n";
         host_getter = get_host_array<Int8Array>;
         break;
     case kExternalUint8Array:
+      debug(0) << "Making Uint8Array.\n";
         host_getter = get_host_array<Uint8Array>;
         break;
     case kExternalInt16Array:
+      debug(0) << "Making Int16Array.\n";
         host_getter = get_host_array<Int16Array>;
         break;
     case kExternalUint16Array:
+      debug(0) << "Making Uint16Array.\n";
         host_getter = get_host_array<Uint16Array>;
         break;
     case kExternalInt32Array:
+      debug(0) << "Making Int32Array.\n";
         host_getter = get_host_array<Int32Array>;
         break;
     case kExternalUint32Array:
+      debug(0) << "Making Uint32Array.\n";
         host_getter = get_host_array<Uint32Array>;
         break;
     case kExternalFloat32Array:
+      debug(0) << "Making Float32Array.\n";
         host_getter = get_host_array<Float32Array>;
         break;
     case kExternalFloat64Array:
+      debug(0) << "Making Float64Array.\n";
         host_getter = get_host_array<Float64Array>;
         break;
     default:
@@ -183,7 +183,7 @@ Local<ObjectTemplate> make_buffer_t_template(Isolate* isolate, ExternalArrayType
 }
 
 Local<Object> make_buffer_t(Isolate *isolate, struct buffer_t *buf, ExternalArrayType element_type) {
-  //  debug(0) << "Making buffer_t on " << buf << " which has elem_size " << buf->elem_size << "\n";
+    debug(0) << "Making buffer_t on " << buf << " which has elem_size " << buf->elem_size << "\n";
     Local<ObjectTemplate> object_template = make_buffer_t_template(isolate, element_type);
     Local<Object> wrapper = object_template->NewInstance();
     Local<External> buf_wrap(External::New(isolate, buf));
@@ -346,7 +346,7 @@ void print_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 void error_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
   //  debug(0) << "error callback called with " << args.Length() << " args\n";
-    internal_assert(args.Length() >= 2) << "Not enough arguments to error_callback in JavaScriptExecutor.\n";
+    internal_assert(args.Length() >= 2) << "Not enough arguments to error_callback in JavaScriptExecutor(V8).\n";
     HandleScope scope(args.GetIsolate());
     Local<Object> user_context = args[0]->ToObject();
     Local<External> handle_wrapper = Local<External>::Cast(user_context->GetInternalField(0));
@@ -458,8 +458,12 @@ Local<ObjectTemplate> make_callbacks(Isolate *isolate) {
     return global;
 }
 
-int run_javascript(const std::string &source, const std::string &fn_name,
-                   std::vector<std::pair<Argument, const void *> > args) {
+} // namespace JS_V8;
+
+int run_javascript_v8(const std::string &source, const std::string &fn_name,
+                      std::vector<std::pair<Argument, const void *> > args) {
+    using namespace JS_V8;
+
     debug(0) << "Calling JavaScript function " << fn_name << " with " << args.size() << " args.\n";
     // TODO: thread safety.
     static bool inited = false;
@@ -468,6 +472,16 @@ int run_javascript(const std::string &source, const std::string &fn_name,
         V8::InitializeICU();
         Platform* platform = platform::CreateDefaultPlatform();
         V8::InitializePlatform(platform);
+        const char *flags[] = {
+          "HalideJavaScriptExecutor"
+#if 0
+          "--trace_concurrent_recompilation=true",
+          "--trace_codegen",
+          "--always_opt"
+#endif
+        };
+        int flags_size = sizeof(flags)/sizeof(flags[0]);
+        V8::SetFlagsFromCommandLine(&flags_size, const_cast<char **>(flags), false);
         V8::Initialize();
         V8::SetArrayBufferAllocator(new HalideArrayBufferAllocator());
         inited = true;
@@ -543,3 +557,664 @@ int run_javascript(const std::string &source, const std::string &fn_name,
 }} // close Halide::Internal namespace
 
 #endif
+
+#if WITH_JAVASCRIPT_SPIDERMONKEY
+
+#include "jsapi.h"
+#include "jsfriendapi.h"
+#include "js/Conversions.h"
+
+namespace Halide { namespace Internal {
+
+namespace JS_SpiderMonkey {
+
+using namespace JS;
+
+// The class of the global object.
+static JSClass global_class = {
+  "global",
+  JSCLASS_GLOBAL_FLAGS,
+  JS_PropertyStub,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL, NULL, NULL, NULL,
+  JS_GlobalObjectTraceHook,
+  { }
+};
+
+// The error reporter callback.
+void reportError(JSContext *cx, const char *message, JSErrorReport *report) {
+    const char *filename = report->filename;
+    if (filename == NULL) {
+        filename = "<no filename>";
+    }
+    internal_error << "Error running JavaScript: " << message << " | File: " << filename << " Line: " << report->lineno << "\n";
+}
+
+enum ExternalArrayType {
+  kExternalInt8Array = 1,
+  kExternalUint8Array,
+  kExternalInt16Array,
+  kExternalUint16Array,
+  kExternalInt32Array,
+  kExternalUint32Array,
+  kExternalFloat32Array,
+  kExternalFloat64Array,
+  kExternalUint8ClampedArray,
+};
+
+ExternalArrayType halide_type_to_external_array_type(const Type &t) {
+  if (t.is_uint()) {
+      switch (t.bits) {
+          case 8:
+              return kExternalUint8Array;
+              break;
+          case 16:
+              return kExternalUint16Array;
+              break;
+          case 32:
+              return kExternalUint32Array;
+              break;
+          default:
+              internal_error << "Unsupported bit size.\n";
+              return kExternalUint8Array;
+              break;
+      }
+  } else if (t.is_int()) {
+       switch (t.bits) {
+           case 8:
+               return kExternalInt8Array;
+               break;
+           case 16:
+               return kExternalInt16Array;
+               break;
+           case 32:
+               return kExternalInt32Array;
+               break;
+           default:
+               internal_error << "Unsupported bit size.\n";
+               return kExternalInt8Array;
+               break;
+       }
+   } else   if (t.is_float()) {
+       switch (t.bits) {
+           case 32:
+               return kExternalFloat32Array;
+               break;
+           case 64:
+               return kExternalFloat64Array;
+               break;
+           default:
+               internal_error << "Unsupported bit size.\n";
+               return kExternalFloat32Array;
+               break;
+       }
+   }
+
+   internal_error << "Unsupported buffer type.\n";
+   return kExternalUint8Array;
+}
+
+struct WrappedBuffer {
+    JSContext *context; // TODO: Can we get this from objects?
+    RootedObject buffer;
+    RootedObject host_buffer;
+    RootedObject min_buffer;
+    RootedObject stride_buffer;
+    RootedObject extent_buffer;
+    RootedObject host_array;
+    RootedObject min_array;
+    RootedObject stride_array;
+    RootedObject extent_array;
+
+    WrappedBuffer(JSContext *context, buffer_t *buf) :
+      context(context), buffer(context), host_buffer(context), min_buffer(context), stride_buffer(context), extent_buffer(context),
+        host_array(context), min_array(context), stride_array(context), extent_array(context) {
+    }
+
+    ~WrappedBuffer() {
+        JS_StealArrayBufferContents(context, host_buffer);
+        JS_StealArrayBufferContents(context, min_buffer);
+        JS_StealArrayBufferContents(context, stride_buffer);
+        JS_StealArrayBufferContents(context, extent_buffer);
+    }
+};
+
+JSObject *make_array_of_type(JSContext *context, HandleObject array_buffer, ExternalArrayType element_type) {
+    internal_assert(JS_IsArrayBufferObject(&*array_buffer)) << "Passed array buffer is not an array buffer object (SpiderMonkey).\n";
+    switch (element_type) {
+      case kExternalInt8Array:
+        //        debug(0) << "Making Int8Array.\n";
+        return JS_NewInt8ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+      case kExternalUint8Array:
+        //        debug(0) << "Making Uint8Array.\n";
+        return JS_NewUint8ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+      case kExternalInt16Array:
+        //        debug(0) << "Making Int16Array.\n";
+        return JS_NewInt16ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+      case kExternalUint16Array:
+        //        debug(0) << "Making Uint16Array.\n";
+        return JS_NewUint16ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+      case kExternalInt32Array:
+        //        debug(0) << "Making Int32Array.\n";
+        return JS_NewInt32ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+      case kExternalUint32Array:
+        //        debug(0) << "Making Uint32Array.\n";
+        return JS_NewUint32ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+      case kExternalFloat32Array:
+        //        debug(0) << "Making Float32Array.\n";
+        return JS_NewFloat32ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+     case kExternalFloat64Array:
+       //        debug(0) << "Making Float64Array.\n";
+        return JS_NewFloat64ArrayWithBuffer(context, array_buffer, 0, -1);
+        break;
+     default:
+        internal_error << "Unknown array type.\n";
+        break;
+    }
+    return NULL;
+}
+
+bool dev_getter(JSContext *cx, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    //    debug(0) << "Dev getter this is " << &args.thisv().toObject() << " argv[0] is " << &args[0].toObject() << " argv[1] is " << &args[1].toObject()  << "\n";
+
+    buffer_t *buf = (buffer_t *)JS_GetPrivate(&args.thisv().toObject());
+    // TODO: Figure out how to do this via an object.
+    args.rval().setInt32(buf->dev);
+    return true;
+}
+
+bool dev_setter(JSContext *cx, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    //    debug(0) << "Dev setter this is " << &args.thisv().toObject() << " argv[0] is " << &args[0].toObject() << " argv[1] is " << &args[1].toObject()  << "\n";
+    //    buffer_t *buf = (buffer_t *)JS_GetPrivate(&args.thisv().toObject());
+    // TODO: Figure out how to do this via an object.
+    args.rval().setInt32(0);
+    return true;
+}
+
+bool elem_size_getter(JSContext *cx, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    //    debug(0) << "Elem size getter this is " << &args.thisv().toObject() << " argv[0] is " << &args[0].toObject() << " argv[1] is " << &args[1].toObject()  << "\n";
+    buffer_t *buf = (buffer_t *)JS_GetPrivate(&args.thisv().toObject());
+    args.rval().setInt32(buf->elem_size);
+    //    debug(0) << "buf is " << buf << " elem size is " << buf->elem_size << "\n";
+    return true;
+}
+
+bool elem_size_setter(JSContext *cx, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    //    debug(0) << "Elem size setter this is " << &args.thisv().toObject() << " argv[0] is " << &args[0].toObject() << " argv[1] is " << &args[1].toObject()  << "\n";
+    buffer_t *buf = (buffer_t *)JS_GetPrivate(&args.thisv().toObject());
+    //    debug(0) << "buf is " << buf << " elem size is " << buf->elem_size << "\n";
+    buf->elem_size = args[1].toInt32();
+    //    debug(0) << "buf is " << buf << " elem size is " << buf->elem_size << "\n";
+    args.rval().setInt32(buf->elem_size);
+    return true;
+}
+
+static JSClass buffer_t_class = {
+  "buffer_T",
+  JSCLASS_HAS_PRIVATE,
+  JS_PropertyStub,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL, NULL, NULL, NULL,
+  NULL,
+  { }
+};
+
+Value make_buffer_t(JSContext *context, struct buffer_t *buf, ExternalArrayType element_type) {
+    Value result;
+    RootedObject buffer(context, JS_NewObject(context, &buffer_t_class));
+    JS_SetPrivate(buffer, buf);
+
+    //    debug(0) << "Making host buffer for type " << (int)element_type << " on " << buf << " object is " << &*buffer << " of length " << buffer_total_size(buf) * buf->elem_size << "\n";
+    if (buf->host != NULL) {
+        RootedObject host_buffer(context, JS_NewArrayBufferWithContents(context, buffer_total_size(buf) * buf->elem_size, buf->host));
+        RootedObject host_array(context, make_array_of_type(context, host_buffer, element_type));
+        JS_DefineProperty(context, buffer, "host", host_array, JSPROP_READONLY);
+    } else {
+        RootedValue temp_null(context, JSVAL_NULL);
+        JS_DefineProperty(context, buffer, "host", temp_null, JSPROP_READONLY);
+    }
+
+    //    debug(0) << "Making min buffer of length " << sizeof(buf->min) << "\n";
+    RootedObject min_buffer(context, JS_NewArrayBufferWithContents(context, sizeof(buf->min), &buf->min[0]));
+    RootedObject min_array(context, JS_NewInt32ArrayWithBuffer(context, min_buffer, 0, -1));
+    JS_DefineProperty(context, buffer, "min", min_array, JSPROP_READONLY);
+
+    RootedObject stride_buffer(context, JS_NewArrayBufferWithContents(context, sizeof(buf->stride), &buf->stride[0]));
+    RootedObject stride_array(context, JS_NewInt32ArrayWithBuffer(context, stride_buffer, 0, -1));
+    JS_DefineProperty(context, buffer, "stride", stride_array, JSPROP_READONLY);
+
+    RootedObject extent_buffer(context, JS_NewArrayBufferWithContents(context, sizeof(buf->extent), &buf->extent[0]));
+    RootedObject extent_array(context, JS_NewInt32ArrayWithBuffer(context, extent_buffer, 0, -1));
+    JS_DefineProperty(context, buffer, "extent", extent_array, JSPROP_READONLY);
+
+    JS_DefineProperty(context, buffer, "dev", 0, 0, dev_getter, dev_setter);
+    JS_DefineProperty(context, buffer, "elem_size", 0, 0, elem_size_getter, elem_size_setter);
+
+    result.setObject(*buffer);
+    return result;
+}
+
+bool disconnect_array_buffer(JSContext *context, HandleValue buffer, const char *name) {
+    RootedObject buffer_obj(context, &buffer.toObject());
+    RootedValue typed_array_val(context);
+    if (JS_GetProperty(context, buffer_obj, name, &typed_array_val)) {
+        if (typed_array_val.isNull() || typed_array_val.isUndefined()) {
+            return true;
+        }
+        RootedObject typed_array(context, &typed_array_val.toObject());
+        RootedValue array_buffer_val(context);
+        if (JS_GetProperty(context, typed_array, "buffer", &array_buffer_val)) {
+            RootedObject array_buffer(context, &array_buffer_val.toObject());
+            if (JS_StealArrayBufferContents(context, array_buffer)) {
+                return true;
+            }
+        }
+    }
+    debug(0) << "Buffer steal failed.\n";
+    return false;
+}
+
+static JSClass handle_class = {
+  "buffer_T",
+  JSCLASS_HAS_PRIVATE,
+  JS_PropertyStub,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL, NULL, NULL, NULL,
+  NULL,
+  { }
+};
+
+Value wrap_scalar(JSContext *context, const Type &t, const void *val_ptr) {
+    Value result;
+    if (t.is_handle()) {
+        RootedObject temp(context);
+        temp = JS_NewObject(context, &handle_class);
+        JS_SetPrivate(temp, *(void **)val_ptr);
+        result.setObject(*temp);
+    } else {
+        if (t.is_uint()) {
+            switch (t.bits) {
+                case 8:
+                    result.setInt32(*reinterpret_cast<const uint8_t *>(val_ptr));
+                    break;
+                case 16:
+                    result.setInt32(*reinterpret_cast<const uint16_t *>(val_ptr));
+                    break;
+                case 32:
+                    result.setDouble(*reinterpret_cast<const uint32_t *>(val_ptr));
+                    break;
+                default:
+                    internal_error << "Unsupported bit size.\n";
+                    result.setInt32(*reinterpret_cast<const uint8_t *>(val_ptr));
+                    break;
+            }
+        } else if (t.is_int()) {
+            switch (t.bits) {
+                case 8:
+                    result.setInt32(*reinterpret_cast<const int8_t *>(val_ptr));
+                    break;
+                case 16:
+                    result.setInt32(*reinterpret_cast<const int16_t *>(val_ptr));
+                    break;
+                case 32:
+                    result.setInt32(*reinterpret_cast<const int32_t *>(val_ptr));
+                    break;
+                default:
+                    internal_error << "Unsupported bit size.\n";
+                    result.setInt32(*reinterpret_cast<const int8_t *>(val_ptr));
+                    break;
+            }
+         } else if (t.is_float()) {
+             switch (t.bits) {
+                 case 32:
+                     result.setDouble(*reinterpret_cast<const float *>(val_ptr));
+                     break;
+                 case 64:
+                     result.setDouble(*reinterpret_cast<const double *>(val_ptr));
+                     break;
+                 default:
+                     internal_error << "Unsupported bit size.\n";
+                     result.setDouble(*reinterpret_cast<const float *>(val_ptr));
+                     break;
+             }
+        }
+    }
+    return result;
+}
+
+JITUserContext *get_user_context(HandleValue arg) {
+    if (arg.isNull()) {
+        return NULL;
+    }
+    return (JITUserContext *)JS_GetPrivate(&arg.toObject());
+}
+
+bool error_callback(JSContext *context, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    internal_assert(args.length() >= 2) << "Not enough arguments to error_callback in JavaScriptExecutor(SpiderMonkey).\n";
+
+    JITUserContext *jit_user_context = get_user_context(args[0]);
+    RootedString arg_str(context, args[1].toString());
+    char *msg = JS_EncodeStringToUTF8(context, arg_str);
+
+    if (jit_user_context != NULL && jit_user_context->handlers.custom_error != NULL) {
+        (*jit_user_context->handlers.custom_error)(jit_user_context, msg);
+    } else {
+        halide_runtime_error << msg;
+    }
+
+    JS_free(context, msg);
+
+    args.rval().setInt32(0);
+    return true;
+}
+
+bool print_callback(JSContext *context, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+
+    JITUserContext *jit_user_context = get_user_context(args[0]);
+    RootedString arg_str(context, args[1].toString());
+    char *msg = JS_EncodeStringToUTF8(context, arg_str);
+
+    if (jit_user_context != NULL && jit_user_context->handlers.custom_print != NULL) {
+        (*jit_user_context->handlers.custom_print)(jit_user_context, msg);
+    } else {
+      debug(0) << msg;
+    }
+
+    JS_free(context, msg);
+
+    args.rval().setInt32(0);
+    return true;
+}
+
+std::unique_ptr<uint8_t> make_trace_value(JSContext *context, HandleValue val,
+                                          int32_t type_code, int32_t bits, int32_t vector_width) {
+    if (val.isUndefined() || val.isNull()) {
+        return std::unique_ptr<uint8_t>();
+    }
+    RootedObject val_array(context, &val.toObject());
+    RootedValue temp(context);
+    size_t elem_size = ((bits + 7) / 8);
+    size_t total_size = elem_size * vector_width;
+    std::unique_ptr<uint8_t> result(new uint8_t(total_size));
+    uint8_t *ptr = result.get();
+    for (int32_t i = 0; i < vector_width; i++) {
+        JS_GetElement(context, val_array, (uint32_t)i, &temp);
+        if (type_code == 0) {
+            if (bits == 8) {
+                *(int8_t *)ptr = (int8_t)temp.toInt32();
+            } else if (bits == 16) {
+                *(int16_t *)ptr = (int16_t)temp.toInt32();
+            } else if (bits == 32) {
+                *(int32_t *)ptr = (int32_t)temp.toInt32();
+            } else {
+                *(int64_t *)ptr = (int64_t)temp.toDouble();
+            }
+        } else if (type_code == 1) {
+            if (bits == 8) {
+                *(uint8_t *)ptr = (uint8_t)temp.toDouble();
+            } else if (bits == 16) {
+                *(uint16_t *)ptr = (uint16_t)temp.toDouble();
+            } else if (bits == 32) {
+                *(uint32_t *)ptr = (uint32_t)temp.toDouble();
+            } else {
+                *(uint64_t *)ptr = (uint64_t)temp.toDouble();
+            }
+        } else if (type_code == 2) {
+            internal_assert(bits >= 32) << "Tracing a bad type in JavaScript (SpiderMonkey)";
+            if (bits == 32) {
+                *(float *)ptr = (float)temp.toDouble();
+            } else {
+                *(double *)ptr = (double)temp.toNumber();
+            }
+        } else if (type_code == 3) {
+            *(void **)ptr = (void *)temp.asRawBits();
+        }
+        ptr += elem_size;
+    }
+
+    return result;
+}
+
+bool trace_callback(JSContext *context, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+
+    JITUserContext *jit_user_context = get_user_context(args[0]);
+    RootedObject js_event(context);
+    js_event = &args[1].toObject();
+    halide_trace_event event;
+
+    RootedValue temp(context);
+    JS_GetProperty(context, js_event, "func", &temp);
+    RootedString func_str(context, temp.toString());
+    char *func_save = JS_EncodeStringToUTF8(context, func_str);
+    event.func = func_save;
+    JS_GetProperty(context, js_event, "event", &temp);
+    event.event = (halide_trace_event_code)temp.toInt32();
+    JS_GetProperty(context, js_event, "parent_id", &temp);
+    event.parent_id = (halide_trace_event_code)temp.toInt32();
+    JS_GetProperty(context, js_event, "type_code", &temp);
+    event.type_code = (halide_trace_event_code)temp.toInt32();
+    JS_GetProperty(context, js_event, "bits", &temp);
+    event.bits = (halide_trace_event_code)temp.toInt32();
+    JS_GetProperty(context, js_event, "vector_width", &temp);
+    event.vector_width = (halide_trace_event_code)temp.toInt32();
+    JS_GetProperty(context, js_event, "value_index", &temp);
+    event.value_index = (halide_trace_event_code)temp.toInt32();
+    JS_GetProperty(context, js_event, "value", &temp);
+    std::unique_ptr<uint8_t> value_storage(make_trace_value(context, temp, event.type_code, event.bits, event.vector_width));
+    event.value = (void *)value_storage.get();
+    JS_GetProperty(context, js_event, "dimensions", &temp);
+    event.dimensions = (halide_trace_event_code)temp.toInt32();
+
+    std::vector<int32_t> coordinates(event.dimensions);
+    RootedObject js_coords(context);
+    JS_GetProperty(context, js_event, "coordinates", &temp);
+    js_coords = &temp.toObject();
+    for (int32_t i = 0; i < event.dimensions; i++) {
+        JS_GetElement(context, js_coords, i, &temp);
+        coordinates[i] = temp.toInt32();
+    }
+    event.coordinates = &coordinates[0];
+
+    if (jit_user_context != NULL && jit_user_context->handlers.custom_trace != NULL) {
+        (*jit_user_context->handlers.custom_trace)(jit_user_context, &event);
+    } else {
+        // TODO: handle this case.
+    }
+
+    JS_free(context, func_save);
+
+    int result = 0;
+    args.rval().setInt32(result);
+    return true;
+}
+
+bool make_callbacks(JSContext *context, HandleObject global) {
+    if (!JS_DefineFunction(context, global, "halide_error", &error_callback, 2, 0)) {
+        return false;
+    }
+    if (!JS_DefineFunction(context, global, "halide_print", &print_callback, 2, 0)) {
+        return false;
+    }
+    if (!JS_DefineFunction(context, global, "halide_trace", &trace_callback, 2, 0)) {
+        return false;
+    }
+    return true;    // Create a template for the global object where we set the
+}
+
+} // namespace JS_SpiderMonkey
+
+int run_javascript_spidermonkey(const std::string &source, const std::string &fn_name,
+                                std::vector<std::pair<Argument, const void *> > args) {
+    int32_t result = 0; 
+
+    using namespace JS_SpiderMonkey;
+
+    debug(0) << "Calling JavaScript function " << fn_name << " with " << args.size() << " args.\n";
+    // TODO: thread safety.
+    static bool inited = false;
+    if (!inited) {
+        if (!JS_Init()) {
+            return -1;
+        }
+        inited = true;
+    }
+
+    // Create a JS runtime.
+    JSRuntime *runtime = JS_NewRuntime(128L * 1024L * 1024L);
+    if (!runtime) {
+        return -1;
+    }
+
+    // Create a context.
+    JSContext *context = JS_NewContext(runtime, 8192);
+    if (!context) {
+        JS_DestroyRuntime(runtime);
+        return -1;
+    }
+    JS_SetErrorReporter(runtime, reportError);
+
+    {
+        JSAutoRequest auto_request(context);
+
+        // Create the global object and a new compartment.
+        RootedObject global(context);
+        global = JS_NewGlobalObject(context, &global_class, NULL,
+                                    JS::DontFireOnNewGlobalHook);
+        if (!global) {
+            JS_DestroyContext(context);
+            JS_DestroyRuntime(runtime);
+            return -1;
+        }
+
+        JSAutoCompartment auto_compartment(context, global);
+
+        // Populate the global object with the standard globals, like Object and
+        // Array.
+        if (!JS_InitStandardClasses(context, global)) {
+            JS_DestroyContext(context);
+            JS_DestroyRuntime(runtime);
+            return -1;
+        }
+
+
+
+
+        make_callbacks(context, global);
+
+        RootedValue script_result(context);
+        CompileOptions options(context);
+        bool succeeded = JS::Evaluate(context, global, options, source.data(), source.size(), &script_result);
+        if (!succeeded) {
+            debug(0) << "JavaScript script evaulation failed(SpiderMonkey).\n";
+            JS_DestroyContext(context);
+            JS_DestroyRuntime(runtime);
+            return -1;
+        }
+
+        debug(0) << "Script compiled(SpiderMonkey).\n";
+
+        AutoValueVector js_args(context);
+        for (size_t i = 0; i < args.size(); i++) {
+            Argument &arg(args[i].first);
+            if (arg.is_buffer()) {
+                js_args.append(make_buffer_t(context,
+                                             (struct buffer_t *)args[i].second,
+                                             halide_type_to_external_array_type(arg.type)));
+            } else {
+                js_args.append(wrap_scalar(context, arg.type, args[i].second));
+            }
+        }
+
+        RootedValue js_result(context);
+        succeeded = JS::Call(context, global, fn_name.c_str(), js_args, &js_result);
+
+        debug(0) << "Returned from call with return val " << succeeded << ".\n";
+
+        // The underlying memory for the array buffers must be stolen back
+        // so GC doesn't try to free the pointers.
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].first.is_buffer()) {
+                disconnect_array_buffer(context, js_args[i], "host");
+                disconnect_array_buffer(context, js_args[i], "min");
+                disconnect_array_buffer(context, js_args[i], "stride");
+                disconnect_array_buffer(context, js_args[i], "extent");
+            }
+        }
+
+        if (succeeded) {
+            JS::ToInt32(context, js_result, &result);
+        } else {
+          result = -1;
+        }
+    }
+
+    JS_DestroyContext(context);
+    
+    return result;
+}
+
+}} // close Halide::Internal namespace
+
+#endif
+
+namespace Halide { namespace Internal {
+
+int run_javascript(const Target &target, const std::string &source, const std::string &fn_name,
+                   const std::vector<std::pair<Argument, const void *> > &args) {
+#if !defined(WITH_JAVASCRIPT_V8) && !defined(WITH_JAVASCRIPT_SPIDERMONKEY)
+    user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
+    return -1;
+#endif
+
+#ifdef WITH_JAVASCRIPT_V8
+    if (!target.has_feature(Target::SpiderMonkey)) {
+        return run_javascript_v8(source, fn_name, args);
+    }
+#else    
+    if (target.has_feature(Target::JavaScript_V8)) {
+        user_error << "V8 JavaScript requrested without configuring V8 JavaScript engine.";
+    }
+#endif
+
+#ifdef WITH_JAVASCRIPT_SPIDERMONKEY
+    return run_javascript_spidermonkey(source, fn_name, args);
+#else    
+    if (target.has_feature(Target::JavaScript_SpiderMonkey)) {
+        user_error << "V8 JavaScript requrested without configuring V8 JavaScript engine.";
+    }
+#endif
+
+
+
+}
+
+}} // close Halide::Internal namespace

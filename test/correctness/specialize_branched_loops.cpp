@@ -45,6 +45,13 @@ extern "C" DLLEXPORT int count(int) {
 HalideExtern_1(int, count, int);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping specialized_branched_loops test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
+
     Var x, y, c;
 
     {

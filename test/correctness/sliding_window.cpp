@@ -25,6 +25,12 @@ extern "C" void my_free(void *, void *) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping sliding window test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
     Func f1("f1"), g1("g1");
     Var x("x");
 

@@ -21,6 +21,13 @@ extern "C" DLLEXPORT float my_func(int x, float y) {
 HalideExtern_2(float, my_func, int, float);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping extern function test for JavaScript.\n");
+        return 0;
+    }
+
     Var x, y;
     Func f;
 
@@ -32,7 +39,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
             float correct = (float)(i*j);
-	    float delta = imf(i, j) - correct;
+            float delta = imf(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
                 return -1;

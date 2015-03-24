@@ -29,6 +29,12 @@ HalideExtern_3(std::list<int> *, list_maybe_insert, std::list<int> *, bool, int)
 
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping image_of_lists test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
 
     // Compute the list of factors of all numbers < 100
     Func factors;

@@ -21,6 +21,13 @@ extern "C" DLLEXPORT float my_powf(float x, float y) {
 HalideExtern_2(float, my_powf, float, float);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping process_some_tiles test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
+
     // Brighten some tiles of an image, where that region is given by
     // a lower-res bitmap.
 

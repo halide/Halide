@@ -16,6 +16,13 @@ extern "C" DLLEXPORT int count(int x) {
 HalideExtern_1(int, count, int);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping C compute_at_split_rvar test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
+
     {
         // Split an rvar, compute something at the inner var, and make
         // sure the it's evaluated the right number of times.

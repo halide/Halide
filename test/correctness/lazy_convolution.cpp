@@ -18,6 +18,12 @@ extern "C" DLLEXPORT float call_counter(float x) {
 HalideExtern_1(float, call_counter, float);
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping lazy_convolution test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
 
     Func f;
     Var x, y;

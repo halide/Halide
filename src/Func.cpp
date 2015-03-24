@@ -2439,7 +2439,7 @@ struct JITFuncCallContext {
 void Func::realize(Realization dst, const Target &target) {
     // TODO: see if JS and non-JS can share more code.
     if (target.has_feature(Target::JavaScript)) {
-    #if WITH_JAVASCRIPT_V8
+    #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
         if (cached_javascript.empty()) {
             compile_jit(target);
         }
@@ -2507,7 +2507,7 @@ void Func::realize(Realization dst, const Target &target) {
     // (If there is a user-set error handler, it will be called as well.)
 
     int exit_status = 0;
-    #if WITH_JAVASCRIPT_V8
+    #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
     if (target.has_feature(Target::JavaScript)) {
         // Sanitise the name of the generated function
         string js_fn_name = name();
@@ -2523,7 +2523,7 @@ void Func::realize(Realization dst, const Target &target) {
         }
 
         Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
-        exit_status = run_javascript(cached_javascript, js_fn_name, js_args);
+        exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args);
         Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
     } else
     #endif
@@ -2650,7 +2650,7 @@ void Func::infer_input_bounds(Realization dst) {
             }
 
             Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
-            exit_status = run_javascript(cached_javascript, js_fn_name, js_args);
+            exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args);
             Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
         } else
         #endif

@@ -28,6 +28,12 @@ int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping C loop_invariant_extern_calls test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
     Var x, y;
     Func f;
 

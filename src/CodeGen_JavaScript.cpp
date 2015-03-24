@@ -3,7 +3,6 @@
 #include <limits>
 
 #include "CodeGen_JavaScript.h"
-#include "CodeGen.h"
 #include "CodeGen_Internal.h"
 #include "Deinterleave.h"
 #include "Substitute.h"
@@ -131,9 +130,9 @@ string CodeGen_JavaScript::print_reinterpret(Type type, Expr e) {
         return make_js_int_cast(print_expr(e), e.type().is_uint(), e.type().bits, type.is_uint(), type.bits);
     } else {
         int32_t bytes_needed = (std::max(type.bits, e.type().bits) + 7) / 8;
-        string dataview = unique_name("r");
+        string dataview = unique_name('r');
         do_indent();
-        stream << "var " << dataview << "= new DataView(new ArrayBuffer(" << bytes_needed << "));\n";
+        stream << "var " << dataview << " = new DataView(new ArrayBuffer(" << bytes_needed << "));\n";
         string setter = "set" + javascript_type_array_name_fragment(e.type());
         string getter = "get" + javascript_type_array_name_fragment(type);
         string val = print_expr(e);
@@ -410,10 +409,12 @@ void CodeGen_JavaScript::visit(const Div *op) {
         ostringstream oss;
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
-#if 0 // TODO: check JS spec
-    } else if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b), Call::Extern));
-#endif
+    } else if (!op->type.is_float()) {
+        ostringstream oss;
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        oss << "Math.floor(" << a << " / " << b << ")";
+        print_assignment(op->type, oss.str());
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -426,12 +427,23 @@ void CodeGen_JavaScript::visit(const Mod *op) {
         ostringstream oss;
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
-#if 0 // TODO: check JS reference
-    } else if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "smod", vec(op->a, op->b), Call::Extern));
-#endif
+    } else if (!op->type.is_float()) {
+        string var_name(unique_name('_'));
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        do_indent();
+        stream << "var " << var_name << " = Math.floor(" << a << " % " << b << ");\n";
+        if (op->type.is_int()) {
+            do_indent();
+            stream << "if (" << var_name << " < 0) { " << var_name << " += (" << b << " < 0) ? -" << b << " : " << b << ";}\n";
+        }
+        id = var_name;
     } else {
-        visit_binop(op->type, op->a, op->b, "%");
+        string var_name(unique_name('_'));
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        stream << "var " << var_name << " = " << a << " - " << b << " * Math.floor(" << a << " / " << b << "); ";
+        id = var_name;
     }
 }
 
@@ -512,10 +524,10 @@ void CodeGen_JavaScript::visit(const FloatImm *op) {
         if (op->value > 0) {
             id = "Number.POSITIVE_INFINITY";
         } else {
-            id = "Number.NEGTIVE_INFINITY";
+            id = "Number.NEGATIVE_INFINITY";
         }
     } else {
-#if 0 // TODO: Figure out if there is a way to wrie a floating-point literal in JS
+#if 0   // TODO: Figure out if there is a way to wrie a floating-point hex literal in JS
         // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
         union {
             uint32_t as_uint;
@@ -528,11 +540,68 @@ void CodeGen_JavaScript::visit(const FloatImm *op) {
         oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
         id = oss.str();
 #else
-    }
         ostringstream oss;
         oss << op->value;
         id = oss.str();
 #endif
+    }
+}
+
+namespace {
+
+std::map<string, std::pair<string, int> > js_math_functions{
+  { { "sqrt_f32", { "Math.sqrt", 1 } },
+    { "sqrt_f64", { "Math.sqrt", 1 } },
+    { "sin_f32", { "Math.sin", 1 } },
+    { "sin_f64", { "Math.sin", 1 } },
+    { "cos_f32", { "Math.cos", 1 } },
+    { "cos_f64", { "Math.cos", 1 } },
+    { "tan_f32", { "Math.tan", 1 } },
+    { "tan_f64", { "Math.tan", 1 } },
+    { "exp_f32", { "Math.exp", 1 } },
+    { "exp_f64", { "Math.exp", 1 } },
+    { "log_f32", { "Math.log", 1 } },
+    { "log_f64", { "Math.log", 1 } },
+    { "abs_f32", { "Math.abs", 1 } },
+    { "abs_f64", { "Math.abs", 1 } },
+    { "floor_f32", { "Math.floor", 1 } },
+    { "floor_f64", { "Math.floor", 1 } },
+    { "ceil_f32", { "Math.ceil", 1 } },
+    { "ceil_f64", { "Math.ceil", 1 } },
+    { "round_f32", { "Math.round", 1 } },
+    { "round_f64", { "Math.round", 1 } },
+    { "trunc_f32", { "Math.trunc", 1 } },
+    { "trunc_f64", { "Math.trunc", 1 } },
+    { "pow_f32", { "Math.pow", 2 } },
+    { "pow_f64", { "Math.pow", 2 } },
+    { "asin_f32", { "Math.asin", 1 } },
+    { "asin_f64", { "Math.asin", 1 } },
+    { "acos_f32", { "Math.acos", 1 } },
+    { "acos_f64", { "Math.acos", 1 } },
+    { "atan_f32", { "Math.atan", 1 } },
+    { "atan_f64", { "Math.atan", 1 } },
+    { "atan2_f32", { "Math.atan2", 2 } },
+    { "atan2_f64", { "Math.atan2", 2 } },
+    { "sinh_f32", { "Math.sinh", 1 } },
+    { "sinh_f64", { "Math.sinh", 1 } },
+    { "cosh_f32", { "Math.cosh", 1 } },
+    { "cosh_f64", { "Math.cosh", 1 } },
+    { "tanh_f32", { "Math.tanh", 1 } },
+    { "tanh_f64", { "Math.tanh", 1 } },
+    { "asinh_f32", { "Math.asinh", 1 } },
+    { "asinh_f64", { "Math.asinh", 1 } },
+    { "acosh_f32", { "Math.acosh", 1 } },
+    { "acosh_f64", { "Math.acosh", 1 } },
+    { "atanh_f32", { "Math.atanh", 1 } },
+    { "atanh_f64", { "Math.atanh", 1 } },
+    { "nan_f32", { "Math.NAN", 0 } },
+    { "neg_inf_f32", { "Math.NEGATIVE_INFINITY", 0 } },
+    { "inf_f32", { "Math.INFINITY", 0 } }
+      //maxval*?
+      //minval*?
+  }
+};
+
 }
 
 void CodeGen_JavaScript::visit(const Call *op) {
@@ -659,7 +728,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
             }
             coordinates_stream << "]";
 
-            string event_name = unique_name("e");
+            string event_name = unique_name('e');
             do_indent();
             stream << "var " << event_name << " = { func: " << op->args[0] << ", ";
             stream << "event: " << op->args[1] << ", ";
@@ -791,7 +860,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
             stream << "host: " << args[0] << ",\n";
             int dims = ((int)op->args.size() - 2)/3;
             do_indent();
-            stream << "min: [ "; 
+            stream << "min: ["; 
             for (int i = 0; i < dims; i++) {
                 if (i > 0) {
                     stream << ", ";
@@ -800,7 +869,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
             }
             stream << "],\n";
             do_indent();
-            stream << "extent: [ ";
+            stream << "extent: [";
             for (int i = 0; i < dims; i++) {
                 if (i > 0) {
                     stream << ", ";
@@ -809,20 +878,21 @@ void CodeGen_JavaScript::visit(const Call *op) {
             }
             stream << "],\n";
             do_indent();
-            stream << "stride: [ ";
+            stream << "stride: [";
             for (int i = 0; i < dims; i++) {
                 if (i > 0) {
                     stream << ", ";
                 }
                 stream << args[i*3+4];
             }
+            stream << "],\n";
             do_indent();
             stream << "elem_size: " << args[1] << ",\n";
             do_indent();
             stream << "host_dirty: false,\n";
             do_indent();
             stream << "dev_dirty: false,\n";
-            stream << "],\n};";
+            stream << "};\n";
             rhs << buf_id;
         } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
@@ -862,7 +932,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
             string dest = print_expr(op->args[0]);
             string src = print_expr(op->args[1]);
             string size = print_expr(op->args[2]);
-            string index_var = unique_name("i");
+            string index_var = unique_name('i');
             stream << "for (var " << index_var << " = 0; " << index_var << " < " << size << "; " << index_var << "++) ";
             open_scope();
             do_indent();
@@ -913,16 +983,23 @@ void CodeGen_JavaScript::visit(const Call *op) {
             // TODO: other intrinsics
             internal_error << "Unhandled intrinsic in JavaScript backend: " << op->name << '\n';
         }
-
     } else {
         // Generic calls
+
+        // Map math functions to JS names.
+        string js_name = op->name;
+        auto js_math_fn = js_math_functions.find(op->name);
+        if (js_math_fn != js_math_functions.end()) {
+            js_name = js_math_fn->second.first;
+        }
+
         vector<string> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = print_expr(op->args[i]);
         }
-        rhs << op->name << "(";
+        rhs << js_name << "(";
 
-        if (CodeGen::function_takes_user_context(op->name)) {
+        if (function_takes_user_context(op->name)) {
             rhs << (have_user_context ? "__user_context, " : "null, ");
         }
 
@@ -1085,7 +1162,6 @@ void CodeGen_JavaScript::visit(const AssertStmt *op) {
 }
 
 void CodeGen_JavaScript::visit(const Pipeline *op) {
-
     do_indent();
     stream << "// produce " << op->name << '\n';
     print_stmt(op->produce);

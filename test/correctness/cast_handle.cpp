@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping cast_handle test for JavaScript.\n");
+        return 0;
+    }
     Func f, g;
     Var x;
     Param<void *> handle;
