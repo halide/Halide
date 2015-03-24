@@ -443,7 +443,7 @@ private:
             }
         } else if (a_uses_var && b_uses_var) {
             // Convert to f(x) - g(x) == 0 and let the subtract mutator clean up.
-            expr = mutate(a - b == 0);
+            expr = mutate(Cmp::make(a - b, 0));
         }
 
         if (!expr.defined()) {
