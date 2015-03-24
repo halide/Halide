@@ -3,6 +3,9 @@
 
 using namespace Halide;
 
+template <typename T>
+static bool local_isnan(T x) { return x != x; }
+
 int main(int argc, char **argv) {
     Image<uint32_t> input(256);
     for (int i = 0; i < 256; i++) {
@@ -17,10 +20,13 @@ int main(int argc, char **argv) {
 
     for (int x = 0; x < 256; x++) {
         float y = im1(x);
-        uint32_t output = Halide::Internal::reinterpret_bits<uint32_t>(y);
-        if (input(x) != output) {
-            printf("Reinterpret cast turned %x into %x!", input(x), output);
-            return -1;
+        // Treat all NaNs as equal.
+        if (!(local_isnan(y) && local_isnan(Halide::Internal::reinterpret_bits<float>(input(x))))) {
+            uint32_t output = Halide::Internal::reinterpret_bits<uint32_t>(y);
+            if (input(x) != output) {
+                printf("Reinterpret cast turned %x into %x!", input(x), output);
+                return -1;
+            }
         }
     }
 
