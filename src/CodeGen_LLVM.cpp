@@ -580,7 +580,11 @@ void CodeGen_LLVM::compile_to_native(const string &filename, bool assembly) {
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
+    #if WITH_NATIVE_CLIENT
+    options.UseInitArray = true;
+    #else
     options.UseInitArray = false;
+    #endif
 
     TargetMachine *target_machine =
         target->createTargetMachine(module->getTargetTriple(),
@@ -637,13 +641,6 @@ void CodeGen_LLVM::compile_to_native(const string &filename, bool assembly) {
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(createAlwaysInlinerPass());
-
-    // For nacl, we need to put the destructors into the fini_array manually.
-    #if WITH_NATIVE_CLIENT
-    if (this->target.os == Target::NaCl) {
-        pass_manager.add(createExpandCtorsPass());
-    }
-    #endif
 
     // Override default to generate verbose assembly.
     #if LLVM_VERSION < 37

@@ -27,9 +27,7 @@ $env:PATH += ";C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin"
 #svn co http://llvm.org/svn/llvm-project/llvm/trunk $ROOT\llvm
 #svn co http://llvm.org/svn/llvm-project/cfe/trunk $ROOT\llvm\tools\clang
 
-#git clone http://git.chromium.org/native_client/pnacl-llvm.git $ROOT\pnacl-llvm
-#git checkout
-
+#git clone https://chromium.googlesource.com/native_client/pnacl-llvm.git $ROOT\pnacl-llvm
 
 # Update llvm source
 svn up $ROOT\llvm\tools\clang
@@ -126,7 +124,7 @@ foreach (${configuration} in "Release", "Debug") {
   if ($LastExitCode) {
    echo "Build failed!"
    exit $LastExitCode
-  } 
+  }
 
   cd $ROOT
   if (! (Test-Path build_32_pnacl_${configuration})) {
@@ -214,14 +212,14 @@ foreach ($d in "32_trunk","64_trunk", "64_pnacl","32_pnacl") {
     mkdir distrib
   }
   cd distrib
-  
+
   $DISTRIB_DIR = "distrib_${d}_${COMMIT}_${DATE}"
   if (Test-Path $DISTRIB_DIR) {
     rm $DISTRIB_DIR -r -Force
   }
   mkdir $DISTRIB_DIR
   cd $DISTRIB_DIR
-  
+
   mkdir include
   mkdir Release
   mkdir Debug
@@ -235,8 +233,7 @@ foreach ($d in "32_trunk","64_trunk", "64_pnacl","32_pnacl") {
   cp $ROOT\README.md .
   &7z a Halide_Windows_${d}_${COMMIT}_${DATE}.zip *
   mv Halide_Windows_${d}_${COMMIT}_${DATE}.zip ..
-  
+
   cd ..
   rm $DISTRIB_DIR -r -Force
 }
- 
