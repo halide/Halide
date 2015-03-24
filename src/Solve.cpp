@@ -407,8 +407,12 @@ private:
                         expr = mutate(Opp::make(mul_a->a, (b / mul_a->b)));
                     }
                 } else {
-                    Expr div = b / mul_a->b;
-                    Expr rem = b % mul_a->b;
+                    // Don't use operator/ and operator % to sneak
+                    // past the division-by-zero check. We'll only
+                    // actually use these when mul_a->b is a positive
+                    // or negative constant.
+                    Expr div = Div::make(b, mul_a->b);
+                    Expr rem = Mod::make(b, mul_a->b);
                     if (is_eq) {
                         // f(x) * c == b -> f(x) == b/c && b%c == 0
                         expr = mutate((mul_a->a == div) && (rem == 0));
