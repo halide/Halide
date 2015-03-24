@@ -74,6 +74,9 @@ struct CheckVars : public IRGraphVisitor {
         // Was it defined internally by a let expression?
         if (defined_internally.contains(var->name)) return;
 
+        // Is this a variable tagged ".buffer"?
+        if (ends_with(var->name, ".buffer")) return;
+
         // Is it a pure argument?
         for (size_t i = 0; i < pure_args.size(); i++) {
             if (var->name == pure_args[i]) return;

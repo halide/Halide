@@ -808,21 +808,7 @@ public:
     using IRGraphVisitor::visit;
 
     void visit(const Call *op) {
-
-        if (op->call_type == Call::Extern) {
-            // Check if we are passing a variable tagged with ".buffer" to an
-            // extern call node, directly. If so, don't attempt to track access
-            // to the buffer.
-            for (int i = 0; i != op->args.size(); ++i) {
-                const Variable *buffer_var = op->args[i].as<Variable>();
-                if (buffer_var && ends_with(buffer_var->name, ".buffer")) {
-                    continue;
-                }
-                include(op->args[i]);
-            }
-        } else {
-            IRGraphVisitor::visit(op);
-        }
+        IRGraphVisitor::visit(op);
         if (op->image.defined()) {
             Result r;
             r.image = op->image;

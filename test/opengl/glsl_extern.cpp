@@ -40,16 +40,19 @@ Expr texture2D(ImageT input, Expr x, Expr y) {
 
     // We want to pass the image itself to the extern call texture2D.
     // Internally, Halide will give this entity a name tagged with the string
-    // ".buffer". Here we create a variable with a parameter using the name of
-    // the provided image.
-    Type type = Buffer(input).type();
-    Parameter param(type, true, 4, name);
-    param.set_buffer(input);
-
+    // ".buffer". Here we create a variable with a buffer using the name of
+    // the provided image. In the case below, where the image is not used
+    // elsewhere in the Halide Func, passing the image as the third parameter to
+    // Variable::make sets up the variable as an argument to the Halide Func.
     Expr v = Variable::make(Handle(),
                             name + ".buffer",
-                            param);
+                            input);
 
+    // The return type for the call is set to Float(32,4) because the GLSL
+    // builtin function returns a vec4 value. In the Halide Func definiton we
+    // will extract a single channel from this expression using the
+    // shuffle_vector Halide intrinisic. In the case that the schedule is
+    // vectorized, the shuffle intrinsic may be dropped by the compiler.
     return Call::make(Float(32, 4),
                       "texture2D",
                       vec<Expr>(v, vec2(x, y)),

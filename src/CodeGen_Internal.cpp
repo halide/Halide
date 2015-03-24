@@ -86,7 +86,7 @@ void Closure::visit(const Variable *op) {
             std::string name = op->name.substr(0, op->name.length()-7);
             debug(3) << "Adding buffer " << name << " to closure\n";
             BufferRef &ref = buffers[name];
-            ref.type = op->param.type();
+            ref.type = op->image.type();
             ref.read = true;
         } else {
             // Otherwise, add the Variable to the closure as a scalar
