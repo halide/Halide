@@ -310,6 +310,15 @@ private:
         }
     }
 
+    void visit(const Call *op) {
+        // Ignore likely intrinsics
+        if (op->name == Call::likely && op->call_type == Call::Intrinsic) {
+            expr = mutate(op->args[0]);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     template<typename T>
     void visit_commutative_op(const T *op) {
         bool old_uses_var = uses_var;

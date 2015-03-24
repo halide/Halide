@@ -150,6 +150,11 @@ private:
                 return max_lane(bound_vars.get(v->name));
             }
         }
+        if (const Call *c = e.as<Call>()) {
+            if (c->name == Call::likely && c->call_type == Call::Intrinsic) {
+                return max_lane(c->args[0]);
+            }
+        }
         return Expr();
     }
 
@@ -170,6 +175,11 @@ private:
                 return min_lane(bound_vars.get(v->name));
             }
         }
+        if (const Call *c = e.as<Call>()) {
+            if (c->name == Call::likely && c->call_type == Call::Intrinsic) {
+                return min_lane(c->args[0]);
+            }
+        }
         return Expr();
     }
 
@@ -180,7 +190,6 @@ private:
             // branch of any selects or mins we're in is the
             // steady-state one.
             likely = true;
-            expr = expr.as<Call>()->args[0];
         }
     }
 
@@ -741,7 +750,7 @@ class PartitionLoops : public IRMutator {
         Stmt body = mutate(op->body);
 
         // Conservatively only apply this optimization at one loop
-        // level.
+        // level. Comment this out to allow full expansion.
         if (!body.same_as(op->body)) {
             stmt = For::make(op->name, op->min, op->extent,
                              op->for_type, op->device_api, body);
