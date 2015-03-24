@@ -243,6 +243,50 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Check recursive merging of branches does not change result.
+    {
+        ImageParam input(UInt(8), 4, "input");
+
+        Expr ch = input.extent(2);
+        Func f("f");
+        f(x, y, c) = select(ch == 1,
+                            select(c < 3, input(x, y, 0, 0), 255),
+                            select(c < ch, input(x, y, min(c, ch-1), 0), 255));
+
+        f.bound(c, 0, 4);
+
+        int xn = 16;
+        int yn = 8;
+        int cn = 3;
+        int wn = 2;
+
+        Image<uint8_t> in(xn, yn, cn, wn);
+        for (int x = 0; x < xn; ++x) {
+            for (int y = 0; y < yn; ++y) {
+                for (int c = 0; c < cn; ++c) {
+                    for (int w = 0; w < wn; ++w) {
+                        in(x, y, c, w) = x + y + c + w;
+                    }
+                }
+            }
+        }
+        input.set(in);
+
+        Image<uint8_t> f_result = f.realize(xn, yn, 4);
+        for (int x = 0; x < f_result.width(); x++) {
+            for (int y = 0; y < f_result.height(); y++) {
+                for (int c = 0; c < f_result.channels(); c++) {
+                    int correct = (c < cn ? x + y + c : 255);
+                    if (f_result(x, y, c) != correct) {
+                        printf("f_result(%d, %d, %d) = %d instead of %d\n",
+                               x, y, c, f_result(x, y, c), correct);
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

@@ -145,7 +145,7 @@ int main(int argc, char **argv) {
         f.set_custom_print(halide_print);
         Image<float> imf = f.realize(N);
 
-        assert(messages.size() == N);
+        assert(messages.size() == (size_t)N);
 
         char correct[1024];
         for (int i = 0; i < N; i++) {
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
         g.set_custom_print(halide_print);
         Image<double> img = g.realize(N);
 
-        assert(messages.size() == N);
+        assert(messages.size() == (size_t)N);
 
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%e\n", img(i));
