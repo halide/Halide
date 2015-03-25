@@ -214,6 +214,7 @@ FILTERS_DIR = $(BUILD_DIR)/filters
 
 SOURCE_FILES = \
   AllocationBoundsInference.cpp \
+  AutomaticScheduling.cpp \
   BlockFlattening.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -284,7 +285,6 @@ SOURCE_FILES = \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
   Schedule.cpp \
-  ScheduleOptimizationLevels.cpp \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -309,6 +309,7 @@ SOURCE_FILES = \
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
   AllocationBoundsInference.h \
+  AutomaticScheduling.h \
   Argument.h \
   BlockFlattening.h \
   BoundaryConditions.h \
@@ -385,7 +386,6 @@ HEADER_FILES = \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
   Schedule.h \
-  ScheduleOptimizationLevels.h \
   Scope.h \
   Simplify.h \
   SkipStages.h \

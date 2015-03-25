@@ -1,8 +1,8 @@
+#include "AutomaticScheduling.h"
 #include "Bounds.h"
 #include "Expr.h"
 #include "FindCalls.h"
 #include "Schedule.h"
-#include "ScheduleOptimizationLevels.h"
 #include "Simplify.h"
 #include <map>
 #include <set>

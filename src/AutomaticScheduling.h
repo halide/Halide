@@ -1,8 +1,8 @@
-#ifndef HALIDE_SCHEDULE_OPTIMIZATION_LEVELS_H
-#define HALIDE_SCHEDULE_OPTIMIZATION_LEVELS_H
+#ifndef HALIDE_AUTOMATIC_SCHEDULING_H
+#define HALIDE_AUTOMATIC_SCHEDULING_H
 
 /** \file
- * Defines the various optimization levels for scheduling.
+ * Defines various automatic scheduling routines.
  */
 
 #include "Func.h"

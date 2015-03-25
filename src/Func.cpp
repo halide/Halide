@@ -24,7 +24,7 @@
 #include "IREquality.h"
 #include "HumanReadableStmt.h"
 #include "StmtToHtml.h"
-#include "ScheduleOptimizationLevels.h"
+#include "AutomaticScheduling.h"
 
 namespace Halide {
 
