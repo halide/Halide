@@ -898,7 +898,6 @@ class PartitionLoops : public IRMutator {
         }
     }
 };
-}
 
 // Remove any remaining 'likely' intrinsics. There may be some left
 // behind if we didn't successfully simplify something.
@@ -914,6 +913,8 @@ class RemoveLikelyTags : public IRMutator {
         }
     }
 };
+
+}
 
 Stmt partition_loops(Stmt s) {
     s = PartitionLoops().mutate(s);
