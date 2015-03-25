@@ -114,12 +114,14 @@ private:
     }
 
     void transitive_calls_helper(Function f, vector<Function> &result, set<string> &visited) {
-        if (visited.find(f.name()) != visited.end()) return;
         visited.insert(f.name());
         const vector<Function> &dir_calls = calls(f);
-        result.insert(result.end(), dir_calls.begin(), dir_calls.end());
         for (vector<Function>::const_iterator I = dir_calls.begin(), E = dir_calls.end(); I != E; ++I) {
-            transitive_calls_helper(*I, result, visited);
+            Function call = *I;
+            if (visited.find(call.name()) == visited.end()) {
+                result.push_back(call);
+                transitive_calls_helper(call, result, visited);
+            }
         }
     }
 };
