@@ -833,7 +833,6 @@ class PartitionLoops : public IRMutator {
                 if (make_prologue) {
                     Stmt prologue = For::make(op->name, op->min, min_steady - op->min,
                                               op->for_type, op->device_api, body);
-                    //prologue = simplify_prologue.mutate(prologue);
                     prologue = f.simplify_prologue(prologue);
                     new_loop = Block::make(prologue, new_loop);
                 }
@@ -841,7 +840,6 @@ class PartitionLoops : public IRMutator {
                 if (make_epilogue) {
                     Stmt epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
                                               op->for_type, op->device_api, body);
-                    // epilogue = simplify_epilogue.mutate(epilogue);
                     epilogue = f.simplify_epilogue(epilogue);
                     new_loop = Block::make(new_loop, epilogue);
                 }
