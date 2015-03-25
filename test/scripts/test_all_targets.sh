@@ -18,9 +18,9 @@ mkdir -p testing/deps
 if [[ ! -f testing/deps/libpng32.a ]]; then
     cd testing/deps
     echo Acquiring and building libpng
-    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.14/lpng1614.zip/download -o lpng1614.zip || exit 1
-    unzip -n lpng1614.zip
-    cd lpng1614
+    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.16/lpng1616.zip/download -o lpng1616.zip || exit 1
+    unzip -n lpng1616.zip
+    cd lpng1616
     if [[ `uname` == Darwin ]]; then
         make -f scripts/makefile.darwin clean
         make -f scripts/makefile.darwin ARCH="-arch i386 -arch x86_64" || exit 1
@@ -91,8 +91,8 @@ ln -s ${HEAD} testing/reports/head
 for LLVM in ${LLVMS}; do
 
     if [[ "$LLVM" == pnacl ]]; then
-        LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
-        CLANG_REPO=http://git.chromium.org/native_client/pnacl-clang.git
+        LLVM_REPO=https://chromium.googlesource.com/native_client/pnacl-llvm.git
+        CLANG_REPO=https://chromium.googlesource.com/native_client/pnacl-clang.git
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == trunk ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
