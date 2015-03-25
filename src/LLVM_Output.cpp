@@ -87,7 +87,11 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
+    #if WITH_NATIVE_CLIENT
+    options.UseInitArray = true;
+    #else
     options.UseInitArray = false;
+    #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
 }
