@@ -588,8 +588,17 @@ class PartitionLoops : public IRMutator {
 
         Stmt body = mutate(op->body);
 
-        // Conservatively only apply this optimization at one loop
-        // level. Comment this out to allow full expansion.
+        // We conservatively only apply this optimization at one loop
+        // level, which limits the expansion in code size to a factor
+        // of 3.  Comment out the check below to allow full expansion
+        // into 3^n cases for n loop levels.
+        //
+        // Another strategy is to not recursively call mutate on the
+        // body in the line above, but instead recursively call mutate
+        // only on simpler_body below. This results in a 2*n + 1
+        // expansion factor. Testing didn't reveal either of these
+        // strategies to be a performance win, so we'll just expand
+        // once.
         if (!body.same_as(op->body)) {
             stmt = For::make(op->name, op->min, op->extent,
                              op->for_type, op->device_api, body);
