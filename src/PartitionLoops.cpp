@@ -581,172 +581,6 @@ private:
     }
 };
 
-// Aggressively simplify an expression given bounds on a particular
-// variable. Used to simplify the prologue and epilogue.
-class BoundsBasedSimplify : public IRMutator {
-    Scope<Interval> scope;
-
-    using IRMutator::visit;
-
-    void visit_min_or_max(Expr e, Expr orig_a, Expr orig_b, bool is_min) {
-        Expr a = mutate(orig_a);
-        Expr b = mutate(orig_b);
-
-        Interval ia = bounds_of_expr_in_scope(a, scope);
-        Interval ib = bounds_of_expr_in_scope(b, scope);
-
-        bool depends_on_loop_var =
-            !ia.max.same_as(ia.min) ||
-            !ib.max.same_as(ib.min);
-
-        Expr use_b = ia.min >= ib.max;
-        Expr use_a = ia.max <= ib.min;
-        if (!is_min) {
-            std::swap(use_a, use_b);
-        }
-
-        if (depends_on_loop_var && is_one(simplify(use_a))) {
-            expr = a;
-        } else if (depends_on_loop_var && is_one(simplify(use_b))) {
-            expr = b;
-        } else if (a.same_as(orig_a) && b.same_as(orig_b)) {
-            expr = e;
-        } else if (is_min) {
-            expr = Min::make(a, b);
-        } else {
-            expr = Max::make(a, b);
-        }
-    }
-
-    void visit(const Min *op) {
-        if (op->type != Int(32)) {
-            IRMutator::visit(op);
-            return;
-        }
-
-        visit_min_or_max(op, op->a, op->b, true);
-    }
-
-    void visit(const Max *op) {
-        if (op->type != Int(32)) {
-            IRMutator::visit(op);
-            return;
-        }
-
-        visit_min_or_max(op, op->a, op->b, false);
-    }
-
-    void visit_cmp(Expr e, Expr orig_a, Expr orig_b) {
-        const LT *lt = e.as<LT>();
-        const LE *le = e.as<LE>();
-        const GT *gt = e.as<GT>();
-        const GE *ge = e.as<GE>();
-        internal_assert(lt || le || gt || ge);
-
-        if (orig_a.type() != Int(32)) {
-            if (lt) IRMutator::visit(lt);
-            else if (le) IRMutator::visit(le);
-            else if (gt) IRMutator::visit(gt);
-            else if (ge) IRMutator::visit(ge);
-            return;
-        }
-
-        Expr a = mutate(orig_a), b = mutate(orig_b);
-        Interval ia = bounds_of_expr_in_scope(a, scope);
-        Interval ib = bounds_of_expr_in_scope(b, scope);
-
-        bool depends_on_loop_var =
-            !ia.max.same_as(ia.min) ||
-            !ib.max.same_as(ib.min);
-
-        Expr is_true;
-        Expr is_false;
-
-        if (lt) {
-            is_true = ia.max < ib.min;
-            is_false = ia.min >= ib.max;
-        } else if (le) {
-            is_true = ia.max <= ib.min;
-            is_false = ia.min > ib.max;
-        } else if (gt) {
-            is_true = ia.min > ib.max;
-            is_false = ia.max <= ib.min;
-        } else if (ge) {
-            is_true = ia.min >= ib.max;
-            is_false = ia.max < ib.min;
-        }
-
-        internal_assert(is_true.defined() && is_false.defined());
-
-        if (depends_on_loop_var && is_one(simplify(is_true))) {
-            expr = const_true();
-        } else if (depends_on_loop_var && is_one(simplify(is_false))) {
-            expr = const_false();
-        } else if (a.same_as(orig_a) && b.same_as(orig_b)) {
-            expr = e;
-        } else if (lt) {
-            expr = LT::make(a, b);
-        } else if (le) {
-            expr = LE::make(a, b);
-        } else if (gt) {
-            expr = GT::make(a, b);
-        } else if (ge) {
-            expr = GE::make(a, b);
-        }
-
-    }
-
-    void visit(const LT *op) {
-        visit_cmp(op, op->a, op->b);
-    }
-
-    void visit(const LE *op) {
-        visit_cmp(op, op->a, op->b);
-    }
-
-    void visit(const GT *op) {
-        visit_cmp(op, op->a, op->b);
-    }
-
-    void visit(const GE *op) {
-        visit_cmp(op, op->a, op->b);
-    }
-
-    template<typename LetOrLetStmt, typename StmtOrExpr>
-    void visit_let(const LetOrLetStmt *op, StmtOrExpr &result) {
-        Expr value = mutate(op->value);
-
-        StmtOrExpr body;
-        if (value.type() == Int(32)) {
-            Interval i = bounds_of_expr_in_scope(op->value, scope);
-            scope.push(op->name, i);
-            body = mutate(op->body);
-            scope.pop(op->name);
-        } else {
-            body = mutate(op->body);
-        }
-
-        if (value.same_as(op->value) && body.same_as(op->body)) {
-            result = op;
-        } else {
-            result = LetOrLetStmt::make(op->name, value, body);
-        }
-    }
-
-    void visit(const Let *op) {
-        visit_let(op, expr);
-    }
-
-    void visit(const LetStmt *op) {
-        visit_let(op, stmt);
-    }
-
-public:
-    BoundsBasedSimplify(const string &loop_var, Expr min, Expr max) {
-        scope.push(loop_var, Interval(min, max));
-    }
-};
-
 class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
@@ -777,25 +611,6 @@ class PartitionLoops : public IRMutator {
 
             // Accrue a stack of let statements defining the steady state start and end.
             vector<pair<string, Expr> > lets;
-
-            // The steady state was simplified by
-            // FindSteadyState. It's not safe to simplify the prologue
-            // and epilogue at the same time - FindSteadyState uses
-            // already found simplifications to make new ones,
-            // including potentially using a simplification of the
-            // prologue end to assist the epilogue start. Instead we
-            // do a bounds-based simplification of the prologue and
-            // epilogue as a later pass.
-            //
-            // Note that the bounds we use are actually slightly
-            // conservative. E.g. we claim the prologue can run up
-            // till min_steady, where it actually runs to
-            // clamp(min_steady, loop_min, loop_max). Fortunately, the
-            // case where our bound is incorrect is the case where the
-            // prologue or epilogue have extent zero, so the incorrect
-            // simplification doesn't matter.
-            BoundsBasedSimplify simplify_prologue(op->name, op->min, min_steady.defined() ? min_steady - 1 : Expr());
-            BoundsBasedSimplify simplify_epilogue(op->name, max_steady, op->min + op->extent - 1);
 
             if (make_prologue) {
                 // Clamp the prologue end to within the existing loop bounds,
@@ -852,7 +667,6 @@ class PartitionLoops : public IRMutator {
                 // above. Could be a big win on the GPU (generating
                 // separate kernels for the nasty cases near the
                 // boundaries).
-                //
                 //
                 // Rather than having a three-way if for prologue,
                 // steady state, or epilogue, we have a two-way if
