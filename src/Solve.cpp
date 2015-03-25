@@ -13,6 +13,8 @@ using std::map;
 using std::pair;
 using std::make_pair;
 
+namespace {
+
 /** A mutator that moves all instances of a free variable as far left
  * and as far outermost as possible. See the test cases at the bottom
  * of this file.
@@ -524,6 +526,8 @@ private:
 
 };
 
+} // Anonymous namespace
+
 Expr solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
     SolveExpression solver(variable, scope);
     e = solver.mutate(e);
@@ -535,11 +539,14 @@ Expr solve_expression(Expr e, const std::string &variable, const Scope<Expr> &sc
     }
 }
 
+namespace {
 
 // Testing code
 void check(Expr a, Expr b) {
     Expr c = solve_expression(a, "x");
     internal_assert(equal(c, b)) << "Expression: " << a << "\n solved to " << c << "\n instead of " << b << "\n";
+}
+
 }
 
 void solve_test() {
