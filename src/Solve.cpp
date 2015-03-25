@@ -505,7 +505,8 @@ private:
         } else if (external_scope.contains(op->name)) {
             Expr e = external_scope.get(op->name);
             // Expressions in the external scope haven't been solved
-            // yet.
+            // yet. This will either pull its solution from the cache,
+            // or solve it and then put it into the cache.
             expr = mutate(e);
         } else {
             expr = op;
