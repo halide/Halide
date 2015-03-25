@@ -128,8 +128,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y"), c("c"), k("k");
 
-    Func clamped("clamped");
-    clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     // For downscaling, widen the interpolation kernel to perform lowpass
     // filtering.

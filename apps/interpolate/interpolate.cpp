@@ -41,8 +41,7 @@ int main(int argc, char **argv) {
     Func upsampledx[levels];
     Var x("x"), y("y"), c("c");
 
-    Func clamped;
-    clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     // This triggers a bug in llvm 3.3 (3.2 and trunk are fine), so we
     // rewrite it in a way that doesn't trigger the bug. The rewritten

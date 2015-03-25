@@ -23,9 +23,7 @@ int main(int argc, char **argv) {
         Param<int> mouse_x, mouse_y;
 
         // Add a boundary condition.
-        Func clamped;
-        clamped(x, y, c) = state(clamp(x, state.left(), state.right()),
-                                 clamp(y, state.top(), state.bottom()), c);
+        Func clamped = BoundaryConditions::repeat_edge(state);
 
         Expr xm = max(x-1, 0), xp = min(x+1, state.width()-1);
         Expr ym = max(y-1, 0), yp = min(y+1, state.height()-1);
