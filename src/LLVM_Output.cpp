@@ -44,7 +44,7 @@ bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
 }
 
 bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
-    #if LLVM_VERSION < 36 || defined(WITH_NATIVE_CLIENT)
+    #if LLVM_VERSION < 36
     if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
         result = "";
         return true;
@@ -118,7 +118,7 @@ void clone_target_options(const llvm::Module *from, llvm::Module *to) {
 
     std::string mattrs;
     if (Internal::get_md_string(from->getModuleFlag("halide_mattrs"), mattrs)) {
-        #if LLVM_VERSION < 36 || defined(WITH_NATIVE_CLIENT)
+        #if LLVM_VERSION < 36
         to->addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::ConstantDataArray::getString(context, mattrs));
         #else
         to->addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
