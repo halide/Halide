@@ -5,52 +5,67 @@
  * Defines various automatic scheduling routines.
  */
 
-#include "Func.h"
 #include "IR.h"
 
 namespace Halide {
+
+class Func;
+
+typedef enum {
+    ComputeRootAllStencils,
+    InlineAllPointwise,
+    ParallelizeOuter,
+    VectorizeInner
+} AutoScheduleStrategy;
+
 namespace Internal {
 
-class ScheduleOptimization {
+/** Base class for all automatic scheduling strategy implementations. */  
+class AutoScheduleStrategyImpl {
 public:
-    /** Level of optimization. */
-    typedef enum { LEVEL_0, LEVEL_1, LEVEL_2 } Level;
-    /** Apply the schedule optimization to the pipeline. 'func' should
+    /** Apply the schedule strategy to the pipeline. 'func' should
      * be the output of the pipeline. */
-    virtual void apply(Func func) = 0;
+    virtual void apply(Func root) = 0;
 };
 
-/** Optimization level 0 does nothing. */
-class OptimizationLevel0 : public ScheduleOptimization {
-public:
-    virtual void apply(Func func) { }
-};
-
-/** Optimization level 1 performs the following simple optimization:
- * - Functions with a single callsite are inlined.
+/** Performs the following pipeline optimization:
  * - Functions called as a stencil are compute_root.
  */
-class OptimizationLevel1 : public ScheduleOptimization {
+class ComputeRootAllStencils : public AutoScheduleStrategyImpl {
 public:
-    virtual void apply(Func func);
+    virtual void apply(Func root);
 };
 
-/** Optimization level 2 performs the following optimization:
- * - Run optimization level 1.
- * - For all compute_root functions, vectorize the innermost dimension
- *   and parallelize the outermost dimension.
+/** Performs the following pipeline optimization:
+ * - Functions with a single callsite are inlined.
  */
-class OptimizationLevel2 : public ScheduleOptimization {
+class InlineAllPointwise : public AutoScheduleStrategyImpl {
 public:
-    virtual void apply(Func func);
+    virtual void apply(Func root);
+};
+
+/** Performs the following pipeline optimization:
+ * - Parallelize the outermost dimension of all non-inlined functions.
+ */
+class ParallelizeOuter : public AutoScheduleStrategyImpl {
+public:
+    virtual void apply(Func root);
 private:
     void parallelize_outer(Function f);
     void vectorize_inner(Function f);
 };
 
-/** Apply schedule optimizations, controled by the HL_SCHED_OPT
- * environment variable. */
-void apply_schedule_optimization(Func func);
+/** Performs the following pipeline optimization:
+ * - Vectorize the innermost dimension of all non-inlined functions.
+ */
+class VectorizeInner : public AutoScheduleStrategyImpl {
+public:
+    virtual void apply(Func root);
+};
+
+/** Apply the given schedule strategy to the pipeline with output
+ * 'root'. */
+EXPORT void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy);
 
 }
 }

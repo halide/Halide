@@ -16,6 +16,7 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "AutomaticScheduling.h"
 
 namespace Halide {
 
@@ -969,6 +970,10 @@ public:
     EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const;
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
     // @}
+
+    /** Apply an automatic schedule to the pipeline with this function
+        as the output. */
+    EXPORT Func &auto_schedule(AutoScheduleStrategy strategy);
 
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to

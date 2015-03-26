@@ -2,6 +2,7 @@
 #include "Bounds.h"
 #include "Expr.h"
 #include "FindCalls.h"
+#include "Func.h"
 #include "Schedule.h"
 #include "Simplify.h"
 #include <map>
@@ -20,37 +21,6 @@ using std::map;
 namespace {
 
 const unsigned UNDEFINED_FOOTPRINT_SIZE = ~0U;
-
-/** Return the optimization level controlled by HL_SCHED_OPT
- * environment variable. */
-ScheduleOptimization::Level get_optimization_level() {
-    char *level = getenv("HL_SCHED_OPT");
-    int i = level ? atoi(level) : 0;
-    switch (i) {
-    case 0:
-        return ScheduleOptimization::LEVEL_0;
-    case 1:
-        return ScheduleOptimization::LEVEL_1;
-    case 2:
-        return ScheduleOptimization::LEVEL_2;
-    default:
-        internal_assert(false);
-        return ScheduleOptimization::LEVEL_0;
-    }
-}
-
-/** Return the optimization corresponding to the given level. */
-ScheduleOptimization *get_optimization(ScheduleOptimization::Level level) {
-    switch (level) {
-    case ScheduleOptimization::LEVEL_0:
-        return new OptimizationLevel0();
-    case ScheduleOptimization::LEVEL_1:
-        return new OptimizationLevel1();
-    case ScheduleOptimization::LEVEL_2:
-        return new OptimizationLevel2();
-    }
-    return NULL;
-}
 
 /** Convenience class representing the callgraph for a pipeline. */
 class CallGraph {
@@ -230,64 +200,85 @@ unsigned calculate_footprint_size(Function f, CallGraph &cg) {
 
 } // end anonymous namespace
 
-
-void OptimizationLevel1::apply(Func func) {
-    Function root = func.function();
-    // Reset all user-specified schedules.
-    ResetSchedules reset(root);
+void InlineAllPointwise::apply(Func root) {
     // Construct a callgraph for the pipeline.
-    CallGraph cg(root);
-    vector<Function> all_functions = cg.transitive_calls(root);
+    CallGraph cg(root.function());
+    vector<Function> all_functions = cg.transitive_calls(root.function());
     for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
         Function f = *I;
-        Func wrapper(f);
         unsigned footprint = calculate_footprint_size(f, cg);
         if (footprint == 1) {
+            Func wrapper(f);
             wrapper.compute_inline();
-        } else {
+        }
+    }
+}
+
+void ComputeRootAllStencils::apply(Func root) {
+    // Construct a callgraph for the pipeline.
+    CallGraph cg(root.function());
+    vector<Function> all_functions = cg.transitive_calls(root.function());
+    for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
+        Function f = *I;
+        unsigned footprint = calculate_footprint_size(f, cg);
+        if (footprint > 1) {
+            Func wrapper(f);
             wrapper.store_root().compute_root();
         }
     }
 }
 
-void OptimizationLevel2::apply(Func func) {
-    Function root = func.function();
-    OptimizationLevel1 *lvl1 = new OptimizationLevel1();
-    lvl1->apply(func);
-    // Construct a callgraph for the pipeline.
-    CallGraph cg(root);
-    vector<Function> all_functions = cg.transitive_calls(root);
-    parallelize_outer(root);
-    vectorize_inner(root);
+void ParallelizeOuter::apply(Func root) {
+    CallGraph cg(root.function());
+    vector<Function> all_functions = cg.transitive_calls(root.function());
+    all_functions.push_back(root.function());
     for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
         Function f = *I;
-        if (f.schedule().compute_level() == LoopLevel::root()) {
-            parallelize_outer(f);
-            vectorize_inner(f);
+        if (!f.schedule().compute_level().is_inline()) {
+            Func wrapper(f);
+            Dim outer = f.schedule().dims()[f.schedule().dims().size() - 1];
+            Var v(outer.var);
+            wrapper.parallel(v);
         }
     }
 }
 
-void OptimizationLevel2::parallelize_outer(Function f) {
-    Func wrapper(f);
-    Dim outer = f.schedule().dims()[f.schedule().dims().size() - 1];
-    Var v(outer.var);
-    wrapper.parallel(v);
+void VectorizeInner::apply(Func root) {
+    CallGraph cg(root.function());
+    vector<Function> all_functions = cg.transitive_calls(root.function());
+    all_functions.push_back(root.function());
+    for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
+        Function f = *I;
+        if (!f.schedule().compute_level().is_inline()) {
+            Func wrapper(f);
+            Dim inner = f.schedule().dims()[0];
+            Var v(inner.var);
+            unsigned factor = 128 / f.output_types()[0].bits;
+            wrapper.vectorize(v, factor);
+        }
+    }
 }
 
-void OptimizationLevel2::vectorize_inner(Function f) {
-    Func wrapper(f);
-    Dim inner = f.schedule().dims()[0];
-    Var v(inner.var);
-    unsigned factor = 128 / f.output_types()[0].bits;
-    wrapper.vectorize(v, factor);
-}
-
-void apply_schedule_optimization(Func func) {
-    ScheduleOptimization::Level level = get_optimization_level();
-    ScheduleOptimization *opt = get_optimization(level);
-    internal_assert(opt);
-    opt->apply(func);
+void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy) {
+    AutoScheduleStrategyImpl *impl = NULL;
+    switch (strategy) {
+    case AutoScheduleStrategy::ComputeRootAllStencils:
+        impl = new ComputeRootAllStencils();
+        break;
+    case AutoScheduleStrategy::InlineAllPointwise:
+        impl = new InlineAllPointwise();
+        break;
+    case AutoScheduleStrategy::ParallelizeOuter:
+        impl = new ParallelizeOuter();
+        break;
+    case AutoScheduleStrategy::VectorizeInner:
+        impl = new VectorizeInner();
+        break;
+    }
+    internal_assert(impl != NULL);
+    // Reset all user-specified schedules.
+    ResetSchedules reset(root.function());
+    impl->apply(root);
 }
 
 }

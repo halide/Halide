@@ -24,7 +24,6 @@
 #include "IREquality.h"
 #include "HumanReadableStmt.h"
 #include "StmtToHtml.h"
-#include "AutomaticScheduling.h"
 
 namespace Halide {
 
@@ -992,6 +991,12 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     parallel(tx);
     parallel(ty);
     parallel(tz);
+    return *this;
+}
+
+Func &Func::auto_schedule(AutoScheduleStrategy strategy) {
+    invalidate_cache();
+    apply_automatic_schedule(*this, strategy);
     return *this;
 }
 
@@ -2042,8 +2047,6 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
     args = add_user_context_arg(args, target);
-
-    apply_schedule_optimization(*this);
 
     lower(target);
 
