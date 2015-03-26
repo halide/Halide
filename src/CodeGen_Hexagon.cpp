@@ -344,7 +344,219 @@ llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
   }
   return NULL;
 }
+
+// Attempt to cast an expression to a smaller type while provably not
+// losing information. If it can't be done, return an undefined Expr.
+
+Expr lossless_cast(Type t, Expr e) {
+    if (t == e.type()) {
+        return e;
+    } else if (t.can_represent(e.type())) {
+        return cast(t, e);
+    }
+
+    if (const Cast *c = e.as<Cast>()) {
+        if (t == c->value.type()) {
+            return c->value;
+        } else {
+            return lossless_cast(t, c->value);
+        }
+    }
+
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        Expr v = lossless_cast(t.element_of(), b->value);
+        if (v.defined()) {
+            return Broadcast::make(v, b->width);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const IntImm *i = e.as<IntImm>()) {
+        int x = int_cast_constant(t, i->value);
+        if (x == i->value) {
+            return cast(t, e);
+        } else {
+            return Expr();
+        }
+    }
+
+    return Expr();
+}
+bool checkVMPAVectorLoadPair(const Load *LoadA, const Load*LoadC) {
+  if (!LoadA || !LoadC)
+    return false;
+  debug(4) << "**checkVMPAVectorLoadPair**\n";
+  debug(4) << "LoadA = " << LoadA->name << "[" << LoadA->index << "]\n";
+  debug(4) << "LoadC = " << LoadC->name << "[" << LoadC->index << "]\n";
+  const Ramp *RampA = LoadA->index.as<Ramp>();
+  const Ramp *RampC = LoadC->index.as<Ramp>();
+  if (!RampA  || !RampC) {
+    debug(4) << "checkVMPAVectorLoadPair: Not both Ramps\n";
+    return false;
+  }
+  const IntImm *StrideA = RampA->stride.as<IntImm>();
+  const IntImm *StrideC = RampC->stride.as<IntImm>();
+
+  if (StrideA->value != 2 || StrideC->value != 2) {
+    debug(4) << "checkVMPAVectorLoadPair: Not all strides are 2\n";
+    return false;
+  }
+
+  if (RampA->width != 64 || RampC->width != 64) {
+      debug(4) << "checkVMPAVectorLoadPair: Not all widths are 64\n";
+      return false;
+  }
+
+  Expr BaseA = RampA->base;
+  Expr BaseC = RampC->base;
+
+  Expr DiffCA = simplify(BaseC - BaseA);
+  debug (4) << "checkVMPAVectorLoadPair: BaseA = " << BaseA << "\n";
+  debug (4) << "checkVMPAVectorLoadPair: BaseC = " << BaseC << "\n";
+  debug (4) << "checkVMPAVectorLoadPair: DiffCA = " << DiffCA << "\n";
+  if (is_one(DiffCA))
+    return true;
+  return false;
+}
+bool checkVMPAOperandCombinations(vector<Expr> &matches) {
+  internal_assert(matches.size() == 4);
+  // We accept only two combinations for now.
+  // All four vector loads.
+  // Two vector loads and two broadcasts.
+  // Check if all four are loads
+  int I;
+  debug(4) << "**checkVMPAOperandCombinations**\n";
+  for (I = 0; I < 4; ++I)
+    debug(4) << "matches[" << I << "] = " << matches[I] << "\n";
+
+  const Load *LoadA = matches[0].as<Load>();
+  const Load *LoadB = matches[1].as<Load>();
+  const Load *LoadC = matches[2].as<Load>();
+  const Load *LoadD = matches[3].as<Load>();
+  if (LoadA && LoadB && LoadC && LoadD) {
+    if (((LoadA->name != LoadC->name) && (LoadA->name != LoadD->name)) ||
+        ((LoadB->name != LoadC->name) && (LoadB->name != LoadD->name))) {
+      debug(4) <<
+        "checkVMPAOperandCombinations: All 4 loads, but not exactly"
+        " two pairs of arrays\n";
+      return false;
+    }
+    if (LoadA->name == LoadD->name){
+      std::swap(matches[2], matches[3]);
+      std::swap(LoadC, LoadD);
+    }
+    return checkVMPAVectorLoadPair(LoadA, LoadC) &&
+      checkVMPAVectorLoadPair(LoadB, LoadD);
+  } else {
+    // Theoretically we can deal with all of them not being vector loads
+    // (Hint: Think 4 broadcasts), but this is rare, so now we will deal
+    // only with 2 broadcasts and 2 loads to catch this case for example
+    // 3*f(2x) + 7*f(2x+1);
+    const Load *InterleavedLoad1, *InterleavedLoad2;
+    if (!LoadA && LoadB) {
+      const Broadcast *BroadcastA = matches[0].as<Broadcast>();
+      if (!BroadcastA) {
+        debug(4) << "checkVMPAOperandCombinations: A is neither a vector load"
+          " nor a broadcast\n";
+        return false;
+      }
+      InterleavedLoad1 = LoadB;
+    } else if (LoadA && !LoadB) {
+      const Broadcast *BroadcastB = matches[1].as<Broadcast>();
+      if (!BroadcastB) {
+        debug(4) << "checkVMPAOperandCombinations: B is neither a vector load"
+          " nor a broadcast\n";
+        return false;
+      }
+      InterleavedLoad1 = LoadA;
+      std::swap(matches[0], matches[1]);
+    }
+    if (!LoadC && LoadD) {
+      const Broadcast *BroadcastC = matches[2].as<Broadcast>();
+      if (!BroadcastC) {
+        debug(4) << "checkVMPAOperandCombinations: C is neither a vector load"
+          " nor a broadcast\n";
+        return false;
+      }
+      InterleavedLoad2 = LoadD;
+    } else if (LoadC && !LoadD) {
+      const Broadcast *BroadcastD = matches[3].as<Broadcast>();
+      if (!BroadcastD) {
+        debug(4) << "checkVMPAOperandCombinations: D is neither a vector load"
+          " nor a broadcast\n";
+        return false;
+      }
+      InterleavedLoad2 = LoadC;
+      std::swap(matches[2], matches[3]);
+    }
+    if (InterleavedLoad1->name != InterleavedLoad2->name)
+      return false;
+    // Todo: Should we be checking the broadcasts?
+    return checkVMPAVectorLoadPair(InterleavedLoad1, InterleavedLoad2);
+  }
+  return false;
+}
+bool CodeGen_Hexagon::shouldUseVMPA(const Add *op, std::vector<Value *> &LLVMValues){
+  Expr pattern;
+  // pattern = (cast(Int(16, 64), wild_u8x64) * cast(Int(16, 64), wild_u8x64)) +
+  //   (cast(Int(16, 64), wild_u8x64) * cast(Int(16, 64), wild_u8x64));
+  pattern = (wild_i16x64 * wild_i16x64) + (wild_i16x64 * wild_i16x64);
+  vector<Expr> matches;
+  if (expr_match(pattern, op, matches)) {
+    debug(4) << "Pattern matched\n";
+    internal_assert(matches.size() == 4);
+    matches[0] = lossless_cast(UInt(8, 64), matches[0]);
+    matches[1] = lossless_cast(UInt(8, 64), matches[1]);
+    matches[2] = lossless_cast(UInt(8, 64), matches[2]);
+    matches[3] = lossless_cast(UInt(8, 64), matches[3]);
+    if (!matches[0].defined() || !matches[1].defined() ||
+        !matches[2].defined() || !matches[3].defined())
+      return false;
+    if (!checkVMPAOperandCombinations(matches))
+      return false;
+
+    std::vector<Expr> vecA, vecB;
+    vecA.push_back(matches[0]);
+    vecA.push_back(matches[2]);
+    vecB.push_back(matches[1]);
+    vecB.push_back(matches[3]);
+    Value *a = interleave_vectors(Int(8, 128), vecA);
+    Value *b = interleave_vectors(Int(8, 128), vecB);
+    LLVMValues.push_back(a);
+    LLVMValues.push_back(b);
+    return true;
+  }
+  return false;
+}
 void CodeGen_Hexagon::visit(const Add *op) {
+  debug(4) << "HexagonCodegen: " << op->type << ", " << op->a << " + " << op->b << "\n";
+  std::vector<Value *>LLVMValues;
+  if (shouldUseVMPA(op, LLVMValues)) {
+    internal_assert (LLVMValues.size() == 2);
+    Value *Lt = LLVMValues[0];
+    Value *Rt = LLVMValues[1];
+    llvm::Function *F = Intrinsic::getDeclaration(module, Intrinsic::hexagon_V6_vmpabuuv);
+    llvm::FunctionType *FType = F->getFunctionType();
+    llvm::Type *T0 = FType->getParamType(0);
+    llvm::Type *T1 = FType->getParamType(1);
+    if (T0 != Lt->getType()) {
+      Lt = builder->CreateBitCast(Lt, T0);
+    }
+    if (T1 != Rt->getType())
+      Rt = builder->CreateBitCast(Rt, T1);
+
+    Halide::Type DestType = op->type;
+    llvm::Type *DestLLVMType = llvm_type_of(DestType);
+    Value *Call = builder->CreateCall2(F, Lt, Rt);
+    if (DestLLVMType != Call->getType())
+      value = builder->CreateBitCast(Call, DestLLVMType);
+    else
+      value = Call;
+    debug(4) << "Generating vmpa\n";
+    return;
+  }
+
   value = emitBinaryOp(op, varith);
   if (!value)
     CodeGen_Posix::visit(op);

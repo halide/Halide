@@ -58,6 +58,8 @@ protected:
     void visit(const Call *);
     /* // @} */
 
+    bool shouldUseVMPA(const Add *, std::vector<llvm::Value *> &);
+
     llvm::Value *emitBinaryOp(const BaseExprNode *op,
                               std::vector<Pattern> &Patterns);
     std::string mcpu() const;
