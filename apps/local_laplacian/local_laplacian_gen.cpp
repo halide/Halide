@@ -46,17 +46,16 @@ int main(int argc, char **argv) {
     Expr fx = cast<float>(x) / 256.0f;
     remap(x) = alpha*fx*exp(-fx*fx/2.0f);
 
+    // Set a boundary condition
+    Func clamped = BoundaryConditions::repeat_edge(input);
+
     // Convert to floating point
     Func floating;
-    floating(x, y, c) = cast<float>(input(x, y, c)) / 65535.0f;
-
-    // Set a boundary condition
-    Func clamped;
-    clamped(x, y, c) = floating(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    floating(x, y, c) = clamped(x, y, c) / 65535.0f;
 
     // Get the luminance channel
     Func gray;
-    gray(x, y) = 0.299f * clamped(x, y, 0) + 0.587f * clamped(x, y, 1) + 0.114f * clamped(x, y, 2);
+    gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
     // Make the processed Gaussian pyramid.
     Func gPyramid[J];
@@ -104,7 +103,7 @@ int main(int argc, char **argv) {
     // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
     Func color;
     float eps = 0.01f;
-    color(x, y, c) = outGPyramid[0](x, y) * (clamped(x, y, c)+eps) / (gray(x, y)+eps);
+    color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c)+eps) / (gray(x, y)+eps);
 
     Func output("local_laplacian");
     // Convert back to 16-bit
@@ -150,4 +149,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-
