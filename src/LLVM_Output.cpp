@@ -12,15 +12,15 @@ namespace Halide {
 
 llvm::raw_fd_ostream *new_raw_fd_ostream(const std::string &filename) {
     std::string error_string;
-#if LLVM_VERSION < 35
+    #if LLVM_VERSION < 35
     llvm::raw_fd_ostream *raw_out = new llvm::raw_fd_ostream(filename.c_str(), error_string);
-#elif LLVM_VERSION == 35
+    #elif LLVM_VERSION == 35
     llvm::raw_fd_ostream *raw_out = new llvm::raw_fd_ostream(filename.c_str(), error_string, llvm::sys::fs::F_None);
-#else // llvm 3.6
+    #else // llvm 3.6
     std::error_code err;
     llvm::raw_fd_ostream *raw_out = new llvm::raw_fd_ostream(filename.c_str(), err, llvm::sys::fs::F_None);
     if (err) error_string = err.message();
-#endif
+    #endif
     internal_assert(error_string.empty())
         << "Error opening output " << filename << ": " << error_string << "\n";
 
@@ -30,12 +30,12 @@ llvm::raw_fd_ostream *new_raw_fd_ostream(const std::string &filename) {
 namespace Internal {
 
 bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
-#if LLVM_VERSION < 36
+    #if LLVM_VERSION < 36 || defined(WITH_NATIVE_CLIENT)
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
-#else
+    #else
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
-#endif
+    #endif
     if (c) {
         result = !c->isZero();
         return true;
@@ -44,7 +44,7 @@ bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
 }
 
 bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
-#if LLVM_VERSION < 36
+    #if LLVM_VERSION < 36 || defined(WITH_NATIVE_CLIENT)
     if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
         result = "";
         return true;
@@ -54,13 +54,13 @@ bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
         result = c->getAsCString();
         return true;
     }
-#else
+    #else
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
         result = c->getString();
         return true;
     }
-#endif
+    #endif
     return false;
 }
 
@@ -87,7 +87,7 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
-    #if WITH_NATIVE_CLIENT
+    #ifdef WITH_NATIVE_CLIENT
     options.UseInitArray = true;
     #else
     options.UseInitArray = false;
@@ -108,20 +108,20 @@ void clone_target_options(const llvm::Module *from, llvm::Module *to) {
 
     std::string mcpu;
     if (Internal::get_md_string(from->getModuleFlag("halide_mcpu"), mcpu)) {
-#if LLVM_VERSION < 36
+        #if LLVM_VERSION < 36
         to->addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::ConstantDataArray::getString(context, mcpu));
-#else
+        #else
         to->addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
-#endif
+        #endif
     }
 
     std::string mattrs;
     if (Internal::get_md_string(from->getModuleFlag("halide_mattrs"), mattrs)) {
-#if LLVM_VERSION < 36
+        #if LLVM_VERSION < 36 || defined(WITH_NATIVE_CLIENT)
         to->addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::ConstantDataArray::getString(context, mattrs));
-#else
+        #else
         to->addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
-#endif
+        #endif
     }
 }
 
