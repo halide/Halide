@@ -75,6 +75,10 @@
 #include <llvm/IR/MDBuilder.h>
 #endif
 
+#if WITH_NATIVE_CLIENT
+#include <llvm/Transforms/NaCl.h>
+#endif
+
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(pop)
@@ -88,7 +92,7 @@
 #endif
 
 namespace Halide { namespace Internal {
-#if LLVM_VERSION >= 36
+#if (LLVM_VERSION >= 36) && !(WITH_NATIVE_CLIENT)
 typedef llvm::Metadata *LLVMMDNodeArgumentType;
 inline llvm::Metadata *value_as_metadata_type(llvm::Value *val) { return llvm::ValueAsMetadata::get(val); }
 #else

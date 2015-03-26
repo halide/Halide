@@ -22,7 +22,7 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 else
     BITS=64
-    # ptx and opencl fall into this category
+    # cuda (ptx) and opencl fall into this category
     export LD="ld"
     export CC="${CC} -m64"
     export CXX="${CXX} -m64"
@@ -48,7 +48,7 @@ COMMIT=`git rev-parse HEAD`
 mv distrib/halide.tgz distrib/halide_${HOST}_${BITS}_${LLVM}_${COMMIT}_${DATE}.tgz
 chmod a+r distrib/*
 
-if [ "$HL_TARGET" == ptx -a "$HOST" == Darwin ]; then
+if [ "$HL_TARGET" == cuda -a "$HOST" == Darwin ]; then
     echo "Halide builds but tests not run"
 elif [ "$HL_TARGET" == opencl -a "$HOST" == Darwin ]; then
     echo "Halide builds but tests not run"

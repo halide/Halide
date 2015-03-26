@@ -621,10 +621,7 @@ int main(int argc, char **argv) {
         // clamp-to-edge boundary condition:
 
         // First add the boundary condition.
-        Func clamped;
-        Expr x_clamped = clamp(x, 0, input.width()-1);
-        Expr y_clamped = clamp(y, 0, input.height()-1);
-        clamped(x, y) = input(x_clamped, y_clamped);
+        Func clamped = BoundaryConditions::repeat_edge(input);
 
         // Define a 5x5 box that starts at (-2, -2)
         RDom r(-2, 5, -2, 5);

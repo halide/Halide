@@ -50,11 +50,10 @@ public:
     }
 
     bool contains(const Expr &a, const Expr &b) const {
-        
         uint32_t h = hash(a, b);
         const Entry &e = entries[h];
         return ((a.same_as(e.a) && b.same_as(e.b)) ||
-                (a.same_as(e.b) && b.same_as(e.a)));       
+                (a.same_as(e.b) && b.same_as(e.a)));
     }
 
     void clear() {

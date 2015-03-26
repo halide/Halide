@@ -350,8 +350,13 @@ struct Call : public ExprNode<Call> {
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations
-    // (instead of IR nodes). These are matched by name.
-    EXPORT static const std::string debug_to_file,
+    // (instead of IR nodes). These are matched by name. Note that
+    // these are deliberately char* (rather than std::string) so that
+    // they can be referenced at static-initialization time without
+    // risking ambiguous initalization order; we use a typedef to simplify
+    // declaration.
+    typedef const char* const ConstString;
+    EXPORT static ConstString debug_to_file,
         shuffle_vector,
         interleave_vectors,
         reinterpret,
@@ -389,7 +394,8 @@ struct Call : public ExprNode<Call> {
         make_struct,
         stringify,
         memoize_expr,
-        copy_memory;
+        copy_memory,
+        likely;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

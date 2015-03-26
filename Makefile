@@ -223,7 +223,6 @@ SOURCE_FILES = \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
-  BranchVisitors.cpp \
   Buffer.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
@@ -271,7 +270,6 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lerp.cpp \
-  LinearSolve.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
   Memoization.cpp \
@@ -281,6 +279,7 @@ SOURCE_FILES = \
   ParallelRVar.cpp \
   Param.cpp \
   Parameter.cpp \
+  PartitionLoops.cpp \
   Profiling.cpp \
   Qualify.cpp \
   Random.cpp \
@@ -293,8 +292,7 @@ SOURCE_FILES = \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
-  SpecializeBranchedLoops.cpp \
-  SpecializeClampedRamps.cpp \
+  Solve.cpp \
   StmtCompiler.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
@@ -319,7 +317,6 @@ HEADER_FILES = \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
-  BranchVisitors.h \
   Buffer.h \
   CodeGen_ARM.h \
   CodeGen_Hexagon.h \
@@ -371,7 +368,6 @@ HEADER_FILES = \
   JITModule.h \
   Lambda.h \
   Lerp.h \
-  LinearSolve.h \
   LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
@@ -382,6 +378,7 @@ HEADER_FILES = \
   ParallelRVar.h \
   Parameter.h \
   Param.h \
+  PartitionLoops.h \
   Profiling.h \
   Qualify.h \
   Random.h \
@@ -395,8 +392,7 @@ HEADER_FILES = \
   Simplify.h \
   SkipStages.h \
   SlidingWindow.h \
-  SpecializeBranchedLoops.h \
-  SpecializeClampedRamps.h \
+  Solve.h \
   StmtCompiler.h \
   StmtToHtml.h \
   StorageFlattening.h \

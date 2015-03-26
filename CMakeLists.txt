@@ -42,7 +42,6 @@ if (WIN32)
   add_definitions("/wd4244 /wd4267 /wd4800 /wd4996 /wd4305 /wd4146")
 endif()
 
-
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   target_link_libraries("${name}" Halide ${PROJECT_LIBS})
