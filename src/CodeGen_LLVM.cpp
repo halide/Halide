@@ -369,6 +369,10 @@ bool CodeGen_LLVM::llvm_Mips_enabled = false;
 llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     init_module();
 
+    llvm::Triple triple = get_target_triple();
+    module->setTargetTriple(triple.str());
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
     module->setModuleIdentifier(input.name());
 
     // Add some target specific info to the module as metadata.
@@ -386,11 +390,6 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
 
         JITModule::make_externs(shared_runtime, module);
     }
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
