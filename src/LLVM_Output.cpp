@@ -87,6 +87,7 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
+    options.FunctionSections = true;
     #ifdef WITH_NATIVE_CLIENT
     options.UseInitArray = true;
     #else

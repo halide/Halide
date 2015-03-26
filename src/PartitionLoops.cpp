@@ -8,6 +8,7 @@
 #include "IREquality.h"
 #include "ExprUsesVar.h"
 #include "Substitute.h"
+#include "CodeGen_GPU_Dev.h"
 
 namespace Halide {
 namespace Internal {
@@ -600,6 +601,14 @@ class PartitionLoops : public IRMutator {
         // strategies to be a performance win, so we'll just expand
         // once.
         if (!body.same_as(op->body)) {
+            stmt = For::make(op->name, op->min, op->extent,
+                             op->for_type, op->device_api, body);
+            return;
+        }
+
+        // We can't inject logic at the loop over gpu blocks, or in
+        // between gpu thread loops.
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             stmt = For::make(op->name, op->min, op->extent,
                              op->for_type, op->device_api, body);
             return;
