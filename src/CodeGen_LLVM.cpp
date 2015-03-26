@@ -580,6 +580,7 @@ void CodeGen_LLVM::compile_to_native(const string &filename, bool assembly) {
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
+    options.FunctionSections = true;
     #if WITH_NATIVE_CLIENT
     options.UseInitArray = true;
     #else
