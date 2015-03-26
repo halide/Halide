@@ -37,7 +37,6 @@ struct Test {
         }
 
         printf("%s: %f\n", name, time);
-
     }
 };
 
@@ -60,23 +59,25 @@ int main(int argc, char **argv) {
 
     // Apply several different boundary conditions.
     Test tests[] = {
+        {"unbounded", lambda(x, y, padded_input(x+1, y+1)), 0.0},
         {"constant_exterior", constant_exterior(input, 0.0f), 0.0},
         {"repeat_edge", repeat_edge(input), 0.0},
         {"repeat_image", repeat_image(input), 0.0},
         {"mirror_image", mirror_image(input), 0.0},
         {"mirror_interior", mirror_interior(input), 0.0},
-        {"unbounded", lambda(x, y, padded_input(x+1, y+1)), 0.0},
         {NULL, Func(), 0.0}}; // Sentinel
 
     // Time each
     for (int i = 0; tests[i].name; i++) {
         tests[i].test();
+        // Nothing should be that much more expensive than unbounded
+        if (tests[i].time > tests[0].time * 5) {
+            printf("Error: %s is %f times slower than unbounded\n",
+                   tests[i].name, tests[i].time / tests[0].time);
+            return -1;
+        }
     }
 
-    // Validate the results
-    printf("Results not yet validated, because the performance of boundary"
-           " conditions is poor. This test is purely informational (and"
-           " aspirational).\n");
-
+    printf("Success!\n");
     return 0;
 }

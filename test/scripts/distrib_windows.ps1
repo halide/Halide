@@ -1,5 +1,5 @@
 # Set the root dir of the Halide checkout
-$ROOT = "C:\Code\Halide"
+$ROOT = "E:\Code\Halide"
 cd $ROOT
 
 $ErrorActionPreference = "Continue"
@@ -18,16 +18,16 @@ $env:PATH += ";C:\Program Files (x86)\Subversion\bin"
 $env:PATH += ";C:\Program Files (x86)\CMake\bin"
 $env:PATH += ";C:\Program Files (x86)\CMake 2.8\bin"
 $env:PATH += ";C:\Program Files (x86)\Git\bin"
-$env:PATH += ";C:\Program Files (x86)\7-Zip"
+$env:PATH += ";C:\Program Files\7-Zip"
 $env:PATH += ";C:\Program Files (x86)\MSBuild\12.0\bin"
 $env:PATH += ";C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin"
 
 
 # Get llvm
-#svn co http://llvm.org/svn/llvm-project/llvm/trunk $ROOT\llvm
-#svn co http://llvm.org/svn/llvm-project/cfe/trunk $ROOT\llvm\tools\clang
+# svn co http://llvm.org/svn/llvm-project/llvm/trunk $ROOT\llvm
+# svn co http://llvm.org/svn/llvm-project/cfe/trunk $ROOT\llvm\tools\clang
 
-#git clone https://chromium.googlesource.com/native_client/pnacl-llvm.git $ROOT\pnacl-llvm
+# git clone https://chromium.googlesource.com/native_client/pnacl-llvm.git $ROOT\pnacl-llvm
 
 # Update llvm source
 svn up $ROOT\llvm\tools\clang
@@ -36,7 +36,8 @@ svn up $ROOT\llvm
 #cd $ROOT\pnacl-llvm
 # This version of pnacl llvm doesn't really compile on windows.
 # - Comment out '#error unknown architecture' in ResolvePNaClIntrinsics.cpp
-# - Clang compiled with msvc won't work, so you need to manually get the nacl sdk, get pepper_35, and
+# - Don't try to compile any of the tools - just the libraries. In particular, 
+#   clang compiled with msvc won't work, so you need to manually get the nacl sdk, get pepper_41, and
 #   copy the contents of the folder that contains clang.exe into pnacl-llvm/nacl-sdk-bin, and also copy
 #   the dlls from one of the folders that contains cygwin1.dll
 
@@ -44,7 +45,7 @@ svn up $ROOT\llvm
 #git checkout 650319f0929eea0cb49581e2ecffa3641f11ec02
 #cd $ROOT
 
-$COMMIT = git show HEAD | head -n1 | cut -b8-
+$COMMIT = (git show HEAD | select -First 1 | Out-String).TrimStart("commit ").Trim()
 $DATE = date +%Y_%m_%d
 
 # Build latest llvm
@@ -140,8 +141,10 @@ foreach (${configuration} in "Release", "Debug") {
   }
 }
 
-# Run the tests
-foreach ($d in "32_trunk","64_trunk", "64_pnacl","32_pnacl") {
+# Run the tests. pnacl llvm has relocation issues on Windows 8.1 in 64-bit mode (because it's based on llvm 3.6),
+# so we'll skip jit-testing that. Running generators has already occurred above, so we know at 
+# this stage that things at least compile with pnacl llvm.
+foreach ($d in "32_trunk","64_trunk", "32_pnacl") {
   $env:HL_JIT_TARGET = "host"
 
   cd ${ROOT}\build_${d}_Release\bin\Release

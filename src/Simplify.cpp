@@ -324,12 +324,19 @@ private:
                                        select_a->false_value + select_b->false_value));
         } else if (add_a && is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
-            if (is_simple_const(b)) expr = mutate(add_a->a + (add_a->b + b));
-            else expr = mutate((add_a->a + b) + add_a->b);
+            if (is_simple_const(b)) {
+                expr = mutate(add_a->a + (add_a->b + b));
+            } else {
+                expr = mutate((add_a->a + b) + add_a->b);
+            }
         } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a + add_b->a) + add_b->b);
-        } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
-            expr = mutate((sub_a->a + b) - sub_a->b);
+        } else if (sub_a && is_simple_const(sub_a->a)) {
+            if (is_simple_const(b)) {
+                expr = mutate((sub_a->a + b) - sub_a->b);
+            } else {
+                expr = mutate((b - sub_a->b) + sub_a->a);
+            }
 
         } else if (sub_a && equal(b, sub_a->b)) {
             // Additions that cancel an inner term
@@ -340,9 +347,9 @@ private:
         } else if (sub_b && equal(a, sub_b->b)) {
             // a + (b - a)
             expr = sub_b->a;
-        } else if (sub_b && is_zero(sub_b->a)) {
-            // a + (0 - b)
-            expr = a - sub_b->b;
+        } else if (sub_b && is_simple_const(sub_b->a)) {
+            // a + (7 - b) -> (a - b) + 7
+            expr = mutate((a - sub_b->b) + sub_b->a);
         } else if (sub_a && sub_b && equal(sub_a->b, sub_b->a)) {
             // (a - b) + (b - c) -> a - c
             expr = mutate(sub_a->a - sub_b->b);
@@ -1387,8 +1394,9 @@ private:
         const Min *min_b = b.as<Min>();
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
+        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
 
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
 
         if (delta.type() == Int(32) && !is_const(delta)) {
             Interval i = bounds_of_expr_in_scope(delta, bounds_info);
@@ -1515,6 +1523,15 @@ private:
                 } else {
                     expr = LT::make(a, b);
                 }
+            } else if (mul_a && div_a_a && add_b &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_b->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib && ia <= -ic &&
+                       equal(div_a_a->a, add_b->a)) {
+                // (x/c1)*c1 < x + c2 where c1 <= -c2 -> false
+                expr = const_false();
             } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
                 expr = const_true(delta_ramp->width);
@@ -2315,6 +2332,22 @@ private:
         IRMutator::visit(op);
     }
 
+    void visit(const Store *op) {
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+
+        const Load *load = value.as<Load>();
+
+        if (load && load->name == op->name && equal(load->index, index)) {
+            // foo[x] = foo[x] is a no-op
+            stmt = Evaluate::make(0);
+        } else if (value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index);
+        }
+    }
+
     void visit(const Block *op) {
         Stmt first = mutate(op->first);
 
@@ -2868,6 +2901,10 @@ void simplify_test() {
     check(x <  min(x, y), f);
     check(min(x, y) <= x, t);
     check(max(x, y) <  x, f);
+
+    check((x/8)*8 < x - 8, f);
+    check((x/8)*8 < x - 9, f);
+    check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,

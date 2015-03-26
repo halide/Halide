@@ -27,8 +27,7 @@ int main(int argc, char **argv) {
         Param<float> cx, cy;
         Param<int> frame;
 
-        Func clamped;
-        clamped(x, y, c) = state(clamp(x, 0, state.width()-1), clamp(y, 0, state.height()-1), c);
+        Func clamped = BoundaryConditions::repeat_edge(state);
 
         Func blur_x, blur_y, blur;
         blur_x(x, y, c) = (clamped(x-3, y, c) +

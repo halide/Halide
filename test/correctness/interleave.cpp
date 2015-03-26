@@ -34,8 +34,8 @@ int count_interleaves(Func f) {
 
 void check_interleave_count(Func f, int correct) {
     int c = count_interleaves(f);
-    if (c != correct) {
-        printf("Func %s should have interleaved %d times but interleaved %d times instead.\n",
+    if (c < correct) {
+        printf("Func %s should have interleaved >= %d times but interleaved %d times instead.\n",
                f.name().c_str(), correct, c);
         exit(-1);
     }
