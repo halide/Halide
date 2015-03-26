@@ -1404,6 +1404,24 @@ inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Exp
 }
 // @}
 
+/** Expressions tagged with this intrinsic are considered to be part
+ * of the steady state of some loop with a nasty beginning and end
+ * (e.g. a boundary condition). When Halide encounters likely
+ * intrinsics, it splits the containing loop body into three, and
+ * tries to simplify down all conditions that lead to the likely. For
+ * example, given the expression: select(x < 1, bar, x > 10, bar,
+ * likely(foo)), Halide will split the loop over x into portions where
+ * x < 1, 1 <= x <= 10, and x > 10.
+ *
+ * You're unlikely to want to call this directly. You probably want to
+ * use the boundary condition helpers in the BoundaryConditon
+ * namespace instead.
+ */
+inline Expr likely(Expr e) {
+    return Internal::Call::make(e.type(), Internal::Call::likely,
+                                Internal::vec<Expr>(e), Internal::Call::Intrinsic);
+}
+
 }
 
 #endif

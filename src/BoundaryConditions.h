@@ -38,8 +38,12 @@ namespace Halide {
  *  samples, mirroring over the edge, and repeating or mirroring the
  *  entire image.
  *
- *  TODO: Add support for passing Image<T> and ImageParam, and
- *  possibly other types directly to this functions.
+ *  Using these functions to express your boundary conditions is highly
+ *  recommended for correctness and performance. Some of these are hard
+ *  to get right. The versions here are both understood by bounds
+ *  inference, and also judiciously use the 'likely' intrinsic to minimize
+ *  runtime overhead.
+ *
  */
 namespace BoundaryConditions {
 

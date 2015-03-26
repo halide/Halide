@@ -28,8 +28,7 @@
 #include "UniquifyVariableNames.h"
 #include "SkipStages.h"
 #include "CSE.h"
-#include "SpecializeBranchedLoops.h"
-#include "SpecializeClampedRamps.h"
+#include "PartitionLoops.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
 #include "Inline.h"
@@ -212,7 +211,7 @@ Stmt build_provide_loop_nest(Function f,
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
-                base = Min::make(base, old_max + (1 - split.factor));
+                base = Min::make(likely(base), old_max + (1 - split.factor));
 
             }
 
@@ -1901,17 +1900,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = simplify(s);
     debug(2) << "Lowering after rewriting vector interleavings:\n" << s << "\n\n";
 
-    debug(1) << "Specializing clamped ramps...\n";
-    s = specialize_clamped_ramps(s);
+    debug(1) << "Partitioning loops to simplify boundary conditions...\n";
+    s = partition_loops(s);
     s = simplify(s);
-    debug(2) << "Lowering after specializing clamped ramps:\n" << s << "\n\n";
-
-    debug(1) << "Specializing branched loops...\n";
-    s = specialize_branched_loops(s);
-    s = remove_dead_allocations(s);
-    s = simplify(s);
-    s = remove_trivial_for_loops(s);
-    debug(2) << "Lowering after specializing branched loops:\n" << s << "\n\n";
+    debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
@@ -1944,8 +1936,9 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     // For nodes which have their device set to DeviceAPI::Parent).
     debug(1) << "Propagating inherited attributes downward.\n";
     s = propagate_inherited_attributes(s);
-    debug(1) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";
+    debug(2) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";
 
+    s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
