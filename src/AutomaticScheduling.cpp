@@ -200,20 +200,6 @@ unsigned calculate_footprint_size(Function f, CallGraph &cg) {
 
 } // end anonymous namespace
 
-void InlineAllPointwise::apply(Func root) {
-    // Construct a callgraph for the pipeline.
-    CallGraph cg(root.function());
-    vector<Function> all_functions = cg.transitive_calls(root.function());
-    for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
-        Function f = *I;
-        unsigned footprint = calculate_footprint_size(f, cg);
-        if (footprint == 1) {
-            Func wrapper(f);
-            wrapper.compute_inline();
-        }
-    }
-}
-
 void ComputeRootAllStencils::apply(Func root) {
     // Construct a callgraph for the pipeline.
     CallGraph cg(root.function());
@@ -259,14 +245,11 @@ void VectorizeInner::apply(Func root) {
     }
 }
 
-void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy) {
+void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy, bool reset_schedules) {
     AutoScheduleStrategyImpl *impl = NULL;
     switch (strategy) {
     case AutoScheduleStrategy::ComputeRootAllStencils:
         impl = new ComputeRootAllStencils();
-        break;
-    case AutoScheduleStrategy::InlineAllPointwise:
-        impl = new InlineAllPointwise();
         break;
     case AutoScheduleStrategy::ParallelizeOuter:
         impl = new ParallelizeOuter();
@@ -277,7 +260,7 @@ void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy) {
     }
     internal_assert(impl != NULL);
     // Reset all user-specified schedules.
-    ResetSchedules reset(root.function());
+    if (reset_schedules) ResetSchedules reset(root.function());
     impl->apply(root);
 }
 

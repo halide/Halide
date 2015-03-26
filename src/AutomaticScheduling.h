@@ -13,7 +13,6 @@ class Func;
 
 typedef enum {
     ComputeRootAllStencils,
-    InlineAllPointwise,
     ParallelizeOuter,
     VectorizeInner
 } AutoScheduleStrategy;
@@ -32,14 +31,6 @@ public:
  * - Functions called as a stencil are compute_root.
  */
 class ComputeRootAllStencils : public AutoScheduleStrategyImpl {
-public:
-    virtual void apply(Func root);
-};
-
-/** Performs the following pipeline optimization:
- * - Functions with a single callsite are inlined.
- */
-class InlineAllPointwise : public AutoScheduleStrategyImpl {
 public:
     virtual void apply(Func root);
 };
@@ -65,7 +56,7 @@ public:
 
 /** Apply the given schedule strategy to the pipeline with output
  * 'root'. */
-EXPORT void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy);
+EXPORT void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy, bool reset_schedules);
 
 }
 }

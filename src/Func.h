@@ -415,6 +415,11 @@ class Func {
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
 
+    /** Whether or not function schedules should be reset before
+     * performing any automatic scheduling. */
+    bool auto_schedule_reset;
+
+
     /** Pointers to current values of the automatically inferred
      * arguments (buffers and scalars) used to realize this
      * function. Only relevant when jitting. We can hold these things
