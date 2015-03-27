@@ -13,33 +13,14 @@
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 
-#ifdef _WIN32
-#define NOMINMAX
-#ifdef _WIN64
-#define GPU_LIB_CC
-#else
-#define GPU_LIB_CC __stdcall
-#endif
-#include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
-}
-#else
-#define GPU_LIB_CC
-#include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(NULL, s) != NULL;
-}
-#endif
-
-namespace Halide {
-namespace Internal {
-
 using std::vector;
 using std::string;
 using std::map;
 
 using namespace llvm;
+
+namespace Halide {
+namespace Internal {
 
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the
@@ -118,7 +99,6 @@ private:
         }
     }
 };
-
 
 class GPU_Host_Closure : public Halide::Internal::Closure {
 public:
@@ -205,45 +185,33 @@ void GPU_Host_Closure::visit(const For *loop) {
     Internal::Closure::visit(loop);
 }
 
-template<typename CodeGen_CPU>
-bool CodeGen_GPU_Host<CodeGen_CPU>::lib_cuda_linked = false;
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
-    CodeGen_CPU(target),
-    cgdev(make_devices(target)) {
-}
-
-template<typename CodeGen_CPU>
-std::map<DeviceAPI, CodeGen_GPU_Dev *> CodeGen_GPU_Host<CodeGen_CPU>::make_devices(Target t)
-{
-    std::map<DeviceAPI, CodeGen_GPU_Dev *> result;
-
+CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
     // For the default GPU, OpenCL is preferred, CUDA next, and OpenGL last.
     // The code is in reverse order to allow later tests to override earlier ones.
     DeviceAPI default_api = DeviceAPI::Default_GPU;
-    if (t.has_feature(Target::OpenGL)) {
+    if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
-        result[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(t);
+        cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
         default_api = DeviceAPI::GLSL;
     }
-    if (t.has_feature(Target::CUDA)) {
+    if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
-        result[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(t);
+        cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
         default_api = DeviceAPI::CUDA;
     }
-    if (t.has_feature(Target::OpenCL)) {
+    if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        result[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(t);
+        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
         default_api = DeviceAPI::OpenCL;
     }
 
-    if (result.empty()) {
-        internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
+    if (cgdev.empty()) {
+        internal_error << "Requested unknown GPU target: " << target.to_string() << "\n";
     } else {
-        result[DeviceAPI::Default_GPU] = result[default_api];
+        cgdev[DeviceAPI::Default_GPU] = cgdev[default_api];
     }
-    return result;
 }
 
 template<typename CodeGen_CPU>
@@ -257,45 +225,43 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::init_module() {
-    CodeGen_CPU::init_module();
+void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
+    function_name = f.name;
 
-    // also set up the child codegenerator - this is set up once per
-    // PTX_Host::compile, and reused across multiple PTX_Dev::compile
-    // invocations for different kernels.
+    // Create a new module for all of the kernels we find in this function.
     std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
         iter->second->init_module();
     }
-}
 
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::compile_for_device(Stmt stmt, string name,
-                                                       const vector<Argument> &args,
-                                                       const vector<Buffer> &images_to_embed) {
-    // Unset constant flag for embedded image global variables
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
-        string name = images_to_embed[i].name();
-        GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
-        global->setConstant(false);
-    }
-
+    // Call the base implementation to create the function.
+    CodeGen_CPU::compile_func(f);
 
     // Remember the entry block so we can branch to it upon init success.
     BasicBlock *entry = &function->getEntryBlock();
 
-    std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
         if (iter->first == DeviceAPI::Default_GPU) {
             continue;
         }
+
         CodeGen_GPU_Dev *gpu_codegen = iter->second;
         std::string api_unique_name = gpu_codegen->api_unique_name();
+
+        // If the module state for this API/function did not get created, there were
+        // no kernels using this API.
+        llvm::Value *module_state = get_module_state(api_unique_name, false);
+        if (!module_state) {
+            continue;
+        }
+
         debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
 
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
-        Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_" + api_unique_name + "_kernel_src");
+        Value *kernel_src_ptr =
+            CodeGen_CPU::create_constant_binary_blob(kernel_src,
+                                                     "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
         // Insert a new block to run initialization at the beginning of the function.
         BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels" + api_unique_name,
@@ -307,7 +273,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_for_device(Stmt stmt, string name,
         Value *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
         Value *result = builder->CreateCall4(init, user_context,
-                                             get_module_state(api_unique_name),
+                                             module_state,
                                              kernel_src_ptr, kernel_size);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
         CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + init_kernels_name);
@@ -318,86 +284,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_for_device(Stmt stmt, string name,
         entry = init_kernels_bb;
     }
 
-    // Optimize the module
-    CodeGen_CPU::optimize_module();
-}
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module) {
-
-    // Make sure extern cuda calls inside the module point to the
-    // right things. If cuda is already linked in we should be
-    // fine. If not we need to tell llvm to load it.
-    if (target.has_feature(Target::CUDA) && !lib_cuda_linked) {
-        // First check if libCuda has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("cuInit")) {
-            debug(1) << "This program was linked to cuda already\n";
-        } else {
-            debug(1) << "Looking for cuda shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
-            }
-            user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
-        }
-        lib_cuda_linked = true;
-    } else if (target.has_feature(Target::OpenCL)) {
-        // First check if libOpenCL has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("clCreateContext")) {
-            debug(1) << "This program was linked to OpenCL already\n";
-        } else {
-            debug(1) << "Looking for OpenCL shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
-            }
-            user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
-        }
-    } else if (target.has_feature(Target::OpenGL)) {
-        if (target.os == Target::Linux) {
-            if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-                user_assert(error.empty()) << "Could not find libGL.so\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-                user_assert(error.empty()) << "Could not find libX11.so\n";
-            }
-        } else if (target.os == Target::OSX) {
-            if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
-                user_assert(error.empty()) << "Could not find AGL.framework\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
-                user_assert(error.empty()) << "Could not find OpenGL.framework\n";
-            }
-        } else {
-            internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
-        }
-    }
+    function_name = "";
 }
 
 template<typename CodeGen_CPU>
@@ -606,24 +493,25 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 }
 
 template<typename CodeGen_CPU>
-Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name) {
-    GlobalVariable *module_state = module->getGlobalVariable("module_state" + api_unique_name, true);
-    if (!module_state)
+Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name,
+                                                       bool create) {
+    std::string name = "module_state_" + function_name + "_" + api_unique_name;
+    GlobalVariable *module_state = module->getGlobalVariable(name, true);
+    if (!module_state && create)
     {
         // Create a global variable to hold the module state
         PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
         module_state = new GlobalVariable(*module, void_ptr_type,
                                           false, GlobalVariable::InternalLinkage,
                                           ConstantPointerNull::get(void_ptr_type),
-                                          "module_state" + api_unique_name);
+                                          name);
         debug(4) << "Created device module state global variable\n";
     }
 
     return module_state;
 }
 
-
-// Force template instantiation for x86 and arm.
+// Force template instantiation.
 #ifdef WITH_X86
 template class CodeGen_GPU_Host<CodeGen_X86>;
 #endif

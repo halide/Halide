@@ -15,17 +15,18 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "StmtCompiler.h"
+#include "Image.h"
 #include "CodeGen_C.h"
 #include "CodeGen_JavaScript.h"
-#include "Image.h"
 #include "JavaScriptExecutor.h"
 #include "Param.h"
 #include "Debug.h"
-#include "Target.h"
 #include "IREquality.h"
 #include "HumanReadableStmt.h"
-#include "StmtToHtml.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "Output.h"
+#include "LLVM_Output.h"
 
 namespace Halide {
 
@@ -2014,7 +2015,7 @@ struct ArgumentComparator {
 };
 }
 
-std::vector<Argument> Func::infer_arguments() const {
+vector<Argument> Func::infer_arguments() const {
     user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
 
     InferArguments infer_args(name(), /*include_buffers*/ false);
@@ -2039,81 +2040,113 @@ void Func::lower(const Target &t) {
     }
 }
 
+Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
+    // TODO: This is a bit of a wart. Right now, IR cannot directly
+    // reference Buffers because neither CodeGen_LLVM nor
+    // CodeGen_C can generate the correct buffer unpacking code.
+
+    // To work around this, we generate two functions. The private
+    // function is one where every buffer referenced is an argument,
+    // and the public function is a wrapper that calls the private
+    // function, passing the global buffers to the private
+    // function. This works because the public function does not
+    // attempt to directly access any of the fields of the buffer.
+
+    string public_name = fn_name.empty() ? name() : fn_name;
+    string private_name = "__" + public_name;
+
+    lower(target);
+    Stmt private_body = lowered;
+
+    // Get all the arguments/global images referenced in this function.
+    vector<Argument> public_args = add_user_context_arg(args, target);
+
+    vector<Buffer> global_images;
+    validate_arguments(name(), public_args, private_body, global_images);
+    for (int i = 0; i < outputs(); i++) {
+        public_args.push_back(output_buffers()[i]);
+    }
+
+    // Create a module with all the global images in it.
+    Module module(public_name, target);
+
+    // Add all the global images to the module, and add the global
+    // images used to the private argument list.
+    vector<Argument> private_args = public_args;
+    for (size_t i = 0; i < global_images.size(); i++) {
+        Buffer buf = global_images[i];
+        module.append(buf);
+        private_args.push_back(Argument(buf.name(), Argument::Buffer, buf.type(), buf.dimensions()));
+    }
+
+    module.append(LoweredFunc(private_name, private_args, private_body, LoweredFunc::Internal));
+
+    // Generate a call to the private function, adding an arguments
+    // for the global images.
+    vector<Expr> private_params;
+    for (size_t i = 0; i < private_args.size(); i++) {
+        const Argument &arg = private_args[i];
+        if (arg.is_buffer()) {
+            private_params.push_back(Variable::make(type_of<void*>(), arg.name + ".buffer"));
+        } else {
+            private_params.push_back(Variable::make(arg.type, arg.name));
+        }
+    }
+    Expr call_private = Call::make(Int(32), private_name, private_params, Call::Extern);
+    Stmt public_body = AssertStmt::make(call_private == 0, private_name + " failed");
+    module.append(LoweredFunc(public_name, public_args, public_body, LoweredFunc::External));
+
+    return module;
+}
+
+
 void Func::compile_to(const Outputs &output_files, vector<Argument> args,
                       const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
-    args = add_user_context_arg(args, target);
+    Module m = compile_to_module(args, fn_name, target);
 
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+    llvm::LLVMContext context;
+    llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
 
     if (!output_files.object_name.empty()) {
-        cg.compile_to_native(output_files.object_name, false);
+        compile_llvm_module_to_object(llvm_module, output_files.object_name);
     }
     if (!output_files.assembly_name.empty()) {
-        cg.compile_to_native(output_files.assembly_name, true);
+        compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
     }
     if (!output_files.bitcode_name.empty()) {
-        cg.compile_to_bitcode(output_files.bitcode_name);
+        compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
     }
+
+    delete llvm_module;
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
                               const Target &target) {
-    compile_to(Outputs().bitcode(filename), args, fn_name, target);
+    compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_bitcode(filename, args, "", target);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args,
+void Func::compile_to_object(const string &filename, const vector<Argument> &args,
                              const string &fn_name, const Target &target) {
-    compile_to(Outputs().object(filename), args, fn_name, target);
+    compile_module_to_object(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_object(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_object(filename, args, "", target);
 }
 
-void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    ofstream header(filename.c_str());
-    CodeGen_C cg(header);
-    cg.compile_header(fn_name.empty() ? name() : fn_name, args);
+void Func::compile_to_header(const string &filename, const vector<Argument> &args, const string &fn_name, const Target &target) {
+    compile_module_to_c_header(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_c(const string &filename, vector<Argument> args,
+void Func::compile_to_c(const string &filename, const vector<Argument> &args,
                         const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    ofstream src(filename.c_str());
-    CodeGen_C cg(src);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+    compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_javascript(const string &filename, vector<Argument> args,
@@ -2135,15 +2168,13 @@ void Func::compile_to_javascript(const string &filename, vector<Argument> args,
 }
 
 void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
-    lower(target);
+    Module m = compile_to_module(infer_arguments(), "", target);
     if (fmt == HTML) {
-        print_to_html(filename, lowered);
+        compile_module_to_html(m, filename);
     } else {
-        ofstream stmt_output(filename.c_str());
-        stmt_output << lowered;
+        compile_module_to_text(m, filename);
     }
 }
-
 
 void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                               Realization dst,
@@ -2177,11 +2208,13 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
 
     Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
 
+    Module m(name(), t);
+    m.append(LoweredFunc(name(), infer_arguments(), s, LoweredFunc::External));
+
     if (fmt == HTML) {
-        print_to_html(filename, s);
+        compile_module_to_html(m, filename);
     } else {
-        ofstream stmt_output(filename.c_str());
-        stmt_output << s;
+        compile_module_to_text(m, filename);
     }
 }
 
@@ -2255,10 +2288,14 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                        std::map<std::string, Expr>(), fmt, t);
 }
 
-void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
+void Func::compile_to_file(const string &filename_prefix, const vector<Argument> &args,
                            const Target &target) {
-    compile_to_header(filename_prefix + ".h", args, filename_prefix, target);
-    compile_to_object(filename_prefix + ".o", args, filename_prefix, target);
+    // Although it is possibly confusing, in order To preserve
+    // existing behavior, we need to pass filename_prefix as the new
+    // function name.
+    Module m = compile_to_module(args, filename_prefix, target);
+    compile_module_to_c_header(m, filename_prefix + ".h");
+    compile_module_to_object(m, filename_prefix + ".o");
 }
 
 void Func::compile_to_file(const string &filename_prefix, const Target &target) {
@@ -2290,12 +2327,12 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
     compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e), target);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
-    compile_to(Outputs().assembly(filename), args, fn_name, target);
+    compile_module_to_assembly(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_assembly(filename, args, "", target);
 }
 
@@ -2791,18 +2828,17 @@ void Func::compile_jit(const Target &target_arg) {
             js_debug << cached_javascript;
         }
     } else {
-        StmtCompiler cg(target);
-
-        cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+        // Make a module.
+        Module module(name(), target.with_feature(Target::JIT));
+        LoweredFunc lfn(n, infer_args.arg_types, lowered, LoweredFunc::External);
+        module.append(lfn);
 
         if (debug::debug_level >= 3) {
-            cg.compile_to_native(name() + ".s", true);
-            cg.compile_to_bitcode(name() + ".bc");
-            ofstream stmt_debug((name() + ".stmt").c_str());
-            stmt_debug << lowered;
+            compile_module_to_native(module, name() + ".bc", name() + ".s");
+            compile_module_to_text(module, name() + ".stmt");
         }
 
-        compiled_module = cg.compile_to_function_pointers();
+        compiled_module = JITModule(module, lfn);
     }
 }
 

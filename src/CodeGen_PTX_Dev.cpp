@@ -26,11 +26,18 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
+
+    context = new llvm::LLVMContext();
+}
+
+CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
+    delete context;
 }
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<GPU_Argument> &args) {
+    internal_assert(module != NULL);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 
@@ -45,7 +52,6 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     }
 
     // Make our function
-    function_name = name;
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 
@@ -125,15 +131,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 }
 
 void CodeGen_PTX_Dev::init_module() {
-
-    CodeGen_LLVM::init_module();
+    init_context();
 
     #ifdef WITH_PTX
-    internal_assert(!module);
+    delete module;
     module = get_initial_module_for_ptx_device(target, context);
     #endif
-
-    owns_module = true;
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
@@ -414,7 +417,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         module->dump();
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
-
 
     string str = outs.str();
     debug(1) << "PTX kernel:\n" << str.c_str() << "\n";

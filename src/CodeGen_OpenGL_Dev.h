@@ -41,7 +41,7 @@ private:
     CodeGen_GLSL *glc;
 
     virtual std::string print_gpu_name(const std::string &name);
-    
+
 private:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
@@ -53,14 +53,14 @@ private:
 class CodeGen_GLSL : public CodeGen_C {
 public:
     CodeGen_GLSL(std::ostream &s);
-    void compile(Stmt stmt,
-                 std::string name,
-                 const std::vector<GPU_Argument> &args,
-                 const Target &target);
+    void add_kernel(Stmt stmt,
+                    std::string name,
+                    const std::vector<GPU_Argument> &args,
+                    const Target &target);
 
     EXPORT static void test();
 
-    
+
     std::string print_name(const std::string &);
 
 protected:

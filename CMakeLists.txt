@@ -8,13 +8,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-set(LLVM_BIN "llvm3.2/bin/Debug/"
+set(LLVM_BIN "llvm3.6/bin/Debug/"
   CACHE PATH "Path to LLVM bin directory")
-set(LLVM_LIB "llvm3.2/lib/Debug/"
+set(LLVM_LIB "llvm3.6/lib/Debug/"
   CACHE PATH "Path to LLVM lib directory")
-set(LLVM_INCLUDE "llvm3.2/include/"
+set(LLVM_INCLUDE "llvm3.6/include/"
   CACHE PATH "Path to LLVM include directory")
-set(LLVM_VERSION "32" CACHE STRING "First two digits of LLVM version (omitting '.')")
+set(LLVM_VERSION "36" CACHE STRING "First two digits of LLVM version (omitting '.')")
 
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
@@ -22,7 +22,7 @@ file(TO_NATIVE_PATH "${LLVM_BIN}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 
 message(${CLANG})
 
-option(TARGET_NATIVE_CLIENT "Include Native Client" ON)
+option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ON)
 option(TARGET_ARM "Include ARM target" ON)
 option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ON)

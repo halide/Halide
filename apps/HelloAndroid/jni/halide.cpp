@@ -24,9 +24,7 @@ int main(int argc, char **argv) {
     Func tone_curve;
     tone_curve(x) = i16(pow(f32(x)/256.0f, 1.8f) * 256.0f);
 
-    Func clamped;
-    clamped(x, y) = input(clamp(x, 0, input.width()-1),
-                          clamp(y, 0, input.height()-1));
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     Func curved;
     curved(x, y) = tone_curve(clamped(x, y));

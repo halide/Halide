@@ -182,8 +182,8 @@ WEAK bool validate_device_pointer(void *user_context, buffer_t* buf, size_t size
     }
 
     debug(user_context) << "CL: validate " << (void *)dev_ptr
-                        << ": asked for " << size
-                        << ", actual allocated " << real_size << "\n";
+                        << ": asked for " << (uint64_t)size
+                        << ", actual allocated " << (uint64_t)real_size << "\n";
 
     if (size) {
         halide_assert(user_context, real_size >= size && "Validating pointer with insufficient size");
@@ -350,12 +350,12 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         << "      max mem alloc size: " << max_mem_alloc_size/(1024*1024) << " MB\n"
         << "      local mem size: " << local_mem_size << "\n"
         << "      max compute units: " << max_compute_units << "\n"
-        << "      max workgroup size: " << max_work_group_size << "\n"
+        << "      max workgroup size: " << (uint64_t)max_work_group_size << "\n"
         << "      max work item dimensions: " << max_work_item_dimensions << "\n"
-        << "      max work item sizes: " << max_work_item_sizes[0]
-        << "x" << max_work_item_sizes[1]
-        << "x" << max_work_item_sizes[2]
-        << "x" << max_work_item_sizes[3] << "\n";
+        << "      max work item sizes: " << (uint64_t)max_work_item_sizes[0]
+        << "x" << (uint64_t)max_work_item_sizes[1]
+        << "x" << (uint64_t)max_work_item_sizes[2]
+        << "x" << (uint64_t)max_work_item_sizes[3] << "\n";
     #endif
 
 
@@ -646,7 +646,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
 
     debug(user_context)
-        << "    Allocating buffer of " << size << " bytes,"
+        << "    Allocating buffer of " << (int)size << " bytes,"
         << " extents: " << buf->extent[0] << "x" << buf->extent[1] << "x" << buf->extent[2] << "x" << buf->extent[3]
         << " strides: " << buf->stride[0] << "x" << buf->stride[1] << "x" << buf->stride[2] << "x" << buf->stride[3]
         << " (" << buf->elem_size << " bytes per element)\n";
@@ -656,7 +656,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     #endif
 
     cl_int err;
-    debug(user_context) << "    clCreateBuffer -> " << size << " ";
+    debug(user_context) << "    clCreateBuffer -> " << (int)size << " ";
     cl_mem dev_ptr = clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
     if (err != CL_SUCCESS || dev_ptr == 0) {
         debug(user_context) << get_opencl_error_name(err) << "\n";
@@ -725,7 +725,7 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
             debug(user_context)
                 << "    clEnqueueWriteBufferRect ((" << z << ", " << w << "), "
                 << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
-                << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+                << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
                 << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
             cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
@@ -815,7 +815,7 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
             debug(user_context)
                 << "    clEnqueueReadBufferRect ((" << z << ", " << w << "), "
                 << "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
-                << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+                << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
                 << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
             cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
@@ -928,7 +928,7 @@ WEAK int halide_opencl_run(void *user_context,
     int i = 0;
     while (arg_sizes[i] != 0) {
         debug(user_context) << "    clSetKernelArg " << i
-                            << " " << arg_sizes[i]
+                            << " " << (int)arg_sizes[i]
                             << " [" << (*((void **)args[i])) << " ...] "
                             << arg_is_buffer[i] << "\n";
         void *this_arg = args[i];

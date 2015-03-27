@@ -20,8 +20,7 @@ int main(int argc, char **argv) {
         Param<int> mouse_x, mouse_y;
         Expr a = state(x, y, 0), b = state(x, y, 1);
 
-        Func clamped;
-        clamped(x, y, c) = state(clamp(x, 0, state.width()-1), clamp(y, 0, state.height()-1), c);
+        Func clamped = BoundaryConditions::repeat_edge(state);
 
         RDom kernel(-2, 5);
         Func g, gaussian;

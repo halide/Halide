@@ -149,11 +149,24 @@ set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    # -m64 isn't respected unless we also use a 64-bit target.
-    IF (ARCHS EQUAL 32)
-      set(TARGET "i386-unknown-unknown-unknown")
+    IF (LLVM_VERSION LESS 36)
+      IF (ARCHS EQUAL 32)
+        set(TARGET "i386-unknown-unknown-unknown")
+      ELSE()
+        set(TARGET "x86_64-unknown-unknown-unknown")
+      ENDIF()
     ELSE()
-      set(TARGET "x86_64-unknown-unknown-unknown")
+      IF (ARCHS EQUAL 32)
+        IF (${i} MATCHES "windows_.*")
+          # win32 uses the stdcall calling convention, which is x86-specific
+          set(TARGET "i386-unknown-nacl-unknown")
+        ELSE()
+          set(TARGET "le32-unknown-nacl-unknown")
+        ENDIF()
+      ELSE()
+        # generic 64-bit code
+        set(TARGET "le64-unknown-unknown-unknown")
+      ENDIF()
     ENDIF()
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
     set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
@@ -268,6 +281,7 @@ set(HEADER_FILES
   ModulusRemainder.h
   Parameter.h
   Param.h
+  PartitionLoops.h
   RDom.h
   Reduction.h
   RemoveTrivialForLoops.h
@@ -275,7 +289,7 @@ set(HEADER_FILES
   Scope.h
   Simplify.h
   SlidingWindow.h
-  StmtCompiler.h
+  Solve.h
   StorageFlattening.h
   StorageFolding.h
   Substitute.h
@@ -296,7 +310,6 @@ set(HEADER_FILES
   Target.h
   SkipStages.h
   RemoveUndef.h
-  SpecializeClampedRamps.h
   FastIntegerDivide.h
   AllocationBoundsInference.h
   Error.h
@@ -314,11 +327,11 @@ set(HEADER_FILES
   Generator.h
   ObjectInstanceRegistry.h
   BlockFlattening.h
-  LinearSolve.h
-  BranchVisitors.h
-  SpecializeBranchedLoops.h
   RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
+  Output.h
+  LLVM_Output.h
+  Module.h
   DeviceInterface.h
   runtime/HalideRuntime.h
   CodeGen_JavaScript.h
@@ -370,9 +383,11 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Lower.cpp
   Debug.cpp
   Parameter.cpp
+  PartitionLoops.cpp
   Reduction.cpp
   Random.cpp
   RDom.cpp
+  Solve.cpp
   Profiling.cpp
   Tracing.cpp
   StorageFlattening.cpp
@@ -380,7 +395,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UnrollLoops.cpp
   BoundsInference.cpp
   IRMatch.cpp
-  StmtCompiler.cpp
   IntegerDivisionTable.cpp
   SlidingWindow.cpp
   StorageFolding.cpp
@@ -398,7 +412,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Target.cpp
   SkipStages.cpp
   RemoveUndef.cpp
-  SpecializeClampedRamps.cpp
   FastIntegerDivide.cpp
   AllocationBoundsInference.cpp
   Inline.cpp
@@ -425,11 +438,11 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Generator.cpp
   ObjectInstanceRegistry.cpp
   BlockFlattening.cpp
-  LinearSolve.cpp
-  BranchVisitors.cpp
-  SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
   LLVM_Runtime_Linker.cpp
+  Output.cpp
+  LLVM_Output.cpp
+  Module.cpp
   DeviceInterface.cpp
   CodeGen_JavaScript.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
