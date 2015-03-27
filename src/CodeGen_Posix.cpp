@@ -169,8 +169,16 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         llvm::Function *free_fn = module->getFunction("halide_free");
         internal_assert(free_fn) << "Could not find halide_free in module.\n";
         debug(4) << "Creating call to halide_free\n";
-        Value *args[2] = { get_user_context(), alloc.ptr };
-        builder->CreateCall(free_fn, args);
+        builder->CreateCall2(free_fn, get_user_context(), alloc.ptr);
+
+        // Free any device-side allocations too. If a device-side
+        // allocation exists, then a buffer exists.
+        string buf_name = name + ".buffer";
+        if (sym_exists(buf_name)) {
+            free_fn = module->getFunction("halide_device_free");
+            Value *buf_ptr = sym_get(buf_name);
+            builder->CreateCall2(free_fn, get_user_context(), buf_ptr);
+        }
     }
 
     allocations.pop(name);

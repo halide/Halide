@@ -105,8 +105,6 @@ WEAK void halide_device_release(void *user_context, const halide_device_interfac
 WEAK int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
     ScopedMutexLock lock(&device_copy_mutex);
 
-    debug(NULL) << "halide_copy_to_host " << buf << "\n";
-
     return copy_to_host_already_locked(user_context, buf);
 }
 
