@@ -152,7 +152,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
-void CodeGen_Posix::free_allocation(const std::string &name) {
+void CodeGen_Posix::free_allocation(const std::string &name, bool in_error_handler) {
     Allocation alloc = allocations.get(name);
 
     internal_assert(alloc.ptr);
@@ -170,18 +170,26 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         internal_assert(free_fn) << "Could not find halide_free in module.\n";
         debug(4) << "Creating call to halide_free\n";
         builder->CreateCall2(free_fn, get_user_context(), alloc.ptr);
-
-        // Free any device-side allocations too. If a device-side
-        // allocation exists, then a buffer exists.
-        string buf_name = name + ".buffer";
-        if (sym_exists(buf_name)) {
-            free_fn = module->getFunction("halide_device_free");
-            Value *buf_ptr = sym_get(buf_name);
-            builder->CreateCall2(free_fn, get_user_context(), buf_ptr);
-        }
     }
 
     allocations.pop(name);
+
+    // Free any device-side allocations too. If a device-side
+    // allocation exists, then a buffer exists.
+    string buf_name = name + ".buffer";
+    if (sym_exists(buf_name)) {
+        llvm::Function *free_fn = module->getFunction("halide_device_free");
+        Value *buf_ptr = sym_get(buf_name);
+        Value *result = builder->CreateCall2(free_fn, get_user_context(), buf_ptr);
+        if (!in_error_handler) {
+            Value *check = builder->CreateIsNull(result);
+            // We deferred this until after the allocations.pop so we
+            // don't retry freeing the same buffer in the error
+            // handler.
+            create_assertion(check, "halide_device_free returned a non-zero value");
+        }
+    }
+
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
@@ -203,7 +211,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
-    free_allocation(stmt->name);
+    free_allocation(stmt->name, false);
     sym_pop(stmt->name + ".host");
 }
 
@@ -223,7 +231,7 @@ void CodeGen_Posix::prepare_for_early_exit() {
             // one in the allocation - it may have been forwarded
             // inside a parallel for loop
             stash.push_back(allocations.get(names[i]));
-            free_allocation(names[i]);
+            free_allocation(names[i], true);
         }
 
         // Restore all the allocations before we jump back to the main
