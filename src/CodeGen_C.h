@@ -10,8 +10,10 @@
 #include <vector>
 #include <ostream>
 #include <map>
+#include <set>
 
 #include "IRPrinter.h"
+#include "Module.h"
 #include "Scope.h"
 
 namespace Halide {
@@ -29,26 +31,33 @@ class CodeGen_C : public IRPrinter {
 public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_C(std::ostream &);
+    CodeGen_C(std::ostream &dest, bool is_header = false, const std::string &include_guard = "");
+    ~CodeGen_C();
 
-    /** Emit source code equivalent to the given statement, wrapped in
-     * a function with the given type signature */
-    void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
-                 const std::vector<Buffer> &images_to_embed);
-
-    /** Emit a header file defining a halide pipeline with the given
-     * type signature */
-    void compile_header(const std::string &name, const std::vector<Argument> &args);
+    /** Emit the declarations contained in the module as C code. */
+    void compile(const Module &module);
 
     static void test();
 
 protected:
+    /** Emit a declaration. */
+    // @{
+    virtual void compile(const LoweredFunc &func);
+    virtual void compile(const Buffer &buffer);
+    // @}
+
     /** An ID for the most recently generated ssa variable */
     std::string id;
 
+    /** Controls whether this instance is generating declarations or
+     * definitions. */
+    bool is_header;
+
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
+
+    /** Remember already emitted funcitons. */
+    std::set<std::string> emitted;
 
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
@@ -75,8 +84,11 @@ protected:
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
     void close_scope(const std::string &comment);
 
-    /** Unpack a buffer into its constituent parts */
-    void unpack_buffer(Type t, const std::string &buffer_name);
+    /** Unpack a buffer into its constituent parts and push it on the allocations stack. */
+    void push_buffer(Type t, const std::string &buffer_name);
+
+    /** Pop a buffer from the stack. */
+    void pop_buffer(const std::string &buffer_name);
 
     /** Track the types of allocations to avoid unnecessary casts. */
     Scope<Type> allocations;
