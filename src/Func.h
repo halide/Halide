@@ -16,6 +16,7 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -541,9 +542,9 @@ public:
      * signature, and C function name (which defaults to the same name
      * as this halide function */
     //@{
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
+    EXPORT void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                    const Target &target = get_target_from_environment());
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>,
+    EXPORT void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &,
                                    const Target &target = get_target_from_environment());
     // @}
 
@@ -553,9 +554,9 @@ public:
      * as this halide function. You probably don't want to use this
      * directly; call compile_to_file instead. */
     //@{
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
+    EXPORT void compile_to_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>,
+    EXPORT void compile_to_object(const std::string &filename, const std::vector<Argument> &,
                                   const Target &target = get_target_from_environment());
     // @}
 
@@ -566,7 +567,7 @@ public:
      * function. You don't actually have to have defined this function
      * yet to call this. You probably don't want to use this directly;
      * call compile_to_file instead. */
-    EXPORT void compile_to_header(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+    EXPORT void compile_to_header(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
                                   const Target &target = get_target_from_environment());
 
     /** Statically compile this function to text assembly equivalent
@@ -575,9 +576,9 @@ public:
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
     //@{
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
+    EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                     const Target &target = get_target_from_environment());
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>,
+    EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
                                     const Target &target = get_target_from_environment());
     // @}
     /** Statically compile this function to C source code. This is
@@ -585,7 +586,7 @@ public:
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
     EXPORT void compile_to_c(const std::string &filename,
-                             std::vector<Argument>,
+                             const std::vector<Argument> &,
                              const std::string &fn_name = "",
                              const Target &target = get_target_from_environment());
 
@@ -599,7 +600,7 @@ public:
     /** Write out an internal representation of lowered code as above
      * but simplified using the provided realization bounds and other
      * concrete parameter values. Can emit html or plain text. */
-    //@{
+    // @{
     EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
                                                    Realization dst,
                                                    const std::map<std::string, Expr> &additional_replacements,
@@ -665,15 +666,14 @@ public:
                                                    int x_size,
                                                    StmtOutputFormat fmt = Text,
                                                    const Target &t = get_target_from_environment());
-
     // @}
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.
      */
-    //@{
-    EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args,
+    // @{
+    EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
     EXPORT void compile_to_file(const std::string &filename_prefix,
                                 const Target &target = get_target_from_environment());
@@ -688,6 +688,11 @@ public:
     EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
                                 const Target &target = get_target_from_environment());
     // @}
+
+    /** Store an internal representation of lowered code as a self
+     * contained Module suitable for further compilation. */
+    EXPORT Module compile_to_module(const std::vector<Argument> &args, const std::string &fn_name = "",
+                                    const Target &target = get_target_from_environment());
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in

@@ -3,7 +3,7 @@
 
 #include <ostream>
 
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -27,6 +27,10 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
 /** Emit a halide type on an output stream (such as std::cout) in a
  * human-readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
+
+/** Emit a halide Module on an output stream (such as std::cout) in a
+ * human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
 
 /** Emit a halide device api type in a human readable form */
 std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
@@ -109,7 +113,6 @@ protected:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-
 };
 }
 }

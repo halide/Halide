@@ -86,7 +86,6 @@ private:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-
 };
 
 template<typename T>
