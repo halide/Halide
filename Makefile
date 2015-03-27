@@ -264,12 +264,15 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lerp.cpp \
+  LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
   Memoization.cpp \
+  Module.cpp \
   ModulusRemainder.cpp \
   ObjectInstanceRegistry.cpp \
   OneToOne.cpp \
+  Output.cpp \
   ParallelRVar.cpp \
   Param.cpp \
   Parameter.cpp \
@@ -287,7 +290,6 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
-  StmtCompiler.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -361,13 +363,16 @@ HEADER_FILES = \
   JITModule.h \
   Lambda.h \
   Lerp.h \
+  LLVM_Output.h \
   LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
   Memoization.h \
+  Module.h \
   ModulusRemainder.h \
   ObjectInstanceRegistry.h \
   OneToOne.h \
+  Output.h \
   ParallelRVar.h \
   Parameter.h \
   Param.h \
@@ -386,7 +391,6 @@ HEADER_FILES = \
   SkipStages.h \
   SlidingWindow.h \
   Solve.h \
-  StmtCompiler.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \

@@ -277,7 +277,6 @@ set(HEADER_FILES
   Simplify.h
   SlidingWindow.h
   Solve.h
-  StmtCompiler.h
   StorageFlattening.h
   StorageFolding.h
   Substitute.h
@@ -317,6 +316,9 @@ set(HEADER_FILES
   BlockFlattening.h
   RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
+  Output.h
+  LLVM_Output.h
+  Module.h
   DeviceInterface.h
   runtime/HalideRuntime.h
 )
@@ -379,7 +381,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UnrollLoops.cpp
   BoundsInference.cpp
   IRMatch.cpp
-  StmtCompiler.cpp
   IntegerDivisionTable.cpp
   SlidingWindow.cpp
   StorageFolding.cpp
@@ -425,6 +426,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BlockFlattening.cpp
   RemoveDeadAllocations.cpp
   LLVM_Runtime_Linker.cpp
+  Output.cpp
+  LLVM_Output.cpp
+  Module.cpp
   DeviceInterface.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

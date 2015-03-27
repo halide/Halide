@@ -409,6 +409,5 @@ void ComputeModulusRemainder::visit(const Evaluate *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
-
 }
 }
