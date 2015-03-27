@@ -1316,10 +1316,10 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", Argument::Buffer, Int(32), 3);
-    Argument float_arg("alpha", Argument::Scalar, Float(32), 0);
-    Argument int_arg("beta", Argument::Scalar, Int(32), 0);
-    Argument user_context_arg("__user_context", Argument::Scalar, Handle(), 0);
+    Argument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
+    Argument float_arg("alpha", Argument::InputScalar, Float(32), 0);
+    Argument int_arg("beta", Argument::InputScalar, Int(32), 0);
+    Argument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
     vector<Argument> args(4);
     args[0] = buffer_arg;
     args[1] = float_arg;
