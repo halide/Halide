@@ -17,7 +17,7 @@ class Reporter : public Halide::CompileTimeErrorReporter {
 
     virtual void error(const char *msg) {
         printf("Custom error: %s\n", msg);
-	throw "error";
+        throw "error";
     }
 };
 
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 
     try {
         Image<uint8_t> out(10, 10);
-	f.realize(out);
+        f.realize(out);
     } catch (const char *msg) {
         error_occurred = true;
     }

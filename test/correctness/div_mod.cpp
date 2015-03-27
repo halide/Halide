@@ -315,7 +315,7 @@ bool div_mod() {
             T ri = r(i, j);
 
             if (qi*bi + ri != ai && (ecount++) < 10) {
-	      std::cout << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai << ", " << (int64_t)bi << "; q, r = " << (int64_t)qi << ", " << (int64_t)ri << " at " << i << ", " << j << "\n";
+              std::cout << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai << ", " << (int64_t)bi << "; q, r = " << (int64_t)qi << ", " << (int64_t)ri << " at " << i << ", " << j << "\n";
                 success = false;
             } else if (!(0 <= ri && (bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
                 std::cout << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai << ", " << (int64_t)bi << "; q, r = " << (int64_t)qi << ", " << (int64_t)ri << "\n";

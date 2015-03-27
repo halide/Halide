@@ -24,6 +24,13 @@ void my_halide_error(void *user_context, const char *msg) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping extern_error test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
+
     std::vector<ExternFuncArgument> args;
     args.push_back(user_context_value());
 

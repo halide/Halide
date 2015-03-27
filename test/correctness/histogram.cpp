@@ -38,8 +38,8 @@ int main(int argc, char **argv) {
     /*
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-	hist.gpu_tile(x, 64);
-	hist.update().gpu_tile(r.x, r.y, 16, 16);
+        hist.gpu_tile(x, 64);
+        hist.update().gpu_tile(r.x, r.y, 16, 16);
     }
     */
 

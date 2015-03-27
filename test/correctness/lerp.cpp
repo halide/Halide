@@ -240,9 +240,9 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {
-  	    input_a_img(i, j) = (i << 4) + j;
-	    input_b_img(i, j) = ((15 - i) << 4) + (15 - j);
-	}
+            input_a_img(i, j) = (i << 4) + j;
+            input_b_img(i, j) = ((15 - i) << 4) + (15 - j);
+        }
     }
 
     ImageParam input_a(UInt(8), 2);
@@ -264,9 +264,9 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {
-	    assert(input_a_img(i, j) == result_should_be_a(i, j));
-	    assert(input_b_img(i, j) == result_should_be_b(i, j));
-	}
+            assert(input_a_img(i, j) == result_should_be_a(i, j));
+            assert(input_b_img(i, j) == result_should_be_b(i, j));
+        }
     }
 
     std::cout << "Success!" << std::endl;

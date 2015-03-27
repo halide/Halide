@@ -337,25 +337,25 @@ bool test(int vec_width) {
     // Divide by small constants
     if (verbose) printf("Dividing by small constants\n");
     for (int c = 2; c < 16; c++) {
-	Func f10;
-	f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
-	f10.vectorize(x, vec_width);
-	Image<A> im10 = f10.realize(W, H);
+        Func f10;
+        f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
+        f10.vectorize(x, vec_width);
+        Image<A> im10 = f10.realize(W, H);
 
-	for (int y = 0; y < H; y++) {
-	    for (int x = 0; x < W; x++) {
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
                 A correct = divide(input(x, y), (A)c);
 
                 if (!close_enough(im10(x, y), correct)) {
-		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
-			   (double)(input(x, y)), c,
-			   (double)(im10(x, y)),
-			   (double)(correct));
-		    printf("Error when dividing by %d\n", c);
-		    return false;
-		}
-	    }
-	}
+                    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
+                           (double)(input(x, y)), c,
+                           (double)(im10(x, y)),
+                           (double)(correct));
+                    printf("Error when dividing by %d\n", c);
+                    return false;
+                }
+            }
+        }
     }
 
     // Interleave

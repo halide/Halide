@@ -64,9 +64,9 @@ extern "C" DLLEXPORT int make_data_multi(buffer_t *out1, buffer_t *out2) {
     assert(out1->host && out1->elem_size == 4 && out1->stride[0] == 1);
     assert(out2->host && out2->elem_size == 4 && out2->stride[0] == 1);
     assert(out1->min[0] == out2->min[0] &&
-	   out1->min[1] == out2->min[1] &&
-	   out1->extent[0] == out2->extent[0] &&
-	   out1->extent[1] == out2->extent[1]);
+           out1->min[1] == out2->min[1] &&
+           out1->extent[0] == out2->extent[0] &&
+           out1->extent[1] == out2->extent[1]);
     printf("Generating data over [%d %d] x [%d %d]\n",
            out1->min[0], out1->min[0] + out1->extent[0],
            out1->min[1], out1->min[1] + out1->extent[1]);
@@ -84,6 +84,13 @@ extern "C" DLLEXPORT int make_data_multi(buffer_t *out1, buffer_t *out2) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping extern_producer test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
+
     Func source;
     source.define_extern("make_data",
                          std::vector<ExternFuncArgument>(),
@@ -114,7 +121,7 @@ int main(int argc, char **argv) {
     types.push_back(Float(32));
     multi.define_extern("make_data_multi",
                         std::vector<ExternFuncArgument>(),
-			types, 2);
+                        types, 2);
     Func sink_multi;
     sink_multi(x, y) = multi(x, y)[0] - sin(x + y) +
                        multi(x, y)[1] - cos(x + y);

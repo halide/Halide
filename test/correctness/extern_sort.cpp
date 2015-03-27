@@ -26,6 +26,13 @@ extern "C" DLLEXPORT int sort_buffer(buffer_t *in, buffer_t *out) {
 
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript extern support.
+        printf("Skipping extern_sort test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
+
     Func data;
     Var x;
     data(x) = sin(x);

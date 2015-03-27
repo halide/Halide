@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::JavaScript)) {
         // TODO: Add JavaScript extern support.
         printf("Skipping sliding_backwards test for JavaScript as it uses a C extern function.\n");
-	return 0;
+        return 0;
     }
     Func f, g;
     Var x;
