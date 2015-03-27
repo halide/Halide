@@ -20,8 +20,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
-                                     jitEventListener(NULL) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
@@ -708,23 +707,6 @@ int CodeGen_X86::native_vector_bits() const {
         return 256;
     } else {
         return 128;
-    }
-}
-
-void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *m)
-{
-    jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
-    if (jitEventListener) {
-        ee->RegisterJITEventListener(jitEventListener);
-    }
-}
-
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *)
-{
-    if (jitEventListener) {
-        ee->UnregisterJITEventListener(jitEventListener);
-        delete jitEventListener;
-        jitEventListener = NULL;
     }
 }
 

@@ -32,6 +32,8 @@ public:
     virtual ~CodeGen_GPU_Host();
 
 protected:
+    void compile_func(const LoweredFunc &func);
+
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
      * compiler doesn't know that CodeGen_CPU will in fact inherit
@@ -71,24 +73,10 @@ protected:
     void visit(const For *);
     // @}
 
-    /** Initialize the CodeGen_GPU_Host internal state to compile a fresh
-     * module. Also initializes the device specific module. */
-    virtual void init_module();
+    std::string function_name;
 
-    /** Extend the already generated LLVM IR for the host code with
-     * the device specific part of the host code. */
-    void compile_for_device(Stmt stmt, std::string name,
-                            const std::vector<Argument> &args,
-                            const std::vector<Buffer> &images_to_embed);
-
-    /** Finds and links in the necessary runtime symbols prior to jitting */
-    void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
-
-    static bool lib_cuda_linked;
-
-    static std::map<DeviceAPI, CodeGen_GPU_Dev *> make_devices(Target);
-
-    llvm::Value *get_module_state(const std::string &api_unique_name);
+    llvm::Value *get_module_state(const std::string &api_unique_name,
+                                  bool create = true);
 
 private:
     /** Child code generator for device kernels. */

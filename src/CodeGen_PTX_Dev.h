@@ -24,6 +24,7 @@ public:
 
     /** Create a PTX device code generator. */
     CodeGen_PTX_Dev(Target host);
+    ~CodeGen_PTX_Dev();
 
     void add_kernel(Stmt stmt,
                     const std::string &name,
