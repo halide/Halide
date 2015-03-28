@@ -126,7 +126,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     target(t),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
-    buffer_t_type(NULL),
+    buffer_t_type(NULL), destructor_t_type(NULL),
 
     // Vector types. These need an LLVMContext before they can be initialized.
     i8x8(NULL),
@@ -216,7 +216,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     max_f32(Float(32).max()),
 
     min_f64(Float(64).min()),
-    max_f64(Float(64).max()) {
+    max_f64(Float(64).max()),
+    destructor_loop(NULL) {
     initialize_llvm();
 }
 
@@ -492,6 +493,9 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
 
+    // Make a doubly-linked-loop of destructors
+    initialize_destructor_loop();
+
     // Put the arguments in the symbol table
     {
         size_t i = 0;
@@ -544,6 +548,28 @@ std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
         ret.push_back(ConstantInt::get(t, *i));
     }
     return ret;
+}
+
+void CodeGen_LLVM::initialize_destructor_loop() {
+    destructor_t_type = module->getTypeByName("struct.destructor_t");
+    internal_assert(destructor_t_type);
+    destructor_loop = create_alloca_at_entry(destructor_t_type, 1);
+    llvm::Function *fn = module->getFunction("initialize_destructor_sentinel");
+    internal_assert(fn);
+    builder->CreateCall(fn, destructor_loop);
+}
+
+Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj) {
+    llvm::Function *fn = module->getFunction("register_destructor");
+    llvm::Value *d = create_alloca_at_entry(destructor_t_type, 1);
+    builder->CreateCall4(fn, destructor_loop, d, destructor_fn, obj);
+    return d;
+}
+
+void CodeGen_LLVM::call_destructor(llvm::Value *d) {
+    llvm::Function *fn = module->getFunction("call_destructor");
+    internal_assert(fn);
+    builder->CreateCall2(fn, get_user_context(), d);
 }
 
 void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
@@ -1883,9 +1909,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                 builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
             }
 
-            // This implement sets device pointer and dirty bits to
-            // zero. GPU codegen should also catch this and do
-            // something smarter.
             builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
@@ -2387,15 +2410,40 @@ void CodeGen_LLVM::visit(const Let *op) {
 }
 
 void CodeGen_LLVM::visit(const LetStmt *op) {
-    sym_push(op->name, codegen(op->value));
+    Value *rhs = codegen(op->value);
+    sym_push(op->name, rhs);
 
     if (op->value.type() == Int(32)) {
         alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
     }
+
+    // We really need a let statement variant that means object
+    // creation with an associated destructor. Until that day, we
+    // special case buffer_t creation.
+    Value *destructor = NULL;
+    const Call *call = op->value.as<Call>();
+    if (call &&
+        call->name == Call::create_buffer_t &&
+        call->call_type == Call::Intrinsic) {
+        // halide_device_free stands in for a general purpose buffer_t
+        // destructor. It's all such a destructor would currently do.
+        llvm::Function *fn = module->getFunction("halide_device_free");
+        internal_assert(fn);
+        destructor = register_destructor(fn, rhs);
+        sym_push(op->name + ".destructor", destructor);
+    }
+
     codegen(op->body);
     if (op->value.type() == Int(32)) {
         alignment_info.pop(op->name);
     }
+
+    if (destructor && sym_exists(op->name + ".destructor")) {
+        // If we made a destructor and it hasn't already been called,
+        // call it.
+        call_destructor(destructor);
+    }
+
     sym_pop(op->name);
 }
 
@@ -2471,9 +2519,11 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message) {
     debug(4) << "Creating call to error handlers\n";
     builder->CreateCall(error_handler, vec<llvm::Value *>(get_user_context(), msg));
 
-    // Do any architecture-specific cleanup necessary
-    debug(4) << "Creating cleanup code\n";
-    prepare_for_early_exit();
+    // Call all the destructors in the destructor loop
+    llvm::Function *fn = module->getFunction("halide_call_all_destructors");
+    internal_assert(fn);
+    internal_assert(destructor_loop);
+    builder->CreateCall2(fn, get_user_context(), destructor_loop);
 
     // Bail out with error code -1
     builder->CreateRet(ConstantInt::get(i32, -1));
@@ -2579,6 +2629,10 @@ void CodeGen_LLVM::visit(const For *op) {
         Scope<Value *> saved_symbol_table;
         symbol_table.swap(saved_symbol_table);
 
+        // Make a new destructor loop
+        Value *parent_destructor_loop = destructor_loop;
+        initialize_destructor_loop();
+
         // Get the function arguments
 
         // The user context is first argument of the function; it's
@@ -2621,6 +2675,9 @@ void CodeGen_LLVM::visit(const For *op) {
         // Now restore the scope
         symbol_table.swap(saved_symbol_table);
         function = containing_function;
+
+        // Restore the destructor loop
+        destructor_loop = parent_destructor_loop;
 
         // Check for success
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));

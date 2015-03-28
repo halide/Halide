@@ -144,6 +144,7 @@ protected:
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
     llvm::StructType *buffer_t_type;
+    llvm::StructType *destructor_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -199,6 +200,18 @@ protected:
 
     /** Add a definition of buffer_t to the module if it isn't already there. */
     void define_buffer_t();
+
+    /** Initialize the data structure that tracks destructors. */
+    void initialize_destructor_loop();
+
+    /** Creates and returns a new destructor object on the
+     * stack. Emits code that registers it with the destructor
+     * loop. */
+    llvm::Value *register_destructor(llvm::Function *destructor_fn, llvm::Value *obj);
+
+    /** Emit code that calls a destructor object and removes it from
+     * the loop. */
+    void call_destructor(llvm::Value *d);
 
     /** Codegen an assertion. If false, it bails out and calls the
      * error handler. Either set message to non-NULL *or* pass a
@@ -391,6 +404,9 @@ private:
     /** String constants already emitted to the module. Tracked to
      * prevent emitting the same string many times. */
     std::map<std::string, llvm::Constant *> string_constants;
+
+    /** A double-linked loop of destructors */
+    llvm::Value *destructor_loop;
 };
 
 }
