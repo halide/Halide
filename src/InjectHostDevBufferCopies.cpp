@@ -637,38 +637,5 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     return InjectBufferCopies(f.buffers_to_track, t).mutate(s);
 }
 
-class InjectDevFrees : public IRMutator {
-    using IRMutator::visit;
-
-    // We assume buffers are uniquely named at this point
-    set<string> needs_freeing;
-
-    void visit(const Call *op) {
-        if (op->name == "halide_copy_to_device" || op->name == "halide_device_malloc") {
-            internal_assert(op->args.size() == 2);
-            const Variable *var = op->args[0].as<Variable>();
-            internal_assert(var);
-            needs_freeing.insert(var->name);
-        }
-        expr = op;
-    }
-
-    void visit(const Free *op) {
-        string buf_name = op->name + ".buffer";
-        if (needs_freeing.count(buf_name)) {
-            Expr buf = Variable::make(Handle(), buf_name);
-            Expr free_call = Call::make(Int(32), "halide_device_free", vec(buf), Call::Extern);
-            Stmt check = AssertStmt::make(free_call == 0, "Failed to free device buffer for " + op->name);
-            stmt = Block::make(check, op);
-        } else {
-            stmt = op;
-        }
-    }
-};
-
-Stmt inject_dev_frees(Stmt s) {
-    return InjectDevFrees().mutate(s);
-}
-
 }
 }

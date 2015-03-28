@@ -81,6 +81,7 @@ DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
+DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
@@ -430,6 +431,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 modules.push_back(get_initmod_posix_math_ll(c));
             }
+            modules.push_back(get_initmod_destructors(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITInlined) {
