@@ -509,6 +509,57 @@ Expr raise_to_integer_power(Expr e, int p) {
     return result;
 }
 
+Expr int64_to_immediate_expr(int64_t i) {
+    Expr lo = Cast::make(Int(64), Cast::make(UInt(32), Expr((int32_t) i)));
+    Expr hi = Cast::make(Int(64), Cast::make(Int(32), Expr((int32_t) (i >> 32))));
+    return Cast::make(Int(64), simplify((hi << Expr(32)) | lo));
+}
+
+bool int64_from_immediate_expr(Expr e, int64_t* value) {
+    // This is a deliberately simple parser that is only meant to
+    // decode Exprs produced by int64_to_immediate_expr() [or likely
+    // simplifications thereof]. Caveat emptor.
+    if (!e.defined() || e.type() != type_of<int64_t>()) {
+        return false;
+    }
+    if (const Cast* c = e.as<Cast>()) {
+        // We already checked the type above, so we don't need to check it again
+        e = c->value;
+    }
+    // Lo 32 bits are unsigned (to avoid sign extension)
+    uint32_t u32;
+    if (scalar_from_constant_expr<uint32_t>(e, &u32)) {
+        *value = static_cast<int64_t>(u32);
+        return true;
+    }
+    int32_t i32;
+    if (scalar_from_constant_expr<int32_t>(e, &i32)) {
+        *value = static_cast<int64_t>(i32);
+        return true;
+    }
+    if (const Call* call = e.as<Call>()) {
+        if (call->name == Call::shift_left) {
+            int64_t lhs, rhs;
+            if (!int64_from_immediate_expr(call->args[0], &lhs) ||
+                !int64_from_immediate_expr(call->args[1], &rhs)) {
+                return false;
+            }
+            *value = (lhs << rhs);
+            return true;
+        }
+        if (call->name == Call::bitwise_or) {
+            int64_t lhs, rhs;
+            if (!int64_from_immediate_expr(call->args[0], &lhs) ||
+                !int64_from_immediate_expr(call->args[1], &rhs)) {
+                return false;
+            }
+            *value = (lhs | rhs);
+            return true;
+        }
+    }
+    return false;
+}
+
 }
 
 Expr fast_log(Expr x) {
