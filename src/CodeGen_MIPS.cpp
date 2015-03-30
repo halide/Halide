@@ -38,6 +38,14 @@ llvm::Triple CodeGen_MIPS::get_target_triple() const {
     return triple;
 }
 
+llvm::DataLayout CodeGen_MIPS::get_data_layout() const {
+    if (target.bits == 32) {
+        return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
+    } else {
+        return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
+    }
+}
+
 string CodeGen_MIPS::mcpu() const {
     if (target.bits == 32) {
         return "";
