@@ -1422,6 +1422,128 @@ inline Expr likely(Expr e) {
                                 Internal::vec<Expr>(e), Internal::Call::Intrinsic);
 }
 
+namespace Internal {
+
+/** You can't represent an int64 as a single immediate node in Halide IR;
+ * this provides a convenient wrapper for code that wants to manipulate
+ * int64 (and uint64) values as Exprs (most notable, Parameter's def/min/max
+ * values). int64_to_imm_expr() converts an int64 value into an Expr
+ * of type Int(64) with the equivalent value. int64_from_imm_expr() recovers
+ * the original value from the Expr and returns true (returning false if
+ * the Expr is ill-formed; this shouldn't ever happen for an Expr created
+ * by int64_to_imm_expr).
+ */
+EXPORT Expr int64_to_immediate_expr(int64_t i);
+EXPORT bool int64_from_immediate_expr(Expr e, int64_t* i);
+
+
+/** Given a scalar constant, return an Expr that represents it. This will
+ * usually be a simple IntImm or FloatImm, with two notable exceptions:
+ *
+ * -- Expr has no way to represent a float64 at present, so these values
+ * are lossily stored in a float32.
+ * -- int64 and uint64 will be stored exactly, but as a small sequence
+ * of bit operations.
+ *
+ * Note that in all cases, Expr.type == type_of<T>().
+ */
+template<typename T>
+inline Expr scalar_to_constant_expr(T value) {
+    return Cast::make(type_of<T>(), Expr(value));
+}
+
+template<>
+inline Expr scalar_to_constant_expr(uint32_t u32) {
+    // Have to construct the literal as a signed int32 and cast the result.
+    return Cast::make(UInt(32), Expr((int32_t) u32));
+}
+
+template<>
+inline Expr scalar_to_constant_expr(double f64) {
+    // Sorry, double, you're just gonna have to live with the loss.
+    return Cast::make(Float(64), Expr((float) f64));
+}
+
+template<>
+inline Expr scalar_to_constant_expr(int64_t i) {
+    // Cast is redundant here, but included for symmetry
+    return Cast::make(Int(64), int64_to_immediate_expr(i));
+}
+
+template<>
+inline Expr scalar_to_constant_expr(uint64_t u) {
+    return Cast::make(UInt(64), int64_to_immediate_expr(static_cast<int64_t>(u)));
+}
+
+namespace {
+
+// extract_immediate is a private utility for scalar_from_constant_expr,
+// and should not be used elsewhere
+template<typename T>
+inline bool extract_immediate(Expr e, T *value) {
+    if (const IntImm* i = e.as<IntImm>()) {
+        *value = static_cast<T>(i->value);
+        return true;
+    }
+    return false;
+}
+
+template<>
+inline bool extract_immediate(Expr e, float *value) {
+    if (const FloatImm* f = e.as<FloatImm>()) {
+        *value = static_cast<float>(f->value);
+        return true;
+    }
+    return false;
+}
+
+template<>
+inline bool extract_immediate(Expr e, double *value) {
+    if (const FloatImm* f = e.as<FloatImm>()) {
+        *value = static_cast<double>(f->value);
+        return true;
+    }
+    return false;
+}
+
+template<>
+inline bool extract_immediate(Expr e, int64_t *value) {
+    return int64_from_immediate_expr(e, value);
+}
+
+template<>
+inline bool extract_immediate(Expr e, uint64_t *value) {
+    return int64_from_immediate_expr(e, reinterpret_cast<int64_t*>(value));
+}
+
+}  // namespace
+
+/** Given an Expr produced by scalar_to_constant_expr<T>, extract the constant value
+ * of type T and return true. If the constant value cannot be converted to type
+ * T, return false.
+ *
+ * In general, ScalarFromExpr<T>(ScalarToExpr<T>(v)) -> (v, true) for all scalar
+ * type T, with the notable exception of T == float64, which will return true
+ * but possibly lose precision.
+ *
+ * This function exists primarily to allow for code that needs to extract
+ * the default/min/max values in a Parameter (e.g. to write metadata for
+ * a compiled Generator); it is not intended to be a general Expr evaluator,
+ * and should not be used as one.
+ */
+template<typename T>
+inline bool scalar_from_constant_expr(Expr e, T *value) {
+  if (!e.defined() || e.type() != type_of<T>()) {
+    return false;
+  }
+  if (const Cast* c = e.as<Cast>()) {
+    e = c->value;
+  }
+  return extract_immediate<T>(e, value);
+}
+
+}  // namespace Internal
+
 }
 
 #endif
