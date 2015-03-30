@@ -22,7 +22,8 @@ protected:
 
     using CodeGen_Posix::visit;
 
-    /* override */ virtual llvm::Triple get_target_triple() const;
+    llvm::Triple get_target_triple() const;
+    llvm::DataLayout get_data_layout() const;
 
     std::string mcpu() const;
     std::string mattrs() const;

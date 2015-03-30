@@ -370,7 +370,15 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     init_module();
 
     llvm::Triple triple = get_target_triple();
+    llvm::DataLayout dl = get_data_layout();
     module->setTargetTriple(triple.str());
+
+    #if LLVM_VERSION > 36
+    module->setDataLayout(dl);
+    #else
+    module->setDataLayout(&dl);
+    #endif
+
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     module->setModuleIdentifier(input.name());
@@ -569,6 +577,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
     llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
+    llvm::ArrayType *padding_bytes = ArrayType::get(i8, 2);
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
@@ -577,8 +586,10 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
         ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
         ConstantInt::get(i32, b.elem_size),
-        ConstantInt::get(i8, 1),
-        ConstantInt::get(i8, 0)
+        ConstantInt::get(i8, 1), // host_dirty
+        ConstantInt::get(i8, 0), // dev_dirty
+        ConstantArray::get(padding_bytes, vec(ConstantInt::get(i8, 0),
+                                              ConstantInt::get(i8, 0)))
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
     global->setInitializer(buffer_struct);
