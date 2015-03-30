@@ -2276,7 +2276,12 @@ void Func::compile_to_file(const string &filename_prefix, const vector<Argument>
     // function name.
     Module m = compile_to_module(args, filename_prefix, target);
     compile_module_to_c_header(m, filename_prefix + ".h");
-    compile_module_to_object(m, filename_prefix + ".o");
+
+    if (target.arch == Target::PNaCl) {
+        compile_module_to_llvm_bitcode(m, filename_prefix + ".o");
+    } else {
+        compile_module_to_object(m, filename_prefix + ".o");
+    }
 }
 
 void Func::compile_to_file(const string &filename_prefix, const Target &target) {
