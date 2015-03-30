@@ -24,7 +24,11 @@ void OutputImageParam::add_implicit_args_if_placeholder(std::vector<Expr> &args,
 }
 
 OutputImageParam::OutputImageParam(const Internal::Parameter &p) :
-    param(p) {}
+    param(p) {
+}
+
+OutputImageParam::~OutputImageParam() {
+}
 
 const std::string &OutputImageParam::name() const {
     return param.name();
@@ -135,6 +139,9 @@ ImageParam::ImageParam(Type t, int d, const std::string &n) :
     Internal::unique_name(n);
 }
 
+ImageParam::~ImageParam() {
+}
+
 void ImageParam::set(Buffer b) {
     if (b.defined()) {
         user_assert(b.type() == type())
@@ -229,5 +236,3 @@ ImageParam::operator Argument() const {
 }
 
 }
-
-
