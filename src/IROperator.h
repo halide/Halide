@@ -1424,18 +1424,6 @@ inline Expr likely(Expr e) {
 
 namespace Internal {
 
-namespace {
-
-// Cast e to Type t iff it is not already of that type.
-Expr cast_if(Type t, Expr e) {
-    if (e.type() != t) {
-        e = Cast::make(t, e);
-    }
-    return e;
-}
-
-}  // namespace
-
 /** Given a scalar constant, return an Expr that represents it. This will
  * usually be a simple IntImm or FloatImm, with the exception of 64-bit values,
  * which are stored as wrappers to simple Call expressions.
@@ -1445,13 +1433,13 @@ Expr cast_if(Type t, Expr e) {
 template<typename T>
 inline Expr scalar_to_constant_expr(T value) {
     // All integral types <= 32 bits, including bool
-    return cast_if(type_of<T>(), Expr(static_cast<int32_t>(value)));
+    return cast(type_of<T>(), Expr(static_cast<int32_t>(value)));
 }
 
 template<>
 inline Expr scalar_to_constant_expr(float f32) {
     // float32 needs to skip the cast to int32
-    return cast_if(Float(32), Expr(f32));
+    return cast(Float(32), Expr(f32));
 }
 
 template<>
@@ -1473,7 +1461,7 @@ inline Expr scalar_to_constant_expr(int64_t i) {
 
 template<>
 inline Expr scalar_to_constant_expr(uint64_t u) {
-    return cast_if(UInt(64), scalar_to_constant_expr<int64_t>(static_cast<int64_t>(u)));
+    return cast(UInt(64), scalar_to_constant_expr<int64_t>(static_cast<int64_t>(u)));
 }
 
 namespace {
