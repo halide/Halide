@@ -520,12 +520,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         add_underscores_to_posix_calls_on_windows(modules[0]);
     }
 
-    if (t.arch == Target::PNaCl) {
-        // The initial module is supposed to have the right datalayout
-        // already, but this is not the case for PNaCl.
-        modules[0]->setDataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
-    }
-
     return modules[0];
 }
 
