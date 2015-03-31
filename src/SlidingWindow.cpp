@@ -196,11 +196,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = select(loop_var_expr == loop_min, min_required, prev_max_plus_one);
+                new_min = select(loop_var_expr <= loop_min, min_required, likely(prev_max_plus_one));
                 new_max = max_required;
             } else {
                 new_min = min_required;
-                new_max = select(loop_var_expr == loop_min, max_required, prev_min_minus_one);
+                new_max = select(loop_var_expr <= loop_min, max_required, likely(prev_min_minus_one));
             }
 
             Expr early_stages_min_required = new_min;

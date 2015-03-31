@@ -219,7 +219,6 @@ SOURCE_FILES = \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
-  BranchVisitors.cpp \
   Buffer.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
@@ -266,16 +265,19 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lerp.cpp \
-  LinearSolve.cpp \
+  LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
   Memoization.cpp \
+  Module.cpp \
   ModulusRemainder.cpp \
   ObjectInstanceRegistry.cpp \
   OneToOne.cpp \
+  Output.cpp \
   ParallelRVar.cpp \
   Param.cpp \
   Parameter.cpp \
+  PartitionLoops.cpp \
   Profiling.cpp \
   Qualify.cpp \
   Random.cpp \
@@ -288,9 +290,7 @@ SOURCE_FILES = \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
-  SpecializeBranchedLoops.cpp \
-  SpecializeClampedRamps.cpp \
-  StmtCompiler.cpp \
+  Solve.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -315,7 +315,6 @@ HEADER_FILES = \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
-  BranchVisitors.h \
   Buffer.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
@@ -366,17 +365,20 @@ HEADER_FILES = \
   JITModule.h \
   Lambda.h \
   Lerp.h \
-  LinearSolve.h \
+  LLVM_Output.h \
   LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
   Memoization.h \
+  Module.h \
   ModulusRemainder.h \
   ObjectInstanceRegistry.h \
   OneToOne.h \
+  Output.h \
   ParallelRVar.h \
   Parameter.h \
   Param.h \
+  PartitionLoops.h \
   Profiling.h \
   Qualify.h \
   Random.h \
@@ -390,9 +392,7 @@ HEADER_FILES = \
   Simplify.h \
   SkipStages.h \
   SlidingWindow.h \
-  SpecializeBranchedLoops.h \
-  SpecializeClampedRamps.h \
-  StmtCompiler.h \
+  Solve.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
@@ -411,8 +411,58 @@ HEADER_FILES = \
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image windows_cuda windows_opencl windows_io windows_thread_pool ssp opengl linux_opengl_context osx_opengl_context android_opengl_context posix_print gpu_device_selection cache nacl_host_cpu_count to_string module_jit_ref_count module_aot_ref_count device_interface
-RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips arm_no_neon
+RUNTIME_CPP_COMPONENTS = \
+  android_clock \
+  android_host_cpu_count \
+  android_io \
+  android_opengl_context \
+  cache \
+  cuda \
+  device_interface \
+  fake_thread_pool \
+  gcd_thread_pool \
+  gpu_device_selection \
+  ios_io \
+  linux_clock \
+  linux_host_cpu_count \
+  linux_opengl_context \
+  module_aot_ref_count \
+  module_jit_ref_count \
+  nacl_host_cpu_count \
+  opencl \
+  opengl \
+  osx_clock \
+  osx_host_cpu_count \
+  osx_opengl_context \
+  posix_allocator \
+  posix_clock \
+  posix_error_handler \
+  posix_io \
+  posix_math \
+  posix_print \
+  posix_thread_pool \
+  to_string \
+  ssp \
+  tracing \
+  windows_clock \
+  windows_cuda \
+  windows_opencl \
+  windows_io \
+  windows_thread_pool \
+  write_debug_image
+
+RUNTIME_LL_COMPONENTS = \
+  aarch64 \
+  arm \
+  arm_no_neon \
+  mips \
+  pnacl_math \
+  posix_math \
+  ptx_dev \
+  win32_math \
+  x86 \
+  x86_avx \
+  x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h
 
@@ -468,22 +518,43 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
 
+
+ifneq ($(LLVM_35_OR_OLDER), )
+RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
+RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
+else
+# Compile generic 32- or 64-bit code
+RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
+RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
+endif
+
+# win32 is tied to x86 due to the use of the __stdcall calling convention
+RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
+
 # -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
+
+$(BUILD_DIR)/initmod.windows_%_32.ll: src/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target $(RUNTIME_TRIPLE_WIN_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32.d
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target "i386-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
 
 $(BUILD_DIR)/initmod.%_64_debug.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m64 -target  $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64_debug.d
+
+$(BUILD_DIR)/initmod.windows_%_32_debug.ll: src/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m32 -target $(RUNTIME_TRIPLE_WIN_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32_debug.d
 
 $(BUILD_DIR)/initmod.%_32_debug.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m32 -target "i386-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
 	@-mkdir -p $(BUILD_DIR)

@@ -3,7 +3,7 @@
 
 #include "IRPrinter.h"
 #include "IROperator.h"
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -38,6 +38,21 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     } else {
         Internal::IRPrinter p(stream);
         p.print(ir);
+    }
+    return stream;
+}
+
+ostream &operator <<(ostream &stream, const Buffer &buffer) {
+    return stream << "buffer " << buffer.name() << " = {...}\n";
+}
+
+ostream &operator<<(ostream &stream, const Module &m) {
+    stream << "Target = " << m.target().to_string() << "\n";
+    for (size_t i = 0; i < m.buffers.size(); i++) {
+        stream << m.buffers[i] << "\n";
+    }
+    for (size_t i = 0; i < m.functions.size(); i++) {
+        stream << m.functions[i] << "\n";
     }
     return stream;
 }
@@ -137,6 +152,34 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
         p.print(ir);
     }
     return stream;
+}
+
+
+ostream &operator <<(ostream &stream, const LoweredFunc &function) {
+    stream << function.linkage << " func " << function.name << " (";
+    for (size_t i = 0; i < function.args.size(); i++) {
+        stream << function.args[i].name;
+        if (i + 1 < function.args.size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") {\n";
+    stream << function.body;
+    stream << "}\n\n";
+    return stream;
+}
+
+
+std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
+    switch (type) {
+    case LoweredFunc::External:
+        out << "external";
+        break;
+    case LoweredFunc::Internal:
+        out << "internal";
+        break;
+    }
+    return out;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {

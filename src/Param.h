@@ -169,7 +169,7 @@ public:
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
     operator Argument() const {
-        return Argument(name(), Argument::Scalar, type(), 0,
+        return Argument(name(), Argument::InputScalar, type(), 0,
             param.get_scalar_expr(), param.get_min_value(), param.get_max_value());
     }
 };
@@ -196,6 +196,9 @@ public:
 
     /** Construct a NULL image parameter handle. */
     OutputImageParam() {}
+
+    /** Virtual destructor. Does nothing. */
+    EXPORT virtual ~OutputImageParam();
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
     EXPORT OutputImageParam(const Internal::Parameter &p);
@@ -295,7 +298,7 @@ public:
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
-    EXPORT operator Argument() const;
+    EXPORT virtual operator Argument() const;
 
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
@@ -309,6 +312,9 @@ public:
 
     /** Construct a NULL image parameter handle. */
     ImageParam() : OutputImageParam() {}
+
+    /** Virtual destructor. Does nothing. */
+    EXPORT virtual ~ImageParam();
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
@@ -356,6 +362,10 @@ public:
         return (*this)(_);
     }
 
+    /** Construct the appropriate argument matching this parameter,
+     * for the purpose of generating the right type signature when
+     * statically compiling halide pipelines. */
+    EXPORT virtual operator Argument() const;
 };
 
 }

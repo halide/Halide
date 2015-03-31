@@ -20,8 +20,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
-                                     jitEventListener(NULL) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
@@ -88,6 +87,27 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
 
     return triple;
 }
+
+
+llvm::DataLayout CodeGen_X86::get_data_layout() const {
+    if (target.bits == 32) {
+        if (target.os == Target::OSX) {
+            return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+        } else if (target.os == Target::Windows) {
+            return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-S32");
+        } else {
+            // Linux/Android/NaCl
+            return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+        }
+    } else { // 64-bit
+        if (target.os == Target::NaCl) {
+            return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:128-n8:16:32:64-S128");
+        } else {
+            return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
+        }
+    }
+}
+
 
 Expr _i64(Expr e) {
     return cast(Int(64, e.type().width), e);
@@ -708,23 +728,6 @@ int CodeGen_X86::native_vector_bits() const {
         return 256;
     } else {
         return 128;
-    }
-}
-
-void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *m)
-{
-    jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
-    if (jitEventListener) {
-        ee->RegisterJITEventListener(jitEventListener);
-    }
-}
-
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *)
-{
-    if (jitEventListener) {
-        ee->UnregisterJITEventListener(jitEventListener);
-        delete jitEventListener;
-        jitEventListener = NULL;
     }
 }
 

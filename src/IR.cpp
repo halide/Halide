@@ -596,6 +596,7 @@ Call::ConstString Call::make_struct = "make_struct";
 Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
 Call::ConstString Call::copy_memory = "copy_memory";
+Call::ConstString Call::likely = "likely";
 
 }
 }

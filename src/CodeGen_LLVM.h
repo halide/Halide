@@ -24,6 +24,7 @@ class AllocaInst;
 class Constant;
 class Triple;
 class MDNode;
+class DataLayout;
 }
 
 #include <map>
@@ -32,10 +33,8 @@ class MDNode;
 #include <vector>
 
 #include "IRVisitor.h"
-#include "Argument.h"
-#include "IR.h"
+#include "Module.h"
 #include "Scope.h"
-#include "JITModule.h"
 #include "ModulusRemainder.h"
 #include "Target.h"
 
@@ -50,28 +49,36 @@ namespace Internal {
  */
 class CodeGen_LLVM : public IRVisitor {
 public:
-    mutable RefCount ref_count;
+    /** Create an instance of CodeGen_LLVM suitable for the target. */
+    static CodeGen_LLVM *new_for_target(const Target &target,
+                                        llvm::LLVMContext &context);
 
-    CodeGen_LLVM(Target t);
     virtual ~CodeGen_LLVM();
 
-    /** Emit a compiled halide statement as llvm bitcode. Call this
-     * after calling compile. */
-    virtual void compile_to_bitcode(const std::string &filename);
+    /** Takes a halide Module and compiles it to an llvm Module. */
+    virtual llvm::Module *compile(const Module &module);
 
-    /** Emit a compiled halide statement as either an object file, or
-     * as raw assembly, depending on the value of the second
-     * argument. Call this after calling compile. */
-    virtual void compile_to_native(const std::string &filename, bool assembly = false);
+    /** The target we're generating code for */
+    const Target &get_target() const { return target; }
 
-    /** Compile to machine code stored in memory, and return some
-     * functions pointers into that machine code. */
-    JITModule compile_to_function_pointers();
+    /** Tell the code generator which LLVM context to use. */
+    void set_context(llvm::LLVMContext &context);
+
+protected:
+    CodeGen_LLVM(Target t);
+
+    /** Compile a specific halide declaration into the llvm Module. */
+    // @{
+    virtual void compile_func(const LoweredFunc &func);
+    virtual void compile_buffer(const Buffer &buffer);
+    // @}
 
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
      * define these. */
     // @{
+    virtual llvm::Triple get_target_triple() const = 0;
+    virtual llvm::DataLayout get_data_layout() const = 0;
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
@@ -82,30 +89,8 @@ public:
     virtual int native_vector_bits() const = 0;
     // @}
 
-    /** Get the llvm target triple used. */
-    virtual llvm::Triple get_target_triple() const = 0;
-
-    /** Do any required target-specific things to the execution engine
-     * and the module prior to jitting. Called by JITModule
-     * just before it jits. Does nothing by default. */
-    virtual void jit_init(llvm::ExecutionEngine *, llvm::Module *) {}
-
-    /** Do any required target-specific things to the execution engine
-     * and the module after jitting. Called by JITModule just
-     * after it jits. Does nothing by default. */
-    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
-
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
-
-    /** Takes a halide statement and compiles it to an llvm module held
-     * internally. Call this before calling compile_to_bitcode or
-     * compile_to_native. */
-    virtual void compile(Stmt stmt, std::string name,
-                         const std::vector<Argument> &args,
-                         const std::vector<Buffer> &images_to_embed);
-
-protected:
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
@@ -119,7 +104,6 @@ protected:
     static bool llvm_Mips_enabled;
 
     llvm::Module *module;
-    bool owns_module;
     llvm::Function *function;
     llvm::LLVMContext *context;
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
@@ -130,19 +114,12 @@ protected:
     /** The target we're generating code for */
     Halide::Target target;
 
+    /** Grab all the context specific internal state. */
+    virtual void init_context();
     /** Initialize the CodeGen_LLVM internal state to compile a fresh
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
-
-    /** Extend the already generated LLVM IR for the host code with
-     * the device specific part of the host code. Called by compile
-     * after doing the main host compilation but before optimizing the
-     * module.  Default implementation does nothing. */
-    virtual void compile_for_device(Stmt stmt, std::string name,
-                                    const std::vector<Argument> &args,
-                                    const std::vector<Buffer> &images_to_embed) {
-    }
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -206,9 +183,6 @@ protected:
     Expr min_f32, max_f32, min_f64, max_f64;
     // @}
 
-    /** The name of the function being generated. */
-    std::string function_name;
-
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
@@ -222,7 +196,8 @@ protected:
     /** Take an llvm Value representing a pointer to a buffer_t,
      * and populate the symbol table with its constituent parts.
      */
-    void unpack_buffer(std::string name, llvm::Value *buffer);
+    void push_buffer(const std::string &name, llvm::Value *buffer);
+    void pop_buffer(const std::string &name);
 
     /** Add a definition of buffer_t to the module if it isn't already there. */
     void define_buffer_t();
@@ -420,6 +395,11 @@ private:
     std::map<std::string, llvm::Constant *> string_constants;
 };
 
-}}
+}
+
+/** Given a Halide module, generate an llvm::Module. */
+EXPORT llvm::Module *codegen_llvm(const Module &module, llvm::LLVMContext &context);
+
+}
 
 #endif

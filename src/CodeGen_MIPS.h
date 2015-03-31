@@ -23,6 +23,7 @@ public:
 protected:
 
     llvm::Triple get_target_triple() const;
+    llvm::DataLayout get_data_layout() const;
 
     using CodeGen_Posix::visit;
 

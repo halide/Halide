@@ -681,6 +681,9 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::likely) {
+            assert(op->args.size() == 1);
+            op->args[0].accept(this);
         } else if (op->call_type == Call::Intrinsic && op->name == Call::return_second) {
             assert(op->args.size() == 2);
             op->args[1].accept(this);

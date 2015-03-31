@@ -22,12 +22,14 @@ public:
      * enabled using the appropriate flags in the target struct. */
     CodeGen_X86(Target);
 
-    void jit_init(llvm::ExecutionEngine *, llvm::Module *);
-    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
+protected:
 
     llvm::Triple get_target_triple() const;
-
-protected:
+    llvm::DataLayout get_data_layout() const;
+    std::string mcpu() const;
+    std::string mattrs() const;
+    bool use_soft_float_abi() const;
+    int native_vector_bits() const;
 
     using CodeGen_Posix::visit;
 
@@ -47,14 +49,6 @@ protected:
     void visit(const NE *);
     void visit(const Select *);
     // @}
-
-    std::string mcpu() const;
-    std::string mattrs() const;
-    bool use_soft_float_abi() const;
-    int native_vector_bits() const;
-
-private:
-    llvm::JITEventListener* jitEventListener;
 };
 
 }}
