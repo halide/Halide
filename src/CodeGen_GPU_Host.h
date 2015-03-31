@@ -67,10 +67,14 @@ protected:
     using CodeGen_CPU::i64;
     using CodeGen_CPU::buffer_t_type;
     using CodeGen_CPU::allocations;
+    using CodeGen_CPU::call_destructor;
+    using CodeGen_CPU::register_destructor;
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
+    void visit(const Free *);
+    void visit(const Call *);
     // @}
 
     std::string function_name;

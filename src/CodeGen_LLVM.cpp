@@ -561,8 +561,20 @@ void CodeGen_LLVM::initialize_destructor_loop() {
 
 Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj) {
     llvm::Function *fn = module->getFunction("register_destructor");
+    internal_assert(fn);
+
+    // Cast the object to llvm's representation of void *
+    obj = builder->CreatePointerCast(obj, i8->getPointerTo());
+
+    // Cast the function to something that takes a void *
+    llvm::Type *d_fn_type = fn->getFunctionType()->params()[2];
+    llvm::Value *d_fn = builder->CreatePointerCast(destructor_fn, d_fn_type);
+
+    // Allocate a stack slot for this destructor
     llvm::Value *d = create_alloca_at_entry(destructor_t_type, 1);
-    builder->CreateCall4(fn, destructor_loop, d, destructor_fn, obj);
+
+    // Codegen the call that adds it to the loop
+    builder->CreateCall4(fn, destructor_loop, d, d_fn, obj);
     return d;
 }
 
@@ -2417,31 +2429,10 @@ void CodeGen_LLVM::visit(const LetStmt *op) {
         alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
     }
 
-    // We really need a let statement variant that means object
-    // creation with an associated destructor. Until that day, we
-    // special case buffer_t creation.
-    Value *destructor = NULL;
-    const Call *call = op->value.as<Call>();
-    if (call &&
-        call->name == Call::create_buffer_t &&
-        call->call_type == Call::Intrinsic) {
-        // halide_device_free stands in for a general purpose buffer_t
-        // destructor. It's all such a destructor would currently do.
-        llvm::Function *fn = module->getFunction("halide_device_free");
-        internal_assert(fn);
-        destructor = register_destructor(fn, rhs);
-        sym_push(op->name + ".destructor", destructor);
-    }
-
     codegen(op->body);
+
     if (op->value.type() == Int(32)) {
         alignment_info.pop(op->name);
-    }
-
-    if (destructor && sym_exists(op->name + ".destructor")) {
-        // If we made a destructor and it hasn't already been called,
-        // call it.
-        call_destructor(destructor);
     }
 
     sym_pop(op->name);
