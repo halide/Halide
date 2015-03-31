@@ -5,6 +5,7 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
+#include "runtime/HalideRuntime.h"
 
 /** \file
  * Defines a type used for expressing the type signature of a
@@ -34,9 +35,9 @@ struct Argument {
      * but there is no runtime enforcement of this at present.
      */
     enum Kind {
-        InputScalar,
-        InputBuffer,
-        OutputBuffer
+        InputScalar = HalideArgumentKind_InputScalar,
+        InputBuffer = HalideArgumentKind_InputBuffer,
+        OutputBuffer = HalideArgumentKind_OutputBuffer
     };
     Kind kind;
 
