@@ -47,7 +47,7 @@ INLINE void call_destructor(void *user_context, destructor_t *d) {
     d->fn(user_context, d->object);
 }
 
-WEAK void halide_call_all_destructors(void *user_context, destructor_t *sentinel) {
+WEAK __attribute__((noinline)) void halide_call_all_destructors(void *user_context, destructor_t *sentinel) {
     destructor_t *d = sentinel->next;
     while (d != sentinel) {
         d->fn(user_context, d->object);
