@@ -114,7 +114,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
-            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, name);
+            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, false, name);
             allocation.stack_bytes = stack_bytes;
         }
     } else {

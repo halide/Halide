@@ -577,11 +577,11 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     obj = builder->CreatePointerCast(obj, void_ptr);
 
     // Cast the function to something that takes a pair of void *
-    FunctionType *d_fn_type = FunctionType::get(void_t, vec(void_ptr, void_ptr), false);
+    llvm::Type *d_fn_type = FunctionType::get(void_t, vec(void_ptr, void_ptr), false)->getPointerTo();
     llvm::Value *d_fn = builder->CreatePointerCast(destructor_fn, d_fn_type);
 
     // Allocate a stack slot for this destructor
-    llvm::Value *d = create_alloca_at_entry(destructor_t_type, 1);
+    llvm::Value *d = create_alloca_at_entry(destructor_t_type, 1, true);
 
     // Codegen the call that adds it to the loop
     builder->CreateCall4(fn, destructor_loop, d, d_fn, obj);
@@ -2810,7 +2810,7 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
     value = NULL;
 }
 
-Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
+Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_initialize, const string &name) {
     llvm::BasicBlock *here = builder->GetInsertBlock();
     llvm::BasicBlock *entry = &here->getParent()->getEntryBlock();
     if (entry->empty()) {
@@ -2820,6 +2820,11 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, const string &
     }
     Value *size = ConstantInt::get(i32, n);
     Value *ptr = builder->CreateAlloca(t, size, name);
+
+    if (zero_initialize) {
+        internal_assert(n == 1) << "Zero initialization for stack arrays not implemented\n";
+        builder->CreateStore(Constant::getNullValue(t), ptr);
+    }
     builder->SetInsertPoint(here);
     return ptr;
 }

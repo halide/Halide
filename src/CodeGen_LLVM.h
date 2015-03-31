@@ -339,7 +339,9 @@ protected:
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
-    llvm::Value *create_alloca_at_entry(llvm::Type *type, int n, const std::string &name = "");
+    llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
+                                        bool zero_initialize = false,
+                                        const std::string &name = "");
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
