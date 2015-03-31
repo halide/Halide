@@ -998,9 +998,9 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
-Func &Func::auto_schedule(AutoScheduleStrategy strategy) {
+Func &Func::auto_schedule(AutoScheduleStrategy strategy, const Target &target) {
     invalidate_cache();
-    apply_automatic_schedule(*this, strategy, auto_schedule_reset);
+    apply_automatic_schedule(*this, strategy, auto_schedule_reset, target);
     // Only reset schedules on the first call to auto_schedule.
     if (auto_schedule_reset) {
         auto_schedule_reset = false;

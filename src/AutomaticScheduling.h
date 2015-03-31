@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -24,7 +25,7 @@ class AutoScheduleStrategyImpl {
 public:
     /** Apply the schedule strategy to the pipeline. 'func' should
      * be the output of the pipeline. */
-    virtual void apply(Func root) = 0;
+    virtual void apply(Func root, const Target &target) = 0;
     virtual ~AutoScheduleStrategyImpl() {}
 };
 
@@ -33,7 +34,7 @@ public:
  */
 class ComputeRootAllStencils : public AutoScheduleStrategyImpl {
 public:
-    virtual void apply(Func root);
+    virtual void apply(Func root, const Target &target);
 };
 
 /** Performs the following pipeline optimization:
@@ -41,7 +42,7 @@ public:
  */
 class ParallelizeOuter : public AutoScheduleStrategyImpl {
 public:
-    virtual void apply(Func root);
+    virtual void apply(Func root, const Target &target);
 private:
     void parallelize_outer(Function f);
     void vectorize_inner(Function f);
@@ -52,12 +53,13 @@ private:
  */
 class VectorizeInner : public AutoScheduleStrategyImpl {
 public:
-    virtual void apply(Func root);
+    virtual void apply(Func root, const Target &target);
 };
 
 /** Apply the given schedule strategy to the pipeline with output
  * 'root'. */
-EXPORT void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy, bool reset_schedules);
+EXPORT void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy,
+                                     bool reset_schedules, const Target &target);
 
 }
 }

@@ -983,7 +983,8 @@ public:
 
     /** Apply an automatic schedule to the pipeline with this function
         as the output. */
-    EXPORT Func &auto_schedule(AutoScheduleStrategy strategy);
+    EXPORT Func &auto_schedule(AutoScheduleStrategy strategy,
+                               const Target &target = get_target_from_environment());
 
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to
