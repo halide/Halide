@@ -237,6 +237,7 @@ add_dependencies(InitialModules
 
 set(HEADER_FILES
   AllocationBoundsInference.h
+  AutomaticScheduling.h
   Argument.h
   BlockFlattening.h
   BoundaryConditions.h
@@ -353,6 +354,7 @@ add_definitions("-DCOMPILING_HALIDE")
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
 
   AllocationBoundsInference.cpp
+  AutomaticScheduling.cpp
   BlockFlattening.cpp
   BoundaryConditions.cpp
   Bounds.cpp
