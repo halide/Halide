@@ -25,6 +25,7 @@ public:
     /** Apply the schedule strategy to the pipeline. 'func' should
      * be the output of the pipeline. */
     virtual void apply(Func root) = 0;
+    virtual ~AutoScheduleStrategyImpl() {}
 };
 
 /** Performs the following pipeline optimization:

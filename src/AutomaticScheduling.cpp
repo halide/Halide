@@ -34,22 +34,12 @@ public:
 
     /** Return list of functions directly calling function f. */
     const vector<Function> &callers(Function f) {
-        map<string, vector<Function> >::const_iterator I = call_to_caller.find(f.name());
-        if (I == call_to_caller.end()) {
-            call_to_caller[f.name()] = vector<Function>();
-            I = call_to_caller.find(f.name());
-        }
-        return I->second;
+        return call_to_caller[f.name()];
     }
 
     /** Return list of functions directly called by f. */
     const vector<Function> &calls(Function f) {
-        map<string, vector<Function> >::const_iterator I = call_to_callee.find(f.name());
-        if (I == call_to_callee.end()) {
-            call_to_callee[f.name()] = vector<Function>();
-            I = call_to_callee.find(f.name());
-        }
-        return I->second;
+        return call_to_callee[f.name()];
     }
 
     /** Return list of functions transitively called by f. This does
@@ -116,8 +106,8 @@ private:
     void reset_schedule(Function f) {
         Schedule &olds = f.schedule();
         std::vector<Bound> oldbounds(olds.bounds().begin(), olds.bounds().end());
-        f.schedule() = Schedule();
         Schedule &s = f.schedule();
+        s = Schedule();
         s.bounds().insert(s.bounds().begin(), oldbounds.begin(), oldbounds.end());
 
         for (size_t i = 0; i < f.args().size(); i++) {
@@ -142,7 +132,7 @@ vector<Interval> get_function_bounds(Function f, CallGraph &cg) {
     result.resize(f.dimensions());
     vector<bool> initialized;
     initialized.resize(f.dimensions(), false);
-    vector<Function> callers = cg.callers(f);
+    const vector<Function> &callers = cg.callers(f);
     if (callers.empty()) {
         // Return undefined bounds for uncalled functions.
         result.clear();
