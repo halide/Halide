@@ -5,6 +5,7 @@ using namespace Halide;
 using Halide::Internal::Dim;
 using Halide::Internal::ForType;
 using Halide::Internal::Schedule;
+using Halide::Internal::Split;
 
 namespace {
 
@@ -128,6 +129,24 @@ int main(int argc, char **argv) {
         assert(get_inner_dim(g).for_type == ForType::Vectorized);
         assert(get_outer_dim(f).for_type == ForType::Serial);
         assert(get_outer_dim(g).for_type == ForType::Parallel);
+    }
+
+    {
+        Func f("f"), g("g");
+        f(x, y) = input(x, y) * 0.5f;
+        g(x, y) = f(x-1, y) + f(x, y) + f(x+1, y);
+        g.auto_schedule(VectorizeInner);
+        assert(get_inner_dim(f).for_type == ForType::Serial);
+        assert(get_inner_dim(g).for_type == ForType::Vectorized);
+        // Verify correct vector factor for the target.
+        const Target &target = get_target_from_environment();
+        int correct_factor = target.natural_vector_size(g.output_types()[0]);
+        const std::vector<Split> splits = g.function().schedule().splits();
+        assert(splits.size() == 1);
+        const Split &split = splits[0];
+        const int *factor = as_const_int(split.factor);
+        assert(factor);
+        assert(*factor == correct_factor);
     }
     
     printf("Success!\n");

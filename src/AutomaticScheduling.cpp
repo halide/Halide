@@ -226,7 +226,7 @@ void VectorizeInner::apply(Func root, const Target &target) {
             Func wrapper(f);
             Dim inner = f.schedule().dims()[0];
             Var v(inner.var);
-            unsigned factor = 128 / f.output_types()[0].bits;
+            unsigned factor = target.natural_vector_size(f.output_types()[0]);
             wrapper.vectorize(v, factor);
         }
     }
