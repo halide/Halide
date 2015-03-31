@@ -364,27 +364,25 @@ void CodeGen_JavaScript::visit(const Cast *op) {
     print_assignment(op->type, value);
 }
 
+Expr conditionally_extract_lane(Expr e, int lane) {
+    internal_assert(lane < e.type().width) << "Bad lane in conditionally_extract_lane\n";
+    if (e.type().width != 1) {
+        return extract_lane(e, lane);
+    } else {
+        return e;
+    }
+}
+
 void CodeGen_JavaScript::visit_binop(Type t, Expr a, Expr b, const char * op) {
     ostringstream rhs;
-    if (t.width == 1) {
-        string sa = print_expr(a);
-        string sb = print_expr(b);
-        rhs << sa << " " << op << " " << sb;
-    } else {
-        std::vector<string> sa;
-        std::vector<string> sb;
-
-        for (int32_t i = 0; i < t.width; i++) {
-            sa.push_back(print_expr(extract_lane(a, i)));
-            sb.push_back(print_expr(extract_lane(b, i)));
-        }
-        rhs << "[";
-        for (int32_t i = 0; i < t.width; i++) {
-            if (i != 0) {
-                rhs << ", ";
-            }
-            rhs << sa[i] << " " << op << " " << sb[i];
-        }
+    const char *lead_char = (t.width != 1) ? "[" : "";
+    for (int lane = 0; lane < t.width; lane++) {
+        string sa = print_expr(conditionally_extract_lane(a, lane));
+        string sb = print_expr(conditionally_extract_lane(b, lane));
+        rhs << lead_char << sa << " " << op << " " << sb;
+        lead_char = ", ";
+    }
+    if (t.width > 1) {
         rhs << "]";
     }
     print_assignment(t, rhs.str());
@@ -403,48 +401,61 @@ void CodeGen_JavaScript::visit(const Mul *op) {
 }
 
 void CodeGen_JavaScript::visit(const Div *op) {
-    int bits;
-    // TODO: Support optimization on vectors
-    if (op->type.width == 1 && is_const_power_of_two(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " >> " << bits;
-        print_assignment(op->type, oss.str());
-    } else if (!op->type.is_float()) {
-        ostringstream oss;
-        string a = print_expr(op->a);
-        string b = print_expr(op->b);
-        oss << "Math.floor(" << a << " / " << b << ")";
-        print_assignment(op->type, oss.str());
-    } else {
-        visit_binop(op->type, op->a, op->b, "/");
+    const char *lead_char = (op->type.width != 1) ? "[" : "";
+    ostringstream rhs;
+    for (int lane = 0; lane < op->type.width; lane++) {
+        int bits;
+
+        if (is_const_power_of_two(conditionally_extract_lane(op->b, lane), &bits)) {
+            rhs << lead_char << print_expr(conditionally_extract_lane(op->a, lane)) << " >> " << bits;
+        } else {
+            string a = print_expr(conditionally_extract_lane(op->a, lane));
+            string b = print_expr(conditionally_extract_lane(op->b, lane));
+            rhs << lead_char;
+            if (!op->type.is_float()) {
+                rhs << "Math.floor(" << a << " / " << b << ")";
+            } else {
+                rhs << a << " / " << b;
+            }
+        }
+        lead_char = ", ";
     }
+    if (op->type.width > 1) {
+        rhs << "]";
+    }
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Mod *op) {
-    int bits;
-    // TODO: Support optimization on vectors
-    if (op->type.width == 1 && is_const_power_of_two(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
-        print_assignment(op->type, oss.str());
-    } else if (!op->type.is_float()) {
-        string var_name(unique_name('_'));
-        string a = print_expr(op->a);
-        string b = print_expr(op->b);
-        do_indent();
-        stream << "var " << var_name << " = Math.floor(" << a << " % " << b << ");\n";
-        if (op->type.is_int()) {
-            do_indent();
-            stream << "if (" << var_name << " < 0) { " << var_name << " += (" << b << " < 0) ? -" << b << " : " << b << ";}\n";
+    const char *lead_char = (op->type.width != 1) ? "[" : "";
+    ostringstream rhs;
+    for (int lane = 0; lane < op->type.width; lane++) {
+        int bits;
+
+        if (is_const_power_of_two(conditionally_extract_lane(op->b, lane), &bits)) {
+            rhs << lead_char << print_expr(conditionally_extract_lane(op->a, lane)) << " & " << ((1 << bits) - 1);
+        } else {
+            string var_name(unique_name('_'));
+            string a = print_expr(conditionally_extract_lane(op->a, lane));
+            string b = print_expr(conditionally_extract_lane(op->b, lane));
+            if (!op->type.is_float()) {
+                do_indent();
+                stream << "var " << var_name << " = Math.floor(" << a << " % " << b << ");\n";
+                if (op->type.is_int()) {
+                    do_indent();
+                    stream << "if (" << var_name << " < 0) { " << var_name << " += (" << b << " < 0) ? -" << b << " : " << b << ";}\n";
+                }
+            } else {
+                stream << "var " << var_name << " = " << a << " - " << b << " * Math.floor(" << a << " / " << b << "); ";
+            }
+            rhs << lead_char << var_name;
         }
-        id = var_name;
-    } else {
-        string var_name(unique_name('_'));
-        string a = print_expr(op->a);
-        string b = print_expr(op->b);
-        stream << "var " << var_name << " = " << a << " - " << b << " * Math.floor(" << a << " / " << b << "); ";
-        id = var_name;
+        lead_char = ", ";
     }
+    if (op->type.width > 1) {
+        rhs << "]";
+    }
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Max *op) {
@@ -612,7 +623,31 @@ void CodeGen_JavaScript::visit(const Call *op) {
 
     // Handle intrinsics first
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::debug_to_file) {
+        if (op->name == Call::shuffle_vector) {
+            internal_assert((int) op->args.size() == 1 + op->type.width);
+            string input_vector = print_expr(op->args[0]);
+            const char *lead_char = (op->type.width != 1) ? "[" : "";
+            for (size_t i = 1; i < op->args.size(); i++) {
+                rhs << lead_char << input_vector << "[" << print_expr(op->args[i]) << "]";
+                lead_char = ", ";
+            }
+            if (op->type.width != 1) {
+                rhs << "]";
+            }
+        } else if (op->name == Call::interleave_vectors) {
+            vector<string> vecs(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                vecs[i] = print_expr(op->args[i]);
+            }
+            const char *lead_char = "[";
+            for (int i = 0; i < op->type.width; i++) {
+                for (size_t j = 0; j < op->args.size(); j++) {
+                    rhs << lead_char <<  vecs[j] << "[" << i << "]";
+                    lead_char = ", ";
+                }
+            }
+            rhs << "]";
+        } else if (op->name == Call::debug_to_file) {
             internal_assert(op->args.size() == 9);
             const StringImm *string_imm = op->args[0].as<StringImm>();
             internal_assert(string_imm);
@@ -705,16 +740,10 @@ void CodeGen_JavaScript::visit(const Call *op) {
             Type type = op->args[4].type();
 
             ostringstream value_stream;
-            value_stream << "[";
+            const char *lead_char = "[";
             for (int32_t v_index = 0; v_index < type.width; v_index++) {
-                if (v_index != 0) {
-                    value_stream << ", ";
-                }
-                if (type.width == 1) {
-                    value_stream << print_expr(op->args[4]);
-                } else {
-                    value_stream << print_expr(extract_lane(op->args[4], v_index));
-                }
+                value_stream << lead_char << print_expr(conditionally_extract_lane(op->args[4], v_index));
+                lead_char = ", ";
             }
             value_stream << "]";
 
@@ -993,21 +1022,33 @@ void CodeGen_JavaScript::visit(const Call *op) {
             js_name = js_math_fn->second.first;
         }
 
-        vector<string> args(op->args.size());
-        for (size_t i = 0; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-        }
-        rhs << js_name << "(";
+        for (int lane = 0; lane < op->type.width; lane++) {
 
-        if (function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context, " : "null, ");
+            const char *lead_char = "";
+            if (op->type.width != 1) {
+                lead_char = (lane == 0) ? "[" : ", ";
+            }
+
+            vector<string> args(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                args[i] = print_expr(conditionally_extract_lane(op->args[i], lane));
+            }
+            rhs << lead_char << js_name << "(";
+
+            if (function_takes_user_context(op->name)) {
+                rhs << (have_user_context ? "__user_context, " : "null, ");
+            }
+
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) rhs << ", ";
+                rhs << args[i];
+            }
+            rhs << ")";
+        }
+        if (op->type.width != 1) {
+            rhs << "]";
         }
 
-        for (size_t i = 0; i < op->args.size(); i++) {
-            if (i > 0) rhs << ", ";
-            rhs << args[i];
-        }
-        rhs << ")";
     }
 
     print_assignment(op->type, rhs.str());
@@ -1061,14 +1102,14 @@ void CodeGen_JavaScript::visit(const Ramp *op) {
 void CodeGen_JavaScript::visit(const Broadcast *op) {
     ostringstream rhs;
     string value = print_expr(op->value);
-    rhs << "[";
+    const char *lead_char = (op->type.width != 1) ? "[" : "";
     for (int32_t i = 0; i < op->width; i++) {
-        if (i != 0) {
-            rhs << ", ";
-        }
-        rhs << value;
+        rhs << lead_char << value;
+        lead_char = ", ";
     }
-    rhs << "]";
+    if (op->type.width != 1) {
+        rhs << "]";
+    }
     print_assignment(op->type, rhs.str());
 }
 
