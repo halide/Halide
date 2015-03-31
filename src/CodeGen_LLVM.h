@@ -391,15 +391,6 @@ private:
      * prevent emitting the same string many times. */
     std::map<std::string, llvm::Constant *> string_constants;
 
-
-    /** Given an Expr that is presumed to be a constant scalar, convert
-     * to an llvm::Constant and return. (If the Expr is not a constant scalar,
-     * assert.) */
-    typedef llvm::Constant *(*expr_to_llvm_constant_func_t)(Expr e);
-
-    /** Map a Halide::Type name to an expr_to_llvm_constant_func_t. */
-    std::map<std::string, expr_to_llvm_constant_func_t> expr_to_llvm_constant_func_map;
-
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage.
