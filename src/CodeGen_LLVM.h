@@ -24,6 +24,7 @@ class AllocaInst;
 class Constant;
 class Triple;
 class MDNode;
+class DataLayout;
 }
 
 #include <map>
@@ -77,6 +78,7 @@ protected:
      * define these. */
     // @{
     virtual llvm::Triple get_target_triple() const = 0;
+    virtual llvm::DataLayout get_data_layout() const = 0;
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;

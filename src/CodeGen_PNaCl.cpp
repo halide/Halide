@@ -31,6 +31,10 @@ llvm::Triple CodeGen_PNaCl::get_target_triple() const {
     return triple;
 }
 
+llvm::DataLayout CodeGen_PNaCl::get_data_layout() const {
+    return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
+}
+
 string CodeGen_PNaCl::mcpu() const {
     return "";
 }

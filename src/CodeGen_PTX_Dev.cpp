@@ -255,6 +255,10 @@ llvm::Triple CodeGen_PTX_Dev::get_target_triple() const {
     return Triple(Triple::normalize(march() + "--"));
 }
 
+llvm::DataLayout CodeGen_PTX_Dev::get_data_layout() const {
+    return llvm::DataLayout("e-i64:64-v16:16-v32:32-n16:32:64");
+}
+
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     #ifdef WITH_PTX

@@ -197,6 +197,9 @@ public:
     /** Construct a NULL image parameter handle. */
     OutputImageParam() {}
 
+    /** Virtual destructor. Does nothing. */
+    EXPORT virtual ~OutputImageParam();
+
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
     EXPORT OutputImageParam(const Internal::Parameter &p);
 
@@ -309,6 +312,9 @@ public:
 
     /** Construct a NULL image parameter handle. */
     ImageParam() : OutputImageParam() {}
+
+    /** Virtual destructor. Does nothing. */
+    EXPORT virtual ~ImageParam();
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
