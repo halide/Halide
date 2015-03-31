@@ -6,6 +6,7 @@
 #include "Schedule.h"
 #include "Simplify.h"
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -15,6 +16,7 @@ namespace Internal {
 
 using std::set;
 using std::string;
+using std::unique_ptr;
 using std::vector;
 using std::map;
 
@@ -57,8 +59,8 @@ public:
         set<string> visited;
         vector<Function> result(dir_calls.begin(), dir_calls.end());
         visited.insert(f.name());
-        for (vector<Function>::const_iterator I = dir_calls.begin(), E = dir_calls.end(); I != E; ++I) {
-            transitive_calls_helper(*I, result, visited);
+        for (Function call : dir_calls) {
+            transitive_calls_helper(call, result, visited);
         }
         return result;
     }
@@ -70,15 +72,15 @@ private:
     void construct(Function f, set<string> &visited) {
         visited.insert(f.name());
         map<string, Function> calls = find_direct_calls(f);
-        for (map<string, Function>::iterator I = calls.begin(), E = calls.end(); I != E; ++I) {
-            string name = I->first;
-            Function func = I->second;
+        for (auto call_entry : calls) {
+            string name = call_entry.first;
+            Function func = call_entry.second;
             name_to_func[name] = func;
             call_to_callee[f.name()].push_back(func);
             call_to_caller[func.name()].push_back(f);
 
-            if (visited.find(I->first) == visited.end()) {
-                construct(I->second, visited);
+            if (visited.find(name) == visited.end()) {
+                construct(func, visited);
             }
         }
     }
@@ -86,8 +88,7 @@ private:
     void transitive_calls_helper(Function f, vector<Function> &result, set<string> &visited) {
         visited.insert(f.name());
         const vector<Function> &dir_calls = calls(f);
-        for (vector<Function>::const_iterator I = dir_calls.begin(), E = dir_calls.end(); I != E; ++I) {
-            Function call = *I;
+        for (Function call : dir_calls) {
             if (visited.find(call.name()) == visited.end()) {
                 result.push_back(call);
                 transitive_calls_helper(call, result, visited);
@@ -104,8 +105,8 @@ public:
         reset_schedule(root);
         CallGraph cg(root);
         vector<Function> calls = cg.transitive_calls(root);
-        for (std::vector<Function>::iterator I = calls.begin(), E = calls.end(); I != E; ++I) {
-            reset_schedule(*I);
+        for (Function call : calls) {
+            reset_schedule(call);
         }
     }
     
@@ -147,8 +148,8 @@ vector<Interval> get_function_bounds(Function f, CallGraph &cg) {
         result.clear();
         return result;
     }
-    for (vector<Function>::const_iterator I = callers.begin(), E = callers.end(); I != E; ++I) {
-        const vector<Expr> outputs = (*I).values();
+    for (Function caller : callers) {
+        const vector<Expr> outputs = caller.values();
         internal_assert(outputs.size() == 1) << "Unhandled number of outputs";
         Box b = boxes_required(outputs[0])[f.name()];
         const unsigned dim = b.bounds.size();
@@ -184,8 +185,7 @@ unsigned calculate_footprint_size(Function f, CallGraph &cg) {
         return UNDEFINED_FOOTPRINT_SIZE;
     }
     Expr footprint = 1;
-    for (vector<Interval>::iterator I = bounds.begin(), E = bounds.end(); I != E; ++I) {
-        const Interval &i = *I;
+    for (Interval i : bounds) {
         internal_assert(i.min.defined() && i.max.defined());
         Expr diff = i.max - i.min + 1;
         footprint *= diff;
@@ -204,8 +204,7 @@ void ComputeRootAllStencils::apply(Func root) {
     // Construct a callgraph for the pipeline.
     CallGraph cg(root.function());
     vector<Function> all_functions = cg.transitive_calls(root.function());
-    for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
-        Function f = *I;
+    for (Function f : all_functions) {
         unsigned footprint = calculate_footprint_size(f, cg);
         if (footprint > 1) {
             Func wrapper(f);
@@ -218,8 +217,7 @@ void ParallelizeOuter::apply(Func root) {
     CallGraph cg(root.function());
     vector<Function> all_functions = cg.transitive_calls(root.function());
     all_functions.push_back(root.function());
-    for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
-        Function f = *I;
+    for (Function f : all_functions) {
         if (!f.schedule().compute_level().is_inline()) {
             Func wrapper(f);
             Dim outer = f.schedule().dims()[f.schedule().dims().size() - 1];
@@ -233,8 +231,7 @@ void VectorizeInner::apply(Func root) {
     CallGraph cg(root.function());
     vector<Function> all_functions = cg.transitive_calls(root.function());
     all_functions.push_back(root.function());
-    for (vector<Function>::iterator I = all_functions.begin(), E = all_functions.end(); I != E; ++I) {
-        Function f = *I;
+    for (Function f : all_functions) {
         if (!f.schedule().compute_level().is_inline()) {
             Func wrapper(f);
             Dim inner = f.schedule().dims()[0];
@@ -246,16 +243,16 @@ void VectorizeInner::apply(Func root) {
 }
 
 void apply_automatic_schedule(Func root, AutoScheduleStrategy strategy, bool reset_schedules) {
-    AutoScheduleStrategyImpl *impl = NULL;
+    unique_ptr<AutoScheduleStrategyImpl> impl;
     switch (strategy) {
     case AutoScheduleStrategy::ComputeRootAllStencils:
-        impl = new ComputeRootAllStencils();
+        impl.reset(new ComputeRootAllStencils());
         break;
     case AutoScheduleStrategy::ParallelizeOuter:
-        impl = new ParallelizeOuter();
+        impl.reset(new ParallelizeOuter());
         break;
     case AutoScheduleStrategy::VectorizeInner:
-        impl = new VectorizeInner();
+        impl.reset(new VectorizeInner());
         break;
     }
     internal_assert(impl != NULL);
