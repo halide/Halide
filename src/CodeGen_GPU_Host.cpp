@@ -415,18 +415,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // NULL-terminated list
         Value *gpu_args_arr =
             create_alloca_at_entry(ArrayType::get(arg_t, num_args+1),
-                                   num_args+1,
+                                   num_args+1, false,
                                    kernel_name + "_args");
 
         // NULL-terminated list of size_t's
         Value *gpu_arg_sizes_arr =
             create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1),
-                                   num_args+1,
+                                   num_args+1, false,
                                    kernel_name + "_arg_sizes");
 
         Value *gpu_arg_is_buffer_arr =
             create_alloca_at_entry(ArrayType::get(i8, num_args+1),
-                                   num_args+1,
+                                   num_args+1, false,
                                    kernel_name + "_arg_is_buffer");
 
         for (int i = 0; i < num_args; i++) {

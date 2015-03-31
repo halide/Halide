@@ -39,6 +39,9 @@ INLINE void register_destructor(
 }
 
 INLINE void call_destructor(void *user_context, destructor_t *d) {
+    // Handle calling an uninitialized destructor object
+    if (!d->next) return;
+
     // Remove myself from the list
     d->next->prev = d->prev;
     d->prev->next = d->next;
