@@ -135,6 +135,7 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_consume = 6,
                               halide_trace_end_consume = 7};
 
+#pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
     halide_trace_event_code event;
@@ -147,6 +148,7 @@ struct halide_trace_event {
     int32_t dimensions;
     int32_t *coordinates;
 };
+#pragma pack(pop)
 
 /** Called when Funcs are marked as trace_load, trace_store, or
  * trace_realization. See Func::set_custom_trace. The default
@@ -307,6 +309,7 @@ typedef enum halide_type_code_t {
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
  * GPU). */
+#pragma pack(push, 1)
 typedef struct buffer_t {
   /** A device-handle for e.g. GPU memory used to back this buffer. */
   uint64_t dev;
@@ -344,7 +347,10 @@ typedef struct buffer_t {
    mirroring this buffer, and the data has been modified on the
    device side. */
   bool dev_dirty;
+
+  uint8_t _padding[2];
 } buffer_t;
+#pragma pack(pop)
 
 #endif
 

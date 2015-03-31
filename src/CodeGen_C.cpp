@@ -25,6 +25,7 @@ const string buffer_t_definition =
     "#ifndef BUFFER_T_DEFINED\n"
     "#define BUFFER_T_DEFINED\n"
     "#include <stdint.h>\n"
+    "#pragma pack(push, 1)\n"
     "typedef struct buffer_t {\n"
     "    uint64_t dev;\n"
     "    uint8_t* host;\n"
@@ -34,7 +35,9 @@ const string buffer_t_definition =
     "    int32_t elem_size;\n"
     "    bool host_dirty;\n"
     "    bool dev_dirty;\n"
+    "    uint8_t padding[2];\n"
     "} buffer_t;\n"
+    "#pragma pack(pop)\n"
     "#endif\n";
 
 const string headers =
