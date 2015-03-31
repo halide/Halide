@@ -22,7 +22,7 @@ void test_expr(T value) {
         std::cerr << "constant of type " << t << " returned expr of type " << e.type() << "\n";
         exit(-1);
     }
-    T nvalue;
+    T nvalue = T(0);
     if (!scalar_from_constant_expr<T>(e, &nvalue)) {
         std::cerr << "constant of type " << t << " failed scalar_from_constant_expr with value " << value << "\n";
         exit(-1);
@@ -43,28 +43,8 @@ void test_expr_range() {
     test_expr<T>(1);
 
     test_expr<T>(low);
-    test_expr<T>(static_cast<T>(low - 1));
-
-    test_expr<T>(static_cast<T>(min - 1));
     test_expr<T>(min);
-
-    test_expr<T>(static_cast<T>(max - 1));
     test_expr<T>(max);
-    test_expr<T>(static_cast<T>(max + 1));
-
-    if (std::numeric_limits<T>::is_signed) {
-        test_expr<T>(-1);
-
-        test_expr<T>(-low);
-        test_expr<T>(-static_cast<T>(low - 1));
-
-        test_expr<T>(-static_cast<T>(min - 1));
-        test_expr<T>(-min);
-
-        test_expr<T>(-static_cast<T>(max - 1));
-        test_expr<T>(-max);
-        test_expr<T>(-static_cast<T>(max + 1));
-    }
 }
 
 int main(int argc, char **argv) {
