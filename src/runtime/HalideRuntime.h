@@ -354,6 +354,75 @@ typedef struct buffer_t {
 
 #endif
 
+/** halide_scalar_value_t is a simple union able to represent all the well-known
+ * scalar values in a filter argument. Note that it isn't tagged with a type;
+ * you must ensure you know the proper type before accessing. Most user
+ * code will never need to create instances of this struct; its primary use
+ * is to hold def/min/max values in a halide_filter_argument_t. */
+union halide_scalar_value_t {
+  bool b;
+  int8_t i8;
+  int16_t i16;
+  int32_t i32;
+  int64_t i64;
+  uint8_t u8;
+  uint16_t u16;
+  uint32_t u32;
+  uint64_t u64;
+  float f32;
+  double f64;
+  void *handle;
+};
+
+enum halide_argument_kind_t {
+    HalideArgumentKind_InputScalar = 0,
+    HalideArgumentKind_InputBuffer = 1,
+    HalideArgumentKind_OutputBuffer = 2
+};
+
+// Some compile environments can add padding to the end of the struct
+// without #pragma pack, which will mess up the LLVM initialization code.
+
+/**
+ * halide_filter_argument_t is essentially a plain-C-struct equivalent to
+ * Halide::Argument; most user code will never need to create one.
+ */
+#pragma pack(push, 1)
+struct halide_filter_argument_t {
+  const char *name;       // name of the argument; will never be null or empty.
+  // TODO: all these would fit into uint8. Should we pack them tightly?
+  int32_t kind;           // actually halide_argument_kind_t
+  int32_t dimensions;     // always zero for scalar arguments
+  int32_t type_code;      // actually halide_type_code_t
+  int32_t type_bits;      // [1, 8, 16, 32, 64]
+  // These pointers should always be null for buffer arguments,
+  // and *may* be null for scalar arguments. (A null value means )
+  const halide_scalar_value_t *def;
+  const halide_scalar_value_t *min;
+  const halide_scalar_value_t *max;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct halide_filter_metadata_t {
+  // TODO: should we add a version field at the beginning, in case we want
+  // to expand metadata later? (Or would we be better off simply adding more
+  // external symbols in the future?)
+
+  /** The Target for which the filter was compiled. This is always
+   * a canonical Target string (ie a product of Target::to_string). */
+  const char* target;
+
+  /** An array of the filters input and output arguments; this will never be
+   * null. The order of arguments is not guaranteed (input and output arguments
+   * may come in any order); however, it is guaranteed that all arguments
+   * will have a unique name within a given filter. */
+  const halide_filter_argument_t* arguments;
+
+  /** The number of entries in the arguments field. This is always >= 1. */
+  int32_t num_arguments;
+};
+#pragma pack(pop)
 
 #ifdef __cplusplus
 } // End extern "C"

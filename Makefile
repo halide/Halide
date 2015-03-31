@@ -424,6 +424,7 @@ RUNTIME_CPP_COMPONENTS = \
   linux_clock \
   linux_host_cpu_count \
   linux_opengl_context \
+  metadata \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
