@@ -597,6 +597,8 @@ Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
 Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
+Call::ConstString Call::make_int64 = "make_int64";
+Call::ConstString Call::make_float64 = "make_float64";
 
 }
 }
