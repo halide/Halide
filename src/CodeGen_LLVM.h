@@ -407,7 +407,7 @@ private:
      * prevent emitting the same string many times. */
     std::map<std::string, llvm::Constant *> string_constants;
 
-    /** A double-linked loop of destructors */
+    /** A doubly-linked loop of destructors for the current function. */
     llvm::Value *destructor_loop;
 };
 

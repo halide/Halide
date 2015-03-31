@@ -571,11 +571,13 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     llvm::Function *fn = module->getFunction("register_destructor");
     internal_assert(fn);
 
-    // Cast the object to llvm's representation of void *
-    obj = builder->CreatePointerCast(obj, i8->getPointerTo());
+    llvm::Type *void_ptr = i8->getPointerTo();
 
-    // Cast the function to something that takes a void *
-    llvm::Type *d_fn_type = fn->getFunctionType()->params()[2];
+    // Cast the object to llvm's representation of void *
+    obj = builder->CreatePointerCast(obj, void_ptr);
+
+    // Cast the function to something that takes a pair of void *
+    FunctionType *d_fn_type = FunctionType::get(void_t, vec(void_ptr, void_ptr), false);
     llvm::Value *d_fn = builder->CreatePointerCast(destructor_fn, d_fn_type);
 
     // Allocate a stack slot for this destructor
@@ -2433,8 +2435,7 @@ void CodeGen_LLVM::visit(const Let *op) {
 }
 
 void CodeGen_LLVM::visit(const LetStmt *op) {
-    Value *rhs = codegen(op->value);
-    sym_push(op->name, rhs);
+    sym_push(op->name, codegen(op->value));
 
     if (op->value.type() == Int(32)) {
         alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
