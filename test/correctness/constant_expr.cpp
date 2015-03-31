@@ -6,31 +6,10 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 template<typename T>
-bool equals(T a, T b) {
-    return a == b;
-}
-
-// float64 is never an exact match, since it gets stored as float32.
-template<>
-bool equals(double a, double b) {
-    return fabs(a - b) < 1e10;
-}
-
-template<typename T>
 bool bit_flip(T a) {
     return ~a;
 }
 
-// Not really a useful test for floats; just negate it to avoid compiler error.
-template<>
-bool bit_flip(float a) {
-    return -a;
-}
-
-template<>
-bool bit_flip(double a) {
-    return -a;
-}
 
 template<typename T>
 void test_expr(T value) {
@@ -48,7 +27,7 @@ void test_expr(T value) {
         std::cerr << "constant of type " << t << " failed scalar_from_constant_expr with value " << value << "\n";
         exit(-1);
     }
-    if (!equals(nvalue, value)) {
+    if (nvalue != value) {
         std::cerr << "Roundtrip failed for type " << t << ": input " << value << " output " << nvalue << "\n";
         exit(-1);
     }
@@ -56,26 +35,36 @@ void test_expr(T value) {
 
 template<typename T>
 void test_expr_range() {
+    const T low = std::numeric_limits<T>::lowest();
     const T min = std::numeric_limits<T>::min();
-    // Don't bother testing std::numeric_limits<double>::max(),
-    // since we know it will fail (since Exprs clamp to float32);
-    // rather than special-casing that comparison elsewhere, just
-    // limit to the float32 range here.
-    const T max = type_of<T>().code == Type::Float ?
-                    std::numeric_limits<float>::max() :
-                    std::numeric_limits<T>::max();
-    const T mid = min + (max - min) / 2;
+    const T max = std::numeric_limits<T>::max();
+
     test_expr<T>(0);
     test_expr<T>(1);
+
+    test_expr<T>(low);
+    test_expr<T>(static_cast<T>(low - 1));
+
+    test_expr<T>(static_cast<T>(min - 1));
     test_expr<T>(min);
+
+    test_expr<T>(static_cast<T>(max - 1));
     test_expr<T>(max);
-    test_expr<T>(mid);
-    test_expr<T>(mid - 1);
-    test_expr<T>(mid + 2);
-    test_expr<T>(mid / 3);
-    test_expr<T>(mid + mid / 3);
-    test_expr<T>(bit_flip<T>(max));
-    test_expr<T>(bit_flip<T>(mid));
+    test_expr<T>(static_cast<T>(max + 1));
+
+    if (std::numeric_limits<T>::is_signed) {
+        test_expr<T>(-1);
+
+        test_expr<T>(-low);
+        test_expr<T>(-static_cast<T>(low - 1));
+
+        test_expr<T>(-static_cast<T>(min - 1));
+        test_expr<T>(-min);
+
+        test_expr<T>(-static_cast<T>(max - 1));
+        test_expr<T>(-max);
+        test_expr<T>(-static_cast<T>(max + 1));
+    }
 }
 
 int main(int argc, char **argv) {
@@ -91,7 +80,7 @@ int main(int argc, char **argv) {
     test_expr_range<float>();
     test_expr_range<double>();
 
-    // Test various edge cases for int64, since we do extra voodoo to
+    // Test various edge cases for int64 and double, since we do extra voodoo to
     // disassemble and reassemble them.
     test_expr<int64_t>(-64);
     test_expr<int64_t>((int64_t) 0x000000007fffffff);
@@ -120,6 +109,14 @@ int main(int argc, char **argv) {
     test_expr<uint64_t>((uint64_t) 0x7FFFFFFFFFFFFFFF);
     test_expr<uint64_t>((uint64_t) 0x8000000000000000);
     test_expr<uint64_t>((uint64_t) 0x8000000000000001);
+
+    test_expr<float>(3.141592);
+    test_expr<float>(3.40282e+38);
+    test_expr<float>(3.40282e+38);
+
+    test_expr<double>(3.1415926535897932384626433832795);
+    test_expr<double>(1.79769e+308);
+    test_expr<double>(-1.79769e+308);
 
     printf("Success!\n");
     return 0;
