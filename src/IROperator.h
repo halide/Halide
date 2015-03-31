@@ -1424,18 +1424,6 @@ inline Expr likely(Expr e) {
 
 namespace Internal {
 
-/** You can't represent an int64 as a single immediate node in Halide IR;
- * this provides a convenient wrapper for code that wants to manipulate
- * int64 (and uint64) values as Exprs (most notable, Parameter's def/min/max
- * values). int64_to_imm_expr() converts an int64 value into an Expr
- * of type Int(64) with the equivalent value. int64_from_imm_expr() recovers
- * the original value from the Expr and returns true (returning false if
- * the Expr is ill-formed; this shouldn't ever happen for an Expr created
- * by int64_to_imm_expr).
- */
-EXPORT Expr int64_to_immediate_expr(int64_t i);
-EXPORT bool int64_from_immediate_expr(Expr e, int64_t* i);
-
 namespace {
 
 // Cast e to Type t iff it is not already of that type.
@@ -1449,41 +1437,43 @@ Expr cast_if(Type t, Expr e) {
 }  // namespace
 
 /** Given a scalar constant, return an Expr that represents it. This will
- * usually be a simple IntImm or FloatImm, with two notable exceptions:
- *
- * -- Expr has no way to represent a float64 at present, so these values
- * are lossily stored in a float32.
- * -- int64 and uint64 will be stored exactly, but as a small sequence
- * of bit operations.
+ * usually be a simple IntImm or FloatImm, with the exception of 64-bit values,
+ * which are stored as wrappers to simple Call expressions.
  *
  * Note that in all cases, Expr.type == type_of<T>().
  */
 template<typename T>
 inline Expr scalar_to_constant_expr(T value) {
-    return cast_if(type_of<T>(), Expr(value));
+    // All integral types <= 32 bits, including bool
+    return cast_if(type_of<T>(), Expr(static_cast<int32_t>(value)));
 }
 
 template<>
-inline Expr scalar_to_constant_expr(uint32_t u32) {
-    // Have to construct the literal as a signed int32 and cast the result.
-    return cast_if(UInt(32), Expr((int32_t) u32));
+inline Expr scalar_to_constant_expr(float f32) {
+    // float32 needs to skip the cast to int32
+    return cast_if(Float(32), Expr(f32));
 }
 
 template<>
 inline Expr scalar_to_constant_expr(double f64) {
-    // Sorry, double, you're just gonna have to live with the loss.
-    return cast_if(Float(64), Expr((float) f64));
+    union {
+        int32_t as_int32[2];
+        double as_double;
+    } u;
+    u.as_double = f64;
+    return Call::make(Float(64), Call::make_float64, vec(Expr(u.as_int32[0]), Expr(u.as_int32[1])), Call::Intrinsic);
 }
 
 template<>
 inline Expr scalar_to_constant_expr(int64_t i) {
-    // Cast is redundant here, but included for symmetry
-    return cast_if(Int(64), int64_to_immediate_expr(i));
+    const int32_t hi = static_cast<int32_t>(i >> 32);
+    const int32_t lo = static_cast<int32_t>(i);
+    return Call::make(Int(64), Call::make_int64, vec(Expr(hi), Expr(lo)), Call::Intrinsic);
 }
 
 template<>
 inline Expr scalar_to_constant_expr(uint64_t u) {
-    return cast_if(UInt(64), int64_to_immediate_expr(static_cast<int64_t>(u)));
+    return cast_if(UInt(64), scalar_to_constant_expr<int64_t>(static_cast<int64_t>(u)));
 }
 
 namespace {
@@ -1491,7 +1481,7 @@ namespace {
 // extract_immediate is a private utility for scalar_from_constant_expr,
 // and should not be used elsewhere
 template<typename T>
-inline bool extract_immediate(Expr e, T *value) {
+bool extract_immediate(Expr e, T *value) {
     if (const IntImm* i = e.as<IntImm>()) {
         *value = static_cast<T>(i->value);
         return true;
@@ -1500,7 +1490,7 @@ inline bool extract_immediate(Expr e, T *value) {
 }
 
 template<>
-inline bool extract_immediate(Expr e, float *value) {
+bool extract_immediate(Expr e, float *value) {
     if (const FloatImm* f = e.as<FloatImm>()) {
         *value = static_cast<float>(f->value);
         return true;
@@ -1508,23 +1498,60 @@ inline bool extract_immediate(Expr e, float *value) {
     return false;
 }
 
+// We expect a float64-immediate to be either a call to make_float64()
+// (with two IntImm), or a single FloatImm (if the value fits into a float32)
 template<>
-inline bool extract_immediate(Expr e, double *value) {
-    if (const FloatImm* f = e.as<FloatImm>()) {
-        *value = static_cast<double>(f->value);
+bool extract_immediate(Expr e, double *value) {
+    union {
+        int32_t as_int32[2];
+        double as_double;
+    } u;
+    if (const Call* call = e.as<Call>()) {
+        if (call->name == Call::make_float64) {
+            if (!extract_immediate(call->args[0], &u.as_int32[0]) ||
+                !extract_immediate(call->args[1], &u.as_int32[1])) {
+                return false;
+            }
+            *value = u.as_double;
+            return true;
+        }
+        return false;
+    }
+    float f0;
+    if (extract_immediate(e, &f0)) {
+        *value = static_cast<double>(f0);
+        return true;
+    }
+    return false;
+}
+
+
+// We expect an int64-immediate to be either a call to make_int64()
+// (with two IntImm), or a single IntImm (if the value fits into an int32)
+template<>
+bool extract_immediate(Expr e, int64_t *value) {
+    int32_t lo, hi;
+    if (const Call* call = e.as<Call>()) {
+        if (call->name == Call::make_int64) {
+            if (!extract_immediate(call->args[0], &hi) ||
+                !extract_immediate(call->args[1], &lo)) {
+                return false;
+            }
+            *value = (static_cast<int64_t>(hi) << 32) | static_cast<uint32_t>(lo);
+            return true;
+        }
+        return false;
+    }
+    if (extract_immediate(e, &lo)) {
+        *value = static_cast<int64_t>(lo);
         return true;
     }
     return false;
 }
 
 template<>
-inline bool extract_immediate(Expr e, int64_t *value) {
-    return int64_from_immediate_expr(e, value);
-}
-
-template<>
 inline bool extract_immediate(Expr e, uint64_t *value) {
-    return int64_from_immediate_expr(e, reinterpret_cast<int64_t*>(value));
+    return extract_immediate(e, reinterpret_cast<int64_t*>(value));
 }
 
 }  // namespace
