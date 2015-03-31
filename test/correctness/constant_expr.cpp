@@ -35,6 +35,9 @@ bool bit_flip(double a) {
 template<typename T>
 void test_expr(T value) {
     Type t = type_of<T>();
+
+    // std::cout << "Test " << t << " = " << value << "\n";
+
     Expr e = scalar_to_constant_expr<T>(value);
     if (e.type() != t) {
         std::cerr << "constant of type " << t << " returned expr of type " << e.type() << "\n";
@@ -49,7 +52,6 @@ void test_expr(T value) {
         std::cerr << "Roundtrip failed for type " << t << ": input " << value << " output " << nvalue << "\n";
         exit(-1);
     }
-    // std::cout << "Test " << t << " = " << value << "\n";
 }
 
 template<typename T>
@@ -88,6 +90,36 @@ int main(int argc, char **argv) {
     test_expr_range<uint64_t>();
     test_expr_range<float>();
     test_expr_range<double>();
+
+    // Test various edge cases for int64, since we do extra voodoo to
+    // disassemble and reassemble them.
+    test_expr<int64_t>(-64);
+    test_expr<int64_t>((int64_t) 0x000000007fffffff);
+    test_expr<int64_t>((int64_t) 0x0000000080000000);
+    test_expr<int64_t>((int64_t) 0x0000000080000001);
+    test_expr<int64_t>((int64_t) 0x00000000ffffffff);
+    test_expr<int64_t>((int64_t) 0x00000001ffffffff);
+    test_expr<int64_t>((int64_t) 0x7fffffff00000000);
+    test_expr<int64_t>((int64_t) 0x7fffffff80000000);
+    test_expr<int64_t>((int64_t) 0xffffffff80000000);
+    test_expr<int64_t>((int64_t) 0xffffffff00000001);
+    test_expr<int64_t>((int64_t) 0x7FFFFFFFFFFFFFFF);
+    test_expr<int64_t>((int64_t) 0x8000000000000000);
+    test_expr<int64_t>((int64_t) 0x8000000000000001);
+
+    test_expr<uint64_t>(-64);
+    test_expr<uint64_t>((uint64_t) 0x000000007fffffff);
+    test_expr<uint64_t>((uint64_t) 0x0000000080000000);
+    test_expr<uint64_t>((uint64_t) 0x0000000080000001);
+    test_expr<uint64_t>((uint64_t) 0x00000000ffffffff);
+    test_expr<uint64_t>((uint64_t) 0x00000001ffffffff);
+    test_expr<uint64_t>((uint64_t) 0x7fffffff00000000);
+    test_expr<uint64_t>((uint64_t) 0x7fffffff80000000);
+    test_expr<uint64_t>((uint64_t) 0xffffffff80000000);
+    test_expr<uint64_t>((uint64_t) 0xffffffff00000001);
+    test_expr<uint64_t>((uint64_t) 0x7FFFFFFFFFFFFFFF);
+    test_expr<uint64_t>((uint64_t) 0x8000000000000000);
+    test_expr<uint64_t>((uint64_t) 0x8000000000000001);
 
     printf("Success!\n");
     return 0;

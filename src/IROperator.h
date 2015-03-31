@@ -1436,6 +1436,17 @@ namespace Internal {
 EXPORT Expr int64_to_immediate_expr(int64_t i);
 EXPORT bool int64_from_immediate_expr(Expr e, int64_t* i);
 
+namespace {
+
+// Cast e to Type t iff it is not already of that type.
+Expr cast_if(Type t, Expr e) {
+    if (e.type() != t) {
+        e = Cast::make(t, e);
+    }
+    return e;
+}
+
+}  // namespace
 
 /** Given a scalar constant, return an Expr that represents it. This will
  * usually be a simple IntImm or FloatImm, with two notable exceptions:
@@ -1449,30 +1460,30 @@ EXPORT bool int64_from_immediate_expr(Expr e, int64_t* i);
  */
 template<typename T>
 inline Expr scalar_to_constant_expr(T value) {
-    return Cast::make(type_of<T>(), Expr(value));
+    return cast_if(type_of<T>(), Expr(value));
 }
 
 template<>
 inline Expr scalar_to_constant_expr(uint32_t u32) {
     // Have to construct the literal as a signed int32 and cast the result.
-    return Cast::make(UInt(32), Expr((int32_t) u32));
+    return cast_if(UInt(32), Expr((int32_t) u32));
 }
 
 template<>
 inline Expr scalar_to_constant_expr(double f64) {
     // Sorry, double, you're just gonna have to live with the loss.
-    return Cast::make(Float(64), Expr((float) f64));
+    return cast_if(Float(64), Expr((float) f64));
 }
 
 template<>
 inline Expr scalar_to_constant_expr(int64_t i) {
     // Cast is redundant here, but included for symmetry
-    return Cast::make(Int(64), int64_to_immediate_expr(i));
+    return cast_if(Int(64), int64_to_immediate_expr(i));
 }
 
 template<>
 inline Expr scalar_to_constant_expr(uint64_t u) {
-    return Cast::make(UInt(64), int64_to_immediate_expr(static_cast<int64_t>(u)));
+    return cast_if(UInt(64), int64_to_immediate_expr(static_cast<int64_t>(u)));
 }
 
 namespace {
