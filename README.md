@@ -61,21 +61,21 @@ without overriding the parallel runtime entirely.
 Building Halide
 ===============
 
-Building halide requires at least llvm 3.3, along with the matching
+Building halide requires at least llvm 3.5, along with the matching
 version of clang. llvm-config and clang must be somewhere in the
-path. If your OS does not have packages for llvm-3.3, you can find
+path. If your OS does not have packages for llvm-3.5, you can find
 binaries for it at http://llvm.org/releases/download.html. Download an
 appropriate package and then either install it, or at least put the
 bin subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversion:
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_33 llvm3.3
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_33 llvm3.3/tools/clang
+    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_35 llvm3.5
+    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_35 llvm3.5/tools/clang
 
 Then build it like so:
 
-    % cd llvm3.3
+    % cd llvm3.5
     % ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
     % make -j8
 
@@ -89,7 +89,7 @@ Then finally tell Halide's Makefile about it like so:
 
 If you wish to use cmake to build llvm, the build procedure is:
 
-    % cd llvm3.3
+    % cd llvm3.5
     % mkdir build
     % cd build
     % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -99,9 +99,6 @@ then to point Halide to it:
 
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
     export CLANG=<path to llvm>/build/bin/clang
-
-On Ubuntu llvm 3.2 also works, but you should omit --disable-terminfo
-or -DLLVM_ENABLE_TERMINFO=OFF when configuring it.
 
 With LLVM_CONFIG and CLANG set (or the appropriate llvm-config and
 clang in your path), you should be able to just run 'make' in this
@@ -116,8 +113,8 @@ If you wish to use cmake to build Halide, the build procedure is:
 
     % mkdir build
     % cd build
-    % LLVM_ROOT=/path/to/llvm3.3
-    % cmake -DLLVM_BIN=${LLVM_ROOT}/build/bin -DLLVM_INCLUDE="${LLVM_ROOT}/include;${LLVM_ROOT}/build/include" -DLLVM_LIB=${LLVM_ROOT}/build/lib -DLLVM_VERSION=33 ..
+    % LLVM_ROOT=/path/to/llvm3.5
+    % cmake -DLLVM_BIN=${LLVM_ROOT}/build/bin -DLLVM_INCLUDE="${LLVM_ROOT}/include;${LLVM_ROOT}/build/include" -DLLVM_LIB=${LLVM_ROOT}/build/lib -DLLVM_VERSION=35 ..
     % make -j8
 
 Building Halide and llvm as 32-bit on 64-bit linux
