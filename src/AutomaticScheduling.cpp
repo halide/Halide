@@ -208,7 +208,7 @@ void ParallelizeOuter::apply(Func root) {
     vector<Function> all_functions = cg.transitive_calls(root.function());
     all_functions.push_back(root.function());
     for (Function f : all_functions) {
-        if (!f.schedule().compute_level().is_inline()) {
+        if (!f.schedule().compute_level().is_inline() || f.same_as(root.function())) {
             Func wrapper(f);
             Dim outer = f.schedule().dims()[f.schedule().dims().size() - 1];
             Var v(outer.var);
@@ -222,7 +222,7 @@ void VectorizeInner::apply(Func root) {
     vector<Function> all_functions = cg.transitive_calls(root.function());
     all_functions.push_back(root.function());
     for (Function f : all_functions) {
-        if (!f.schedule().compute_level().is_inline()) {
+        if (!f.schedule().compute_level().is_inline() || f.same_as(root.function())) {
             Func wrapper(f);
             Dim inner = f.schedule().dims()[0];
             Var v(inner.var);
