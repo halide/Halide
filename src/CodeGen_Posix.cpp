@@ -174,15 +174,6 @@ void CodeGen_Posix::visit(const Free *stmt) {
         call_destructor(alloc.destructor);
     }
 
-    // There may be a buffer_t and a destructor for it associated with
-    // this allocation.
-    string destructor_name = name + ".buffer.destructor";
-    if (sym_exists(destructor_name)) {
-        Value *d = sym_get(destructor_name);
-        call_destructor(d);
-        sym_pop(destructor_name);
-    }
-
     allocations.pop(name);
     sym_pop(name + ".host");
 }

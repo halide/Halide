@@ -237,8 +237,28 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
     // Call the base implementation to create the function.
     CodeGen_CPU::compile_func(f);
 
-    // Remember the entry block so we can branch to it upon init success.
+    // We need to insert code after the existing entry block, so that
+    // the destructor loop exists before we do the assertions involved
+    // in initializing gpu kernels.
+
+    // Split the entry block just before its end.
     BasicBlock *entry = &function->getEntryBlock();
+    llvm::Instruction *terminator = entry->getTerminator();
+    internal_assert(terminator);
+    BasicBlock *post_entry = entry->splitBasicBlock(terminator);
+
+    // Create some code that does the GPU initialization.
+    BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels",
+                                                     function, post_entry);
+
+    // The entry block should go to the init kernels block instead of
+    // the post entry block.
+    entry->getTerminator()->eraseFromParent();
+    builder->SetInsertPoint(entry);
+    builder->CreateBr(init_kernels_bb);
+
+    // Fill out the init kernels block
+    builder->SetInsertPoint(init_kernels_bb);
 
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
         if (iter->first == DeviceAPI::Default_GPU) {
@@ -263,10 +283,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
             CodeGen_CPU::create_constant_binary_blob(kernel_src,
                                                      "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
-        // Insert a new block to run initialization at the beginning of the function.
-        BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels" + api_unique_name,
-                                                         function, entry);
-        builder->SetInsertPoint(init_kernels_bb);
+
         Value *user_context = get_user_context();
         Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
@@ -277,12 +294,10 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
                                              kernel_src_ptr, kernel_size);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
         CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + init_kernels_name);
-
-        // Upon success, jump to the previous entry.
-        builder->CreateBr(entry);
-        // Set the entry for the next init block to the init block just generated
-        entry = init_kernels_bb;
     }
+
+    // the init kernels block should branch to the post-entry block
+    builder->CreateBr(post_entry);
 
     function_name = "";
 }
@@ -510,6 +525,43 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_un
 
     return module_state;
 }
+
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
+    CodeGen_CPU::visit(op);
+    if (op->name == "halide_device_malloc" || op->name == "halide_copy_to_device") {
+        // Register a destructor for this buffer if this is the first
+        // device_malloc or copy_to_device for it.
+        internal_assert(op->args.size() == 2);
+        const Variable *buf_var = op->args[0].as<Variable>();
+        internal_assert(buf_var);
+        const string &buf_name = buf_var->name;
+        string destructor_name = buf_name + "_destructor";
+
+        if (!sym_exists(destructor_name)) {
+            llvm::Value *buf = sym_get(buf_name);
+            // Register a destructor that frees the device allocation.
+            llvm::Value *destructor =
+                register_destructor(module->getFunction("halide_device_free"), buf);
+            sym_push(destructor_name, destructor);
+        }
+    }
+}
+
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
+    CodeGen_CPU::visit(op);
+
+    // Also free gpu memory by triggering the destructor
+    string destructor_name = op->name + ".buffer_destructor";
+    if (sym_exists(destructor_name)) {
+        Value *d = sym_get(destructor_name);
+        CodeGen_CPU::call_destructor(d);
+        sym_pop(destructor_name);
+    }
+}
+
+
 
 // Force template instantiation.
 #ifdef WITH_X86
