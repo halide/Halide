@@ -132,26 +132,26 @@ int main(int argc, char **argv) {
         // Func input.
         check_constant_exterior(
             input, exterior,
-            lambda(x, y, constant_exterior(input_f, exterior, 0, W, 0, H)(x, y)),
+            constant_exterior(input_f, exterior, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Image input.
         check_constant_exterior(
             input, exterior,
-            lambda(x, y, constant_exterior(input, exterior, 0, W, 0, H)(x, y)),
+            constant_exterior(input, exterior, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Undefined bounds.
         check_constant_exterior(
             input, exterior,
-            lambda(x, y, constant_exterior(input, exterior, Expr(), Expr(), 0, H)(x, y)),
+            constant_exterior(input, exterior, Expr(), Expr(), 0, H),
             0, W, test_min, test_extent);
         check_constant_exterior(
             input, exterior,
-            lambda(x, y, constant_exterior(input, exterior, 0, W, Expr(), Expr())(x, y)),
+            constant_exterior(input, exterior, 0, W, Expr(), Expr()),
             test_min, test_extent, 0, H);
         // Implicitly determined bounds.
         check_constant_exterior(
             input, exterior,
-            lambda(x, y, constant_exterior(input, exterior)(x, y)),
+            constant_exterior(input, exterior),
             test_min, test_extent, test_min, test_extent);
     }
 
@@ -163,26 +163,26 @@ int main(int argc, char **argv) {
         // Func input.
         check_repeat_edge(
             input,
-            lambda(x, y, repeat_edge(input_f, 0, W, 0, H)(x, y)),
+            repeat_edge(input_f, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Image input.
         check_repeat_edge(
             input,
-            lambda(x, y, repeat_edge(input, 0, W, 0, H)(x, y)),
+            repeat_edge(input, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Undefined bounds.
         check_repeat_edge(
             input,
-            lambda(x, y, repeat_edge(input, Expr(), Expr(), 0, H)(x, y)),
+            repeat_edge(input, Expr(), Expr(), 0, H),
             0, W, test_min, test_extent);
         check_repeat_edge(
             input,
-            lambda(x, y, repeat_edge(input, 0, W, Expr(), Expr())(x, y)),
+            repeat_edge(input, 0, W, Expr(), Expr()),
             test_min, test_extent, 0, H);
         // Implicitly determined bounds.
         check_repeat_edge(
             input,
-            lambda(x, y, repeat_edge(input)(x, y)),
+            repeat_edge(input),
             test_min, test_extent, test_min, test_extent);
     }
 
@@ -194,26 +194,26 @@ int main(int argc, char **argv) {
         // Func input.
         check_repeat_image(
             input,
-            lambda(x, y, repeat_image(input_f, 0, W, 0, H)(x, y)),
+            repeat_image(input_f, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Image input.
         check_repeat_image(
             input,
-            lambda(x, y, repeat_image(input, 0, W, 0, H)(x, y)),
+            repeat_image(input, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Undefined bounds.
         check_repeat_image(
             input,
-            lambda(x, y, repeat_image(input, Expr(), Expr(), 0, H)(x, y)),
+            repeat_image(input, Expr(), Expr(), 0, H),
             0, W, test_min, test_extent);
         check_repeat_image(
             input,
-            lambda(x, y, repeat_image(input, 0, W, Expr(), Expr())(x, y)),
+            repeat_image(input, 0, W, Expr(), Expr()),
             test_min, test_extent, 0, H);
         // Implicitly determined bounds.
         check_repeat_image(
             input,
-            lambda(x, y, repeat_image(input)(x, y)),
+            repeat_image(input),
             test_min, test_extent, test_min, test_extent);
     }
 
@@ -225,26 +225,26 @@ int main(int argc, char **argv) {
         // Func input.
         check_mirror_image(
             input,
-            lambda(x, y, mirror_image(input_f, 0, W, 0, H)(x, y)),
+            mirror_image(input_f, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Image input.
         check_mirror_image(
             input,
-            lambda(x, y, mirror_image(input, 0, W, 0, H)(x, y)),
+            mirror_image(input, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Undefined bounds.
         check_mirror_image(
             input,
-            lambda(x, y, mirror_image(input, Expr(), Expr(), 0, H)(x, y)),
+            mirror_image(input, Expr(), Expr(), 0, H),
             0, W, test_min, test_extent);
         check_mirror_image(
             input,
-            lambda(x, y, mirror_image(input, 0, W, Expr(), Expr())(x, y)),
+            mirror_image(input, 0, W, Expr(), Expr()),
             test_min, test_extent, 0, H);
         // Implicitly determined bounds.
         check_mirror_image(
             input,
-            lambda(x, y, mirror_image(input)(x, y)),
+            mirror_image(input),
             test_min, test_extent, test_min, test_extent);
     }
 
@@ -256,26 +256,26 @@ int main(int argc, char **argv) {
         // Func input.
         check_mirror_interior(
             input,
-            lambda(x, y, mirror_interior(input_f, 0, W, 0, H)(x, y)),
+            mirror_interior(input_f, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Image input.
         check_mirror_interior(
             input,
-            lambda(x, y, mirror_interior(input, 0, W, 0, H)(x, y)),
+            mirror_interior(input, 0, W, 0, H),
             test_min, test_extent, test_min, test_extent);
         // Undefined bounds.
         check_mirror_interior(
             input,
-            lambda(x, y, mirror_interior(input, Expr(), Expr(), 0, H)(x, y)),
+            mirror_interior(input, Expr(), Expr(), 0, H),
             0, W, test_min, test_extent);
         check_mirror_interior(
             input,
-            lambda(x, y, mirror_interior(input, 0, W, Expr(), Expr())(x, y)),
+            mirror_interior(input, 0, W, Expr(), Expr()),
             test_min, test_extent, 0, H);
         // Implicitly determined bounds.
         check_mirror_interior(
             input,
-            lambda(x, y, mirror_interior(input)(x, y)),
+            mirror_interior(input),
             test_min, test_extent, test_min, test_extent);
     }
 
