@@ -114,6 +114,7 @@ DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
+DECLARE_CPP_INITMOD(metadata)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -507,6 +508,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             }
         }
     }
+
+    modules.push_back(get_initmod_metadata(c, bits_64, debug));
 
     link_modules(modules);
 

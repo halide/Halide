@@ -146,7 +146,7 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
-    llvm::StructType *buffer_t_type;
+    llvm::StructType *buffer_t_type, *metadata_t_type, *argument_t_type, *scalar_value_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -199,9 +199,6 @@ protected:
      */
     void push_buffer(const std::string &name, llvm::Value *buffer);
     void pop_buffer(const std::string &name);
-
-    /** Add a definition of buffer_t to the module if it isn't already there. */
-    void define_buffer_t();
 
     /* Call this at the location of object creation to register how an
      * object should be destroyed. This does three things:
@@ -417,6 +414,16 @@ private:
      * destructors. As destructors are registered, code gets added
      * to this block. */
     llvm::BasicBlock *destructor_block;
+
+    /** Embed an instance of halide_filter_metadata_t in the code, using
+     * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
+     * as extern "C" linkage.
+     */
+    void embed_metadata(std::string name, const std::vector<Argument> &args);
+
+    /** Embed a constant expression as a global variable. */
+    llvm::Constant *embed_constant_expr(Expr e);
+
 };
 
 }
