@@ -171,7 +171,7 @@ void CodeGen_Posix::visit(const Free *stmt) {
         internal_assert(alloc.destructor);
 
         // Trigger the destructor
-        call_destructor(alloc.destructor);
+        builder->Insert(alloc.destructor->clone());
     }
 
     allocations.pop(name);
