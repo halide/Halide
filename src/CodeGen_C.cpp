@@ -211,6 +211,10 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
     // Throw in a definition of a buffer_t
     stream << buffer_t_definition;
 
+    // halide_filter_metadata_t just gets a forward declaration
+    // (include HalideRuntime.h for the full goodness)
+    stream << "struct halide_filter_metadata_t;\n";
+
     if (!is_header) {
         stream << globals;
     }
@@ -445,6 +449,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
         stream << "int " << f.name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+
+        // And also the metadata.
+       stream << "extern const halide_filter_metadata_t " << f.name << "_metadata;\n";
     }
 }
 
@@ -1364,6 +1371,7 @@ void CodeGen_C::test() {
     string correct_source =
         headers +
         buffer_t_definition +
+        "struct halide_filter_metadata_t;\n" +
         globals +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
