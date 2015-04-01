@@ -1513,6 +1513,12 @@ inline bool extract_immediate(Expr e, double *value) {
     return false;
 }
 
+// Force use of the templated functions.
+inline bool _extract_immediate(Expr e, double *value) {
+    return extract_immediate(e, reinterpret_cast<double*>(value));
+}
+
+
 
 // We expect an int64-immediate to be either a call to make_int64()
 // (with two IntImm), or a single IntImm (if the value fits into an int32)
