@@ -35,9 +35,9 @@ struct Argument {
      * but there is no runtime enforcement of this at present.
      */
     enum Kind {
-        InputScalar = HalideArgumentKind_InputScalar,
-        InputBuffer = HalideArgumentKind_InputBuffer,
-        OutputBuffer = HalideArgumentKind_OutputBuffer
+        InputScalar = halide_argument_kind_input_scalar,
+        InputBuffer = halide_argument_kind_input_buffer,
+        OutputBuffer = halide_argument_kind_output_buffer
     };
     Kind kind;
 

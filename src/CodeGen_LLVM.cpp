@@ -620,62 +620,55 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
 namespace {
 
-// Convert a Type into an integer key suitable for use with std::map
-int key_for_type(Type t) {
-    internal_assert(t.bits < 256 && t.width == 1);
-    return t.code * 256 + t.bits;
-}
-
-template<typename T>
-T scalar_from_constant_expr_or_die(Expr e) {
-    T v;
-    internal_assert(scalar_from_constant_expr(e, &v)) << "scalar_from_constant_expr fails for Expr " << e << "\n";
-    return v;
-}
-
 template<typename T>
 llvm::Constant *get_constant(llvm::Type *ty, Expr e) {
-    return std::numeric_limits<T>::is_integer ?
-        ConstantInt::get(ty, scalar_from_constant_expr_or_die<T>(e)) :
-        ConstantFP::get(ty, scalar_from_constant_expr_or_die<T>(e));
+    T v;
+    internal_assert(scalar_from_constant_expr<T>(e, &v)) << "scalar_from_constant_expr fails for Expr " << e << "\n";
+    return std::numeric_limits<T>::is_integer ? ConstantInt::get(ty, v) : ConstantFP::get(ty, v);
 }
 
 }  // namespace
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type().code == Type::Handle) {
-        // Handle is always emitted as "undefined"
+    if (!e.defined() || e.type() == Handle()) {
+        // Handle is always emitted into metadata "undefined", regardless of
+        // what sort of Expr is provided.
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
 
-    // This function is typically called exactly once (at most) per
-    // instance of CodeGen_LLVM, so it's not really worth trying to hoist
-    // out of this function. (It also uses the llvm::Type member variables
-    // from CodeGen_LLVM; keeping it here makes it easier to just re-use those.)
-    std::map<int, std::function<llvm::Constant *(Expr e)>> expr_to_llvm_constant_func_map{
-        { key_for_type(Bool()), [this](Expr e) -> llvm::Constant* { return get_constant<bool>(i1, e); } },
-        { key_for_type(UInt(8)), [this](Expr e) -> llvm::Constant* { return get_constant<uint8_t>(i8, e); } },
-        { key_for_type(UInt(16)), [this](Expr e) -> llvm::Constant* { return get_constant<uint16_t>(i16, e); } },
-        { key_for_type(UInt(32)), [this](Expr e) -> llvm::Constant* { return get_constant<uint32_t>(i32, e); } },
-        { key_for_type(UInt(64)), [this](Expr e) -> llvm::Constant* { return get_constant<uint64_t>(i64, e); } },
-        { key_for_type(Int(8)), [this](Expr e) -> llvm::Constant* { return get_constant<int8_t>(i8, e); } },
-        { key_for_type(Int(16)), [this](Expr e) -> llvm::Constant* { return get_constant<int16_t>(i16, e); } },
-        { key_for_type(Int(32)), [this](Expr e) -> llvm::Constant* { return get_constant<int32_t>(i32, e); } },
-        { key_for_type(Int(64)), [this](Expr e) -> llvm::Constant* { return get_constant<int64_t>(i64, e); } },
-        { key_for_type(Float(32)), [this](Expr e) -> llvm::Constant* { return get_constant<float>(f32, e); } },
-        { key_for_type(Float(64)), [this](Expr e) -> llvm::Constant* { return get_constant<double>(f64, e); } }
-    };
-
-    auto iter = expr_to_llvm_constant_func_map.find(key_for_type(e.type()));
-    internal_assert(iter != expr_to_llvm_constant_func_map.end()) << "Unhandled Constant Expr Type " << e.type() << "\n";
-    llvm::Constant *constantValue = iter->second(e);
+    llvm::Constant *constant = NULL;
+    if (e.type() == Bool()) {
+        constant = get_constant<bool>(i1, e);
+    } else if (e.type() == UInt(8)) {
+        constant = get_constant<uint8_t>(i8, e);
+    } else if (e.type() == UInt(16)) {
+        constant = get_constant<uint16_t>(i16, e);
+    } else if (e.type() == UInt(32)) {
+        constant = get_constant<uint32_t>(i32, e);
+    } else if (e.type() == UInt(64)) {
+        constant = get_constant<uint64_t>(i64, e);
+    } else if (e.type() == Int(8)) {
+        constant = get_constant<int8_t>(i8, e);
+    } else if (e.type() == Int(16)) {
+        constant = get_constant<int16_t>(i16, e);
+    } else if (e.type() == Int(32)) {
+        constant = get_constant<int32_t>(i32, e);
+    } else if (e.type() == Int(64)) {
+        constant = get_constant<int64_t>(i64, e);
+    } else if (e.type() == Float(32)) {
+        constant = get_constant<float>(f32, e);
+    } else if (e.type() == Float(64)) {
+        constant = get_constant<double>(f64, e);
+    } else {
+        internal_assert(0) << "Unhandled Constant Expr Type " << e.type() << "\n";
+    }
 
     GlobalVariable *storage = new GlobalVariable(
             *module,
-            constantValue->getType(),
+            constant->getType(),
             /*isConstant*/ true,
             GlobalValue::PrivateLinkage,
-            constantValue);
+            constant);
 
     Constant *zero = ConstantInt::get(i32, 0);
     return ConstantExpr::getBitCast(
@@ -711,9 +704,10 @@ void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
         ConstantArray::get(arguments_array, arguments_array_entries));
 
     Constant *metadata_fields[] = {
-        create_string_constant(target.to_string()),
-        ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, vec(zero, zero)),
-        ConstantInt::get(i32, num_args)
+        /* version */ zero,
+        /* num_arguments */ ConstantInt::get(i32, num_args),
+        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, vec(zero, zero)),
+        /* target */ create_string_constant(target.to_string())
     };
 
     new GlobalVariable(
