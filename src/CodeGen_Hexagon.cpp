@@ -258,6 +258,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                                Intrinsic::hexagon_V6_vmpyuhv));
   multiplies.push_back(Pattern(i32_(wild_i16x32 * wild_i16x32),
                                Intrinsic::hexagon_V6_vmpyhv));
+  multiplies.push_back(Pattern(wild_i16x32 * wild_i16x32,
+                               Intrinsic::hexagon_V6_vmpyih));
 }
 
 #if 0
@@ -730,6 +732,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
     }
     CodeGen_Posix::visit(op);
   }
+}
+void CodeGen_Hexagon:: visit(const Mul *op) {
+  value = emitBinaryOp(op, multiplies);
+  if (!value)
+    CodeGen_Posix::visit(op);
+  return;
 }
   void CodeGen_Hexagon::visit(const Broadcast *op) {
     //    int Width = op->width;

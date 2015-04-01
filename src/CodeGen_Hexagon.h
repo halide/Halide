@@ -56,6 +56,7 @@ protected:
     void visit(const Min *);
     void visit(const Cast *);
     void visit(const Call *);
+    void visit(const Mul *);
     /* // @} */
 
     bool shouldUseVMPA(const Add *, std::vector<llvm::Value *> &);
