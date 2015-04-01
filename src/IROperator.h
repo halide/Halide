@@ -1483,6 +1483,10 @@ inline bool extract_immediate(Expr e, float *value) {
         *value = static_cast<float>(f->value);
         return true;
     }
+    if (const IntImm *i = e.as<IntImm>()) {
+        *value = static_cast<float>(i->value);
+        return true;
+    }
     return false;
 }
 
@@ -1504,6 +1508,10 @@ inline bool extract_immediate(Expr e, double *value) {
             return true;
         }
         return false;
+    }
+    if (const IntImm *i = e.as<IntImm>()) {
+        *value = static_cast<double>(i->value);
+        return true;
     }
     float f0;
     if (extract_immediate(e, &f0)) {
@@ -1559,13 +1567,13 @@ inline bool extract_immediate(Expr e, uint64_t *value) {
  */
 template<typename T>
 inline bool scalar_from_constant_expr(Expr e, T *value) {
-  if (!e.defined() || e.type() != type_of<T>()) {
-    return false;
-  }
-  if (const Cast* c = e.as<Cast>()) {
-    e = c->value;
-  }
-  return extract_immediate<T>(e, value);
+    if (!e.defined() || e.type() != type_of<T>()) {
+        return false;
+    }
+    if (const Cast* c = e.as<Cast>()) {
+        e = c->value;
+    }
+    return extract_immediate<T>(e, value);
 }
 
 }  // namespace Internal
