@@ -1,0 +1,21 @@
+#include <Halide.h>
+#include "halide-hexagon-setup.h"
+#include "vmpy.h"
+#include <stdio.h>
+using namespace Halide;
+#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#define COMPILE_BC(X)  ((X).compile_to_bitcode("x.bc", args, target))
+
+#define VECTORSIZE 64 //Vector width in bytes. (Single mode)
+#define DOUBLEVECTORSIZE 128
+
+
+int main(int argc, char **argv) {
+  Target target;
+  setupHexagonTarget(target);
+  //CHECK: vmpy(v{{[0-9]+}}.b,v{{[0-9]+}}.b)
+  testVMPY<uint8_t, uint8_t, uint16_t>(target);
+  //CHECK: vmpy(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
+  testVMPY<int16_t, int16_t, int32_t>(target);
+  return 0;
+}

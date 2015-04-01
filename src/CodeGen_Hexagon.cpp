@@ -56,7 +56,7 @@ using namespace llvm;
             bool Invert = false) : pattern(p), ID(id), type(t),
                                    InvertOperands(Invert) {}
   };
-  std::vector<Pattern> casts, varith, averages, combiners, vbitwise;
+  std::vector<Pattern> casts, varith, averages, combiners, vbitwise, multiplies;
 
 namespace {
 Expr sat_h_ub(Expr A) {
@@ -85,6 +85,18 @@ Expr bitwiseNot(Expr A) {
 Expr shiftLeft(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_left, vec(A, B),
                               Internal::Call::Intrinsic);
+}
+Expr u16_(Expr E) {
+  return cast (UInt(16, E.type().width), E);
+}
+Expr i16_(Expr E) {
+  return cast (Int(16, E.type().width), E);
+}
+Expr u32_(Expr E) {
+  return cast (UInt(32, E.type().width), E);
+}
+Expr i32_(Expr E) {
+  return cast (Int(32, E.type().width), E);
 }
 }
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
@@ -238,6 +250,14 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
                              Intrinsic::hexagon_V6_vavgw));
   averages.push_back(Pattern(((wild_i32x16 - wild_i32x16)/2),
                              Intrinsic::hexagon_V6_vnavgw));
+  multiplies.push_back(Pattern(u16_(wild_u8x64 * wild_u8x64),
+                               Intrinsic::hexagon_V6_vmpyubv));
+  multiplies.push_back(Pattern(i16_(wild_i8x64 * wild_i8x64),
+                               Intrinsic::hexagon_V6_vmpybv));
+  multiplies.push_back(Pattern(u32_(wild_u16x32 * wild_u16x32),
+                               Intrinsic::hexagon_V6_vmpyuhv));
+  multiplies.push_back(Pattern(i32_(wild_i16x32 * wild_i16x32),
+                               Intrinsic::hexagon_V6_vmpyhv));
 }
 
 #if 0
@@ -590,6 +610,40 @@ void CodeGen_Hexagon::visit(const Min *op) {
 }
 void CodeGen_Hexagon::visit(const Cast *op) {
   vector<Expr> matches;
+  debug(4) << "visit(Cast): " << op->value << "\n";
+  for (size_t I = 0; I < multiplies.size(); ++I) {
+    const Pattern &P = multiplies[I];
+    if (expr_match(P.pattern, op, matches)) {
+      internal_assert(matches.size() == 2);
+      Intrinsic::ID ID = P.ID;
+      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      llvm::FunctionType *FType = F->getFunctionType();
+      bool InvertOperands = P.InvertOperands;
+      Value *Lt = codegen(matches[0]);
+      Value *Rt = codegen(matches[1]);
+      if (InvertOperands)
+        std::swap(Lt, Rt);
+
+      llvm::Type *T0 = FType->getParamType(0);
+      llvm::Type *T1 = FType->getParamType(1);
+      if (T0 != Lt->getType()) {
+        Lt = builder->CreateBitCast(Lt, T0);
+      }
+      if (T1 != Rt->getType())
+        Rt = builder->CreateBitCast(Rt, T1);
+
+      Halide::Type DestType = op->type;
+      llvm::Type *DestLLVMType = llvm_type_of(DestType);
+      Value *Call = builder->CreateCall2(F, Lt, Rt);
+
+      if (DestLLVMType != Call->getType())
+        value = builder->CreateBitCast(Call, DestLLVMType);
+      else
+        value = Call;
+      return;
+    }
+  }
+  matches.clear();
   for (size_t I = 0; I < casts.size(); ++I) {
     const Pattern &P = casts[I];
     if (expr_match(P.pattern, op, matches)) {
