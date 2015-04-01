@@ -582,10 +582,6 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
     // Put it in the stack slot
     builder->CreateStore(obj, stack_slot);
 
-    // Cast the function to something that takes a pair of void *
-    llvm::Type *d_fn_type = FunctionType::get(void_t, vec(void_ptr, void_ptr), false)->getPointerTo();
-    llvm::Value *d_fn = builder->CreatePointerCast(destructor_fn, d_fn_type);
-
     // Switch to the destructor block, and add code that cleans up this object.
     IRBuilderBase::InsertPoint here = builder->saveIP();
     BasicBlock *dtors = get_destructor_block();
@@ -595,7 +591,7 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     Instruction *cleanup =
-        builder->CreateCall3(call_destructor, get_user_context(), d_fn, stack_slot);
+        builder->CreateCall3(call_destructor, get_user_context(), destructor_fn, stack_slot);
 
     // Switch back to the original location
     builder->restoreIP(here);
