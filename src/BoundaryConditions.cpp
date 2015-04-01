@@ -12,8 +12,6 @@ Func repeat_edge(const Func &source,
         ") than dimensions (" << args.size() << ") Func " <<
         source.name() << "has.\n";
 
-    Func bounded;
-
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
         Var arg_var = args[i];
@@ -25,14 +23,17 @@ Func repeat_edge(const Func &source,
         } else if (!min.defined() && !extent.defined()) {
             actuals.push_back(arg_var);
         } else {
-            user_error << "Partially undefined bounds for " << arg_var << "\n";
+            user_error << "Partially undefined bounds for dimension " << arg_var
+                       << " of Func " << source.name() << "\n";
         }
     }
 
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
+    Func bounded(source.name() + "_bounded");
     bounded(args) = source(actuals);
+
     return bounded;
 }
 
@@ -43,8 +44,6 @@ Func constant_exterior(const Func &source, Expr value,
         "constant_exterior called with more bounds (" << bounds.size() <<
         ") than dimensions (" << source.args().size() << ") Func " <<
         source.name() << "has.\n";
-
-    Func bounded;
 
     Expr out_of_bounds = cast<bool>(false);
     for (size_t i = 0; i < bounds.size(); i++) {
@@ -57,10 +56,12 @@ Func constant_exterior(const Func &source, Expr value,
                              arg_var < min ||
                              arg_var >= min + extent);
         } else if (min.defined() || extent.defined()) {
-            user_error << "Partially undefined bounds for " << arg_var << "\n";
+            user_error << "Partially undefined bounds for dimension " << arg_var
+                       << " of Func " << source.name() << "\n";
         }
     }
 
+    Func bounded(source.name() + "_bounded");
     bounded(args) = select(out_of_bounds, value, repeat_edge(source, bounds)(args));
 
     return bounded;
@@ -95,15 +96,15 @@ Func repeat_image(const Func &source,
         } else if (!min.defined() && !extent.defined()) {
             actuals.push_back(arg_var);
         } else {
-            user_error << "Partially undefined bounds for " << arg_var << "\n";
+            user_error << "Partially undefined bounds for dimension " << arg_var
+                       << " of Func " << source.name() << "\n";
         }
     }
 
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
-    internal_assert(args.begin() + actuals.size() == args.end());
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
-    Func bounded;
+    Func bounded(source.name() + "_bounded");
     bounded(args) = source(actuals);
 
     return bounded;
@@ -136,15 +137,15 @@ Func mirror_image(const Func &source,
         } else if (!min.defined() && !extent.defined()) {
             actuals.push_back(arg_var);
         } else {
-            user_error << "Partially undefined bounds for " << arg_var << "\n";
+            user_error << "Partially undefined bounds for dimension " << arg_var
+                       << " of Func " << source.name() << "\n";
         }
     }
 
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
-    Func bounded;
-
+    Func bounded(source.name() + "_bounded");
     bounded(args) = source(actuals);
 
     return bounded;
@@ -157,8 +158,6 @@ Func mirror_interior(const Func &source,
         "mirror_interior called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
         source.name() << "has.\n";
-
-    Func mirrored;
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
@@ -184,14 +183,15 @@ Func mirror_interior(const Func &source,
         } else if (!min.defined() && !extent.defined()) {
             actuals.push_back(arg_var);
         } else {
-            user_error << "Partially undefined bounds for " << arg_var << "\n";
+            user_error << "Partially undefined bounds for dimension " << arg_var
+                       << " of Func " << source.name() << "\n";
         }
     }
 
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
-    Func bounded;
+    Func bounded(source.name() + "_bounded");
     bounded(args) = source(actuals);
 
     return bounded;
