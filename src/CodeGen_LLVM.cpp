@@ -497,6 +497,9 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
 
     debug(1) << "Generating llvm bitcode for function " << name << "...\n";
 
+    // Null out the destructor block.
+    destructor_block = NULL;
+
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
@@ -532,9 +535,6 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
-    // Null out the destructor block.
-    destructor_block = NULL;
-
     module->setModuleIdentifier("halide_module_" + name);
     debug(2) << module << "\n";
 
@@ -566,6 +566,7 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
         builder->CreateRet(ConstantInt::get(i32, -1));
         builder->SetInsertPoint(here);
     }
+    internal_assert(destructor_block->getParent() == function);
     return destructor_block;
 }
 
