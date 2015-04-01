@@ -1477,43 +1477,6 @@ bool extract_immediate(Expr e, T *value) {
     return false;
 }
 
-template<>
-bool extract_immediate(Expr e, float *value) {
-    if (const FloatImm* f = e.as<FloatImm>()) {
-        *value = static_cast<float>(f->value);
-        return true;
-    }
-    return false;
-}
-
-// We expect a float64-immediate to be either a call to make_float64()
-// (with two IntImm), or a single FloatImm (if the value fits into a float32)
-template<>
-bool extract_immediate(Expr e, double *value) {
-    union {
-        int32_t as_int32[2];
-        double as_double;
-    } u;
-    if (const Call* call = e.as<Call>()) {
-        if (call->name == Call::make_float64) {
-            if (!extract_immediate(call->args[0], &u.as_int32[0]) ||
-                !extract_immediate(call->args[1], &u.as_int32[1])) {
-                return false;
-            }
-            *value = u.as_double;
-            return true;
-        }
-        return false;
-    }
-    float f0;
-    if (extract_immediate(e, &f0)) {
-        *value = static_cast<double>(f0);
-        return true;
-    }
-    return false;
-}
-
-
 // We expect an int64-immediate to be either a call to make_int64()
 // (with two IntImm), or a single IntImm (if the value fits into an int32)
 template<>
