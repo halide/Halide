@@ -1469,7 +1469,7 @@ namespace {
 // extract_immediate is a private utility for scalar_from_constant_expr,
 // and should not be used elsewhere
 template<typename T>
-bool extract_immediate(Expr e, T *value) {
+inline bool extract_immediate(Expr e, T *value) {
     if (const IntImm* i = e.as<IntImm>()) {
         *value = static_cast<T>(i->value);
         return true;
@@ -1478,9 +1478,13 @@ bool extract_immediate(Expr e, T *value) {
 }
 
 template<>
-bool extract_immediate(Expr e, float *value) {
+inline bool extract_immediate(Expr e, float *value) {
     if (const FloatImm* f = e.as<FloatImm>()) {
         *value = static_cast<float>(f->value);
+        return true;
+    }
+    if (const IntImm *i = e.as<IntImm>()) {
+        *value = static_cast<float>(i->value);
         return true;
     }
     return false;
@@ -1489,7 +1493,7 @@ bool extract_immediate(Expr e, float *value) {
 // We expect a float64-immediate to be either a call to make_float64()
 // (with two IntImm), or a single FloatImm (if the value fits into a float32)
 template<>
-bool extract_immediate(Expr e, double *value) {
+inline bool extract_immediate(Expr e, double *value) {
     union {
         int32_t as_int32[2];
         double as_double;
@@ -1505,6 +1509,10 @@ bool extract_immediate(Expr e, double *value) {
         }
         return false;
     }
+    if (const IntImm *i = e.as<IntImm>()) {
+        *value = static_cast<double>(i->value);
+        return true;
+    }
     float f0;
     if (extract_immediate(e, &f0)) {
         *value = static_cast<double>(f0);
@@ -1517,7 +1525,7 @@ bool extract_immediate(Expr e, double *value) {
 // We expect an int64-immediate to be either a call to make_int64()
 // (with two IntImm), or a single IntImm (if the value fits into an int32)
 template<>
-bool extract_immediate(Expr e, int64_t *value) {
+inline bool extract_immediate(Expr e, int64_t *value) {
     int32_t lo, hi;
     if (const Call* call = e.as<Call>()) {
         if (call->name == Call::make_int64) {
@@ -1559,13 +1567,13 @@ inline bool extract_immediate(Expr e, uint64_t *value) {
  */
 template<typename T>
 inline bool scalar_from_constant_expr(Expr e, T *value) {
-  if (!e.defined() || e.type() != type_of<T>()) {
-    return false;
-  }
-  if (const Cast* c = e.as<Cast>()) {
-    e = c->value;
-  }
-  return extract_immediate<T>(e, value);
+    if (!e.defined() || e.type() != type_of<T>()) {
+        return false;
+    }
+    if (const Cast* c = e.as<Cast>()) {
+        e = c->value;
+    }
+    return extract_immediate<T>(e, value);
 }
 
 }  // namespace Internal
