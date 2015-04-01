@@ -235,7 +235,7 @@ int main(int argc, char **argv) {
   static const halide_filter_argument_t kExpectedArguments[] = {
     {
       "input",
-      HalideArgumentKind_InputBuffer,
+      halide_argument_kind_input_buffer,
       3,
       halide_type_uint,
       8,
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
     },
     {
       "b",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_uint,
       1,
@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
     },
     {
       "i8",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_int,
       8,
@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
     },
     {
       "i16",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_int,
       16,
@@ -275,7 +275,7 @@ int main(int argc, char **argv) {
     },
     {
       "i32",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_int,
       32,
@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
     },
     {
       "i64",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_int,
       64,
@@ -295,7 +295,7 @@ int main(int argc, char **argv) {
     },
     {
       "u8",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_uint,
       8,
@@ -305,7 +305,7 @@ int main(int argc, char **argv) {
     },
     {
       "u16",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_uint,
       16,
@@ -315,7 +315,7 @@ int main(int argc, char **argv) {
     },
     {
       "u32",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_uint,
       32,
@@ -325,7 +325,7 @@ int main(int argc, char **argv) {
     },
     {
       "u64",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_uint,
       64,
@@ -335,7 +335,7 @@ int main(int argc, char **argv) {
     },
     {
       "f32",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_float,
       32,
@@ -345,7 +345,7 @@ int main(int argc, char **argv) {
     },
     {
       "f64",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_float,
       64,
@@ -355,7 +355,7 @@ int main(int argc, char **argv) {
     },
     {
       "h",
-      HalideArgumentKind_InputScalar,
+      halide_argument_kind_input_scalar,
       0,
       halide_type_handle,
       64,
@@ -365,7 +365,7 @@ int main(int argc, char **argv) {
     },
     {
       "output.0",
-      HalideArgumentKind_OutputBuffer,
+      halide_argument_kind_output_buffer,
       3,
       halide_type_float,
       32,
@@ -375,7 +375,7 @@ int main(int argc, char **argv) {
     },
     {
       "output.1",
-      HalideArgumentKind_OutputBuffer,
+      halide_argument_kind_output_buffer,
       3,
       halide_type_float,
       32,
