@@ -8,6 +8,7 @@ using namespace Halide;
 
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
+// RUN: ./vmpy.out | FileCheck %s
 
 
 int main(int argc, char **argv) {
