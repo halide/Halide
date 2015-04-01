@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <iostream>
+#include <string.h>
 
 #include "metadata_tester.h"
 #include "static_image.h"
