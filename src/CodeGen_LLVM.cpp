@@ -560,11 +560,11 @@ std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
 BasicBlock *CodeGen_LLVM::get_destructor_block() {
     if (!destructor_block) {
         // Create it if it doesn't exist.
-        BasicBlock *here = builder->GetInsertBlock();
+        IRBuilderBase::InsertPoint here = builder->saveIP();
         destructor_block = BasicBlock::Create(*context, "destructor_block", function);
         builder->SetInsertPoint(destructor_block);
         builder->CreateRet(ConstantInt::get(i32, -1));
-        builder->SetInsertPoint(here);
+        builder->restoreIP(here);
     }
     internal_assert(destructor_block->getParent() == function);
     return destructor_block;
@@ -587,7 +587,7 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
     llvm::Value *d_fn = builder->CreatePointerCast(destructor_fn, d_fn_type);
 
     // Switch to the destructor block, and add code that cleans up this object.
-    BasicBlock *here = builder->GetInsertBlock();
+    IRBuilderBase::InsertPoint here = builder->saveIP();
     BasicBlock *dtors = get_destructor_block();
 
     builder->SetInsertPoint(dtors->getFirstNonPHI());
@@ -598,7 +598,7 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
         builder->CreateCall3(call_destructor, get_user_context(), d_fn, stack_slot);
 
     // Switch back to the original location
-    builder->SetInsertPoint(here);
+    builder->restoreIP(here);
 
     // Return the cleanup instruction so that it can also be cloned to
     // cleanup the object in the normal course of events (e.g. at a
@@ -2629,7 +2629,7 @@ void CodeGen_LLVM::visit(const For *op) {
         function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function
-        BasicBlock *call_site = builder->GetInsertBlock();
+        IRBuilderBase::InsertPoint call_site = builder->saveIP();
         BasicBlock *block = BasicBlock::Create(*context, "entry", function);
         builder->SetInsertPoint(block);
 
@@ -2671,7 +2671,7 @@ void CodeGen_LLVM::visit(const For *op) {
         builder->CreateRet(ConstantInt::get(i32, 0));
 
         // Move the builder back to the main function and call do_par_for
-        builder->SetInsertPoint(call_site);
+        builder->restoreIP(call_site);
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
         internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
         do_par_for->setDoesNotAlias(5);
@@ -2819,8 +2819,8 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 }
 
 Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_initialize, const string &name) {
-    llvm::BasicBlock *here = builder->GetInsertBlock();
-    llvm::BasicBlock *entry = &here->getParent()->getEntryBlock();
+    IRBuilderBase::InsertPoint here = builder->saveIP();
+    BasicBlock *entry = &builder->GetInsertBlock()->getParent()->getEntryBlock();
     if (entry->empty()) {
         builder->SetInsertPoint(entry);
     } else {
@@ -2833,7 +2833,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
         internal_assert(n == 1) << "Zero initialization for stack arrays not implemented\n";
         builder->CreateStore(Constant::getNullValue(t), ptr);
     }
-    builder->SetInsertPoint(here);
+    builder->restoreIP(here);
     return ptr;
 }
 
