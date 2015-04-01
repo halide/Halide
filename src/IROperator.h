@@ -1469,7 +1469,7 @@ namespace {
 // extract_immediate is a private utility for scalar_from_constant_expr,
 // and should not be used elsewhere
 template<typename T>
-bool extract_immediate(Expr e, T *value) {
+inline bool extract_immediate(Expr e, T *value) {
     if (const IntImm* i = e.as<IntImm>()) {
         *value = static_cast<T>(i->value);
         return true;
@@ -1478,7 +1478,7 @@ bool extract_immediate(Expr e, T *value) {
 }
 
 template<>
-bool extract_immediate(Expr e, float *value) {
+inline bool extract_immediate(Expr e, float *value) {
     if (const FloatImm* f = e.as<FloatImm>()) {
         *value = static_cast<float>(f->value);
         return true;
@@ -1489,7 +1489,7 @@ bool extract_immediate(Expr e, float *value) {
 // We expect a float64-immediate to be either a call to make_float64()
 // (with two IntImm), or a single FloatImm (if the value fits into a float32)
 template<>
-bool extract_immediate(Expr e, double *value) {
+inline bool extract_immediate(Expr e, double *value) {
     union {
         int32_t as_int32[2];
         double as_double;
@@ -1517,7 +1517,7 @@ bool extract_immediate(Expr e, double *value) {
 // We expect an int64-immediate to be either a call to make_int64()
 // (with two IntImm), or a single IntImm (if the value fits into an int32)
 template<>
-bool extract_immediate(Expr e, int64_t *value) {
+inline bool extract_immediate(Expr e, int64_t *value) {
     int32_t lo, hi;
     if (const Call* call = e.as<Call>()) {
         if (call->name == Call::make_int64) {
