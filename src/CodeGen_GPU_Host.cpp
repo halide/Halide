@@ -539,6 +539,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
         const string &buf_name = buf_var->name;
         string destructor_name = buf_name + "_destructor";
 
+        // We may already have a destructor for this allocation, if
+        // this is one of many copy_to_device calls.
         if (!sym_exists(destructor_name)) {
             llvm::Value *buf = sym_get(buf_name);
             // Register a destructor that frees the device allocation.
