@@ -126,7 +126,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     target(t),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
-    buffer_t_type(NULL), destructor_t_type(NULL),
+    buffer_t_type(NULL),
 
     // Vector types. These need an LLVMContext before they can be initialized.
     i8x8(NULL),
@@ -217,7 +217,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
-    destructor_loop(NULL) {
+    destructor_block(NULL) {
     initialize_llvm();
 }
 
@@ -501,9 +501,6 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
 
-    // Make a doubly-linked-loop of destructors
-    initialize_destructor_loop();
-
     // Put the arguments in the symbol table
     {
         size_t i = 0;
@@ -535,11 +532,16 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
+    // Null out the destructor block.
+    destructor_block = NULL;
+
     module->setModuleIdentifier("halide_module_" + name);
     debug(2) << module << "\n";
 
-    // Now verify the function is ok
-    internal_assert(verifyFunction(*function) == false);
+    if (verifyFunction(*function, &llvm::outs())) {
+        function->dump();
+        internal_error << "Function failed to verify\n";
+    }
 
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
@@ -558,40 +560,52 @@ std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
     return ret;
 }
 
-void CodeGen_LLVM::initialize_destructor_loop() {
-    destructor_t_type = module->getTypeByName("struct.destructor_t");
-    internal_assert(destructor_t_type);
-    destructor_loop = create_alloca_at_entry(destructor_t_type, 1);
-    llvm::Function *fn = module->getFunction("initialize_destructor_sentinel");
-    internal_assert(fn);
-    builder->CreateCall(fn, destructor_loop);
+BasicBlock *CodeGen_LLVM::get_destructor_block() {
+    if (!destructor_block) {
+        // Create it if it doesn't exist.
+        BasicBlock *here = builder->GetInsertBlock();
+        destructor_block = BasicBlock::Create(*context, "destructor_block", function);
+        builder->SetInsertPoint(destructor_block);
+        builder->CreateRet(ConstantInt::get(i32, -1));
+        builder->SetInsertPoint(here);
+    }
+    return destructor_block;
 }
 
-Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj) {
-    llvm::Function *fn = module->getFunction("register_destructor");
-    internal_assert(fn);
+Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj) {
 
+    // Create a null-initialized stack slot to track this object
     llvm::Type *void_ptr = i8->getPointerTo();
+    llvm::Value *stack_slot = create_alloca_at_entry(void_ptr, 1, true);
 
     // Cast the object to llvm's representation of void *
     obj = builder->CreatePointerCast(obj, void_ptr);
+
+    // Put it in the stack slot
+    builder->CreateStore(obj, stack_slot);
 
     // Cast the function to something that takes a pair of void *
     llvm::Type *d_fn_type = FunctionType::get(void_t, vec(void_ptr, void_ptr), false)->getPointerTo();
     llvm::Value *d_fn = builder->CreatePointerCast(destructor_fn, d_fn_type);
 
-    // Allocate a stack slot for this destructor
-    llvm::Value *d = create_alloca_at_entry(destructor_t_type, 1, true);
+    // Switch to the destructor block, and add code that cleans up this object.
+    BasicBlock *here = builder->GetInsertBlock();
+    BasicBlock *dtors = get_destructor_block();
 
-    // Codegen the call that adds it to the loop
-    builder->CreateCall4(fn, destructor_loop, d, d_fn, obj);
-    return d;
-}
+    builder->SetInsertPoint(dtors->getFirstNonPHI());
 
-void CodeGen_LLVM::call_destructor(llvm::Value *d) {
-    llvm::Function *fn = module->getFunction("call_destructor");
-    internal_assert(fn);
-    builder->CreateCall2(fn, get_user_context(), d);
+    llvm::Function *call_destructor = module->getFunction("call_destructor");
+    internal_assert(call_destructor);
+    Instruction *cleanup =
+        builder->CreateCall3(call_destructor, get_user_context(), d_fn, stack_slot);
+
+    // Switch back to the original location
+    builder->SetInsertPoint(here);
+
+    // Return the cleanup instruction so that it can also be cloned to
+    // cleanup the object in the normal course of events (e.g. at a
+    // Free node).
+    return cleanup;
 }
 
 void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
@@ -685,7 +699,9 @@ void CodeGen_LLVM::optimize_module() {
 }
 
 void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {
-    value->setName(name);
+    if (!value->getType()->isVoidTy()) {
+        value->setName(name);
+    }
     symbol_table.push(name, value);
 }
 
@@ -2522,14 +2538,8 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message) {
     debug(4) << "Creating call to error handlers\n";
     builder->CreateCall(error_handler, vec<llvm::Value *>(get_user_context(), msg));
 
-    // Call all the destructors in the destructor loop
-    llvm::Function *fn = module->getFunction("halide_call_all_destructors");
-    internal_assert(fn);
-    internal_assert(destructor_loop);
-    builder->CreateCall2(fn, get_user_context(), destructor_loop);
-
-    // Bail out with error code -1
-    builder->CreateRet(ConstantInt::get(i32, -1));
+    // Branch to the destructor block, which cleans up and then bails out.
+    builder->CreateBr(get_destructor_block());
 
     // Continue on using the success case
     builder->SetInsertPoint(assert_succeeds_bb);
@@ -2628,13 +2638,13 @@ void CodeGen_LLVM::visit(const For *op) {
         // Get the user context value before swapping out the symbol table.
         Value *user_context = get_user_context();
 
+        // Save the destructor block
+        BasicBlock *parent_destructor_block = destructor_block;
+        destructor_block = NULL;
+
         // Make a new scope to use
         Scope<Value *> saved_symbol_table;
         symbol_table.swap(saved_symbol_table);
-
-        // Make a new destructor loop
-        Value *parent_destructor_loop = destructor_loop;
-        initialize_destructor_loop();
 
         // Get the function arguments
 
@@ -2679,8 +2689,8 @@ void CodeGen_LLVM::visit(const For *op) {
         symbol_table.swap(saved_symbol_table);
         function = containing_function;
 
-        // Restore the destructor loop
-        destructor_loop = parent_destructor_loop;
+        // Restore the destructor block
+        destructor_block = parent_destructor_block;
 
         // Check for success
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));

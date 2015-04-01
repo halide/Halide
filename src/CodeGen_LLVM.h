@@ -25,6 +25,7 @@ class Constant;
 class Triple;
 class MDNode;
 class DataLayout;
+class BasicBlock;
 }
 
 #include <map>
@@ -146,7 +147,6 @@ protected:
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
     llvm::StructType *buffer_t_type;
-    llvm::StructType *destructor_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -203,17 +203,21 @@ protected:
     /** Add a definition of buffer_t to the module if it isn't already there. */
     void define_buffer_t();
 
-    /** Initialize the data structure that tracks destructors. */
-    void initialize_destructor_loop();
+    /* Call this at the location of object creation to register how an
+     * object should be destroyed. This does three things:
+     * 1) Emits code here that puts the object in a unique
+     * null-initialized stack slot
+     * 2) Adds an instruction to the error handling block that calls the
+     * destructor on that stack slot if it's not null.
+     * 3) Returns that instruction, so that you can also insert a
+     * clone of it where you actually want to delete the object in the
+     * non-error case. */
+    llvm::Instruction *register_destructor(llvm::Function *destructor_fn, llvm::Value *obj);
 
-    /** Creates and returns a new destructor object on the
-     * stack. Emits code that registers it with the destructor
-     * loop. */
-    llvm::Value *register_destructor(llvm::Function *destructor_fn, llvm::Value *obj);
-
-    /** Emit code that calls a destructor object and removes it from
-     * the loop. */
-    void call_destructor(llvm::Value *d);
+    /** Retrieves the block containing the error handling
+     * code. Creates it if it doesn't already exist for this
+     * function. */
+    llvm::BasicBlock *get_destructor_block();
 
     /** Codegen an assertion. If false, it bails out and calls the
      * error handler. Either set message to non-NULL *or* pass a
@@ -409,8 +413,10 @@ private:
      * prevent emitting the same string many times. */
     std::map<std::string, llvm::Constant *> string_constants;
 
-    /** A doubly-linked loop of destructors for the current function. */
-    llvm::Value *destructor_loop;
+    /** A basic block to branch to on error that triggers all
+     * destructors. As destructors are registered, code gets added
+     * to this block. */
+    llvm::BasicBlock *destructor_block;
 };
 
 }
