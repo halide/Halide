@@ -545,7 +545,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
             llvm::Value *buf = sym_get(buf_name);
             // Register a destructor that frees the device allocation.
             llvm::Instruction *destructor =
-                register_destructor(module->getFunction("halide_device_free"), buf);
+                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf);
             sym_push(destructor_name, destructor);
         }
     }
