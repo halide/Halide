@@ -31,7 +31,7 @@ Func repeat_edge(const Func &source,
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
-    Func bounded(source.name() + "_bounded");
+    Func bounded("repeat_edge");
     bounded(args) = source(actuals);
 
     return bounded;
@@ -61,7 +61,7 @@ Func constant_exterior(const Func &source, Expr value,
         }
     }
 
-    Func bounded(source.name() + "_bounded");
+    Func bounded("constant_exterior");
     bounded(args) = select(out_of_bounds, value, repeat_edge(source, bounds)(args));
 
     return bounded;
@@ -104,7 +104,7 @@ Func repeat_image(const Func &source,
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
-    Func bounded(source.name() + "_bounded");
+    Func bounded("repeat_image");
     bounded(args) = source(actuals);
 
     return bounded;
@@ -145,7 +145,7 @@ Func mirror_image(const Func &source,
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
-    Func bounded(source.name() + "_bounded");
+    Func bounded("mirror_image");
     bounded(args) = source(actuals);
 
     return bounded;
@@ -191,7 +191,7 @@ Func mirror_interior(const Func &source,
     // If there were fewer bounds than dimensions, regard the ones at the end as unbounded.
     actuals.insert(actuals.end(), args.begin() + actuals.size(), args.end());
 
-    Func bounded(source.name() + "_bounded");
+    Func bounded("mirror_interior");
     bounded(args) = source(actuals);
 
     return bounded;
