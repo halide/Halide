@@ -5,293 +5,278 @@
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
 
+template <typename T>
+void check_constant_exterior(const Image<T> &input, T exterior, Func f,
+                             int test_min_x, int test_extent_x, int test_min_y, int test_extent_y) {
+    Image<T> result(test_extent_x, test_extent_y);
+    result.set_min(test_min_x, test_min_y);
+    f.realize(result);
+
+    for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
+        for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
+            if (x < 0 || y < 0 || x >= input.width() || y >= input.height()) {
+                assert(result(x, y) == exterior);
+            } else {
+                assert(result(x, y) == input(x, y));
+            }
+        }
+    }
+}
+
+template <typename T>
+void check_repeat_edge(const Image<T> &input, Func f,
+                       int test_min_x, int test_extent_x, int test_min_y, int test_extent_y) {
+    Image<T> result(test_extent_x, test_extent_y);
+    result.set_min(test_min_x, test_min_y);
+    f.realize(result);
+
+    for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
+        for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
+            int32_t clamped_y = std::min(input.height() - 1, std::max(0, y));
+            int32_t clamped_x = std::min(input.width() - 1, std::max(0, x));
+            assert(result(x, y) == input(clamped_x, clamped_y));
+        }
+    }
+}
+
+template <typename T>
+void check_repeat_image(const Image<T> &input, Func f,
+                        int test_min_x, int test_extent_x, int test_min_y, int test_extent_y) {
+    Image<T> result(test_extent_x, test_extent_y);
+    result.set_min(test_min_x, test_min_y);
+    f.realize(result);
+
+    for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
+        for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
+            int32_t mapped_x = x;
+            int32_t mapped_y = y;
+            while (mapped_x < 0) mapped_x += input.width();
+            while (mapped_x > input.width() - 1) mapped_x -= input.width();
+            while (mapped_y < 0) mapped_y += input.height();
+            while (mapped_y > input.height() - 1) mapped_y -= input.height();
+            assert(result(x, y) == input(mapped_x, mapped_y));
+        }
+    }
+}
+
+template <typename T>
+void check_mirror_image(const Image<T> &input, Func f,
+                        int test_min_x, int test_extent_x, int test_min_y, int test_extent_y) {
+    Image<T> result(test_extent_x, test_extent_y);
+    result.set_min(test_min_x, test_min_y);
+    f.realize(result);
+
+    for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
+        for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
+            int32_t mapped_x = (x < 0) ? -(x + 1) : x;
+            mapped_x = mapped_x % (2 * input.width());
+            if (mapped_x > (input.width() - 1)) {
+                mapped_x = (2 * input.width() - 1) - mapped_x;
+            }
+            int32_t mapped_y = (y < 0) ? -(y + 1) : y;
+            mapped_y = mapped_y % (2 * input.height());
+            if (mapped_y > (input.height() - 1)) {
+                mapped_y = (2 * input.height() - 1) - mapped_y;
+            }
+            assert(result(x, y) == input(mapped_x, mapped_y));
+        }
+    }
+}
+
+template <typename T>
+void check_mirror_interior(const Image<T> &input, Func f,
+                           int test_min_x, int test_extent_x, int test_min_y, int test_extent_y) {
+    Image<T> result(test_extent_x, test_extent_y);
+    result.set_min(test_min_x, test_min_y);
+    f.realize(result);
+
+    for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
+        for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
+            int32_t mapped_x = abs(x) % (input.width() * 2 - 2);
+            if (mapped_x > input.width() - 1) {
+                mapped_x = input.width() * 2 - 2 - mapped_x;
+            }
+            int32_t mapped_y = abs(y) % (input.height() * 2 - 2);
+            if (mapped_y > input.height() - 1) {
+                mapped_y = input.height() * 2 - 2 - mapped_y;
+            }
+
+            assert(result(x, y) == input(mapped_x, mapped_y));
+        }
+    }
+}
+
 int main(int argc, char **argv) {
 
-    Image<uint8_t> input(10, 10);
+    const int W = 10;
+    const int H = 10;
+    Image<uint8_t> input(W, H);
 
-    for (int32_t i = 0; i < 10; i++) {
-        for (int32_t j = 0; j < 10; j++) {
-          input(i, j) = i + j * 10;
+    for (int32_t y = 0; y < H; y++) {
+        for (int32_t x = 0; x < W; x++) {
+          input(x, y) = x + y * W;
         }
     }
 
     Var x("x"), y("y");
     Func input_f("input_f");
-
     input_f(x, y) = input(x, y);
 
-    Func f, g, h, m, n;
-    Func f_img, g_img, h_img, m_img, n_img;
-    Func f_img_implicit, g_img_implicit, h_img_implicit, m_img_implicit, n_img_implicit;
+    // constant_exterior:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 50;
 
-    f(x, y) = constant_exterior(input_f, 42, 0, 10, 0, 10)(x, y);
-    g(x, y) = repeat_edge(input_f, 0, 10, 0, 10)(x, y);
-    h(x, y) = repeat_image(input_f, 0, 10, 0, 10)(x, y);
-    m(x, y) = mirror_image(input_f, 0, 10, 0, 10)(x, y);
-    n(x, y) = mirror_interior(input_f, 0, 10, 0, 10)(x, y);
+        const uint8_t exterior = 42;
 
-    f_img(x, y) = constant_exterior(input, 42, 0, 10, 0, 10)(x, y);
-    g_img(x, y) = repeat_edge(input, 0, 10, 0, 10)(x, y);
-    h_img(x, y) = repeat_image(input, 0, 10, 0, 10)(x, y);
-    m_img(x, y) = mirror_image(input, 0, 10, 0, 10)(x, y);
-    n_img(x, y) = mirror_interior(input, 0, 10, 0, 10)(x, y);
-
-    f_img_implicit(x, y) = constant_exterior(input, 42)(x, y);
-    g_img_implicit(x, y) = repeat_edge(input)(x, y);
-    h_img_implicit(x, y) = repeat_image(input)(x, y);
-    m_img_implicit(x, y) = mirror_image(input)(x, y);
-    n_img_implicit(x, y) = mirror_interior(input)(x, y);
-
-    const int32_t test_min = -25;
-    const int32_t test_extent = 50;
-
-    Image<uint8_t> result_constant_exterior(test_extent, test_extent);
-    result_constant_exterior.set_min(test_min, test_min);
-    f.realize(result_constant_exterior);
-
-    for (int32_t i = test_extent; i < (test_min + test_extent); i++) {
-        for (int32_t j = test_extent; j < (test_min + test_extent); j++) {
-            if (i < 0 || j < 0 || i > 9 || j > 9) {
-                assert(result_constant_exterior(i, j) == 42);
-            } else {
-                assert(result_constant_exterior(i, j) == input(i, j));
-            }
-        }
+        // Func input.
+        check_constant_exterior(
+            input, exterior,
+            constant_exterior(input_f, exterior, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Image input.
+        check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Undefined bounds.
+        check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent);
+        check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H);
+        // Implicitly determined bounds.
+        check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior),
+            test_min, test_extent, test_min, test_extent);
     }
 
-    Image<uint8_t> result_constant_exterior_img(test_extent, test_extent);
-    result_constant_exterior_img.set_min(test_min, test_min);
-    f_img.realize(result_constant_exterior_img);
+    // repeat_edge:
+    {
+        const int32_t test_min = -5;
+        const int32_t test_extent = 20;
 
-    for (int32_t i = test_extent; i < (test_min + test_extent); i++) {
-        for (int32_t j = test_extent; j < (test_min + test_extent); j++) {
-            if (i < 0 || j < 0 || i > 9 || j > 9) {
-                assert(result_constant_exterior_img(i, j) == 42);
-            } else {
-                assert(result_constant_exterior_img(i, j) == input(i, j));
-            }
-        }
+        // Func input.
+        check_repeat_edge(
+            input,
+            repeat_edge(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Image input.
+        check_repeat_edge(
+            input,
+            repeat_edge(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Undefined bounds.
+        check_repeat_edge(
+            input,
+            repeat_edge(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent);
+        check_repeat_edge(
+            input,
+            repeat_edge(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H);
+        // Implicitly determined bounds.
+        check_repeat_edge(
+            input,
+            repeat_edge(input),
+            test_min, test_extent, test_min, test_extent);
     }
 
-    Image<uint8_t> result_constant_exterior_img_implicit(test_extent, test_extent);
-    result_constant_exterior_img_implicit.set_min(test_min, test_min);
-    f_img_implicit.realize(result_constant_exterior_img_implicit);
+    // repeat_image:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 50;
 
-    for (int32_t i = test_extent; i < (test_min + test_extent); i++) {
-        for (int32_t j = test_extent; j < (test_min + test_extent); j++) {
-            if (i < 0 || j < 0 || i > 9 || j > 9) {
-                assert(result_constant_exterior_img_implicit(i, j) == 42);
-            } else {
-                assert(result_constant_exterior_img_implicit(i, j) == input(i, j));
-            }
-        }
+        // Func input.
+        check_repeat_image(
+            input,
+            repeat_image(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Image input.
+        check_repeat_image(
+            input,
+            repeat_image(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Undefined bounds.
+        check_repeat_image(
+            input,
+            repeat_image(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent);
+        check_repeat_image(
+            input,
+            repeat_image(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H);
+        // Implicitly determined bounds.
+        check_repeat_image(
+            input,
+            repeat_image(input),
+            test_min, test_extent, test_min, test_extent);
     }
 
-    Image<uint8_t> result_repeat_edge(20, 20);
-    result_repeat_edge.set_min(-5, -5);
-    g.realize(result_repeat_edge);
+    // mirror_image:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 50;
 
-    for (int32_t i = -5; i < 15; i++) {
-        for (int32_t j = -5; j < 15; j++) {
-            int32_t clamped_i = std::min(9, std::max(0, i));
-            int32_t clamped_j = std::min(9, std::max(0, j));
-            assert(result_repeat_edge(i, j) == input(clamped_i, clamped_j));
-        }
+        // Func input.
+        check_mirror_image(
+            input,
+            mirror_image(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Image input.
+        check_mirror_image(
+            input,
+            mirror_image(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Undefined bounds.
+        check_mirror_image(
+            input,
+            mirror_image(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent);
+        check_mirror_image(
+            input,
+            mirror_image(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H);
+        // Implicitly determined bounds.
+        check_mirror_image(
+            input,
+            mirror_image(input),
+            test_min, test_extent, test_min, test_extent);
     }
 
-    Image<uint8_t> result_repeat_edge_img(20, 20);
-    result_repeat_edge_img.set_min(-5, -5);
-    g_img.realize(result_repeat_edge_img);
+    // mirror_interior:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 50;
 
-    for (int32_t i = -5; i < 15; i++) {
-        for (int32_t j = -5; j < 15; j++) {
-            int32_t clamped_i = std::min(9, std::max(0, i));
-            int32_t clamped_j = std::min(9, std::max(0, j));
-            assert(result_repeat_edge_img(i, j) == input(clamped_i, clamped_j));
-        }
-    }
-
-    Image<uint8_t> result_repeat_edge_img_implicit(20, 20);
-    result_repeat_edge_img_implicit.set_min(-5, -5);
-    g_img_implicit.realize(result_repeat_edge_img_implicit);
-
-    for (int32_t i = -5; i < 15; i++) {
-        for (int32_t j = -5; j < 15; j++) {
-            int32_t clamped_i = std::min(9, std::max(0, i));
-            int32_t clamped_j = std::min(9, std::max(0, j));
-            assert(result_repeat_edge_img_implicit(i, j) == input(clamped_i, clamped_j));
-        }
-    }
-
-    Image<uint8_t> result_repeat_image(50, 50);
-    result_repeat_image.set_min(-25, -25);
-    h.realize(result_repeat_image);
-
-    for (int32_t i = -25; i < 25; i++) {
-        for (int32_t j = -25; j < 25; j++) {
-            int32_t mapped_i = i;
-            int32_t mapped_j = j;
-            while (mapped_i < 0) mapped_i += 10;
-            while (mapped_i > 9) mapped_i -= 10;
-            while (mapped_j < 0) mapped_j += 10;
-            while (mapped_j > 9) mapped_j -= 10;
-
-            assert(result_repeat_image(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_repeat_image_img(50, 50);
-    result_repeat_image_img.set_min(-25, -25);
-    h_img.realize(result_repeat_image_img);
-
-    for (int32_t i = -25; i < 25; i++) {
-        for (int32_t j = -25; j < 25; j++) {
-            int32_t mapped_i = i;
-            int32_t mapped_j = j;
-            while (mapped_i < 0) mapped_i += 10;
-            while (mapped_i > 9) mapped_i -= 10;
-            while (mapped_j < 0) mapped_j += 10;
-            while (mapped_j > 9) mapped_j -= 10;
-
-            assert(result_repeat_image_img(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_repeat_image_img_implicit(50, 50);
-    result_repeat_image_img_implicit.set_min(-25, -25);
-    h_img_implicit.realize(result_repeat_image_img_implicit);
-
-    for (int32_t i = -25; i < 25; i++) {
-        for (int32_t j = -25; j < 25; j++) {
-            int32_t mapped_i = i;
-            int32_t mapped_j = j;
-            while (mapped_i < 0) mapped_i += 10;
-            while (mapped_i > 9) mapped_i -= 10;
-            while (mapped_j < 0) mapped_j += 10;
-            while (mapped_j > 9) mapped_j -= 10;
-
-            assert(result_repeat_image_img_implicit(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_mirror_image(test_extent, test_extent);
-    result_mirror_image.set_min(test_min, test_min);
-    m.realize(result_mirror_image);
-
-    for (int32_t j = test_min; j < (test_min + test_extent); j++) {
-        for (int32_t i = test_min; i < (test_min + test_extent); i++) {
-            int32_t mapped_i = (i < 0) ? -(i + 1) : i;
-            mapped_i = mapped_i % (2 * 10);
-            if (mapped_i > (10 - 1)) {
-                mapped_i = (2 * 10 - 1) - mapped_i;
-            }
-            int32_t mapped_j = (j < 0) ? -(j + 1) : j;
-            mapped_j = mapped_j % (2 * 10);
-            if (mapped_j > (10 - 1)) {
-                mapped_j = (2 * 10 - 1) - mapped_j;
-            }
-
-            assert(result_mirror_image(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_mirror_image_img(test_extent, test_extent);
-    result_mirror_image_img.set_min(test_min, test_min);
-    m_img.realize(result_mirror_image_img);
-
-    for (int32_t j = test_min; j < (test_min + test_extent); j++) {
-        for (int32_t i = test_min; i < (test_min + test_extent); i++) {
-            int32_t mapped_i = (i < 0) ? -(i + 1) : i;
-            mapped_i = mapped_i % (2 * 10);
-            if (mapped_i > (10 - 1)) {
-                mapped_i = (2 * 10 - 1) - mapped_i;
-            }
-            int32_t mapped_j = (j < 0) ? -(j + 1) : j;
-            mapped_j = mapped_j % (2 * 10);
-            if (mapped_j > (10 - 1)) {
-                mapped_j = (2 * 10 - 1) - mapped_j;
-            }
-
-            assert(result_mirror_image_img(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_mirror_image_img_implicit(test_extent, test_extent);
-    result_mirror_image_img_implicit.set_min(test_min, test_min);
-    m_img_implicit.realize(result_mirror_image_img_implicit);
-
-    for (int32_t j = test_min; j < (test_min + test_extent); j++) {
-        for (int32_t i = test_min; i < (test_min + test_extent); i++) {
-            int32_t mapped_i = (i < 0) ? -(i + 1) : i;
-            mapped_i = mapped_i % (2 * 10);
-            if (mapped_i > (10 - 1)) {
-                mapped_i = (2 * 10 - 1) - mapped_i;
-            }
-            int32_t mapped_j = (j < 0) ? -(j + 1) : j;
-            mapped_j = mapped_j % (2 * 10);
-            if (mapped_j > (10 - 1)) {
-                mapped_j = (2 * 10 - 1) - mapped_j;
-            }
-
-            assert(result_mirror_image_img_implicit(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_mirror_interior(test_extent, test_extent);
-    result_mirror_interior.set_min(test_min, test_min);
-    n.realize(result_mirror_interior);
-
-    for (int32_t j = test_min; j < (test_min + test_extent); j++) {
-        for (int32_t i = test_min; i < (test_min + test_extent); i++) {
-            int32_t mapped_i = abs(i) % 18;
-            if (mapped_i > 9) {
-                mapped_i = 18 - mapped_i;
-            }
-            int32_t mapped_j = abs(j) % 18;
-            if (mapped_j > 9) {
-                mapped_j = 18 - mapped_j;
-            }
-
-            assert(result_mirror_interior(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_mirror_interior_img(test_extent, test_extent);
-    result_mirror_interior_img.set_min(test_min, test_min);
-    n.realize(result_mirror_interior_img);
-
-    for (int32_t j = test_min; j < (test_min + test_extent); j++) {
-        for (int32_t i = test_min; i < (test_min + test_extent); i++) {
-            int32_t mapped_i = abs(i) % 18;
-            if (mapped_i > 9) {
-                mapped_i = 18 - mapped_i;
-            }
-            int32_t mapped_j = abs(j) % 18;
-            if (mapped_j > 9) {
-                mapped_j = 18 - mapped_j;
-            }
-
-            assert(result_mirror_interior_img(i, j) == input(mapped_i, mapped_j));
-        }
-    }
-
-    Image<uint8_t> result_mirror_interior_img_implicit(test_extent, test_extent);
-    result_mirror_interior_img_implicit.set_min(test_min, test_min);
-    n.realize(result_mirror_interior_img_implicit);
-
-    for (int32_t j = test_min; j < (test_min + test_extent); j++) {
-        for (int32_t i = test_min; i < (test_min + test_extent); i++) {
-            int32_t mapped_i = abs(i) % 18;
-            if (mapped_i > 9) {
-                mapped_i = 18 - mapped_i;
-            }
-            int32_t mapped_j = abs(j) % 18;
-            if (mapped_j > 9) {
-                mapped_j = 18 - mapped_j;
-            }
-
-            assert(result_mirror_interior_img_implicit(i, j) == input(mapped_i, mapped_j));
-        }
+        // Func input.
+        check_mirror_interior(
+            input,
+            mirror_interior(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Image input.
+        check_mirror_interior(
+            input,
+            mirror_interior(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent);
+        // Undefined bounds.
+        check_mirror_interior(
+            input,
+            mirror_interior(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent);
+        check_mirror_interior(
+            input,
+            mirror_interior(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H);
+        // Implicitly determined bounds.
+        check_mirror_interior(
+            input,
+            mirror_interior(input),
+            test_min, test_extent, test_min, test_extent);
     }
 
     printf("Success!\n");

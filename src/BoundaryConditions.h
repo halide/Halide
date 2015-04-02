@@ -31,7 +31,9 @@ namespace Halide {
  *          if the extent of any region is 1 or less).
  *
  *  If the source Func has more dimensions than are specified, the extra ones
- *  are unmodified.
+ *  are unmodified. Additionally, passing an undefined (default constructed)
+ *  'Expr' for the min and extent of a dimension will keep that dimension
+ *  unmodified.
  *
  *  Numerous options for specifing the outside area are provided,
  *  including replacement with an expression, repeating the edge
