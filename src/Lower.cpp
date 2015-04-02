@@ -230,8 +230,14 @@ Stmt build_provide_loop_nest(Function f,
             Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
             Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
 
-            Expr inner = fused % inner_extent + inner_min;
-            Expr outer = fused / inner_extent + outer_min;
+            // If the inner extent is zero, the loop will never be
+            // entered, but the bounds expressions lifted out might
+            // contain divides or mods by zero. In the cases where
+            // simplification of inner and outer matter, inner_extent
+            // is a constant, so the max will simplify away.
+            Expr factor = max(inner_extent, 1);
+            Expr inner = fused % factor + inner_min;
+            Expr outer = fused / factor + outer_min;
 
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
