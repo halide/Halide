@@ -60,6 +60,7 @@ protected:
     /* // @} */
 
     bool shouldUseVMPA(const Add *, std::vector<llvm::Value *> &);
+    bool shouldUseVDMPY(const Add *, std::vector<llvm::Value *> &);
 
     llvm::Value *emitBinaryOp(const BaseExprNode *op,
                               std::vector<Pattern> &Patterns);

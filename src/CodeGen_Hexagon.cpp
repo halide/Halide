@@ -405,28 +405,33 @@ Expr lossless_cast(Type t, Expr e) {
 
     return Expr();
 }
-bool checkVMPAVectorLoadPair(const Load *LoadA, const Load*LoadC) {
+// Check to see if LoadA and LoadB are vectors of 'Width' elements and
+// that they form interleaved loads of even and odd elements
+//. i.e they are of the form.
+// LoadA = A[ramp(base, 2, Width)]
+// LoadB = A[ramp(base+1, 2, Width)]
+bool checkInterleavedLoadPair(const Load *LoadA, const Load*LoadC, int Width) {
   if (!LoadA || !LoadC)
     return false;
-  debug(4) << "**checkVMPAVectorLoadPair**\n";
+  debug(4) << "**checkInterleavedLoadPair**\n";
   debug(4) << "LoadA = " << LoadA->name << "[" << LoadA->index << "]\n";
   debug(4) << "LoadC = " << LoadC->name << "[" << LoadC->index << "]\n";
   const Ramp *RampA = LoadA->index.as<Ramp>();
   const Ramp *RampC = LoadC->index.as<Ramp>();
   if (!RampA  || !RampC) {
-    debug(4) << "checkVMPAVectorLoadPair: Not both Ramps\n";
+    debug(4) << "checkInterleavedLoadPair: Not both Ramps\n";
     return false;
   }
   const IntImm *StrideA = RampA->stride.as<IntImm>();
   const IntImm *StrideC = RampC->stride.as<IntImm>();
 
   if (StrideA->value != 2 || StrideC->value != 2) {
-    debug(4) << "checkVMPAVectorLoadPair: Not all strides are 2\n";
+    debug(4) << "checkInterleavedLoadPair: Not all strides are 2\n";
     return false;
   }
 
-  if (RampA->width != 64 || RampC->width != 64) {
-      debug(4) << "checkVMPAVectorLoadPair: Not all widths are 64\n";
+  if (RampA->width != Width || RampC->width != Width) {
+      debug(4) << "checkInterleavedLoadPair: Not all widths are 64\n";
       return false;
   }
 
@@ -434,21 +439,30 @@ bool checkVMPAVectorLoadPair(const Load *LoadA, const Load*LoadC) {
   Expr BaseC = RampC->base;
 
   Expr DiffCA = simplify(BaseC - BaseA);
-  debug (4) << "checkVMPAVectorLoadPair: BaseA = " << BaseA << "\n";
-  debug (4) << "checkVMPAVectorLoadPair: BaseC = " << BaseC << "\n";
-  debug (4) << "checkVMPAVectorLoadPair: DiffCA = " << DiffCA << "\n";
+  debug (4) << "checkInterleavedLoadPair: BaseA = " << BaseA << "\n";
+  debug (4) << "checkInterleavedLoadPair: BaseC = " << BaseC << "\n";
+  debug (4) << "checkInterleavedLoadPair: DiffCA = " << DiffCA << "\n";
   if (is_one(DiffCA))
     return true;
   return false;
 }
-bool checkVMPAOperandCombinations(vector<Expr> &matches) {
+// Check to see if the elements of the 'matches' form a dot product
+// of interleaved values, i.e, they are this for example
+// matches[0]*matches[1] + matches[2]*matches[3]
+// where matches[0] and matches[2] are interleaved loads
+// i.e matches[0] is A[ramp(base, 2, Width)]
+// and matches[2] is A[ramp(base+1, 2, Width)]
+// Similarly, matches[1] is B[ramp(base, 2, Width)]
+// and matches[3] is B[ramp(base+1, 2, Width)]
+bool checkTwoWayDotProductOperandsCombinations(vector<Expr> &matches,
+                                               int Width) {
   internal_assert(matches.size() == 4);
   // We accept only two combinations for now.
   // All four vector loads.
   // Two vector loads and two broadcasts.
   // Check if all four are loads
   int I;
-  debug(4) << "**checkVMPAOperandCombinations**\n";
+  debug(4) << "**checkTwoWayDotProductOperandsCombinations**\n";
   for (I = 0; I < 4; ++I)
     debug(4) << "matches[" << I << "] = " << matches[I] << "\n";
 
@@ -460,16 +474,16 @@ bool checkVMPAOperandCombinations(vector<Expr> &matches) {
     if (((LoadA->name != LoadC->name) && (LoadA->name != LoadD->name)) ||
         ((LoadB->name != LoadC->name) && (LoadB->name != LoadD->name))) {
       debug(4) <<
-        "checkVMPAOperandCombinations: All 4 loads, but not exactly"
-        " two pairs of arrays\n";
+        "checkTwoWayDotProductOperandsCombinations: All 4 loads, but not"
+        " exactly two pairs of arrays\n";
       return false;
     }
     if (LoadA->name == LoadD->name){
       std::swap(matches[2], matches[3]);
       std::swap(LoadC, LoadD);
     }
-    return checkVMPAVectorLoadPair(LoadA, LoadC) &&
-      checkVMPAVectorLoadPair(LoadB, LoadD);
+    return checkInterleavedLoadPair(LoadA, LoadC, Width) &&
+      checkInterleavedLoadPair(LoadB, LoadD, Width);
   } else {
     // Theoretically we can deal with all of them not being vector loads
     // (Hint: Think 4 broadcasts), but this is rare, so now we will deal
@@ -479,16 +493,16 @@ bool checkVMPAOperandCombinations(vector<Expr> &matches) {
     if (!LoadA && LoadB) {
       const Broadcast *BroadcastA = matches[0].as<Broadcast>();
       if (!BroadcastA) {
-        debug(4) << "checkVMPAOperandCombinations: A is neither a vector load"
-          " nor a broadcast\n";
+        debug(4) << "checkTwoWayDotProductOperandsCombinations: A is neither a"
+          "vector load  nor a broadcast\n";
         return false;
       }
       InterleavedLoad1 = LoadB;
     } else if (LoadA && !LoadB) {
       const Broadcast *BroadcastB = matches[1].as<Broadcast>();
       if (!BroadcastB) {
-        debug(4) << "checkVMPAOperandCombinations: B is neither a vector load"
-          " nor a broadcast\n";
+        debug(4) << "checkTwoWayDotProductOperandsCombinations: B is neither a"
+          " vector laod nor a broadcast\n";
         return false;
       }
       InterleavedLoad1 = LoadA;
@@ -497,16 +511,16 @@ bool checkVMPAOperandCombinations(vector<Expr> &matches) {
     if (!LoadC && LoadD) {
       const Broadcast *BroadcastC = matches[2].as<Broadcast>();
       if (!BroadcastC) {
-        debug(4) << "checkVMPAOperandCombinations: C is neither a vector load"
-          " nor a broadcast\n";
+        debug(4) << "checkTwoWayDotProductOperandsCombinations: C is neither a"
+          " vector load nor a broadcast\n";
         return false;
       }
       InterleavedLoad2 = LoadD;
     } else if (LoadC && !LoadD) {
       const Broadcast *BroadcastD = matches[3].as<Broadcast>();
       if (!BroadcastD) {
-        debug(4) << "checkVMPAOperandCombinations: D is neither a vector load"
-          " nor a broadcast\n";
+        debug(4) << "checkTwoWayDotProductOperandsCombinations: D is neither a"
+          "vector load nor a broadcast\n";
         return false;
       }
       InterleavedLoad2 = LoadC;
@@ -515,7 +529,42 @@ bool checkVMPAOperandCombinations(vector<Expr> &matches) {
     if (InterleavedLoad1->name != InterleavedLoad2->name)
       return false;
     // Todo: Should we be checking the broadcasts?
-    return checkVMPAVectorLoadPair(InterleavedLoad1, InterleavedLoad2);
+    return checkInterleavedLoadPair(InterleavedLoad1, InterleavedLoad2, Width);
+  }
+  return false;
+}
+bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op, std::vector<Value *> &LLVMValues){
+  Expr pattern;
+  int I;
+  pattern = (wild_i32x16 * wild_i32x16) + (wild_i32x16 * wild_i32x16);
+  vector<Expr> matches;
+  if (expr_match(pattern, op, matches)) {
+    internal_assert(matches.size() == 4);
+    debug(4) << "**shouldUseVDMPY**\n";
+    for (I = 0; I < 4; ++I)
+      debug(4) << "matches[" << I << "] = " << matches[I] << "\n";
+
+    matches[0] = lossless_cast(Int(16, 16), matches[0]);
+    matches[1] = lossless_cast(Int(16, 16), matches[1]);
+    matches[2] = lossless_cast(Int(16, 16), matches[2]);
+    matches[3] = lossless_cast(Int(16, 16), matches[3]);
+    if (!matches[0].defined() || !matches[1].defined() ||
+        !matches[2].defined() || !matches[3].defined())
+      return false;
+    if (!checkTwoWayDotProductOperandsCombinations(matches, 16))
+      return false;
+
+    std::vector<Expr> vecA, vecB;
+    vecA.push_back(matches[0]);
+    vecA.push_back(matches[2]);
+    vecB.push_back(matches[1]);
+    vecB.push_back(matches[3]);
+    Value *a = interleave_vectors(Int(16, 32), vecA);
+    Value *b = interleave_vectors(Int(16, 32), vecB);
+    LLVMValues.push_back(a);
+    LLVMValues.push_back(b);
+    return true;
+
   }
   return false;
 }
@@ -535,7 +584,7 @@ bool CodeGen_Hexagon::shouldUseVMPA(const Add *op, std::vector<Value *> &LLVMVal
     if (!matches[0].defined() || !matches[1].defined() ||
         !matches[2].defined() || !matches[3].defined())
       return false;
-    if (!checkVMPAOperandCombinations(matches))
+    if (!checkTwoWayDotProductOperandsCombinations(matches, 64))
       return false;
 
     std::vector<Expr> vecA, vecB;
@@ -578,7 +627,31 @@ void CodeGen_Hexagon::visit(const Add *op) {
     debug(4) << "Generating vmpa\n";
     return;
   }
+  if (shouldUseVDMPY(op, LLVMValues)) {
+    internal_assert (LLVMValues.size() == 2);
+    Value *Lt = LLVMValues[0];
+    Value *Rt = LLVMValues[1];
+    llvm::Function *F =
+      Intrinsic::getDeclaration(module, Intrinsic::hexagon_V6_vdmpyhvsat);
+    llvm::FunctionType *FType = F->getFunctionType();
+    llvm::Type *T0 = FType->getParamType(0);
+    llvm::Type *T1 = FType->getParamType(1);
+    if (T0 != Lt->getType()) {
+      Lt = builder->CreateBitCast(Lt, T0);
+    }
+    if (T1 != Rt->getType())
+      Rt = builder->CreateBitCast(Rt, T1);
 
+    Halide::Type DestType = op->type;
+    llvm::Type *DestLLVMType = llvm_type_of(DestType);
+    Value *Call = builder->CreateCall2(F, Lt, Rt);
+    if (DestLLVMType != Call->getType())
+      value = builder->CreateBitCast(Call, DestLLVMType);
+    else
+      value = Call;
+    debug(4) << "HexagonCodegen: Generating Vd32.w=vdmpy(Vu32.h,Rt32.h):sat\n";
+    return;
+  }
   value = emitBinaryOp(op, varith);
   if (!value)
     CodeGen_Posix::visit(op);
