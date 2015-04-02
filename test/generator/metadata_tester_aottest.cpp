@@ -42,34 +42,34 @@ bool scalar_union_equal(int32_t type_code,
     case halide_type_int:
         switch (type_bits) {
         case 8:
-            return e.i8 == a.i8;
+            return e.u.i8 == a.u.i8;
         case 16:
-            return e.i16 == a.i16;
+            return e.u.i16 == a.u.i16;
         case 32:
-            return e.i32 == a.i32;
+            return e.u.i32 == a.u.i32;
         case 64:
-            return e.i64 == a.i64;
+            return e.u.i64 == a.u.i64;
         }
     case halide_type_uint:
         switch (type_bits) {
         case 8:
-            return e.u8 == a.u8;
+            return e.u.u8 == a.u.u8;
         case 16:
-            return e.u16 == a.u16;
+            return e.u.u16 == a.u.u16;
         case 32:
-            return e.u32 == a.u32;
+            return e.u.u32 == a.u.u32;
         case 64:
-            return e.u64 == a.u64;
+            return e.u.u64 == a.u.u64;
         }
     case halide_type_float:
         switch (type_bits) {
         case 32:
-            return e.f32 == a.f32;
+            return e.u.f32 == a.u.f32;
         case 64:
-            return e.f64 == a.f64;
+            return e.u.f64 == a.u.f64;
         }
     case halide_type_handle:
-        return e.handle == a.handle;
+        return e.u.handle == a.u.handle;
     }
     fprintf(stderr, "Unsupported type %d or size %d\n", type_code, type_bits);
     exit(-1);
@@ -150,73 +150,73 @@ struct Scalar {
 
 template <>
 const halide_scalar_value_t *Scalar::init(bool v) {
-    scalar.b = v;
+    scalar.u.b = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(int8_t v) {
-    scalar.i8 = v;
+    scalar.u.i8 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(int16_t v) {
-    scalar.i16 = v;
+    scalar.u.i16 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(int32_t v) {
-    scalar.i32 = v;
+    scalar.u.i32 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(int64_t v) {
-    scalar.i64 = v;
+    scalar.u.i64 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(uint8_t v) {
-    scalar.u8 = v;
+    scalar.u.u8 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(uint16_t v) {
-    scalar.u16 = v;
+    scalar.u.u16 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(uint32_t v) {
-    scalar.u32 = v;
+    scalar.u.u32 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(uint64_t v) {
-    scalar.u64 = v;
+    scalar.u.u64 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(float v) {
-    scalar.f32 = v;
+    scalar.u.f32 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(double v) {
-    scalar.f64 = v;
+    scalar.u.f64 = v;
     return &scalar;
 }
 
 template <>
 const halide_scalar_value_t *Scalar::init(void *v) {
-    scalar.handle = v;
+    scalar.u.handle = v;
     return &scalar;
 }
 

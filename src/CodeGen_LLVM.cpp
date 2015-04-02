@@ -416,7 +416,7 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     argument_t_type = module->getTypeByName("struct.halide_filter_argument_t");
     internal_assert(argument_t_type) << "Did not find halide_filter_argument_t in initial module";
 
-    scalar_value_t_type = module->getTypeByName("union.halide_scalar_value_t");
+    scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
 
 

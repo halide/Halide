@@ -358,20 +358,25 @@ typedef struct buffer_t {
  * scalar values in a filter argument. Note that it isn't tagged with a type;
  * you must ensure you know the proper type before accessing. Most user
  * code will never need to create instances of this struct; its primary use
- * is to hold def/min/max values in a halide_filter_argument_t. */
-union halide_scalar_value_t {
-    bool b;
-    int8_t i8;
-    int16_t i16;
-    int32_t i32;
-    int64_t i64;
-    uint8_t u8;
-    uint16_t u16;
-    uint32_t u32;
-    uint64_t u64;
-    float f32;
-    double f64;
-    void *handle;
+ * is to hold def/min/max values in a halide_filter_argument_t. (Note that
+ * this is conceptually just a union; it's wrapped in a struct to ensure
+ * that it doesn't get anonymized by LLVM.)
+ */
+struct halide_scalar_value_t {
+    union {
+        bool b;
+        int8_t i8;
+        int16_t i16;
+        int32_t i32;
+        int64_t i64;
+        uint8_t u8;
+        uint16_t u16;
+        uint32_t u32;
+        uint64_t u64;
+        float f32;
+        double f64;
+        void *handle;
+    } u;
 };
 
 enum halide_argument_kind_t {
