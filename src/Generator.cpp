@@ -302,10 +302,10 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
         func.compile_to_c(base_path + ".cpp", inputs, function_name, target);
     }
     if (options.emit_stmt) {
-        func.compile_to_lowered_stmt(base_path + ".stmt", Halide::Text, target);
+        func.compile_to_lowered_stmt(base_path + ".stmt", inputs, Halide::Text, target);
     }
     if (options.emit_stmt_html) {
-        func.compile_to_lowered_stmt(base_path + ".html", Halide::HTML, target);
+        func.compile_to_lowered_stmt(base_path + ".html", inputs, Halide::HTML, target);
     }
 }
 
