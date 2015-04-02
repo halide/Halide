@@ -622,7 +622,7 @@ namespace {
 
 template<typename T>
 llvm::Constant *get_constant(llvm::Type *ty, Expr e) {
-    T v;
+    T v = 0;
     internal_assert(scalar_from_constant_expr<T>(e, &v)) << "scalar_from_constant_expr fails for Expr " << e << "\n";
     return std::numeric_limits<T>::is_integer ? ConstantInt::get(ty, v) : ConstantFP::get(ty, v);
 }

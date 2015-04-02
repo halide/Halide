@@ -160,7 +160,7 @@ foreach (i ${RUNTIME_CPP} )
       IF (ARCHS EQUAL 32)
         IF (${i} MATCHES "windows_.*")
           # win32 uses the stdcall calling convention, which is x86-specific
-          set(TARGET "i386-unknown-nacl-unknown")
+          set(TARGET "i386-unknown-unknown-unknown")
         ELSE()
           set(TARGET "le32-unknown-nacl-unknown")
         ENDIF()
