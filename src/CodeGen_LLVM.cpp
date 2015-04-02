@@ -613,7 +613,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
     // Finally, dump it in the symbol table
     Constant *zero = ConstantInt::get(i32, 0);
-    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
+    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, vec(zero));
     sym_push(buf.name(), global_ptr);
     sym_push(buf.name() + ".buffer", global_ptr);
 }
@@ -672,7 +672,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
 
     Constant *zero = ConstantInt::get(i32, 0);
     return ConstantExpr::getBitCast(
-        ConstantExpr::getInBoundsGetElementPtr(storage, vec(zero)),
+        ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, vec(zero)),
         scalar_value_t_type->getPointerTo());
 }
 
@@ -706,7 +706,7 @@ void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
     Constant *metadata_fields[] = {
         /* version */ zero,
         /* num_arguments */ ConstantInt::get(i32, num_args),
-        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, vec(zero, zero)),
+        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, vec(zero, zero)),
         /* target */ create_string_constant(target.to_string())
     };
 
@@ -2551,7 +2551,7 @@ Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, co
     global->setAlignment(32);
 
     Constant *zero = ConstantInt::get(i32, 0);
-    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero, zero));
+    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, vec(zero, zero));
     return ptr;
 }
 
