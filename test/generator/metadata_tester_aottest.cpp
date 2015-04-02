@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "metadata_tester.h"
+#include "metadata_tester_ucon.h"
 #include "static_image.h"
 
 const int kSize = 32;
@@ -228,22 +229,7 @@ const halide_scalar_value_t *make_scalar(void *v) {
     return s;
 }
 
-int main(int argc, char **argv) {
-
-    const Image<uint8_t> input = make_image<uint8_t>();
-
-    Image<float> output0(kSize, kSize, 3);
-    Image<float> output1(kSize, kSize, 3);
-
-    int result;
-
-    result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
-    EXPECT_EQ(0, result);
-
-    verify(input, output0, output1);
-
-    const halide_filter_metadata_t &md = metadata_tester_metadata;
-
+void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     // target will vary depending on where we are testing, but probably
     // will contain "x86" or "arm".
     if (!strstr(md.target, "x86") && !strstr(md.target, "arm")) {
@@ -252,6 +238,16 @@ int main(int argc, char **argv) {
     }
 
     static const halide_filter_argument_t kExpectedArguments[] = {
+        {
+          "__user_context",
+          halide_argument_kind_input_scalar,
+          0,
+          halide_type_handle,
+          sizeof(void*)*8,
+          NULL,
+          NULL,
+          NULL,
+        },
         {
           "input",
           halide_argument_kind_input_buffer,
@@ -405,15 +401,41 @@ int main(int argc, char **argv) {
     };
     const int kExpectedArgumentCount = (int)sizeof(kExpectedArguments) / sizeof(kExpectedArguments[0]);
 
-    EXPECT_EQ(kExpectedArgumentCount, md.num_arguments);
+    EXPECT_EQ(kExpectedArgumentCount - (expect_ucon_at_0 ? 0 : 1), md.num_arguments);
+
+    const halide_filter_argument_t* expected = &kExpectedArguments[expect_ucon_at_0 ? 0 : 1];
+    for (int i = 0; i < md.num_arguments; ++i) {
+        fprintf(stdout, "checking arg %d %s\n", i, md.arguments[i].name);
+        match_argument(expected[i], md.arguments[i]);
+    }
 
     for (int i = 0; i < kExpectedArgumentCount; ++i) {
-        fprintf(stdout, "checking arg %d %s\n", i, md.arguments[i].name);
-        match_argument(kExpectedArguments[i], md.arguments[i]);
         delete kExpectedArguments[i].def;
         delete kExpectedArguments[i].min;
         delete kExpectedArguments[i].max;
     }
+}
+
+int main(int argc, char **argv) {
+
+    const Image<uint8_t> input = make_image<uint8_t>();
+
+    Image<float> output0(kSize, kSize, 3);
+    Image<float> output1(kSize, kSize, 3);
+
+    int result;
+
+    result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
+    EXPECT_EQ(0, result);
+
+    result = metadata_tester_ucon(NULL, input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
+    EXPECT_EQ(0, result);
+
+    verify(input, output0, output1);
+
+    check_metadata(metadata_tester_metadata, false);
+    check_metadata(metadata_tester_ucon_metadata, true);
+
     printf("Success!\n");
     return 0;
 }
