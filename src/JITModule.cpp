@@ -25,10 +25,10 @@ static bool have_symbol(const char *s) {
 }
 #endif
 
-using std::string;
-
 namespace Halide {
 namespace Internal {
+
+using std::string;
 
 namespace {
 
@@ -232,8 +232,6 @@ void load_opengl() {
 }
 
 }
-
-using std::string;
 
 using namespace llvm;
 
