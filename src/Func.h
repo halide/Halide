@@ -594,6 +594,7 @@ public:
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
     EXPORT void compile_to_lowered_stmt(const std::string &filename,
+                                        const std::vector<Argument> &args,
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
 
