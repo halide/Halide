@@ -53,6 +53,8 @@ bool scalar_union_equal(int32_t type_code,
         }
     case halide_type_uint:
         switch (type_bits) {
+        case 1:
+            return e.u.b == a.u.b;
         case 8:
             return e.u.u8 == a.u.u8;
         case 16:
@@ -237,7 +239,8 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
         exit(-1);
     }
 
-    static const halide_filter_argument_t kExpectedArguments[] = {
+    // Not static, since we free make_scalar() results each time
+    const halide_filter_argument_t kExpectedArguments[] = {
         {
           "__user_context",
           halide_argument_kind_input_scalar,
