@@ -133,7 +133,7 @@ llvm::TargetMachine *get_target_machine(const llvm::Module *module) {
         std::cout << error_string << std::endl;
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
     }
-    internal_assert(target) << "Could not create target\n";
+    internal_assert(target) << "Could not create target for " << module->getTargetTriple() << "\n";
 
     llvm::TargetOptions options;
     std::string mcpu = "";
