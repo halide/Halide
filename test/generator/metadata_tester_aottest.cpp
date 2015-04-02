@@ -141,83 +141,91 @@ void verify(const Image<InputType> &input, const Image<OutputType> &output0, con
     }
 }
 
-struct Scalar {
-    halide_scalar_value_t scalar;
-
-    template <typename T>
-    const halide_scalar_value_t *init(T v);
-};
+template <typename T>
+const halide_scalar_value_t *make_scalar(T v);
 
 template <>
-const halide_scalar_value_t *Scalar::init(bool v) {
-    scalar.b = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(bool v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->b = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(int8_t v) {
-    scalar.i8 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(int8_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->i8 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(int16_t v) {
-    scalar.i16 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(int16_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->i16 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(int32_t v) {
-    scalar.i32 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(int32_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->i32 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(int64_t v) {
-    scalar.i64 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(int64_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->i64 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(uint8_t v) {
-    scalar.u8 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(uint8_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->u8 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(uint16_t v) {
-    scalar.u16 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(uint16_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->u16 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(uint32_t v) {
-    scalar.u32 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(uint32_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->u32 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(uint64_t v) {
-    scalar.u64 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(uint64_t v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->u64 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(float v) {
-    scalar.f32 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(float v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->f32 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(double v) {
-    scalar.f64 = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(double v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->f64 = v;
+    return s;
 }
 
 template <>
-const halide_scalar_value_t *Scalar::init(void *v) {
-    scalar.handle = v;
-    return &scalar;
+const halide_scalar_value_t *make_scalar(void *v) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    s->handle = v;
+    return s;
 }
 
 int main(int argc, char **argv) {
@@ -260,7 +268,7 @@ int main(int argc, char **argv) {
           0,
           halide_type_uint,
           1,
-          Scalar().init<bool>(true),
+          make_scalar<bool>(true),
           NULL,
           NULL,
         },
@@ -270,9 +278,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_int,
           8,
-          Scalar().init<int8_t>(8),
-          Scalar().init<int8_t>(-8),
-          Scalar().init<int8_t>(127),
+          make_scalar<int8_t>(8),
+          make_scalar<int8_t>(-8),
+          make_scalar<int8_t>(127),
         },
         {
           "i16",
@@ -280,9 +288,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_int,
           16,
-          Scalar().init<int16_t>(16),
-          Scalar().init<int16_t>(-16),
-          Scalar().init<int16_t>(127),
+          make_scalar<int16_t>(16),
+          make_scalar<int16_t>(-16),
+          make_scalar<int16_t>(127),
         },
         {
           "i32",
@@ -290,9 +298,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_int,
           32,
-          Scalar().init<int32_t>(32),
-          Scalar().init<int32_t>(-32),
-          Scalar().init<int32_t>(127),
+          make_scalar<int32_t>(32),
+          make_scalar<int32_t>(-32),
+          make_scalar<int32_t>(127),
         },
         {
           "i64",
@@ -300,9 +308,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_int,
           64,
-          Scalar().init<int64_t>(64),
-          Scalar().init<int64_t>(-64),
-          Scalar().init<int64_t>(127),
+          make_scalar<int64_t>(64),
+          make_scalar<int64_t>(-64),
+          make_scalar<int64_t>(127),
         },
         {
           "u8",
@@ -310,9 +318,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_uint,
           8,
-          Scalar().init<uint8_t>(80),
-          Scalar().init<uint8_t>(8),
-          Scalar().init<uint8_t>(255),
+          make_scalar<uint8_t>(80),
+          make_scalar<uint8_t>(8),
+          make_scalar<uint8_t>(255),
         },
         {
           "u16",
@@ -320,9 +328,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_uint,
           16,
-          Scalar().init<uint16_t>(160),
-          Scalar().init<uint16_t>(16),
-          Scalar().init<uint16_t>(2550),
+          make_scalar<uint16_t>(160),
+          make_scalar<uint16_t>(16),
+          make_scalar<uint16_t>(2550),
         },
         {
           "u32",
@@ -330,9 +338,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_uint,
           32,
-          Scalar().init<uint32_t>(320),
-          Scalar().init<uint32_t>(32),
-          Scalar().init<uint32_t>(2550),
+          make_scalar<uint32_t>(320),
+          make_scalar<uint32_t>(32),
+          make_scalar<uint32_t>(2550),
         },
         {
           "u64",
@@ -340,9 +348,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_uint,
           64,
-          Scalar().init<uint64_t>(640),
-          Scalar().init<uint64_t>(64),
-          Scalar().init<uint64_t>(2550),
+          make_scalar<uint64_t>(640),
+          make_scalar<uint64_t>(64),
+          make_scalar<uint64_t>(2550),
         },
         {
           "f32",
@@ -350,9 +358,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_float,
           32,
-          Scalar().init<float>(32.1234f),
-          Scalar().init<float>(-3200.1234f),
-          Scalar().init<float>(3200.1234f),
+          make_scalar<float>(32.1234f),
+          make_scalar<float>(-3200.1234f),
+          make_scalar<float>(3200.1234f),
         },
         {
           "f64",
@@ -360,9 +368,9 @@ int main(int argc, char **argv) {
           0,
           halide_type_float,
           64,
-          Scalar().init<double>(64.25),
-          Scalar().init<double>(-6400.25),
-          Scalar().init<double>(6400.25),
+          make_scalar<double>(64.25),
+          make_scalar<double>(-6400.25),
+          make_scalar<double>(6400.25),
         },
         {
           "h",
@@ -402,6 +410,9 @@ int main(int argc, char **argv) {
     for (int i = 0; i < kExpectedArgumentCount; ++i) {
         fprintf(stdout, "checking arg %d %s\n", i, md.arguments[i].name);
         match_argument(kExpectedArguments[i], md.arguments[i]);
+        delete kExpectedArguments[i].def;
+        delete kExpectedArguments[i].min;
+        delete kExpectedArguments[i].max;
     }
     printf("Success!\n");
     return 0;
