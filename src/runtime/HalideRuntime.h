@@ -342,7 +342,36 @@ enum halide_error_code_t {
 
     /** debug_to_file failed to open or write to the specified
      * file. */
-    halide_error_code_debug_to_file = -13
+    halide_error_code_debug_to_file_failed = -13,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from device to host. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_host_failed = -14,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from host to device. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_device_failed = -15,
+
+    /** The Halide runtime encountered an error while trying to
+     * allocate memory on device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_malloc_failed = -16,
+
+    /** The Halide runtime encountered an error while trying to
+     * synchronize with a device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_sync_failed = -17,
+
+    /** The Halide runtime encountered an error while trying to free a
+     * device allocation. Turn on -debug in your target string to see
+     * more details. */
+    halide_error_code_device_free_failed = -18,
+
+    /** A device operation was attempted on a buffer with no device
+     * interface. */
+    halide_error_code_no_device_interface = -19
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -392,8 +421,8 @@ extern int halide_error_param_too_large_f64(void *user_context, const char *para
                                             double val, double max_val);
 extern int halide_error_out_of_memory(void *user_context);
 extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
-extern int halide_error_debug_to_file(void *user_context, const char *func,
-                                      const char *filename, int error_code);
+extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
+                                             const char *filename, int error_code);
 // @}
 
 

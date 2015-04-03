@@ -613,6 +613,7 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
 
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
+    internal_assert(destructor_fn);
     Instruction *cleanup =
         builder->CreateCall3(call_destructor, get_user_context(), destructor_fn, stack_slot);
 

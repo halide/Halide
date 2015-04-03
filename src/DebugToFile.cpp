@@ -85,7 +85,7 @@ class DebugToFile : public IRMutator {
             string call_result_name = unique_name("debug_to_file_result");
             Expr call_result_var = Variable::make(Int(32), call_result_name);
             Stmt body = AssertStmt::make(call_result_var == 0,
-                                         Call::make(Int(32), "halide_error_debug_to_file",
+                                         Call::make(Int(32), "halide_error_debug_to_file_failed",
                                                     vec<Expr>(f.name(), f.debug_file(), call_result_var),
                                                     Call::Extern));
             body = LetStmt::make(call_result_name, call, body);
