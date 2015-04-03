@@ -186,12 +186,13 @@ WEAK int halide_error_buffer_argument_is_null(void *user_context, const char *bu
     return halide_error_code_buffer_argument_is_null;
 }
 
-WEAK int halide_error_debug_to_file(void *user_context, const char *func, const char *filename, int error_code) {
+WEAK int halide_error_debug_to_file_failed(void *user_context, const char *func,
+                                           const char *filename, int error_code) {
     error(user_context)
         << "Failed to dump function " << func
         << " to file " << filename
         << " with error " << error_code;
-    return halide_error_code_debug_to_file;
+    return halide_error_code_debug_to_file_failed;
 }
 
 }
