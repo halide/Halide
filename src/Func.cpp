@@ -2109,10 +2109,18 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
     llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
 
     if (!output_files.object_name.empty()) {
-        compile_llvm_module_to_object(llvm_module, output_files.object_name);
+        if (target.arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.object_name);
+        } else {
+            compile_llvm_module_to_object(llvm_module, output_files.object_name);
+        }
     }
     if (!output_files.assembly_name.empty()) {
-        compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
+        if (target.arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_assembly(llvm_module, output_files.assembly_name);
+        } else {
+            compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
+        }
     }
     if (!output_files.bitcode_name.empty()) {
         compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
@@ -2148,8 +2156,8 @@ void Func::compile_to_c(const string &filename, const vector<Argument> &args,
     compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
-    Module m = compile_to_module(infer_arguments(), "", target);
+void Func::compile_to_lowered_stmt(const string &filename, const vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
+    Module m = compile_to_module(args, "", target);
     if (fmt == HTML) {
         compile_module_to_html(m, filename);
     } else {
