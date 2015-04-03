@@ -83,8 +83,12 @@ private:
     /** Free the memory backing an allocation and pop it from the
      * symbol table and the allocations map. For heap allocations it
      * calls halide_free in the runtime, for stack allocations it
-     * marks the block as free so it can be reused. */
-    void free_allocation(const std::string &name);
+     * marks the block as free so it can be reused. Also frees any
+     * device-side allocations by calling halide_device_free. If
+     * in_error_handler is false, it additionally asserts that
+     * halide_device_free returned zero. */
+    void free_allocation(const std::string &name,
+                         bool in_error_handler = false);
 };
 
 }}

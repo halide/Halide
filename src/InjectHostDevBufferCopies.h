@@ -15,9 +15,6 @@ namespace Internal {
  * halide_copy_to_host as needed. */
 Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t);
 
-/** Inject calls to halide_dev_free as needed. */
-Stmt inject_dev_frees(Stmt s);
-
 }
 }
 
