@@ -563,7 +563,7 @@ public:
         stream << open_expand_button(id);
         stream << open_span("Matched");
         stream << keyword("func");
-        stream << " (";
+        stream << " " << op.name << "(";
         stream << close_span();
         for (size_t i = 0; i < op.args.size(); i++) {
             if (i > 0) {

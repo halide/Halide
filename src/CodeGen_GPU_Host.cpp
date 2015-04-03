@@ -13,14 +13,14 @@
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 
+namespace Halide {
+namespace Internal {
+
 using std::vector;
 using std::string;
 using std::map;
 
 using namespace llvm;
-
-namespace Halide {
-namespace Internal {
 
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the

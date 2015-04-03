@@ -135,6 +135,7 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_consume = 6,
                               halide_trace_end_consume = 7};
 
+#pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
     halide_trace_event_code event;
@@ -147,6 +148,7 @@ struct halide_trace_event {
     int32_t dimensions;
     int32_t *coordinates;
 };
+#pragma pack(pop)
 
 /** Called when Funcs are marked as trace_load, trace_store, or
  * trace_realization. See Func::set_custom_trace. The default
@@ -307,47 +309,128 @@ typedef enum halide_type_code_t {
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
  * GPU). */
+#pragma pack(push, 1)
 typedef struct buffer_t {
-  /** A device-handle for e.g. GPU memory used to back this buffer. */
-  uint64_t dev;
+    /** A device-handle for e.g. GPU memory used to back this buffer. */
+    uint64_t dev;
 
-  /** A pointer to the start of the data in main memory. */
-  uint8_t* host;
+    /** A pointer to the start of the data in main memory. */
+    uint8_t* host;
 
-  /** The size of the buffer in each dimension. */
-  int32_t extent[4];
+    /** The size of the buffer in each dimension. */
+    int32_t extent[4];
 
-  /** Gives the spacing in memory between adjacent elements in the
-   * given dimension.  The correct memory address for a load from
-   * this buffer at position x, y, z, w is:
-   * host + (x * stride[0] + y * stride[1] + z * stride[2] + w * stride[3]) * elem_size
-   * By manipulating the strides and extents you can lazily crop,
-   * transpose, and even flip buffers without modifying the data.
-   */
-  int32_t stride[4];
+    /** Gives the spacing in memory between adjacent elements in the
+    * given dimension.  The correct memory address for a load from
+    * this buffer at position x, y, z, w is:
+    * host + (x * stride[0] + y * stride[1] + z * stride[2] + w * stride[3]) * elem_size
+    * By manipulating the strides and extents you can lazily crop,
+    * transpose, and even flip buffers without modifying the data.
+    */
+    int32_t stride[4];
 
-  /** Buffers often represent evaluation of a Func over some
-   * domain. The min field encodes the top left corner of the
-   * domain. */
-  int32_t min[4];
+    /** Buffers often represent evaluation of a Func over some
+    * domain. The min field encodes the top left corner of the
+    * domain. */
+    int32_t min[4];
 
-  /** How many bytes does each buffer element take. This may be
-   * replaced with a more general type code in the future. */
-  int32_t elem_size;
+    /** How many bytes does each buffer element take. This may be
+    * replaced with a more general type code in the future. */
+    int32_t elem_size;
 
-  /** This should be true if there is an existing device allocation
-   * mirroring this buffer, and the data has been modified on the
-   * host side. */
-  bool host_dirty;
+    /** This should be true if there is an existing device allocation
+    * mirroring this buffer, and the data has been modified on the
+    * host side. */
+    bool host_dirty;
 
-  /** This should be true if there is an existing device allocation
-   mirroring this buffer, and the data has been modified on the
-   device side. */
-  bool dev_dirty;
+    /** This should be true if there is an existing device allocation
+    mirroring this buffer, and the data has been modified on the
+    device side. */
+    bool dev_dirty;
+
+    uint8_t _padding[2];
 } buffer_t;
+#pragma pack(pop)
 
 #endif
 
+/** halide_scalar_value_t is a simple union able to represent all the well-known
+ * scalar values in a filter argument. Note that it isn't tagged with a type;
+ * you must ensure you know the proper type before accessing. Most user
+ * code will never need to create instances of this struct; its primary use
+ * is to hold def/min/max values in a halide_filter_argument_t. (Note that
+ * this is conceptually just a union; it's wrapped in a struct to ensure
+ * that it doesn't get anonymized by LLVM.)
+ */
+struct halide_scalar_value_t {
+    union {
+        bool b;
+        int8_t i8;
+        int16_t i16;
+        int32_t i32;
+        int64_t i64;
+        uint8_t u8;
+        uint16_t u16;
+        uint32_t u32;
+        uint64_t u64;
+        float f32;
+        double f64;
+        void *handle;
+    } u;
+};
+
+enum halide_argument_kind_t {
+    halide_argument_kind_input_scalar = 0,
+    halide_argument_kind_input_buffer = 1,
+    halide_argument_kind_output_buffer = 2
+};
+
+/*
+    These structs must be robust across different compilers and settings; when
+    modifying them, strive for the following rules:
+
+    1) All fields are explicitly sized. I.e. must use int32_t and not "int"
+    2) All fields must land on an alignment boundary that is the same as their size
+    3) Explicit padding is added to make that so
+    4) The sizeof the struct is padded out to a multiple of the largest natural size thing in the struct
+    5) don't forget that 32 and 64 bit pointers are different sizes
+*/
+
+/**
+ * halide_filter_argument_t is essentially a plain-C-struct equivalent to
+ * Halide::Argument; most user code will never need to create one.
+ */
+struct halide_filter_argument_t {
+    const char *name;       // name of the argument; will never be null or empty.
+    int32_t kind;           // actually halide_argument_kind_t
+    int32_t dimensions;     // always zero for scalar arguments
+    int32_t type_code;      // actually halide_type_code_t
+    int32_t type_bits;      // [1, 8, 16, 32, 64]
+    // These pointers should always be null for buffer arguments,
+    // and *may* be null for scalar arguments. (A null value means
+    // there is no def/min/max specified for this argument.)
+    const halide_scalar_value_t *def;
+    const halide_scalar_value_t *min;
+    const halide_scalar_value_t *max;
+};
+
+struct halide_filter_metadata_t {
+    /** version of this metadata; currently always 0. */
+    int32_t version;
+
+    /** The number of entries in the arguments field. This is always >= 1. */
+    int32_t num_arguments;
+
+    /** An array of the filters input and output arguments; this will never be
+     * null. The order of arguments is not guaranteed (input and output arguments
+     * may come in any order); however, it is guaranteed that all arguments
+     * will have a unique name within a given filter. */
+    const halide_filter_argument_t* arguments;
+
+    /** The Target for which the filter was compiled. This is always
+     * a canonical Target string (ie a product of Target::to_string). */
+    const char* target;
+};
 
 #ifdef __cplusplus
 } // End extern "C"

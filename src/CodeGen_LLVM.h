@@ -24,6 +24,7 @@ class AllocaInst;
 class Constant;
 class Triple;
 class MDNode;
+class DataLayout;
 }
 
 #include <map>
@@ -77,6 +78,7 @@ protected:
      * define these. */
     // @{
     virtual llvm::Triple get_target_triple() const = 0;
+    virtual llvm::DataLayout get_data_layout() const = 0;
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
@@ -143,7 +145,7 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
-    llvm::StructType *buffer_t_type;
+    llvm::StructType *buffer_t_type, *metadata_t_type, *argument_t_type, *scalar_value_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -196,9 +198,6 @@ protected:
      */
     void push_buffer(const std::string &name, llvm::Value *buffer);
     void pop_buffer(const std::string &name);
-
-    /** Add a definition of buffer_t to the module if it isn't already there. */
-    void define_buffer_t();
 
     /** Codegen an assertion. If false, it bails out and calls the
      * error handler. Either set message to non-NULL *or* pass a
@@ -391,6 +390,14 @@ private:
     /** String constants already emitted to the module. Tracked to
      * prevent emitting the same string many times. */
     std::map<std::string, llvm::Constant *> string_constants;
+
+    /** Embed an instance of halide_filter_metadata_t in the code, using
+     * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
+     * as extern "C" linkage.
+     */
+    void embed_metadata(std::string name, const std::vector<Argument> &args);
+
+    llvm::Constant *embed_constant_expr(Expr e);
 };
 
 }

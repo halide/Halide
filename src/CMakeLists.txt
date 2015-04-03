@@ -87,6 +87,7 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  metadata
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
@@ -159,7 +160,7 @@ foreach (i ${RUNTIME_CPP} )
       IF (ARCHS EQUAL 32)
         IF (${i} MATCHES "windows_.*")
           # win32 uses the stdcall calling convention, which is x86-specific
-          set(TARGET "i386-unknown-nacl-unknown")
+          set(TARGET "i386-unknown-unknown-unknown")
         ELSE()
           set(TARGET "le32-unknown-nacl-unknown")
         ENDIF()
@@ -236,103 +237,103 @@ add_dependencies(InitialModules
   bitcode2cpp)
 
 set(HEADER_FILES
-  Util.h
-  Type.h
+  AllocationBoundsInference.h
   Argument.h
+  BlockFlattening.h
+  BoundaryConditions.h
   Bounds.h
   BoundsInference.h
   Buffer.h
+  CSE.h
+  CodeGen_ARM.h
   CodeGen_C.h
-  CodeGen_LLVM.h
-  CodeGen_X86.h
+  CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
-  CodeGen_PTX_Dev.h
+  CodeGen_LLVM.h
+  CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
   CodeGen_OpenGL_Dev.h
-  CodeGen_GPU_Dev.h
   CodeGen_PNaCl.h
+  CodeGen_PTX_Dev.h
+  CodeGen_Posix.h
+  CodeGen_X86.h
+  Debug.h
+  DebugToFile.h
   Deinterleave.h
   Derivative.h
-  OneToOne.h
-  Extern.h
+  DeviceInterface.h
+  EarlyFree.h
+  Error.h
   Expr.h
+  ExprUsesVar.h
+  Extern.h
+  FastIntegerDivide.h
   FindCalls.h
   Func.h
   Function.h
-  Image.h
-  InlineReductions.h
-  IntegerDivisionTable.h
-  Introspection.h
-  IntrusivePtr.h
-  IREquality.h
+  Generator.h
+  HumanReadableStmt.h
   IR.h
+  IREquality.h
   IRMatch.h
   IRMutator.h
   IROperator.h
   IRPrinter.h
   IRVisitor.h
-  InjectOpenGLIntrinsics.h
+  Image.h
   InjectHostDevBufferCopies.h
+  InjectOpenGLIntrinsics.h
+  Inline.h
+  InlineReductions.h
+  IntegerDivisionTable.h
+  Introspection.h
+  IntrusivePtr.h
   JITModule.h
+  LLVM_Output.h
+  LLVM_Runtime_Linker.h
   Lambda.h
-  Debug.h
+  Lerp.h
   Lower.h
   MainPage.h
+  Memoization.h
+  Module.h
   ModulusRemainder.h
-  Parameter.h
+  ObjectInstanceRegistry.h
+  OneToOne.h
+  Output.h
+  ParallelRVar.h
   Param.h
+  Parameter.h
   PartitionLoops.h
+  Profiling.h
+  Qualify.h
   RDom.h
+  Random.h
   Reduction.h
+  RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
+  RemoveUndef.h
   Schedule.h
   Scope.h
   Simplify.h
+  SkipStages.h
   SlidingWindow.h
   Solve.h
+  StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
   Substitute.h
-  Profiling.h
+  Target.h
   Tracing.h
+  Tuple.h
+  Type.h
+  UnifyDuplicateLets.h
+  UniquifyVariableNames.h
   UnrollLoops.h
+  Util.h
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
-  CodeGen_Posix.h
-  CodeGen_ARM.h
-  DebugToFile.h
-  EarlyFree.h
-  UniquifyVariableNames.h
-  CSE.h
-  Tuple.h
-  Lerp.h
-  Target.h
-  SkipStages.h
-  RemoveUndef.h
-  FastIntegerDivide.h
-  AllocationBoundsInference.h
-  Error.h
-  Inline.h
-  Qualify.h
-  ExprUsesVar.h
-  Random.h
-  ParallelRVar.h
-  BoundaryConditions.h
-  UnifyDuplicateLets.h
-  HumanReadableStmt.h
-  StmtToHtml.h
-  Memoization.h
-  CodeGen_MIPS.h
-  Generator.h
-  ObjectInstanceRegistry.h
-  BlockFlattening.h
-  RemoveDeadAllocations.h
-  LLVM_Runtime_Linker.h
-  Output.h
-  LLVM_Output.h
-  Module.h
-  DeviceInterface.h
   runtime/HalideRuntime.h
   CodeGen_JavaScript.h
 )
@@ -352,71 +353,97 @@ file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include
 add_definitions("-DCOMPILING_HALIDE")
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
-  CodeGen_LLVM.cpp
-  CodeGen_Internal.cpp
-  CodeGen_X86.cpp
+
+  AllocationBoundsInference.cpp
+  BlockFlattening.cpp
+  BoundaryConditions.cpp
+  Bounds.cpp
+  BoundsInference.cpp
+  Buffer.cpp
+  CSE.cpp
+  CodeGen_ARM.cpp
+  CodeGen_C.cpp
+  CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
-  CodeGen_PTX_Dev.cpp
+  CodeGen_Internal.cpp
+  CodeGen_LLVM.cpp
+  CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
-  CodeGen_GPU_Dev.cpp
-  CodeGen_Posix.cpp
   CodeGen_PNaCl.cpp
-  CodeGen_ARM.cpp
-  IR.cpp
-  IRMutator.cpp
-  IRPrinter.cpp
-  IRVisitor.cpp
-  CodeGen_C.cpp
-  Substitute.cpp
-  ModulusRemainder.cpp
-  Bounds.cpp
+  CodeGen_PTX_Dev.cpp
+  CodeGen_Posix.cpp
+  CodeGen_X86.cpp
+  Debug.cpp
+  Debug.cpp
+  DebugToFile.cpp
+  Deinterleave.cpp
   Derivative.cpp
-  OneToOne.cpp
+  DeviceInterface.cpp
+  EarlyFree.cpp
+  Error.cpp
+  ExprUsesVar.cpp
+  FastIntegerDivide.cpp
   FindCalls.cpp
   Func.cpp
-  Simplify.cpp
-  IREquality.cpp
-  Util.cpp
   Function.cpp
+  FuseGPUThreadLoops.cpp
+  Generator.cpp
+  HumanReadableStmt.cpp
+  IR.cpp
+  IREquality.cpp
+  IRMatch.cpp
+  IRMutator.cpp
   IROperator.cpp
+  IRPrinter.cpp
+  IRVisitor.cpp
+  Image.cpp
+  InjectHostDevBufferCopies.cpp
+  InjectOpenGLIntrinsics.cpp
+  Inline.cpp
+  InlineReductions.cpp
+  IntegerDivisionTable.cpp
+  Introspection.cpp
+  JITModule.cpp
+  LLVM_Output.cpp
+  LLVM_Runtime_Linker.cpp
+  Lerp.cpp
   Lower.cpp
-  Debug.cpp
+  Memoization.cpp
+  Module.cpp
+  ModulusRemainder.cpp
+  ObjectInstanceRegistry.cpp
+  OneToOne.cpp
+  Output.cpp
+  ParallelRVar.cpp
+  Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
-  Reduction.cpp
-  Random.cpp
-  RDom.cpp
-  Solve.cpp
   Profiling.cpp
-  Tracing.cpp
-  StorageFlattening.cpp
-  VectorizeLoops.cpp
-  UnrollLoops.cpp
-  BoundsInference.cpp
-  IRMatch.cpp
-  IntegerDivisionTable.cpp
-  SlidingWindow.cpp
-  StorageFolding.cpp
-  InlineReductions.cpp
-  RemoveTrivialForLoops.cpp
-  Deinterleave.cpp
-  DebugToFile.cpp
-  Type.cpp
-  JITModule.cpp
-  EarlyFree.cpp
-  UniquifyVariableNames.cpp
-  CSE.cpp
-  Tuple.cpp
-  Lerp.cpp
-  Target.cpp
-  SkipStages.cpp
-  RemoveUndef.cpp
-  FastIntegerDivide.cpp
-  AllocationBoundsInference.cpp
-  Inline.cpp
   Qualify.cpp
+  RDom.cpp
+  Random.cpp
+  Reduction.cpp
+  RemoveDeadAllocations.cpp
+  RemoveTrivialForLoops.cpp
+  RemoveUndef.cpp
+  Schedule.cpp
+  Simplify.cpp
+  SkipStages.cpp
+  SlidingWindow.cpp
+  Solve.cpp
+  StmtToHtml.cpp
+  StorageFlattening.cpp
+  StorageFolding.cpp
+  Substitute.cpp
+  Target.cpp
+  Tracing.cpp
+  Tuple.cpp
+  Type.cpp
   UnifyDuplicateLets.cpp
+  UniquifyVariableNames.cpp
+  UnrollLoops.cpp
+  Util.cpp
   VaryingAttributes.cpp
   ExprUsesVar.cpp
   Introspection.cpp
@@ -444,6 +471,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Output.cpp
   Module.cpp
   DeviceInterface.cpp
+  VectorizeLoops.cpp
   CodeGen_JavaScript.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

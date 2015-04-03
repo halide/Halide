@@ -18,6 +18,7 @@ public:
     CodeGen_ARM(Target);
 
     llvm::Triple get_target_triple() const;
+    llvm::DataLayout get_data_layout() const;
 
 protected:
 

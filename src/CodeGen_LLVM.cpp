@@ -1,4 +1,5 @@
 #include <iostream>
+#include <limits>
 #include <sstream>
 
 #include "IRPrinter.h"
@@ -127,6 +128,9 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
     buffer_t_type(NULL),
+    metadata_t_type(NULL),
+    argument_t_type(NULL),
+    scalar_value_t_type(NULL),
 
     // Vector types. These need an LLVMContext before they can be initialized.
     i8x8(NULL),
@@ -370,7 +374,15 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     init_module();
 
     llvm::Triple triple = get_target_triple();
+    llvm::DataLayout dl = get_data_layout();
     module->setTargetTriple(triple.str());
+
+    #if LLVM_VERSION > 36
+    module->setDataLayout(dl);
+    #else
+    module->setDataLayout(&dl);
+    #endif
+
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     module->setModuleIdentifier(input.name());
@@ -394,8 +406,19 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
-    // Start the module off with a definition of a buffer_t
-    define_buffer_t();
+    // Ensure some types we need are defined
+    buffer_t_type = module->getTypeByName("struct.buffer_t");
+    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
+
+    metadata_t_type = module->getTypeByName("struct.halide_filter_metadata_t");
+    internal_assert(metadata_t_type) << "Did not find halide_filter_metadata_t in initial module";
+
+    argument_t_type = module->getTypeByName("struct.halide_filter_argument_t");
+    internal_assert(argument_t_type) << "Did not find halide_filter_argument_t in initial module";
+
+    scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
+    internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
+
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
@@ -533,6 +556,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // (useful for calling from JIT and other machine interfaces).
     if (f.linkage == LoweredFunc::External) {
         add_argv_wrapper(module, function, name + "_argv");
+        embed_metadata(name + "_metadata", args);
     }
 }
 
@@ -569,6 +593,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
     llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
+    llvm::ArrayType *padding_bytes = ArrayType::get(i8, 2);
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
@@ -577,8 +602,10 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
         ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
         ConstantInt::get(i32, b.elem_size),
-        ConstantInt::get(i8, 1),
-        ConstantInt::get(i8, 0)
+        ConstantInt::get(i8, 1), // host_dirty
+        ConstantInt::get(i8, 0), // dev_dirty
+        ConstantArray::get(padding_bytes, vec(ConstantInt::get(i8, 0),
+                                              ConstantInt::get(i8, 0)))
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
     global->setInitializer(buffer_struct);
@@ -586,9 +613,122 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
     // Finally, dump it in the symbol table
     Constant *zero = ConstantInt::get(i32, 0);
+#if LLVM_VERSION >= 37
+    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, vec(zero));
+#else
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
+#endif
     sym_push(buf.name(), global_ptr);
     sym_push(buf.name() + ".buffer", global_ptr);
+}
+
+namespace {
+
+template<typename T>
+llvm::Constant *get_constant(llvm::Type *ty, Expr e) {
+    T v = 0;
+    internal_assert(scalar_from_constant_expr<T>(e, &v)) << "scalar_from_constant_expr fails for Expr " << e << "\n";
+    return std::numeric_limits<T>::is_integer ? ConstantInt::get(ty, v) : ConstantFP::get(ty, v);
+}
+
+}  // namespace
+
+Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
+    if (!e.defined() || e.type() == Handle()) {
+        // Handle is always emitted into metadata "undefined", regardless of
+        // what sort of Expr is provided.
+        return Constant::getNullValue(scalar_value_t_type->getPointerTo());
+    }
+
+    llvm::Constant *constant = NULL;
+    if (e.type() == Bool()) {
+        constant = get_constant<bool>(i1, e);
+    } else if (e.type() == UInt(8)) {
+        constant = get_constant<uint8_t>(i8, e);
+    } else if (e.type() == UInt(16)) {
+        constant = get_constant<uint16_t>(i16, e);
+    } else if (e.type() == UInt(32)) {
+        constant = get_constant<uint32_t>(i32, e);
+    } else if (e.type() == UInt(64)) {
+        constant = get_constant<uint64_t>(i64, e);
+    } else if (e.type() == Int(8)) {
+        constant = get_constant<int8_t>(i8, e);
+    } else if (e.type() == Int(16)) {
+        constant = get_constant<int16_t>(i16, e);
+    } else if (e.type() == Int(32)) {
+        constant = get_constant<int32_t>(i32, e);
+    } else if (e.type() == Int(64)) {
+        constant = get_constant<int64_t>(i64, e);
+    } else if (e.type() == Float(32)) {
+        constant = get_constant<float>(f32, e);
+    } else if (e.type() == Float(64)) {
+        constant = get_constant<double>(f64, e);
+    } else {
+        internal_assert(0) << "Unhandled Constant Expr Type " << e.type() << "\n";
+    }
+
+    GlobalVariable *storage = new GlobalVariable(
+            *module,
+            constant->getType(),
+            /*isConstant*/ true,
+            GlobalValue::PrivateLinkage,
+            constant);
+
+    Constant *zero = ConstantInt::get(i32, 0);
+    return ConstantExpr::getBitCast(
+#if LLVM_VERSION >= 37
+        ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, vec(zero)),
+#else
+        ConstantExpr::getInBoundsGetElementPtr(storage, vec(zero)),
+#endif
+        scalar_value_t_type->getPointerTo());
+}
+
+void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
+    Constant *zero = ConstantInt::get(i32, 0);
+
+    const int num_args = (int) args.size();
+
+    vector<Constant *> arguments_array_entries;
+    for (int arg = 0; arg < num_args; ++arg) {
+        Constant *argument_fields[] = {
+            create_string_constant(args[arg].name),
+            ConstantInt::get(i32, args[arg].kind),
+            ConstantInt::get(i32, args[arg].dimensions),
+            ConstantInt::get(i32, args[arg].type.code),
+            ConstantInt::get(i32, args[arg].type.bits),
+            embed_constant_expr(args[arg].def),
+            embed_constant_expr(args[arg].min),
+            embed_constant_expr(args[arg].max)
+        };
+        arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
+    }
+    llvm::ArrayType *arguments_array = ArrayType::get(argument_t_type, num_args);
+    GlobalVariable *arguments_array_storage = new GlobalVariable(
+        *module,
+        arguments_array,
+        /*isConstant*/ true,
+        GlobalValue::PrivateLinkage,
+        ConstantArray::get(arguments_array, arguments_array_entries));
+
+    Constant *metadata_fields[] = {
+        /* version */ zero,
+        /* num_arguments */ ConstantInt::get(i32, num_args),
+#if LLVM_VERSION >= 37
+        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, vec(zero, zero)),
+#else
+        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, vec(zero, zero)),
+#endif
+        /* target */ create_string_constant(target.to_string())
+    };
+
+    new GlobalVariable(
+        *module,
+        metadata_t_type,
+        /*isConstant*/ true,
+        GlobalValue::ExternalLinkage,
+        ConstantStruct::get(metadata_t_type, metadata_fields),
+        name);
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
@@ -738,12 +878,6 @@ void CodeGen_LLVM::pop_buffer(const string &name) {
     sym_pop(name + ".min.2");
     sym_pop(name + ".min.3");
     sym_pop(name + ".elem_size");
-}
-
-// Add a definition of buffer_t to the module if it isn't already there
-void CodeGen_LLVM::define_buffer_t() {
-    buffer_t_type = module->getTypeByName("struct.buffer_t");
-    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
@@ -2429,7 +2563,11 @@ Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, co
     global->setAlignment(32);
 
     Constant *zero = ConstantInt::get(i32, 0);
+#if LLVM_VERSION >= 37
+    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, vec(zero, zero));
+#else
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero, zero));
+#endif
     return ptr;
 }
 

@@ -21,7 +21,7 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
+LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer -pedantic -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
@@ -428,8 +428,59 @@ HEADER_FILES = \
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image windows_cuda windows_opencl windows_io windows_thread_pool ssp opengl linux_opengl_context osx_opengl_context android_opengl_context posix_print gpu_device_selection cache nacl_host_cpu_count to_string module_jit_ref_count module_aot_ref_count device_interface
-RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41 pnacl_math win32_math aarch64 mips arm_no_neon
+RUNTIME_CPP_COMPONENTS = \
+  android_clock \
+  android_host_cpu_count \
+  android_io \
+  android_opengl_context \
+  cache \
+  cuda \
+  device_interface \
+  fake_thread_pool \
+  gcd_thread_pool \
+  gpu_device_selection \
+  ios_io \
+  linux_clock \
+  linux_host_cpu_count \
+  linux_opengl_context \
+  metadata \
+  module_aot_ref_count \
+  module_jit_ref_count \
+  nacl_host_cpu_count \
+  opencl \
+  opengl \
+  osx_clock \
+  osx_host_cpu_count \
+  osx_opengl_context \
+  posix_allocator \
+  posix_clock \
+  posix_error_handler \
+  posix_io \
+  posix_math \
+  posix_print \
+  posix_thread_pool \
+  to_string \
+  ssp \
+  tracing \
+  windows_clock \
+  windows_cuda \
+  windows_opencl \
+  windows_io \
+  windows_thread_pool \
+  write_debug_image
+
+RUNTIME_LL_COMPONENTS = \
+  aarch64 \
+  arm \
+  arm_no_neon \
+  mips \
+  pnacl_math \
+  posix_math \
+  ptx_dev \
+  win32_math \
+  x86 \
+  x86_avx \
+  x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h
 
@@ -521,7 +572,7 @@ $(BUILD_DIR)/initmod.windows_%_32_debug.ll: src/runtime/windows_%.cpp $(BUILD_DI
 
 $(BUILD_DIR)/initmod.%_32_debug.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m32 -target "le32-unknown-nacl-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
 	@-mkdir -p $(BUILD_DIR)
@@ -665,6 +716,13 @@ $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h:
 $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur_blur.generator
 	@-mkdir -p tmp
 	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o ../$(FILTERS_DIR) target=$(HL_TARGET) is_interleaved=true
+
+# metadata_tester is built with and without user-context
+$(FILTERS_DIR)/metadata_tester_ucon.o $(FILTERS_DIR)/metadata_tester_ucon.h: $(FILTERS_DIR)/metadata_tester.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -f metadata_tester_ucon -o ../$(FILTERS_DIR) target=$(HL_TARGET)-user_context
+
+$(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.o
 
 # user_context needs to be generated with user_context as the first argument to its calls
 $(FILTERS_DIR)/user_context.o $(FILTERS_DIR)/user_context.h: $(FILTERS_DIR)/user_context.generator

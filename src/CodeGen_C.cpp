@@ -25,6 +25,7 @@ const string buffer_t_definition =
     "#ifndef BUFFER_T_DEFINED\n"
     "#define BUFFER_T_DEFINED\n"
     "#include <stdint.h>\n"
+    "#pragma pack(push, 1)\n"
     "typedef struct buffer_t {\n"
     "    uint64_t dev;\n"
     "    uint8_t* host;\n"
@@ -34,7 +35,9 @@ const string buffer_t_definition =
     "    int32_t elem_size;\n"
     "    bool host_dirty;\n"
     "    bool dev_dirty;\n"
+    "    uint8_t _padding[2];\n"
     "} buffer_t;\n"
+    "#pragma pack(pop)\n"
     "#endif\n";
 
 const string headers =
@@ -149,6 +152,18 @@ const string globals =
     " u.as_uint = bits;\n"
     " return u.as_float;\n"
     "}\n"
+    "inline int64_t make_int64(int32_t hi, int32_t lo) {\n"
+    "    return (((int64_t)hi) << 32) | (uint32_t)lo;\n"
+    "}\n"
+    "inline double make_float64(int32_t i0, int32_t i1) {\n"
+    "    union {\n"
+    "        int32_t as_int32[2];\n"
+    "        double as_double;\n"
+    "    } u;\n"
+    "    u.as_int32[0] = i0;\n"
+    "    u.as_int32[1] = i1;\n"
+    "    return u.as_double;\n"
+    "}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
@@ -195,6 +210,10 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
 
     // Throw in a definition of a buffer_t
     stream << buffer_t_definition;
+
+    // halide_filter_metadata_t just gets a forward declaration
+    // (include HalideRuntime.h for the full goodness)
+    stream << "struct halide_filter_metadata_t;\n";
 
     if (!is_header) {
         stream << globals;
@@ -430,6 +449,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
         stream << "int " << f.name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+
+        // And also the metadata.
+       stream << "extern const halide_filter_metadata_t " << f.name << "_metadata;\n";
     }
 }
 
@@ -1349,6 +1371,7 @@ void CodeGen_C::test() {
     string correct_source =
         headers +
         buffer_t_definition +
+        "struct halide_filter_metadata_t;\n" +
         globals +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"

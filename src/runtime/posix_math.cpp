@@ -67,4 +67,18 @@ INLINE double minval_f64() {
     return double_from_bits(UINT64_C(0xffefffffffffffff));
 }
 
+INLINE int64_t make_int64(int32_t hi, int32_t lo) {
+    return (static_cast<int64_t>(hi) << 32) | static_cast<uint32_t>(lo);
+}
+
+INLINE double make_float64(int32_t i0, int32_t i1) {
+    union {
+        int32_t as_int32[2];
+        double as_double;
+    } u;
+    u.as_int32[0] = i0;
+    u.as_int32[1] = i1;
+    return u.as_double;
+}
+
 }
