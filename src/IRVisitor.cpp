@@ -150,6 +150,7 @@ void IRVisitor::visit(const LetStmt *op) {
 
 void IRVisitor::visit(const AssertStmt *op) {
     op->condition.accept(this);
+    op->message.accept(this)
 }
 
 void IRVisitor::visit(const Pipeline *op) {
@@ -369,6 +370,7 @@ void IRGraphVisitor::visit(const LetStmt *op) {
 
 void IRGraphVisitor::visit(const AssertStmt *op) {
     include(op->condition);
+    include(op->message);
 }
 
 void IRGraphVisitor::visit(const Pipeline *op) {
