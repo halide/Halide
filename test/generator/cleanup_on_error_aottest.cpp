@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     int result = cleanup_on_error(output);
 
     if (result != halide_error_code_out_of_memory) {
-        printf("The exit status was %d instead of -10\n", result);
+        printf("The exit status was %d instead of %d\n", result, halide_error_code_out_of_memory);
         return -1;
     }
 
