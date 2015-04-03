@@ -6,8 +6,6 @@
 #include <iostream>
 #include <fstream>
 
-using namespace std;
-
 namespace Halide {
 
 llvm::raw_fd_ostream *new_raw_fd_ostream(const std::string &filename) {
@@ -128,14 +126,14 @@ void clone_target_options(const llvm::Module *from, llvm::Module *to) {
 
 
 llvm::TargetMachine *get_target_machine(const llvm::Module *module) {
-    string error_string;
+    std::string error_string;
 
     const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
     if (!target) {
-        cout << error_string << endl;
+        std::cout << error_string << std::endl;
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
     }
-    internal_assert(target) << "Could not create target\n";
+    internal_assert(target) << "Could not create target for " << module->getTargetTriple() << "\n";
 
     llvm::TargetOptions options;
     std::string mcpu = "";
