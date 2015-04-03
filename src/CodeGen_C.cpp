@@ -1141,12 +1141,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     open_scope();
     string id_msg = print_expr(op->message);
     do_indent();
-    stream << "halide_error("
-           << (have_user_context ? "__user_context_, " : "NULL, ")
-           << id_msg
-           << ");\n";
-    do_indent();
-    stream << "return -1;\n";
+    stream << "return " << id_msg << "\n";
     close_scope("");
 }
 
