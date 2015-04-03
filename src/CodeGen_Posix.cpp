@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "Debug.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -27,26 +28,25 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // Compute size from list of extents checking for 32-bit signed overflow.
     // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
     // does not work with NaCl at the moment.
-    Value *overflow = NULL;
-    int bytes_per_item = type.width * type.bytes();
-    Value *llvm_size_wide = ConstantInt::get(i64, bytes_per_item);
+
+    Expr no_overflow = const_true(1);
+    Expr total_size = cast<int64_t>(type.width * type.bytes());
+    Expr max_size = cast<int64_t>(0x7fffffff);
     for (size_t i = 0; i < extents.size(); i++) {
-        llvm_size_wide = builder->CreateMul(llvm_size_wide, codegen(Cast::make(Int(64), extents[i])));
-        if (overflow == NULL) {
-            overflow = llvm_size_wide;
-        } else {
-            overflow = builder->CreateOr(overflow, llvm_size_wide);
-        }
-    }
-    Value *llvm_size = builder->CreateTrunc(llvm_size_wide, i32);
-
-    if (overflow != NULL) {
-        Constant *zero = ConstantInt::get(i64, 0);
-        create_assertion(builder->CreateICmpEQ(builder->CreateLShr(overflow, 31), zero),
-                         std::string("32-bit signed overflow computing size of allocation ") + name);
+        total_size *= extents[i];
+        no_overflow = no_overflow && (total_size <= max_size);
     }
 
-    return llvm_size;
+    // For constant-sized allocations this check should simplify away.
+    no_overflow = simplify(no_overflow);
+    if (!is_one(no_overflow)) {
+        create_assertion(codegen(no_overflow),
+                         Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+                                    vec<Expr>(name, total_size, max_size), Call::Extern));
+    }
+
+    total_size = simplify(cast<int32_t>(total_size));
+    return codegen(total_size);
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
@@ -143,7 +143,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         Value *zero_size = builder->CreateIsNull(llvm_size);
         check = builder->CreateOr(check, zero_size);
 
-        create_assertion(check, "Out of memory (malloc returned NULL)");
+        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+                                           std::vector<Expr>(), Call::Extern));
 
         // Register a destructor for it.
         llvm::Function *free_fn = module->getFunction("halide_free");

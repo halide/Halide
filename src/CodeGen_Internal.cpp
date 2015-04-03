@@ -251,7 +251,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opengl_run",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
-        "halide_opengl_initialize_kernels"
+        "halide_opengl_initialize_kernels",
         "halide_get_gpu_device",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
@@ -261,7 +261,8 @@ bool function_takes_user_context(const std::string &name) {
             return true;
         }
     }
-    return false;
+    // The error functions all take a user context
+    return starts_with(name, "halide_error_");
 }
 
 }

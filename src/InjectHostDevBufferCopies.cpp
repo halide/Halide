@@ -174,8 +174,10 @@ class InjectBufferCopies : public IRMutator {
         Expr buf = Variable::make(Handle(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
         Expr call = Call::make(Int(32), "halide_device_malloc", vec(buf, device_interface), Call::Extern);
-        string msg = "Failed to allocate device buffer for " + buf_name;
-        return AssertStmt::make(call == 0, msg);
+        string call_result_name = unique_name("device_malloc_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        return LetStmt::make(call_result_name, call,
+                             AssertStmt::make(call_result_var == 0, call_result_var));
     }
 
     enum CopyDirection {
@@ -194,11 +196,11 @@ class InjectBufferCopies : public IRMutator {
         }
 
         std::string suffix = (direction == ToDevice) ? "device" : "host";
-        Expr copy = Call::make(Int(32), "halide_copy_to_" + suffix, args, Call::Extern);
-        Stmt check = AssertStmt::make(copy == 0,
-                                      "Failed to copy buffer " + buf_name +
-                                      " to " + suffix + ".");
-        return check;
+        Expr call = Call::make(Int(32), "halide_copy_to_" + suffix, args, Call::Extern);
+        string call_result_name = unique_name("copy_to_" + suffix + "_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        return LetStmt::make(call_result_name, call,
+                             AssertStmt::make(call_result_var == 0, call_result_var));
     }
 
     // Prepend code to the statement that copies everything marked as
