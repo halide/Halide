@@ -150,7 +150,7 @@ void IRVisitor::visit(const LetStmt *op) {
 
 void IRVisitor::visit(const AssertStmt *op) {
     op->condition.accept(this);
-    op->message.accept(this)
+    op->message.accept(this);
 }
 
 void IRVisitor::visit(const Pipeline *op) {
