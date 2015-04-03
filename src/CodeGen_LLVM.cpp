@@ -417,7 +417,7 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     argument_t_type = module->getTypeByName("struct.halide_filter_argument_t");
     internal_assert(argument_t_type) << "Did not find halide_filter_argument_t in initial module";
 
-    scalar_value_t_type = module->getTypeByName("union.halide_scalar_value_t");
+    scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
 
 
@@ -668,7 +668,11 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
     // Finally, dump it in the symbol table
     Constant *zero = ConstantInt::get(i32, 0);
+#if LLVM_VERSION >= 37
+    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, vec(zero));
+#else
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
+#endif
     sym_push(buf.name(), global_ptr);
     sym_push(buf.name() + ".buffer", global_ptr);
 }
@@ -677,7 +681,7 @@ namespace {
 
 template<typename T>
 llvm::Constant *get_constant(llvm::Type *ty, Expr e) {
-    T v;
+    T v = 0;
     internal_assert(scalar_from_constant_expr<T>(e, &v)) << "scalar_from_constant_expr fails for Expr " << e << "\n";
     return std::numeric_limits<T>::is_integer ? ConstantInt::get(ty, v) : ConstantFP::get(ty, v);
 }
@@ -727,7 +731,11 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
 
     Constant *zero = ConstantInt::get(i32, 0);
     return ConstantExpr::getBitCast(
+#if LLVM_VERSION >= 37
+        ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, vec(zero)),
+#else
         ConstantExpr::getInBoundsGetElementPtr(storage, vec(zero)),
+#endif
         scalar_value_t_type->getPointerTo());
 }
 
@@ -761,7 +769,11 @@ void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
     Constant *metadata_fields[] = {
         /* version */ zero,
         /* num_arguments */ ConstantInt::get(i32, num_args),
+#if LLVM_VERSION >= 37
+        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, vec(zero, zero)),
+#else
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, vec(zero, zero)),
+#endif
         /* target */ create_string_constant(target.to_string())
     };
 
@@ -2609,7 +2621,11 @@ Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, co
     global->setAlignment(32);
 
     Constant *zero = ConstantInt::get(i32, 0);
+#if LLVM_VERSION >= 37
+    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, vec(zero, zero));
+#else
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero, zero));
+#endif
     return ptr;
 }
 
