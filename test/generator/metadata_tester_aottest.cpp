@@ -246,7 +246,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           halide_argument_kind_input_scalar,
           0,
           halide_type_handle,
-          sizeof(void*)*8,
+          64,
           NULL,
           NULL,
           NULL,
