@@ -579,7 +579,14 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
         IRBuilderBase::InsertPoint here = builder->saveIP();
         destructor_block = BasicBlock::Create(*context, "destructor_block", function);
         builder->SetInsertPoint(destructor_block);
-        builder->CreateRet(ConstantInt::get(i32, -1));
+        // The first instruction in the destructor block is a phi node
+        // that collects the error code.
+        Value *error_code = builder->CreatePHI(i32, 0);
+
+        // Calls to destructors will get inserted here.
+
+        // The last instruction is the return op that returns it.
+        builder->CreateRet(error_code);
         builder->restoreIP(here);
     }
     internal_assert(destructor_block->getParent() == function);
@@ -2637,10 +2644,14 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *erro
     // Call the error handler
     if (!error_code) error_code = codegen(message);
 
-    // Drop the error code on the floor (TODO: fix this)
-    (void)error_code;
-
     // Branch to the destructor block, which cleans up and then bails out.
+    BasicBlock *dtors = get_destructor_block();
+
+    // Hook up our error code to the phi node that the destructor block starts with.
+    PHINode *phi = dyn_cast<PHINode>(dtors->begin());
+    internal_assert(phi) << "The destructor block is supposed to start with a phi node\n";
+    phi->addIncoming(error_code, builder->GetInsertBlock());
+
     builder->CreateBr(get_destructor_block());
 
     // Continue on using the success case
