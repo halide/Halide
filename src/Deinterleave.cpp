@@ -383,7 +383,7 @@ Expr extract_lane(Expr e, int lane) {
     Scope<int> lets;
     Deinterleaver d(lets);
     d.starting_lane = lane;
-    d.lane_stride = 0;
+    d.lane_stride = e.type().width;
     d.new_width = 1;
     e = d.mutate(e);
     return simplify(e);
