@@ -326,7 +326,11 @@ class ExternCallPrototypes : public IRGraphVisitor {
                     if (i > 0) {
                         stream << ", ";
                     }
-                    stream << type_to_c_type(op->args[i].type());
+                    if (op->args[i].as<StringImm>()) {
+                        stream << "const char *";
+                    } else {
+                        stream << type_to_c_type(op->args[i].type());
+                    }
                 }
                 stream << ");\n";
                 emitted.insert(op->name);
