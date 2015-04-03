@@ -1915,12 +1915,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
 
-    if (t.has_gpu_feature()) {
-        debug(1) << "Injecting device frees...\n";
-        s = inject_dev_frees(s);
-        debug(2) << "Lowering after injecting device frees:\n" << s << "\n\n";
-    }
-
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
 

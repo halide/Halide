@@ -25,6 +25,7 @@ class Constant;
 class Triple;
 class MDNode;
 class DataLayout;
+class BasicBlock;
 }
 
 #include <map>
@@ -199,6 +200,22 @@ protected:
     void push_buffer(const std::string &name, llvm::Value *buffer);
     void pop_buffer(const std::string &name);
 
+    /* Call this at the location of object creation to register how an
+     * object should be destroyed. This does three things:
+     * 1) Emits code here that puts the object in a unique
+     * null-initialized stack slot
+     * 2) Adds an instruction to the error handling block that calls the
+     * destructor on that stack slot if it's not null.
+     * 3) Returns that instruction, so that you can also insert a
+     * clone of it where you actually want to delete the object in the
+     * non-error case. */
+    llvm::Instruction *register_destructor(llvm::Function *destructor_fn, llvm::Value *obj);
+
+    /** Retrieves the block containing the error handling
+     * code. Creates it if it doesn't already exist for this
+     * function. */
+    llvm::BasicBlock *get_destructor_block();
+
     /** Codegen an assertion. If false, it bails out and calls the
      * error handler. Either set message to non-NULL *or* pass a
      * vector of Expr arguments to print.  */
@@ -323,7 +340,9 @@ protected:
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
-    llvm::Value *create_alloca_at_entry(llvm::Type *type, int n, const std::string &name = "");
+    llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
+                                        bool zero_initialize = false,
+                                        const std::string &name = "");
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
@@ -391,13 +410,20 @@ private:
      * prevent emitting the same string many times. */
     std::map<std::string, llvm::Constant *> string_constants;
 
+    /** A basic block to branch to on error that triggers all
+     * destructors. As destructors are registered, code gets added
+     * to this block. */
+    llvm::BasicBlock *destructor_block;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage.
      */
     void embed_metadata(std::string name, const std::vector<Argument> &args);
 
+    /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);
+
 };
 
 }

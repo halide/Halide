@@ -220,7 +220,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     max_f32(Float(32).max()),
 
     min_f64(Float(64).min()),
-    max_f64(Float(64).max()) {
+    max_f64(Float(64).max()),
+    destructor_block(NULL) {
     initialize_llvm();
 }
 
@@ -511,6 +512,9 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
 
     debug(1) << "Generating llvm bitcode for function " << name << "...\n";
 
+    // Null out the destructor block.
+    destructor_block = NULL;
+
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
@@ -549,8 +553,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     module->setModuleIdentifier("halide_module_" + name);
     debug(2) << module << "\n";
 
-    // Now verify the function is ok
-    internal_assert(verifyFunction(*function) == false);
+    internal_assert(!verifyFunction(*function));
 
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
@@ -568,6 +571,51 @@ std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
         ret.push_back(ConstantInt::get(t, *i));
     }
     return ret;
+}
+
+BasicBlock *CodeGen_LLVM::get_destructor_block() {
+    if (!destructor_block) {
+        // Create it if it doesn't exist.
+        IRBuilderBase::InsertPoint here = builder->saveIP();
+        destructor_block = BasicBlock::Create(*context, "destructor_block", function);
+        builder->SetInsertPoint(destructor_block);
+        builder->CreateRet(ConstantInt::get(i32, -1));
+        builder->restoreIP(here);
+    }
+    internal_assert(destructor_block->getParent() == function);
+    return destructor_block;
+}
+
+Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj) {
+
+    // Create a null-initialized stack slot to track this object
+    llvm::Type *void_ptr = i8->getPointerTo();
+    llvm::Value *stack_slot = create_alloca_at_entry(void_ptr, 1, true);
+
+    // Cast the object to llvm's representation of void *
+    obj = builder->CreatePointerCast(obj, void_ptr);
+
+    // Put it in the stack slot
+    builder->CreateStore(obj, stack_slot);
+
+    // Switch to the destructor block, and add code that cleans up this object.
+    IRBuilderBase::InsertPoint here = builder->saveIP();
+    BasicBlock *dtors = get_destructor_block();
+
+    builder->SetInsertPoint(dtors->getFirstNonPHI());
+
+    llvm::Function *call_destructor = module->getFunction("call_destructor");
+    internal_assert(call_destructor);
+    Instruction *cleanup =
+        builder->CreateCall3(call_destructor, get_user_context(), destructor_fn, stack_slot);
+
+    // Switch back to the original location
+    builder->restoreIP(here);
+
+    // Return the cleanup instruction so that it can also be cloned to
+    // cleanup the object in the normal course of events (e.g. at a
+    // Free node).
+    return cleanup;
 }
 
 void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
@@ -774,7 +822,9 @@ void CodeGen_LLVM::optimize_module() {
 }
 
 void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {
-    value->setName(name);
+    if (!value->getType()->isVoidTy()) {
+        value->setName(name);
+    }
     symbol_table.push(name, value);
 }
 
@@ -2017,9 +2067,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                 builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
             }
 
-            // This implement sets device pointer and dirty bits to
-            // zero. GPU codegen should also catch this and do
-            // something smarter.
             builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
@@ -2526,10 +2573,13 @@ void CodeGen_LLVM::visit(const LetStmt *op) {
     if (op->value.type() == Int(32)) {
         alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
     }
+
     codegen(op->body);
+
     if (op->value.type() == Int(32)) {
         alignment_info.pop(op->name);
     }
+
     sym_pop(op->name);
 }
 
@@ -2609,12 +2659,8 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message) {
     debug(4) << "Creating call to error handlers\n";
     builder->CreateCall(error_handler, vec<llvm::Value *>(get_user_context(), msg));
 
-    // Do any architecture-specific cleanup necessary
-    debug(4) << "Creating cleanup code\n";
-    prepare_for_early_exit();
-
-    // Bail out with error code -1
-    builder->CreateRet(ConstantInt::get(i32, -1));
+    // Branch to the destructor block, which cleans up and then bails out.
+    builder->CreateBr(get_destructor_block());
 
     // Continue on using the success case
     builder->SetInsertPoint(assert_succeeds_bb);
@@ -2706,12 +2752,16 @@ void CodeGen_LLVM::visit(const For *op) {
         function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function
-        BasicBlock *call_site = builder->GetInsertBlock();
+        IRBuilderBase::InsertPoint call_site = builder->saveIP();
         BasicBlock *block = BasicBlock::Create(*context, "entry", function);
         builder->SetInsertPoint(block);
 
         // Get the user context value before swapping out the symbol table.
         Value *user_context = get_user_context();
+
+        // Save the destructor block
+        BasicBlock *parent_destructor_block = destructor_block;
+        destructor_block = NULL;
 
         // Make a new scope to use
         Scope<Value *> saved_symbol_table;
@@ -2744,7 +2794,7 @@ void CodeGen_LLVM::visit(const For *op) {
         builder->CreateRet(ConstantInt::get(i32, 0));
 
         // Move the builder back to the main function and call do_par_for
-        builder->SetInsertPoint(call_site);
+        builder->restoreIP(call_site);
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
         internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
         do_par_for->setDoesNotAlias(5);
@@ -2759,6 +2809,9 @@ void CodeGen_LLVM::visit(const For *op) {
         // Now restore the scope
         symbol_table.swap(saved_symbol_table);
         function = containing_function;
+
+        // Restore the destructor block
+        destructor_block = parent_destructor_block;
 
         // Check for success
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
@@ -2888,9 +2941,9 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
     value = NULL;
 }
 
-Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
-    llvm::BasicBlock *here = builder->GetInsertBlock();
-    llvm::BasicBlock *entry = &here->getParent()->getEntryBlock();
+Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_initialize, const string &name) {
+    IRBuilderBase::InsertPoint here = builder->saveIP();
+    BasicBlock *entry = &builder->GetInsertBlock()->getParent()->getEntryBlock();
     if (entry->empty()) {
         builder->SetInsertPoint(entry);
     } else {
@@ -2898,7 +2951,12 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, const string &
     }
     Value *size = ConstantInt::get(i32, n);
     Value *ptr = builder->CreateAlloca(t, size, name);
-    builder->SetInsertPoint(here);
+
+    if (zero_initialize) {
+        internal_assert(n == 1) << "Zero initialization for stack arrays not implemented\n";
+        builder->CreateStore(Constant::getNullValue(t), ptr);
+    }
+    builder->restoreIP(here);
     return ptr;
 }
 
