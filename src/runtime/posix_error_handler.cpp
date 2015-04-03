@@ -1,3 +1,4 @@
+#include "HalideRuntime.h"
 #include "runtime_internal.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
@@ -53,7 +54,7 @@ WEAK int halide_error_explicit_bounds_too_small(void *user_context, const char *
         << " (from " << min_bound << " to " << max_bound
         << ") do not cover required region (from " << min_required
         << " to " << max_required << ")";
-    return -2;
+    return halide_error_code_explicit_bounds_too_small;
 }
 
 WEAK int halide_error_bad_elem_size(void *user_context, const char *func_name,
@@ -62,7 +63,7 @@ WEAK int halide_error_bad_elem_size(void *user_context, const char *func_name,
         << func_name << " has type " << type_name
         << " but elem_size of the buffer passed in is "
         << elem_size_given << " instead of " << correct_elem_size;
-    return -3;
+    return halide_error_code_bad_elem_size;
 }
 
 WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
@@ -79,7 +80,7 @@ WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_
             << ", which is beyond the max (" << max_valid
             << ") in dimension " << dimension;
     }
-    return -4;
+    return halide_error_code_access_out_of_bounds;
 }
 
 WEAK int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name, int64_t allocation_size, int64_t max_size) {
@@ -87,7 +88,7 @@ WEAK int halide_error_buffer_allocation_too_large(void *user_context, const char
         << "Total allocation for buffer " << buffer_name
         << " is " << allocation_size
         << ", which exceeds the maximum size of " << max_size;
-    return -5;
+    return halide_error_code_buffer_allocation_too_large;
 }
 
 WEAK int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name, int64_t actual_size, int64_t max_size) {
@@ -95,7 +96,7 @@ WEAK int halide_error_buffer_extents_too_large(void *user_context, const char *b
         << "Product of extents for buffer " << buffer_name
         << " is " << actual_size
         << ", which exceeds the maximum size of " << max_size;
-    return -5;
+    return halide_error_code_buffer_extents_too_large;
 }
 
 WEAK int halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
@@ -109,7 +110,7 @@ WEAK int halide_error_constraints_make_required_region_smaller(void *user_contex
         << " to the required region made it smaller. "
         << "Required size: " << required_min << " to " << required_max << ". "
         << "Constrained size: " << constrained_min << " to " << constrained_max << ".";
-    return -6;
+    return halide_error_code_constraints_make_required_region_smaller;
 }
 
 WEAK int halide_error_constraint_violated(void *user_context, const char *var, int val,
@@ -117,7 +118,7 @@ WEAK int halide_error_constraint_violated(void *user_context, const char *var, i
     error(user_context)
         << "Constraint violated: " << var << " (" << val
         << ") == " << constrained_var << " (" << constrained_var << ")";
-    return -7;
+    return halide_error_code_constraint_violated;
 }
 
 WEAK int halide_error_param_too_small_i64(void *user_context, const char *param_name,
@@ -126,7 +127,7 @@ WEAK int halide_error_param_too_small_i64(void *user_context, const char *param_
         << "Parameter " << param_name
         << " is " << val
         << " but must be at least " << min_val;
-    return -8;
+    return halide_error_code_param_too_small;
 }
 
 WEAK int halide_error_param_too_small_u64(void *user_context, const char *param_name,
@@ -135,7 +136,7 @@ WEAK int halide_error_param_too_small_u64(void *user_context, const char *param_
         << "Parameter " << param_name
         << " is " << val
         << " but must be at least " << min_val;
-    return -8;
+    return halide_error_code_param_too_small;
 }
 
 WEAK int halide_error_param_too_small_f64(void *user_context, const char *param_name,
@@ -144,7 +145,7 @@ WEAK int halide_error_param_too_small_f64(void *user_context, const char *param_
         << "Parameter " << param_name
         << " is " << val
         << " but must be at least " << min_val;
-    return -8;
+    return halide_error_code_param_too_small;
 }
 
 WEAK int halide_error_param_too_large_i64(void *user_context, const char *param_name,
@@ -153,7 +154,7 @@ WEAK int halide_error_param_too_large_i64(void *user_context, const char *param_
         << "Parameter " << param_name
         << " is " << val
         << " but must be at most " << max_val;
-    return -9;
+    return halide_error_code_param_too_large;
 }
 
 WEAK int halide_error_param_too_large_u64(void *user_context, const char *param_name,
@@ -162,7 +163,7 @@ WEAK int halide_error_param_too_large_u64(void *user_context, const char *param_
         << "Parameter " << param_name
         << " is " << val
         << " but must be at most " << max_val;
-    return -9;
+    return halide_error_code_param_too_large;
 }
 
 WEAK int halide_error_param_too_large_f64(void *user_context, const char *param_name,
@@ -171,18 +172,18 @@ WEAK int halide_error_param_too_large_f64(void *user_context, const char *param_
         << "Parameter " << param_name
         << " is " << val
         << " but must be at most " << max_val;
-    return -9;
+    return halide_error_code_param_too_large;
 }
 
 WEAK int halide_error_out_of_memory(void *user_context) {
     error(user_context) << "Out of memory (halide_malloc returned NULL)";
-    return -10;
+    return halide_error_code_out_of_memory;
 }
 
 WEAK int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name) {
     error(user_context)
         << "Buffer argument " << buffer_name << " is NULL";
-    return -11;
+    return halide_error_code_buffer_argument_is_null;
 }
 
 WEAK int halide_error_debug_to_file(void *user_context, const char *func, const char *filename, int error_code) {
@@ -190,7 +191,7 @@ WEAK int halide_error_debug_to_file(void *user_context, const char *func, const 
         << "Failed to dump function " << func
         << " to file " << filename
         << " with error " << error_code;
-    return -12;
+    return halide_error_code_debug_to_file;
 }
 
 }

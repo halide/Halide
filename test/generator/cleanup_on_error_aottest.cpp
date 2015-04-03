@@ -55,8 +55,7 @@ int main(int argc, char **argv) {
     Image<int32_t> output(size);
     int result = cleanup_on_error(output);
 
-    if (result != -10) {
-        // oom is -10
+    if (result != halide_error_code_out_of_memory) {
         printf("The exit status was %d instead of -10\n", result);
         return -1;
     }
