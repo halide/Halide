@@ -32,11 +32,6 @@ WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(voi
     return result;
 }
 
-WEAK int halide_error_generic(void *user_context, const char *message) {
-    halide_error(user_context, message);
-    return -1;
-}
-
 WEAK int halide_error_bounds_inference_call_failed(void *user_context, const char *extern_stage_name, int result) {
     error(user_context)
         << "Bounds inference call to external stage " << extern_stage_name
