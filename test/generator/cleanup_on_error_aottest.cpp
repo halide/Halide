@@ -75,9 +75,9 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if (errors != 2) {
-        // There's one error from the malloc failing, and one error from the pipeline failing.
-        printf("There were supposed to be two errors\n");
+    if (errors != 1) {
+        // There's one error from the malloc failing
+        printf("There was supposed to be one error\n");
         return -1;
     }
 

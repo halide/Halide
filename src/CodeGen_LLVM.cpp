@@ -869,7 +869,9 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     might_be_misaligned.insert(name);
 
     // Make sure the buffer object itself is not null
-    create_assertion(builder->CreateIsNotNull(buffer), "buffer argument " + name + " is NULL");
+    create_assertion(builder->CreateIsNotNull(buffer),
+                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
+                                vec<Expr>(name), Call::Extern));
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -1861,7 +1863,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             Value *arg = codegen(op->args[0]);
 
             // Make a size 1 vector of undef at the end to mix in undef values.
-            //llvm::VectorType *undef_end_type = arg->getType();
             Value *undefs = UndefValue::get(arg->getType());
 
             value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
@@ -2486,7 +2487,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         // We also have several impure runtime functions that do not
         // take a handle.
         if (op->name == "halide_current_time_ns" ||
-            op->name == "halide_gpu_thread_barrier") {
+            op->name == "halide_gpu_thread_barrier" ||
+            starts_with(op->name, "halide_error")) {
             pure = false;
         }
 
@@ -2497,7 +2499,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
         if (op->type.is_scalar()) {
-            debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
             if (pure) {
                 call->setDoesNotAccessMemory();
@@ -2605,7 +2606,10 @@ Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, co
     return ptr;
 }
 
-void CodeGen_LLVM::create_assertion(Value *cond, Expr message) {
+void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *error_code) {
+
+    internal_assert(!message.defined() || message.type() == Int(32))
+        << "Assertion result is not an int: " << message;
 
     if (target.has_feature(Target::NoAsserts)) return;
 
@@ -2630,18 +2634,11 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message) {
     // Build the failure case
     builder->SetInsertPoint(assert_fails_bb);
 
-    // Codegen the message here, inside the failure case. This may be
-    // expensive, and the calls that build the string may appear to be
-    // side-effecting to llvm, so it's important to do the codegen
-    // right here.
-    llvm::Value *msg = codegen(message);
-
     // Call the error handler
-    llvm::Function *error_handler = module->getFunction("halide_error");
-    internal_assert(error_handler)
-        << "Could not find halide_error in initial module\n";
-    debug(4) << "Creating call to error handlers\n";
-    builder->CreateCall(error_handler, vec<llvm::Value *>(get_user_context(), msg));
+    if (!error_code) error_code = codegen(message);
+
+    // Drop the error code on the floor (TODO: fix this)
+    (void)error_code;
 
     // Branch to the destructor block, which cleans up and then bails out.
     builder->CreateBr(get_destructor_block());
@@ -2799,7 +2796,7 @@ void CodeGen_LLVM::visit(const For *op) {
 
         // Check for success
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-        create_assertion(did_succeed, "Failure inside parallel for loop");
+        create_assertion(did_succeed, Expr(), result);
 
     } else {
         internal_error << "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen.\n";

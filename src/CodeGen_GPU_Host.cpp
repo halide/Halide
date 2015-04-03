@@ -293,7 +293,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
                                              module_state,
                                              kernel_src_ptr, kernel_size);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-        CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + init_kernels_name);
+        CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
     }
 
     // the init kernels block should branch to the post-entry block
@@ -502,7 +502,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-        CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + run_fn_name);
+        CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
     } else {
         CodeGen_CPU::visit(loop);
     }

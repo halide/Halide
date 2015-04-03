@@ -216,14 +216,12 @@ protected:
      * function. */
     llvm::BasicBlock *get_destructor_block();
 
-    /** Codegen an assertion. If false, it bails out and calls the
-     * error handler. Either set message to non-NULL *or* pass a
-     * vector of Expr arguments to print.  */
+    /** Codegen an assertion. If false, returns the error code (if not
+     * null), or evaluates and returns the message, which must be an
+     * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message);
-    void create_assertion(llvm::Value *condition, const char *message) {
-        create_assertion(condition, StringImm::make(message));
-    }
+    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = NULL);
+
     // @}
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
