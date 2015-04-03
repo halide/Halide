@@ -552,6 +552,7 @@ void CodeGen_JavaScript::visit(const FloatImm *op) {
         id = oss.str();
 #else
         ostringstream oss;
+        oss.precision(10);
         oss << op->value;
         id = oss.str();
 #endif
@@ -560,7 +561,18 @@ void CodeGen_JavaScript::visit(const FloatImm *op) {
 
 namespace {
 
-std::map<string, std::pair<string, int> > js_math_functions{
+std::map<string, string > js_math_values {
+    { "neg_inf_f32", "Number.NEGATIVE_INFINITY" },
+    { "inf_f32", "Number.INFINITY" },
+    { "minval_f32", "-3.4028234663852885981e+38" },
+    { "maxval_f32", "3.4028234663852885981e+38" },
+    { "minval_f64", "Number.MIN_VALUE" },
+    { "maxval_f64", "Number.MAX_VALUE" },
+    { "nan_f32", "Number.NaN" },
+    { "nan_f64", "Number.NaN" },
+};
+
+std::map<string, std::pair<string, int> > js_math_functions {
   { { "sqrt_f32", { "Math.sqrt", 1 } },
     { "sqrt_f64", { "Math.sqrt", 1 } },
     { "sin_f32", { "Math.sin", 1 } },
@@ -605,11 +617,6 @@ std::map<string, std::pair<string, int> > js_math_functions{
     { "acosh_f64", { "Math.acosh", 1 } },
     { "atanh_f32", { "Math.atanh", 1 } },
     { "atanh_f64", { "Math.atanh", 1 } },
-    { "nan_f32", { "Math.NAN", 0 } },
-    { "neg_inf_f32", { "Math.NEGATIVE_INFINITY", 0 } },
-    { "inf_f32", { "Math.INFINITY", 0 } }
-      //maxval*?
-      //minval*?
   }
 };
 
@@ -1015,35 +1022,41 @@ void CodeGen_JavaScript::visit(const Call *op) {
     } else {
         // Generic calls
 
-        // Map math functions to JS names.
-        string js_name = op->name;
-        auto js_math_fn = js_math_functions.find(op->name);
-        if (js_math_fn != js_math_functions.end()) {
-            js_name = js_math_fn->second.first;
-        }
+        auto js_math_value = js_math_values.find(op->name);
 
-        for (int lane = 0; lane < op->type.width; lane++) {
-
-            const char *lead_char = "";
-            if (op->type.width != 1) {
-                lead_char = (lane == 0) ? "[" : ", ";
+        if (js_math_value != js_math_values.end()) {
+            rhs << js_math_value->second;;
+        } else {
+            // Map math functions to JS names.
+            string js_name = op->name;
+            auto js_math_fn = js_math_functions.find(op->name);
+            if (js_math_fn != js_math_functions.end()) {
+                js_name = js_math_fn->second.first;
             }
 
-            vector<string> args(op->args.size());
-            for (size_t i = 0; i < op->args.size(); i++) {
-                args[i] = print_expr(conditionally_extract_lane(op->args[i], lane));
-            }
-            rhs << lead_char << js_name << "(";
+            for (int lane = 0; lane < op->type.width; lane++) {
 
-            if (function_takes_user_context(op->name)) {
-                rhs << (have_user_context ? "__user_context, " : "null, ");
-            }
+                const char *lead_char = "";
+                if (op->type.width != 1) {
+                    lead_char = (lane == 0) ? "[" : ", ";
+                }
 
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (i > 0) rhs << ", ";
-                rhs << args[i];
+                vector<string> args(op->args.size());
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    args[i] = print_expr(conditionally_extract_lane(op->args[i], lane));
+                }
+                rhs << lead_char << js_name << "(";
+
+                if (function_takes_user_context(op->name)) {
+                    rhs << (have_user_context ? "__user_context, " : "null, ");
+                }
+
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    if (i > 0) rhs << ", ";
+                    rhs << args[i];
+                }
+                rhs << ")";
             }
-            rhs << ")";
         }
         if (op->type.width != 1) {
             rhs << "]";
