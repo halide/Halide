@@ -29,6 +29,7 @@ const string preamble =
     "if (typeof(halide_error) != \"function\") { halide_error = function (user_context, msg) { halide_print(user_context, msg); } }\n"
     "if (typeof(halide_trace) != \"function\") { var id = 0; halide_trace = function (user_context, event) { return id++; } }\n"
     "if (typeof(halide_shutdown_trace) != \"function\") { halide_shutdown_trace = function () { return 0; } }\n"
+    "if (typeof(fast_inverse_f32) != \"function\") { fast_inverse_f32 = function(x) { return 1 / x; } }\n"
     "function halide_rewrite_buffer(b, elem_size,\n"
     "                           min0, extent0, stride0,\n"
     "                           min1, extent1, stride1,\n"
@@ -617,6 +618,8 @@ std::map<string, std::pair<string, int> > js_math_functions {
     { "acosh_f64", { "Math.acosh", 1 } },
     { "atanh_f32", { "Math.atanh", 1 } },
     { "atanh_f64", { "Math.atanh", 1 } },
+    { "is_nan_f32", { "Number.isNaN", 1 } },
+    { "is_nan_f64", { "Number.isNaN", 1 } },
   }
 };
 
@@ -989,29 +992,35 @@ void CodeGen_JavaScript::visit(const Call *op) {
             }
             do_indent();
             string struct_name = unique_name('s');
-            stream << "var " << struct_name << " ";
-            open_scope();
+            stream << "var " << struct_name << " = { ";
             for (size_t i = 0; i < op->args.size(); i++) {
-                do_indent();
                 if (i > 0) stream << ", ";
                 stream << "f_" << i << ": " << values[i];
             }
-            close_scope("make_struct");
+            stream <<" } // make struct\n";
             rhs << struct_name;
         } else if (op->name == Call::stringify) {
             string buf_name = unique_name('b');
+
+            // Print all args that are general Exprs before starting output on stream.
+            std::vector<Expr> printed_args(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (op->args[i].as<StringImm>() == NULL && !op->args[i].type().is_handle()) {
+                    printed_args[i] = print_expr(op->args[i]);
+                }
+            }
             do_indent();
             stream << "var " << buf_name << " = \"\";\n";
             for (size_t i = 0; i < op->args.size(); i++) {
                 Type t = op->args[i].type();
 
+                do_indent();
                 if (op->args[i].as<StringImm>()) {
                   stream << buf_name << " = " << buf_name << ".concat(" << op->args[i] << ");\n";
                 } else if (t.is_handle()) {
                     stream << buf_name << " = " << buf_name << ".concat(\"<Object>\");\n";
                 } else {
-                  string arg = print_expr(op->args[i]);
-                    stream << buf_name << " = " << buf_name << ".concat(" << arg << ".toString());\n";
+                    stream << buf_name << " = " << buf_name << ".concat(" << printed_args[i] << ".toString());\n";
                 }
             }
             rhs << buf_name;
