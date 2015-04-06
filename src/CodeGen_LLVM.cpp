@@ -914,19 +914,47 @@ Value *CodeGen_LLVM::buffer_elem_size(Value *buffer) {
 }
 
 Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 1, "buf_host");
+    return builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        0,
+        1,
+        "buf_host");
 }
 
 Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 0, "buf_dev");
+    return builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        0,
+        0,
+        "buf_dev");
 }
 
 Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 6, "buffer_host_dirty");
+    return builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        0,
+        6,
+        "buffer_host_dirty");
 }
 
 Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7, "buffer_dev_dirty");
+    return builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        0,
+        7,
+        "buffer_dev_dirty");
 }
 
 Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
@@ -934,7 +962,13 @@ Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 2);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    return builder->CreateInBoundsGEP(buffer, args, "buf_extent");
+    return builder->CreateInBoundsGEP(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        args,
+        "buf_extent");
 }
 
 Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
@@ -942,7 +976,13 @@ Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 3);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    return builder->CreateInBoundsGEP(buffer, args, "buf_stride");
+    return builder->CreateInBoundsGEP(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        args,
+        "buf_stride");
 }
 
 Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
@@ -950,11 +990,24 @@ Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    return builder->CreateInBoundsGEP(buffer, args, "buf_min");
+    return builder->CreateInBoundsGEP(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        args,
+        "buf_min");
 }
 
 Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 5, "buf_elem_size");
+    return builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        0,
+        5,
+        "buf_elem_size");
 }
 
 Value *CodeGen_LLVM::codegen(Expr e) {
@@ -2122,9 +2175,16 @@ void CodeGen_LLVM::visit(const Call *op) {
             // Allocate and populate a stack array for the integer args
             Value *coords;
             if (int_args > 0) {
-                coords = create_alloca_at_entry(llvm_type_of(op->args[5].type()), int_args);
+                llvm::Type *coords_type = llvm_type_of(op->args[5].type());
+                coords = create_alloca_at_entry(coords_type, int_args);
                 for (int i = 0; i < int_args; i++) {
-                    Value *coord_ptr = builder->CreateConstInBoundsGEP1_32(coords, i);
+                    Value *coord_ptr =
+                        builder->CreateConstInBoundsGEP1_32(
+#if LLVM_VERSION >= 37
+                            coords_type,
+#endif
+                            coords,
+                            i);
                     builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
                 }
                 coords = builder->CreatePointerCast(coords, i32->getPointerTo());
@@ -2149,7 +2209,14 @@ void CodeGen_LLVM::visit(const Call *op) {
                 coords};
 
             for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
-                Value *field_ptr = builder->CreateConstInBoundsGEP2_32(trace_event, 0, i);
+                Value *field_ptr =
+                    builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+                        trace_event_type,
+#endif
+                        trace_event,
+                        0,
+                        i);
                 builder->CreateStore(members[i], field_ptr);
             }
 
@@ -2248,7 +2315,14 @@ void CodeGen_LLVM::visit(const Call *op) {
 
                 // Put the elements in the struct.
                 for (size_t i = 0; i < args.size(); i++) {
-                    Value *field_ptr = builder->CreateConstInBoundsGEP2_32(ptr, 0, i);
+                    Value *field_ptr =
+                        builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+                            struct_t,
+#endif
+                            ptr,
+                            0,
+                            i);
                     builder->CreateStore(args[i], field_ptr);
                 }
 
@@ -2695,7 +2769,7 @@ void CodeGen_LLVM::visit(const For *op) {
         Value *ptr = create_alloca_at_entry(closure_t, 1);
 
         // Fill in the closure
-        closure.pack_struct(ptr, symbol_table, builder);
+        closure.pack_struct(closure_t, ptr, symbol_table, builder);
 
         // Make a new function that does one iteration of the body of the loop
         llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
@@ -2735,7 +2809,7 @@ void CodeGen_LLVM::visit(const For *op) {
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
         // Load everything from the closure into the new scope
-        closure.unpack_struct(symbol_table, closure_handle, builder);
+        closure.unpack_struct(symbol_table, closure_t, closure_handle, builder);
 
         // Generate the new function body
         codegen(op->body);
@@ -2813,7 +2887,8 @@ void CodeGen_LLVM::visit(const Store *op) {
                 add_tbaa_metadata(store, op->name, slice_index);
             }
         } else if (ramp) {
-            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
+            Type ptr_type = value_type.element_of();
+            Value *ptr = codegen_buffer_pointer(op->name, ptr_type, ramp->base);
             const IntImm *const_stride = ramp->stride.as<IntImm>();
             Value *stride = codegen(ramp->stride);
             // Scatter without generating the indices as a vector
@@ -2822,7 +2897,13 @@ void CodeGen_LLVM::visit(const Store *op) {
                 Value *v = builder->CreateExtractElement(val, lane);
                 if (const_stride) {
                     // Use a constant offset from the base pointer
-                    Value *p = builder->CreateConstInBoundsGEP1_32(ptr, const_stride->value * i);
+                    Value *p =
+                        builder->CreateConstInBoundsGEP1_32(
+#if LLVM_VERSION >= 37
+                            llvm_type_of(ptr_type),
+#endif
+                            ptr,
+                            const_stride->value * i);
                     StoreInst *store = builder->CreateStore(v, p);
                     add_tbaa_metadata(store, op->name, op->index);
                 } else {
