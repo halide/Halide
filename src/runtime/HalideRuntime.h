@@ -432,6 +432,34 @@ struct halide_filter_metadata_t {
     const char* target;
 };
 
+// TODO: should "name" be moved into halide_filter_metadata_t?
+// How about argv_func?
+
+/** enumerate_func_t is a callback for halide_enumerate_registered_filters; it
+ * is called once per registered filter discovered. Return 0 to continue
+ * the enumeration, or nonzero to terminate the enumeration. enumerate_context
+ * is an arbitrary pointer you can use to provide a callback argument. */
+typedef int (*enumerate_func_t)(void* enumerate_context, const char* name,
+    const halide_filter_metadata_t *metadata, int (*argv_func)(void **args));
+
+/** If a filter is compiled with Target::RegisterMetadata, it will register itself
+ * in an internal list at load time; halide_enumerate_registered_filters() allows
+ * you to enumerate all such filters at runtime. This allows you to link together
+ * arbitrary AOT-compiled filters and introspect/call them easily. Note:
+ *
+ * -- Only filters compiled with Target::RegisterMetadata enabled will be enumerated.
+ * -- This function should not be called before or after main() (i.e., must not
+ * be called from static ctors or dtors).
+ * -- Filters will be enumerated in an unpredictable order; it is essential
+ * you do not rely on a particular order of enumeration.
+ * -- It is *not* guaranteed that the names in an enumeration are unique!
+ *
+ * The return value is zero if the enumerate_func_t always returns zero;
+ * if the enumerate_func_t returns a nonzero value, enumeration will
+ * terminate early and return that nonzero result.
+ */
+extern int halide_enumerate_registered_filters(void *user_context, void* enumerate_context, enumerate_func_t func);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

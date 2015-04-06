@@ -59,6 +59,8 @@ struct Target {
 
         UserContext,  ///< Generated code takes a user_context pointer as first argument
 
+        RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
+
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!

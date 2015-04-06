@@ -699,9 +699,13 @@ $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_inte
 	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o ../$(FILTERS_DIR) target=$(HL_TARGET) is_interleaved=true
 
 # metadata_tester is built with and without user-context
+$(FILTERS_DIR)/metadata_tester.o $(FILTERS_DIR)/metadata_tester.h: $(FILTERS_DIR)/metadata_tester.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -f metadata_tester -o ../$(FILTERS_DIR) target=$(HL_TARGET)-register_metadata
+
 $(FILTERS_DIR)/metadata_tester_ucon.o $(FILTERS_DIR)/metadata_tester_ucon.h: $(FILTERS_DIR)/metadata_tester.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -f metadata_tester_ucon -o ../$(FILTERS_DIR) target=$(HL_TARGET)-user_context
+	cd tmp; $(LD_PATH_SETUP) ../$< -f metadata_tester_ucon -o ../$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata
 
 $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.o
 

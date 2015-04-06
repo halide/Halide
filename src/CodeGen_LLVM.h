@@ -395,9 +395,11 @@ private:
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage.
      */
-    void embed_metadata(std::string name, const std::vector<Argument> &args);
+    llvm::Constant* embed_metadata(std::string name, const std::vector<Argument> &args);
 
     llvm::Constant *embed_constant_expr(Expr e);
+
+    void register_metadata(std::string name, llvm::Constant *metadata, llvm::Function *argv_wrapper);
 };
 
 }
