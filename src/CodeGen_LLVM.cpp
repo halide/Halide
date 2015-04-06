@@ -990,7 +990,13 @@ Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    return builder->CreateInBoundsGEP(buffer_t_type, buffer, args, "buf_min");
+    return builder->CreateInBoundsGEP(
+#if LLVM_VERSION >= 37
+        buffer_t_type,
+#endif
+        buffer,
+        args,
+        "buf_min");
 }
 
 Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {

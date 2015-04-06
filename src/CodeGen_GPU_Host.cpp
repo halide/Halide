@@ -401,9 +401,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
         Value *gpu_args_arr =
             create_alloca_at_entry(
-#if LLVM_VERSION >= 37
                 gpu_args_arr_type,
-#endif
                 num_args+1,
                 kernel_name + "_args");
 
@@ -412,18 +410,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                                             num_args+1);
         Value *gpu_arg_sizes_arr =
             create_alloca_at_entry(
-#if LLVM_VERSION >= 37
                 gpu_arg_sizes_arr_type,
-#endif
                 num_args+1,
                 kernel_name + "_arg_sizes");
 
         llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8, num_args+1);
         Value *gpu_arg_is_buffer_arr =
             create_alloca_at_entry(
-#if LLVM_VERSION >= 37
                 gpu_arg_is_buffer_arr_type,
-#endif
                 num_args+1,
                 kernel_name + "_arg_is_buffer");
 
