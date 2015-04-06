@@ -123,7 +123,14 @@ StructType *Closure::build_type(LLVMContext *context) {
     return struct_t;
 }
 
-void Closure::pack_struct(llvm::Type *type, Value *dst, const Scope<Value *> &src, IRBuilder<> *builder) {
+void Closure::pack_struct(llvm::Type *
+#if LLVM_VERSION >= 37
+                          type
+#endif
+                          ,
+                          Value *dst,
+                          const Scope<Value *> &src,
+                          IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();
@@ -151,7 +158,11 @@ void Closure::pack_struct(llvm::Type *type, Value *dst, const Scope<Value *> &sr
 }
 
 void Closure::unpack_struct(Scope<Value *> &dst,
-                            llvm::Type *type,
+                            llvm::Type *
+#if LLVM_VERSION >= 37
+                            type
+#endif
+                            ,
                             Value *src,
                             IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
