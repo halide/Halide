@@ -398,21 +398,34 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         int num_args = (int)closure_args.size();
 
         // NULL-terminated list
+        llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
         Value *gpu_args_arr =
-            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_args");
+            create_alloca_at_entry(
+#if LLVM_VERSION >= 37
+                gpu_args_arr_type,
+#endif
+                num_args+1,
+                kernel_name + "_args");
 
         // NULL-terminated list of size_t's
+        llvm::Type *gpu_arg_sizes_arr_type = ArrayType::get(target_size_t_type,
+                                                            num_args+1);
         Value *gpu_arg_sizes_arr =
-            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_arg_sizes");
+            create_alloca_at_entry(
+#if LLVM_VERSION >= 37
+                gpu_arg_sizes_arr_type,
+#endif
+                num_args+1,
+                kernel_name + "_arg_sizes");
 
+        llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8, num_args+1);
         Value *gpu_arg_is_buffer_arr =
-            create_alloca_at_entry(ArrayType::get(i8, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_arg_is_buffer");
+            create_alloca_at_entry(
+#if LLVM_VERSION >= 37
+                gpu_arg_is_buffer_arr_type,
+#endif
+                num_args+1,
+                kernel_name + "_arg_is_buffer");
 
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
@@ -443,23 +456,59 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // store a void * pointer to the argument into the gpu_args_arr
             Value *bits = builder->CreateBitCast(ptr, arg_t);
             builder->CreateStore(bits,
-                                 builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_args_arr_type,
+#endif
+                                    gpu_args_arr,
+                                    0,
+                                    i));
 
             // store the size of the argument
             int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
-                                 builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_arg_sizes_arr_type,
+#endif
+                                    gpu_arg_sizes_arr,
+                                    0,
+                                    i));
 
             builder->CreateStore(ConstantInt::get(i8, closure_args[i].is_buffer),
-                                 builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, i));
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_arg_is_buffer_arr_type,
+#endif
+                                    gpu_arg_is_buffer_arr,
+                                    0,
+                                    i));
         }
         // NULL-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
-                             builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_args_arr_type,
+#endif
+                                gpu_args_arr,
+                                0,
+                                num_args));
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
-                             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_arg_sizes_arr_type,
+#endif
+                                gpu_arg_sizes_arr,
+                                0,
+                                num_args));
         builder->CreateStore(ConstantInt::get(i8, 0),
-                             builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, num_args));
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_args_arr_type,
+#endif
+                                gpu_arg_is_buffer_arr,
+                                0,
+                                num_args));
 
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
@@ -473,9 +522,30 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_blocks[0]), codegen(bounds.num_blocks[1]), codegen(bounds.num_blocks[2]),
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
-            builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref" + api_unique_name),
-            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref" + api_unique_name),
-            builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, 0, "gpu_arg_is_buffer_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_arg_sizes_arr_type,
+#endif
+                gpu_arg_sizes_arr,
+                0,
+                0,
+                "gpu_arg_sizes_ar_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_args_arr_type,
+#endif
+                gpu_args_arr,
+                0,
+                0,
+                "gpu_args_arr_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_arg_is_buffer_arr_type,
+#endif
+                gpu_arg_is_buffer_arr,
+                0,
+                0,
+                "gpu_arg_is_buffer_ref" + api_unique_name),
             gpu_num_padded_attributes,
             gpu_vertex_buffer,
             gpu_num_coords_dim0,
