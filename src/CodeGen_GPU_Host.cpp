@@ -498,7 +498,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         builder->CreateStore(ConstantInt::get(i8, 0),
                              builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
-                                gpu_args_arr_type,
+                                gpu_arg_is_buffer_arr_type,
 #endif
                                 gpu_arg_is_buffer_arr,
                                 0,
