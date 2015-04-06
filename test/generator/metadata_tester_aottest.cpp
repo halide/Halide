@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
+#include <map>
 
 #include "metadata_tester.h"
 #include "metadata_tester_ucon.h"
@@ -419,19 +420,36 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     }
 }
 
+int EnumerateFunc(void* enumerate_context,
+    const char* name,
+    const halide_filter_metadata_t *metadata,
+    int (*argv_func)(void **args)) {
+  std::map<std::string, int> &enum_results = *reinterpret_cast<std::map<std::string, int>*>(enumerate_context);
+  enum_results[name] = metadata->num_arguments;
+  return 0;
+}
+
 int main(int argc, char **argv) {
+    void* user_context = NULL;
+
+    int result;
+
+    std::map<std::string, int> enum_results;
+    result = halide_enumerate_registered_filters(user_context, &enum_results, EnumerateFunc);
+    EXPECT_EQ(0, result);
+    EXPECT_EQ(2, enum_results.size());
+    EXPECT_EQ(15, enum_results["metadata_tester"]);
+    EXPECT_EQ(16, enum_results["metadata_tester_ucon"]);
 
     const Image<uint8_t> input = make_image<uint8_t>();
 
     Image<float> output0(kSize, kSize, 3);
     Image<float> output1(kSize, kSize, 3);
 
-    int result;
-
     result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
     EXPECT_EQ(0, result);
 
-    result = metadata_tester_ucon(NULL, input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
+    result = metadata_tester_ucon(user_context, input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
     EXPECT_EQ(0, result);
 
     verify(input, output0, output1);
