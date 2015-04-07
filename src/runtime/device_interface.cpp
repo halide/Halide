@@ -186,6 +186,7 @@ WEAK int halide_device_sync(void *user_context, struct buffer_t *buf) {
         interface = halide_get_device_interface(buf->dev);
     }
     if (interface == NULL) {
+        debug(user_context) << "halide_device_sync on buffer with no interface\n";
         return halide_error_code_no_device_interface;
     }
     int result = interface->device_sync(user_context, buf);
@@ -209,6 +210,7 @@ WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const ha
 
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != interface) {
+        debug(user_context) << "halide_malloc doesn't support switching interfaces\n";
         return halide_error_code_device_malloc_failed;
     }
 
