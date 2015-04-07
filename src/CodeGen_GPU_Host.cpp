@@ -601,7 +601,10 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
         const Variable *buf_var = op->args[0].as<Variable>();
         internal_assert(buf_var);
         const string &buf_name = buf_var->name;
-        string destructor_name = buf_name + "_destructor";
+        // Put the destructor in the symbol table as
+        // func_name.buffer_gpu_destructor.
+        internal_assert(ends_with(buf_name, ".buffer"));
+        string destructor_name = buf_name + "_gpu_destructor";
 
         // We may already have a destructor for this allocation, if
         // this is one of many copy_to_device calls.
@@ -620,7 +623,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
     CodeGen_CPU::visit(op);
 
     // Also free gpu memory by triggering the destructor
-    string destructor_name = op->name + ".buffer_destructor";
+    string destructor_name = op->name + ".buffer_gpu_destructor";
     if (sym_exists(destructor_name)) {
         Value *d = sym_get(destructor_name);
         Instruction *inst = llvm::dyn_cast<Instruction>(d);
