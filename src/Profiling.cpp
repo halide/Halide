@@ -59,7 +59,7 @@ public:
             // Note that this is tacked on to the front of the block, since it must come
             // before the calls to halide_current_time_ns.
             Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", vector<Expr>(), Call::Extern);
-            Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
+            Stmt begin_clock = Evaluate::make(begin_clock_call);
             s = Block::make(begin_clock, s);
 
             // Do a little calibration: make a loop that does a large number of calls to add_ticks
