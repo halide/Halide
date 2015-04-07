@@ -1265,10 +1265,10 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         string error_call_name = "halide_error_param";
 
         if (p.condition.as<LE>()) {
-            error_call_name += "_too_small";
+            error_call_name += "_too_large";
         } else {
             internal_assert(p.condition.as<GE>());
-            error_call_name += "_too_large";
+            error_call_name += "_too_small";
         }
 
         if (wider.is_int()) {
