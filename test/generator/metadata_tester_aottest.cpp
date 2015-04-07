@@ -437,7 +437,16 @@ int main(int argc, char **argv) {
     verify(input, output0, output1);
 
     check_metadata(metadata_tester_metadata, false);
+    if (!strcmp(metadata_tester_metadata.name, "metadata_tester_metadata")) {
+        fprintf(stderr, "Expected name %s\n", "metadata_tester_metadata");
+        exit(-1);
+    }
+
     check_metadata(metadata_tester_ucon_metadata, true);
+    if (!strcmp(metadata_tester_ucon_metadata.name, "metadata_tester_ucon_metadata")) {
+        fprintf(stderr, "Expected name %s\n", "metadata_tester_ucon_metadata");
+        exit(-1);
+    }
 
     printf("Success!\n");
     return 0;
