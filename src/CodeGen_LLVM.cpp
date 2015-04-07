@@ -556,7 +556,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // (useful for calling from JIT and other machine interfaces).
     if (f.linkage == LoweredFunc::External) {
         add_argv_wrapper(module, function, name + "_argv");
-        embed_metadata(name + "_metadata", args);
+        embed_metadata(name + "_metadata", name, args);
     }
 }
 
@@ -684,7 +684,8 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
         scalar_value_t_type->getPointerTo());
 }
 
-void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
+void CodeGen_LLVM::embed_metadata(const std::string &metadata_name,
+        const std::string &function_name, const std::vector<Argument> &args) {
     Constant *zero = ConstantInt::get(i32, 0);
 
     const int num_args = (int) args.size();
@@ -719,7 +720,8 @@ void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
 #else
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, vec(zero, zero)),
 #endif
-        /* target */ create_string_constant(target.to_string())
+        /* target */ create_string_constant(target.to_string()),
+        /* name */ create_string_constant(function_name)
     };
 
     new GlobalVariable(
@@ -728,7 +730,7 @@ void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
         /*isConstant*/ true,
         GlobalValue::ExternalLinkage,
         ConstantStruct::get(metadata_t_type, metadata_fields),
-        name);
+        metadata_name);
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
