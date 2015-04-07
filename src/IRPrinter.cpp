@@ -98,7 +98,8 @@ void IRPrinter::test() {
     Stmt store2 = Store::make("out", call + 1, x);
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
     Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
-    Stmt assertion = AssertStmt::make(y > 3, vec<Expr>(Expr("y is greater than "), 3));
+    Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
+                                                         vec<Expr>(string("y"), y, 3), Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
     Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), const_true(), let_stmt);
@@ -108,7 +109,7 @@ void IRPrinter::test() {
     std::string correct_source = \
         "allocate buf[float32 * 1023]\n"
         "let y = 17\n"
-        "assert((y > 3), stringify(\"y is greater than \", 3))\n"
+        "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
         "produce buf {\n"
         "  parallel (x, -2, (y + 2)) {\n"
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"

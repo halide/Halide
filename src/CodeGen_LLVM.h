@@ -25,6 +25,7 @@ class Constant;
 class Triple;
 class MDNode;
 class DataLayout;
+class BasicBlock;
 }
 
 #include <map>
@@ -199,14 +200,28 @@ protected:
     void push_buffer(const std::string &name, llvm::Value *buffer);
     void pop_buffer(const std::string &name);
 
-    /** Codegen an assertion. If false, it bails out and calls the
-     * error handler. Either set message to non-NULL *or* pass a
-     * vector of Expr arguments to print.  */
+    /* Call this at the location of object creation to register how an
+     * object should be destroyed. This does three things:
+     * 1) Emits code here that puts the object in a unique
+     * null-initialized stack slot
+     * 2) Adds an instruction to the error handling block that calls the
+     * destructor on that stack slot if it's not null.
+     * 3) Returns that instruction, so that you can also insert a
+     * clone of it where you actually want to delete the object in the
+     * non-error case. */
+    llvm::Instruction *register_destructor(llvm::Function *destructor_fn, llvm::Value *obj);
+
+    /** Retrieves the block containing the error handling
+     * code. Creates it if it doesn't already exist for this
+     * function. */
+    llvm::BasicBlock *get_destructor_block();
+
+    /** Codegen an assertion. If false, returns the error code (if not
+     * null), or evaluates and returns the message, which must be an
+     * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message);
-    void create_assertion(llvm::Value *condition, const char *message) {
-        create_assertion(condition, StringImm::make(message));
-    }
+    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = NULL);
+
     // @}
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
@@ -323,7 +338,9 @@ protected:
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
-    llvm::Value *create_alloca_at_entry(llvm::Type *type, int n, const std::string &name = "");
+    llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
+                                        bool zero_initialize = false,
+                                        const std::string &name = "");
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
@@ -391,6 +408,11 @@ private:
      * prevent emitting the same string many times. */
     std::map<std::string, llvm::Constant *> string_constants;
 
+    /** A basic block to branch to on error that triggers all
+     * destructors. As destructors are registered, code gets added
+     * to this block. */
+    llvm::BasicBlock *destructor_block;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage.
@@ -398,7 +420,9 @@ private:
     void embed_metadata(const std::string &metadata_name,
         const std::string &function_name, const std::vector<Argument> &args);
 
+    /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);
+
 };
 
 }
