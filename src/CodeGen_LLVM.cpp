@@ -449,7 +449,7 @@ namespace {
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
-void add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &name) {
+llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &name) {
     llvm::Type *buffer_t_type = m->getTypeByName("struct.buffer_t");
     llvm::Type *i8 = llvm::Type::getInt8Ty(m->getContext());
     llvm::Type *i32 = llvm::Type::getInt32Ty(m->getContext());
@@ -480,6 +480,7 @@ void add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &na
     llvm::Value *result = builder.CreateCall(fn, wrapper_args);
     builder.CreateRet(result);
     llvm::verifyFunction(*wrapper);
+    return wrapper;
 }
 
 }
@@ -555,8 +556,11 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
     if (f.linkage == LoweredFunc::External) {
-        add_argv_wrapper(module, function, name + "_argv");
-        embed_metadata(name + "_metadata", args);
+        llvm::Function *wrapper = add_argv_wrapper(module, function, name + "_argv");
+        llvm::Constant *metadata = embed_metadata(name + "_metadata", args);
+        if (target.has_feature(Target::RegisterMetadata)) {
+            register_metadata(name, metadata, wrapper);
+        }
     }
 }
 
@@ -684,7 +688,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
         scalar_value_t_type->getPointerTo());
 }
 
-void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
+llvm::Constant *CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
     Constant *zero = ConstantInt::get(i32, 0);
 
     const int num_args = (int) args.size();
@@ -722,13 +726,48 @@ void CodeGen_LLVM::embed_metadata(string name, const vector<Argument> &args) {
         /* target */ create_string_constant(target.to_string())
     };
 
-    new GlobalVariable(
+    GlobalVariable *metadata = new GlobalVariable(
         *module,
         metadata_t_type,
         /*isConstant*/ true,
         GlobalValue::ExternalLinkage,
         ConstantStruct::get(metadata_t_type, metadata_fields),
         name);
+
+    return metadata;
+}
+
+void CodeGen_LLVM::register_metadata(string name, llvm::Constant *metadata, llvm::Function *argv_wrapper) {
+    llvm::Function *register_metadata = module->getFunction("_halide_runtime_internal_register_metadata");
+    internal_assert(register_metadata) << "Could not find register_metadata in initial module\n";
+
+    llvm::StructType *register_t_type = module->getTypeByName("struct._halide_runtime_internal_registered_filter_t");
+    internal_assert(register_t_type) << "Could not find register_t_type in initial module\n";
+
+    Constant *list_node_fields[] = {
+        Constant::getNullValue(register_t_type->getPointerTo()),
+        create_string_constant(name),
+        metadata,
+        argv_wrapper
+    };
+
+    GlobalVariable *list_node = new GlobalVariable(
+        *module,
+        register_t_type,
+        /*isConstant*/ false,
+        GlobalValue::PrivateLinkage,
+        ConstantStruct::get(register_t_type, list_node_fields));
+
+    llvm::FunctionType *func_t = llvm::FunctionType::get(void_t, false);
+    llvm::Function *ctor = llvm::Function::Create(func_t, llvm::GlobalValue::PrivateLinkage, name + ".register_metadata", module);
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", ctor);
+    builder->SetInsertPoint(block);
+    llvm::CallInst *call = builder->CreateCall(register_metadata, vec<llvm::Value *>(list_node));
+    call->setDoesNotThrow();
+    builder->CreateRet(call);
+    llvm::verifyFunction(*ctor);
+
+    llvm::appendToGlobalCtors(*module, ctor, 0);
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
