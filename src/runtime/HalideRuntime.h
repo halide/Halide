@@ -430,6 +430,9 @@ struct halide_filter_metadata_t {
     /** The Target for which the filter was compiled. This is always
      * a canonical Target string (ie a product of Target::to_string). */
     const char* target;
+
+    /** The function name of the filter. */
+    const char* name;
 };
 
 #ifdef __cplusplus
