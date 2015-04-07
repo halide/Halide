@@ -32,7 +32,7 @@ extern "C" {
 
 // This is looked up by name in Codegen_LLVM, which is easier to do
 // for functions with plain C linkage.
-WEAK void _halide_runtime_internal_register_metadata(_halide_runtime_internal_registered_filter_t *info) {
+WEAK void halide_runtime_internal_register_metadata(_halide_runtime_internal_registered_filter_t *info) {
     // Note that although the metadata pointer itself is valid, the contents pointed
     // to by it may not be initialized yet (since order of execution is not guaranteed in this case);
     // it is essential that this code not do anything with that pointer other than store

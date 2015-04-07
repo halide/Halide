@@ -738,7 +738,7 @@ llvm::Constant *CodeGen_LLVM::embed_metadata(string name, const vector<Argument>
 }
 
 void CodeGen_LLVM::register_metadata(string name, llvm::Constant *metadata, llvm::Function *argv_wrapper) {
-    llvm::Function *register_metadata = module->getFunction("_halide_runtime_internal_register_metadata");
+    llvm::Function *register_metadata = module->getFunction("halide_runtime_internal_register_metadata");
     internal_assert(register_metadata) << "Could not find register_metadata in initial module\n";
 
     llvm::StructType *register_t_type = module->getTypeByName("struct._halide_runtime_internal_registered_filter_t");
