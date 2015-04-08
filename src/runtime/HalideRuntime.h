@@ -499,10 +499,11 @@ inline bool halide_get_buffer_flag(const buffer_t* buf, halide_buffer_flag_bits_
 }
 
 inline void halide_set_buffer_flag(buffer_t* buf, halide_buffer_flag_bits_t flag, bool set) {
-    if (set)
+    if (set) {
         buf->flags |= flag;
-    else
+    } else {
         buf->flags &= ~flag;
+    }
 }
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
