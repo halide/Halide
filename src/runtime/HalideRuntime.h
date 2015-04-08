@@ -572,14 +572,11 @@ struct halide_filter_metadata_t {
     const char* name;
 };
 
-// TODO: should "name" be moved into halide_filter_metadata_t?
-// How about argv_func?
-
 /** enumerate_func_t is a callback for halide_enumerate_registered_filters; it
  * is called once per registered filter discovered. Return 0 to continue
  * the enumeration, or nonzero to terminate the enumeration. enumerate_context
  * is an arbitrary pointer you can use to provide a callback argument. */
-typedef int (*enumerate_func_t)(void* enumerate_context, const char* name,
+typedef int (*enumerate_func_t)(void* enumerate_context,
     const halide_filter_metadata_t *metadata, int (*argv_func)(void **args));
 
 /** If a filter is compiled with Target::RegisterMetadata, it will register itself

@@ -795,7 +795,7 @@ llvm::Constant *CodeGen_LLVM::embed_metadata(const std::string &metadata_name,
     return metadata;
 }
 
-void CodeGen_LLVM::register_metadata(string name, llvm::Constant *metadata, llvm::Function *argv_wrapper) {
+void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Constant *metadata, llvm::Function *argv_wrapper) {
     llvm::Function *register_metadata = module->getFunction("halide_runtime_internal_register_metadata");
     internal_assert(register_metadata) << "Could not find register_metadata in initial module\n";
 
@@ -804,7 +804,6 @@ void CodeGen_LLVM::register_metadata(string name, llvm::Constant *metadata, llvm
 
     Constant *list_node_fields[] = {
         Constant::getNullValue(register_t_type->getPointerTo()),
-        create_string_constant(name),
         metadata,
         argv_wrapper
     };
