@@ -423,7 +423,7 @@ private:
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);
 
-    void register_metadata(std::string name, llvm::Constant *metadata, llvm::Function *argv_wrapper);
+    void register_metadata(const std::string &name, llvm::Constant *metadata, llvm::Function *argv_wrapper);
 };
 
 }

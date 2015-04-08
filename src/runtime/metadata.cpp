@@ -5,7 +5,6 @@ extern "C" {
 
 struct _halide_runtime_internal_registered_filter_t {
     struct _halide_runtime_internal_registered_filter_t *next;
-    const char *name;
     const halide_filter_metadata_t* metadata;
     int (*argv_func)(void **args);
 };
@@ -47,7 +46,7 @@ WEAK int halide_enumerate_registered_filters(void *user_context, void* enumerate
     list_head_t* head = get_list_head();
     ScopedMutexLock lock(&head->mutex);
     for (_halide_runtime_internal_registered_filter_t* f = head->next; f != NULL; f = f->next) {
-        int r = (*func)(enumerate_context, f->name, f->metadata, f->argv_func);
+        int r = (*func)(enumerate_context, f->metadata, f->argv_func);
         if (r != 0) return r;
     }
     return 0;

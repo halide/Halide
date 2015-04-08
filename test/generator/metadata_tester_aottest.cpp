@@ -421,11 +421,10 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
 }
 
 int EnumerateFunc(void* enumerate_context,
-    const char* name,
     const halide_filter_metadata_t *metadata,
     int (*argv_func)(void **args)) {
   std::map<std::string, int> &enum_results = *reinterpret_cast<std::map<std::string, int>*>(enumerate_context);
-  enum_results[name] = metadata->num_arguments;
+  enum_results[metadata->name] = metadata->num_arguments;
   return 0;
 }
 
