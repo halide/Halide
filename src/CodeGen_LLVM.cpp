@@ -658,6 +658,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
         ConstantInt::get(i32, b.elem_size),
         ConstantInt::get(i32, halide_buffer_host_dirty), // flags: host_dirty, !dev_dirty
+        Constant::getNullValue(i8->getPointerTo())
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
     global->setInitializer(buffer_struct);

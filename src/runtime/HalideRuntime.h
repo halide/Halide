@@ -478,6 +478,10 @@ typedef struct buffer_t {
     * Flag bits from halide_buffer_flag_bits_t.
     */
     int32_t flags;
+
+    /** An unused field, used to ensure that the struct is an even multiple
+     * of 64 bits on 32-bit systems. */
+    void* _unused;
 } buffer_t;
 
 enum halide_buffer_flag_bits_t {

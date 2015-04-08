@@ -33,6 +33,7 @@ const string buffer_t_definition =
     "    int32_t min[4];\n"
     "    int32_t elem_size;\n"
     "    int32_t flags;\n"
+    "    void* _unused;\n"
     "} buffer_t;\n"
     "enum halide_buffer_flag_bits_t {\n"
     "    halide_buffer_host_dirty = (1 << 0),\n"
