@@ -75,7 +75,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
 
     if (dst) {
         srcBuf.host = (uint8_t *)src;
-        halide_set_buffer_flag(&srcBuf, halide_buffer_host_dirty, true);
+        halide_buffer_set_host_dirty(&srcBuf, true);
         srcBuf.extent[0] = w;
         srcBuf.extent[1] = h;
         srcBuf.extent[2] = 0;

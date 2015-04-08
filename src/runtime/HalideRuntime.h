@@ -484,6 +484,15 @@ typedef struct buffer_t {
     void* _unused;
 } buffer_t;
 
+#endif
+
+#if defined(__cplusplus) && (__cplusplus > 199711L || _MSC_VER >= 1800)
+// Let's assert specific size expectations, because disagreement
+// between caller and callee produces suboptimal results.
+static_assert(sizeof(buffer_t) == (sizeof(void*) == 4 ? 72 : 80),
+              "sizeof(buffer_t) is incorrect");
+#endif
+
 enum halide_buffer_flag_bits_t {
     /** This should be true if there is an existing device allocation
     * mirroring this buffer, and the data has been modified on the
@@ -496,17 +505,27 @@ enum halide_buffer_flag_bits_t {
     halide_buffer_dev_dirty = (1 << 1)
 };
 
-#endif
-
-inline bool halide_get_buffer_flag(const buffer_t* buf, halide_buffer_flag_bits_t flag) {
-    return (buf->flags & flag) != 0;
+inline bool halide_buffer_get_host_dirty(const buffer_t* buf) {
+    return (buf->flags & halide_buffer_host_dirty) != 0;
 }
 
-inline void halide_set_buffer_flag(buffer_t* buf, halide_buffer_flag_bits_t flag, bool set) {
+inline bool halide_buffer_get_dev_dirty(const buffer_t* buf) {
+    return (buf->flags & halide_buffer_dev_dirty) != 0;
+}
+
+inline void halide_buffer_set_host_dirty(buffer_t* buf, bool set) {
     if (set) {
-        buf->flags |= flag;
+        buf->flags |= halide_buffer_host_dirty;
     } else {
-        buf->flags &= ~flag;
+        buf->flags &= ~halide_buffer_host_dirty;
+    }
+}
+
+inline void halide_buffer_set_dev_dirty(buffer_t* buf, bool set) {
+    if (set) {
+        buf->flags |= halide_buffer_dev_dirty;
+    } else {
+        buf->flags &= ~halide_buffer_dev_dirty;
     }
 }
 

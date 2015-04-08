@@ -161,22 +161,22 @@ uint64_t Buffer::device_handle() const {
 
 bool Buffer::host_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return halide_get_buffer_flag(&contents.ptr->buf, halide_buffer_host_dirty);
+    return halide_buffer_get_host_dirty(&contents.ptr->buf);
 }
 
 void Buffer::set_host_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    halide_set_buffer_flag(&contents.ptr->buf, halide_buffer_host_dirty, dirty);
+    halide_buffer_set_host_dirty(&contents.ptr->buf, dirty);
 }
 
 bool Buffer::device_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return halide_get_buffer_flag(&contents.ptr->buf, halide_buffer_dev_dirty);
+    return halide_buffer_get_dev_dirty(&contents.ptr->buf);
 }
 
 void Buffer::set_device_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    halide_set_buffer_flag(&contents.ptr->buf, halide_buffer_dev_dirty, dirty);
+    halide_buffer_set_dev_dirty(&contents.ptr->buf, dirty);
 }
 
 int Buffer::dimensions() const {

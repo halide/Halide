@@ -633,7 +633,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     buffer_t b = *(buf.raw_buffer());
     user_assert(b.host)
         << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
-    user_assert(!halide_get_buffer_flag(&b, halide_buffer_dev_dirty))
+    user_assert(!halide_buffer_get_dev_dirty(&b))
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
