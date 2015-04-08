@@ -7,4 +7,4 @@
 
 #define INLINE inline __attribute__((weak)) __attribute__((used)) __attribute__((always_inline)) __attribute__((nothrow)) __attribute__((pure))
 
-INLINE void __force_include_halide_filter_metadata_t_types(halide_filter_metadata_t*) {}
+INLINE void __force_include_halide_filter_metadata_t_types(halide_filter_metadata_t*, halide_scalar_value_t*) {}
