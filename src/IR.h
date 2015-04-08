@@ -216,15 +216,14 @@ struct LetStmt : public StmtNode<LetStmt> {
     EXPORT static Stmt make(std::string name, Expr value, Stmt body);
 };
 
-/** If the 'condition' is false, then bail out calling halide_error. */
+/** If the 'condition' is false, then evaluate and return the message,
+ * which should be a call to an error function. */
 struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     Expr message;
 
-    EXPORT static Stmt make(Expr condition, const char *message);
     EXPORT static Stmt make(Expr condition, Expr message);
-    EXPORT static Stmt make(Expr condition, const std::vector<Expr> &message);
 };
 
 /** This node is a helpful annotation to do with permissions. The
