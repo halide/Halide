@@ -1,9 +1,5 @@
 #include "HalideRuntime.h"
 
-// Grab the internal device_interface functions
-#define WEAK
-#include "device_interface.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 

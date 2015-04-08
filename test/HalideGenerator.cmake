@@ -47,8 +47,7 @@ function(halide_add_generator_dependency target gen_target gen_name func_name)
     add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
       DEPENDS "${gen_target}"
       COMMAND "${CMAKE_BINARY_DIR}/bin/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${SCRATCH_DIR}" ${ARGN}
-      COMMAND rm -f "${FILTER_LIB}"
-      COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${SCRATCH_DIR}/${func_name}.o"
+      COMMAND "${CMAKE_AR}" r "${FILTER_LIB}" "${SCRATCH_DIR}/${func_name}.o"
       WORKING_DIRECTORY "${SCRATCH_DIR}"
       )
   endif()
