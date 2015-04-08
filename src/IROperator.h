@@ -1414,7 +1414,7 @@ inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Exp
  * x < 1, 1 <= x <= 10, and x > 10.
  *
  * You're unlikely to want to call this directly. You probably want to
- * use the boundary condition helpers in the BoundaryConditon
+ * use the boundary condition helpers in the BoundaryConditions
  * namespace instead.
  */
 inline Expr likely(Expr e) {
