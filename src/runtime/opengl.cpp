@@ -245,8 +245,8 @@ WEAK void debug_buffer(void *user_context, buffer_t *buf) {
         << "  min: " << buf->min[0] << " " << buf->min[1]
         << " " << buf->min[2] << " " << buf->min[3] <<  "\n"
         << "  elem_size: " << buf->elem_size << "\n"
-        << "  host_dirty: " << buf->host_dirty << "\n"
-        << "  dev_dirty: " << buf->dev_dirty << "\n";
+        << "  host_dirty: " << halide_get_buffer_flag(buf, halide_buffer_host_dirty) << "\n"
+        << "  dev_dirty: " << halide_get_buffer_flag(buf, halide_buffer_dev_dirty) << "\n";
 }
 
 WEAK GLuint make_shader(void *user_context, GLenum type,

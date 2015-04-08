@@ -309,7 +309,6 @@ typedef enum halide_type_code_t {
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
  * GPU). */
-#pragma pack(push, 1)
 typedef struct buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t dev;
@@ -338,21 +337,36 @@ typedef struct buffer_t {
     * replaced with a more general type code in the future. */
     int32_t elem_size;
 
+    /**
+    * Flag bits from halide_buffer_flag_bits_t.
+    */
+    int32_t flags;
+} buffer_t;
+
+enum halide_buffer_flag_bits_t {
     /** This should be true if there is an existing device allocation
     * mirroring this buffer, and the data has been modified on the
     * host side. */
-    bool host_dirty;
+    halide_buffer_host_dirty = (1 << 0),
 
     /** This should be true if there is an existing device allocation
     mirroring this buffer, and the data has been modified on the
     device side. */
-    bool dev_dirty;
-
-    uint8_t _padding[2];
-} buffer_t;
-#pragma pack(pop)
+    halide_buffer_dev_dirty = (1 << 1)
+};
 
 #endif
+
+inline bool halide_get_buffer_flag(const buffer_t* buf, halide_buffer_flag_bits_t flag) {
+    return (buf->flags & flag) != 0;
+}
+
+inline void halide_set_buffer_flag(buffer_t* buf, halide_buffer_flag_bits_t flag, bool set) {
+    if (set)
+        buf->flags |= flag;
+    else
+        buf->flags &= ~flag;
+}
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;

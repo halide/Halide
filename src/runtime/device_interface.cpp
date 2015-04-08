@@ -28,10 +28,10 @@ WEAK halide_mutex device_copy_mutex;
 WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
     int result = 0;
 
-    if (buf->dev_dirty) {
+    if (halide_get_buffer_flag(buf, halide_buffer_dev_dirty)) {
         debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty is true\n";
         const halide_device_interface *interface = halide_get_device_interface(buf->dev);
-        if (buf->host_dirty) {
+        if (halide_get_buffer_flag(buf, halide_buffer_host_dirty)) {
             debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
             result = -1; // TODO: what value?
         } else if (interface == NULL) {
@@ -40,7 +40,7 @@ WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
         } else {
             result = interface->copy_to_host(user_context, buf);
             if (result == 0) {
-                buf->dev_dirty = false;
+                halide_set_buffer_flag(buf, halide_buffer_dev_dirty, false);
             } else {
                 debug(user_context) << "copy_to_host_already_locked " << buf << " device copy_to_host returned an error\n";
             }
@@ -117,7 +117,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
 
     ScopedMutexLock lock(&device_copy_mutex);
 
-    debug(user_context) << "halide_copy_to_device " << buf << ", host: " << buf->host << ", dev: " << buf->dev << ", host_dirty: " << buf->host_dirty << ", dev_dirty:" << buf->dev_dirty << "\n";
+    debug(user_context) << "halide_copy_to_device " << buf << ", host: " << buf->host << ", dev: " << buf->dev << ", host_dirty: " << halide_get_buffer_flag(buf, halide_buffer_host_dirty) << ", dev_dirty:" << halide_get_buffer_flag(buf, halide_buffer_dev_dirty) << "\n";
     const halide_device_interface *buf_dev_interface = halide_get_device_interface(buf->dev);
     if (interface == NULL) {
         debug(user_context) << "halide_copy_to_device " << buf << " interface is NULL\n";
@@ -130,8 +130,8 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
 
     if (buf->dev && buf_dev_interface != interface) {
         debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer to new device\n";
-        if (buf_dev_interface != NULL && buf->dev_dirty) {
-            halide_assert(user_context, !buf->host_dirty);
+        if (buf_dev_interface != NULL && halide_get_buffer_flag(buf, halide_buffer_dev_dirty)) {
+            halide_assert(user_context, !halide_get_buffer_flag(buf, halide_buffer_host_dirty));
             result = copy_to_host_already_locked(user_context, buf);
             if (result != 0) {
                 debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer halide_copy_to_host failed\n";
@@ -143,7 +143,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
             debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer halide_device_free failed\n";
             return result;
         }
-        buf->host_dirty = true; // force copy back to new device below.
+        halide_set_buffer_flag(buf, halide_buffer_host_dirty, true);  // force copy back to new device below.
     }
 
     if (buf->dev == 0) {
@@ -154,15 +154,15 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
         }
     }
 
-    if (buf->host_dirty) {
+    if (halide_get_buffer_flag(buf, halide_buffer_host_dirty)) {
         debug(user_context) << "halide_copy_to_device " << buf << " host is dirty\n";
-        if (buf->dev_dirty) {
+        if (halide_get_buffer_flag(buf, halide_buffer_dev_dirty)) {
             debug(user_context) << "halide_copy_to_device " << buf << " dev_dirty is true error\n";
             result = -1; // TODO: What value?
         } else {
             result = interface->copy_to_device(user_context, buf);
             if (result == 0) {
-                buf->host_dirty = 0;
+                halide_set_buffer_flag(buf, halide_buffer_host_dirty, false);
             } else {
                 debug(user_context) << "halide_copy_to_device " << buf << "device copy_to_device returned an error\n";
             }
@@ -189,7 +189,7 @@ WEAK int halide_device_sync(void *user_context, struct buffer_t *buf) {
 WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
     const halide_device_interface *current_interface = halide_get_device_interface(buf->dev);
     debug(user_context) << "halide_device_malloc: " << buf << " interface " << interface <<
-        " host: " << buf->host << ", dev: " << buf->dev << ", host_dirty: " << buf->host_dirty << ", dev_dirty:" << buf->dev_dirty <<
+        " host: " << buf->host << ", dev: " << buf->dev << ", host_dirty: " << halide_get_buffer_flag(buf, halide_buffer_host_dirty) << ", dev_dirty:" << halide_get_buffer_flag(buf, halide_buffer_dev_dirty) <<
         " buf current interface: " << current_interface << "\n";
 
     // halide_device_malloc does not support switching interfaces.
@@ -225,7 +225,7 @@ WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
             return result;
         }
     }
-    buf->dev_dirty = false;
+    halide_set_buffer_flag(buf, halide_buffer_dev_dirty, false);
     return 0;
 }
 

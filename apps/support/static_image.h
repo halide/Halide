@@ -14,21 +14,6 @@
 
 #include "HalideRuntime.h"
 
-#ifndef BUFFER_T_DEFINED
-#define BUFFER_T_DEFINED
-#include <stdint.h>
-typedef struct buffer_t {
-    uint64_t dev;
-    uint8_t* host;
-    int32_t extent[4];
-    int32_t stride[4];
-    int32_t min[4];
-    int32_t elem_size;
-    bool host_dirty;
-    bool dev_dirty;
-} buffer_t;
-#endif
-
 template<typename T>
 class Image {
     struct Contents {
@@ -71,8 +56,8 @@ class Image {
 
         uint8_t *ptr = new uint8_t[sizeof(T)*size + 40];
         buf.host = ptr;
-        buf.host_dirty = false;
-        buf.dev_dirty = false;
+        halide_set_buffer_flag(&buf, halide_buffer_host_dirty, false);
+        halide_set_buffer_flag(&buf, halide_buffer_dev_dirty, false);
         buf.dev = 0;
         while ((size_t)buf.host & 0x1f) buf.host++;
         contents = new Contents(buf, ptr);
@@ -123,26 +108,26 @@ public:
     void set_host_dirty(bool dirty = true) {
         // If you use data directly, you must also call this so that
         // gpu-side code knows that it needs to copy stuff over.
-        contents->buf.host_dirty = dirty;
+        halide_set_buffer_flag(&contents->buf, halide_buffer_host_dirty, dirty);
     }
 
     void copy_to_host() {
-        if (contents->buf.dev_dirty) {
+        if (halide_get_buffer_flag(&contents->buf, halide_buffer_dev_dirty)) {
             halide_copy_to_host(NULL, &contents->buf);
-            contents->buf.dev_dirty = false;
+            halide_set_buffer_flag(&contents->buf, halide_buffer_dev_dirty, false);
         }
     }
 
     void copy_to_device(const struct halide_device_interface *device_interface) {
-        if (contents->buf.host_dirty) {
+        if (halide_get_buffer_flag(&contents->buf, halide_buffer_host_dirty)) {
             // If host
             halide_copy_to_device(NULL, &contents->buf, device_interface);
-            contents->buf.host_dirty = false;
+            halide_set_buffer_flag(&contents->buf, halide_buffer_host_dirty, false);
         }
     }
 
     void dev_free() {
-        assert(!contents->buf.dev_dirty);
+        assert(!halide_get_buffer_flag(&contents->buf, halide_buffer_dev_dirty));
         contents->dev_free();
     }
 

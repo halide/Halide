@@ -224,16 +224,14 @@ protected:
     // @{
     llvm::Value *buffer_host(llvm::Value *);
     llvm::Value *buffer_dev(llvm::Value *);
-    llvm::Value *buffer_host_dirty(llvm::Value *);
-    llvm::Value *buffer_dev_dirty(llvm::Value *);
+    llvm::Value *buffer_flags(llvm::Value *);
     llvm::Value *buffer_min(llvm::Value *, int);
     llvm::Value *buffer_extent(llvm::Value *, int);
     llvm::Value *buffer_stride(llvm::Value *, int);
     llvm::Value *buffer_elem_size(llvm::Value *);
     llvm::Value *buffer_host_ptr(llvm::Value *);
     llvm::Value *buffer_dev_ptr(llvm::Value *);
-    llvm::Value *buffer_host_dirty_ptr(llvm::Value *);
-    llvm::Value *buffer_dev_dirty_ptr(llvm::Value *);
+    llvm::Value *buffer_flags_ptr(llvm::Value *);
     llvm::Value *buffer_min_ptr(llvm::Value *, int);
     llvm::Value *buffer_extent_ptr(llvm::Value *, int);
     llvm::Value *buffer_stride_ptr(llvm::Value *, int);
@@ -359,6 +357,11 @@ protected:
 
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+
+    /** Perform if (flag) value |= mask; else value &= ~mask.
+     * Flag can be any integral type.
+     * value and mask must be identical integral types. */
+    llvm::Value *set_bit_mask(llvm::Value *value, llvm::Value *mask, llvm::Value *flag);
 
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:

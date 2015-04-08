@@ -69,8 +69,7 @@ struct BufferContents {
             buf.host = data;
         }
         buf.dev = 0;
-        buf.host_dirty = false;
-        buf.dev_dirty = false;
+        buf.flags = 0;
         buf.extent[0] = x_size;
         buf.extent[1] = y_size;
         buf.extent[2] = z_size;
@@ -162,22 +161,22 @@ uint64_t Buffer::device_handle() const {
 
 bool Buffer::host_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.host_dirty;
+    return halide_get_buffer_flag(&contents.ptr->buf, halide_buffer_host_dirty);
 }
 
 void Buffer::set_host_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.host_dirty = dirty;
+    halide_set_buffer_flag(&contents.ptr->buf, halide_buffer_host_dirty, dirty);
 }
 
 bool Buffer::device_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.dev_dirty;
+    return halide_get_buffer_flag(&contents.ptr->buf, halide_buffer_dev_dirty);
 }
 
 void Buffer::set_device_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.dev_dirty = dirty;
+    halide_set_buffer_flag(&contents.ptr->buf, halide_buffer_dev_dirty, dirty);
 }
 
 int Buffer::dimensions() const {

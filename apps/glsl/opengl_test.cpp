@@ -34,7 +34,7 @@ public:
         size_t size = w * h * c * elem_size;
         buf.host = (uint8_t*)malloc(size);
         memset(buf.host, 0, size);
-        buf.host_dirty = true;
+        halide_set_buffer_flag(&buf, halide_buffer_host_dirty, true);
     }
     ~Image() {
         free(buf.host);
