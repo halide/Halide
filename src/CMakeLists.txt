@@ -79,6 +79,7 @@ set(RUNTIME_CPP
   android_opengl_context
   cache
   cuda
+  destructors
   device_interface
   fake_thread_pool
   gcd_thread_pool

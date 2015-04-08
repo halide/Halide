@@ -289,6 +289,143 @@ extern void halide_memoization_cache_store(void *user_context, const uint8_t *ca
  */
 extern void halide_memoization_cache_cleanup();
 
+/** The error codes that may be returned by a Halide pipeline. */
+enum halide_error_code_t {
+    /** There was no error. This is the value returned by Halide on success. */
+    halide_error_code_success = 0,
+
+    /** An uncategorized error occurred. Refer to the string passed to halide_error. */
+    halide_error_code_generic_error = -1,
+
+    /** A Func was given an explicit bound via Func::bound, but this
+     * was not large enough to encompass the region that is used of
+     * the Func by the rest of the pipeline. */
+    halide_error_code_explicit_bounds_too_small = -2,
+
+    /** The elem_size field of a buffer_t does not match the size in
+     * bytes of the type of that ImageParam. Probable type mismatch. */
+    halide_error_code_bad_elem_size = -3,
+
+    /** A pipeline would access memory outside of the buffer_t passed
+     * in. */
+    halide_error_code_access_out_of_bounds = -4,
+
+    /** A buffer_t was given that spans more than 2GB of memory. */
+    halide_error_code_buffer_allocation_too_large = -5,
+
+    /** A buffer_t was given with extents that multiply to a number
+     * greater than 2^31-1 */
+    halide_error_code_buffer_extents_too_large = -6,
+
+    /** Applying explicit constraints on the size of an input or
+     * output buffer shrank the size of that buffer below what will be
+     * accessed by the pipeline. */
+    halide_error_code_constraints_make_required_region_smaller = -7,
+
+    /** A constraint on a size or stride of an input or output buffer
+     * was not met by the buffer_t passed in. */
+    halide_error_code_constraint_violated = -8,
+
+    /** A scalar parameter passed in was smaller than its minimum
+     * declared value. */
+    halide_error_code_param_too_small = -9,
+
+    /** A scalar parameter passed in was greater than its minimum
+     * declared value. */
+    halide_error_code_param_too_large = -10,
+
+    /** A call to halide_malloc returned NULL. */
+    halide_error_code_out_of_memory = -11,
+
+    /** A buffer_t pointer passed in was NULL. */
+    halide_error_code_buffer_argument_is_null = -12,
+
+    /** debug_to_file failed to open or write to the specified
+     * file. */
+    halide_error_code_debug_to_file_failed = -13,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from device to host. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_host_failed = -14,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from host to device. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_device_failed = -15,
+
+    /** The Halide runtime encountered an error while trying to
+     * allocate memory on device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_malloc_failed = -16,
+
+    /** The Halide runtime encountered an error while trying to
+     * synchronize with a device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_sync_failed = -17,
+
+    /** The Halide runtime encountered an error while trying to free a
+     * device allocation. Turn on -debug in your target string to see
+     * more details. */
+    halide_error_code_device_free_failed = -18,
+
+    /** A device operation was attempted on a buffer with no device
+     * interface. */
+    halide_error_code_no_device_interface = -19
+};
+
+/** Halide calls the functions below on various error conditions. The
+ * default implementations construct an error message, call
+ * halide_error, then return the matching error code above. Override
+ * these to catch the errors individually. */
+
+/** A call into an extern stage for the purposes of bounds inference
+ * failed. Returns the error code given by the extern stage. */
+extern int halide_error_bounds_inference_call_failed(void *user_context, const char *extern_stage_name, int result);
+
+/** A call to an extern stage failed. Returned the error code given by
+ * the extern stage. */
+extern int halide_error_extern_stage_failed(void *user_context, const char *extern_stage_name, int result);
+
+/** Various other error conditions. See the enum above for a
+ * description of each. */
+// @{
+extern int halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                      int min_bound, int max_bound, int min_required, int max_required);
+extern int halide_error_bad_elem_size(void *user_context, const char *func_name,
+                                      const char *type_name, int elem_size_given, int correct_elem_size);
+extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
+                                             int dimension, int min_touched, int max_touched,
+                                             int min_valid, int max_valid);
+extern int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name,
+                                                    int64_t allocation_size, int64_t max_size);
+extern int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name,
+                                                 int64_t actual_size, int64_t max_size);
+extern int halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
+                                                                 int dimension,
+                                                                 int constrained_min, int constrained_extent,
+                                                                 int required_min, int required_extent);
+extern int halide_error_constraint_violated(void *user_context, const char *var, int val,
+                                            const char *constrained_var, int constrained_val);
+extern int halide_error_param_too_small_i64(void *user_context, const char *param_name,
+                                            int64_t val, int64_t min_val);
+extern int halide_error_param_too_small_u64(void *user_context, const char *param_name,
+                                            uint64_t val, uint64_t min_val);
+extern int halide_error_param_too_small_f64(void *user_context, const char *param_name,
+                                            double val, double min_val);
+extern int halide_error_param_too_large_i64(void *user_context, const char *param_name,
+                                            int64_t val, int64_t max_val);
+extern int halide_error_param_too_large_u64(void *user_context, const char *param_name,
+                                            uint64_t val, uint64_t max_val);
+extern int halide_error_param_too_large_f64(void *user_context, const char *param_name,
+                                            double val, double max_val);
+extern int halide_error_out_of_memory(void *user_context);
+extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
+extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
+                                             const char *filename, int error_code);
+// @}
+
+
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always pointer-sized).
  * Note that the int/uint/float values do not imply a specific bit width
@@ -444,6 +581,9 @@ struct halide_filter_metadata_t {
     /** The Target for which the filter was compiled. This is always
      * a canonical Target string (ie a product of Target::to_string). */
     const char* target;
+
+    /** The function name of the filter. */
+    const char* name;
 };
 
 #ifdef __cplusplus

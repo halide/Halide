@@ -281,7 +281,8 @@ bool function_takes_user_context(const std::string &name) {
             return true;
         }
     }
-    return false;
+    // The error functions all take a user context
+    return starts_with(name, "halide_error_");
 }
 
 }

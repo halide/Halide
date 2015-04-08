@@ -326,7 +326,11 @@ class ExternCallPrototypes : public IRGraphVisitor {
                     if (i > 0) {
                         stream << ", ";
                     }
-                    stream << type_to_c_type(op->args[i].type());
+                    if (op->args[i].as<StringImm>()) {
+                        stream << "const char *";
+                    } else {
+                        stream << type_to_c_type(op->args[i].type());
+                    }
                 }
                 stream << ");\n";
                 emitted.insert(op->name);
@@ -508,6 +512,8 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
            << buf_name
            << "->host);\n";
     allocations.push(buffer_name, t);
+    do_indent();
+    stream << "(void)" << name << ";\n";
 
     do_indent();
     stream << "const bool "
@@ -555,6 +561,8 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
            << "_elem_size = "
            << buf_name
            << "->elem_size;\n";
+    do_indent();
+    stream << "(void)" << name << "_elem_size;\n";
 }
 
 void CodeGen_C::pop_buffer(const std::string &buffer_name) {
@@ -1140,12 +1148,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     open_scope();
     string id_msg = print_expr(op->message);
     do_indent();
-    stream << "halide_error("
-           << (have_user_context ? "__user_context_, " : "NULL, ")
-           << id_msg
-           << ");\n";
-    do_indent();
-    stream << "return -1;\n";
+    stream << "return " << id_msg << ";\n";
     close_scope("");
 }
 
@@ -1381,6 +1384,7 @@ void CodeGen_C::test() {
         "\n\n"
         "int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
+        " (void)_buf;\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
         " (void)_buf_host_and_dev_are_null;\n"
         " const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
@@ -1408,6 +1412,7 @@ void CodeGen_C::test() {
         " const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
         " (void)_buf_stride_3;\n"
         " const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
+        " (void)_buf_elem_size;\n"
         " {\n"
         "  int64_t _0 = 43;\n"
         "  int64_t _1 = _0 * _beta;\n"
