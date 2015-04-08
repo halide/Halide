@@ -174,6 +174,7 @@ if (WITH_TEST_GENERATORS)
       endif()
     endif()
     target_include_directories("${TEST_RUNNER}" PRIVATE "${CMAKE_SOURCE_DIR}/apps/support")
+    target_include_directories("${TEST_RUNNER}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
     set_target_properties("${TEST_RUNNER}" PROPERTIES FOLDER "generator")
     if (WIN32)
       # /FORCE:multiple allows clobbering the halide runtime symbols in the lib

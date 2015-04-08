@@ -174,8 +174,10 @@ class InjectBufferCopies : public IRMutator {
         Expr buf = Variable::make(Handle(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
         Expr call = Call::make(Int(32), "halide_device_malloc", vec(buf, device_interface), Call::Extern);
-        string msg = "Failed to allocate device buffer for " + buf_name;
-        return AssertStmt::make(call == 0, msg);
+        string call_result_name = unique_name("device_malloc_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        return LetStmt::make(call_result_name, call,
+                             AssertStmt::make(call_result_var == 0, call_result_var));
     }
 
     enum CopyDirection {
@@ -194,11 +196,11 @@ class InjectBufferCopies : public IRMutator {
         }
 
         std::string suffix = (direction == ToDevice) ? "device" : "host";
-        Expr copy = Call::make(Int(32), "halide_copy_to_" + suffix, args, Call::Extern);
-        Stmt check = AssertStmt::make(copy == 0,
-                                      "Failed to copy buffer " + buf_name +
-                                      " to " + suffix + ".");
-        return check;
+        Expr call = Call::make(Int(32), "halide_copy_to_" + suffix, args, Call::Extern);
+        string call_result_name = unique_name("copy_to_" + suffix + "_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        return LetStmt::make(call_result_name, call,
+                             AssertStmt::make(call_result_var == 0, call_result_var));
     }
 
     // Prepend code to the statement that copies everything marked as
@@ -635,39 +637,6 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     }
 
     return InjectBufferCopies(f.buffers_to_track, t).mutate(s);
-}
-
-class InjectDevFrees : public IRMutator {
-    using IRMutator::visit;
-
-    // We assume buffers are uniquely named at this point
-    set<string> needs_freeing;
-
-    void visit(const Call *op) {
-        if (op->name == "halide_copy_to_device" || op->name == "halide_device_malloc") {
-            internal_assert(op->args.size() == 2);
-            const Variable *var = op->args[0].as<Variable>();
-            internal_assert(var);
-            needs_freeing.insert(var->name);
-        }
-        expr = op;
-    }
-
-    void visit(const Free *op) {
-        string buf_name = op->name + ".buffer";
-        if (needs_freeing.count(buf_name)) {
-            Expr buf = Variable::make(Handle(), buf_name);
-            Expr free_call = Call::make(Int(32), "halide_device_free", vec(buf), Call::Extern);
-            Stmt check = AssertStmt::make(free_call == 0, "Failed to free device buffer for " + op->name);
-            stmt = Block::make(check, op);
-        } else {
-            stmt = op;
-        }
-    }
-};
-
-Stmt inject_dev_frees(Stmt s) {
-    return InjectDevFrees().mutate(s);
 }
 
 }
