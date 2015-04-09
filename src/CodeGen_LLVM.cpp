@@ -581,13 +581,24 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
         builder->SetInsertPoint(destructor_block);
         // The first instruction in the destructor block is a phi node
         // that collects the error code.
-        Value *error_code = builder->CreatePHI(i32, 0);
+        PHINode *error_code = builder->CreatePHI(i32, 0);
 
         // Calls to destructors will get inserted here.
 
         // The last instruction is the return op that returns it.
         builder->CreateRet(error_code);
+
+        // Create a dead block that branches to the destructor block
+        // so that the phi node has at least one incoming edge even if
+        // there are no destructors.
+        BasicBlock *pre_destructor_block = BasicBlock::Create(*context, "pre_destructor_block", function);
+        builder->SetInsertPoint(pre_destructor_block);
+        builder->CreateBr(destructor_block);
+        error_code->addIncoming(ConstantInt::get(i32, 0), pre_destructor_block);
+
+        // Jump back to where we were.
         builder->restoreIP(here);
+
     }
     internal_assert(destructor_block->getParent() == function);
     return destructor_block;
