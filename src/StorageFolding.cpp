@@ -55,8 +55,6 @@ public:
 class AttemptStorageFoldingOfFunction : public IRMutator {
     string func;
 
-    Scope<Interval> scope;
-
     using IRMutator::visit;
 
     void visit(const Pipeline *op) {
@@ -65,23 +63,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             stmt = op;
         } else {
             IRMutator::visit(op);
-        }
-    }
-
-    void visit(const LetStmt *op) {
-        // Include constant lets in the bounds scope.
-        Stmt body;
-        if (is_const(op->value)) {
-            scope.push(op->name, Interval(op->value, op->value));
-            body = mutate(op->body);
-            scope.pop(op->name);
-        } else {
-            body = mutate(op->body);
-        }
-        if (body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = LetStmt::make(op->name, op->value, body);
         }
     }
 
@@ -117,6 +98,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                 // The max of the extent over all values of the loop variable must be a constant
                 Expr extent = simplify(max - min);
+                Scope<Interval> scope;
                 scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
                                               Variable::make(Int(32), op->name + ".loop_max")));
                 Expr max_extent = bounds_of_expr_in_scope(extent, scope).max;
@@ -250,8 +232,44 @@ class StorageFolding : public IRMutator {
     }
 };
 
+// Because storage folding runs before simplification, it's useful to
+// at least substitute in constants before running it, and also simplify the RHS of Let Stmts.
+class SubstituteInConstants : public IRMutator {
+    using IRMutator::visit;
+
+    Scope<Expr> scope;
+    void visit(const LetStmt *op) {
+        Expr value = simplify(mutate(op->value));
+
+        Stmt body;
+        if (is_const(value)) {
+            scope.push(op->name, value);
+            body = mutate(op->body);
+            scope.pop(op->name);
+        } else {
+            body = mutate(op->body);
+        }
+
+        if (body.same_as(op->body) && value.same_as(op->value)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, value, body);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (scope.contains(op->name)) {
+            expr = scope.get(op->name);
+        } else {
+            expr = op;
+        }
+    }
+};
+
 Stmt storage_folding(Stmt s) {
-    return StorageFolding().mutate(s);
+    s = SubstituteInConstants().mutate(s);
+    s = StorageFolding().mutate(s);
+    return s;
 }
 
 }

@@ -596,6 +596,18 @@ private:
         } else if (max_a && max_b && equal(max_a->a, max_b->b) && equal(max_a->b, max_b->a)) {
             // max(a, b) - max(b, a) -> 0
             expr = make_zero(op->type);
+        } else if (min_a && min_b && is_zero(simplify((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
+            // min(a, b) - min(c, d) where a-b == c-d -> b - d
+            expr = mutate(min_a->b - min_b->b);
+        } else if (max_a && max_b && is_zero(simplify((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
+            // max(a, b) - max(c, d) where a-b == c-d -> b - d
+            expr = mutate(max_a->b - max_b->b);
+        } else if (min_a && min_b && is_zero(simplify((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
+            // min(a, b) - min(c, d) where a-b == d-c -> b - c
+            expr = mutate(min_a->b - min_b->a);
+        } else if (max_a && max_b && is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
+            // max(a, b) - max(c, d) where a-b == d-c -> b - c
+            expr = mutate(max_a->b - max_b->a);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2957,6 +2969,11 @@ void simplify_test() {
     check(max(likely(x), x), likely(x));
     check(select(x > y, likely(x), x), likely(x));
     check(select(x > y, x, likely(x)), likely(x));
+
+    check(min(x + 1, y) - min(x, y - 1), 1);
+    check(max(x + 1, y) - max(x, y - 1), 1);
+    check(min(x + 1, y) - min(y - 1, x), 1);
+    check(max(x + 1, y) - max(y - 1, x), 1);
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
