@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     in.extent[1] = 64;
     in.stride[1] = 64;
 
-    out.host = (uint8_t *)malloc(64*4);
+    out.host = (uint8_t *)malloc(64*64*4);
     out.elem_size = 4;
     out.extent[0] = 64;
     out.stride[0] = 1;
