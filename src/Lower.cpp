@@ -37,6 +37,7 @@
 #include "Func.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "InjectCoordinatesIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
@@ -1905,10 +1906,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Injecting OpenGL texture intrinsics...\n";
-        s = inject_opengl_intrinsics(s);
-        debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
+    if (t.has_coordinates_feature()) {
+        debug(1) << "Injecting coordinates intrinsics...\n";
+        s = inject_coordinates_intrinsics(s);
+        debug(2) << "Lowering after coordinates intrinsics:\n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";
@@ -1919,6 +1920,12 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
+    }
+
+    if (t.has_feature(Target::OpenGL)) {
+        debug(1) << "Injecting OpenGL texture intrinsics...\n";
+        s = inject_opengl_intrinsics(s);
+        debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
     if (t.has_gpu_feature()) {

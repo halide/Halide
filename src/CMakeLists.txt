@@ -282,6 +282,7 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   Image.h
+  InjectCoordinatesIntrinsics.h
   InjectHostDevBufferCopies.h
   InjectOpenGLIntrinsics.h
   Inline.h
@@ -398,6 +399,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   Image.cpp
+  InjectCoordinatesIntrinsics.cpp
   InjectHostDevBufferCopies.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp

@@ -390,6 +390,8 @@ struct Call : public ExprNode<Call> {
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
+        coordinates_load,
+        coordinates_store,
         make_struct,
         stringify,
         memoize_expr,
