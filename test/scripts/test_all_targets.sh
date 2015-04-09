@@ -75,9 +75,9 @@ if [[ `uname` == Darwin ]]; then
     export CC="clang"
     export LLVMS="trunk release-3.5 release-3.6 pnacl"
 else
-    export CXX="g++"
-    export GXX="g++"
-    export CC="gcc"
+    export CXX="g++-4.8"
+    export GXX="g++-4.8"
+    export CC="gcc-4.8"
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
     export LLVMS="release-3.5 trunk release-3.6 pnacl"
 fi
@@ -176,7 +176,7 @@ for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
         TARGETS="x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     elif [[ "$LLVM" == trunk ]]; then
-        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx cuda opencl"
+        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx host-cuda host-opencl"
     else
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx"
     fi
