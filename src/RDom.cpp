@@ -67,7 +67,9 @@ void RDom::init_vars(string name) {
 }
 
 RDom::RDom(ReductionDomain d) : dom(d) {
-    init_vars("");
+    if (d.defined()) {
+        init_vars("");
+    }
 }
 
 RDom::RDom(const std::vector<std::pair<Expr, Expr> > &ranges, string name) {

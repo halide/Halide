@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 #include <limits>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
             int scan_count = sscanf(messages[i].c_str(), "%lld the answer is %f unsigned %llu",
                                     &square, &forty_two, &one_forty_five);
             assert(scan_count == 3);
-            assert(square == i * i);
+            assert(square == static_cast<long long>(i * i));
             assert(forty_two == 42.0f);
             assert(one_forty_five == 145);
         }
@@ -145,7 +145,7 @@ int main(int argc, char **argv) {
         f.set_custom_print(halide_print);
         Image<float> imf = f.realize(N);
 
-        assert(messages.size() == N);
+        assert(messages.size() == (size_t)N);
 
         char correct[1024];
         for (int i = 0; i < N; i++) {
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
         g.set_custom_print(halide_print);
         Image<double> img = g.realize(N);
 
-        assert(messages.size() == N);
+        assert(messages.size() == (size_t)N);
 
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%e\n", img(i));

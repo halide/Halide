@@ -3,7 +3,7 @@
 #include <string.h>
 #include <fstream>
 
-#ifdef WIN32
+#ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -15,15 +15,15 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "StmtCompiler.h"
-#include "CodeGen_C.h"
 #include "Image.h"
 #include "Param.h"
 #include "Debug.h"
-#include "Target.h"
 #include "IREquality.h"
 #include "HumanReadableStmt.h"
-#include "StmtToHtml.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "Output.h"
+#include "LLVM_Output.h"
 
 namespace Halide {
 
@@ -49,7 +49,7 @@ vector<Argument> add_user_context_arg(vector<Argument> args, const Target& targe
         internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
     }
     if (target.has_feature(Target::UserContext)) {
-        args.insert(args.begin(), Argument("__user_context", false, Halide::Handle()));
+        args.insert(args.begin(), Argument("__user_context", Argument::InputScalar, Halide::Handle(), 0));
     }
     return args;
 }
@@ -57,54 +57,22 @@ vector<Argument> add_user_context_arg(vector<Argument> args, const Target& targe
 }  // namespace
 
 Func::Func(const string &name) : func(unique_name(name)),
-                                 error_handler(NULL),
-                                 custom_malloc(NULL),
-                                 custom_free(NULL),
-                                 custom_do_par_for(NULL),
-                                 custom_do_task(NULL),
-                                 custom_trace(NULL),
-                                 custom_print(NULL),
-                                 cache_size(0),
                                  random_seed(0),
                                  jit_user_context(make_user_context()) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
-               error_handler(NULL),
-               custom_malloc(NULL),
-               custom_free(NULL),
-               custom_do_par_for(NULL),
-               custom_do_task(NULL),
-               custom_trace(NULL),
-               custom_print(NULL),
-               cache_size(0),
                random_seed(0),
                jit_user_context(make_user_context()) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
-                     error_handler(NULL),
-                     custom_malloc(NULL),
-                     custom_free(NULL),
-                     custom_do_par_for(NULL),
-                     custom_do_task(NULL),
-                     custom_trace(NULL),
-                     custom_print(NULL),
-                     cache_size(0),
                      random_seed(0),
                      jit_user_context(make_user_context()) {
     (*this)(_) = e;
 }
 
 Func::Func(Function f) : func(f),
-                         error_handler(NULL),
-                         custom_malloc(NULL),
-                         custom_free(NULL),
-                         custom_do_par_for(NULL),
-                         custom_do_task(NULL),
-                         custom_trace(NULL),
-                         custom_print(NULL),
-                         cache_size(0),
                          random_seed(0),
                          jit_user_context(make_user_context()) {
 }
@@ -368,7 +336,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && Var::is_implicit(var->name))
+        if (var && var->name == _.name())
             break;
         iter++;
     }
@@ -402,7 +370,7 @@ const std::string &Stage::name() const {
     return stage_name;
 }
 
-void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
+void Stage::set_dim_type(VarOrRVar var, ForType t) {
     bool found = false;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -412,7 +380,7 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
+            if (!dims[i].pure && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
                 user_assert(schedule.allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -427,8 +395,8 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
 
-        } else if (t == For::Vectorized) {
-            user_assert(dims[i].for_type != For::Vectorized)
+        } else if (t == ForType::Vectorized) {
+            user_assert(dims[i].for_type != ForType::Vectorized)
                 << "In schedule for " << stage_name
                 << ", can't vectorize across " << var.name()
                 << " because Func is already vectorized across " << dims[i].var << "\n";
@@ -440,6 +408,26 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
                    << ", could not find dimension "
                    << var.name()
                    << " to mark as " << t
+                   << " in vars for function\n"
+                   << dump_argument_list();
+    }
+}
+
+void Stage::set_dim_device_api(VarOrRVar var, DeviceAPI device_api) {
+    bool found = false;
+    vector<Dim> &dims = schedule.dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, var.name())) {
+            found = true;
+            dims[i].device_api = device_api;
+        }
+    }
+
+    if (!found) {
+        user_error << "In schedule for " << stage_name
+                   << ", could not find dimension "
+                   << var.name()
+                   << " to set to device API " << static_cast<int>(device_api)
                    << " in vars for function\n"
                    << dump_argument_list();
     }
@@ -679,22 +667,22 @@ Stage &Stage::allow_race_conditions() {
 }
 
 Stage &Stage::serial(VarOrRVar var) {
-    set_dim_type(var, For::Serial);
+    set_dim_type(var, ForType::Serial);
     return *this;
 }
 
 Stage &Stage::parallel(VarOrRVar var) {
-    set_dim_type(var, For::Parallel);
+    set_dim_type(var, ForType::Parallel);
     return *this;
 }
 
 Stage &Stage::vectorize(VarOrRVar var) {
-    set_dim_type(var, For::Vectorized);
+    set_dim_type(var, ForType::Vectorized);
     return *this;
 }
 
 Stage &Stage::unroll(VarOrRVar var) {
-    set_dim_type(var, For::Unrolled);
+    set_dim_type(var, ForType::Unrolled);
     return *this;
 }
 
@@ -774,7 +762,7 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size, con
         user_assert(found)
             << "In schedule for " << stage.name()
             << ", could not find var " << vars[i].name()
-            << " to reorder in the argumemt list.\n"
+            << " to reorder in the argument list.\n"
             << stage.dump_argument_list();
     }
 
@@ -869,79 +857,94 @@ Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrR
 
 #endif // Can't have C++11 arbitrary number of args support
 
-Stage &Stage::gpu_threads(VarOrRVar tx, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
     parallel(tx);
     rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
     parallel(tx);
     parallel(ty);
     rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__thread_id_y", tx.is_rvar));
+    rename(ty, VarOrRVar("__thread_id_y", ty.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
+    set_dim_device_api(tz, device_api);
     parallel(tx);
     parallel(ty);
     parallel(tz);
     rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__thread_id_y", tx.is_rvar));
-    rename(tz, VarOrRVar("__thread_id_z", tx.is_rvar));
+    rename(ty, VarOrRVar("__thread_id_y", ty.is_rvar));
+    rename(tz, VarOrRVar("__thread_id_z", tz.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_blocks(VarOrRVar tx, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
     parallel(tx);
     rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
     parallel(tx);
     parallel(ty);
     rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__block_id_y", tx.is_rvar));
+    rename(ty, VarOrRVar("__block_id_y", ty.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
+    set_dim_device_api(tz, device_api);
     parallel(tx);
     parallel(ty);
     parallel(tz);
     rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__block_id_y", tx.is_rvar));
-    rename(tz, VarOrRVar("__block_id_z", tx.is_rvar));
+    rename(ty, VarOrRVar("__block_id_y", ty.is_rvar));
+    rename(tz, VarOrRVar("__block_id_z", tz.is_rvar));
     return *this;
 }
 
-Stage &Stage::gpu_single_thread(GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_single_thread(DeviceAPI device_api) {
     split(Var::outermost(), Var::outermost(), Var::gpu_blocks(), 1);
+    set_dim_device_api(Var::gpu_blocks(), device_api);
     parallel(Var::gpu_blocks());
     return *this;
 }
 
-Stage &Stage::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu(VarOrRVar bx, VarOrRVar tx, DeviceAPI device_api) {
     return gpu_blocks(bx).gpu_threads(tx);
 }
 
 Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by,
-                  VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
+                  VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     return gpu_blocks(bx, by).gpu_threads(tx, ty);
 }
 
 Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
                   VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                  GPUAPI /* gpu_api */) {
+                  DeviceAPI device_api) {
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, GPUAPI /* gpu_api */) {
+Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, DeviceAPI device_api) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         tx("__thread_id_x", x.is_rvar);
     split(x, bx, tx, x_size);
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(tx, device_api);
     parallel(bx);
     parallel(tx);
     return *this;
@@ -950,12 +953,16 @@ Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, GPUAPI /* gpu_api */) {
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
                        Expr x_size, Expr y_size,
-                       GPUAPI /* gpu_api */) {
+                       DeviceAPI device_api) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         by("__block_id_y", y.is_rvar),
         tx("__thread_id_x", x.is_rvar),
         ty("__thread_id_y", y.is_rvar);
     tile(x, y, bx, by, tx, ty, x_size, y_size);
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(by, device_api);
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
     parallel(bx);
     parallel(by);
     parallel(tx);
@@ -965,7 +972,7 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        Expr x_size, Expr y_size, Expr z_size,
-                       GPUAPI /* gpu_api */) {
+                       DeviceAPI device_api) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         by("__block_id_y", y.is_rvar),
         bz("__block_id_z", z.is_rvar),
@@ -983,6 +990,12 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     // tx ty tz by bx bz
     reorder(bx, by);
     // tx ty tz bx by bz
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(by, device_api);
+    set_dim_device_api(bz, device_api);
+    set_dim_device_api(tx, device_api);
+    set_dim_device_api(ty, device_api);
+    set_dim_device_api(tz, device_api);
     parallel(bx);
     parallel(by);
     parallel(bz);
@@ -1176,81 +1189,81 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
 
 #endif // Can't have C++11 arbitrary number of args support
 
-Func &Func::gpu_threads(VarOrRVar tx, GPUAPI gpu_api) {
+Func &Func::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_threads(tx, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, device_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_threads(tx, ty, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, ty, device_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_threads(tx, ty, tz, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, ty, tz, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, GPUAPI gpu_api) {
+Func &Func::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_blocks(bx, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, GPUAPI gpu_api) {
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_blocks(bx, by, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, by, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, GPUAPI gpu_api) {
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_blocks(bx, by, bz, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, by, bz, device_api);
     return *this;
 }
 
-Func &Func::gpu_single_thread(GPUAPI gpu_api) {
+Func &Func::gpu_single_thread(DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_single_thread(gpu_api);
+    Stage(func.schedule(), name()).gpu_single_thread(device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI gpu_api) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu(bx, tx, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, tx, device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu(bx, by, tx, ty, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, by, tx, ty, device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu(bx, by, bz, tx, ty, tz, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, by, bz, tx, ty, tz, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api) {
+Func &Func::gpu_tile(VarOrRVar x, int x_size, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_tile(x, x_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, x_size, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_tile(x, y, x_size, y_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, y, x_size, y_size, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, GPUAPI gpu_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.schedule(), name()).gpu_tile(x, y, z, x_size, y_size, z_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, y, z, x_size, y_size, z_size, device_api);
     return *this;
 }
 
@@ -1263,7 +1276,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule(), name()).gpu_blocks(x, y);
+    Stage(func.schedule(), name()).gpu_blocks(x, y, DeviceAPI::GLSL);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
@@ -1425,7 +1438,7 @@ Stage Func::update(int idx) {
 
 void Func::invalidate_cache() {
     lowered = Stmt();
-    compiled_module = JITCompiledModule();
+    compiled_module = JITModule();
 }
 
 Func::operator Stage() const {
@@ -1916,7 +1929,14 @@ private:
     void include_parameter(Internal::Parameter p) {
         if (!p.defined()) return;
         if (already_have(p.name())) return;
-        arg_types.push_back(Argument(p.name(), p.is_buffer(), p.type()));
+        Expr def, min, max;
+        if (!p.is_buffer()) {
+            def = p.get_scalar_expr();
+            min = p.get_min_value();
+            max = p.get_max_value();
+        }
+        arg_types.push_back(Argument(p.name(), p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
+            p.type(), p.dimensions(), def, min, max));
         if (p.is_buffer()) {
             Buffer b = p.get_buffer();
             int idx = (int)arg_values.size();
@@ -1936,7 +1956,7 @@ private:
         if (!b.defined()) return;
         if (already_have(b.name())) return;
         image_args.push_back(make_pair((int)arg_types.size(), b));
-        arg_types.push_back(Argument(b.name(), true, b.type()));
+        arg_types.push_back(Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions()));
         arg_values.push_back(b.raw_buffer());
     }
 
@@ -1974,6 +1994,8 @@ void validate_arguments(const string &output,
     for (size_t i = 0; i < required_args.size(); i++) {
         const Argument &arg = required_args[i];
 
+        internal_assert(arg.is_input()) << "Expected only input Arguments here";
+
         Buffer buf;
         for (size_t j = 0; !buf.defined() && j < infer_args.image_args.size(); j++) {
             if (infer_args.image_args[j].first == (int)i) {
@@ -1997,7 +2019,7 @@ void validate_arguments(const string &output,
         } else if (!found) {
             std::ostringstream err;
             err << "Generated code refers to ";
-            if (arg.is_buffer) err << "image ";
+            if (arg.is_buffer()) err << "image ";
             err << "parameter " << arg.name
                 << ", which was not found in the argument list.\n";
 
@@ -2019,15 +2041,15 @@ void validate_arguments(const string &output,
 // followed by all non-buffers (alphabetical by name).
 struct ArgumentComparator {
     bool operator()(const Argument& a, const Argument& b) {
-        if (a.is_buffer != b.is_buffer)
-            return a.is_buffer;
+        if (a.is_buffer() != b.is_buffer())
+            return a.is_buffer();
         else
             return a.name < b.name;
     }
 };
 }
 
-std::vector<Argument> Func::infer_arguments() const {
+vector<Argument> Func::infer_arguments() const {
     user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
 
     InferArguments infer_args(name(), /*include_buffers*/ false);
@@ -2052,94 +2074,136 @@ void Func::lower(const Target &t) {
     }
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
-                              const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
+Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
+    // TODO: This is a bit of a wart. Right now, IR cannot directly
+    // reference Buffers because neither CodeGen_LLVM nor
+    // CodeGen_C can generate the correct buffer unpacking code.
 
-    args = add_user_context_arg(args, target);
+    // To work around this, we generate two functions. The private
+    // function is one where every buffer referenced is an argument,
+    // and the public function is a wrapper that calls the private
+    // function, passing the global buffers to the private
+    // function. This works because the public function does not
+    // attempt to directly access any of the fields of the buffer.
+
+    string public_name = fn_name.empty() ? name() : fn_name;
+    string private_name = "__" + public_name;
 
     lower(target);
+    Stmt private_body = lowered;
 
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
+    // Get all the arguments/global images referenced in this function.
+    vector<Argument> public_args = add_user_context_arg(args, target);
 
+    vector<Buffer> global_images;
+    validate_arguments(name(), public_args, private_body, global_images);
     for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
+        public_args.push_back(output_buffers()[i]);
+        internal_assert(public_args.back().is_output()) << "Expected only output Arguments here";
     }
 
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_bitcode(filename);
+    // Create a module with all the global images in it.
+    Module module(public_name, target);
+
+    // Add all the global images to the module, and add the global
+    // images used to the private argument list.
+    vector<Argument> private_args = public_args;
+    for (size_t i = 0; i < global_images.size(); i++) {
+        Buffer buf = global_images[i];
+        module.append(buf);
+        private_args.push_back(Argument(buf.name(), Argument::InputBuffer, buf.type(), buf.dimensions()));
+    }
+
+    module.append(LoweredFunc(private_name, private_args, private_body, LoweredFunc::Internal));
+
+    // Generate a call to the private function, adding an arguments
+    // for the global images.
+    vector<Expr> private_params;
+    for (size_t i = 0; i < private_args.size(); i++) {
+        const Argument &arg = private_args[i];
+        if (arg.is_buffer()) {
+            private_params.push_back(Variable::make(type_of<void*>(), arg.name + ".buffer"));
+        } else {
+            private_params.push_back(Variable::make(arg.type, arg.name));
+        }
+    }
+    string private_result_name = unique_name(private_name + "_result", false);
+    Expr private_result_var = Variable::make(Int(32), private_result_name);
+    Expr call_private = Call::make(Int(32), private_name, private_params, Call::Extern);
+    Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
+    public_body = LetStmt::make(private_result_name, call_private, public_body);
+
+    module.append(LoweredFunc(public_name, public_args, public_body, LoweredFunc::External));
+
+    return module;
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
+
+void Func::compile_to(const Outputs &output_files, vector<Argument> args,
+                      const string &fn_name, const Target &target) {
+    user_assert(defined()) << "Can't compile undefined Func.\n";
+
+    Module m = compile_to_module(args, fn_name, target);
+
+    llvm::LLVMContext context;
+    llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
+
+    if (!output_files.object_name.empty()) {
+        if (target.arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.object_name);
+        } else {
+            compile_llvm_module_to_object(llvm_module, output_files.object_name);
+        }
+    }
+    if (!output_files.assembly_name.empty()) {
+        if (target.arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_assembly(llvm_module, output_files.assembly_name);
+        } else {
+            compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
+        }
+    }
+    if (!output_files.bitcode_name.empty()) {
+        compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
+    }
+
+    delete llvm_module;
+}
+
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
+                              const Target &target) {
+    compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
+}
+
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_bitcode(filename, args, "", target);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args,
+void Func::compile_to_object(const string &filename, const vector<Argument> &args,
                              const string &fn_name, const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, false);
+    compile_module_to_object(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_object(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_object(filename, args, "", target);
 }
 
-void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    ofstream header(filename.c_str());
-    CodeGen_C cg(header);
-    cg.compile_header(fn_name.empty() ? name() : fn_name, args);
+void Func::compile_to_header(const string &filename, const vector<Argument> &args, const string &fn_name, const Target &target) {
+    compile_module_to_c_header(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_c(const string &filename, vector<Argument> args,
+void Func::compile_to_c(const string &filename, const vector<Argument> &args,
                         const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    ofstream src(filename.c_str());
-    CodeGen_C cg(src);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+    compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
-    lower(target);
+void Func::compile_to_lowered_stmt(const string &filename, const vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
+    Module m = compile_to_module(args, "", target);
     if (fmt == HTML) {
-        print_to_html(filename, lowered);
+        compile_module_to_html(m, filename);
     } else {
-        ofstream stmt_output(filename.c_str());
-        stmt_output << lowered;
+        compile_module_to_text(m, filename);
     }
 }
-
 
 void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                               Realization dst,
@@ -2173,11 +2237,13 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
 
     Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
 
+    Module m(name(), t);
+    m.append(LoweredFunc(name(), infer_arguments(), s, LoweredFunc::External));
+
     if (fmt == HTML) {
-        print_to_html(filename, s);
+        compile_module_to_html(m, filename);
     } else {
-        ofstream stmt_output(filename.c_str());
-        stmt_output << s;
+        compile_module_to_text(m, filename);
     }
 }
 
@@ -2251,10 +2317,19 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                        std::map<std::string, Expr>(), fmt, t);
 }
 
-void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
+void Func::compile_to_file(const string &filename_prefix, const vector<Argument> &args,
                            const Target &target) {
-    compile_to_header(filename_prefix + ".h", args, filename_prefix, target);
-    compile_to_object(filename_prefix + ".o", args, filename_prefix, target);
+    // Although it is possibly confusing, in order To preserve
+    // existing behavior, we need to pass filename_prefix as the new
+    // function name.
+    Module m = compile_to_module(args, filename_prefix, target);
+    compile_module_to_c_header(m, filename_prefix + ".h");
+
+    if (target.arch == Target::PNaCl) {
+        compile_module_to_llvm_bitcode(m, filename_prefix + ".o");
+    } else {
+        compile_module_to_object(m, filename_prefix + ".o");
+    }
 }
 
 void Func::compile_to_file(const string &filename_prefix, const Target &target) {
@@ -2286,79 +2361,39 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
     compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e), target);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, true);
+    compile_module_to_assembly(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_assembly(filename, args, "", target);
 }
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    error_handler = handler;
-    if (compiled_module.set_error_handler) {
-        compiled_module.set_error_handler(handler);
-    }
+    jit_handlers.custom_error = handler;
 }
 
 void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                 void (*cust_free)(void *, void *)) {
-    custom_malloc = cust_malloc;
-    custom_free = cust_free;
-    if (compiled_module.set_custom_allocator) {
-        compiled_module.set_custom_allocator(cust_malloc, cust_free);
-    }
+    jit_handlers.custom_malloc = cust_malloc;
+    jit_handlers.custom_free = cust_free;
 }
 
 void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    custom_do_par_for = cust_do_par_for;
-    if (compiled_module.set_custom_do_par_for) {
-        compiled_module.set_custom_do_par_for(cust_do_par_for);
-    }
+    jit_handlers.custom_do_par_for = cust_do_par_for;
 }
 
 void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    custom_do_task = cust_do_task;
-    if (compiled_module.set_custom_do_task) {
-        compiled_module.set_custom_do_task(cust_do_task);
-    }
+    jit_handlers.custom_do_task = cust_do_task;
 }
 
-void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
-    custom_trace = t;
-    if (compiled_module.set_custom_trace) {
-        compiled_module.set_custom_trace(t);
-    }
+void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
+    jit_handlers.custom_trace = trace_fn;
 }
 
 void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    custom_print = cust_print;
-    if (compiled_module.set_custom_print) {
-        compiled_module.set_custom_print(custom_print);
-    }
-}
-
-void Func::memoization_cache_set_size(uint64_t size) {
-    cache_size = size;
-    if (compiled_module.memoization_cache_set_size) {
-        compiled_module.memoization_cache_set_size(size);
-    }
+    jit_handlers.custom_print = cust_print;
 }
 
 void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
@@ -2387,7 +2422,10 @@ struct ErrorBuffer {
     enum { MaxBufSize = 4096 };
     char buf[MaxBufSize];
     int end;
-    void (*next_error_handler)(void *user_context, const char *);
+
+    ErrorBuffer() {
+        end = 0;
+    }
 
     void concat(const char *message) {
         size_t len = strlen(message);
@@ -2398,7 +2436,7 @@ struct ErrorBuffer {
         }
 
         // Atomically claim some space in the buffer
-#ifdef WIN32
+#ifdef _MSC_VER
         int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
 #else
         int old_end = __sync_fetch_and_add(&end, len);
@@ -2417,39 +2455,61 @@ struct ErrorBuffer {
         }
     }
 
-    const char *str() const {
-        return buf;
+    std::string str() const {
+        return std::string(buf, end);
     }
 
     static void handler(void *ctx, const char *message) {
         if (ctx) {
-            ErrorBuffer *buf = (ErrorBuffer *)ctx;
+            JITUserContext *ctx1 = (JITUserContext *)ctx;
+            ErrorBuffer *buf = (ErrorBuffer *)ctx1->user_context;
             buf->concat(message);
-            if (buf->next_error_handler) {
-                buf->next_error_handler(ctx, message);
+        }
+    }
+};
+
+struct JITFuncCallContext {
+    ErrorBuffer error_buffer;
+    JITUserContext jit_context;
+    Internal::Parameter &user_context_param;
+
+    JITFuncCallContext(const JITHandlers &handlers, Internal::Parameter &user_context_param)
+        : user_context_param(user_context_param) {
+        void *user_context = NULL;
+        JITHandlers local_handlers = handlers;
+        if (local_handlers.custom_error == NULL) {
+            local_handlers.custom_error = Internal::ErrorBuffer::handler;
+            user_context = &error_buffer;
+        }
+        JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
+        user_context_param.set_scalar(&jit_context);
+    }
+
+    void report_if_error(int exit_status) {
+        if (exit_status) {
+            std::string output = error_buffer.str();
+            if (!output.empty()) {
+                // Only report the errors if no custom error handler was installed
+                halide_runtime_error << error_buffer.str();
+                error_buffer.end = 0;
             }
         }
+    }
+
+    void finalize(int exit_status) {
+        report_if_error(exit_status);
+        user_context_param.set_scalar((void *)NULL); // Don't leave param hanging with pointer to stack.
     }
 };
 
 }  // namespace Internal
 
-bool Func::prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf) {
-    bool has_custom_error_handler = (error_handler != &Internal::ErrorBuffer::handler && error_handler != NULL);
-    memset(buf->buf, 0, Internal::ErrorBuffer::MaxBufSize);
-    buf->end = 0;
-    buf->next_error_handler = has_custom_error_handler ? error_handler : NULL;
-    compiled_module.set_error_handler(Internal::ErrorBuffer::handler);
-    jit_user_context.set_scalar(buf);
-    return has_custom_error_handler;
-}
-
 void Func::realize(Realization dst, const Target &target) {
-    if (!compiled_module.wrapped_function) {
+    if (!compiled_module.argv_function()) {
         compile_jit(target);
     }
 
-    internal_assert(compiled_module.wrapped_function);
+    internal_assert(compiled_module.argv_function());
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2469,14 +2529,7 @@ void Func::realize(Realization dst, const Target &target) {
             << "\" has type " << func.output_types()[i] << ".\n";
     }
 
-    // In case these have changed since the last realization
-    compiled_module.set_error_handler(error_handler);
-    compiled_module.set_custom_allocator(custom_malloc, custom_free);
-    compiled_module.set_custom_do_par_for(custom_do_par_for);
-    compiled_module.set_custom_do_task(custom_do_task);
-    compiled_module.set_custom_trace(custom_trace);
-    compiled_module.set_custom_print(custom_print);
-    compiled_module.memoization_cache_set_size(cache_size);
+    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2500,28 +2553,19 @@ void Func::realize(Realization dst, const Target &target) {
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void * const *)arg_values[i] << ")\n";
         internal_assert(arg_values[i])
             << "An argument to a jitted function is null\n";
     }
 
     // Always add a custom error handler to capture any error messages.
     // (If there is a user-set error handler, it will be called as well.)
-    ErrorBuffer buf;
-    bool has_custom_error_handler = prepare_to_catch_runtime_errors(&buf);
 
     Internal::debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+    int exit_status = compiled_module.argv_function()(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
-    }
-
-    if (exit_status && !has_custom_error_handler) {
-        // Only report the errors if no custom error handler was installed
-        halide_runtime_error << buf.str();
-    }
+    jit_context.finalize(exit_status);
 }
 
 void Func::infer_input_bounds(Buffer dst) {
@@ -2529,12 +2573,13 @@ void Func::infer_input_bounds(Buffer dst) {
 }
 
 void Func::infer_input_bounds(Realization dst) {
-    if (!compiled_module.wrapped_function) {
+    if (!compiled_module.argv_function()) {
         compile_jit();
     }
 
-    internal_assert(compiled_module.wrapped_function);
+    internal_assert(compiled_module.argv_function());
 
+    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2553,15 +2598,6 @@ void Func::infer_input_bounds(Realization dst) {
             << ", but Func \"" << name()
             << "\" has type " << func.output_types()[i] << ".\n";
     }
-
-    // In case these have changed since the last realization
-    compiled_module.set_error_handler(error_handler);
-    compiled_module.set_custom_allocator(custom_malloc, custom_free);
-    compiled_module.set_custom_do_par_for(custom_do_par_for);
-    compiled_module.set_custom_do_task(custom_do_task);
-    compiled_module.set_custom_trace(custom_trace);
-    compiled_module.set_custom_print(custom_print);
-    compiled_module.memoization_cache_set_size(cache_size);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2589,7 +2625,7 @@ void Func::infer_input_bounds(Realization dst) {
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void * const *)arg_values[i] << ")\n";
         internal_assert(arg_values[i]) << "An argument to a jitted function is null.\n";
     }
 
@@ -2608,23 +2644,15 @@ void Func::infer_input_bounds(Realization dst) {
     const int max_iters = 16;
     int iter = 0;
 
-    // Always add a custom error handler to capture any error messages.
-    // (If there is a user-set error handler, it will be called as well.)
-    ErrorBuffer buf;
-    bool has_custom_error_handler = prepare_to_catch_runtime_errors(&buf);
-
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers we expect to be mutated
         for (size_t j = 0; j < tracked_buffers.size(); j++) {
             old_buffer[j] = *tracked_buffers[j];
         }
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+        int exit_status = compiled_module.argv_function()(&(arg_values[0]));
 
-        if (exit_status && !has_custom_error_handler) {
-            // Only report the errors if no custom error handler was installed
-            halide_runtime_error << buf.str();
-        }
+        jit_context.report_if_error(exit_status);
 
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
@@ -2639,6 +2667,9 @@ void Func::infer_input_bounds(Realization dst) {
             break;
         }
     }
+
+    jit_context.finalize(0);
+
     user_assert(iter < max_iters)
         << "Inferring input bounds on Func \"" << name() << "\""
         << " didn't converge after " << max_iters
@@ -2691,14 +2722,14 @@ void Func::infer_input_bounds(Realization dst) {
             image_param_args[i].second.set_buffer(buffer);
         }
     }
-
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
-    }
 }
 
-void *Func::compile_jit(const Target &target) {
+void *Func::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Can't jit-compile undefined Func.\n";
+
+    Target target(target_arg);
+    target.set_feature(Target::JIT);
+    target.set_feature(Target::UserContext);
 
     lower(target);
 
@@ -2713,14 +2744,13 @@ void *Func::compile_jit(const Target &target) {
 
     arg_values = infer_args.arg_values;
 
-
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
         if (func.outputs() > 1) {
             buffer_name = buffer_name + '.' + int_to_string(i);
         }
         Type t = func.output_types()[i];
-        Argument me(buffer_name, true, t);
+        Argument me(buffer_name, Argument::OutputBuffer, t, dimensions());
         infer_args.arg_types.push_back(me);
         arg_values.push_back(NULL); // A spot to put the address of this output buffer
     }
@@ -2730,12 +2760,8 @@ void *Func::compile_jit(const Target &target) {
     for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
         Internal::debug(2) << infer_args.arg_types[i].name << ", "
                            << infer_args.arg_types[i].type << ", "
-                           << infer_args.arg_types[i].is_buffer << "\n";
+                           << infer_args.arg_types[i].is_buffer() << "\n";
     }
-
-    Target t = target;
-    t.set_feature(Target::JIT);
-    StmtCompiler cg(t);
 
     // Sanitise the name of the generated function
     string n = name();
@@ -2745,18 +2771,18 @@ void *Func::compile_jit(const Target &target) {
         }
     }
 
-    cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+    // Make a module.
+    Module module(name(), target.with_feature(Target::JIT));
+    LoweredFunc lfn(n, infer_args.arg_types, lowered, LoweredFunc::External);
+    module.append(lfn);
 
     if (debug::debug_level >= 3) {
-        cg.compile_to_native(name() + ".s", true);
-        cg.compile_to_bitcode(name() + ".bc");
-        ofstream stmt_debug((name() + ".stmt").c_str());
-        stmt_debug << lowered;
+        compile_module_to_native(module, name() + ".bc", name() + ".s");
+        compile_module_to_text(module, name() + ".stmt");
     }
 
-    compiled_module = cg.compile_to_function_pointers();
-
-    return compiled_module.function;
+    compiled_module = JITModule(module, lfn);
+    return compiled_module.main_function();
 }
 
 void Func::test() {
@@ -2794,6 +2820,6 @@ void Func::test() {
 
 EXPORT Var _("_");
 EXPORT Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
-                 _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
+           _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }

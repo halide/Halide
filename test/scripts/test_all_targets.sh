@@ -18,9 +18,9 @@ mkdir -p testing/deps
 if [[ ! -f testing/deps/libpng32.a ]]; then
     cd testing/deps
     echo Acquiring and building libpng
-    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.14/lpng1614.zip/download -o lpng1614.zip || exit 1
-    unzip -n lpng1614.zip
-    cd lpng1614
+    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.16/lpng1616.zip/download -o lpng1616.zip || exit 1
+    unzip -n lpng1616.zip
+    cd lpng1616
     if [[ `uname` == Darwin ]]; then
         make -f scripts/makefile.darwin clean
         make -f scripts/makefile.darwin ARCH="-arch i386 -arch x86_64" || exit 1
@@ -73,19 +73,14 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -stdlib=libc++"
     export GXX="clang++ -stdlib=libc++"
     export CC="clang"
-    export LLVMS="trunk release-3.5 release-3.4 pnacl"
+    export LLVMS="trunk release-3.5 release-3.6 pnacl"
 else
-    export CXX="g++"
-    export GXX="g++"
-    export CC="gcc"
+    export CXX="g++-4.8"
+    export GXX="g++-4.8"
+    export CC="gcc-4.8"
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
-    export LLVMS="release-3.5 trunk release-3.4 pnacl"
+    export LLVMS="release-3.5 trunk release-3.6 pnacl"
 fi
-
-
-# We also need the nacl sdk. For now we assume the existence under ~/nacl_sdk
-export NATIVE_CLIENT_X86_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_x86_glibc/x86_64-nacl/include/
-export NATIVE_CLIENT_ARM_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_arm_newlib/include/
 
 # link testing/reports/head to the current head
 rm -rf testing/reports/head/*
@@ -96,25 +91,29 @@ ln -s ${HEAD} testing/reports/head
 for LLVM in ${LLVMS}; do
 
     if [[ "$LLVM" == pnacl ]]; then
-        LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
-        CLANG_REPO=http://git.chromium.org/native_client/pnacl-clang.git
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_REPO=https://chromium.googlesource.com/native_client/pnacl-llvm.git
+        CLANG_REPO=https://chromium.googlesource.com/native_client/pnacl-clang.git
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == trunk ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.3 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.4 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.5 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+    elif [[ "$LLVM" == release-3.6 ]]; then
+        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_36
+        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_36
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     fi
 
     # Check out llvm if necessary
@@ -175,9 +174,9 @@ pwd
 
 for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
-        TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
+        TARGETS="x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     elif [[ "$LLVM" == trunk ]]; then
-        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx opencl"
+        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx host-cuda host-opencl"
     else
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx"
     fi

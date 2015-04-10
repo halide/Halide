@@ -13,11 +13,6 @@
 #include "Type.h"
 #include "Util.h"
 
-namespace llvm {
-class Module;
-class LLVMContext;
-}
-
 namespace Halide {
 
 /** A struct representing a target machine and os to generate code for. */
@@ -49,6 +44,7 @@ struct Target {
         F16C,  ///< Enable x86 16-bit float support
 
         ARMv7s,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+        NoNEON,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
 
         CUDA,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
         CUDACapability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
@@ -248,17 +244,6 @@ EXPORT Target get_jit_target_from_environment();
  */
 EXPORT Target parse_target_string(const std::string &target);
 
-namespace Internal {
-
-/** Create an llvm module containing the support code for a given target. */
-llvm::Module *get_initial_module_for_target(Target, llvm::LLVMContext *);
-
-/** Create an llvm module containing the support code for ptx device. */
-llvm::Module *get_initial_module_for_ptx_device(Target, llvm::LLVMContext *c);
-
 }
-
-}
-
 
 #endif

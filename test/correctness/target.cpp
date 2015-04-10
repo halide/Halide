@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 // TODO(zalman): this is ugly. Likely C++11 is the answer...

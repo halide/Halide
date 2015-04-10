@@ -1,6 +1,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdio.h>
 
 #include "Simplify.h"
@@ -323,12 +324,19 @@ private:
                                        select_a->false_value + select_b->false_value));
         } else if (add_a && is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
-            if (is_simple_const(b)) expr = mutate(add_a->a + (add_a->b + b));
-            else expr = mutate((add_a->a + b) + add_a->b);
+            if (is_simple_const(b)) {
+                expr = mutate(add_a->a + (add_a->b + b));
+            } else {
+                expr = mutate((add_a->a + b) + add_a->b);
+            }
         } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a + add_b->a) + add_b->b);
-        } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
-            expr = mutate((sub_a->a + b) - sub_a->b);
+        } else if (sub_a && is_simple_const(sub_a->a)) {
+            if (is_simple_const(b)) {
+                expr = mutate((sub_a->a + b) - sub_a->b);
+            } else {
+                expr = mutate((b - sub_a->b) + sub_a->a);
+            }
 
         } else if (sub_a && equal(b, sub_a->b)) {
             // Additions that cancel an inner term
@@ -339,9 +347,9 @@ private:
         } else if (sub_b && equal(a, sub_b->b)) {
             // a + (b - a)
             expr = sub_b->a;
-        } else if (sub_b && is_zero(sub_b->a)) {
-            // a + (0 - b)
-            expr = a - sub_b->b;
+        } else if (sub_b && is_simple_const(sub_b->a)) {
+            // a + (7 - b) -> (a - b) + 7
+            expr = mutate((a - sub_b->b) + sub_b->a);
         } else if (sub_a && sub_b && equal(sub_a->b, sub_b->a)) {
             // (a - b) + (b - c) -> a - c
             expr = mutate(sub_a->a - sub_b->b);
@@ -456,6 +464,9 @@ private:
         const Min *min_a = a.as<Min>();
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
+
+        const Max *max_a = a.as<Max>();
+        const Max *max_b = b.as<Max>();
 
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
@@ -579,6 +590,24 @@ private:
         } else if (min_a && add_a_b && no_overflow(op->type) && equal(b, add_a_b->b)) {
             // min(c, b + a) - a -> min(b, c-a)
             expr = mutate(min(add_a_b->a, min_a->a - b));
+        } else if (min_a && min_b && equal(min_a->a, min_b->b) && equal(min_a->b, min_b->a)) {
+            // min(a, b) - min(b, a) -> 0
+            expr = make_zero(op->type);
+        } else if (max_a && max_b && equal(max_a->a, max_b->b) && equal(max_a->b, max_b->a)) {
+            // max(a, b) - max(b, a) -> 0
+            expr = make_zero(op->type);
+        } else if (min_a && min_b && is_zero(simplify((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
+            // min(a, b) - min(c, d) where a-b == c-d -> b - d
+            expr = mutate(min_a->b - min_b->b);
+        } else if (max_a && max_b && is_zero(simplify((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
+            // max(a, b) - max(c, d) where a-b == c-d -> b - d
+            expr = mutate(max_a->b - max_b->b);
+        } else if (min_a && min_b && is_zero(simplify((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
+            // min(a, b) - min(c, d) where a-b == d-c -> b - c
+            expr = mutate(min_a->b - min_b->a);
+        } else if (max_a && max_b && is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
+            // max(a, b) - max(c, d) where a-b == d-c -> b - c
+            expr = mutate(max_a->b - max_b->a);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -889,6 +918,8 @@ private:
         const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
+        const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
 
         min_a_a = max_a ? max_a->a.as<Min>() : min_a_a;
 
@@ -1075,6 +1106,14 @@ private:
             } else {
                 expr = mutate(max(mul_a->a, ib/ia) * ia);
             }
+        } else if (call_a && call_a->name == Call::likely && call_a->call_type == Call::Intrinsic &&
+                   equal(call_a->args[0], b)) {
+            // min(likely(b), b) -> likely(b)
+            expr = a;
+        } else if (call_b && call_b->name == Call::likely && call_b->call_type == Call::Intrinsic &&
+                   equal(call_b->args[0], a)) {
+            // min(a, likely(a)) -> likely(a)
+            expr = b;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1109,6 +1148,8 @@ private:
         const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : NULL;
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
+        const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
 
         if (equal(a, b)) {
             expr = a;
@@ -1275,6 +1316,14 @@ private:
             } else {
                 expr = mutate(min(mul_a->a, ib/ia) * ia);
             }
+        } else if (call_a && call_a->name == Call::likely && call_a->call_type == Call::Intrinsic &&
+                   equal(call_a->args[0], b)) {
+            // max(likely(b), b) -> likely(b)
+            expr = a;
+        } else if (call_b && call_b->name == Call::likely && call_b->call_type == Call::Intrinsic &&
+                   equal(call_b->args[0], a)) {
+            // max(a, likely(a)) -> likely(a)
+            expr = b;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1386,8 +1435,9 @@ private:
         const Min *min_b = b.as<Min>();
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
+        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
 
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
 
         if (delta.type() == Int(32) && !is_const(delta)) {
             Interval i = bounds_of_expr_in_scope(delta, bounds_info);
@@ -1514,6 +1564,15 @@ private:
                 } else {
                     expr = LT::make(a, b);
                 }
+            } else if (mul_a && div_a_a && add_b &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_b->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib && ia <= -ic &&
+                       equal(div_a_a->a, add_b->a)) {
+                // (x/c1)*c1 < x + c2 where c1 <= -c2 -> false
+                expr = const_false();
             } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
                 expr = const_true(delta_ramp->width);
@@ -1711,6 +1770,9 @@ private:
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
 
+        const Call *ct = true_value.as<Call>();
+        const Call *cf = false_value.as<Call>();
+
         if (is_zero(condition)) {
             expr = false_value;
         } else if (is_one(condition)) {
@@ -1726,6 +1788,14 @@ private:
         } else if (const LE *le = condition.as<LE>()) {
             // Normalize select(a <= b, c, d) to select(b < a, d, c)
             expr = mutate(Select::make(le->b < le->a, false_value, true_value));
+        } else if (ct && ct->name == Call::likely && ct->call_type == Call::Intrinsic &&
+                   equal(ct->args[0], false_value)) {
+            // select(cond, likely(a), a) -> likely(a)
+            expr = true_value;
+        } else if (cf && cf->name == Call::likely && cf->call_type == Call::Intrinsic &&
+                   equal(cf->args[0], true_value)) {
+            // select(cond, a, likely(a)) -> likely(a)
+            expr = false_value;
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
@@ -1771,6 +1841,16 @@ private:
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
 
+        // If both sides are no-ops, bail out.
+        if (is_no_op(then_case) && is_no_op(else_case)) {
+            stmt = then_case;
+            return;
+        }
+
+        // Remember the statements before substitution.
+        Stmt then_nosubs = then_case;
+        Stmt else_nosubs = else_case;
+
         // Mine the condition for useful constraints to apply (eg var == value && bool_param).
         std::vector<Expr> stack;
         stack.push_back(condition);
@@ -1778,21 +1858,6 @@ private:
         while (!stack.empty()) {
             Expr next = stack.back();
             stack.pop_back();
-            if (const And *a = next.as<And>()) {
-                if (!or_chain) {
-                    stack.push_back(a->b);
-                    stack.push_back(a->a);
-                    and_chain = true;
-                }
-                continue;
-            } else if (const Or *o = next.as<Or>()) {
-                if (!and_chain) {
-                    stack.push_back(o->b);
-                    stack.push_back(o->a);
-                    or_chain = true;
-                }
-                continue;
-            }
 
             if (!or_chain) {
                 then_case = substitute(next, const_true(), then_case);
@@ -1801,35 +1866,54 @@ private:
                 else_case = substitute(next, const_false(), else_case);
             }
 
-            const EQ *eq = next.as<EQ>();
-            const NE *ne = next.as<NE>();
-            const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
-
-            if (eq && var) {
+            if (const And *a = next.as<And>()) {
                 if (!or_chain) {
-                    then_case = substitute(var->name, eq->b, then_case);
+                    stack.push_back(a->b);
+                    stack.push_back(a->a);
+                    and_chain = true;
                 }
-                if (!and_chain && eq->b.type().is_bool()) {
-                    else_case = substitute(var->name, !eq->b, then_case);
-                }
-            } else if (var) {
-                if (!or_chain) {
-                    then_case = substitute(var->name, const_true(), then_case);
-                }
+            } else if (const Or *o = next.as<Or>()) {
                 if (!and_chain) {
-                    else_case = substitute(var->name, const_false(), else_case);
+                    stack.push_back(o->b);
+                    stack.push_back(o->a);
+                    or_chain = true;
                 }
-            } else if (eq && is_const(eq->b) && !or_chain) {
-                // some_expr = const
-                then_case = substitute(eq->a, eq->b, then_case);
-            } else if (ne && is_const(ne->b) && !and_chain) {
-                // some_expr != const
-                else_case = substitute(ne->a, ne->b, else_case);
+            } else {
+                const EQ *eq = next.as<EQ>();
+                const NE *ne = next.as<NE>();
+                const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
+
+                if (eq && var) {
+                    if (!or_chain) {
+                        then_case = substitute(var->name, eq->b, then_case);
+                    }
+                    if (!and_chain && eq->b.type().is_bool()) {
+                        else_case = substitute(var->name, !eq->b, then_case);
+                    }
+                } else if (var) {
+                    if (!or_chain) {
+                        then_case = substitute(var->name, const_true(), then_case);
+                    }
+                    if (!and_chain) {
+                        else_case = substitute(var->name, const_false(), else_case);
+                    }
+                } else if (eq && is_const(eq->b) && !or_chain) {
+                    // some_expr = const
+                    then_case = substitute(eq->a, eq->b, then_case);
+                } else if (ne && is_const(ne->b) && !and_chain) {
+                    // some_expr != const
+                    else_case = substitute(ne->a, ne->b, else_case);
+                }
             }
         }
 
-        then_case = mutate(then_case);
-        else_case = mutate(else_case);
+        // If substitutions have been made, simplify again.
+        if (!then_case.same_as(then_nosubs)) {
+            then_case = mutate(then_case);
+        }
+        if (!else_case.same_as(else_nosubs)) {
+            else_case = mutate(else_case);
+        }
 
         if (condition.same_as(op->condition) &&
             then_case.same_as(op->then_case) &&
@@ -1913,6 +1997,20 @@ private:
                 expr = a << b;
             } else {
                 expr = a >> b;
+            }
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::bitwise_and) {
+            Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+            int ib = 0;
+            int bits;
+
+            if (const_castint(b, &ib) &&
+                ((ib < b.type().imax()) && (ib < std::numeric_limits<int>::max()) &&
+                 is_const_power_of_two(ib + 1, &bits))) {
+                  expr = Mod::make(a, ib + 1);
+            } else  if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                expr = op;
+            } else {
+                expr = a & b;
             }
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::abs) {
@@ -2026,7 +2124,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 if (op->name == "floor_f32") expr = std::floor(*f);
                 else if (op->name == "ceil_f32") expr = std::ceil(*f);
-#if __cplusplus > 199711L 
+#if __cplusplus > 199711L
                 else if (op->name == "round_f32") expr = std::nearbyint(*f);
 #endif
                 else if (op->name == "trunc_f32") {
@@ -2226,6 +2324,8 @@ private:
         if (a && is_zero(a->condition)) {
             user_error << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                        << stmt << "\n";
+        } else if (a && is_one(a->condition)) {
+            stmt = Evaluate::make(0);
         }
     }
 
@@ -2248,12 +2348,17 @@ private:
             bounds_info.pop(op->name);
         }
 
+        if (is_no_op(new_body)) {
+            stmt = new_body;
+            return;
+        }
+
         if (op->min.same_as(new_min) &&
             op->extent.same_as(new_extent) &&
             op->body.same_as(new_body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, new_min, new_extent, op->for_type, new_body);
+            stmt = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
         }
     }
 
@@ -2281,6 +2386,22 @@ private:
         IRMutator::visit(op);
     }
 
+    void visit(const Store *op) {
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+
+        const Load *load = value.as<Load>();
+
+        if (load && load->name == op->name && equal(load->index, index)) {
+            // foo[x] = foo[x] is a no-op
+            stmt = Evaluate::make(0);
+        } else if (value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index);
+        }
+    }
+
     void visit(const Block *op) {
         Stmt first = mutate(op->first);
 
@@ -2296,9 +2417,10 @@ private:
             const IfThenElse *if_rest = rest.as<IfThenElse>();
 
             // Check if first is a no-op.
-            const AssertStmt *noop = first.as<AssertStmt>();
-            if (noop && is_const(noop->condition, 1)) {
+            if (is_no_op(first)) {
                 stmt = rest;
+            } else if (is_no_op(rest)) {
+                stmt = first;
             } else if (let_first && let_rest &&
                        equal(let_first->value, let_rest->value)) {
 
@@ -2727,6 +2849,9 @@ void simplify_test() {
     check(min(x + y, y + z), min(x, z) + y);
     check(min(y + x, y + z), min(x, z) + y);
 
+    check(min(x, y) - min(y, x), 0);
+    check(max(x, y) - max(y, x), 0);
+
     check(min(123 - x, 1 - x), 1 - x);
     check(max(123 - x, 1 - x), 123 - x);
 
@@ -2748,7 +2873,7 @@ void simplify_test() {
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);
-#if __cplusplus > 199711L 
+#if __cplusplus > 199711L
     check(round(0.6f), 1.0f);
     check(round(-0.5f), 0.0f);
 #endif
@@ -2834,61 +2959,77 @@ void simplify_test() {
     check(min(x, y) <= x, t);
     check(max(x, y) <  x, f);
 
+    check((x/8)*8 < x - 8, f);
+    check((x/8)*8 < x - 9, f);
+    check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
+
+    check(min(x, likely(x)), likely(x));
+    check(min(likely(x), x), likely(x));
+    check(max(x, likely(x)), likely(x));
+    check(max(likely(x), x), likely(x));
+    check(select(x > y, likely(x), x), likely(x));
+    check(select(x > y, x, likely(x)), likely(x));
+
+    check(min(x + 1, y) - min(x, y - 1), 1);
+    check(max(x + 1, y) - max(x, y - 1), 1);
+    check(min(x + 1, y) - min(y - 1, x), 1);
+    check(max(x + 1, y) - max(y - 1, x), 1);
+
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(x + y),
-                           Evaluate::make(x - y)),
+                           Evaluate::make(z + x + y),
+                           Evaluate::make(z + x - y)),
           IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(9),
-                           Evaluate::make(x - y)));
+                           Evaluate::make(z + 9),
+                           Evaluate::make(z + x - y)));
 
     // Check ored conditions apply to the else case only
     Expr b1 = Variable::make(Bool(), "b1");
     Expr b2 = Variable::make(Bool(), "b2");
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(Select::make(b1, 3, 4) + Select::make(b2, 5, 7)),
-                           Evaluate::make(Select::make(b1, 3, 8) - Select::make(b2, 5, 7))),
+                           Evaluate::make(Select::make(b1, x+3, x+4) + Select::make(b2, x+5, x+7)),
+                           Evaluate::make(Select::make(b1, x+3, x+8) - Select::make(b2, x+5, x+7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(Select::make(b1, 3, 4) + Select::make(b2, 5, 7)),
+                           Evaluate::make(Select::make(b1, x+3, x+4) + Select::make(b2, x+5, x+7)),
                            Evaluate::make(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
     check(IfThenElse::make(b1,
-                           Evaluate::make(Select::make(b1, 3, 4)),
-                           Evaluate::make(Select::make(b1, 5, 8))),
+                           Evaluate::make(Select::make(b1, x, y)),
+                           Evaluate::make(Select::make(b1, z, w))),
           IfThenElse::make(b1,
-                           Evaluate::make(3),
-                           Evaluate::make(8)));
+                           Evaluate::make(x),
+                           Evaluate::make(w)));
 
     check(IfThenElse::make(x < y,
-                           IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(0)),
-                           Evaluate::make(0)),
+                           IfThenElse::make(x < y, Evaluate::make(y), Evaluate::make(x)),
+                           Evaluate::make(x)),
           IfThenElse::make(x < y,
-                           Evaluate::make(1),
-                           Evaluate::make(0)));
+                           Evaluate::make(y),
+                           Evaluate::make(x)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(2)),
-                      IfThenElse::make(x < y, Evaluate::make(3), Evaluate::make(4))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
+                      IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(1), Evaluate::make(3)),
-                           Block::make(Evaluate::make(2), Evaluate::make(4))));
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
+                           Block::make(Evaluate::make(x+2), Evaluate::make(x+4))));
 
     // Check conditions involving entire exprs
     Expr foo = x + 3*y;
     Expr foo_simple = x + y*3;
     check(IfThenElse::make(foo == 17,
-                           Evaluate::make(foo+1),
-                           Evaluate::make(foo+2)),
+                           Evaluate::make(x+foo+1),
+                           Evaluate::make(x+foo+2)),
           IfThenElse::make(foo_simple == 17,
-                           Evaluate::make(18),
-                           Evaluate::make(foo_simple+2)));
+                           Evaluate::make(x+18),
+                           Evaluate::make(x+foo_simple+2)));
 
     check(IfThenElse::make(foo != 17,
-                           Evaluate::make(foo+1),
-                           Evaluate::make(foo+2)),
+                           Evaluate::make(x+foo+1),
+                           Evaluate::make(x+foo+2)),
           IfThenElse::make(foo_simple != 17,
-                           Evaluate::make(foo_simple+1),
-                           Evaluate::make(19)));
+                           Evaluate::make(x+foo_simple+1),
+                           Evaluate::make(x+19)));
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);

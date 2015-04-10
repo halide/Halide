@@ -11,7 +11,7 @@ class UnrollLoops : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *for_loop) {
-        if (for_loop->for_type == For::Unrolled) {
+        if (for_loop->for_type == ForType::Unrolled) {
             // Give it one last chance to simplify to an int
             Expr extent = simplify(for_loop->extent);
             const IntImm *e = extent.as<IntImm>();

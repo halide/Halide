@@ -14,6 +14,7 @@ else()
   add_definitions("-D__STDC_LIMIT_MACROS")
   add_definitions("-D__STDC_CONSTANT_MACROS")
   add_definitions("-std=c++11")
+  add_definitions("-fno-rtti")
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
@@ -72,57 +73,66 @@ endif()
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
 
 set(RUNTIME_CPP
+  android_clock
+  android_host_cpu_count
   android_io
+  android_opengl_context
+  cache
   cuda
+  destructors
+  device_interface
   fake_thread_pool
   gcd_thread_pool
+  gpu_device_selection
   ios_io
-  android_clock
   linux_clock
-  nogpu
+  linux_host_cpu_count
+  linux_opengl_context
+  metadata
+  module_aot_ref_count
+  module_jit_ref_count
+  nacl_host_cpu_count
   opencl
   opengl
-  gpu_device_selection
+  osx_clock
+  osx_host_cpu_count
   osx_opengl_context
-  linux_opengl_context
-  android_opengl_context
   posix_allocator
   posix_clock
-  osx_clock
-  windows_clock
   posix_error_handler
   posix_io
-  ssp
   posix_math
-  posix_thread_pool
-  windows_thread_pool
-  android_host_cpu_count
-  linux_host_cpu_count
-  osx_host_cpu_count
-  tracing
-  write_debug_image
-  windows_cuda
-  windows_opencl
-  windows_io
   posix_print
+  posix_thread_pool
+  ssp
   to_string
-  cache
-  nacl_host_cpu_count)
+  tracing
+  windows_clock
+  windows_cuda
+  windows_io
+  windows_opencl
+  windows_thread_pool
+  write_debug_image
+)
+
 set (RUNTIME_LL
-  arm
   aarch64
+  arm
+  arm_no_neon
+  mips
+  pnacl_math
   posix_math
   ptx_dev
-  x86_avx
-  x86
-  x86_sse41
   win32_math
-  pnacl_math
-  mips)
+  x86
+  x86_avx
+  x86_sse41
+)
 set (RUNTIME_BC
   compute_20
   compute_30
-  compute_35)
+  compute_35
+)
 
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
@@ -141,11 +151,24 @@ set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    # -m64 isn't respected unless we also use a 64-bit target.
-    IF (ARCHS EQUAL 32)
-      set(TARGET "i386-unknown-unknown-unknown")
+    IF (LLVM_VERSION LESS 36)
+      IF (ARCHS EQUAL 32)
+        set(TARGET "i386-unknown-unknown-unknown")
+      ELSE()
+        set(TARGET "x86_64-unknown-unknown-unknown")
+      ENDIF()
     ELSE()
-      set(TARGET "x86_64-unknown-unknown-unknown")
+      IF (ARCHS EQUAL 32)
+        IF (${i} MATCHES "windows_.*")
+          # win32 uses the stdcall calling convention, which is x86-specific
+          set(TARGET "i386-unknown-unknown-unknown")
+        ELSE()
+          set(TARGET "le32-unknown-nacl-unknown")
+        ENDIF()
+      ELSE()
+        # generic 64-bit code
+        set(TARGET "le64-unknown-unknown-unknown")
+      ENDIF()
     ENDIF()
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
     set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
@@ -157,11 +180,11 @@ foreach (i ${RUNTIME_CPP} )
 
     add_custom_command(OUTPUT "${LL_D}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                        COMMENT "${SOURCE} -> ${LL_D}")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
 
     add_custom_command(OUTPUT "${BC_D}"
@@ -215,98 +238,105 @@ add_dependencies(InitialModules
   bitcode2cpp)
 
 set(HEADER_FILES
-  Util.h
-  Type.h
+  AllocationBoundsInference.h
   Argument.h
+  BlockFlattening.h
+  BoundaryConditions.h
   Bounds.h
   BoundsInference.h
   Buffer.h
-  buffer_t.h
+  CSE.h
+  CodeGen_ARM.h
   CodeGen_C.h
-  CodeGen.h
-  CodeGen_X86.h
+  CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
-  CodeGen_PTX_Dev.h
+  CodeGen_LLVM.h
+  CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
   CodeGen_OpenGL_Dev.h
-  CodeGen_GPU_Dev.h
   CodeGen_PNaCl.h
+  CodeGen_PTX_Dev.h
+  CodeGen_Posix.h
+  CodeGen_X86.h
+  Debug.h
+  DebugToFile.h
   Deinterleave.h
   Derivative.h
-  OneToOne.h
+  DeviceInterface.h
+  EarlyFree.h
+  Error.h
+  Expr.h
+  ExprUsesVar.h
   Extern.h
+  FastIntegerDivide.h
   FindCalls.h
   Func.h
   Function.h
-  Image.h
-  InlineReductions.h
-  IntegerDivisionTable.h
-  Introspection.h
-  IntrusivePtr.h
-  IREquality.h
+  Generator.h
+  HumanReadableStmt.h
   IR.h
+  IREquality.h
   IRMatch.h
   IRMutator.h
   IROperator.h
   IRPrinter.h
   IRVisitor.h
-  InjectOpenGLIntrinsics.h
+  Image.h
   InjectHostDevBufferCopies.h
-  JITCompiledModule.h
+  InjectOpenGLIntrinsics.h
+  Inline.h
+  InlineReductions.h
+  IntegerDivisionTable.h
+  Introspection.h
+  IntrusivePtr.h
+  JITModule.h
+  LLVM_Output.h
+  LLVM_Runtime_Linker.h
   Lambda.h
-  Debug.h
+  Lerp.h
   Lower.h
   MainPage.h
+  Memoization.h
+  Module.h
   ModulusRemainder.h
-  Parameter.h
+  ObjectInstanceRegistry.h
+  OneToOne.h
+  Output.h
+  ParallelRVar.h
   Param.h
+  Parameter.h
+  PartitionLoops.h
+  Profiling.h
+  Qualify.h
   RDom.h
+  Random.h
   Reduction.h
+  RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
+  RemoveUndef.h
   Schedule.h
   Scope.h
   Simplify.h
+  SkipStages.h
   SlidingWindow.h
-  StmtCompiler.h
+  Solve.h
+  StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
   Substitute.h
-  Profiling.h
-  Tracing.h
-  UnrollLoops.h
-  Var.h
-  VectorizeLoops.h
-  CodeGen_Posix.h
-  CodeGen_ARM.h
-  DebugToFile.h
-  EarlyFree.h
-  UniquifyVariableNames.h
-  CSE.h
-  Tuple.h
-  Lerp.h
   Target.h
-  SkipStages.h
-  RemoveUndef.h
-  SpecializeClampedRamps.h
-  FastIntegerDivide.h
-  AllocationBoundsInference.h
-  Error.h
-  Inline.h
-  Qualify.h
-  ExprUsesVar.h
-  Random.h
-  ParallelRVar.h
-  BoundaryConditions.h
+  Tracing.h
+  Tuple.h
+  Type.h
   UnifyDuplicateLets.h
-  HumanReadableStmt.h
-  StmtToHtml.h
-  Memoization.h
-  CodeGen_MIPS.h
-  Generator.h 
-  ObjectInstanceRegistry.h
-  BlockFlattening.h
-  LinearSolve.h
-  BranchVisitors.h)
+  UniquifyVariableNames.h
+  UnrollLoops.h
+  Util.h
+  Var.h
+  VaryingAttributes.h
+  VectorizeLoops.h
+  runtime/HalideRuntime.h
+)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -316,101 +346,119 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   DEPENDS build_halide_h ${HEADER_FILES})
 
 file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
-  CodeGen.cpp
-  CodeGen_Internal.cpp
-  CodeGen_X86.cpp
+
+  AllocationBoundsInference.cpp
+  BlockFlattening.cpp
+  BoundaryConditions.cpp
+  Bounds.cpp
+  BoundsInference.cpp
+  Buffer.cpp
+  CSE.cpp
+  CodeGen_ARM.cpp
+  CodeGen_C.cpp
+  CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
-  CodeGen_PTX_Dev.cpp
+  CodeGen_Internal.cpp
+  CodeGen_LLVM.cpp
+  CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
-  CodeGen_GPU_Dev.cpp
-  CodeGen_Posix.cpp
   CodeGen_PNaCl.cpp
-  CodeGen_ARM.cpp
-  IR.cpp
-  IRMutator.cpp
-  IRPrinter.cpp
-  IRVisitor.cpp
-  CodeGen_C.cpp
-  Substitute.cpp
-  ModulusRemainder.cpp
-  Bounds.cpp
+  CodeGen_PTX_Dev.cpp
+  CodeGen_Posix.cpp
+  CodeGen_X86.cpp
+  Debug.cpp
+  Debug.cpp
+  DebugToFile.cpp
+  Deinterleave.cpp
   Derivative.cpp
-  OneToOne.cpp
+  DeviceInterface.cpp
+  EarlyFree.cpp
+  Error.cpp
+  ExprUsesVar.cpp
+  FastIntegerDivide.cpp
   FindCalls.cpp
   Func.cpp
-  Simplify.cpp
-  IREquality.cpp
-  Util.cpp
   Function.cpp
-  IROperator.cpp
-  Lower.cpp
-  Debug.cpp
-  Parameter.cpp
-  Reduction.cpp
-  Random.cpp
-  RDom.cpp
-  Profiling.cpp
-  Tracing.cpp
-  StorageFlattening.cpp
-  VectorizeLoops.cpp
-  UnrollLoops.cpp
-  BoundsInference.cpp
-  IRMatch.cpp
-  StmtCompiler.cpp
-  IntegerDivisionTable.cpp
-  SlidingWindow.cpp
-  StorageFolding.cpp
-  InlineReductions.cpp
-  RemoveTrivialForLoops.cpp
-  Deinterleave.cpp
-  DebugToFile.cpp
-  Type.cpp
-  JITCompiledModule.cpp
-  EarlyFree.cpp
-  UniquifyVariableNames.cpp
-  CSE.cpp
-  Tuple.cpp
-  Lerp.cpp
-  Target.cpp
-  SkipStages.cpp
-  RemoveUndef.cpp
-  SpecializeClampedRamps.cpp
-  FastIntegerDivide.cpp
-  AllocationBoundsInference.cpp
-  Inline.cpp
-  Qualify.cpp
-  UnifyDuplicateLets.cpp
-  ExprUsesVar.cpp
-  Introspection.cpp
-  Buffer.cpp
-  Param.cpp
-  Error.cpp
-  Image.cpp
-  Debug.cpp
-  InjectOpenGLIntrinsics.cpp
-  InjectHostDevBufferCopies.cpp
-  Schedule.cpp
   FuseGPUThreadLoops.cpp
-  ParallelRVar.cpp
-  BoundaryConditions.cpp
+  Generator.cpp
   HumanReadableStmt.cpp
-  StmtToHtml.cpp
+  IR.cpp
+  IREquality.cpp
+  IRMatch.cpp
+  IRMutator.cpp
+  IROperator.cpp
+  IRPrinter.cpp
+  IRVisitor.cpp
+  Image.cpp
+  InjectHostDevBufferCopies.cpp
+  InjectOpenGLIntrinsics.cpp
+  Inline.cpp
+  InlineReductions.cpp
+  IntegerDivisionTable.cpp
+  Introspection.cpp
+  JITModule.cpp
+  LLVM_Output.cpp
+  LLVM_Runtime_Linker.cpp
+  Lerp.cpp
+  Lower.cpp
   Memoization.cpp
-  CodeGen_MIPS.cpp
-  Generator.cpp 
+  Module.cpp
+  ModulusRemainder.cpp
   ObjectInstanceRegistry.cpp
-  BlockFlattening.cpp
-  LinearSolve.cpp
-  BranchVisitors.cpp
+  OneToOne.cpp
+  Output.cpp
+  ParallelRVar.cpp
+  Param.cpp
+  Parameter.cpp
+  PartitionLoops.cpp
+  Profiling.cpp
+  Qualify.cpp
+  RDom.cpp
+  Random.cpp
+  Reduction.cpp
+  RemoveDeadAllocations.cpp
+  RemoveTrivialForLoops.cpp
+  RemoveUndef.cpp
+  Schedule.cpp
+  Simplify.cpp
+  SkipStages.cpp
+  SlidingWindow.cpp
+  Solve.cpp
+  StmtToHtml.cpp
+  StorageFlattening.cpp
+  StorageFolding.cpp
+  Substitute.cpp
+  Target.cpp
+  Tracing.cpp
+  Tuple.cpp
+  Type.cpp
+  UnifyDuplicateLets.cpp
+  UniquifyVariableNames.cpp
+  UnrollLoops.cpp
+  Util.cpp
+  VaryingAttributes.cpp
+  VectorizeLoops.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
-  ${HEADER_FILES})
+  ${HEADER_FILES}
+)
 
-target_link_libraries(Halide InitialModules ${LIBS})
+# CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
+# to target_link_libraries. This makes the CMake generation step take a very
+# long time. Instead, since we add the libs to the extra.LinkFileList passed to
+# Xcode below it is not necessary to pass them to target_link_libraries as well.
+if (XCODE)
+  target_link_libraries(Halide InitialModules)
+else()
+  target_link_libraries(Halide InitialModules ${LIBS})
+endif()
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
@@ -435,7 +483,7 @@ if (NOT HALIDE_SHARED_LIBRARY)
 
 if (XCODE)
 
-# Create a
+# Create a link file list
 set(EXTRA_LINKFILELIST "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/extra.LinkFileList")
 
 # Determine the location of libInitialModules.a so we can include the path to it
@@ -466,4 +514,5 @@ endif (NOT HALIDE_SHARED_LIBRARY)
 
 add_dependencies(Halide
   InitialModules
-  build_halide_h)
+  build_halide_h
+)

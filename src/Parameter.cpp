@@ -1,6 +1,8 @@
 #include "IR.h"
+#include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -62,7 +64,7 @@ Parameter::Parameter(Type t, bool is_buffer, int d) :
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     }
 }
 
@@ -70,13 +72,13 @@ Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, boo
     contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     }
 }
 
 Parameter::Parameter(const Parameter& that) : contents(that.contents) {
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     }
 }
 
@@ -88,7 +90,7 @@ Parameter& Parameter::operator=(const Parameter& that) {
         // This can happen if you do:
         // Parameter p; // undefined
         // p = make_interesting_parameter();
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     } else if (!should_be_registered && was_registered) {
         // This can happen if you do:
         // Parameter p = make_interesting_parameter();
@@ -129,6 +131,33 @@ bool Parameter::is_buffer() const {
     return contents.ptr->is_buffer;
 }
 
+Expr Parameter::get_scalar_expr() const {
+    check_is_scalar();
+    const Type t = type();
+    if (t.is_bool()) {
+      return scalar_to_constant_expr<bool>(get_scalar<bool>());
+    } else if (t.is_float()) {
+      switch (t.bits) {
+        case 32: return scalar_to_constant_expr<float>(get_scalar<float>());
+        case 64: return scalar_to_constant_expr<double>(get_scalar<double>());
+      }
+    } else if (t.is_int()) {
+      switch (t.bits) {
+        case 8: return scalar_to_constant_expr<int8_t>(get_scalar<int8_t>());
+        case 16: return scalar_to_constant_expr<int16_t>(get_scalar<int16_t>());
+        case 32: return scalar_to_constant_expr<int32_t>(get_scalar<int32_t>());
+        case 64: return scalar_to_constant_expr<int64_t>(get_scalar<int64_t>());
+      }
+    } else if (t.is_uint()) {
+      switch (t.bits) {
+        case 8: return scalar_to_constant_expr<uint8_t>(get_scalar<uint8_t>());
+        case 16: return scalar_to_constant_expr<uint16_t>(get_scalar<uint16_t>());
+        case 32: return scalar_to_constant_expr<uint32_t>(get_scalar<uint32_t>());
+        case 64: return scalar_to_constant_expr<uint64_t>(get_scalar<uint64_t>());
+      }
+    }
+    return Expr();
+}
 
 Buffer Parameter::get_buffer() const {
     check_is_buffer();

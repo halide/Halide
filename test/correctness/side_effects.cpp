@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <math.h>
 
 using namespace Halide;
@@ -32,8 +32,8 @@ extern "C" DLLEXPORT int draw_pixel(int x, int y, int val) {
 
     const char *code = " .:-~*={}&%#@";
 
-    if (val >= strlen(code)) {
-        val = strlen(code)-1;
+    if (val >= static_cast<int>(strlen(code))) {
+        val = static_cast<int>(strlen(code))-1;
     }
     printf("%c", code[val]);
     return 0;

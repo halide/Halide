@@ -30,7 +30,7 @@
 // - Doesn't do any jit compilation at runtime, so it's fast.
 // - Doesn't depend on libHalide at all, so it's a small, easy-to-deploy binary.
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 using namespace Halide;
 

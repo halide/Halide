@@ -33,8 +33,8 @@ int main(int argc, char **argv) {
   const int channels = 3;
 
   // We can, of course, pass whatever values for Param/ImageParam that we like.
-  example(3.3f, output);
-  verify(output, compiletime_factor, 3.3f, channels);
+  example(3.3245f, output);
+  verify(output, compiletime_factor, 3.3245f, channels);
 
   example(-1.234f, output);
   verify(output, compiletime_factor, -1.234f, channels);

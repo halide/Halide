@@ -16,7 +16,7 @@
 // DYLD_LIBRARY_PATH=../bin ./lesson_01
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
-#include <Halide.h>
+#include "Halide.h"
 
 // We'll also include stdio for printf.
 #include <stdio.h>

@@ -40,7 +40,7 @@ int Type::imax() const {
 
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
-    if (width > 1) {
+    if (is_vector()) {
         return Internal::Broadcast::make(element_of().max(), width);
     }
     if (is_int() && bits == 32) {
@@ -84,7 +84,7 @@ int Type::imin() const {
 
 /** Return an expression which is the minimum value of this type */
 Expr Type::min() const {
-    if (width > 1) {
+    if (is_vector()) {
         return Internal::Broadcast::make(element_of().min(), width);
     }
     if (is_int() && bits == 32) {
