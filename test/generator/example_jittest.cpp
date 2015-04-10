@@ -32,27 +32,27 @@ int main(int argc, char **argv) {
         // all Generators have a "target" GeneratorParam, which is just
         // a Halide::Target set using the normal syntax.)
         Example gen;
-        gen.set_generator_param_values({ { "compiletime_factor", "2.3" },
+        gen.set_generator_param_values({ { "compiletime_factor", "2.392" },
                                          { "channels", "3" },
                                          { "target", "host" },
                                          { "enummy", "foo" },
                                          { "flag", "false" } });
         Image<int32_t> img = gen.build().realize(kSize, kSize, 3, gen.get_target());
-        verify(img, 2.3, 1, 3);
+        verify(img, 2.392, 1, 3);
     }
     {
         // You can also set the GeneratorParams after creation by setting the
         // member values directly, of course.
         Example gen;
-        gen.compiletime_factor.set(2.9);
+        gen.compiletime_factor.set(2.913);
         Image<int32_t> img = gen.build().realize(kSize, kSize, 3);
-        verify(img, 2.9, 1, 3);
+        verify(img, 2.913, 1, 3);
 
         // You can change the GeneratorParams between each call to build().
-        gen.compiletime_factor.set(0.1);
+        gen.compiletime_factor.set(0.1423);
         gen.channels.set(4);
         Image<int32_t> img2 = gen.build().realize(kSize, kSize, 4);
-        verify(img2, 0.1, 1, 4);
+        verify(img2, 0.1423, 1, 4);
 
         // Setting non-existent GeneratorParams will fail with a user_assert.
         // gen->set_generator_param_values({{"unknown_name", "0.1"}});
