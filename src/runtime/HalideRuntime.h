@@ -70,7 +70,7 @@ extern void halide_error(void *user_context, const char *);
  * without depending on e.g. C++ constructor logic.
  */
 struct halide_mutex {
-    unsigned char _private[64];
+    uint64_t _private[8];
 };
 
 /** A basic set of mutex functions, which call platform specific code
@@ -135,6 +135,7 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_consume = 6,
                               halide_trace_end_consume = 7};
 
+#pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
     halide_trace_event_code event;
@@ -147,6 +148,7 @@ struct halide_trace_event {
     int32_t dimensions;
     int32_t *coordinates;
 };
+#pragma pack(pop)
 
 /** Called when Funcs are marked as trace_load, trace_store, or
  * trace_realization. See Func::set_custom_trace. The default
@@ -200,83 +202,37 @@ extern int halide_get_trace_file(void *user_context);
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
 
+/** All Halide GPU or device backend implementations much provide an interface
+ * to be used with halide_device_malloc, etc.
+ */
+struct halide_device_interface;
+
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_release(void *user_context);
+extern void halide_device_release(void *user_context, const halide_device_interface *interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
 extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
 
-/** Copy image data from host memory to device memory. This should not be
- * called directly; Halide handles copying to the device automatically. */
-extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
+/** Copy image data from host memory to device memory. This should not
+ * be called directly; Halide handles copying to the device
+ * automatically.  If interface is NULL and the bug has a non-zero dev
+ * field, the device associated with the dev handle will be
+ * used. Otherwise if the dev field is 0 and interface is NULL, an
+ * error is returned. */
+extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
+                                 const halide_device_interface *interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-extern int halide_dev_sync(void *user_context);
+extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 
 /** Allocate device memory to back a buffer_t. */
-extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
+extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
 
-/** Free any device memory associated with a buffer_t. */
-extern int halide_dev_free(void *user_context, struct buffer_t *buf);
-
-/** These are forward declared here to ensure they have the same
- * signature across different Halide gpu backends. Do not call
- * them. */
-// @{
-extern int halide_init_kernels(void *user_context, void **state_ptr,
-                               const char *src, int size);
-extern int halide_dev_run(void *user_context,
-                          void *state_ptr,
-                          const char *entry_name,
-                          int blocksX, int blocksY, int blocksZ,
-                          int threadsX, int threadsY, int threadsZ,
-                          int shared_mem_bytes,
-                          size_t arg_sizes[],
-                          void *args[]);
-// @}
-
-/** This function is called to populate the buffer_t.dev field with a constant
- * indicating that the OpenGL object corresponding to the buffer_t is bound by
- * the app and not by the Halide runtime. For example, the buffer_t may be
- * backed by an FBO already bound by the application. */
-extern uint64_t halide_opengl_output_client_bound();
-
-/** Forget all state associated with the previous OpenGL context.  This is
- * similar to halide_opengl_release, except that we assume that all OpenGL
- * resources have already been reclaimed by the OS. */
-extern void halide_opengl_context_lost(void *user_context);
-
-/** Set the platform name for OpenCL to use (e.g. "Intel" or
- * "NVIDIA"). The argument is copied internally. The opencl runtime
- * will select a platform that includes this as a substring. If never
- * called, Halide uses the environment variable HL_OCL_PLATFORM_NAME,
- * or defaults to the first available platform. */
-extern void halide_set_ocl_platform_name(const char *n);
-
-/** Halide calls this to get the desired OpenCL platform
- * name. Implement this yourself to use a different platform per
- * user_context. The default implementation returns the value set by
- * halide_set_ocl_platform_name, or the value of the environment
- * variable HL_OCL_PLATFORM_NAME. The output is valid until the next
- * call to halide_set_ocl_platform_name. */
-extern const char *halide_get_ocl_platform_name(void *user_context);
-
-/** Set the device type for OpenCL to use. The argument is copied
- * internally. It must be "cpu", "gpu", or "acc". If never called,
- * Halide uses the environment variable HL_OCL_DEVICE_TYPE. */
-extern void halide_set_ocl_device_type(const char *n);
-
-/** Halide calls this to gets the desired OpenCL device
- * type. Implement this yourself to use a different device type per
- * user_context. The default implementation returns the value set by
- * halide_set_ocl_device_type, or the environment variable
- * HL_OCL_DEVICE_TYPE. The result is valid until the next call to
- * halide_set_ocl_device_type. */
-extern const char *halide_get_ocl_device_type(void *user_context);
+extern int halide_device_free(void *user_context, struct buffer_t *buf);
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
@@ -328,11 +284,293 @@ extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *c
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                            buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
-
 /** Free all memory and resources associated with the memoization cache.
  * Must be called at a time when no other threads are accessing the cache.
  */
 extern void halide_memoization_cache_cleanup();
+
+/** The error codes that may be returned by a Halide pipeline. */
+enum halide_error_code_t {
+    /** There was no error. This is the value returned by Halide on success. */
+    halide_error_code_success = 0,
+
+    /** An uncategorized error occurred. Refer to the string passed to halide_error. */
+    halide_error_code_generic_error = -1,
+
+    /** A Func was given an explicit bound via Func::bound, but this
+     * was not large enough to encompass the region that is used of
+     * the Func by the rest of the pipeline. */
+    halide_error_code_explicit_bounds_too_small = -2,
+
+    /** The elem_size field of a buffer_t does not match the size in
+     * bytes of the type of that ImageParam. Probable type mismatch. */
+    halide_error_code_bad_elem_size = -3,
+
+    /** A pipeline would access memory outside of the buffer_t passed
+     * in. */
+    halide_error_code_access_out_of_bounds = -4,
+
+    /** A buffer_t was given that spans more than 2GB of memory. */
+    halide_error_code_buffer_allocation_too_large = -5,
+
+    /** A buffer_t was given with extents that multiply to a number
+     * greater than 2^31-1 */
+    halide_error_code_buffer_extents_too_large = -6,
+
+    /** Applying explicit constraints on the size of an input or
+     * output buffer shrank the size of that buffer below what will be
+     * accessed by the pipeline. */
+    halide_error_code_constraints_make_required_region_smaller = -7,
+
+    /** A constraint on a size or stride of an input or output buffer
+     * was not met by the buffer_t passed in. */
+    halide_error_code_constraint_violated = -8,
+
+    /** A scalar parameter passed in was smaller than its minimum
+     * declared value. */
+    halide_error_code_param_too_small = -9,
+
+    /** A scalar parameter passed in was greater than its minimum
+     * declared value. */
+    halide_error_code_param_too_large = -10,
+
+    /** A call to halide_malloc returned NULL. */
+    halide_error_code_out_of_memory = -11,
+
+    /** A buffer_t pointer passed in was NULL. */
+    halide_error_code_buffer_argument_is_null = -12,
+
+    /** debug_to_file failed to open or write to the specified
+     * file. */
+    halide_error_code_debug_to_file_failed = -13,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from device to host. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_host_failed = -14,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from host to device. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_device_failed = -15,
+
+    /** The Halide runtime encountered an error while trying to
+     * allocate memory on device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_malloc_failed = -16,
+
+    /** The Halide runtime encountered an error while trying to
+     * synchronize with a device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_sync_failed = -17,
+
+    /** The Halide runtime encountered an error while trying to free a
+     * device allocation. Turn on -debug in your target string to see
+     * more details. */
+    halide_error_code_device_free_failed = -18,
+
+    /** A device operation was attempted on a buffer with no device
+     * interface. */
+    halide_error_code_no_device_interface = -19
+};
+
+/** Halide calls the functions below on various error conditions. The
+ * default implementations construct an error message, call
+ * halide_error, then return the matching error code above. Override
+ * these to catch the errors individually. */
+
+/** A call into an extern stage for the purposes of bounds inference
+ * failed. Returns the error code given by the extern stage. */
+extern int halide_error_bounds_inference_call_failed(void *user_context, const char *extern_stage_name, int result);
+
+/** A call to an extern stage failed. Returned the error code given by
+ * the extern stage. */
+extern int halide_error_extern_stage_failed(void *user_context, const char *extern_stage_name, int result);
+
+/** Various other error conditions. See the enum above for a
+ * description of each. */
+// @{
+extern int halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                      int min_bound, int max_bound, int min_required, int max_required);
+extern int halide_error_bad_elem_size(void *user_context, const char *func_name,
+                                      const char *type_name, int elem_size_given, int correct_elem_size);
+extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
+                                             int dimension, int min_touched, int max_touched,
+                                             int min_valid, int max_valid);
+extern int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name,
+                                                    int64_t allocation_size, int64_t max_size);
+extern int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name,
+                                                 int64_t actual_size, int64_t max_size);
+extern int halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
+                                                                 int dimension,
+                                                                 int constrained_min, int constrained_extent,
+                                                                 int required_min, int required_extent);
+extern int halide_error_constraint_violated(void *user_context, const char *var, int val,
+                                            const char *constrained_var, int constrained_val);
+extern int halide_error_param_too_small_i64(void *user_context, const char *param_name,
+                                            int64_t val, int64_t min_val);
+extern int halide_error_param_too_small_u64(void *user_context, const char *param_name,
+                                            uint64_t val, uint64_t min_val);
+extern int halide_error_param_too_small_f64(void *user_context, const char *param_name,
+                                            double val, double min_val);
+extern int halide_error_param_too_large_i64(void *user_context, const char *param_name,
+                                            int64_t val, int64_t max_val);
+extern int halide_error_param_too_large_u64(void *user_context, const char *param_name,
+                                            uint64_t val, uint64_t max_val);
+extern int halide_error_param_too_large_f64(void *user_context, const char *param_name,
+                                            double val, double max_val);
+extern int halide_error_out_of_memory(void *user_context);
+extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
+extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
+                                             const char *filename, int error_code);
+// @}
+
+
+/** Types in the halide type system. They can be ints, unsigned ints,
+ * or floats (of various bit-widths), or a handle (which is always pointer-sized).
+ * Note that the int/uint/float values do not imply a specific bit width
+ * (the bit width is expected to be encoded in a separate value).
+ */
+typedef enum halide_type_code_t {
+    halide_type_int = 0,   //!< signed integers
+    halide_type_uint = 1,  //!< unsigned integers
+    halide_type_float = 2, //!< floating point numbers
+    halide_type_handle = 3 //!< opaque pointer type (void *)
+} halide_type_code_t;
+
+#ifndef BUFFER_T_DEFINED
+#define BUFFER_T_DEFINED
+
+/**
+ * The raw representation of an image passed around by generated
+ * Halide code. It includes some stuff to track whether the image is
+ * not actually in main memory, but instead on a device (like a
+ * GPU). */
+#pragma pack(push, 1)
+typedef struct buffer_t {
+    /** A device-handle for e.g. GPU memory used to back this buffer. */
+    uint64_t dev;
+
+    /** A pointer to the start of the data in main memory. */
+    uint8_t* host;
+
+    /** The size of the buffer in each dimension. */
+    int32_t extent[4];
+
+    /** Gives the spacing in memory between adjacent elements in the
+    * given dimension.  The correct memory address for a load from
+    * this buffer at position x, y, z, w is:
+    * host + (x * stride[0] + y * stride[1] + z * stride[2] + w * stride[3]) * elem_size
+    * By manipulating the strides and extents you can lazily crop,
+    * transpose, and even flip buffers without modifying the data.
+    */
+    int32_t stride[4];
+
+    /** Buffers often represent evaluation of a Func over some
+    * domain. The min field encodes the top left corner of the
+    * domain. */
+    int32_t min[4];
+
+    /** How many bytes does each buffer element take. This may be
+    * replaced with a more general type code in the future. */
+    int32_t elem_size;
+
+    /** This should be true if there is an existing device allocation
+    * mirroring this buffer, and the data has been modified on the
+    * host side. */
+    bool host_dirty;
+
+    /** This should be true if there is an existing device allocation
+    mirroring this buffer, and the data has been modified on the
+    device side. */
+    bool dev_dirty;
+
+    uint8_t _padding[2];
+} buffer_t;
+#pragma pack(pop)
+
+#endif
+
+/** halide_scalar_value_t is a simple union able to represent all the well-known
+ * scalar values in a filter argument. Note that it isn't tagged with a type;
+ * you must ensure you know the proper type before accessing. Most user
+ * code will never need to create instances of this struct; its primary use
+ * is to hold def/min/max values in a halide_filter_argument_t. (Note that
+ * this is conceptually just a union; it's wrapped in a struct to ensure
+ * that it doesn't get anonymized by LLVM.)
+ */
+struct halide_scalar_value_t {
+    union {
+        bool b;
+        int8_t i8;
+        int16_t i16;
+        int32_t i32;
+        int64_t i64;
+        uint8_t u8;
+        uint16_t u16;
+        uint32_t u32;
+        uint64_t u64;
+        float f32;
+        double f64;
+        void *handle;
+    } u;
+};
+
+enum halide_argument_kind_t {
+    halide_argument_kind_input_scalar = 0,
+    halide_argument_kind_input_buffer = 1,
+    halide_argument_kind_output_buffer = 2
+};
+
+/*
+    These structs must be robust across different compilers and settings; when
+    modifying them, strive for the following rules:
+
+    1) All fields are explicitly sized. I.e. must use int32_t and not "int"
+    2) All fields must land on an alignment boundary that is the same as their size
+    3) Explicit padding is added to make that so
+    4) The sizeof the struct is padded out to a multiple of the largest natural size thing in the struct
+    5) don't forget that 32 and 64 bit pointers are different sizes
+*/
+
+/**
+ * halide_filter_argument_t is essentially a plain-C-struct equivalent to
+ * Halide::Argument; most user code will never need to create one.
+ */
+struct halide_filter_argument_t {
+    const char *name;       // name of the argument; will never be null or empty.
+    int32_t kind;           // actually halide_argument_kind_t
+    int32_t dimensions;     // always zero for scalar arguments
+    int32_t type_code;      // actually halide_type_code_t
+    int32_t type_bits;      // [1, 8, 16, 32, 64]
+    // These pointers should always be null for buffer arguments,
+    // and *may* be null for scalar arguments. (A null value means
+    // there is no def/min/max specified for this argument.)
+    const halide_scalar_value_t *def;
+    const halide_scalar_value_t *min;
+    const halide_scalar_value_t *max;
+};
+
+struct halide_filter_metadata_t {
+    /** version of this metadata; currently always 0. */
+    int32_t version;
+
+    /** The number of entries in the arguments field. This is always >= 1. */
+    int32_t num_arguments;
+
+    /** An array of the filters input and output arguments; this will never be
+     * null. The order of arguments is not guaranteed (input and output arguments
+     * may come in any order); however, it is guaranteed that all arguments
+     * will have a unique name within a given filter. */
+    const halide_filter_argument_t* arguments;
+
+    /** The Target for which the filter was compiled. This is always
+     * a canonical Target string (ie a product of Target::to_string). */
+    const char* target;
+
+    /** The function name of the filter. */
+    const char* name;
+};
 
 #ifdef __cplusplus
 } // End extern "C"

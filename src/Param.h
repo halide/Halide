@@ -144,11 +144,11 @@ public:
         param.set_max_value(max);
     }
 
-    Expr get_min_value() {
+    Expr get_min_value() const {
         return param.get_min_value();
     }
 
-    Expr get_max_value() {
+    Expr get_max_value() const {
         return param.get_max_value();
     }
     // @}
@@ -169,7 +169,8 @@ public:
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
     operator Argument() const {
-        return Argument(name(), false, type());
+        return Argument(name(), Argument::InputScalar, type(), 0,
+            param.get_scalar_expr(), param.get_min_value(), param.get_max_value());
     }
 };
 
@@ -195,6 +196,9 @@ public:
 
     /** Construct a NULL image parameter handle. */
     OutputImageParam() {}
+
+    /** Virtual destructor. Does nothing. */
+    EXPORT virtual ~OutputImageParam();
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
     EXPORT OutputImageParam(const Internal::Parameter &p);
@@ -294,20 +298,23 @@ public:
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
-    EXPORT operator Argument() const;
+    EXPORT virtual operator Argument() const;
 
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
     EXPORT operator ExternFuncArgument() const;
 };
 
-/** An Image parameter to a halide pipelin\e. E.g., the input image. */
+/** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
 
 public:
 
     /** Construct a NULL image parameter handle. */
     ImageParam() : OutputImageParam() {}
+
+    /** Virtual destructor. Does nothing. */
+    EXPORT virtual ~ImageParam();
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
@@ -355,6 +362,10 @@ public:
         return (*this)(_);
     }
 
+    /** Construct the appropriate argument matching this parameter,
+     * for the purpose of generating the right type signature when
+     * statically compiling halide pipelines. */
+    EXPORT virtual operator Argument() const;
 };
 
 }

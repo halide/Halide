@@ -287,6 +287,16 @@ private:
                 args.push_back(op->args[idx]);
             }
             expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
+        } else if (op->name == Call::glsl_texture_load &&
+                   op->call_type == Call::Intrinsic) {
+            // glsl_texture_load returns a <uint x 4> result. Deinterleave by
+            // wrapping the call in a shuffle_vector
+            std::vector<Expr> args;
+            args.push_back(op);
+            for (int i = 0; i < new_width; i++) {
+                args.push_back(i*lane_stride + starting_lane);
+            }
+            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
         } else {
 
             // Vector calls are always parallel across the lanes, so we
@@ -373,7 +383,7 @@ Expr extract_lane(Expr e, int lane) {
     Scope<int> lets;
     Deinterleaver d(lets);
     d.starting_lane = lane;
-    d.lane_stride = 0;
+    d.lane_stride = e.type().width;
     d.new_width = 1;
     e = d.mutate(e);
     return simplify(e);
@@ -412,7 +422,7 @@ class Interleaver : public IRMutator {
             Expr ba = extract_even_lanes(b, vector_lets);
             Expr bb = extract_odd_lanes(b, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              vec(aa, ab, ba, bb), Call::Intrinsic);
+                              vec(aa, ba, ab, bb), Call::Intrinsic);
         } else {
             // Give up and don't do anything clever for >4
             return e;

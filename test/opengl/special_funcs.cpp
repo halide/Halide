@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #include <algorithm>
 #include <stdlib.h>
@@ -40,7 +40,6 @@ bool test_exact(Expr r, Expr g, Expr b) {
     Image<T> gpu_result(W, H, 3);
     test_function(e, cpu_result, gpu_result);
 
-    double err = 0.0;
     for (int y=0; y<gpu_result.height(); y++) {
         for (int x=0; x<gpu_result.width(); x++) {
             if (!(gpu_result(x, y, 0) == cpu_result(x, y, 0) &&
@@ -90,7 +89,6 @@ bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
 
 int main() {
     bool ok = true;
-    double rms;
 
     ok = ok && test_exact<uint8_t>(0, 0, 0);
     ok = ok && test_exact<uint8_t>(clamp(x + y, 0, 255), 0, 0);

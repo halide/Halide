@@ -1,6 +1,10 @@
 
 "Bilateral histogram."
 
+from __future__ import print_function
+from __future__ import division
+
+
 import sys
 from halide import *
 
@@ -25,9 +29,10 @@ def main():
 
     # Construct the bilateral grid
     r = RDom(0, s_sigma, 0, s_sigma, 'r')
-    val = clamped[x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2]
+    val = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
     val = clamp(val, 0.0, 1.0)
-    zi = cast(int_t, val * (1.0/r_sigma) + 0.5)
+    #zi = cast(int_t, val * (1.0/r_sigma) + 0.5)
+    zi = cast(int_t, (val / r_sigma) + 0.5)
     histogram = Func('histogram')
     histogram[x, y, z, c] = 0.0
     histogram[x, y, zi, c] += select(c == 0, val, 1.0)
@@ -40,7 +45,7 @@ def main():
 
     # Take trilinear samples to compute the output
     val = clamp(clamped[x, y], 0.0, 1.0)
-    zv = val * (1.0/r_sigma)
+    zv = val / r_sigma
     zi = cast(int_t, zv)
     zf = zv - zi
     xf = cast(float_t, x % s_sigma) / s_sigma

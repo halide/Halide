@@ -24,7 +24,11 @@ void OutputImageParam::add_implicit_args_if_placeholder(std::vector<Expr> &args,
 }
 
 OutputImageParam::OutputImageParam(const Internal::Parameter &p) :
-    param(p) {}
+    param(p) {
+}
+
+OutputImageParam::~OutputImageParam() {
+}
 
 const std::string &OutputImageParam::name() const {
     return param.name();
@@ -119,7 +123,7 @@ Internal::Parameter OutputImageParam::parameter() const {
 }
 
 OutputImageParam::operator Argument() const {
-    return Argument(name(), true, type());
+    return Argument(name(), Argument::OutputBuffer, type(), dimensions());
 }
 
 OutputImageParam::operator ExternFuncArgument() const {
@@ -133,6 +137,9 @@ ImageParam::ImageParam(Type t, int d, const std::string &n) :
     OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true)) {
     // Discourage future Funcs from having the same name
     Internal::unique_name(n);
+}
+
+ImageParam::~ImageParam() {
 }
 
 void ImageParam::set(Buffer b) {
@@ -224,6 +231,8 @@ Expr ImageParam::operator()(std::vector<Var> args_passed) const {
     return Internal::Call::make(param, args);
 }
 
+ImageParam::operator Argument() const {
+    return Argument(name(), Argument::InputBuffer, type(), dimensions());
 }
 
-
+}

@@ -2,6 +2,7 @@
 #define HALIDE_TYPE_H
 
 #include <stdint.h>
+#include "runtime/HalideRuntime.h"
 #include "Util.h"
 
 /** \file
@@ -18,12 +19,17 @@ struct Expr;
  * larger than one). Front-end code shouldn't use vector
  * types. Instead vectorize a function. */
 struct Type {
-    /** The basic type code: signed integer, unsigned integer, or floating point */
+    /** The basic type code: signed integer, unsigned integer, or floating point.
+     *
+     * Note that TypeCode is guaranteed to have values identical to those of
+     * halide_type_code_t (HalideRuntime.h), but exists as a separate typedef
+     * to preserve source code compatibility.
+     */
     enum TypeCode {
-        Int,  //!< signed integers
-        UInt, //!< unsigned integers
-        Float, //!< floating point numbers
-        Handle //!< opaque pointer type (void *)
+        Int = halide_type_int,
+        UInt = halide_type_uint,
+        Float = halide_type_float,
+        Handle = halide_type_handle
     } code;
 
     /** The number of bits of precision of a single scalar value of this type. */
@@ -35,11 +41,25 @@ struct Type {
     /** How many elements (if a vector type). Should be 1 for scalar types. */
     int width;
 
+    // Default ctor initializes everything to predictable-but-unlikely values
+    Type() : code(Handle), bits(0), width(0) {}
+
+    Type(TypeCode _code, int _bits, int _width) : code(_code), bits(_bits), width(_width) {}
+
+    Type(const Type &that) : code(that.code), bits(that.bits), width(that.width) {}
+
+    Type& operator=(const Type& that) {
+        this->code = that.code;
+        this->bits = that.bits;
+        this->width = that.width;
+        return *this;
+    }
+
     /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code == UInt && bits == 1;}
 
     /** Is this type a vector type? (width > 1) */
-    bool is_vector() const {return width > 1;}
+    bool is_vector() const {return width != 1;}
 
     /** Is this type a scalar type? (width == 1) */
     bool is_scalar() const {return width == 1;}
@@ -68,14 +88,12 @@ struct Type {
 
     /** Produce a vector of this type, with 'width' elements */
     Type vector_of(int w) const {
-        Type type = {code, bits, w};
-        return type;
+        return Type(code, bits, w);
     }
 
     /** Produce the type of a single element of this vector type */
     Type element_of() const {
-        Type type = {code, bits, 1};
-        return type;
+        return Type(code, bits, 1);
     }
 
     /** Can this type represent all values of another type? */

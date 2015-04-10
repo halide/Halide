@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, 256, GPU_Default);
+        f.gpu_tile(x, 256);
     }
 
     u.set(17.0f);

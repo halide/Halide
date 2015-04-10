@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 using namespace Halide;
 
 Var x("x"), y("y"), c("c");
@@ -23,8 +23,7 @@ int main(int argc, char **argv) {
         ImageParam state(Float(32), 3);
         Param<int> mouse_x, mouse_y;
 
-        Func clamped;
-        clamped(x, y, c) = state(clamp(x, 0, state.width()-1), clamp(y, 0, state.height()-1), c);
+        Func clamped = BoundaryConditions::repeat_edge(state);
 
         RDom kernel(-1, 3);
         Func g, gaussian;

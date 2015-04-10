@@ -31,15 +31,21 @@ namespace Halide {
  *          if the extent of any region is 1 or less).
  *
  *  If the source Func has more dimensions than are specified, the extra ones
- *  are unmodified.
+ *  are unmodified. Additionally, passing an undefined (default constructed)
+ *  'Expr' for the min and extent of a dimension will keep that dimension
+ *  unmodified.
  *
  *  Numerous options for specifing the outside area are provided,
  *  including replacement with an expression, repeating the edge
  *  samples, mirroring over the edge, and repeating or mirroring the
  *  entire image.
  *
- *  TODO: Add support for passing Image<T> and ImageParam, and
- *  possibly other types directly to this functions.
+ *  Using these functions to express your boundary conditions is highly
+ *  recommended for correctness and performance. Some of these are hard
+ *  to get right. The versions here are both understood by bounds
+ *  inference, and also judiciously use the 'likely' intrinsic to minimize
+ *  runtime overhead.
+ *
  */
 namespace BoundaryConditions {
 
@@ -51,13 +57,7 @@ inline const Func &func_like_to_func(const Func &func) {
 
 template <typename T>
 inline NO_INLINE Func func_like_to_func(T func_like) {
-    std::vector<Var> args;
-    for (int i = 0; i < func_like.dimensions(); i++) {
-        args.push_back(Var::implicit(i));
-    }
-    Func func;
-    func(args) = func_like(args);
-    return func;
+    return lambda(_, func_like(_));
 }
 
 }

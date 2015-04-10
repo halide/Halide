@@ -172,7 +172,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 can_slide_down = true;
             }
 
-
             if (!can_slide_up && !can_slide_down) {
                 debug(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
@@ -194,13 +193,25 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, max_required) + 1;
             Expr prev_min_minus_one = substitute(loop_var, loop_var_expr - 1, min_required) - 1;
 
+            // If there's no overlap between adjacent iterations, we shouldn't slide.
+            if (is_one(simplify(min_required >= prev_max_plus_one)) ||
+                is_one(simplify(max_required <= prev_min_minus_one))) {
+                debug(3) << "Not sliding " << func.name()
+                         << " over dimension " << dim
+                         << " along loop variable " << loop_var
+                         << " there's no overlap in the region computed across iterations\n"
+                         << "Min is " << min_required << "\n"
+                         << "Max is " << max_required << "\n";
+                return;
+            }
+
             Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = select(loop_var_expr == loop_min, min_required, prev_max_plus_one);
+                new_min = select(loop_var_expr <= loop_min, min_required, likely(prev_max_plus_one));
                 new_max = max_required;
             } else {
                 new_min = min_required;
-                new_max = select(loop_var_expr == loop_min, max_required, prev_min_minus_one);
+                new_max = select(loop_var_expr <= loop_min, max_required, likely(prev_min_minus_one));
             }
 
             Expr early_stages_min_required = new_min;
@@ -297,14 +308,14 @@ class SlidingWindowOnFunction : public IRMutator {
 
         new_body = mutate(new_body);
 
-        if (op->for_type == For::Serial || op->for_type == For::Unrolled) {
+        if (op->for_type == ForType::Serial || op->for_type == ForType::Unrolled) {
             new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);
         }
 
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, new_body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
         }
     }
 

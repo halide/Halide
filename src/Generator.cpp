@@ -48,10 +48,12 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR]  "
-                          "target=target-string [generator_arg=value [...]]\n";
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-e EMIT_OPTIONS] "
+                          "target=target-string [generator_arg=value [...]]\n\n"
+                          "  -e  A comma separated list of optional files to emit. Accepted values are "
+                          "[assembly, bitcode, stmt, html]\n";
 
-    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" } };
+    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" }, { "-e", "" } };
     std::map<std::string, std::string> generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -115,6 +117,22 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
+    GeneratorBase::EmitOptions emit_options;
+    std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    for (const std::string &opt : emit_flags) {
+        if (opt == "assembly") {
+            emit_options.emit_assembly = true;
+        } else if (opt == "bitcode") {
+            emit_options.emit_bitcode = true;
+        } else if (opt == "stmt") {
+            emit_options.emit_stmt = true;
+        } else if (opt == "html") {
+            emit_options.emit_stmt_html = true;
+        } else if (!opt.empty()) {
+            cerr << "Unrecognized emit option: " << opt
+                 << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+        }
+    }
 
     std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
     if (gen == nullptr) {
@@ -122,13 +140,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name);
+    gen->emit_filter(output_dir, function_name, function_name, emit_options);
     return 0;
 }
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
-                                              this);
+                                              this, nullptr);
 }
 
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
@@ -180,8 +198,8 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     return result;
 }
 
-GeneratorBase::GeneratorBase(size_t size) : size(size), params_built(false) {
-    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this);
+GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper) : size(size), params_built(false) {
+    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
 }
 
 GeneratorBase::~GeneratorBase() { ObjectInstanceRegistry::unregister_instance(this); }
@@ -197,8 +215,16 @@ void GeneratorBase::build_params() {
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
             user_assert(filter_params.find(param->name()) == filter_params.end())
                 << "Duplicate Param name: " << param->name();
+            Expr def, min, max;
+            if (!param->is_buffer()) {
+                def = param->get_scalar_expr();
+                min = param->get_min_value();
+                max = param->get_max_value();
+            }
             filter_params[param->name()] = param;
-            filter_arguments.push_back(Argument(param->name(), param->is_buffer(), param->type()));
+            filter_arguments.push_back(Argument(param->name(),
+                param->is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
+                param->type(), param->dimensions(), def, min, max));
         }
 
         std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
@@ -256,8 +282,18 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
 
     std::vector<Halide::Argument> inputs = get_filter_arguments();
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
-    if (options.emit_o) {
-        func.compile_to_object(base_path + ".o", inputs, function_name, target);
+    if (options.emit_o || options.emit_assembly || options.emit_bitcode) {
+        Outputs output_files;
+        if (options.emit_o) {
+            output_files.object_name = base_path + ".o";
+        }
+        if (options.emit_assembly) {
+            output_files.assembly_name = base_path + ".s";
+        }
+        if (options.emit_bitcode) {
+            output_files.bitcode_name = base_path + ".bc";
+        }
+        func.compile_to(output_files, inputs, function_name, target);
     }
     if (options.emit_h) {
         func.compile_to_header(base_path + ".h", inputs, function_name, target);
@@ -265,22 +301,16 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     if (options.emit_cpp) {
         func.compile_to_c(base_path + ".cpp", inputs, function_name, target);
     }
-    if (options.emit_assembly) {
-        func.compile_to_assembly(base_path + ".s", inputs, function_name, target);
-    }
-    if (options.emit_bitcode) {
-        func.compile_to_bitcode(base_path + ".bc", inputs, function_name, target);
-    }
     if (options.emit_stmt) {
-        func.compile_to_lowered_stmt(base_path + ".stmt", Halide::Text, target);
+        func.compile_to_lowered_stmt(base_path + ".stmt", inputs, Halide::Text, target);
     }
     if (options.emit_stmt_html) {
-        func.compile_to_lowered_stmt(base_path + ".html", Halide::HTML, target);
+        func.compile_to_lowered_stmt(base_path + ".html", inputs, Halide::HTML, target);
     }
 }
 
 Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                 std::string function_name){
+                                std::string function_name){
     Func f = build();
     Func f_extern;
     if (function_name.empty()) {

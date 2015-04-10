@@ -38,6 +38,15 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
+string replace_all(string &str, const string &find, const string &replace) {
+    size_t pos = 0;
+    while ((pos = str.find(find, pos)) != string::npos) {
+        str.replace(pos, find.length(), replace);
+        pos += replace.length();
+    }
+    return str;
+}
+
 /** Convert an integer to a string. */
 string int_to_string(int x) {
     // Most calls to this function are during lowering, and correspond
@@ -92,7 +101,8 @@ string base_name(const string &name, char delim) {
 }
 
 string make_entity_name(void *stack_ptr, const string &type, char prefix) {
-    string name = get_variable_name(stack_ptr, type);
+    string name = Introspection::get_variable_name(stack_ptr, type);
+
     if (name.empty()) {
         return unique_name(prefix);
     } else {

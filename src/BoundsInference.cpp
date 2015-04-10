@@ -369,9 +369,9 @@ public:
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
-            vector<Expr> error_message = vec<Expr>("Bounds inference call to external func " + extern_name +
-                                                   " returned non-zero value:", result);
-            Stmt check = AssertStmt::make(EQ::make(result, 0), error_message);
+            Expr error = Call::make(Int(32), "halide_error_bounds_inference_call_failed",
+                                    vec<Expr>(extern_name, result), Call::Extern);
+            Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
             check = LetStmt::make(result_name, e, check);
 
@@ -763,7 +763,7 @@ public:
 
         in_stages.pop(stage_name);
 
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 
     void visit(const Pipeline *p) {
@@ -787,7 +787,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order,
     }
 
     // Add an outermost bounds inference marker
-    s = For::make("<outermost>", 0, 1, For::Serial, s);
+    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
     s = BoundsInference(funcs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }

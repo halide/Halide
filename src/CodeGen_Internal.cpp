@@ -42,6 +42,7 @@ void Closure::visit(const Load *op) {
 
         // If reading an image/buffer, compute the size.
         if (op->image.defined()) {
+            ref.dimensions = op->image.dimensions();
             ref.size = 1;
             for (int i = 0; i < op->image.dimensions(); i++) {
                 ref.size += (op->image.extent(i) - 1)*op->image.stride(i);
@@ -60,6 +61,7 @@ void Closure::visit(const Store *op) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];
         ref.type = op->value.type(); // TODO: Validate type is the same as existing refs?
+        // TODO: do we need to set ref.dimensions?
         ref.write = true;
     } else {
         debug(3) << "Not adding " << op->name << " to closure\n";
@@ -121,14 +123,25 @@ StructType *Closure::build_type(LLVMContext *context) {
     return struct_t;
 }
 
-void Closure::pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *builder) {
-    // dst should be a pointer to a struct of the type returned by build_type
+void Closure::pack_struct(llvm::Type *
+#if LLVM_VERSION >= 37
+                          type
+#endif
+                          ,
+                          Value *dst,
+                          const Scope<Value *> &src,
+                          IRBuilder<> *builder) {
+    // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();
     vector<string> nm = names();
     vector<llvm::Type*> ty = llvm_types(&context);
     for (size_t i = 0; i < nm.size(); i++) {
+#if LLVM_VERSION >= 37
+        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
+#else
         Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx);
+#endif
         Value *val;
         if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
             val = src.get(nm[i]);
@@ -145,19 +158,28 @@ void Closure::pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *bu
 }
 
 void Closure::unpack_struct(Scope<Value *> &dst,
+                            llvm::Type *
+#if LLVM_VERSION >= 37
+                            type
+#endif
+                            ,
                             Value *src,
                             IRBuilder<> *builder) {
-    // src should be a pointer to a struct of the type returned by build_type
+    // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();
     vector<string> nm = names();
     for (size_t i = 0; i < nm.size(); i++) {
+#if LLVM_VERSION >= 37
+        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+#else
         Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
+#endif
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
             load->setMetadata("tbaa", MDNode::get(context,
-                                                  vec<Value *>(MDString::get(context, nm[i]))));
+                                                  vec<LLVMMDNodeArgumentType>(MDString::get(context, nm[i]))));
         }
         dst.push(nm[i], load);
         load->setName(nm[i]);
@@ -165,7 +187,6 @@ void Closure::unpack_struct(Scope<Value *> &dst,
 }
 
 llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
-
     if (t.width == 1) {
         if (t.is_float()) {
             switch (t.bits) {
@@ -220,6 +241,48 @@ bool constant_allocation_size(const std::vector<Expr> &extents, const std::strin
 
     size = static_cast<int32_t>(result);
     return true;
+}
+
+// Returns true if the given function name is one of the Halide runtime
+// functions that takes a user_context pointer as its first parameter.
+bool function_takes_user_context(const std::string &name) {
+    static const char *user_context_runtime_funcs[] = {
+        "halide_copy_to_host",
+        "halide_copy_to_device",
+        "halide_current_time_ns",
+        "halide_debug_to_file",
+        "halide_device_free",
+        "halide_device_malloc",
+        "halide_device_sync",
+        "halide_do_par_for",
+        "halide_do_task",
+        "halide_error",
+        "halide_free",
+        "halide_malloc",
+        "halide_print",
+        "halide_profiling_timer",
+        "halide_device_release",
+        "halide_start_clock",
+        "halide_trace",
+        "halide_memoization_cache_lookup",
+        "halide_memoization_cache_store",
+        "halide_cuda_run",
+        "halide_opencl_run",
+        "halide_opengl_run",
+        "halide_cuda_initialize_kernels",
+        "halide_opencl_initialize_kernels",
+        "halide_opengl_initialize_kernels",
+        "halide_get_gpu_device",
+    };
+    const int num_funcs = sizeof(user_context_runtime_funcs) /
+        sizeof(user_context_runtime_funcs[0]);
+    for (int i = 0; i < num_funcs; ++i) {
+        if (name == user_context_runtime_funcs[i]) {
+            return true;
+        }
+    }
+    // The error functions all take a user context
+    return starts_with(name, "halide_error_");
 }
 
 }

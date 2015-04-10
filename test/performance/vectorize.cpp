@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include "clock.h"
 
 using namespace Halide;
