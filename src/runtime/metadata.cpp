@@ -4,7 +4,10 @@
 extern "C" {
 
 struct _halide_runtime_internal_registered_filter_t {
-    struct _halide_runtime_internal_registered_filter_t *next;
+    // This is a _halide_runtime_internal_registered_filter_t, but
+    // recursive types currently break our method that copies types from
+    // llvm module to llvm module
+    void *next;
     const halide_filter_metadata_t* metadata;
     int (*argv_func)(void **args);
 };
@@ -38,7 +41,8 @@ WEAK void halide_runtime_internal_register_metadata(_halide_runtime_internal_reg
 
 WEAK int halide_enumerate_registered_filters(void *user_context, void* enumerate_context, enumerate_func_t func) {
     ScopedMutexLock lock(&list_head.mutex);
-    for (_halide_runtime_internal_registered_filter_t* f = list_head.next; f != NULL; f = f->next) {
+    for (_halide_runtime_internal_registered_filter_t* f = list_head.next; f != NULL;
+         f = (_halide_runtime_internal_registered_filter_t *)(f->next)) {
         int r = (*func)(enumerate_context, f->metadata, f->argv_func);
         if (r != 0) return r;
     }

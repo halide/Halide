@@ -814,7 +814,7 @@ void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Constant *me
     internal_assert(register_t_type) << "Could not find register_t_type in initial module\n";
 
     Constant *list_node_fields[] = {
-        Constant::getNullValue(register_t_type->getPointerTo()),
+        Constant::getNullValue(i8->getPointerTo()),
         metadata,
         argv_wrapper
     };
