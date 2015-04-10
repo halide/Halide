@@ -328,6 +328,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     PassManager PM;
     #else
     raw_string_ostream ostream(outstr);
+    ostream.SetUnbuffered();
     legacy::PassManager PM;
     #endif
 
@@ -427,9 +428,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    string str = outstr;
-    debug(1) << "PTX kernel:\n" << str.c_str() << "\n";
-    vector<char> buffer(str.begin(), str.end());
+    debug(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
+    vector<char> buffer(outstr.begin(), outstr.end());
     buffer.push_back(0);
     return buffer;
 #else // WITH_PTX
