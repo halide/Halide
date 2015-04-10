@@ -156,10 +156,6 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     llvm::TargetMachine *target_machine = get_target_machine(module);
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
-    #if LLVM_VERSION >= 37
-    std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
-    #endif
-
     // Build up all of the passes that we want to do to the module.
     #if LLVM_VERSION < 37
     llvm::PassManager pass_manager;
@@ -200,6 +196,8 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     #if LLVM_VERSION < 37
     llvm::raw_fd_ostream *raw_out = new_raw_fd_ostream(filename);
     llvm::formatted_raw_ostream *out = new llvm::formatted_raw_ostream(*raw_out);
+    #else
+    std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
     #endif
 
     // Ask the target to add backend passes as necessary.
