@@ -148,8 +148,9 @@ llvm::TargetMachine *get_target_machine(const llvm::Module *module) {
                                        llvm::CodeGenOpt::Aggressive);
 }
 
-void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
-    Internal::debug(1) << "Compiling to native code...\n";
+#if LLVM_VERSION < 37
+void emit_file_legacy(llvm::Module *module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+    Internal::debug(1) << "emit_file_legacy.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module->getTargetTriple() << "\n";
 
     // Get the target specific parser.
@@ -157,23 +158,15 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     // Build up all of the passes that we want to do to the module.
-    #if LLVM_VERSION < 37
     llvm::PassManager pass_manager;
-    #else
-    llvm::legacy::PassManager pass_manager;
-    #endif
 
-    #if LLVM_VERSION < 37
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
     pass_manager.add(new llvm::TargetLibraryInfo(llvm::Triple(module->getTargetTriple())));
-    #else
-    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
-    #endif
 
     #if LLVM_VERSION < 33
     pass_manager.add(new llvm::TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
                                                    target_machine->getVectorTargetTransformInfo()));
-    #elif LLVM_VERSION < 37
+    #else
     target_machine->addAnalysisPasses(pass_manager);
     #endif
 
@@ -187,30 +180,54 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     pass_manager.add(llvm::createAlwaysInlinerPass());
 
     // Override default to generate verbose assembly.
-    #if LLVM_VERSION < 37
     target_machine->setAsmVerbosityDefault(true);
-    #else
-    target_machine->Options.MCOptions.AsmVerbose = true;
-    #endif
 
-    #if LLVM_VERSION < 37
     llvm::raw_fd_ostream *raw_out = new_raw_fd_ostream(filename);
     llvm::formatted_raw_ostream *out = new llvm::formatted_raw_ostream(*raw_out);
-    #else
-    std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
-    #endif
 
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
 
     pass_manager.run(*module);
 
-    #if LLVM_VERSION < 37
     delete out;
     delete raw_out;
-    #endif
 
     delete target_machine;
+}
+#endif
+
+void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+#if LLVM_VERSION < 37
+    emit_file_legacy(module, filename, file_type);
+#else
+    Internal::debug(1) << "emit_file.Compiling to native code...\n";
+    Internal::debug(2) << "Target triple: " << module->getTargetTriple() << "\n";
+
+    // Get the target specific parser.
+    llvm::TargetMachine *target_machine = get_target_machine(module);
+    internal_assert(target_machine) << "Could not allocate target machine!\n";
+
+    std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
+
+    // Build up all of the passes that we want to do to the module.
+    llvm::legacy::PassManager pass_manager;
+
+    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
+
+    // Make sure things marked as always-inline get inlined
+    pass_manager.add(llvm::createAlwaysInlinerPass());
+
+    // Override default to generate verbose assembly.
+    target_machine->Options.MCOptions.AsmVerbose = true;
+
+    // Ask the target to add backend passes as necessary.
+    target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
+
+    pass_manager.run(*module);
+
+    delete target_machine;
+#endif
 }
 
 llvm::Module *compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
