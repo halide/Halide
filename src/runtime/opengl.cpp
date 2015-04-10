@@ -169,16 +169,7 @@ struct ModuleState {
 // All persistent state maintained by the runtime.
 struct GlobalState {
     void init();
-
-    bool CheckAndReportError(void *user_context, const char *location) {
-        GLenum err = GetError();
-        if (err != GL_NO_ERROR) {
-          error(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")" <<
-                " at " << location << ".\n" ;
-            return true;
-        }
-        return false;
-    }
+    bool CheckAndReportError(void *user_context, const char *location);
 
     bool initialized;
 
@@ -204,6 +195,17 @@ struct GlobalState {
     OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
 };
+
+WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *location) {
+    GLenum err = GetError();
+    if (err != GL_NO_ERROR) {
+        error(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")" <<
+            " at " << location << ".\n" ;
+        return true;
+    }
+    return false;
+}
+
 
 WEAK GlobalState global_state;
 
@@ -1048,7 +1050,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
 }
 
 template <class T>
-WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, int channels) {
+ __attribute__((always_inline)) void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, int channels) {
     T *src = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int dstidx = y * width * channels;
@@ -1066,7 +1068,7 @@ WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, in
 }
 
 template <class T>
-WEAK void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, int channels) {
+__attribute__((always_inline)) void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, int channels) {
     T *dst = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int srcidx = y * width * channels;

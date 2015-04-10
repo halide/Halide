@@ -32,7 +32,7 @@ void check(const char *op, int vector_width, Expr e) {
         if (strncmp(op, filter, strlen(filter)) != 0) return;
     }
 
-    printf("%s %d\n", op, vector_width);
+    // printf("%s %d\n", op, vector_width);
 
     std::string name = std::string("test_") + op + Internal::unique_name('_');
     for (size_t i = 0; i < name.size(); i++) {

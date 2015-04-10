@@ -2095,8 +2095,12 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
             private_params.push_back(Variable::make(arg.type, arg.name));
         }
     }
+    string private_result_name = unique_name(private_name + "_result", false);
+    Expr private_result_var = Variable::make(Int(32), private_result_name);
     Expr call_private = Call::make(Int(32), private_name, private_params, Call::Extern);
-    Stmt public_body = AssertStmt::make(call_private == 0, private_name + " failed");
+    Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
+    public_body = LetStmt::make(private_result_name, call_private, public_body);
+
     module.append(LoweredFunc(public_name, public_args, public_body, LoweredFunc::External));
 
     return module;

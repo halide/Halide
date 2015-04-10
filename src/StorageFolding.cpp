@@ -232,8 +232,44 @@ class StorageFolding : public IRMutator {
     }
 };
 
+// Because storage folding runs before simplification, it's useful to
+// at least substitute in constants before running it, and also simplify the RHS of Let Stmts.
+class SubstituteInConstants : public IRMutator {
+    using IRMutator::visit;
+
+    Scope<Expr> scope;
+    void visit(const LetStmt *op) {
+        Expr value = simplify(mutate(op->value));
+
+        Stmt body;
+        if (is_const(value)) {
+            scope.push(op->name, value);
+            body = mutate(op->body);
+            scope.pop(op->name);
+        } else {
+            body = mutate(op->body);
+        }
+
+        if (body.same_as(op->body) && value.same_as(op->value)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, value, body);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (scope.contains(op->name)) {
+            expr = scope.get(op->name);
+        } else {
+            expr = op;
+        }
+    }
+};
+
 Stmt storage_folding(Stmt s) {
-    return StorageFolding().mutate(s);
+    s = SubstituteInConstants().mutate(s);
+    s = StorageFolding().mutate(s);
+    return s;
 }
 
 }

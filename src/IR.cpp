@@ -323,21 +323,12 @@ Stmt LetStmt::make(std::string name, Expr value, Stmt body) {
 
 Stmt AssertStmt::make(Expr condition, Expr message) {
     internal_assert(condition.defined()) << "AssertStmt of undefined\n";
+    internal_assert(message.type() == Int(32)) << "AssertStmt message must be an int:" << message << "\n";
 
     AssertStmt *node = new AssertStmt;
     node->condition = condition;
     node->message = message;
     return node;
-}
-
-Stmt AssertStmt::make(Expr condition, const char * message) {
-    return AssertStmt::make(condition, Expr(message));
-}
-
-Stmt AssertStmt::make(Expr condition, const std::vector<Expr> &message) {
-    internal_assert(!message.empty()) << "Assert with empty message\n";
-    Expr m = Call::make(Handle(), Call::stringify, message, Call::Intrinsic);
-    return AssertStmt::make(condition, m);
 }
 
 Stmt Pipeline::make(std::string name, Stmt produce, Stmt update, Stmt consume) {

@@ -123,14 +123,25 @@ StructType *Closure::build_type(LLVMContext *context) {
     return struct_t;
 }
 
-void Closure::pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *builder) {
-    // dst should be a pointer to a struct of the type returned by build_type
+void Closure::pack_struct(llvm::Type *
+#if LLVM_VERSION >= 37
+                          type
+#endif
+                          ,
+                          Value *dst,
+                          const Scope<Value *> &src,
+                          IRBuilder<> *builder) {
+    // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();
     vector<string> nm = names();
     vector<llvm::Type*> ty = llvm_types(&context);
     for (size_t i = 0; i < nm.size(); i++) {
+#if LLVM_VERSION >= 37
+        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
+#else
         Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx);
+#endif
         Value *val;
         if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
             val = src.get(nm[i]);
@@ -147,14 +158,23 @@ void Closure::pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *bu
 }
 
 void Closure::unpack_struct(Scope<Value *> &dst,
+                            llvm::Type *
+#if LLVM_VERSION >= 37
+                            type
+#endif
+                            ,
                             Value *src,
                             IRBuilder<> *builder) {
-    // src should be a pointer to a struct of the type returned by build_type
+    // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();
     vector<string> nm = names();
     for (size_t i = 0; i < nm.size(); i++) {
+#if LLVM_VERSION >= 37
+        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+#else
         Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
+#endif
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
@@ -261,7 +281,8 @@ bool function_takes_user_context(const std::string &name) {
             return true;
         }
     }
-    return false;
+    // The error functions all take a user context
+    return starts_with(name, "halide_error_");
 }
 
 }
