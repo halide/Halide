@@ -323,9 +323,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     TargetMachine &Target = *target.get();
 
     // Set up passes
+    std::string outstr;
     #if LLVM_VERSION < 37
     PassManager PM;
     #else
+    raw_string_ostream ostream(outstr);
     legacy::PassManager PM;
     #endif
 
@@ -401,9 +403,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #endif
 
     // Output string stream
-    std::string outstr;
+    #if LLVM_VERSION < 37
     raw_string_ostream outs(outstr);
     formatted_raw_ostream ostream(outs);
+    #endif
 
     // Ask the target to add backend passes as necessary.
     bool fail = Target.addPassesToEmitFile(PM, ostream,
@@ -415,14 +418,16 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     PM.run(*module);
 
+    #if LLVM_VERSION < 37
     ostream.flush();
+    #endif
 
     if (debug::debug_level >= 2) {
         module->dump();
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    string str = outs.str();
+    string str = outstr;
     debug(1) << "PTX kernel:\n" << str.c_str() << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
