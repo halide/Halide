@@ -220,7 +220,6 @@ struct ExprCompare {
 
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */
-#if __cplusplus > 199711L // C++11 strongly typed enum
 enum class DeviceAPI {
     Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
     Host,
@@ -229,48 +228,17 @@ enum class DeviceAPI {
     OpenCL,
     GLSL
 };
-#else
-struct DeviceAPI {
-    enum Values {
-        Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
-        Host,
-        Default_GPU,
-        CUDA,
-        OpenCL,
-        GLSL
-    };
-    int val;
-    DeviceAPI() : val(Parent) { }
-    DeviceAPI(int val) : val(val) { }
-    operator int() const { return val; }
-};
-#endif
 
 namespace Internal {
 
 /** An enum describing a type of loop traversal. Used in schedules,
  * and in the For loop IR node. */
-#if __cplusplus > 199711L // C++11 strongly typed enum
 enum class ForType {
     Serial,
     Parallel,
     Vectorized,
     Unrolled
 };
-#else
-struct ForType {
-    enum Values {
-        Serial,
-        Parallel,
-        Vectorized,
-        Unrolled
-    };
-    int val;
-    ForType() : val(Serial) { }
-    ForType(int val) : val(val) { }
-    operator int() const { return val; }
-};
-#endif
 
 
 /** A reference-counted handle to a statement node. */

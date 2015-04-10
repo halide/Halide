@@ -33,9 +33,6 @@ else
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 fi
 
-# Turn on C++11
-export CXX11=true
-
 echo Testing target $HL_TARGET with llvm $LLVM
 echo Using LD = $LD
 echo Using CC = $CC

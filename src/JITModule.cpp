@@ -1,9 +1,6 @@
 #include <string>
 #include <stdint.h>
-
-#if __cplusplus > 199711L || _MSC_VER >= 1800
 #include <mutex>
-#endif
 
 #include "JITModule.h"
 #include "LLVM_Headers.h"
@@ -662,9 +659,7 @@ void adjust_module_ref_count(void *arg, int32_t count) {
     }
 }
 
-#if __cplusplus > 199711L || _MSC_VER >= 1800
 std::mutex shared_runtimes_mutex;
-#endif
 
 // The Halide runtime is broken up into pieces so that state can be
 // shared across JIT compilations that do not use the same target
@@ -802,9 +797,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * JITSharedRuntime::release_all is called, the global state is rest
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
-    #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
-    #endif
 
     std::vector<JITModule> result;
 
@@ -846,9 +839,7 @@ void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
 }
 
 void JITSharedRuntime::release_all() {
-    #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
-    #endif
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
@@ -864,9 +855,7 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 }
 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
-    #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
-    #endif
 
     if (size != default_cache_size && shared_runtimes(MainShared).defined()) {
         default_cache_size = size;
