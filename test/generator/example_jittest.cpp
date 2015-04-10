@@ -1,5 +1,3 @@
-#if __cplusplus > 199711L
-
 #include "Halide.h"
 
 // When using Generators to JIT, just include the Generator .cpp file.
@@ -86,14 +84,3 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
-
-#else
-
-#include <stdio.h>
-
-int main(int argc, char **argv) {
-    printf("This test requires C++11\n");
-    return 0;
-}
-
-#endif

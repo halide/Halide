@@ -2031,7 +2031,6 @@ private:
             } else {
                 expr = abs(a);
             }
-#if __cplusplus > 199711L // C++11 comes with a portable isnan
         } else if (op->call_type == Call::Extern &&
                    op->name == "is_nan_f32") {
             Expr arg = mutate(op->args[0]);
@@ -2043,7 +2042,6 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, vec(arg), op->call_type);
             }
-#endif
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
             // Eagerly concat constant arguments to a stringify.
@@ -2124,9 +2122,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 if (op->name == "floor_f32") expr = std::floor(*f);
                 else if (op->name == "ceil_f32") expr = std::ceil(*f);
-#if __cplusplus > 199711L
                 else if (op->name == "round_f32") expr = std::nearbyint(*f);
-#endif
                 else if (op->name == "trunc_f32") {
                     expr = (*f < 0 ? std::ceil(*f) : std::floor(*f));
                 }
@@ -2873,10 +2869,8 @@ void simplify_test() {
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);
-#if __cplusplus > 199711L
     check(round(0.6f), 1.0f);
     check(round(-0.5f), 0.0f);
-#endif
     check(trunc(-1.6f), -1.0f);
     check(floor(round(x)), round(x));
     check(ceil(ceil(x)), ceil(x));

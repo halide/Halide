@@ -80,9 +80,6 @@
  * methods provided in Target.h)
  */
 
-// Generator requires C++11
-#if __cplusplus > 199711L || _MSC_VER >= 1800
-
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -537,7 +534,5 @@ public:
 };
 
 }  // namespace Halide
-
-#endif  // __cplusplus > 199711L
 
 #endif  // HALIDE_GENERATOR_H_
