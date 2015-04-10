@@ -145,6 +145,18 @@ if (WITH_TEST_GENERATORS)
                                "${GEN_NAME}"
                                "${FUNC_NAME}"
                                "target=host-user_context")
+    # metadata_tester_aottest.cpp depends on two variants of metadata_generator
+    elseif(TEST_SRC STREQUAL "metadata_tester_aottest.cpp")
+      halide_add_generator_dependency("${TEST_RUNNER}"
+                               "generator_${GEN_NAME}"
+                               "${GEN_NAME}"
+                               "${FUNC_NAME}"
+                               "target=host-register_metadata")
+      halide_add_generator_dependency("${TEST_RUNNER}"
+                               "generator_${GEN_NAME}"
+                               "${GEN_NAME}"
+                               "${FUNC_NAME}_ucon"
+                               "target=host-register_metadata-user_context")
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
       halide_add_generator_dependency("${TEST_RUNNER}"
@@ -159,14 +171,6 @@ if (WITH_TEST_GENERATORS)
                                  "tiled_blur_blur"
                                  "tiled_blur_blur"
                                  "target=host")
-      endif()
-      # metadata_tester_aottest.cpp depends on two variants of metadata_generator
-      if(TEST_SRC STREQUAL "metadata_tester_aottest.cpp")
-        halide_add_generator_dependency("${TEST_RUNNER}"
-                                 "generator_${GEN_NAME}"
-                                 "${GEN_NAME}"
-                                 "${FUNC_NAME}_ucon"
-                                 "target=host-user_context")
       endif()
     endif()
     target_include_directories("${TEST_RUNNER}" PRIVATE "${CMAKE_SOURCE_DIR}/apps/support")
