@@ -1328,8 +1328,7 @@ int main(int argc, char **argv) {
     else filter = NULL;
 
     target = get_target_from_environment();
-    target.set_feature(Target::NoAsserts);
-    target.set_feature(Target::NoBoundsQuery);
+    target.set_features({Target::NoAsserts, Target::NoBoundsQuery, Target::JIT});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
