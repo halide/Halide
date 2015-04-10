@@ -96,8 +96,7 @@ CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 
-LLVM_35_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34 35)
-ifneq ($(LLVM_35_OR_OLDER), )
+ifeq ($(LLVM_VERSION_TIMES_10), 35)
 LLVM_OLD_JIT_COMPONENT = jit
 endif
 
@@ -112,12 +111,7 @@ LLVM_STATIC_LIBS =
 LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
 endif
 
-LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
-ifneq ($(LLVM_34_OR_OLDER), )
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
-else
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
-endif
 
 UNAME = $(shell uname)
 
@@ -506,7 +500,7 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 -include $(INITIAL_MODULES:.o=.d)
 
 
-ifneq ($(LLVM_35_OR_OLDER), )
+ifeq ($(LLVM_VERSION_TIMES_10),35)
 RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
 RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
 else
@@ -828,10 +822,18 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/modules clean
 	make -C apps/modules out.png
 
-ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
-ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))
+# It's just for compiling the runtime, so Clang <3.5 *might* work, 
+# but best to peg it to the minimum llvm version.
+ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
+
+ifneq (,$(findstring clang version 3.6,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
+ifneq (,$(findstring clang version 3.7,$(CLANG_VERSION)))
+CLANG_OK=yes
 endif
 
 ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
@@ -842,29 +844,14 @@ ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
-ifneq (,$(findstring 3.,$(LLVM_VERSION)))
-ifeq (,$(findstring 3.0,$(LLVM_VERSION)))
-ifeq (,$(findstring 3.1,$(LLVM_VERSION)))
-LLVM_OK=yes
-endif
-endif
-endif
-
-ifneq (,$findstring 3.3.,$(LLVM_VERSION))
-LLVM_OK=yes
-endif
-ifneq (,$findstring 3.2.,$(LLVM_VERSION))
-LLVM_OK=yes
-endif
-
-ifdef CLANG_OK
+ifneq ($(CLANG_OK), )
 $(BUILD_DIR)/clang_ok:
 	@echo "Found a new enough version of clang"
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/clang_ok
 else
 $(BUILD_DIR)/clang_ok:
-	@echo "Can't find clang or version of clang too old (we need 3.1 or greater):"
+	@echo "Can't find clang or version of clang too old (we need 3.5 or greater):"
 	@echo "You can override this check by setting CLANG_OK=y"
 	echo '$(CLANG_VERSION)'
 	echo $(findstring version 3,$(CLANG_VERSION))
@@ -873,14 +860,18 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifdef LLVM_OK
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37))
+LLVM_OK=yes
+endif
+
+ifneq ($(LLVM_OK), )
 $(BUILD_DIR)/llvm_ok:
 	@echo "Found a new enough version of llvm"
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 3.2 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 3.5 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
