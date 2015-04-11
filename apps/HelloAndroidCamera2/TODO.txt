@@ -1,0 +1,8 @@
+- fix proper startup: resolutions, yuck
+  - always request 1920x1440
+
+
+
+  // This must be called here, before the initial buffer creation.
+        // Putting this inside surfaceCreated() is insufficient.
+        mSurfaceView.getHolder().setFormat(ImageFormat.YV12);

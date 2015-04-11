@@ -76,7 +76,7 @@ If you want to build it yourself, first check it out from subversion:
 Then build it like so:
 
     % cd llvm3.5
-    % ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
+    % ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,aarch64,nvptx,mips
     % make -j8
 
 (Users of OSX 10.8+ may need to explicitly specify GCC vs Clang,
@@ -92,7 +92,7 @@ If you wish to use cmake to build llvm, the build procedure is:
     % cd llvm3.5
     % mkdir build
     % cd build
-    % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+    % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;AArch64;NVPTX;Mips" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
     % make -j8
 
 then to point Halide to it:
