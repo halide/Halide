@@ -13,6 +13,7 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <utility>
 #include <vector>
 #include <string>
 #include <cstring>
@@ -225,13 +226,13 @@ inline NO_INLINE void collect_args(std::vector<T> &collected_args,
 template <typename T1, typename T2, typename T3, typename T4 >
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                      T3 a1, T4 a2) {
-    collected_args.push_back(std::make_pair<T1, T2>(a1, a2));
+    collected_args.push_back(std::pair<T1, T2>(a1, a2));
 }
 
  template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                    T3 a1, T4 a2, Args... args) {
-    collected_args.push_back(std::make_pair<T1, T2>(a1, a2));
+    collected_args.push_back(std::pair<T1, T2>(a1, a2));
     collect_paired_args(collected_args, args...);
 }
 
