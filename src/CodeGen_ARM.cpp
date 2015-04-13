@@ -1061,7 +1061,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
         internal_assert(slices >= 1);
         for (int i = 0; i < t.width; i += intrin_type.width) {
-            Expr slice_base = simplify(ramp->base + i * ramp->stride);
+            Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.width);
             Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
             ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
