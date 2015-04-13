@@ -77,7 +77,7 @@ public:
                                 VarOrRVar xi, VarOrRVar yi,
                                 Expr xfactor, Expr yfactor);
     EXPORT Stage &reorder(const std::vector<VarOrRVar> &vars);
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
+
     template <typename... Args>
     EXPORT typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args... args) {
@@ -87,29 +87,6 @@ public:
         Internal::collect_args(collected_args, args...);
         return reorder(collected_args);
     }
-#else
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                   VarOrRVar w);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                   VarOrRVar w, VarOrRVar t);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                                   VarOrRVar t3);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                                   VarOrRVar t3, VarOrRVar t4);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
-                                   VarOrRVar t6);
-#endif
 
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
@@ -969,7 +946,7 @@ public:
      * to make up the difference (see \ref Var::implicit) */
     // @{
     EXPORT FuncRefVar operator()(std::vector<Var>) const;
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
+
     template <typename... Args>
     EXPORT typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRefVar>::type
     operator()(Args... args) const {
@@ -977,15 +954,6 @@ public:
         Internal::collect_args(collected_args, args...);
         return this->operator()(collected_args);
     }
-#else
-    EXPORT FuncRefVar operator()() const;
-    EXPORT FuncRefVar operator()(Var x) const;
-    EXPORT FuncRefVar operator()(Var x, Var y) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u, Var v) const;
-#endif // C++11
     // @}
 
     /** Either calls to the function, or the left-hand-side of a
@@ -996,7 +964,7 @@ public:
      * \ref Var::implicit)*/
     // @{
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
+
     template <typename... Args>
     EXPORT typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRefExpr>::type
     operator()(Expr x, Args... args) const {
@@ -1005,14 +973,6 @@ public:
         Internal::collect_args(collected_args, args...);
         return (*this)(collected_args);
     }
-#else
-    EXPORT FuncRefExpr operator()(Expr x) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const;
-#endif // C++11
     // @}
 
     /** Split a dimension into inner and outer subdimensions with the
@@ -1096,7 +1056,6 @@ public:
      * innermost out */
     EXPORT Func &reorder(const std::vector<VarOrRVar> &vars);
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
     template <typename... Args>
     EXPORT typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args... args) {
@@ -1106,58 +1065,6 @@ public:
         Internal::collect_args(collected_args, args...);
         return reorder(collected_args);
     }
-#else
-    /** Reorder two dimensions so that x is traversed inside y. Does
-     * not affect the nesting order of other dimensions. E.g, if you
-     * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
-     * traversed in the order (w, y, z, x), from innermost
-     * outwards. */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y);
-
-    /** Reorder three dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
-
-    /** Reorder four dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                         VarOrRVar w);
-
-    /** Reorder five dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                         VarOrRVar w, VarOrRVar t);
-
-    /** Reorder six dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
-
-    /** Reorder seven dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                         VarOrRVar t3);
-
-    /** Reorder eight dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                         VarOrRVar t3, VarOrRVar t4);
-
-    /** Reorder nine dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
-
-    /** Reorder ten dimensions to have the given nesting order, from
-     * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
-                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
-                         VarOrRVar t6);
-#endif // C++11
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(VarOrRVar old_name, VarOrRVar new_name);
@@ -1466,7 +1373,7 @@ public:
      * are reordered around them. */
     // @{
     EXPORT Func &reorder_storage(const std::vector<Var> &dims);
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
+
     EXPORT Func &reorder_storage(Var x, Var y);
     template <typename... Args>
     EXPORT typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
@@ -1477,12 +1384,6 @@ public:
         Internal::collect_args(collected_args, args...);
         return reorder_storage(collected_args);
     }
-#else
-    EXPORT Func &reorder_storage(Var x, Var y);
-    EXPORT Func &reorder_storage(Var x, Var y, Var z);
-    EXPORT Func &reorder_storage(Var x, Var y, Var z, Var w);
-    EXPORT Func &reorder_storage(Var x, Var y, Var z, Var w, Var t);
-#endif
     // @}
 
     /** Compute this function as needed for each unique value of the
