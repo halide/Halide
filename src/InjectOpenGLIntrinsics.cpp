@@ -63,9 +63,9 @@ private:
 
                 // Normalize x, y coordinates. Leave c intact
                 args[i + 2] =
-                    (Cast::make(Float(32), call_args[i + 3]) + 0.5f) / extent;
-            }
-            Expr c_coordinate = call_args[5];
+                    (Cast::make(Float(32), mutate(call_args[i + 3])) + 0.5f) / extent;
+             }
+            Expr c_coordinate = mutate(call_args[5]);
             args[4] = c_coordinate;
 
             Type load_type = call->type;
