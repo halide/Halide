@@ -38,26 +38,12 @@ llvm::Triple CodeGen_MIPS::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_MIPS::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    // Fix the target triple.
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
+llvm::DataLayout CodeGen_MIPS::get_data_layout() const {
+    if (target.bits == 32) {
+        return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
+    } else {
+        return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
+    }
 }
 
 string CodeGen_MIPS::mcpu() const {
@@ -78,6 +64,10 @@ string CodeGen_MIPS::mattrs() const {
 
 bool CodeGen_MIPS::use_soft_float_abi() const {
     return false;
+}
+
+int CodeGen_MIPS::native_vector_bits() const {
+    return 128;
 }
 
 }}

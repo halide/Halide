@@ -1,5 +1,8 @@
 #include "IR.h"
+#include "IROperator.h"
+#include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -7,7 +10,10 @@ namespace Internal {
 struct ParameterContents {
     mutable RefCount ref_count;
     Type type;
-    bool is_buffer;
+    const bool is_buffer;
+    int dimensions;
+    const bool is_explicit_name;
+    const bool is_registered;
     std::string name;
     Buffer buffer;
     uint64_t data;
@@ -15,7 +21,8 @@ struct ParameterContents {
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
-    ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r), name(n), buffer(Buffer()), data(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -44,18 +51,69 @@ void Parameter::check_is_scalar() const {
 }
 
 void Parameter::check_dim_ok(int dim) const {
-    user_assert(dim >= 0 && dim < 4) << "Dimension " << dim << " is not in the range [0, 3]\n";
+    user_assert(dim >= 0 && dim < dimensions())
+        << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter(Type t, bool is_buffer) :
-    contents(new ParameterContents(t, is_buffer, unique_name('p'))) {}
+Parameter::Parameter() : contents(NULL) {
+    // Undefined Parameters are never registered.
+}
 
-Parameter::Parameter(Type t, bool is_buffer, const std::string &name) :
-    contents(new ParameterContents(t, is_buffer, name)) {}
+Parameter::Parameter(Type t, bool is_buffer, int d) :
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
+    internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+    // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+    }
+}
+
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
+    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
+    internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+    }
+}
+
+Parameter::Parameter(const Parameter& that) : contents(that.contents) {
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+    }
+}
+
+Parameter& Parameter::operator=(const Parameter& that) {
+    bool was_registered = contents.defined() && contents.ptr->is_registered;
+    contents = that.contents;
+    bool should_be_registered = contents.defined() && contents.ptr->is_registered;
+    if (should_be_registered && !was_registered) {
+        // This can happen if you do:
+        // Parameter p; // undefined
+        // p = make_interesting_parameter();
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+    } else if (!should_be_registered && was_registered) {
+        // This can happen if you do:
+        // Parameter p = make_interesting_parameter();
+        // p = Parameter();
+        ObjectInstanceRegistry::unregister_instance(this);
+    }
+    return *this;
+}
+
+Parameter::~Parameter() {
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::unregister_instance(this);
+    }
+}
 
 Type Parameter::type() const {
     check_defined();
     return contents.ptr->type;
+}
+
+int Parameter::dimensions() const {
+    check_defined();
+    return contents.ptr->dimensions;
 }
 
 const std::string &Parameter::name() const {
@@ -63,11 +121,43 @@ const std::string &Parameter::name() const {
     return contents.ptr->name;
 }
 
+bool Parameter::is_explicit_name() const {
+    check_defined();
+    return contents.ptr->is_explicit_name;
+}
+
 bool Parameter::is_buffer() const {
     check_defined();
     return contents.ptr->is_buffer;
 }
 
+Expr Parameter::get_scalar_expr() const {
+    check_is_scalar();
+    const Type t = type();
+    if (t.is_bool()) {
+      return scalar_to_constant_expr<bool>(get_scalar<bool>());
+    } else if (t.is_float()) {
+      switch (t.bits) {
+        case 32: return scalar_to_constant_expr<float>(get_scalar<float>());
+        case 64: return scalar_to_constant_expr<double>(get_scalar<double>());
+      }
+    } else if (t.is_int()) {
+      switch (t.bits) {
+        case 8: return scalar_to_constant_expr<int8_t>(get_scalar<int8_t>());
+        case 16: return scalar_to_constant_expr<int16_t>(get_scalar<int16_t>());
+        case 32: return scalar_to_constant_expr<int32_t>(get_scalar<int32_t>());
+        case 64: return scalar_to_constant_expr<int64_t>(get_scalar<int64_t>());
+      }
+    } else if (t.is_uint()) {
+      switch (t.bits) {
+        case 8: return scalar_to_constant_expr<uint8_t>(get_scalar<uint8_t>());
+        case 16: return scalar_to_constant_expr<uint16_t>(get_scalar<uint16_t>());
+        case 32: return scalar_to_constant_expr<uint32_t>(get_scalar<uint32_t>());
+        case 64: return scalar_to_constant_expr<uint64_t>(get_scalar<uint64_t>());
+      }
+    }
+    return Expr();
+}
 
 Buffer Parameter::get_buffer() const {
     check_is_buffer();
@@ -147,7 +237,7 @@ void Parameter::set_min_value(Expr e) {
     contents.ptr->min_value = e;
 }
 
-Expr Parameter::get_min_value() {
+Expr Parameter::get_min_value() const {
     check_is_scalar();
     return contents.ptr->min_value;
 }
@@ -162,7 +252,7 @@ void Parameter::set_max_value(Expr e) {
     contents.ptr->max_value = e;
 }
 
-Expr Parameter::get_max_value() {
+Expr Parameter::get_max_value() const {
     check_is_scalar();
     return contents.ptr->max_value;
 }
@@ -191,3 +281,4 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
 
 }
 }
+

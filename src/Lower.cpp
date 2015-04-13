@@ -21,13 +21,14 @@
 #include "SlidingWindow.h"
 #include "StorageFolding.h"
 #include "RemoveTrivialForLoops.h"
+#include "RemoveDeadAllocations.h"
 #include "Deinterleave.h"
 #include "DebugToFile.h"
 #include "EarlyFree.h"
 #include "UniquifyVariableNames.h"
 #include "SkipStages.h"
 #include "CSE.h"
-#include "SpecializeClampedRamps.h"
+#include "PartitionLoops.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
 #include "Inline.h"
@@ -40,6 +41,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
 #include "Memoization.h"
+#include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
@@ -209,26 +211,16 @@ Stmt build_provide_loop_nest(Function f,
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
-                base = Min::make(base, old_max + (1 - split.factor));
+                base = Min::make(likely(base), old_max + (1 - split.factor));
 
             }
 
             string base_name = prefix + split.inner + ".base";
             Expr base_var = Variable::make(Int(32), base_name);
-            //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
+            // Substitute in the new expression for the split variable ...
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
-
-            if (split.exact) {
-                // The bounds of the old reduction variable need to be
-                // explicitly defined for the benefit of producers
-                // that feed into this stage. They run from base to
-                // base + split factor.
-                stmt = LetStmt::make(prefix + split.old_var + ".min",
-                                     base_var, stmt);
-                stmt = LetStmt::make(prefix + split.old_var + ".max",
-                                     base_var + split.factor - 1, stmt);
-            }
-
+            // ... but also define it as a let for the benefit of bounds inference.
+            stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
@@ -238,13 +230,19 @@ Stmt build_provide_loop_nest(Function f,
             Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
             Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
 
-            Expr inner = fused % inner_extent + inner_min;
-            Expr outer = fused / inner_extent + outer_min;
+            // If the inner extent is zero, the loop will never be
+            // entered, but the bounds expressions lifted out might
+            // contain divides or mods by zero. In the cases where
+            // simplification of inner and outer matter, inner_extent
+            // is a constant, so the max will simplify away.
+            Expr factor = max(inner_extent, 1);
+            Expr inner = fused % factor + inner_min;
+            Expr outer = fused / factor + outer_min;
 
-            //stmt = LetStmt::make(prefix + split.inner, inner, stmt);
-            //stmt = LetStmt::make(prefix + split.outer, outer, stmt);
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
+            stmt = LetStmt::make(prefix + split.inner, inner, stmt);
+            stmt = LetStmt::make(prefix + split.outer, outer, stmt);
 
             // Maintain the known size of the fused dim if
             // possible. This is important for possible later splits.
@@ -256,8 +254,8 @@ Stmt build_provide_loop_nest(Function f,
             }
 
         } else {
-            // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
+            stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
         }
     }
 
@@ -303,7 +301,7 @@ Stmt build_provide_loop_nest(Function f,
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt);
         }
     }
 
@@ -426,7 +424,7 @@ Stmt build_produce(Function f) {
                 }
             } else if (args[j].is_buffer()) {
                 Buffer b = args[j].buffer;
-                Parameter p(b.type(), true, b.name());
+                Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
                 Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
@@ -501,9 +499,9 @@ Stmt build_produce(Function f) {
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
-        Stmt check = AssertStmt::make(EQ::make(result, 0),
-                                      vec<Expr>("Call to external func " + extern_name +
-                                                " returned non-zero value: ", result));
+        Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
+                                vec<Expr>(extern_name, result), Call::Extern);
+        Stmt check = AssertStmt::make(EQ::make(result, 0), error);
         check = LetStmt::make(result_name, e, check);
 
         for (size_t i = 0; i < lets.size(); i++) {
@@ -605,11 +603,9 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
             Expr check = (min_val <= min_var) && (max_val >= max_var);
-            vector<Expr> error_msg = vec<Expr>(
-                "Bounds given for " + b.var + " in " + func.name() +
-                " (from ", min_val, Expr(" to "), max_val,
-                Expr(") don't cover required region (from "),
-                min_var, Expr(" to "), max_var, Expr(")"));
+            Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
+                                        vec<Expr>(b.var, func.name(), min_val, max_val, min_var, max_var),
+                                        Call::Extern);
 
             // bounds inference has already respected these values for us
             //body = LetStmt::make(prefix + ".min", min_val, body);
@@ -734,7 +730,7 @@ private:
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
             func.schedule().compute_level().is_inline() &&
-            for_loop->for_type == For::Vectorized &&
+            for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
@@ -775,10 +771,11 @@ private:
             stmt = for_loop;
         } else {
             stmt = For::make(for_loop->name,
-                           for_loop->min,
-                           for_loop->extent,
-                           for_loop->for_type,
-                           body);
+                             for_loop->min,
+                             for_loop->extent,
+                             for_loop->for_type,
+                             for_loop->device_api,
+                             body);
         }
     }
 
@@ -838,11 +835,7 @@ public:
             Result r;
             r.param = op->param;
             r.type = op->param.type();
-            // We don't know the dimensionality from the Param
-            // alone. Treating it as zero dimensional skips all the
-            // min/extent checks, which is what we want anyway for
-            // image parameters that are only used by buffer handle.
-            r.dimensions = 0;
+            r.dimensions = op->param.dimensions();
             buffers[op->param.name()] = r;
         }
     }
@@ -862,6 +855,25 @@ public:
     }
 };
 
+void realization_order_dfs(string current, map<string, set<string> > &graph, set<string> &visited, set<string> &result_set, vector<string> &order) {
+    set<string> &inputs = graph[current];
+    visited.insert(current);
+
+    for (set<string>::const_iterator i = inputs.begin();
+        i != inputs.end(); ++i) {
+
+        if (visited.find(*i) == visited.end()) {
+            realization_order_dfs(*i, graph, visited, result_set, order);
+        } else if (*i != current) {
+            internal_assert(result_set.find(*i) != result_set.end())
+                << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
+        }
+    }
+
+    result_set.insert(current);
+    order.push_back(current);
+}
+
 vector<string> realization_order(string output, const map<string, Function> &env, map<string, set<string> > &graph) {
     // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
     // Populate the graph
@@ -875,42 +887,13 @@ vector<string> realization_order(string output, const map<string, Function> &env
         }
     }
 
-    vector<string> result;
+    vector<string> order;
     set<string> result_set;
+    set<string> visited;
 
-    while (true) {
-        // Find a function not in result_set, for which all its inputs are
-        // in result_set. Stop when we reach the output function.
-        bool scheduled_something = false;
-        // Inject a dummy use of this var in case asserts are off.
-        (void)scheduled_something;
-        for (map<string, Function>::const_iterator iter = env.begin();
-             iter != env.end(); ++iter) {
-            const string &f = iter->first;
-            if (result_set.find(f) == result_set.end()) {
-                bool good_to_schedule = true;
-                const set<string> &inputs = graph[f];
-                for (set<string>::const_iterator i = inputs.begin();
-                     i != inputs.end(); ++i) {
-                    if (*i != f && result_set.find(*i) == result_set.end()) {
-                        good_to_schedule = false;
-                    }
-                }
+    realization_order_dfs(output, graph, visited, result_set, order);
 
-                if (good_to_schedule) {
-                    scheduled_something = true;
-                    result_set.insert(f);
-                    result.push_back(f);
-                    debug(4) << "Realization order: " << f << "\n";
-                    if (f == output) return result;
-                }
-            }
-        }
-
-        internal_assert(scheduled_something)
-            << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
-    }
-
+    return order;
 }
 
 Stmt create_initial_loop_nest(Function f, const Target &t) {
@@ -951,8 +934,8 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
-        Site s = {f->for_type == For::Parallel ||
-                  f->for_type == For::Vectorized,
+        Site s = {f->for_type == ForType::Parallel ||
+                  f->for_type == ForType::Vectorized,
                   LoopLevel(func, var)};
         sites.push_back(s);
         f->body.accept(this);
@@ -1130,7 +1113,29 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     void visit(const For *op) {
         if (ends_with(op->name, ".__outermost")) {
-            stmt = op->body;
+            stmt = mutate(op->body);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent")) {
+            expr = 1;
+        } else if (ends_with(op->name, ".__outermost.loop_min")) {
+            expr = 0;
+        } else if (ends_with(op->name, ".__outermost.loop_max")) {
+            expr = 1;
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        if (ends_with(op->name, ".__outermost.loop_extent") ||
+            ends_with(op->name, ".__outermost.loop_min") ||
+            ends_with(op->name, ".__outermost.loop_max")) {
+            stmt = mutate(op->body);
         } else {
             IRMutator::visit(op);
         }
@@ -1143,7 +1148,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
-    s = For::make(root_var, 0, 1, For::Serial, s);
+    s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, s);
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1188,7 +1193,14 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 
     map<string, Expr> replace_with_constrained;
     vector<pair<string, Expr> > lets;
-    vector<Expr> asserts;
+
+    struct ParamAssert {
+        Expr condition;
+        Expr value, limit_value;
+        string param_name;
+    };
+
+    vector<ParamAssert> asserts;
 
     // Make constrained versions of the params
     for (map<string, Parameter>::iterator iter = finder.params.begin();
@@ -1204,15 +1216,24 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
             Expr constrained_var = Variable::make(param.type(), constrained_name);
             Expr constrained_value = Variable::make(param.type(), iter->first, param);
             replace_with_constrained[iter->first] = constrained_var;
+
             if (param.get_min_value().defined()) {
-                asserts.push_back(constrained_value >= param.get_min_value());
+                ParamAssert p = {
+                    constrained_value >= param.get_min_value(),
+                    constrained_value, param.get_min_value(),
+                    param.name()
+                };
+                asserts.push_back(p);
                 constrained_value = max(constrained_value, param.get_min_value());
             }
 
             if (param.get_max_value().defined()) {
-                Expr condition = constrained_value >= param.get_min_value();
-                std::ostringstream oss;
-                asserts.push_back(constrained_value <= param.get_max_value());
+                ParamAssert p = {
+                    constrained_value <= param.get_max_value(),
+                    constrained_value, param.get_max_value(),
+                    param.name()
+                };
+                asserts.push_back(p);
                 constrained_value = min(constrained_value, param.get_max_value());
             }
 
@@ -1234,9 +1255,36 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 
     // Inject the assert statements
     for (size_t i = 0; i < asserts.size(); i++) {
-        std::ostringstream oss;
-        oss << "Static bounds constraint on parameter violated: " << asserts[i];
-        s = Block::make(AssertStmt::make(asserts[i], oss.str()), s);
+        ParamAssert p = asserts[i];
+        // Upgrade the types to 64-bit versions for the error call
+        Type wider = p.value.type();
+        wider.bits = 64;
+        p.limit_value = cast(wider, p.limit_value);
+        p.value       = cast(wider, p.value);
+
+        string error_call_name = "halide_error_param";
+
+        if (p.condition.as<LE>()) {
+            error_call_name += "_too_large";
+        } else {
+            internal_assert(p.condition.as<GE>());
+            error_call_name += "_too_small";
+        }
+
+        if (wider.is_int()) {
+            error_call_name += "_i64";
+        } else if (wider.is_uint()) {
+            error_call_name += "_u64";
+        } else {
+            internal_assert(wider.is_float());
+            error_call_name += "_f64";
+        }
+
+        Expr error = Call::make(Int(32), error_call_name,
+                                vec<Expr>(p.param_name, p.value, p.limit_value),
+                                Call::Extern);
+
+        s = Block::make(AssertStmt::make(p.condition, error), s);
     }
 
     return s;
@@ -1250,7 +1298,10 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 // inserted. The second is a piece of code which will rewrite the
 // buffer_t sizes, mins, and strides in order to satisfy the
 // requirements.
-Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds &fb) {
+Stmt add_image_checks(Stmt s, Function f, const Target &t,
+                      const vector<string> &order,
+                      const map<string, Function> &env,
+                      const FuncValueBounds &fb) {
 
     bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
@@ -1348,7 +1399,44 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         string buffer_name = is_output_buffer ? f.name() : name;
 
         Box touched = boxes[buffer_name];
-        internal_assert((int)(touched.size()) == dimensions);
+        internal_assert(touched.empty() || (int)(touched.size()) == dimensions);
+
+        // The buffer may be used in one or more extern stage. If so we need to
+        // expand the box touched to include the results of the
+        // top-level bounds query calls to those extern stages.
+        if (param.defined()) {
+            // Find the extern users.
+            vector<string> extern_users;
+            for (size_t i = 0; i < order.size(); i++) {
+                Function f = env.find(order[i])->second;
+                if (f.has_extern_definition()) {
+                    const vector<ExternFuncArgument> &args = f.extern_arguments();
+                    for (size_t j = 0; j < args.size(); j++) {
+                        if ((args[j].image_param.defined() &&
+                             args[j].image_param.name() == param.name()) ||
+                            (args[j].buffer.defined() &&
+                             args[j].buffer.name() == param.name())) {
+                            extern_users.push_back(order[i]);
+                        }
+                    }
+                }
+            }
+
+            // Expand the box by the result of the bounds query from each.
+            for (size_t i = 0; i < extern_users.size(); i++) {
+                const string &extern_user = extern_users[i];
+                Box query_box;
+                Expr query_buf = Variable::make(Handle(), param.name() + ".bounds_query." + extern_user);
+                for (int j = 0; j < dimensions; j++) {
+                    Expr min = Call::make(Int(32), Call::extract_buffer_min,
+                                          vec<Expr>(query_buf, j), Call::Intrinsic);
+                    Expr max = Call::make(Int(32), Call::extract_buffer_max,
+                                          vec<Expr>(query_buf, j), Call::Intrinsic);
+                    query_box.push_back(Interval(min, max));
+                }
+                merge_boxes(touched, query_box);
+            }
+        }
 
         // An expression returning whether or not we're in inference mode
         ReductionDomain rdom;
@@ -1365,15 +1453,13 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             string elem_size_name = name + ".elem_size";
             Expr elem_size = Variable::make(Int(32), elem_size_name, image, param, rdom);
             int correct_size = type.bytes();
-            ostringstream error_msg;
-            error_msg << error_name << " has type " << type
-                      << ", but elem_size of the buffer_t passed in is ";
-            vector<Expr> args;
-            args.push_back(error_msg.str());
-            args.push_back(elem_size);
-            args.push_back(Expr(" instead of "));
-            args.push_back(correct_size);
-            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, args));
+            ostringstream type_name;
+            type_name << type;
+            Expr error = Call::make(Int(32), "halide_error_bad_elem_size",
+                                    vec<Expr>(error_name, type_name.str(),
+                                              elem_size, correct_size),
+                                    Call::Extern);
+            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error));
         }
 
         if (touched.maybe_unused()) {
@@ -1415,15 +1501,6 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             lets_required.push_back(make_pair(extent_required_name, extent_required));
             lets_required.push_back(make_pair(min_required_name, min_required));
 
-            vector<Expr> error_msg_min = vec<Expr>(
-                error_name + " is accessed at ",
-                min_required,
-                Expr(", which is before the min ("),
-                actual_min,
-                ") in dimension " + dim);
-
-            asserts_required.push_back(AssertStmt::make(actual_min <= min_required_var, error_msg_min));
-
             Expr actual_max = actual_min + actual_extent - 1;
             Expr max_required = min_required_var + extent_required_var - 1;
 
@@ -1431,14 +1508,15 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                 max_required = select(touched.used, max_required, actual_max);
             }
 
-            vector<Expr> error_msg_extent = vec<Expr>(
-                error_name + " is accessed at ",
-                max_required,
-                Expr(", which is beyond the max ("),
-                actual_max,
-                ") in dimension " + dim);
+            Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
-            asserts_required.push_back(AssertStmt::make(actual_max >= max_required, error_msg_extent));
+            Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
+                                        vec<Expr>(error_name, dim,
+                                                  min_required_var, max_required,
+                                                  actual_min, actual_max),
+                                        Call::Extern);
+
+            asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
 
             // Come up with a required stride to use in bounds
             // inference mode. We don't assert it. It's just used to
@@ -1465,8 +1543,10 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             // Halide handle larger single buffers, at least on 64-bit
             // systems.
             Expr max_size = cast<int64_t>(0x7fffffff);
-            Stmt check = AssertStmt::make((cast<int64_t>(actual_extent) * actual_stride) <= max_size,
-                                          "Total allocation for buffer " + name + " exceeds 2^31 - 1");
+            Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
+            Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+                                                    vec<Expr>(name, actual_size, max_size), Call::Extern);
+            Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);
             dims_no_overflow_asserts.push_back(check);
 
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
@@ -1478,9 +1558,9 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
-                    Stmt check = AssertStmt::make(this_dim_var <= max_size,
-                                                  "Product of extents for buffer " + name +
-                                                  " exceeds 2^31 - 1");
+                    Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
+                                            vec<Expr>(name, this_dim_var, max_size), Call::Extern);
+                    Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
                     dims_no_overflow_asserts.push_back(check);
                 }
             }
@@ -1591,10 +1671,13 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
 
             // In bounds inference mode, make sure the proposed
             // versions still satisfy the constraints.
-            Expr check = ((min_proposed <= min_required) &&
-                          (min_proposed + extent_proposed >=
-                           min_required + extent_required));
-            string error = "Applying the constraints to the required region made it smaller";
+            Expr max_proposed = min_proposed + extent_proposed - 1;
+            Expr max_required = min_required + extent_required - 1;
+            Expr check = (min_proposed <= min_required) && (max_proposed >= max_required);
+            Expr error = Call::make(Int(32), "halide_error_constraints_make_required_region_smaller",
+                                    vec<Expr>(error_name, i,
+                                              min_proposed, max_proposed,
+                                              min_required, max_required), Call::Extern);
             asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error));
 
             // stride_required is just a suggestion. It's ok if the
@@ -1611,16 +1694,22 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         for (size_t i = 0; i < constraints.size(); i++) {
             Expr var = Variable::make(Int(32), constraints[i].first);
             Expr constrained_var = Variable::make(Int(32), constraints[i].first + ".constrained");
-            Expr value = constraints[i].second;
-            ostringstream error;
-            error << "Static constraint violated: " << constraints[i].first << " == " << value;
 
-            replace_with_constrained[constraints[i].first] = constrained_var;
+            const string &var_str = constraints[i].first;
+            ostringstream ss;
+            ss << constraints[i].second;
+            string constrained_var_str = ss.str();
 
-            lets_constrained.push_back(make_pair(constraints[i].first + ".constrained", value));
+            replace_with_constrained[var_str] = constrained_var;
+
+            lets_constrained.push_back(make_pair(var_str + ".constrained", constraints[i].second));
+
+            Expr error = Call::make(Int(32), "halide_error_constraint_violated",
+                                    vec<Expr>(var_str, var, constrained_var_str, constrained_var),
+                                    Call::Extern);
 
             // Check the var passed in equals the constrained version (when not in inference mode)
-            asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error.str()));
+            asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
     }
 
@@ -1698,7 +1787,43 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
     return s;
 }
 
-Stmt lower(Function f, const Target &t) {
+class PropagateInheritedAttributes : public IRMutator {
+    using IRMutator::visit;
+
+    DeviceAPI for_device;
+
+    void visit(const For *op) {
+        DeviceAPI save_device = for_device;
+        for_device = (op->device_api == DeviceAPI::Parent) ? for_device : op->device_api;
+
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        Stmt body = mutate(op->body);
+
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body) &&
+            for_device == op->device_api) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
+        }
+
+        for_device = save_device;
+    }
+
+public:
+    PropagateInheritedAttributes() : for_device(DeviceAPI::Host) {
+    }
+};
+
+Stmt propagate_inherited_attributes(Stmt s) {
+    PropagateInheritedAttributes propagator;
+
+    return propagator.mutate(s);
+}
+
+Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes) {
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
 
@@ -1735,7 +1860,7 @@ Stmt lower(Function f, const Target &t) {
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, f, t, func_bounds);
+    s = add_image_checks(s, f, t, order, env, func_bounds);
     debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
@@ -1752,6 +1877,10 @@ Stmt lower(Function f, const Target &t) {
     debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
+
+    debug(1) << "Removing code that depends on undef values...\n";
+    s = remove_undef(s);
+    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
@@ -1788,7 +1917,7 @@ Stmt lower(Function f, const Target &t) {
 
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
-        s = inject_host_dev_buffer_copies(s);
+        s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
     }
 
@@ -1797,10 +1926,6 @@ Stmt lower(Function f, const Target &t) {
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
-
-    debug(1) << "Removing code that depends on undef values...\n";
-    s = remove_undef(s);
-    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
@@ -1823,25 +1948,49 @@ Stmt lower(Function f, const Target &t) {
     s = simplify(s);
     debug(2) << "Lowering after rewriting vector interleavings:\n" << s << "\n\n";
 
-    debug(1) << "Specializing clamped ramps...\n";
-    s = specialize_clamped_ramps(s);
+    debug(1) << "Partitioning loops to simplify boundary conditions...\n";
+    s = partition_loops(s);
     s = simplify(s);
-    debug(2) << "Lowering after specializing clamped ramps:\n" << s << "\n\n";
+    debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
 
-    if (t.has_gpu_feature()) {
-        debug(1) << "Injecting device frees...\n";
-        s = inject_dev_frees(s);
-        debug(2) << "Lowering after injecting device frees:\n" << s << "\n\n";
-    }
-
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
+
+    if (t.has_feature(Target::OpenGL)) {
+        debug(1) << "Detecting varying attributes...\n";
+        s = find_linear_expressions(s);
+        debug(2) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
+
+        debug(1) << "Moving varying attribute expressions out of the shader...\n";
+        s = setup_gpu_vertex_buffer(s);
+        debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
+    }
+
+    // This is envisioned as a catch all pass to propagate attributes
+    // which are inherited from a parent node by a child node so
+    // every CodeGen backend does not have to keep track of these
+    // attributes as the IR tree is traversed. At present, only the
+    // GPU device attribute on For nodes is propagated (to contained
+    // For nodes which have their device set to DeviceAPI::Parent).
+    debug(1) << "Propagating inherited attributes downward.\n";
+    s = propagate_inherited_attributes(s);
+    debug(2) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";
+
+    s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    if (!custom_passes.empty()) {
+        for (size_t i = 0; i < custom_passes.size(); i++) {
+            debug(1) << "Running custom lowering pass " << i << "...\n";
+            s = custom_passes[i]->mutate(s);
+            debug(1) << "Lowering after custom pass " << i << ":\n" << s << "\n\n";
+        }
+    }
 
     return s;
 }

@@ -74,6 +74,12 @@ bool is_const(Expr e, int value) {
     return false;
 }
 
+bool is_no_op(Stmt s) {
+    if (!s.defined()) return true;
+    const Evaluate *e = s.as<Evaluate>();
+    return e && is_const(e->value);
+}
+
 const int * as_const_int(Expr e) {
     const IntImm *i = e.as<IntImm>();
     return i ? &(i->value) : NULL;
@@ -92,7 +98,7 @@ bool is_const_power_of_two(Expr e, int *bits) {
     if (c) return is_const_power_of_two(c->value, bits);
 
     const IntImm *int_imm = e.as<IntImm>();
-    if (int_imm) {
+    if (int_imm && ((int_imm->value & (int_imm->value - 1)) == 0)) {
         int bit_count = 0;
         int tmp;
         for (tmp = 1; tmp < int_imm->value; tmp *= 2) {

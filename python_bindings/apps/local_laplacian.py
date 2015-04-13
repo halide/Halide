@@ -87,7 +87,7 @@ def main(J=8):
     # Make the processed Gaussian pyramid.
     gPyramid = [Func('gPyramid%d'%i) for i in range(J)]
     # Do a lookup into a lut with 256 entires per intensity level
-    level = k * (1.0 / (levels - 1))
+    level = k / (levels - 1)
     idx = gray[x,y]*cast(float_t, levels-1)*256.0
     idx = clamp(cast(int_t, idx), 0, (levels-1)*256)
     gPyramid[0][x,y,k] = beta*(gray[x, y] - level) + level + remap[idx - 256*k]

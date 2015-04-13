@@ -12,19 +12,13 @@
 #include "Param.h"
 #include "Argument.h"
 #include "RDom.h"
-#include "JITCompiledModule.h"
+#include "JITModule.h"
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "Module.h"
 
 namespace Halide {
-
-enum GPUAPI {
-    GPU_Default,
-    GPU_CUDA,
-    GPU_OpenCL,
-    GPU_GLSL
-};
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -47,7 +41,8 @@ struct VarOrRVar {
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
     Internal::Schedule schedule;
-    void set_dim_type(VarOrRVar var, Internal::For::ForType t);
+    void set_dim_type(VarOrRVar var, Internal::ForType t);
+    void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
     std::string stage_name;
 public:
@@ -118,27 +113,27 @@ public:
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
 
-    EXPORT Stage &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    EXPORT Stage &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y,
                                VarOrRVar thread_x, VarOrRVar thread_y,
-                               GPUAPI gpu_api = GPU_Default);
+                               DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
-                               GPUAPI gpu_api = GPU_Default);
-    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
+                               DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
-                                    GPUAPI gpu_api = GPU_Default);
+                                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                    Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
+                                    Expr x_size, Expr y_size, Expr z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &allow_race_conditions();
     // @}
@@ -352,6 +347,44 @@ enum StmtOutputFormat {
      HTML
 };
 
+namespace {
+// Helper for deleting custom lowering passes. In the header so that
+// it goes in user code on windows, where you can have multiple heaps.
+template<typename T>
+void delete_lowering_pass(T *pass) {
+    delete pass;
+}
+}
+
+namespace Internal {
+struct ErrorBuffer;
+class IRMutator;
+}
+
+
+struct Outputs {
+    std::string object_name;
+    std::string assembly_name;
+    std::string bitcode_name;
+
+    Outputs object(const std::string &object_name) {
+        Outputs updated = *this;
+        updated.object_name = object_name;
+        return updated;
+    }
+    Outputs assembly(const std::string &assembly_name) {
+        Outputs updated = *this;
+        updated.assembly_name = assembly_name;
+        return updated;
+    }
+    Outputs bitcode(const std::string &bitcode_name) {
+        Outputs updated = *this;
+        updated.bitcode_name = bitcode_name;
+        return updated;
+    }
+};
+
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -384,43 +417,12 @@ class Func {
 
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
-    Internal::JITCompiledModule compiled_module;
+    Internal::JITModule compiled_module;
 
     /** Invalidate the cached lowered stmt and compiled module. */
     void invalidate_cache();
 
-    /** The current error handler used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    void (*error_handler)(void *user_context, const char *);
-
-    /** The current custom allocator used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    // @{
-    void *(*custom_malloc)(void *user_context, size_t);
-    void (*custom_free)(void *user_context, void *ptr);
-    // @}
-
-    /** The current custom parallel task launcher and handler for
-     * realizing this function. May be NULL. */
-    // @{
-    int (*custom_do_par_for)(void *user_context,
-                             int (*)(void *, int, uint8_t *),
-                             int, int, uint8_t *);
-    int (*custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
-                          int, uint8_t *);
-    // @}
-
-    /** The current custom tracing function. May be NULL. */
-    // @{
-    int32_t (*custom_trace)(void *, const halide_trace_event *);
-
-    // @}
-
-    /** The current print function used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    void (*custom_print)(void *user_context, const char *);
-
-    uint64_t cache_size;
+    Halide::Internal::JITHandlers jit_handlers;
 
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
@@ -438,11 +440,19 @@ class Func {
      * still be valid though. */
     std::vector<std::pair<int, Internal::Parameter> > image_param_args;
 
-    /** A context to use for JIT-realizations of this Func. */
-    Param<void *> user_context;
+    /** The user context that's used when jitting. This is not settable
+     * by user code, but is reserved for internal use.
+     * Note that this is an Internal::Parameter (rather than a Param<void*>)
+     * so that we can exclude it from the ObjectInstanceRegistry. */
+    Internal::Parameter jit_user_context;
 
-    // Some infrastructure that helps Funcs catch and handle runtime errors in JIT-compiled code.
-    bool prepare_to_catch_runtime_errors(void *buf);
+    struct CustomLoweringPass {
+        Internal::IRMutator *pass;
+        void (*deleter)(Internal::IRMutator *);
+    };
+
+    /** A set of custom passes to use when lowering this Func. */
+    std::vector<CustomLoweringPass> custom_lowering_passes;
 
     // Helper function for recursive reordering support
     EXPORT Func &reorder_storage(const std::vector<Var> &dims, size_t start);
@@ -457,6 +467,9 @@ public:
     /** Declare a new undefined function with an
      * automatically-generated unique name */
     EXPORT Func();
+
+    /** Destructor */
+    EXPORT ~Func();
 
     /** Declare a new function with an automatically-generated unique
      * name, and define it to return the given expression (which may
@@ -521,7 +534,7 @@ public:
     EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
 
     template<typename T>
-    void realize(Image<T> dst, const Target &target = get_jit_target_from_environment()) {
+    NO_INLINE void realize(Image<T> dst, const Target &target = get_jit_target_from_environment()) {
         // Images are expected to exist on-host.
         realize(Buffer(dst), target);
         dst.copy_to_host();
@@ -544,9 +557,9 @@ public:
      * signature, and C function name (which defaults to the same name
      * as this halide function */
     //@{
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
+    EXPORT void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                    const Target &target = get_target_from_environment());
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>,
+    EXPORT void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &,
                                    const Target &target = get_target_from_environment());
     // @}
 
@@ -556,9 +569,9 @@ public:
      * as this halide function. You probably don't want to use this
      * directly; call compile_to_file instead. */
     //@{
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
+    EXPORT void compile_to_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>,
+    EXPORT void compile_to_object(const std::string &filename, const std::vector<Argument> &,
                                   const Target &target = get_target_from_environment());
     // @}
 
@@ -569,7 +582,8 @@ public:
      * function. You don't actually have to have defined this function
      * yet to call this. You probably don't want to use this directly;
      * call compile_to_file instead. */
-    EXPORT void compile_to_header(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_header(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
+                                  const Target &target = get_target_from_environment());
 
     /** Statically compile this function to text assembly equivalent
      * to the object file generated by compile_to_object. This is
@@ -577,9 +591,9 @@ public:
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
     //@{
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
+    EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                     const Target &target = get_target_from_environment());
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>,
+    EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
                                     const Target &target = get_target_from_environment());
     // @}
     /** Statically compile this function to C source code. This is
@@ -587,7 +601,7 @@ public:
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
     EXPORT void compile_to_c(const std::string &filename,
-                             std::vector<Argument>,
+                             const std::vector<Argument> &,
                              const std::string &fn_name = "",
                              const Target &target = get_target_from_environment());
 
@@ -595,13 +609,14 @@ public:
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
     EXPORT void compile_to_lowered_stmt(const std::string &filename,
+                                        const std::vector<Argument> &args,
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code as above
      * but simplified using the provided realization bounds and other
      * concrete parameter values. Can emit html or plain text. */
-    //@{
+    // @{
     EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
                                                    Realization dst,
                                                    const std::map<std::string, Expr> &additional_replacements,
@@ -667,15 +682,14 @@ public:
                                                    int x_size,
                                                    StmtOutputFormat fmt = Text,
                                                    const Target &t = get_target_from_environment());
-
     // @}
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.
      */
-    //@{
-    EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args,
+    // @{
+    EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
 // TODO: Add C++11 varargs template, which is trickier due to final optional argument.
     EXPORT void compile_to_file(const std::string &filename_prefix,
@@ -691,6 +705,22 @@ public:
     EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
                                 const Target &target = get_target_from_environment());
 
+    // @}
+
+    /** Store an internal representation of lowered code as a self
+     * contained Module suitable for further compilation. */
+    EXPORT Module compile_to_module(const std::vector<Argument> &args, const std::string &fn_name = "",
+                                    const Target &target = get_target_from_environment());
+
+    /** Compile and generate multiple target files with single call.
+     * Deduces target files based on filenames specified in
+     * output_files struct.
+     */
+    //@{
+    EXPORT void compile_to(const Outputs &output_files,
+                           std::vector<Argument> args,
+                           const std::string &fn_name,
+                           const Target &target = get_target_from_environment());
     // @}
 
     /** Eagerly jit compile the function to machine code. This
@@ -787,7 +817,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
+    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your
@@ -799,11 +829,31 @@ public:
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
-    /** Set the maximum number of bytes used by memoization caching.
-     * If you are compiling statically, you should include HalideRuntime.h
-     * and call halide_memoization_cache_set_size() instead.
-     */
-    EXPORT void memoization_cache_set_size(uint64_t size);
+    /** Add a custom pass to be used during lowering. It is run after
+     * all other lowering passes. Can be used to verify properties of
+     * the lowered Stmt, instrument it with extra code, or otherwise
+     * modify it. The Func takes ownership of the pass, and will call
+     * delete on it when the Func goes out of scope. So don't pass a
+     * stack object, or share pass instances between multiple
+     * Funcs. */
+    template<typename T>
+    void add_custom_lowering_pass(T *pass) {
+        // Template instantiate a custom deleter for this type, then
+        // cast it to a deleter that takes a IRMutator *. The custom
+        // deleter lives in user code, so that deletion is on the same
+        // heap as construction (I hate Windows).
+        void (*deleter)(Internal::IRMutator *) =
+            (void (*)(Internal::IRMutator *))(&delete_lowering_pass<T>);
+        add_custom_lowering_pass(pass, deleter);
+    }
+
+    /** Add a custom pass to be used during lowering, with the
+     * function that will be called to delete it also passed in. Set
+     * it to NULL if you wish to retain ownership of the object. */
+    EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass, void (*deleter)(Internal::IRMutator *));
+
+    /** Remove all previously-set custom lowering passes */
+    EXPORT void clear_custom_lowering_passes();
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
@@ -1291,16 +1341,16 @@ public:
      * threads. If the selected target is not an appropriate GPU, this
      * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** Tell Halide to run this stage using a single gpu thread and
      * block. This is not an efficient use of your GPU, but it can be
      * useful to avoid copy-back for intermediate update stages that
      * touch a very small part of your Func. */
-    EXPORT Func &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     /** \deprecated Old name for #gpu_threads. */
     // @{
@@ -1320,9 +1370,9 @@ public:
      * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** \deprecated Old name for #gpu_blocks. */
@@ -1344,11 +1394,11 @@ public:
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y,
-                     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+                     VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** \deprecated Old name for #gpu. */
@@ -1371,10 +1421,10 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api = GPU_Default);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          int x_size, int y_size, int z_size, GPUAPI gpu_api = GPU_Default);
+                          int x_size, int y_size, int z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** \deprecated Old name for #gpu_tile. */

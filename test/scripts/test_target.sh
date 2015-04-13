@@ -22,7 +22,7 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 else
     BITS=64
-    # ptx and opencl fall into this category
+    # cuda (ptx) and opencl fall into this category
     export LD="ld"
     export CC="${CC} -m64"
     export CXX="${CXX} -m64"
@@ -45,26 +45,23 @@ COMMIT=`git rev-parse HEAD`
 mv distrib/halide.tgz distrib/halide_${HOST}_${BITS}_${LLVM}_${COMMIT}_${DATE}.tgz
 chmod a+r distrib/*
 
-if [ "$HL_TARGET" == ptx -a "$HOST" == Darwin ]; then
+if [ "$HL_TARGET" == "host-cuda" -a "$HOST" == Darwin ]; then
     echo "Halide builds but tests not run"
-elif [ "$HL_TARGET" == opencl -a "$HOST" == Darwin ]; then
+elif [ "$HL_TARGET" == "host-opencl" -a "$HOST" == Darwin ]; then
     echo "Halide builds but tests not run"
 elif [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
 
     # Also check that the nacl apps compile.
-    make -C apps/HelloNaCl clean &&
     make -C apps/nacl_demos clean &&
-    make -C apps/HelloNaCl &&
     make -C apps/nacl_demos &&
     echo "Halide builds but tests not run."
 else
     make test_correctness -j8 &&
     make test_errors -j8 &&
-    make test_static -j8 &&
     make test_tutorials -j8 &&
     make test_performance &&
     make test_apps &&
+    make test_generators &&
     echo "All tests pass"
 fi
-

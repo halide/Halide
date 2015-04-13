@@ -16,7 +16,7 @@
 // DYLD_LIBRARY_PATH=../bin ./lesson_01
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
-#include <Halide.h>
+#include "Halide.h"
 
 // We'll also include stdio for printf.
 #include <stdio.h>
@@ -34,6 +34,11 @@ int main(int argc, char **argv) {
     // Var objects are names to use as variables in the definition of
     // a Func. They have no meaning by themselves.
     Halide::Var x, y;
+
+    // We typically use Vars named 'x' and 'y' to correspond to the x
+    // and y axes of an image, and we write them in that order. If
+    // you're used to thinking of images as having rows and columns,
+    // then x is the column index, and y is the row index.
 
     // Funcs are defined at any integer coordinate of its variables as
     // an Expr in terms of those variables and other functions.

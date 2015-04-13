@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <limits>
 
 #include "Profiling.h"
 #include "IRMutator.h"
@@ -22,6 +23,11 @@ int profiling_level() {
     return trace ? atoi(trace) : 0;
 }
 
+int profiling_loop_level() {
+    char *loop_level = getenv("HL_PROFILE_LOOP_LEVEL");
+    return loop_level ? atoi(loop_level) : std::numeric_limits<int>::max();
+}
+
 using std::map;
 using std::string;
 using std::vector;
@@ -30,7 +36,11 @@ class InjectProfiling : public IRMutator {
 public:
     InjectProfiling(string func_name)
         : level(profiling_level()),
-          func_name(sanitize(func_name)) {
+          maximum_loop_level(profiling_loop_level()),
+          current_loop_level(0),
+          func_name(sanitize(func_name)),
+          dummy(Variable::make(Int(32), "dummy")),
+          dummy_counter(0) {
     }
 
     Stmt inject(Stmt s) {
@@ -43,13 +53,13 @@ public:
                 PushCallStack st(this, kToplevel, kToplevel);
                 s = mutate(s);
             }
-            s = add_ticks(kToplevel, kToplevel, s);
+            s = add_count_and_ticks(kToplevel, kToplevel, s);
             s = add_nsec(kToplevel, kToplevel, s);
 
             // Note that this is tacked on to the front of the block, since it must come
             // before the calls to halide_current_time_ns.
             Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", vector<Expr>(), Call::Extern);
-            Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
+            Stmt begin_clock = Evaluate::make(begin_clock_call);
             s = Block::make(begin_clock, s);
 
             // Do a little calibration: make a loop that does a large number of calls to add_ticks
@@ -63,6 +73,8 @@ public:
             //
             // NOTE: we deliberately do this *after* measuring
             // the total, so this should *not* be included in "kToplevel".
+            Expr j = Variable::make(Int(32), "j");
+
             const int kIters = 1000000;
             const int kUnroll = 4;
             Stmt ticker_block = Stmt();
@@ -72,8 +84,7 @@ public:
                         ticker_block);
             }
 
-            Expr j = Variable::make(Int(32), "j");
-            Stmt do_timings = For::make("j", 0, kIters, For::Serial, ticker_block);
+            Stmt do_timings = For::make("j", 0, kIters, ForType::Serial, DeviceAPI::Host, ticker_block);
             do_timings = add_ticks(kOverhead, kOverhead, do_timings);
             do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
                 Cast::make(UInt(64), kIters * kUnroll), do_timings);
@@ -91,7 +102,7 @@ public:
 
             // Now that we know the final size, allocate the buffer and init to zero.
             Expr i = Variable::make(Int(32), "i");
-            Stmt init = For::make("i", 0, (int)indices.size(), For::Serial,
+            Stmt init = For::make("i", 0, (int)indices.size(), ForType::Serial, DeviceAPI::Host,
                 Store::make(kBufName, Cast::make(UInt(64), 0), i));
             s = Block::make(init, s);
 
@@ -106,9 +117,14 @@ private:
     using IRMutator::visit;
 
     const int level;
+    const int maximum_loop_level;
+    int current_loop_level;
     const string func_name;
     map<string, int> indices;   // map name -> index in buffer.
     vector<string> call_stack;  // names of the nodes upstream
+
+    Expr dummy;
+    int dummy_counter;
 
     class PushCallStack {
     public:
@@ -149,7 +165,9 @@ private:
     }
 
     Stmt add_ticks(const string& op_type, const string& op_name, Stmt s) {
-        Expr ticks = Call::make(UInt(64), Internal::Call::profiling_timer, vector<Expr>(), Call::Intrinsic);
+        std::vector<Expr> args;
+        args.push_back(dummy + dummy_counter++);
+        Expr ticks = Call::make(UInt(64), Internal::Call::profiling_timer, args, Call::Intrinsic);
         return add_delta("ticks", op_type, op_name, ticks, ticks, s);
     }
 
@@ -215,18 +233,25 @@ private:
     }
 
     void visit(const For *op) {
-        if (op->for_type == For::Parallel && level >= 1) {
+        current_loop_level++;
+        if (op->for_type == ForType::Parallel && level >= 1) {
             std::cerr << "Warning: The Halide profiler does not yet support "
                       << "parallel schedules. Not profiling inside the loop over "
                       << op->name << "\n";
             stmt = op;
         } else {
+            PushCallStack st(this, "forloop", op->name);
             IRMutator::visit(op);
         }
         // We only instrument loops at profiling level 2 or higher
-        if (level >= 2) {
-            stmt = add_count_and_ticks("forloop", op->name, stmt);
+        if ((level >= 2) && (current_loop_level <= maximum_loop_level)) {
+            // for loop with Vectorized type is unrolled into vectorized ops,
+            // which usually is too short to profile individually
+            if (op->for_type != ForType::Vectorized) {
+                stmt = add_count_and_ticks("forloop", op->name, stmt);
+            }
         }
+        current_loop_level--;
     }
 };
 

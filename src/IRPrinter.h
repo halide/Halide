@@ -3,7 +3,7 @@
 
 #include <ostream>
 
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -28,15 +28,22 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
  * human-readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
 
+/** Emit a halide Module on an output stream (such as std::cout) in a
+ * human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
+
+/** Emit a halide device api type in a human readable form */
+std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
+
 namespace Internal {
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Stmt &);
+EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */
-std::ostream &operator<<(std::ostream &stream, const For::ForType &);
+std::ostream &operator<<(std::ostream &stream, const ForType &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -106,7 +113,6 @@ protected:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-
 };
 }
 }

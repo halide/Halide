@@ -1,11 +1,9 @@
-#include <Halide.h>
+#include "Halide.h"
 using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
 int main(int argc, char **argv) {
-
-    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
 
     // First define the function that gives the initial state.
     {
@@ -54,7 +52,7 @@ int main(int argc, char **argv) {
         new_real = julia(x, y, t)[0];
         new_imag = julia(x, y, t)[1];
         Expr mag = new_real * new_real + new_imag * new_imag;
-        Expr escape = argmin(mag < 4)[0];
+        Expr escape = argmin(select(mag < 4, 1, 0))[0];
 
         // Now pick a color based on the number of escape iterations.
         Expr r_scale = 128;
@@ -92,11 +90,9 @@ int main(int argc, char **argv) {
 
         julia.compute_at(render, x);
 
-        if (can_vectorize) {
-            render.vectorize(x, 4);
-            julia.update().vectorize(x, 4);
-            final.vectorize(x, 4);
-        }
+        render.vectorize(x, 4);
+        julia.update().vectorize(x, 4);
+        final.vectorize(x, 4);
         final.compile_to_file("julia_render", state);
     }
 

@@ -15,7 +15,7 @@
 // g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -112,6 +112,16 @@ int main(int argc, char **argv) {
         // style boundary condition, and is the simplest boundary
         // condition to express in Halide.
         clamped(x, y, c) = input(clamped_x, clamped_y, c);
+
+        // Defining 'clamped' in that way can be done more concisely
+        // using a helper function from the BoundaryConditions
+        // namespace like so:
+        //
+        // clamped = BoundaryConditions::repeat_edge(input);
+        //
+        // These are important to use for other boundary conditions,
+        // because they are expressed in the way that Halide can best
+        // understand and optimize.
 
         // Upgrade it to 16-bit, so we can do math without it
         // overflowing. This time we'll refer to our new Func

@@ -106,12 +106,7 @@ string simt_intrinsic(const string &name) {
 
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
-    int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " >> " << bits;
-        print_assignment(op->type, oss.str());
-    } else if (op->type.is_int()) {
+    if (op->type.is_int()) {
         print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
@@ -119,12 +114,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
-    int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
-        print_assignment(op->type, oss.str());
-    } else if (op->type.is_int()) {
+    if (op->type.is_int()) {
         print_expr(Call::make(op->type, "smod_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
@@ -133,7 +123,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
+        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
         internal_assert(is_zero(loop->min));
 
         do_indent();
@@ -143,7 +133,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         loop->body.accept(this);
 
     } else {
-        user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
+        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
         CodeGen_C::visit(loop);
     }
 }
@@ -462,6 +452,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
             stream << " " << get_memory_space(args[i].name) << " ";
+            if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
             allocations.push(args[i].name, args[i].type);
@@ -536,6 +527,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float minval_f32() {return -FLT_MAX;}\n"
                << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
+               << "bool is_nan_f32(float x) {return x != x; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << smod_def("char") << "\n"
@@ -568,6 +560,8 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define acosh_f32 acosh \n"
                << "#define tanh_f32 tanh \n"
                << "#define atanh_f32 atanh \n"
+               << "#define fast_inverse_f32 native_recip \n"
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
                << "int halide_gpu_thread_barrier() {\n"
                << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
                << "  return 0;\n"
@@ -577,8 +571,9 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "#define __address_space___shared __local\n";
 
     if (target.has_feature(Target::CLDoubles)) {
-        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
-        src_stream << "#define sqrt_f64 sqrt\n"
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
+                   << "bool is_nan_f64(double x) {return x != x; }\n"
+                   << "#define sqrt_f64 sqrt\n"
                    << "#define sin_f64 sin\n"
                    << "#define cos_f64 cos\n"
                    << "#define exp_f64 exp\n"
@@ -625,6 +620,10 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 
 void CodeGen_OpenCL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
+}
+
+std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
+    return name;
 }
 
 }}

@@ -190,7 +190,7 @@ void IRMutator::visit(const For *op) {
         body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = For::make(op->name, min, extent, op->for_type, body);
+        stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
     }
 }
 
@@ -199,7 +199,9 @@ void IRMutator::visit(const Store *op) {
     Expr index = mutate(op->index);
     if (value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
-    } else stmt = Store::make(op->name, value, index);
+    } else {
+        stmt = Store::make(op->name, value, index);
+    }
 }
 
 void IRMutator::visit(const Provide *op) {

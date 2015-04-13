@@ -12,9 +12,9 @@
 namespace Halide {
 
 namespace Internal {
-/** Is the expression either an IntImm, a FloatImm, or a Cast of the
- * same, or a Ramp or Broadcast of the same. Doesn't do any constant
- * folding. */
+/** Is the expression either an IntImm, a FloatImm, a StringImm, or a
+ * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
+ * any constant folding. */
 EXPORT bool is_const(Expr e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
@@ -60,6 +60,10 @@ EXPORT bool is_one(Expr e);
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
 EXPORT bool is_two(Expr e);
+
+/** Is the statement a no-op (which we represent as either an
+ * undefined Stmt, or as an Evaluate node of a constant) */
+EXPORT bool is_no_op(Stmt s);
 
 /** Given an integer value, cast it into a designated integer type
  * and return the bits as int. Unsigned types are returned as bits in the int
@@ -389,6 +393,31 @@ inline Expr abs(Expr a) {
                                 vec(a), Internal::Call::Intrinsic);
 }
 
+/** Return the absolute difference between two values. Vectorizes
+ * cleanly. Returns an unsigned value of the same bit width. There are
+ * various ways to write this yourself, but they contain numerous
+ * gotchas and don't always compile to good code, so use this
+ * instead. */
+inline Expr absd(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "absd of undefined Expr\n";
+    Internal::match_types(a, b);
+    Type t = a.type();
+
+    if (t.is_float()) {
+        // Floats can just use abs.
+        return abs(a - b);
+    }
+
+    if (t.is_int()) {
+        // The argument may be signed, but the return type is unsigned.
+        t.code = Type::UInt;
+    }
+
+    return Internal::Call::make(t, Internal::Call::absd,
+                                vec(a, b),
+                                Internal::Call::Intrinsic);
+}
+
 /** Returns an expression similar to the ternary operator in C, except
  * that it always evaluates all arguments. If the first argument is
  * true, then return the second, else return the third. Typically
@@ -407,6 +436,15 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
     if (as_const_int(false_value)) {
         false_value = cast(true_value.type(), false_value);
     }
+
+    user_assert(condition.type().is_bool())
+        << "The first argument to a select must be a boolean:\n"
+        << "  " << condition << " has type " << condition.type() << "\n";
+
+    user_assert(true_value.type() == false_value.type())
+        << "The second and third arguments to a select do not have a matching type:\n"
+        << "  " << true_value << " has type " << true_value.type() << "\n"
+        << "  " << false_value << " has type " << false_value.type() << "\n";
 
     return Internal::Select::make(condition, true_value, false_value);
 }
@@ -812,6 +850,22 @@ inline Expr fast_pow(Expr x, Expr y) {
     return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * y));
 }
 
+/** Fast approximate inverse for Float(32). Corresponds to the rcpps
+ * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
+ * cleanly. */
+inline Expr fast_inverse(Expr x) {
+    user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
+    return Internal::Call::make(x.type(), "fast_inverse_f32", vec(x), Internal::Call::Extern);
+}
+
+/** Fast approximate inverse square root for Float(32). Corresponds to
+ * the rsqrtps instruction on x86, and the vrsqrte instruction on
+ * ARM. Vectorizes cleanly. */
+inline Expr fast_inverse_sqrt(Expr x) {
+    user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
+    return Internal::Call::make(x.type(), "fast_inverse_sqrt_f32", vec(x), Internal::Call::Extern);
+}
+
 /** Return the greatest whole number less than or equal to a
  * floating-point expression. If the argument is not floating-point,
  * it is cast to Float(32). The return value is still in floating
@@ -865,6 +919,20 @@ inline Expr trunc(Expr x) {
     } else {
         Type t = Float(32, x.type().width);
         return Internal::Call::make(t, "trunc_f32", vec(cast(t, x)), Internal::Call::Extern);
+    }
+}
+
+/** Returns true if the argument is a Not a Number (NaN). Requires a
+  * floating point argument.  Vectorizes cleanly. */
+inline Expr is_nan(Expr x) {
+    user_assert(x.defined()) << "is_nan of undefined Expr\n";
+    user_assert(x.type().is_float()) << "is_nan only works for float";
+    Type t = Bool(x.type().width);
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(t, "is_nan_f64", vec(x), Internal::Call::Extern);
+    } else {
+        Type ft = Float(32, x.type().width);
+        return Internal::Call::make(t, "is_nan_f32", vec(cast(ft, x)), Internal::Call::Extern);
     }
 }
 
@@ -1335,6 +1403,180 @@ inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Exp
     return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e, f, g, h));
 }
 // @}
+
+/** Expressions tagged with this intrinsic are considered to be part
+ * of the steady state of some loop with a nasty beginning and end
+ * (e.g. a boundary condition). When Halide encounters likely
+ * intrinsics, it splits the containing loop body into three, and
+ * tries to simplify down all conditions that lead to the likely. For
+ * example, given the expression: select(x < 1, bar, x > 10, bar,
+ * likely(foo)), Halide will split the loop over x into portions where
+ * x < 1, 1 <= x <= 10, and x > 10.
+ *
+ * You're unlikely to want to call this directly. You probably want to
+ * use the boundary condition helpers in the BoundaryConditions
+ * namespace instead.
+ */
+inline Expr likely(Expr e) {
+    return Internal::Call::make(e.type(), Internal::Call::likely,
+                                Internal::vec<Expr>(e), Internal::Call::Intrinsic);
+}
+
+namespace Internal {
+
+/** Given a scalar constant, return an Expr that represents it. This will
+ * usually be a simple IntImm or FloatImm, with the exception of 64-bit values,
+ * which are stored as wrappers to simple Call expressions.
+ *
+ * Note that in all cases, Expr.type == type_of<T>().
+ */
+template<typename T>
+inline Expr scalar_to_constant_expr(T value) {
+    // All integral types <= 32 bits, including bool
+    return cast(type_of<T>(), Expr(static_cast<int32_t>(value)));
+}
+
+template<>
+inline Expr scalar_to_constant_expr(float f32) {
+    // float32 needs to skip the cast to int32
+    return cast(Float(32), Expr(f32));
+}
+
+template<>
+inline Expr scalar_to_constant_expr(double f64) {
+    union {
+        int32_t as_int32[2];
+        double as_double;
+    } u;
+    u.as_double = f64;
+    return Call::make(Float(64), Call::make_float64, vec(Expr(u.as_int32[0]), Expr(u.as_int32[1])), Call::Intrinsic);
+}
+
+template<>
+inline Expr scalar_to_constant_expr(int64_t i) {
+    const int32_t hi = static_cast<int32_t>(i >> 32);
+    const int32_t lo = static_cast<int32_t>(i);
+    return Call::make(Int(64), Call::make_int64, vec(Expr(hi), Expr(lo)), Call::Intrinsic);
+}
+
+template<>
+inline Expr scalar_to_constant_expr(uint64_t u) {
+    return cast(UInt(64), scalar_to_constant_expr<int64_t>(static_cast<int64_t>(u)));
+}
+
+namespace {
+
+// extract_immediate is a private utility for scalar_from_constant_expr,
+// and should not be used elsewhere
+template<typename T>
+inline bool extract_immediate(Expr e, T *value) {
+    if (const IntImm* i = e.as<IntImm>()) {
+        *value = static_cast<T>(i->value);
+        return true;
+    }
+    return false;
+}
+
+template<>
+inline bool extract_immediate(Expr e, float *value) {
+    if (const FloatImm* f = e.as<FloatImm>()) {
+        *value = static_cast<float>(f->value);
+        return true;
+    }
+    if (const IntImm *i = e.as<IntImm>()) {
+        *value = static_cast<float>(i->value);
+        return true;
+    }
+    return false;
+}
+
+// We expect a float64-immediate to be either a call to make_float64()
+// (with two IntImm), or a single FloatImm (if the value fits into a float32)
+template<>
+inline bool extract_immediate(Expr e, double *value) {
+    union {
+        int32_t as_int32[2];
+        double as_double;
+    } u;
+    if (const Call* call = e.as<Call>()) {
+        if (call->name == Call::make_float64) {
+            if (!extract_immediate(call->args[0], &u.as_int32[0]) ||
+                !extract_immediate(call->args[1], &u.as_int32[1])) {
+                return false;
+            }
+            *value = u.as_double;
+            return true;
+        }
+        return false;
+    }
+    if (const IntImm *i = e.as<IntImm>()) {
+        *value = static_cast<double>(i->value);
+        return true;
+    }
+    float f0;
+    if (extract_immediate(e, &f0)) {
+        *value = static_cast<double>(f0);
+        return true;
+    }
+    return false;
+}
+
+
+// We expect an int64-immediate to be either a call to make_int64()
+// (with two IntImm), or a single IntImm (if the value fits into an int32)
+template<>
+inline bool extract_immediate(Expr e, int64_t *value) {
+    int32_t lo, hi;
+    if (const Call* call = e.as<Call>()) {
+        if (call->name == Call::make_int64) {
+            if (!extract_immediate(call->args[0], &hi) ||
+                !extract_immediate(call->args[1], &lo)) {
+                return false;
+            }
+            *value = (static_cast<int64_t>(hi) << 32) | static_cast<uint32_t>(lo);
+            return true;
+        }
+        return false;
+    }
+    if (extract_immediate(e, &lo)) {
+        *value = static_cast<int64_t>(lo);
+        return true;
+    }
+    return false;
+}
+
+template<>
+inline bool extract_immediate(Expr e, uint64_t *value) {
+    return extract_immediate(e, reinterpret_cast<int64_t*>(value));
+}
+
+}  // namespace
+
+/** Given an Expr produced by scalar_to_constant_expr<T>, extract the constant value
+ * of type T and return true. If the constant value cannot be converted to type
+ * T, return false.
+ *
+ * In general, ScalarFromExpr<T>(ScalarToExpr<T>(v)) -> (v, true) for all scalar
+ * type T, with the notable exception of T == float64, which will return true
+ * but possibly lose precision.
+ *
+ * This function exists primarily to allow for code that needs to extract
+ * the default/min/max values in a Parameter (e.g. to write metadata for
+ * a compiled Generator); it is not intended to be a general Expr evaluator,
+ * and should not be used as one.
+ */
+template<typename T>
+inline bool scalar_from_constant_expr(Expr e, T *value) {
+    if (!e.defined() || e.type() != type_of<T>()) {
+        return false;
+    }
+    if (const Cast* c = e.as<Cast>()) {
+        e = c->value;
+    }
+    return extract_immediate<T>(e, value);
+}
+
+}  // namespace Internal
 
 }
 
