@@ -183,7 +183,6 @@ class RDom {
 
     void init_vars(std::string name);
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
     std::vector<std::pair<Expr, Expr>> internal_collect_args(std::vector<std::pair<Expr, Expr>> collected_args, Expr min, Expr extent) {
         collected_args.push_back(std::make_pair(min, extent));
         return collected_args;
@@ -193,7 +192,6 @@ class RDom {
     EXPORT RDom(std::vector<std::pair<Expr, Expr>> collected_args, Expr min, Expr extent, Args... args)
         : RDom(internal_collect_args(collected_args, min, extent), args...) {
     }
-#endif
 
 public:
     /** Construct an undefined reduction domain. */
@@ -203,37 +201,10 @@ public:
      * is left blank, a unique one is auto-generated. */
     RDom(const std::vector<std::pair<Expr, Expr> > &ranges, std::string name = "");
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
     template <typename... Args>
     EXPORT RDom(Expr min, Expr extent, Args... args) 
         : RDom(internal_collect_args(std::vector<std::pair<Expr, Expr>>(), min, extent), args...) {
     }
-#else
-    /** Construct a one-dimensional reduction domain with the given name. If the name
-     * is left blank, a unique one is auto-generated. */
-    EXPORT RDom(Expr min, Expr extent, std::string name = "");
-
-    /** Construct a two-dimensional reduction domain with the given name. If the name
-     * is left blank, a unique one is auto-generated. */
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, std::string name = "");
-
-    /** Construct a multi-dimensional reduction domain with the given
-     * name. If the name is left blank, a unique one is
-     * auto-generated. */
-    // @{
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, Expr min5, Expr extent5, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, Expr min7, Expr extent7,
-                std::string name = "");
-#endif
     // @}
 
     /** Construct a reduction domain that iterates over all points in

@@ -204,8 +204,6 @@ EXPORT std::string base_name(const std::string &name, char delim = '.');
 /** Split the source string using 'delim' as the divider. */
 EXPORT std::vector<std::string> split_string(const std::string &source, const std::string &delim);
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
-
 template <typename T>
 inline NO_INLINE void collect_args(std::vector<T> &collected_args) {
 }
@@ -244,8 +242,6 @@ struct meta_and<T1, Args...> : std::integral_constant<bool, T1::value && meta_an
 
 template<typename To, typename... Args>
 struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
-
-#endif // C++11 arbitrary number of args support
 
 }
 }
