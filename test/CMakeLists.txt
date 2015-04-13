@@ -156,7 +156,7 @@ if (WITH_TEST_GENERATORS)
                                "generator_${GEN_NAME}"
                                "${GEN_NAME}"
                                "${FUNC_NAME}_ucon"
-                               "target=host-register_metadata-user_context")
+                               "target=host-register_metadata-user_context debug=all")
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
       halide_add_generator_dependency("${TEST_RUNNER}"

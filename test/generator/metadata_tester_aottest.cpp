@@ -428,6 +428,12 @@ int EnumerateFunc(void* enumerate_context,
   return 0;
 }
 
+static bool halide_print_called = false;
+extern "C" void halide_print(void *user_context, const char *str) {
+    printf("halide_print: %s\n", str);
+    halide_print_called = true;
+}
+
 int main(int argc, char **argv) {
     void* user_context = NULL;
 
@@ -445,11 +451,18 @@ int main(int argc, char **argv) {
     Image<float> output0(kSize, kSize, 3);
     Image<float> output1(kSize, kSize, 3);
 
+    halide_print_called = false;
     result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
     EXPECT_EQ(0, result);
+    // We expect that metadata_tester is built with debug=none
+    EXPECT_EQ(false, halide_print_called);
 
+    halide_print_called = false;
     result = metadata_tester_ucon(user_context, input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, NULL, output0, output1);
     EXPECT_EQ(0, result);
+    // We expect that metadata_tester is built with debug=all
+    // (and that our input should product exactly one call to halide_print)
+    EXPECT_EQ(true, halide_print_called);
 
     verify(input, output0, output1);
 

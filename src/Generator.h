@@ -366,6 +366,19 @@ class GeneratorBase : public NamesInterface {
 public:
     GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
+    /** Possible values for the Generator's "debug" GeneratorParam.
+     * This always defaults to "none", so you can embed debugging code
+     * (e.g. calls to print_when() or debug_to_file()) without any degradation
+     * by default. The enum has four levels by default, with the usage
+     * deliberately fuzzy, but with the intention that "none" means all debugging
+     * information should be omitted, and "all" means, well, everything. */
+    enum class DebugLevel {
+        none,
+        some,
+        lots,
+        all
+    };
+
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
         EmitOptions()
@@ -434,6 +447,8 @@ public:
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
 
+    EXPORT static const std::map<std::string, DebugLevel> &get_halide_debug_enum_map();
+
 private:
     const size_t size;
 
@@ -494,6 +509,8 @@ template <class T> class RegisterGenerator;
 
 template <class T> class Generator : public Internal::GeneratorBase {
 public:
+    GeneratorParam<DebugLevel> debug{"debug", DebugLevel::none, get_halide_debug_enum_map()};
+
     Generator() :
         Internal::GeneratorBase(sizeof(T),
                                 Internal::Introspection::get_introspection_helper<T>()) {}
@@ -508,8 +525,6 @@ private:
     const std::string &generator_name() const override final {
         return *generator_name_storage();
     }
-
-
 };
 
 template <class T> class RegisterGenerator {

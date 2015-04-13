@@ -33,8 +33,14 @@ public:
         f1(x, y, c) = cast(output_type, input(x, y, c));
         f2(x, y, c) = cast<float>(f1(x, y, c) + 1);
 
+        Func f2_d = f2;
+        if (debug >= DebugLevel::all) {
+            f2_d(x, y, c) = print_when(x == 0 && y == 0 && c == 0, f2(x, y, c));
+        }
+
         Func output("output");
-        output(x, y, c) = Tuple(f1(x, y, c), f2(x, y, c));
+        output(x, y, c) = Tuple(f1(x, y, c), f2_d(x, y, c));
+
         return output;
     }
 };

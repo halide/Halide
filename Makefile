@@ -675,7 +675,7 @@ $(FILTERS_DIR)/metadata_tester.o $(FILTERS_DIR)/metadata_tester.h: $(FILTERS_DIR
 
 $(FILTERS_DIR)/metadata_tester_ucon.o $(FILTERS_DIR)/metadata_tester_ucon.h: $(FILTERS_DIR)/metadata_tester.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -f metadata_tester_ucon -o ../$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata
+	cd tmp; $(LD_PATH_SETUP) ../$< -f metadata_tester_ucon -o ../$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata debug=all
 
 $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.o
 

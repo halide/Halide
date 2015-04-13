@@ -329,5 +329,15 @@ Func GeneratorBase::call_extern_by_name(const std::string &generator_name,
     return extern_gen->call_extern(function_arguments, function_name);
 }
 
+const std::map<std::string, GeneratorBase::DebugLevel> &GeneratorBase::get_halide_debug_enum_map() {
+    static const std::map<std::string, GeneratorBase::DebugLevel> m{
+        {"none", DebugLevel::none},
+        {"some", DebugLevel::some},
+        {"lots", DebugLevel::lots},
+        {"all", DebugLevel::all}
+    };
+    return m;
+}
+
 }  // namespace Internal
 }  // namespace Halide
