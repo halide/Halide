@@ -60,6 +60,7 @@ public:
                 } else if (extern_args[i].is_buffer()) {
                     // Function with an extern definition
                     record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
+                                                       extern_args[i].buffer.dimensions(),
                                                        extern_args[i].buffer.name()));
                 } else if (extern_args[i].is_image_param()) {
                     record(extern_args[i].image_param);
@@ -437,7 +438,7 @@ private:
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
-            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), true, generate_key);
+            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), const_true(), generate_key);
 
             stmt = cache_key_alloc;
         } else {
@@ -447,7 +448,7 @@ private:
 };
 
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
-			const std::string &name) {
+                        const std::string &name) {
     InjectMemoization injector(env, name);
 
     return injector.mutate(s);

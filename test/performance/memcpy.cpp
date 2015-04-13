@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #include "clock.h"
 
@@ -45,8 +45,8 @@ int main(int argc, char **argv) {
         halide += t2-t1;
     }
 
-    printf("system memcpy: %.3e byte/s\n", (buffer_size / system) * 1000 * iterations);
-    printf("halide memcpy: %.3e byte/s\n", (buffer_size / halide) * 1000 * iterations);
+    printf("system memcpy: %.3e byte/s\n", (buffer_size / system) * 3 * 1000 * iterations);
+    printf("halide memcpy: %.3e byte/s\n", (buffer_size / halide) * 3 * 1000 * iterations);
 
     // memcpy will win by a little bit for large inputs because it uses streaming stores
     if (halide > system * 2) {

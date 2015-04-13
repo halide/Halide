@@ -171,7 +171,7 @@ public:
  * clever scheduling. If we say:
  *
  \code
- sum_x.compute_at(sum_y, r.y);
+ sum_x.compute_at(sum_y, y);
  \endcode
  *
  * Then the sum in x is computed only as necessary for each scanline

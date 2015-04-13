@@ -1,5 +1,5 @@
 
-NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_35
+NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_41
 
 WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I ../../include
@@ -27,6 +27,7 @@ CXX_64 := $(TC)/bin/x86_64-nacl-g++ -m64 -O3 -Wall -s -Wl,--gc-sections
 CXX_32 := $(TC)/bin/i686-nacl-g++ -m32 -O3 -Wall -s -Wl,--gc-sections
 CXX_ARM := $(ARM_TC)/bin/arm-nacl-g++ -O3 -Wall -s -Wl,--gc-sections -fstack-protector
 CXX_PNACL := $(PNACL_TC)/bin/pnacl-clang++ -O3
+STRIP_64 := $(TC)/bin/x86_64-nacl-strip
 LDFLAGS_64 := -L $(LIBDIR_64) -lppapi_cpp -lppapi
 LDFLAGS_32 := -L $(LIBDIR_32) -lppapi_cpp -lppapi
 LDFLAGS_ARM := -L $(LIBDIR_ARM) -lppapi_cpp -lppapi
@@ -87,7 +88,7 @@ build_arm/%.objects: %.generate
 
 build_pnacl/%.objects: %.generate
 	@mkdir -p build_pnacl
-	cd build_pnacl; HL_TARGET=pnacl DYLD_LIBRARY_PATH=../../../bin LD_LIBRARY_PATH=../../../bin ../$<
+	cd build_pnacl; HL_TARGET=pnacl-32-nacl DYLD_LIBRARY_PATH=../../../bin LD_LIBRARY_PATH=../../../bin ../$<
 	@mv build_pnacl/$*_init.o build_pnacl/$*_init.bc
 	@mv build_pnacl/$*_update.o build_pnacl/$*_update.bc
 	@mv build_pnacl/$*_render.o build_pnacl/$*_render.bc

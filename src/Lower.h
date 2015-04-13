@@ -13,10 +13,13 @@
 namespace Halide {
 namespace Internal {
 
+class IRMutator;
+
 /** Given a halide function with a schedule, create a statement that
  * evaluates it. Automatically pulls in all the functions f depends
  * on. Some stages of lowering may be target-specific. */
-Stmt lower(Function f, const Target &t);
+EXPORT Stmt lower(Function f, const Target &t,
+                  const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>());
 
 void lower_test();
 

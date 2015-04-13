@@ -37,6 +37,7 @@ IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
 
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
+    internal_assert(t.width == v.type().width) << "Cast may not change vector widths\n";
 
     Cast *node = new Cast;
     node->type = t;
@@ -242,7 +243,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     internal_assert(condition.defined()) << "Select of undefined\n";
     internal_assert(true_value.defined()) << "Select of undefined\n";
     internal_assert(false_value.defined()) << "Select of undefined\n";
-    internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool\n";
+    internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool: " << condition.type() << "\n";
     internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
     internal_assert(condition.type().is_scalar() ||
                     condition.type().width == true_value.type().width)
@@ -288,7 +289,7 @@ Expr Ramp::make(Expr base, Expr stride, int width) {
 Expr Broadcast::make(Expr value, int width) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
     internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
-    internal_assert(width > 1) << "Broadcast of width <= 1\n";
+    internal_assert(width != 1) << "Broadcast of width 1\n";
 
     Broadcast *node = new Broadcast;
     node->type = value.type().vector_of(width);
@@ -322,21 +323,12 @@ Stmt LetStmt::make(std::string name, Expr value, Stmt body) {
 
 Stmt AssertStmt::make(Expr condition, Expr message) {
     internal_assert(condition.defined()) << "AssertStmt of undefined\n";
+    internal_assert(message.type() == Int(32)) << "AssertStmt message must be an int:" << message << "\n";
 
     AssertStmt *node = new AssertStmt;
     node->condition = condition;
     node->message = message;
     return node;
-}
-
-Stmt AssertStmt::make(Expr condition, const char * message) {
-    return AssertStmt::make(condition, Expr(message));
-}
-
-Stmt AssertStmt::make(Expr condition, const std::vector<Expr> &message) {
-    internal_assert(!message.empty()) << "Assert with empty message\n";
-    Expr m = Call::make(Handle(), Call::stringify, message, Call::Intrinsic);
-    return AssertStmt::make(condition, m);
 }
 
 Stmt Pipeline::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
@@ -352,7 +344,7 @@ Stmt Pipeline::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
     return node;
 }
 
-Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body) {
+Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
     internal_assert(min.type().is_scalar()) << "For with vector min\n";
@@ -364,6 +356,7 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Stmt b
     node->min = min;
     node->extent = extent;
     node->for_type = for_type;
+    node->device_api = device_api;
     node->body = body;
     return node;
 }
@@ -402,13 +395,14 @@ Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extent
         internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
     }
     internal_assert(body.defined()) << "Allocate of undefined\n";
+    internal_assert(condition.defined()) << "Allocate with undefined condition\n";
+    internal_assert(condition.type().is_bool()) << "Allocate condition is not boolean\n";
 
     Allocate *node = new Allocate;
     node->name = name;
     node->type = type;
     node->extents = extents;
     node->condition = condition;
-
     node->body = body;
     return node;
 }
@@ -428,6 +422,8 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
     }
     internal_assert(body.defined()) << "Realize of undefined\n";
     internal_assert(!types.empty()) << "Realize has empty type\n";
+    internal_assert(condition.defined()) << "Realize with undefined condition\n";
+    internal_assert(condition.type().is_bool()) << "Realize condition is not boolean\n";
 
     Realize *node = new Realize;
     node->name = name;
@@ -552,43 +548,48 @@ template<> EXPORT IRNodeType StmtNode<Block>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<IfThenElse>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Evaluate>::_type_info = {};
 
-using std::string;
-const string Call::debug_to_file = "debug_to_file";
-const string Call::shuffle_vector = "shuffle_vector";
-const string Call::interleave_vectors = "interleave_vectors";
-const string Call::reinterpret = "reinterpret";
-const string Call::bitwise_and = "bitwise_and";
-const string Call::bitwise_not = "bitwise_not";
-const string Call::bitwise_xor = "bitwise_xor";
-const string Call::bitwise_or = "bitwise_or";
-const string Call::shift_left = "shift_left";
-const string Call::shift_right = "shift_right";
-const string Call::abs = "abs";
-const string Call::lerp = "lerp";
-const string Call::random = "random";
-const string Call::rewrite_buffer = "rewrite_buffer";
-const string Call::profiling_timer = "profiling_timer";
-const string Call::create_buffer_t = "create_buffer_t";
-const string Call::extract_buffer_min = "extract_buffer_min";
-const string Call::extract_buffer_max = "extract_buffer_max";
-const string Call::set_host_dirty = "set_host_dirty";
-const string Call::set_dev_dirty = "set_dev_dirty";
-const string Call::popcount = "popcount";
-const string Call::count_leading_zeros = "count_leading_zeros";
-const string Call::count_trailing_zeros = "count_trailing_zeros";
-const string Call::undef = "undef";
-const string Call::address_of = "address_of";
-const string Call::null_handle = "null_handle";
-const string Call::trace = "trace";
-const string Call::trace_expr = "trace_expr";
-const string Call::return_second = "return_second";
-const string Call::if_then_else = "if_then_else";
-const string Call::glsl_texture_load = "glsl_texture_load";
-const string Call::glsl_texture_store = "glsl_texture_store";
-const string Call::make_struct = "make_struct";
-const string Call::stringify = "stringify";
-const string Call::memoize_expr = "memoize_expr";
-const string Call::copy_memory = "copy_memory";
+Call::ConstString Call::debug_to_file = "debug_to_file";
+Call::ConstString Call::shuffle_vector = "shuffle_vector";
+Call::ConstString Call::interleave_vectors = "interleave_vectors";
+Call::ConstString Call::reinterpret = "reinterpret";
+Call::ConstString Call::bitwise_and = "bitwise_and";
+Call::ConstString Call::bitwise_not = "bitwise_not";
+Call::ConstString Call::bitwise_xor = "bitwise_xor";
+Call::ConstString Call::bitwise_or = "bitwise_or";
+Call::ConstString Call::shift_left = "shift_left";
+Call::ConstString Call::shift_right = "shift_right";
+Call::ConstString Call::abs = "abs";
+Call::ConstString Call::absd = "absd";
+Call::ConstString Call::lerp = "lerp";
+Call::ConstString Call::random = "random";
+Call::ConstString Call::rewrite_buffer = "rewrite_buffer";
+Call::ConstString Call::profiling_timer = "profiling_timer";
+Call::ConstString Call::create_buffer_t = "create_buffer_t";
+Call::ConstString Call::copy_buffer_t = "copy_buffer_t";
+Call::ConstString Call::extract_buffer_min = "extract_buffer_min";
+Call::ConstString Call::extract_buffer_max = "extract_buffer_max";
+Call::ConstString Call::set_host_dirty = "set_host_dirty";
+Call::ConstString Call::set_dev_dirty = "set_dev_dirty";
+Call::ConstString Call::popcount = "popcount";
+Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
+Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
+Call::ConstString Call::undef = "undef";
+Call::ConstString Call::address_of = "address_of";
+Call::ConstString Call::null_handle = "null_handle";
+Call::ConstString Call::trace = "trace";
+Call::ConstString Call::trace_expr = "trace_expr";
+Call::ConstString Call::return_second = "return_second";
+Call::ConstString Call::if_then_else = "if_then_else";
+Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
+Call::ConstString Call::glsl_texture_store = "glsl_texture_store";
+Call::ConstString Call::glsl_varying = "glsl_varying";
+Call::ConstString Call::make_struct = "make_struct";
+Call::ConstString Call::stringify = "stringify";
+Call::ConstString Call::memoize_expr = "memoize_expr";
+Call::ConstString Call::copy_memory = "copy_memory";
+Call::ConstString Call::likely = "likely";
+Call::ConstString Call::make_int64 = "make_int64";
+Call::ConstString Call::make_float64 = "make_float64";
 
 }
 }

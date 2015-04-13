@@ -6,15 +6,12 @@
  */
 
 #include <bitset>
+#include <limits>
 #include <stdint.h>
 #include <string>
 #include "Error.h"
+#include "Type.h"
 #include "Util.h"
-
-namespace llvm {
-class Module;
-class LLVMContext;
-}
 
 namespace Halide {
 
@@ -47,6 +44,7 @@ struct Target {
         F16C,  ///< Enable x86 16-bit float support
 
         ARMv7s,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+        NoNEON,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
 
         CUDA,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
         CUDACapability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
@@ -58,6 +56,10 @@ struct Target {
         CLDoubles,  ///< Enable double support on OpenCL targets
 
         OpenGL,  ///< Enable the OpenGL runtime.
+
+        UserContext,  ///< Generated code takes a user_context pointer as first argument
+
+        RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
@@ -193,6 +195,30 @@ struct Target {
         return merge_string(target);
     }
 
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for this Target. */
+    int natural_vector_size(Halide::Type t) const {
+        const bool is_avx2 = has_feature(Halide::Target::AVX2);
+        const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
+        const bool is_integer = t.is_int() || t.is_uint();
+
+        // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
+        // However, AVX has a very limited complement of integer instructions;
+        // restricting us to SSE4.1 size for integer operations produces much
+        // better performance. (AVX2 does have good integer operations for 256-bit
+        // registers.)
+        const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
+        const int data_size = t.bits / 8;
+        return vector_byte_size / data_size;
+    }
+
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for this Target. */
+    template <typename data_t>
+    int natural_vector_size() const {
+        return natural_vector_size(type_of<data_t>());
+    }
+
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
@@ -220,17 +246,6 @@ EXPORT Target get_jit_target_from_environment();
  */
 EXPORT Target parse_target_string(const std::string &target);
 
-namespace Internal {
-
-/** Create an llvm module containing the support code for a given target. */
-llvm::Module *get_initial_module_for_target(Target, llvm::LLVMContext *);
-
-/** Create an llvm module containing the support code for ptx device. */
-llvm::Module *get_initial_module_for_ptx_device(Target, llvm::LLVMContext *c);
-
 }
-
-}
-
 
 #endif

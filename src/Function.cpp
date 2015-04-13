@@ -212,14 +212,14 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], For::Serial, true};
+        Dim d = {args[i], ForType::Serial, DeviceAPI::Parent, true};
         contents.ptr->schedule.dims().push_back(d);
         contents.ptr->schedule.storage_dims().push_back(args[i]);
     }
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), For::Serial, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
         contents.ptr->schedule.dims().push_back(d);
     }
 
@@ -228,7 +228,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         if (values.size() > 1) {
             buffer_name += '.' + int_to_string((int)i);
         }
-        contents.ptr->output_buffers.push_back(Parameter(values[i].type(), true, buffer_name));
+        Parameter output(values[i].type(), true, args.size(), buffer_name);
+        contents.ptr->output_buffers.push_back(output);
     }
 }
 
@@ -386,7 +387,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
             bool pure = can_parallelize_rvar(v, name(), r);
 
-            Dim d = {v, For::Serial, pure};
+            Dim d = {v, ForType::Serial, DeviceAPI::Parent, pure};
             r.schedule.dims().push_back(d);
         }
     }
@@ -394,14 +395,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], For::Serial, true};
+            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::Parent, true};
             r.schedule.dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), For::Serial, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
         r.schedule.dims().push_back(d);
     }
 
@@ -428,7 +429,6 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality) {
 
-    string source_loc = get_source_location();
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func with a pure definition cannot have an extern definition.\n";
@@ -446,7 +446,8 @@ void Function::define_extern(const std::string &function_name,
         if (types.size() > 1) {
             buffer_name += '.' + int_to_string((int)i);
         }
-        contents.ptr->output_buffers.push_back(Parameter(types[i], true, buffer_name));
+        Parameter output(types[i], true, dimensionality, buffer_name);
+        contents.ptr->output_buffers.push_back(output);
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).

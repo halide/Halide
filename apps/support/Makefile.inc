@@ -1,13 +1,31 @@
 CXX ?= g++
 GXX ?= g++
 
+CFLAGS += -I../../include/ -I../support/
+CXXFLAGS += -std=c++11 -I../../include/ -I../support/
+
 ifdef BUILD_PREFIX
 LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
 else
 LIB_HALIDE = bin/libHalide.a
 endif
 
-LDFLAGS += $(shell llvm-config --ldflags)
+LLVM_CONFIG ?= llvm-config
+LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+
+LLVM_CONFIG ?= llvm-config
+LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
+LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
+
+ifeq ($(USE_LLVM_SHARED_LIB), )
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
+LLVM_SHARED_LIBS = 
+else 
+LLVM_STATIC_LIBS = 
+LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
+endif
+
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)

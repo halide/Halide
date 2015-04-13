@@ -31,19 +31,37 @@ namespace Halide {
  *          if the extent of any region is 1 or less).
  *
  *  If the source Func has more dimensions than are specified, the extra ones
- *  are unmodified.
+ *  are unmodified. Additionally, passing an undefined (default constructed)
+ *  'Expr' for the min and extent of a dimension will keep that dimension
+ *  unmodified.
  *
  *  Numerous options for specifing the outside area are provided,
  *  including replacement with an expression, repeating the edge
  *  samples, mirroring over the edge, and repeating or mirroring the
  *  entire image.
  *
- *  TODO: Add support for passing Image<T> and ImageParam, and
- *  possibly other types directly to this functions.
+ *  Using these functions to express your boundary conditions is highly
+ *  recommended for correctness and performance. Some of these are hard
+ *  to get right. The versions here are both understood by bounds
+ *  inference, and also judiciously use the 'likely' intrinsic to minimize
+ *  runtime overhead.
+ *
  */
 namespace BoundaryConditions {
 
 namespace Internal {
+
+inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
+                                     Expr min, Expr extent) {
+    collected_bounds.push_back(std::make_pair(min, extent));
+}
+
+template <typename ...Bounds>
+inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
+                                     Expr min, Expr extent, Bounds... bounds) {
+    collected_bounds.push_back(std::make_pair(min, extent));
+    collect_bounds(collected_bounds, bounds...);
+}
 
 inline const Func &func_like_to_func(const Func &func) {
     return func;
@@ -51,13 +69,7 @@ inline const Func &func_like_to_func(const Func &func) {
 
 template <typename T>
 inline NO_INLINE Func func_like_to_func(T func_like) {
-    std::vector<Var> args;
-    for (int i = 0; i < func_like.dimensions(); i++) {
-        args.push_back(Var::implicit(i));
-    }
-    Func func;
-    func(args) = func_like(args);
-    return func;
+    return lambda(_, func_like(_));
 }
 
 }
@@ -88,7 +100,6 @@ inline NO_INLINE Func constant_exterior(T func_like, Expr value) {
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
 }
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value,
                                         Bounds... bounds) {
@@ -96,85 +107,6 @@ inline NO_INLINE Func constant_exterior(T func_like, Expr value,
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
 }
-#else
-template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Expr min0, Expr extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Expr min0, Expr extent0,
-                                        Expr min1, Expr extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Expr min0, Expr extent0,
-                                        Expr min1, Expr extent1,
-                                        Expr min2, Expr extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Expr min0, Expr extent0,
-                                        Expr min1, Expr extent1,
-                                        Expr min2, Expr extent2,
-                                        Expr min3, Expr extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Expr min0, Expr extent0,
-                                        Expr min1, Expr extent1,
-                                        Expr min2, Expr extent2,
-                                        Expr min3, Expr extent3,
-                                        Expr min4, Expr extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Expr min0, Expr extent0,
-                                        Expr min1, Expr extent1,
-                                        Expr min2, Expr extent2,
-                                        Expr min3, Expr extent3,
-                                        Expr min4, Expr extent4,
-                                        Expr min5, Expr extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
-}
-#endif
 // @}
 
 /** Impose a boundary condition such that the nearest edge sample is returned
@@ -201,92 +133,12 @@ inline NO_INLINE Func repeat_edge(T func_like) {
 }
 
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
 }
-#else
-template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like,
-                                  Expr min0, Expr extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like,
-                                  Expr min0, Expr extent0,
-                                  Expr min1, Expr extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like,
-                                  Expr min0, Expr extent0,
-                                  Expr min1, Expr extent1,
-                                  Expr min2, Expr extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like,
-                                  Expr min0, Expr extent0,
-                                  Expr min1, Expr extent1,
-                                  Expr min2, Expr extent2,
-                                  Expr min3, Expr extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like,
-                                  Expr min0, Expr extent0,
-                                  Expr min1, Expr extent1,
-                                  Expr min2, Expr extent2,
-                                  Expr min3, Expr extent3,
-                                  Expr min4, Expr extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like,
-                                  Expr min0, Expr extent0,
-                                  Expr min1, Expr extent1,
-                                  Expr min2, Expr extent2,
-                                  Expr min3, Expr extent3,
-                                  Expr min4, Expr extent4,
-                                  Expr min5, Expr extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
-}
-#endif
 // @}
 
 /** Impose a boundary condition such that the entire coordinate space is
@@ -312,92 +164,12 @@ inline NO_INLINE Func repeat_image(T func_like) {
     return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
-#else
-template <typename T>
-inline NO_INLINE Func repeat_image(T func_like,
-                                   Expr min0, Expr extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return repeat_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return repeat_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return repeat_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2,
-                                   Expr min3, Expr extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return repeat_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2,
-                                   Expr min3, Expr extent3,
-                                   Expr min4, Expr extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return repeat_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func repeat_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2,
-                                   Expr min3, Expr extent3,
-                                   Expr min4, Expr extent4,
-                                   Expr min5, Expr extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return repeat_image(Internal::func_like_to_func(func_like), bounds);
-}
-#endif
 
 /** Impose a boundary condition such that the entire coordinate space is
  *  tiled with copies of the image abutted against each other, but mirror
@@ -423,92 +195,12 @@ inline NO_INLINE Func mirror_image(T func_like) {
     return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
-#else
-template <typename T>
-inline NO_INLINE Func mirror_image(T func_like,
-                                   Expr min0, Expr extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return mirror_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return mirror_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return mirror_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2,
-                                   Expr min3, Expr extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return mirror_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2,
-                                   Expr min3, Expr extent3,
-                                   Expr min4, Expr extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return mirror_image(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_image(T func_like,
-                                   Expr min0, Expr extent0,
-                                   Expr min1, Expr extent1,
-                                   Expr min2, Expr extent2,
-                                   Expr min3, Expr extent3,
-                                   Expr min4, Expr extent4,
-                                   Expr min5, Expr extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return mirror_image(Internal::func_like_to_func(func_like), bounds);
-}
-#endif
 // @}
 
 /** Impose a boundary condition such that the entire coordinate space is
@@ -537,92 +229,12 @@ inline NO_INLINE Func mirror_interior(T func_like) {
     return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func mirror_interior(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);
 }
-#else
-template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like,
-                                      Expr min0, Expr extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like,
-                                      Expr min0, Expr extent0,
-                                      Expr min1, Expr extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like,
-                                      Expr min0, Expr extent0,
-                                      Expr min1, Expr extent1,
-                                      Expr min2, Expr extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like,
-                                      Expr min0, Expr extent0,
-                                      Expr min1, Expr extent1,
-                                      Expr min2, Expr extent2,
-                                      Expr min3, Expr extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like,
-                                      Expr min0, Expr extent0,
-                                      Expr min1, Expr extent1,
-                                      Expr min2, Expr extent2,
-                                      Expr min3, Expr extent3,
-                                      Expr min4, Expr extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
-}
-
-template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like,
-                                      Expr min0, Expr extent0,
-                                      Expr min1, Expr extent1,
-                                      Expr min2, Expr extent2,
-                                      Expr min3, Expr extent3,
-                                      Expr min4, Expr extent4,
-                                      Expr min5, Expr extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
-}
-#endif
 // @}
 
 }
