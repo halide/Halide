@@ -159,10 +159,11 @@ for LLVM in ${LLVMS}; do
         # Update this llvm and rebuild if it's pnacl
         cd llvm/${LLVM}
         git fetch &&
-        #git checkout 650319f0929eea0cb49581e2ecffa3641f11ec02 &&
+        # This version works with pepper_41
+        git checkout b82e6c61c08dcd77a97cf6cb5020898bb49f97a8
         cd tools/clang &&
         git fetch &&
-        #git checkout c9e11978abdba970b12b46ab792634f0a98319d7 &&
+        git checkout a46d3ebfd8f295a32e2dab6241d207e04302b483
         cd ../../ &&
         make -j8 -C build-32 &&
         make -j8 -C build-64
