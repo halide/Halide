@@ -21,16 +21,16 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer -pedantic -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
+LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
 #  but that is difficult in some testing situations because it requires having
 #  such a compiler handy. One still needs to have 32-bit llvm libraries, etc.)
 BUILD_BIT_SIZE ?=
-TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti $(CXX_WARNING_FLAGS)
+TEST_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti $(CXX_WARNING_FLAGS)
 # The tutorials contain example code with warnings that we don't want to be flagged as errors.
-TUTORIAL_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
+TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
 GENGEN_DEPS ?=$(BIN_DIR)/libHalide.so include/Halide.h tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -54,19 +54,6 @@ WITH_EXCEPTIONS ?=
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
 HL_JIT_TARGET ?= host
-
-# turn off PTX for llvm 3.2
-ifneq ($(LLVM_VERSION), 3.2)
-WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
-endif
-
-# turn on c++11 for llvm 3.5+
-CXX11 ?= $(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39 40)
-
-ifneq ($(CXX11),)
-LLVM_CXX_FLAGS += -std=c++11
-TEST_CXX_FLAGS += -std=c++11
-endif
 
 NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), -DWITH_NATIVE_CLIENT=1, )
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
@@ -109,8 +96,7 @@ CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 
-LLVM_35_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34 35)
-ifneq ($(LLVM_35_OR_OLDER), )
+ifeq ($(LLVM_VERSION_TIMES_10), 35)
 LLVM_OLD_JIT_COMPONENT = jit
 endif
 
@@ -125,12 +111,7 @@ LLVM_STATIC_LIBS =
 LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
 endif
 
-LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
-ifneq ($(LLVM_34_OR_OLDER), )
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
-else
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
-endif
 
 UNAME = $(shell uname)
 
@@ -519,7 +500,7 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 -include $(INITIAL_MODULES:.o=.d)
 
 
-ifneq ($(LLVM_35_OR_OLDER), )
+ifeq ($(LLVM_VERSION_TIMES_10),35)
 RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
 RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
 else
@@ -612,28 +593,16 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
-ifneq ($(CXX11),)
 test_generators: $(GENERATOR_TESTS:test/generator/%_aottest.cpp=generator_aot_%) $(GENERATOR_TESTS:test/generator/%_jittest.cpp=generator_jit_%)
-else
-test_generators: ;
-endif
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings
-
-ifneq ($(CXX11),)
-ALL_TESTS += test_generators
-endif
+ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For static and generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
-ifneq ($(CXX11),)
 time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=time_compilation_generator_%)
-else
-time_compilation_generators: ;
-endif
 
 init_time_compilation_%:
 	echo "TEST,User (s),System (s),Real" > $(@:init_time_compilation_%=compile_times_%.csv)
@@ -857,10 +826,18 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/modules clean
 	make -C apps/modules out.png
 
-ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
-ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))
+# It's just for compiling the runtime, so Clang <3.5 *might* work, 
+# but best to peg it to the minimum llvm version.
+ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
+
+ifneq (,$(findstring clang version 3.6,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
+ifneq (,$(findstring clang version 3.7,$(CLANG_VERSION)))
+CLANG_OK=yes
 endif
 
 ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
@@ -871,29 +848,14 @@ ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
-ifneq (,$(findstring 3.,$(LLVM_VERSION)))
-ifeq (,$(findstring 3.0,$(LLVM_VERSION)))
-ifeq (,$(findstring 3.1,$(LLVM_VERSION)))
-LLVM_OK=yes
-endif
-endif
-endif
-
-ifneq (,$findstring 3.3.,$(LLVM_VERSION))
-LLVM_OK=yes
-endif
-ifneq (,$findstring 3.2.,$(LLVM_VERSION))
-LLVM_OK=yes
-endif
-
-ifdef CLANG_OK
+ifneq ($(CLANG_OK), )
 $(BUILD_DIR)/clang_ok:
 	@echo "Found a new enough version of clang"
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/clang_ok
 else
 $(BUILD_DIR)/clang_ok:
-	@echo "Can't find clang or version of clang too old (we need 3.1 or greater):"
+	@echo "Can't find clang or version of clang too old (we need 3.5 or greater):"
 	@echo "You can override this check by setting CLANG_OK=y"
 	echo '$(CLANG_VERSION)'
 	echo $(findstring version 3,$(CLANG_VERSION))
@@ -902,14 +864,18 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifdef LLVM_OK
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37))
+LLVM_OK=yes
+endif
+
+ifneq ($(LLVM_OK), )
 $(BUILD_DIR)/llvm_ok:
 	@echo "Found a new enough version of llvm"
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 3.2 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 3.5 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
