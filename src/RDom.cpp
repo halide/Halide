@@ -89,8 +89,8 @@ RDom::RDom(const std::vector<std::pair<Expr, Expr> > &ranges, string name) {
         }
         ReductionVariable rv;
         rv.var = name + "." + rvar_uniquifier + "$r";
-        rv.min = ranges[i].first;
-        rv.extent = ranges[i].second;
+        rv.min = cast<int32_t>(ranges[i].first);
+        rv.extent = cast<int32_t>(ranges[i].second);
         vars.push_back(rv);
     }
     dom = ReductionDomain(vars);
@@ -105,7 +105,7 @@ RDom::RDom(Expr min, Expr extent, string name) {
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min), cast<int>(extent) },
+        { name + ".x$r", cast<int32_t>(min), cast<int32_t>(extent) },
     };
     dom = build_domain(vars);
     init_vars(name);
@@ -117,8 +117,8 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+        { name + ".x$r", cast<int32_t>(min0), cast<int32_t>(extent0) },
+        { name + ".y$r", cast<int32_t>(min1), cast<int32_t>(extent1) },
     };
     dom = build_domain(vars);
     init_vars(name);
@@ -130,9 +130,9 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
+        { name + ".x$r", cast<int32_t>(min0), cast<int32_t>(extent0) },
+        { name + ".y$r", cast<int32_t>(min1), cast<int32_t>(extent1) },
+        { name + ".z$r", cast<int32_t>(min2), cast<int32_t>(extent2) },
     };
     dom = build_domain(vars);
     init_vars(name);
@@ -145,10 +145,10 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
+        { name + ".x$r", cast<int32_t>(min0), cast<int32_t>(extent0) },
+        { name + ".y$r", cast<int32_t>(min1), cast<int32_t>(extent1) },
+        { name + ".z$r", cast<int32_t>(min2), cast<int32_t>(extent2) },
+        { name + ".w$r", cast<int32_t>(min3), cast<int32_t>(extent3) },
     };
     dom = build_domain(vars);
     init_vars(name);
@@ -161,11 +161,11 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
+        { name + ".x$r", cast<int32_t>(min0), cast<int32_t>(extent0) },
+        { name + ".y$r", cast<int32_t>(min1), cast<int32_t>(extent1) },
+        { name + ".z$r", cast<int32_t>(min2), cast<int32_t>(extent2) },
+        { name + ".w$r", cast<int32_t>(min3), cast<int32_t>(extent3) },
+        { name + ".4$r", cast<int32_t>(min4), cast<int32_t>(extent4) },
     };
     dom = build_domain(vars);
     init_vars(name);
@@ -178,12 +178,12 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
-        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
+        { name + ".x$r", cast<int32_t>(min0), cast<int32_t>(extent0) },
+        { name + ".y$r", cast<int32_t>(min1), cast<int32_t>(extent1) },
+        { name + ".z$r", cast<int32_t>(min2), cast<int32_t>(extent2) },
+        { name + ".w$r", cast<int32_t>(min3), cast<int32_t>(extent3) },
+        { name + ".4$r", cast<int32_t>(min4), cast<int32_t>(extent4) },
+        { name + ".5$r", cast<int32_t>(min5), cast<int32_t>(extent5) },
     };
     dom = build_domain(vars);
     init_vars(name);
@@ -196,13 +196,13 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
-        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
-        { name + ".6$r", cast<int>(min6), cast<int>(extent6) },
+        { name + ".x$r", cast<int32_t>(min0), cast<int32_t>(extent0) },
+        { name + ".y$r", cast<int32_t>(min1), cast<int32_t>(extent1) },
+        { name + ".z$r", cast<int32_t>(min2), cast<int32_t>(extent2) },
+        { name + ".w$r", cast<int32_t>(min3), cast<int32_t>(extent3) },
+        { name + ".4$r", cast<int32_t>(min4), cast<int32_t>(extent4) },
+        { name + ".5$r", cast<int32_t>(min5), cast<int32_t>(extent5) },
+        { name + ".6$r", cast<int32_t>(min6), cast<int32_t>(extent6) },
     };
     dom = build_domain(vars);
     init_vars(name);
@@ -216,14 +216,14 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     }
 
     ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
-        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
-        { name + ".6$r", cast<int>(min6), cast<int>(extent6) },
-        { name + ".7$r", cast<int>(min7), cast<int>(extent7) },
+        { name + ".x$r", cast<int32_t>(min0), cast<int32_t>(extent0) },
+        { name + ".y$r", cast<int32_t>(min1), cast<int32_t>(extent1) },
+        { name + ".z$r", cast<int32_t>(min2), cast<int32_t>(extent2) },
+        { name + ".w$r", cast<int32_t>(min3), cast<int32_t>(extent3) },
+        { name + ".4$r", cast<int32_t>(min4), cast<int32_t>(extent4) },
+        { name + ".5$r", cast<int32_t>(min5), cast<int32_t>(extent5) },
+        { name + ".6$r", cast<int32_t>(min6), cast<int32_t>(extent6) },
+        { name + ".7$r", cast<int32_t>(min7), cast<int32_t>(extent7) },
     };
     dom = build_domain(vars);
     init_vars(name);
