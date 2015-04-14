@@ -214,6 +214,9 @@ void swap(T &a, T &b) {
     b = t;
 }
 
+// Search the process for a symbol with the given name.
+void *find_symbol(const char *name);
+
 }}}
 
 using namespace Halide::Runtime::Internal;

@@ -421,6 +421,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_allocator \
   posix_clock \
   posix_error_handler \
+  posix_find_symbol \
   posix_io \
   posix_math \
   posix_print \
@@ -430,8 +431,9 @@ RUNTIME_CPP_COMPONENTS = \
   tracing \
   windows_clock \
   windows_cuda \
-  windows_opencl \
+  windows_find_symbol \
   windows_io \
+  windows_opencl \
   windows_thread_pool \
   write_debug_image
 
