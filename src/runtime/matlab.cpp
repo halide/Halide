@@ -205,6 +205,7 @@ WEAK int halide_mex_validate_argument(void *user_context, const halide_filter_ar
     }
     int dim_count = mxGetNumberOfDimensions(arr);
     if (arg->kind == halide_argument_kind_input_scalar) {
+        // Validate that the mxArray has all dimensions of extent 1.
         for (int i = 0; i < dim_count; i++) {
             if (mxGetDimensions(arr)[i] != 1) {
                 error(user_context) << "Expected scalar argument for parameter " << arg->name << ".\n";
@@ -212,12 +213,14 @@ WEAK int halide_mex_validate_argument(void *user_context, const halide_filter_ar
             }
         }
         if (arg->type_bits == 1) {
+            // The pipeline expects a boolean, validate the argument is logical.
             if (!mxIsLogical(arr)) {
                 error(user_context) << "Expected logical argument for scalar parameter " << arg->name
                                     << ", got " << mxGetClassName(arr) << ".\n";
                 return -1;
             }
         } else {
+            // If it isn't a boolean, validate the argument is numeric.
             if (!mxIsNumeric(arr)) {
                 error(user_context) << "Expected numeric argument for scalar parameter " << arg->name
                                     << ", got " << mxGetClassName(arr) << ".\n";
@@ -226,14 +229,23 @@ WEAK int halide_mex_validate_argument(void *user_context, const halide_filter_ar
         }
     } else if (arg->kind == halide_argument_kind_input_buffer ||
                arg->kind == halide_argument_kind_output_buffer) {
+        // Validate that the data type of a buffer matches exactly.
         mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
         if (mxGetClassID(arr) != arg_class_id) {
             error(user_context) << "Expected type of class " << get_class_name(arg_class_id)
-                                << "for argument " << arg->name
+                                << " for argument " << arg->name
                                 << ", got class " << mxGetClassName(arr) << ".\n";
             return -1;
         }
-        if (dim_count > 2 && dim_count > arg->dimensions) {
+        // Validate that the dimensionality matches. Matlab is wierd
+        // because matrices always have at least 2 dimensions, and it
+        // truncates trailing dimensions of extent 1. So, the only way
+        // to have an error here is to have more dimensions with
+        // extent != 1 than the Halide pipeline expects.
+        while (dim_count > 0 && mxGetDimensions(arr)[dim_count - 1] == 1) {
+            dim_count--;
+        }
+        if (dim_count > arg->dimensions) {
             error(user_context) << "Expected array of rank " << arg->dimensions
                                 << "for argument " << arg->name
                                 << ", got array of rank " << dim_count << ".\n";
@@ -245,6 +257,7 @@ WEAK int halide_mex_validate_argument(void *user_context, const halide_filter_ar
 
 WEAK int halide_mex_validate_arguments(void *user_context, const halide_filter_metadata_t *metadata,
                                        int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
+    // Validate the number of arguments is correct.
     if (nlhs + nrhs != metadata->num_arguments) {
         error(user_context) << "Expected " << metadata->num_arguments
                             << " arguments for Halide pipeline " << metadata->name
@@ -252,6 +265,7 @@ WEAK int halide_mex_validate_arguments(void *user_context, const halide_filter_m
         return -1;
     }
 
+    // Validate each argument.
     for (int i = 0; i < nlhs + nrhs; i++) {
         const mxArray *arg = i < nrhs ? prhs[i] : plhs[i - nrhs];
         int ret = halide_mex_validate_argument(user_context, &metadata->arguments[i], arg);
@@ -269,17 +283,23 @@ WEAK int halide_mex_array_to_buffer_t(const mxArray *arr, int expected_dims, buf
     buf->host = (uint8_t *)mxGetData(arr);
     buf->elem_size = mxGetElementSize(arr);
 
+    // Matlab swaps the first two dimensions, so we need to keep at
+    // least two dimensions for now.
+    if (expected_dims < 2) expected_dims = 2;
+
     int dim_count = mxGetNumberOfDimensions(arr);
     for (int i = 0; i < dim_count && i < expected_dims; i++) {
         buf->extent[i] = static_cast<int32_t>(mxGetDimensions(arr)[i]);
     }
 
-    // Add back the least significant dimensions with extent 1.
-    for (int i = 1; i < expected_dims; i++) {
+    // Add back the dimensions with extent 1.
+    for (int i = 2; i < expected_dims; i++) {
         if (buf->extent[i] == 0) {
             buf->extent[i] = 1;
         }
     }
+
+    swap(buf->extent[0], buf->extent[1]);
 
     // Compute dense strides.
     buf->stride[0] = 1;

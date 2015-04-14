@@ -207,6 +207,13 @@ typedef SinkPrinter debug;
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
 
+template <typename T>
+void swap(T &a, T &b) {
+    T t = a;
+    a = b;
+    b = t;
+}
+
 }}}
 
 using namespace Halide::Runtime::Internal;
@@ -215,6 +222,7 @@ extern "C" {
 
 extern WEAK void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
 extern WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
+
 }
 
 
