@@ -561,7 +561,7 @@ public:
     // @}
 
     /** Statically compile this function to an object file that is suitable for use
-     * with Matlab's mex function. */
+     * with Matlab as a mex library. */
     EXPORT void compile_to_matlab_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
                                          const Target &target = get_target_from_environment());
 
