@@ -1,14 +1,23 @@
 #include "HalideRuntime.h"
 
-#define RTLD_DEFAULT ((void *)-2)
+#define INLINE inline __attribute__((always_inline))
+
+extern "C" {
+
+#define RTLD_DEFAULT NULL //((void *)-2)
 extern void *dlsym(void *, const char *);
 
-extern void *alloca(int);
+}  // extern "C"
+
+// This cannot be a function because the result goes out of scope.
+#define alloca __builtin_alloca
 
 // Assume version 7.4 if not defined.
 #ifndef MX_API_VER
 #define MX_API_VER 0x07040000
 #endif
+
+struct mxArray;
 
 // It is important to have the mex function pointer definitions in a
 // namespace to avoid silently conflicting symbols with matlab at
@@ -16,8 +25,6 @@ extern void *alloca(int);
 namespace Halide {
 namespace Runtime {
 namespace mex {
-
-struct mxArray;
 
 enum { TMW_NAME_LENGTH_MAX = 64 };
 enum { mxMAXNAM = TMW_NAME_LENGTH_MAX };
@@ -72,7 +79,7 @@ typedef ptrdiff_t mwSignedIndex;
 typedef void (*mex_exit_fn)(void);
 typedef void (*mxFunctionPtr)(int, mxArray **, int, const mxArray **);
 
-mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
+WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
     switch (type_code) {
     case halide_type_int:
         switch (type_bits) {
@@ -102,7 +109,7 @@ mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
     return mxUNKNOWN_CLASS;
 }
 
-const char *get_class_name(mxClassID id) {
+WEAK const char *get_class_name(mxClassID id) {
     switch (id) {
     case mxCELL_CLASS: return "cell";
     case mxSTRUCT_CLASS: return "struct";
@@ -136,18 +143,19 @@ const char *get_class_name(mxClassID id) {
 #include "mex_functions.h"
 
 template <typename T>
-inline T* get_data(mxArray *a) { return (T *)mxGetData(a); }
+INLINE T* get_data(mxArray *a) { return (T *)mxGetData(a); }
 template <typename T>
-inline const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
+INLINE const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
 
 template <typename T>
-inline T get_scalar(const mxArray *a) { return *get_data<T>(a); }
+INLINE T get_scalar(const mxArray *a) { return *get_data<T>(a); }
 
 template <typename T>
-T get_symbol(void *user_context, const char *name) {
+INLINE T get_symbol(void *user_context, const char *name) {
     T s = (T)dlsym(RTLD_DEFAULT, name);
     if (s == NULL) {
         error(user_context) << "Matlab API not found: " << name << "\n";
+        return NULL;
     }
     return s;
 }
@@ -159,6 +167,14 @@ T get_symbol(void *user_context, const char *name) {
 using namespace Halide::Runtime::mex;
 
 extern "C" {
+
+WEAK void halide_matlab_error(void *, const char *msg) {
+    mexPrintf("Error: %s", msg);
+}
+
+WEAK void halide_matlab_print(void *, const char *msg) {
+    mexPrintf("%s", msg);
+}
 
 WEAK int halide_mex_init(void *user_context) {
     // Assume that if mexPrintf exists, we've already attempted initialization.
@@ -173,6 +189,10 @@ WEAK int halide_mex_init(void *user_context) {
     # define MEX_FN_700(ret, func, func_700, args) func = get_symbol<ret (*)args>(user_context, #func_700); if (!func) { return -1; }
     #endif
     #include "mex_functions.h"
+
+    // Set up Halide's printing to go through Matlab. Also, don't exit on error.
+    halide_set_custom_print(halide_matlab_print);
+    halide_set_error_handler(halide_matlab_error);
 
     return 0;
 }
@@ -210,11 +230,13 @@ WEAK int halide_mex_validate_argument(void *user_context, const halide_filter_ar
         mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
         if (mxGetClassID(arr) != arg_class_id) {
             error(user_context) << "Expected type of class " << get_class_name(arg_class_id)
+                                << "for argument " << arg->name
                                 << ", got class " << mxGetClassName(arr) << ".\n";
             return -1;
         }
         if (dim_count > 2 && dim_count > arg->dimensions) {
             error(user_context) << "Expected array of rank " << arg->dimensions
+                                << "for argument " << arg->name
                                 << ", got array of rank " << dim_count << ".\n";
             return -1;
         }
@@ -226,7 +248,7 @@ WEAK int halide_mex_validate_arguments(void *user_context, const halide_filter_m
                                        int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
     if (nlhs + nrhs != metadata->num_arguments) {
         error(user_context) << "Expected " << metadata->num_arguments
-                            << " for Halide pipeline " << metadata->name
+                            << " arguments for Halide pipeline " << metadata->name
                             << ", got " << nlhs + nrhs << ".\n";
         return -1;
     }
@@ -300,8 +322,8 @@ WEAK int halide_mex_array_to_scalar(const mxArray *arr, int32_t type_code, int32
     return -1;
 }
 
-WEAK int halide_mex_call_pipeline(void *user_context, const halide_filter_metadata_t *metadata,
-                                  int (*pipeline)(void **args),
+WEAK int halide_mex_call_pipeline(void *user_context,
+                                  int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                   int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
     int result;
 

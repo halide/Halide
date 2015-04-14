@@ -211,5 +211,12 @@ extern WEAK void halide_release_jit_module();
 
 using namespace Halide::Runtime::Internal;
 
-#endif
+extern "C" {
 
+extern WEAK void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
+extern WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
+}
+
+
+
+#endif
