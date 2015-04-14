@@ -1906,7 +1906,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.has_coordinates_feature()) {
+    if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting coordinates intrinsics...\n";
         s = inject_coordinates_intrinsics(s);
         debug(2) << "Lowering after coordinates intrinsics:\n" << s << "\n\n";
