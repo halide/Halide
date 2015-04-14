@@ -1,10 +1,6 @@
-#include "CodeGen_C.h"
-#include "StmtToHtml.h"
 #include "Output.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
-
-#include <fstream>
 
 using namespace llvm;
 
