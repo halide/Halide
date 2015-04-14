@@ -33,39 +33,31 @@ private:
             // Create
             //  glsl_texture_load("name",
             //                    name.buffer,
-            //                    (x - x.min)/x.extent,
-            //                    (y - y.min)/y.extent,
+            //                    x/x_extent,
+            //                    y/y_extent,
             //                    c)
-            // out of
+            // from
             //  coordinates_load("name",
-            //                      "name[.n]",
-            //                      name.buffer,
-            //                      x - x.min,
-            //                      y - y,min,
-            //                      c)
+            //                   name.buffer,
+            //                   x, x_extent,
+            //                   y, y_extent,
+            //                   c, c_extent
+            //                   )
             //
             vector<Expr> args(5);
             args[0] = call_args[0];    // "name"
-            const StringImm *string_imm = call_args[1].as<StringImm>();
-            string name = string_imm->value; // "name[.n]"
-            args[1] = call_args[2];    // name.buffer
+            args[1] = call_args[1];    // name.buffer
 
-            // Normalize x and y coordinates.
+            // Normalize first two coordinates.
             for (size_t i = 0; i < 2; i++) {
-                string d = int_to_string(i);
-                string extent_name = name + ".extent." + d;
-                string extent_name_constrained = extent_name + ".constrained";
-                if (scope.contains(extent_name_constrained)) {
-                    extent_name = extent_name_constrained;
-                }
+                int to_index = 2 + i;
+                int from_index = 2 + i * 2;
+                args[to_index] =
+                  (Cast::make(Float(32), mutate(call_args[from_index])) + 0.5f) /
+                  mutate(call_args[from_index + 1]);
+            }
 
-                Expr extent = Variable::make(Int(32), extent_name);
-
-                // Normalize x, y coordinates. Leave c intact
-                args[i + 2] =
-                    (Cast::make(Float(32), mutate(call_args[i + 3])) + 0.5f) / extent;
-             }
-            Expr c_coordinate = mutate(call_args[5]);
+            Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
             args[4] = c_coordinate;
 
             Type load_type = call->type;

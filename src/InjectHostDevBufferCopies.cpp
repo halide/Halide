@@ -386,7 +386,7 @@ class InjectBufferCopies : public IRMutator {
             // counts as a device read
             internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
-            const Variable *buffer_var = op->args[2].as<Variable>();
+            const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
             debug(4) << "Adding GLSL read via glsl_texture_load for " << buffer_var->name << "\n";
