@@ -88,6 +88,7 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  matlab
   metadata
   module_aot_ref_count
   module_jit_ref_count
@@ -296,6 +297,7 @@ set(HEADER_FILES
   Lerp.h
   Lower.h
   MainPage.h
+  MatlabOutput.h
   Memoization.h
   Module.h
   ModulusRemainder.h
@@ -409,6 +411,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
   Lower.cpp
+  MatlabOutput.cpp
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp

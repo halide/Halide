@@ -248,6 +248,7 @@ SOURCE_FILES = \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
+  MatlabOutput.cpp \
   Memoization.cpp \
   Module.cpp \
   ModulusRemainder.cpp \
@@ -348,6 +349,7 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
+  MatlabOutput.h \
   Memoization.h \
   Module.h \
   ModulusRemainder.h \
@@ -406,6 +408,7 @@ RUNTIME_CPP_COMPONENTS = \
   linux_clock \
   linux_host_cpu_count \
   linux_opengl_context \
+  matlab \
   metadata \
   module_aot_ref_count \
   module_jit_ref_count \
@@ -826,7 +829,7 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/modules clean
 	make -C apps/modules out.png
 
-# It's just for compiling the runtime, so Clang <3.5 *might* work, 
+# It's just for compiling the runtime, so Clang <3.5 *might* work,
 # but best to peg it to the minimum llvm version.
 ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))
 CLANG_OK=yes
