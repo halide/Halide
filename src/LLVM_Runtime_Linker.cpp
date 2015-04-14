@@ -115,6 +115,7 @@ DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(metadata)
+DECLARE_CPP_INITMOD(matlab)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -507,6 +508,10 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
         }
+    }
+
+    if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
+        modules.push_back(get_initmod_matlab(c, bits_64, debug));
     }
 
     link_modules(modules);
