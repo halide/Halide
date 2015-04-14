@@ -61,7 +61,7 @@ struct Target {
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
-        Matlab,  ///< Generated code contains a Matlab mex API compatible entry point.
+        Matlab,  ///< Enable Matlab support code.
 
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
