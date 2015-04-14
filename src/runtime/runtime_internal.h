@@ -216,6 +216,11 @@ void swap(T &a, T &b) {
     b = t;
 }
 
+template <typename T>
+T max(const T &a, const T &b) {
+    return a > b ? a : b;
+}
+
 // Search the process for a symbol with the given name.
 extern WEAK void *find_symbol(const char *name);
 
