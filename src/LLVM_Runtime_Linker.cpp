@@ -116,6 +116,8 @@ DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(matlab)
+DECLARE_CPP_INITMOD(posix_find_symbol)
+DECLARE_CPP_INITMOD(windows_find_symbol)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -393,19 +395,23 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_find_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_find_symbol(c, bits_64, debug));
             } else if (t.os == Target::Android) {
                 modules.push_back(get_initmod_android_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_find_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_windows_find_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));

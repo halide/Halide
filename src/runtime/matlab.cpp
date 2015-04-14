@@ -2,16 +2,9 @@
 
 #define INLINE inline __attribute__((always_inline))
 
-extern "C" {
-
-extern void *dlsym(void *, const char *);
-
-}  // extern "C"
-
 // This cannot be a function because the result goes out of scope.
 #define alloca __builtin_alloca
 
-// Assume version 7.4 if not defined.
 #ifndef MX_API_VER
 #define MX_API_VER 0x07040000
 #endif
@@ -65,7 +58,7 @@ enum mxComplexity {
     mxCOMPLEX
 };
 
-#ifdef MX_COMPAT_32
+#ifdef BITS_32
 typedef int mwSize;
 typedef int mwIndex;
 typedef int mwSignedIndex;
@@ -147,11 +140,8 @@ template <typename T>
 INLINE const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
 
 template <typename T>
-INLINE T get_scalar(const mxArray *a) { return *get_data<T>(a); }
-
-template <typename T>
 INLINE T get_symbol(void *user_context, const char *name) {
-    T s = (T)dlsym(NULL, name);
+    T s = (T)find_symbol(name);
     if (s == NULL) {
         error(user_context) << "Matlab API not found: " << name << "\n";
         return NULL;
@@ -168,6 +158,8 @@ using namespace Halide::Runtime::mex;
 extern "C" {
 
 WEAK void halide_matlab_error(void *, const char *msg) {
+    // Note that mexErrMsg/mexErrMsgIdAndTxt crash Matlab. It seems to
+    // be a common problem, those APIs seem to be very fragile.
     mexPrintf("Error: %s", msg);
 }
 
@@ -258,16 +250,23 @@ WEAK int halide_mex_validate_argument(void *user_context, const halide_filter_ar
 WEAK int halide_mex_validate_arguments(void *user_context, const halide_filter_metadata_t *metadata,
                                        int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
     // Validate the number of arguments is correct.
-    if (nlhs + nrhs != metadata->num_arguments) {
+    if (nrhs != metadata->num_arguments) {
         error(user_context) << "Expected " << metadata->num_arguments
                             << " arguments for Halide pipeline " << metadata->name
-                            << ", got " << nlhs + nrhs << ".\n";
+                            << ", got " << nrhs << ".\n";
+        return -1;
+    }
+
+    // Validate the LHS has zero or one argument.
+    if (nlhs > 1) {
+        error(user_context) << "Expected zero or one return value for Halide pipeline " << metadata->name
+                            << ", got " << nlhs << ".\n";
         return -1;
     }
 
     // Validate each argument.
-    for (int i = 0; i < nlhs + nrhs; i++) {
-        const mxArray *arg = i < nrhs ? prhs[i] : plhs[i - nrhs];
+    for (int i = 0; i < nrhs; i++) {
+        const mxArray *arg = prhs[i];
         int ret = halide_mex_validate_argument(user_context, &metadata->arguments[i], arg);
         if (ret != 0) {
             return ret;
@@ -315,26 +314,26 @@ WEAK int halide_mex_array_to_scalar(const mxArray *arr, int32_t type_code, int32
     switch (type_code) {
     case halide_type_int:
         switch (type_bits) {
-        case 1: *reinterpret_cast<bool *>(scalar) = get_scalar<uint8_t>(arr) != 0; return 0;
-        case 8: *reinterpret_cast<int8_t *>(scalar) = get_scalar<int8_t>(arr); return 0;
-        case 16: *reinterpret_cast<int16_t *>(scalar) = get_scalar<int16_t>(arr); return 0;
-        case 32: *reinterpret_cast<int32_t *>(scalar) = get_scalar<int32_t>(arr); return 0;
-        case 64: *reinterpret_cast<int64_t *>(scalar) = get_scalar<int64_t>(arr); return 0;
+        case 1: *reinterpret_cast<bool *>(scalar) = *get_data<uint8_t>(arr) != 0; return 0;
+        case 8: *reinterpret_cast<int8_t *>(scalar) = *get_data<int8_t>(arr); return 0;
+        case 16: *reinterpret_cast<int16_t *>(scalar) = *get_data<int16_t>(arr); return 0;
+        case 32: *reinterpret_cast<int32_t *>(scalar) = *get_data<int32_t>(arr); return 0;
+        case 64: *reinterpret_cast<int64_t *>(scalar) = *get_data<int64_t>(arr); return 0;
         }
         return -1;
     case halide_type_uint:
         switch (type_bits) {
-        case 1: *reinterpret_cast<bool *>(scalar) = get_scalar<uint8_t>(arr) != 0; return 0;
-        case 8: *reinterpret_cast<uint8_t *>(scalar) = get_scalar<uint8_t>(arr); return 0;
-        case 16: *reinterpret_cast<uint16_t *>(scalar) = get_scalar<uint16_t>(arr); return 0;
-        case 32: *reinterpret_cast<uint32_t *>(scalar) = get_scalar<uint32_t>(arr); return 0;
-        case 64: *reinterpret_cast<uint64_t *>(scalar) = get_scalar<uint64_t>(arr); return 0;
+        case 1: *reinterpret_cast<bool *>(scalar) = *get_data<uint8_t>(arr) != 0; return 0;
+        case 8: *reinterpret_cast<uint8_t *>(scalar) = *get_data<uint8_t>(arr); return 0;
+        case 16: *reinterpret_cast<uint16_t *>(scalar) = *get_data<uint16_t>(arr); return 0;
+        case 32: *reinterpret_cast<uint32_t *>(scalar) = *get_data<uint32_t>(arr); return 0;
+        case 64: *reinterpret_cast<uint64_t *>(scalar) = *get_data<uint64_t>(arr); return 0;
         }
         return -1;
     case halide_type_float:
         switch (type_bits) {
-        case 32: *reinterpret_cast<float *>(scalar) = get_scalar<float>(arr); return 0;
-        case 64: *reinterpret_cast<double *>(scalar) = get_scalar<double>(arr); return 0;
+        case 32: *reinterpret_cast<float *>(scalar) = *get_data<float>(arr); return 0;
+        case 64: *reinterpret_cast<double *>(scalar) = *get_data<double>(arr); return 0;
         }
         return -1;
     }
@@ -344,7 +343,14 @@ WEAK int halide_mex_array_to_scalar(const mxArray *arr, int32_t type_code, int32
 WEAK int halide_mex_call_pipeline(void *user_context,
                                   int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                   int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
-    int result;
+
+    int32_t result_storage;
+    int32_t *result_ptr = &result_storage;
+    if (nlhs > 0) {
+        plhs[0] = mxCreateNumericMatrix(1, 1, mxINT32_CLASS, mxREAL);
+        result_ptr = get_data<int32_t>(plhs[0]);
+    }
+    int32_t &result = *result_ptr;
 
     result = halide_mex_init(user_context);
     if (result != 0) {
@@ -356,9 +362,9 @@ WEAK int halide_mex_call_pipeline(void *user_context,
         return result;
     }
 
-    void **args = (void **)alloca((nlhs + nrhs) * sizeof(void *));
-    for (int i = 0; i < nrhs + nlhs; i++) {
-        const mxArray *arg = i < nrhs ? prhs[i] : plhs[i - nrhs];
+    void **args = (void **)alloca(nrhs * sizeof(void *));
+    for (int i = 0; i < nrhs; i++) {
+        const mxArray *arg = prhs[i];
         const halide_filter_argument_t *arg_metadata = &metadata->arguments[i];
 
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
@@ -377,7 +383,8 @@ WEAK int halide_mex_call_pipeline(void *user_context,
         }
     }
 
-    return pipeline(args);
+    result = pipeline(args);
+    return result;
 }
 
 }  // extern "C"
