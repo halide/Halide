@@ -188,97 +188,43 @@ WEAK int halide_mex_init(void *user_context) {
     return 0;
 }
 
-// Do only as much validation as is necessary to avoid accidentally
-// reinterpreting casting data.
-WEAK int halide_mex_validate_argument(void *user_context, const halide_filter_argument_t *arg, const mxArray *arr) {
+// Convert a matlab mxArray to a Halide buffer_t, with a specific number of dimensions.
+WEAK int halide_mex_array_to_buffer_t(void *user_context,
+                                      const mxArray *arr, const halide_filter_argument_t *arg,
+                                      buffer_t *buf) {
+    memset(buf, 0, sizeof(buffer_t));
+
     if (mxIsComplex(arr)) {
         error(user_context) << "Complex argument not supported for parameter " << arg->name << ".\n";
         return -1;
     }
+
     int dim_count = mxGetNumberOfDimensions(arr);
-    if (arg->kind == halide_argument_kind_input_scalar) {
-        // Validate that the mxArray has all dimensions of extent 1.
-        for (int i = 0; i < dim_count; i++) {
-            if (mxGetDimensions(arr)[i] != 1) {
-                error(user_context) << "Expected scalar argument for parameter " << arg->name << ".\n";
-                return -1;
-            }
-        }
-        if (arg->type_bits == 1) {
-            // The pipeline expects a boolean, validate the argument is logical.
-            if (!mxIsLogical(arr)) {
-                error(user_context) << "Expected logical argument for scalar parameter " << arg->name
-                                    << ", got " << mxGetClassName(arr) << ".\n";
-                return -1;
-            }
-        } else {
-            // If it isn't a boolean, validate the argument is numeric.
-            if (!mxIsNumeric(arr)) {
-                error(user_context) << "Expected numeric argument for scalar parameter " << arg->name
-                                    << ", got " << mxGetClassName(arr) << ".\n";
-                return -1;
-            }
-        }
-    } else if (arg->kind == halide_argument_kind_input_buffer ||
-               arg->kind == halide_argument_kind_output_buffer) {
-        // Validate that the data type of a buffer matches exactly.
-        mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
-        if (mxGetClassID(arr) != arg_class_id) {
-            error(user_context) << "Expected type of class " << get_class_name(arg_class_id)
-                                << " for argument " << arg->name
-                                << ", got class " << mxGetClassName(arr) << ".\n";
-            return -1;
-        }
-        // Validate that the dimensionality matches. Matlab is wierd
-        // because matrices always have at least 2 dimensions, and it
-        // truncates trailing dimensions of extent 1. So, the only way
-        // to have an error here is to have more dimensions with
-        // extent != 1 than the Halide pipeline expects.
-        while (dim_count > 0 && mxGetDimensions(arr)[dim_count - 1] == 1) {
-            dim_count--;
-        }
-        if (dim_count > arg->dimensions) {
-            error(user_context) << "Expected array of rank " << arg->dimensions
-                                << "for argument " << arg->name
-                                << ", got array of rank " << dim_count << ".\n";
-            return -1;
-        }
-    }
-    return 0;
-}
+    int expected_dims = arg->dimensions;
 
-WEAK int halide_mex_validate_arguments(void *user_context, const halide_filter_metadata_t *metadata,
-                                       int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
-    // Validate the number of arguments is correct.
-    if (nrhs != metadata->num_arguments) {
-        error(user_context) << "Expected " << metadata->num_arguments
-                            << " arguments for Halide pipeline " << metadata->name
-                            << ", got " << nrhs << ".\n";
+    // Validate that the data type of a buffer matches exactly.
+    mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
+    if (mxGetClassID(arr) != arg_class_id) {
+        error(user_context) << "Expected type of class " << get_class_name(arg_class_id)
+                            << " for argument " << arg->name
+                            << ", got class " << mxGetClassName(arr) << ".\n";
+        return -1;
+    }
+    // Validate that the dimensionality matches. Matlab is wierd
+    // because matrices always have at least 2 dimensions, and it
+    // truncates trailing dimensions of extent 1. So, the only way
+    // to have an error here is to have more dimensions with
+    // extent != 1 than the Halide pipeline expects.
+    while (dim_count > 0 && mxGetDimensions(arr)[dim_count - 1] == 1) {
+        dim_count--;
+    }
+    if (dim_count > expected_dims) {
+        error(user_context) << "Expected array of rank " << expected_dims
+                            << "for argument " << arg->name
+                            << ", got array of rank " << dim_count << ".\n";
         return -1;
     }
 
-    // Validate the LHS has zero or one argument.
-    if (nlhs > 1) {
-        error(user_context) << "Expected zero or one return value for Halide pipeline " << metadata->name
-                            << ", got " << nlhs << ".\n";
-        return -1;
-    }
-
-    // Validate each argument.
-    for (int i = 0; i < nrhs; i++) {
-        const mxArray *arg = prhs[i];
-        int ret = halide_mex_validate_argument(user_context, &metadata->arguments[i], arg);
-        if (ret != 0) {
-            return ret;
-        }
-    }
-
-    return 0;
-}
-
-// Convert a matlab mxArray to a Halide buffer_t, with a specific number of dimensions.
-WEAK int halide_mex_array_to_buffer_t(const mxArray *arr, int expected_dims, buffer_t *buf) {
-    memset(buf, 0, sizeof(buffer_t));
     buf->host = (uint8_t *)mxGetData(arr);
     buf->elem_size = mxGetElementSize(arr);
 
@@ -286,7 +232,6 @@ WEAK int halide_mex_array_to_buffer_t(const mxArray *arr, int expected_dims, buf
     // least two dimensions for now.
     if (expected_dims < 2) expected_dims = 2;
 
-    int dim_count = mxGetNumberOfDimensions(arr);
     for (int i = 0; i < dim_count && i < expected_dims; i++) {
         buf->extent[i] = static_cast<int32_t>(mxGetDimensions(arr)[i]);
     }
@@ -310,30 +255,54 @@ WEAK int halide_mex_array_to_buffer_t(const mxArray *arr, int expected_dims, buf
 }
 
 // Convert a matlab mxArray to a scalar.
-WEAK int halide_mex_array_to_scalar(const mxArray *arr, int32_t type_code, int32_t type_bits, void *scalar) {
-    switch (type_code) {
-    case halide_type_int:
+WEAK int halide_mex_array_to_scalar(void *user_context,
+                                    const mxArray *arr, const halide_filter_argument_t *arg, void *scalar) {
+    if (mxIsComplex(arr)) {
+        error(user_context) << "Complex argument not supported for parameter " << arg->name << ".\n";
+        return -1;
+    }
+
+    // Validate that the mxArray has all dimensions of extent 1.
+    int dim_count = mxGetNumberOfDimensions(arr);
+    for (int i = 0; i < dim_count; i++) {
+        if (mxGetDimensions(arr)[i] != 1) {
+            error(user_context) << "Expected scalar argument for parameter " << arg->name << ".\n";
+            return -1;
+        }
+    }
+    if (!mxIsLogical(arr) && !mxIsNumeric(arr)) {
+        error(user_context) << "Expected numeric argument for scalar parameter " << arg->name
+                            << ", got " << mxGetClassName(arr) << ".\n";
+        return -1;
+    }
+
+    double value = mxGetScalar(arr);
+    int32_t type_code = arg->type_code;
+    int32_t type_bits = arg->type_bits;
+
+    if (type_code == halide_type_int) {
+
         switch (type_bits) {
-        case 1: *reinterpret_cast<bool *>(scalar) = *get_data<uint8_t>(arr) != 0; return 0;
-        case 8: *reinterpret_cast<int8_t *>(scalar) = *get_data<int8_t>(arr); return 0;
-        case 16: *reinterpret_cast<int16_t *>(scalar) = *get_data<int16_t>(arr); return 0;
-        case 32: *reinterpret_cast<int32_t *>(scalar) = *get_data<int32_t>(arr); return 0;
-        case 64: *reinterpret_cast<int64_t *>(scalar) = *get_data<int64_t>(arr); return 0;
+        case 1: *reinterpret_cast<bool *>(scalar) = value != 0; return 0;
+        case 8: *reinterpret_cast<int8_t *>(scalar) = static_cast<int8_t>(value); return 0;
+        case 16: *reinterpret_cast<int16_t *>(scalar) = static_cast<int16_t>(value); return 0;
+        case 32: *reinterpret_cast<int32_t *>(scalar) = static_cast<int32_t>(value); return 0;
+        case 64: *reinterpret_cast<int64_t *>(scalar) = static_cast<int64_t>(value); return 0;
         }
         return -1;
-    case halide_type_uint:
+    } else if (type_code == halide_type_uint) {
         switch (type_bits) {
-        case 1: *reinterpret_cast<bool *>(scalar) = *get_data<uint8_t>(arr) != 0; return 0;
-        case 8: *reinterpret_cast<uint8_t *>(scalar) = *get_data<uint8_t>(arr); return 0;
-        case 16: *reinterpret_cast<uint16_t *>(scalar) = *get_data<uint16_t>(arr); return 0;
-        case 32: *reinterpret_cast<uint32_t *>(scalar) = *get_data<uint32_t>(arr); return 0;
-        case 64: *reinterpret_cast<uint64_t *>(scalar) = *get_data<uint64_t>(arr); return 0;
+        case 1: *reinterpret_cast<bool *>(scalar) = value != 0; return 0;
+        case 8: *reinterpret_cast<uint8_t *>(scalar) = static_cast<uint8_t>(value); return 0;
+        case 16: *reinterpret_cast<uint16_t *>(scalar) = static_cast<uint16_t>(value); return 0;
+        case 32: *reinterpret_cast<uint32_t *>(scalar) = static_cast<uint32_t>(value); return 0;
+        case 64: *reinterpret_cast<uint64_t *>(scalar) = static_cast<uint64_t>(value); return 0;
         }
         return -1;
-    case halide_type_float:
+    } else if (type_code == halide_type_float) {
         switch (type_bits) {
-        case 32: *reinterpret_cast<float *>(scalar) = *get_data<float>(arr); return 0;
-        case 64: *reinterpret_cast<double *>(scalar) = *get_data<double>(arr); return 0;
+        case 32: *reinterpret_cast<float *>(scalar) = static_cast<float>(value); return 0;
+        case 64: *reinterpret_cast<double *>(scalar) = static_cast<double>(value); return 0;
         }
         return -1;
     }
@@ -344,6 +313,11 @@ WEAK int halide_mex_call_pipeline(void *user_context,
                                   int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                   int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 
+    int init_result = halide_mex_init(user_context);
+    if (init_result != 0) {
+        return init_result;
+    }
+
     int32_t result_storage;
     int32_t *result_ptr = &result_storage;
     if (nlhs > 0) {
@@ -352,13 +326,21 @@ WEAK int halide_mex_call_pipeline(void *user_context,
     }
     int32_t &result = *result_ptr;
 
-    result = halide_mex_init(user_context);
-    if (result != 0) {
+    // Set result to failure until proven otherwise.
+    result = -1;
+
+    // Validate the number of arguments is correct.
+    if (nrhs != metadata->num_arguments) {
+        error(user_context) << "Expected " << metadata->num_arguments
+                            << " arguments for Halide pipeline " << metadata->name
+                            << ", got " << nrhs << ".\n";
         return result;
     }
 
-    result = halide_mex_validate_arguments(user_context, metadata, nlhs, plhs, nrhs, prhs);
-    if (result != 0) {
+    // Validate the LHS has zero or one argument.
+    if (nlhs > 1) {
+        error(user_context) << "Expected zero or one return value for Halide pipeline " << metadata->name
+                            << ", got " << nlhs << ".\n";
         return result;
     }
 
@@ -370,16 +352,20 @@ WEAK int halide_mex_call_pipeline(void *user_context,
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
             buffer_t *buf = (buffer_t *)alloca(sizeof(buffer_t));
-            result = halide_mex_array_to_buffer_t(arg, arg_metadata->dimensions, buf);
+            result = halide_mex_array_to_buffer_t(user_context, arg, arg_metadata, buf);
             if (result != 0) {
                 return result;
             }
             args[i] = buf;
         } else {
-            result = halide_mex_array_to_scalar(arg, arg_metadata->type_code, arg_metadata->type_bits, args[i]);
+            size_t size_bytes = max(8, (arg_metadata->type_bits + 7) / 8);
+            void *scalar = alloca(size_bytes);
+            memset(scalar, 0, size_bytes);
+            result = halide_mex_array_to_scalar(user_context, arg, arg_metadata, scalar);
             if (result != 0) {
                 return result;
             }
+            args[i] = scalar;
         }
     }
 
