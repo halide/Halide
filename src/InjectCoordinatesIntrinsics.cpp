@@ -67,20 +67,22 @@ private:
             call_args.push_back(IntImm::make(0));
         }
 
-        // Create coordinates_load("name", "name[.n]", name.buffer, x, y, c)
-        // intrinsic call.
-        // We need to pass "name[.n]" because if we need to add normalization
-        // then we will this name as a prefix for "name[.n].extent" variable.
-        vector<Expr> args(6);
+        // Create coordinates_load("name", name.buffer, x, x_extent, y, y_extent, ...)
+        // Extents can be used by successive passes.
+        vector<Expr> args(2);
         args[0] = call->name;
-        args[1] = name;
-        args[2] = Variable::make(Handle(), call->name + ".buffer");
+        args[1] = Variable::make(Handle(), call->name + ".buffer");
         for (size_t i = 0; i < call_args.size(); i++) {
             string d = int_to_string(i);
             string min_name = name + ".min." + d;
             string min_name_constrained = min_name + ".constrained";
             if (scope.contains(min_name_constrained)) {
                 min_name = min_name_constrained;
+            }
+            string extent_name = name + ".extent." + d;
+            string extent_name_constrained = extent_name + ".constrained";
+            if (scope.contains(extent_name_constrained)) {
+                extent_name = extent_name_constrained;
             }
 
             Expr min = Variable::make(Int(32), min_name);
@@ -101,12 +103,8 @@ private:
                 }
             }
 
-            // Inject intrinsics into the call argument
-            Expr arg = mutate(call_args[i]);
-            debug(4) << "Subtracting min from arg. arg:" << arg
-                     << " min:" << min << "\n";
-
-            args[i + 3] = arg - min;
+            args.push_back(mutate(call_args[i]) - min);
+            args.push_back(Variable::make(Int(32), extent_name));
         }
 
         expr = Call::make(call->type,
