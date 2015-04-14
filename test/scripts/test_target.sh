@@ -33,9 +33,6 @@ else
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 fi
 
-# Turn on C++11
-export CXX11=true
-
 echo Testing target $HL_TARGET with llvm $LLVM
 echo Using LD = $LD
 echo Using CC = $CC
@@ -48,9 +45,9 @@ COMMIT=`git rev-parse HEAD`
 mv distrib/halide.tgz distrib/halide_${HOST}_${BITS}_${LLVM}_${COMMIT}_${DATE}.tgz
 chmod a+r distrib/*
 
-if [ "$HL_TARGET" == cuda -a "$HOST" == Darwin ]; then
+if [ "$HL_TARGET" == "host-cuda" -a "$HOST" == Darwin ]; then
     echo "Halide builds but tests not run"
-elif [ "$HL_TARGET" == opencl -a "$HOST" == Darwin ]; then
+elif [ "$HL_TARGET" == "host-opencl" -a "$HOST" == Darwin ]; then
     echo "Halide builds but tests not run"
 elif [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
