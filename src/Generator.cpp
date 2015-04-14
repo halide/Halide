@@ -1,6 +1,3 @@
-// Generator requires C++11
-#if __cplusplus > 199711L || _MSC_VER >= 1800
-
 #include "Generator.h"
 
 namespace {
@@ -334,5 +331,3 @@ Func GeneratorBase::call_extern_by_name(const std::string &generator_name,
 
 }  // namespace Internal
 }  // namespace Halide
-
-#endif  // __cplusplus > 199711L

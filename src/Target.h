@@ -59,6 +59,8 @@ struct Target {
 
         UserContext,  ///< Generated code takes a user_context pointer as first argument
 
+        RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
+
         JavaScript, ///< Compile to JavaScript and execute immediately. Requires JIT and only works with realize. (For testing mainly.)
         V8, ///< Use the V8 JavaScript engine.
         SpiderMonkey, ///< Use the SpiderMonkey JavaScript engine.

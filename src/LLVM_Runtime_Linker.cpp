@@ -422,7 +422,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             // The first module for inline only case has to be C/C++ compiled otherwise the
             // datalayout is not properly setup.
             modules.push_back(get_initmod_posix_math(c, bits_64, debug));
-            modules.push_back(get_initmod_metadata(c, bits_64, debug));
 
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows && t.bits == 32) {
@@ -446,6 +445,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
+            modules.push_back(get_initmod_metadata(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
