@@ -4,7 +4,6 @@
 
 extern "C" {
 
-#define RTLD_DEFAULT NULL //((void *)-2)
 extern void *dlsym(void *, const char *);
 
 }  // extern "C"
@@ -152,7 +151,7 @@ INLINE T get_scalar(const mxArray *a) { return *get_data<T>(a); }
 
 template <typename T>
 INLINE T get_symbol(void *user_context, const char *name) {
-    T s = (T)dlsym(RTLD_DEFAULT, name);
+    T s = (T)dlsym(NULL, name);
     if (s == NULL) {
         error(user_context) << "Matlab API not found: " << name << "\n";
         return NULL;
