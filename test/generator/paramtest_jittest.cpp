@@ -1,5 +1,3 @@
-#if __cplusplus > 199711L
-
 #include "Halide.h"
 
 #include "paramtest_generator.cpp"
@@ -172,14 +170,3 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
-
-#else
-
-#include <stdio.h>
-
-int main(int argc, char **argv) {
-    printf("This test requires C++11\n");
-    return 0;
-}
-
-#endif
