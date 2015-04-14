@@ -259,9 +259,9 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "javascript") {
             set_feature(Target::JavaScript);
         } else if (tok == "v8") {
-            set_feature(Target::V8);
+            set_feature(Target::JavaScript_V8);
         } else if (tok == "spider_monkey") {
-            set_feature(Target::SpiderMonkey);
+            set_feature(Target::JavaScript_SpiderMonkey);
         } else if (tok == "sse41") {
             set_feature(Target::SSE41);
         } else if (tok == "avx") {
