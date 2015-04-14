@@ -10,7 +10,9 @@
 
 namespace Halide {
 
-EXPORT void compile_module_to_matlab_mex(const Module &module, const std::string &pipeline_name);
+/** Compile a module to an object file suitable for use with Matlab's mex feature. */
+EXPORT void compile_module_to_matlab_object(const Module &module, const std::string &pipeline_name,
+                                            const std::string &filename);
 
 }
 
