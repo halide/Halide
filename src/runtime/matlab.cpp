@@ -15,6 +15,9 @@ namespace Halide {
 namespace Runtime {
 namespace mex {
 
+// Define a few things from mex.h that we need to grab the mex APIs
+// from matlab.
+
 enum { TMW_NAME_LENGTH_MAX = 64 };
 enum { mxMAXNAM = TMW_NAME_LENGTH_MAX };
 
@@ -67,6 +70,15 @@ typedef ptrdiff_t mwSignedIndex;
 
 typedef void (*mex_exit_fn)(void);
 typedef void (*mxFunctionPtr)(int, mxArray **, int, const mxArray **);
+
+// Declare function pointers for the mex APIs.
+#define MEX_FN(ret, func, args) ret (*func)args;
+#ifndef BITS_32
+# define MEX_FN_730(ret, func, func_730, args) MEX_FN(ret, func, args)
+#else
+# define MEX_FN_700(ret, func, func_700, args) MEX_FN(ret, func, args)
+#endif
+#include "mex_functions.h"
 
 // Given a halide type code and bit width, find the equivalent matlab class ID.
 WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
@@ -124,15 +136,6 @@ WEAK const char *get_class_name(mxClassID id) {
     }
 }
 
-// Declare function pointers for the mex APIs.
-#define MEX_FN(ret, func, args) ret (*func)args;
-#ifndef BITS_32
-# define MEX_FN_730(ret, func, func_730, args) MEX_FN(ret, func, args)
-#else
-# define MEX_FN_700(ret, func, func_700, args) MEX_FN(ret, func, args)
-#endif
-#include "mex_functions.h"
-
 // Get the real data pointer from an mxArray.
 template <typename T>
 INLINE T* get_data(mxArray *a) { return (T *)mxGetData(a); }
@@ -168,7 +171,7 @@ WEAK void halide_matlab_print(void *, const char *msg) {
     mexPrintf("%s", msg);
 }
 
-WEAK int halide_mex_init(void *user_context) {
+WEAK int halide_matlab_init(void *user_context) {
     // Assume that if mexPrintf exists, we've already attempted initialization.
     if (mexPrintf != NULL) {
         return halide_error_code_success;
@@ -182,7 +185,11 @@ WEAK int halide_mex_init(void *user_context) {
     #endif
     #include "mex_functions.h"
 
-    // Set up Halide's printing to go through Matlab. Also, don't exit on error.
+    // Set up Halide's printing to go through Matlab. Also, don't exit
+    // on error. We don't just replace halide_error/halide_printf,
+    // because they'd have to be weak here, and there would be no
+    // guarantee that we would get this version (and not the standard
+    // one).
     halide_set_custom_print(halide_matlab_print);
     halide_set_error_handler(halide_matlab_error);
 
@@ -190,9 +197,9 @@ WEAK int halide_mex_init(void *user_context) {
 }
 
 // Convert a matlab mxArray to a Halide buffer_t, with a specific number of dimensions.
-WEAK int halide_mex_array_to_buffer_t(void *user_context,
-                                      const mxArray *arr, const halide_filter_argument_t *arg,
-                                      buffer_t *buf) {
+WEAK int halide_matlab_array_to_buffer_t(void *user_context,
+                                         const mxArray *arr, const halide_filter_argument_t *arg,
+                                         buffer_t *buf) {
     memset(buf, 0, sizeof(buffer_t));
 
     if (mxIsComplex(arr)) {
@@ -256,8 +263,8 @@ WEAK int halide_mex_array_to_buffer_t(void *user_context,
 }
 
 // Convert a matlab mxArray to a scalar.
-WEAK int halide_mex_array_to_scalar(void *user_context,
-                                    const mxArray *arr, const halide_filter_argument_t *arg, void *scalar) {
+WEAK int halide_matlab_array_to_scalar(void *user_context,
+                                       const mxArray *arr, const halide_filter_argument_t *arg, void *scalar) {
     if (mxIsComplex(arr)) {
         error(user_context) << "Complex argument not supported for parameter " << arg->name << ".\n";
         return halide_error_code_generic_error;
@@ -302,7 +309,7 @@ WEAK int halide_mex_array_to_scalar(void *user_context,
         case 32: *reinterpret_cast<float *>(scalar) = static_cast<float>(value); return halide_error_code_success;
         case 64: *reinterpret_cast<double *>(scalar) = static_cast<double>(value); return halide_error_code_success;
         }
-    } else {
+    } else if (type_code == halide_type_handle) {
         error(user_context) << "Parameter " << arg->name << " is of a type not supported by Matlab.\n";
         return halide_error_code_matlab_bad_param_type;
     }
@@ -310,11 +317,11 @@ WEAK int halide_mex_array_to_scalar(void *user_context,
     return halide_error_code_internal_error;
 }
 
-WEAK int halide_mex_call_pipeline(void *user_context,
-                                  int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
-                                  int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
+WEAK int halide_matlab_call_pipeline(void *user_context,
+                                     int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
+                                     int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs) {
 
-    int init_result = halide_mex_init(user_context);
+    int init_result = halide_matlab_init(user_context);
     if (init_result != 0) {
         return init_result;
     }
@@ -353,7 +360,7 @@ WEAK int halide_mex_call_pipeline(void *user_context,
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
             buffer_t *buf = (buffer_t *)__builtin_alloca(sizeof(buffer_t));
-            result = halide_mex_array_to_buffer_t(user_context, arg, arg_metadata, buf);
+            result = halide_matlab_array_to_buffer_t(user_context, arg, arg_metadata, buf);
             if (result != 0) {
                 return result;
             }
@@ -362,7 +369,7 @@ WEAK int halide_mex_call_pipeline(void *user_context,
             size_t size_bytes = max(8, (arg_metadata->type_bits + 7) / 8);
             void *scalar = __builtin_alloca(size_bytes);
             memset(scalar, 0, size_bytes);
-            result = halide_mex_array_to_scalar(user_context, arg, arg_metadata, scalar);
+            result = halide_matlab_array_to_scalar(user_context, arg, arg_metadata, scalar);
             if (result != 0) {
                 return result;
             }
