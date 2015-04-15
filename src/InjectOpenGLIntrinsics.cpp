@@ -57,26 +57,19 @@ private:
                   mutate(call_args[from_index + 1]);
             }
 
-            Expr c_arg = call_args[2 + 2 * 2];
-            // Remind users to explicitly specify the 'min' values of
-            // ImageParams accessed by GLSL-based filters.
+            // Confirm that user explicitly specified constant value for min
+            // value of c dimension for ImageParams accessed by GLSL-based filters.
             if (call->param.defined()) {
                 bool const_min_constraint =
                     call->param.min_constraint(2).defined() &&
                     is_const(call->param.min_constraint(2));
-                if (!const_min_constraint) {
-                    user_warning
-                        << "Coordinates: Assuming min[2]==0 for ImageParam '"
-                        << args[0] << "'. "
-                        << "Call set_min(2, min) or set_bounds(2, "
-                           "min, extent) to override.\n";
-                    // If min value for 3rd dimension(c) is not defined or is
-                    // not constant, assume it is 0.
-                    c_arg = c_arg.as<Sub>()->a - Expr(0);
-                }
+                user_assert(const_min_constraint)
+                    << "GLSL: Requires minimum for c-dimension set to constant "
+                    << "for ImageParam '" << args[0] << "'. "
+                    << "Call set_min(2, min) or set_bounds(2, min, extent) to set.\n";
             }
 
-            Expr c_coordinate = mutate(c_arg);
+            Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
             args[4] = c_coordinate;
 
             Type load_type = call->type;
