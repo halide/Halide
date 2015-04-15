@@ -183,15 +183,13 @@ class RDom {
 
     void init_vars(std::string name);
 
-    std::vector<std::pair<Expr, Expr>> internal_collect_args(std::vector<std::pair<Expr, Expr>> collected_args, Expr min, Expr extent) {
-        collected_args.push_back(std::make_pair(min, extent));
-        return collected_args;
-    }
-
-    template <typename... Args>
-    EXPORT RDom(std::vector<std::pair<Expr, Expr>> collected_args, Expr min, Expr extent, Args... args)
-        : RDom(internal_collect_args(collected_args, min, extent), args...) {
-    }
+	EXPORT void initialize_from_ranges(const std::vector<std::pair<Expr, Expr> > &ranges, std::string name = "");
+	
+	template <typename... Args>
+	NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args... args) {
+		ranges.push_back(std::make_pair(min, extent));
+		initialize_from_ranges(ranges, args...);
+	}
 
 public:
     /** Construct an undefined reduction domain. */
@@ -199,11 +197,17 @@ public:
 
     /** Construct a multi-dimensional reduction domain with the given name. If the name
      * is left blank, a unique one is auto-generated. */
-    RDom(const std::vector<std::pair<Expr, Expr> > &ranges, std::string name = "");
+	// @{
+	NO_INLINE RDom(const std::vector<std::pair<Expr, Expr> > &ranges, std::string name = "") {
+		initialize_from_ranges(ranges, name);
+	}
 
     template <typename... Args>
-    EXPORT RDom(Expr min, Expr extent, Args... args) 
-        : RDom(internal_collect_args(std::vector<std::pair<Expr, Expr>>(), min, extent), args...) {
+	NO_INLINE RDom(Expr min, Expr extent, Args... args) {
+		// This should really just be a delegating constructor, but I couldn't make 
+		// that work with variadic template unpacking in visual studio 2013
+		std::vector<std::pair<Expr, Expr>> ranges;
+		initialize_from_ranges(ranges, min, extent, args...);
     }
     // @}
 

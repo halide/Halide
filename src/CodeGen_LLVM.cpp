@@ -2174,6 +2174,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
 
             int dims = op->args.size()/3;
+            user_assert(dims <= 4)
+                << "Halide currently has a limit of four dimensions on "
+                << "Funcs used on the GPU or passed to extern stages.\n";
             for (int i = 0; i < 4; i++) {
                 Value *min, *extent, *stride;
                 if (i < dims) {
