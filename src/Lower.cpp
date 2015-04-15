@@ -1512,7 +1512,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
             Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
-                                        vec<Expr>(error_name, dim,
+                                        vec<Expr>(error_name, j,
                                                   min_required_var, max_required,
                                                   actual_min, actual_max),
                                         Call::Extern);
