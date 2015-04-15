@@ -180,6 +180,37 @@ using namespace Halide::Runtime::mex;
 
 extern "C" {
 
+WEAK void halide_matlab_describe_pipeline(stringstream &desc, const halide_filter_metadata_t *metadata) {
+    desc << "int " << metadata->name << "(";
+    for (int i = 0; i < metadata->num_arguments; i++) {
+        const halide_filter_argument_t *arg = &metadata->arguments[i];
+        if (i > 0) {
+            desc << ", ";
+        }
+        if (arg->kind == halide_argument_kind_output_buffer) {
+            desc << "out ";
+        }
+        if (arg->kind == halide_argument_kind_output_buffer ||
+            arg->kind == halide_argument_kind_input_buffer) {
+            desc << arg->dimensions << "d ";
+        } else if (arg->kind == halide_argument_kind_input_scalar) {
+            desc << "scalar ";
+        }
+        desc << get_class_name(get_class_id(arg->type_code, arg->type_bits));
+        desc << " '" << arg->name << "'";
+    }
+    desc << ")";
+}
+
+WEAK void halide_matlab_note_pipeline_description(void *user_context, const halide_filter_metadata_t *metadata) {
+    stringstream desc(user_context);
+    desc << "Note pipeline definition:\n";
+    halide_matlab_describe_pipeline(desc, metadata);
+    halide_print(user_context, desc.str());
+}
+
+
+
 WEAK void halide_matlab_error(void *user_context, const char *msg) {
     // Note that mexErrMsg/mexErrMsgIdAndTxt crash Matlab. It seems to
     // be a common problem, those APIs seem to be very fragile.
@@ -365,6 +396,7 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
         error(user_context) << "Expected " << metadata->num_arguments
                             << " arguments for Halide pipeline " << metadata->name
                             << ", got " << nrhs << ".\n";
+        halide_matlab_note_pipeline_description(user_context, metadata);
         return result;
     }
 
@@ -372,6 +404,7 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
     if (nlhs > 1) {
         error(user_context) << "Expected zero or one return value for Halide pipeline " << metadata->name
                             << ", got " << nlhs << ".\n";
+        halide_matlab_note_pipeline_description(user_context, metadata);
         return result;
     }
 
@@ -385,6 +418,7 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
             buffer_t *buf = (buffer_t *)__builtin_alloca(sizeof(buffer_t));
             result = halide_matlab_array_to_buffer_t(user_context, arg, arg_metadata, buf);
             if (result != 0) {
+                halide_matlab_note_pipeline_description(user_context, metadata);
                 return result;
             }
             args[i] = buf;
@@ -394,6 +428,7 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
             memset(scalar, 0, size_bytes);
             result = halide_matlab_array_to_scalar(user_context, arg, arg_metadata, scalar);
             if (result != 0) {
+                halide_matlab_note_pipeline_description(user_context, metadata);
                 return result;
             }
             args[i] = scalar;
