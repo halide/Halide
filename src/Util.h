@@ -208,7 +208,7 @@ template <typename T>
 inline NO_INLINE void collect_args(std::vector<T> &collected_args) {
 }
 
- template <typename T, typename T2>
+template <typename T, typename T2>
 inline NO_INLINE void collect_args(std::vector<T> &collected_args,
                                    T2 arg) {
     collected_args.push_back(arg);
