@@ -44,17 +44,17 @@ enum mxClassID {
     mxFUNCTION_CLASS,
     mxOPAQUE_CLASS,
     mxOBJECT_CLASS,
-#if defined(_LP64) || defined(_WIN64)
-    mxINDEX_CLASS = mxUINT64_CLASS,
-#else
+#ifdef BITS_32
     mxINDEX_CLASS = mxUINT32_CLASS,
+#else
+    mxINDEX_CLASS = mxUINT64_CLASS,
 #endif
 
     mxSPARSE_CLASS = mxVOID_CLASS
 };
 
 enum mxComplexity {
-    mxREAL,
+    mxREAL = 0,
     mxCOMPLEX
 };
 
@@ -69,7 +69,6 @@ typedef ptrdiff_t mwSignedIndex;
 #endif
 
 typedef void (*mex_exit_fn)(void);
-typedef void (*mxFunctionPtr)(int, mxArray **, int, const mxArray **);
 
 // Declare function pointers for the mex APIs.
 #define MEX_FN(ret, func, args) ret (*func)args;
@@ -161,19 +160,21 @@ using namespace Halide::Runtime::mex;
 
 extern "C" {
 
-WEAK void halide_matlab_error(void *, const char *msg) {
+WEAK void halide_matlab_error(void *user_context, const char *msg) {
     // Note that mexErrMsg/mexErrMsgIdAndTxt crash Matlab. It seems to
     // be a common problem, those APIs seem to be very fragile.
-    mexPrintf("Error: %s", msg);
+    stringstream error_msg(user_context);
+    error_msg << "\nHalide Error: " << msg;
+    mexWarnMsgTxt(error_msg.str());
 }
 
 WEAK void halide_matlab_print(void *, const char *msg) {
-    mexPrintf("%s", msg);
+    mexWarnMsgTxt(msg);
 }
 
 WEAK int halide_matlab_init(void *user_context) {
     // Assume that if mexPrintf exists, we've already attempted initialization.
-    if (mexPrintf != NULL) {
+    if (mexWarnMsgTxt != NULL) {
         return halide_error_code_success;
     }
 
@@ -212,10 +213,11 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
 
     // Validate that the data type of a buffer matches exactly.
     mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
-    if (mxGetClassID(arr) != arg_class_id) {
+    mxClassID class_id = mxGetClassID(arr);
+    if (class_id != arg_class_id) {
         error(user_context) << "Expected type of class " << get_class_name(arg_class_id)
                             << " for argument " << arg->name
-                            << ", got class " << mxGetClassName(arr) << ".\n";
+                            << ", got class " << get_class_name(class_id) << ".\n";
         return halide_error_code_matlab_bad_param_type;
     }
     // Validate that the dimensionality matches. Matlab is wierd
@@ -228,7 +230,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     }
     if (dim_count > expected_dims) {
         error(user_context) << "Expected array of rank " << expected_dims
-                            << "for argument " << arg->name
+                            << " for argument " << arg->name
                             << ", got array of rank " << dim_count << ".\n";
         return halide_error_code_matlab_bad_param_type;
     }
@@ -280,7 +282,7 @@ WEAK int halide_matlab_array_to_scalar(void *user_context,
     }
     if (!mxIsLogical(arr) && !mxIsNumeric(arr)) {
         error(user_context) << "Expected numeric argument for scalar parameter " << arg->name
-                            << ", got " << mxGetClassName(arr) << ".\n";
+                            << ", got " << get_class_name(mxGetClassID(arr)) << ".\n";
         return halide_error_code_matlab_bad_param_type;
     }
 
