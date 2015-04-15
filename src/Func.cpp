@@ -24,7 +24,6 @@
 #include "LLVM_Headers.h"
 #include "Output.h"
 #include "LLVM_Output.h"
-#include "MatlabOutput.h"
 
 namespace Halide {
 
@@ -2151,15 +2150,6 @@ void Func::compile_to_object(const string &filename, const vector<Argument> &arg
 void Func::compile_to_object(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_object(filename, args, "", target);
 }
-
-void Func::compile_to_matlab_object(const std::string &filename,
-                                    const std::vector<Argument> &args, const std::string &fn_name,
-                                    const Target &target) {
-    std::string pipeline_name = fn_name.empty() ? name() : fn_name;
-    Module m = compile_to_module(args, pipeline_name, target.with_feature(Target::Matlab));
-    compile_module_to_matlab_object(m, pipeline_name, filename);
-}
-
 
 void Func::compile_to_header(const string &filename, const vector<Argument> &args, const string &fn_name, const Target &target) {
     compile_module_to_c_header(compile_to_module(args, fn_name, target), filename);

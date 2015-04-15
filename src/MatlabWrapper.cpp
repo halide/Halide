@@ -1,15 +1,16 @@
-#include "Output.h"
+#include "Error.h"
 #include "LLVM_Headers.h"
-#include "LLVM_Output.h"
 
 using namespace llvm;
 
 namespace Halide {
-
-namespace {
+namespace Internal {
 
 // Define the mex wrapper API call (mexFunction) for a func with name pipeline_name.
-llvm::Function *define_matlab_wrapper(const std::string &pipeline_name, llvm::Module *module) {
+llvm::Function *define_matlab_wrapper(llvm::Module *module, const std::string &pipeline_name) {
+    user_assert(!module->getFunction("mexFunction"))
+        << "Module already contains a mexFunction. Only one pipeline can define a mexFunction.\n";
+
     LLVMContext &ctx = module->getContext();
 
     llvm::Function *pipeline = module->getFunction(pipeline_name + "_argv");
@@ -66,14 +67,5 @@ llvm::Function *define_matlab_wrapper(const std::string &pipeline_name, llvm::Mo
     return mex;
 }
 
-}  // namespace
-
-void compile_module_to_matlab_object(const Module &module, const std::string &pipeline_name,
-                                     const std::string &filename) {
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(module, context));
-    define_matlab_wrapper(pipeline_name, llvm_module.get());
-    compile_llvm_module_to_object(llvm_module.get(), filename);
-}
-
+}  // namespace Internal
 }  // namespace Halide

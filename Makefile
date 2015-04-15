@@ -181,6 +181,9 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
+#
+STATIC_TEST_LIBS += -ldl
+
 ifdef BUILD_PREFIX
 BUILD_DIR = build/$(BUILD_PREFIX)
 BIN_DIR = bin/$(BUILD_PREFIX)
@@ -248,7 +251,7 @@ SOURCE_FILES = \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
-  MatlabOutput.cpp \
+  MatlabWrapper.cpp \
   Memoization.cpp \
   Module.cpp \
   ModulusRemainder.cpp \
@@ -349,7 +352,7 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
-  MatlabOutput.h \
+  MatlabWrapper.h \
   Memoization.h \
   Module.h \
   ModulusRemainder.h \

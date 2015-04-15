@@ -299,7 +299,7 @@ set(HEADER_FILES
   Lerp.h
   Lower.h
   MainPage.h
-  MatlabOutput.h
+  MatlabWrapper.h
   Memoization.h
   Module.h
   ModulusRemainder.h
@@ -413,7 +413,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
   Lower.cpp
-  MatlabOutput.cpp
+  MatlabWrapper.cpp
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp

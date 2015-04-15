@@ -13,6 +13,7 @@
 #include "Lerp.h"
 #include "Util.h"
 #include "LLVM_Runtime_Linker.h"
+#include "MatlabWrapper.h"
 
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
@@ -571,6 +572,10 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         llvm::Constant *metadata = embed_metadata(name + "_metadata", name, args);
         if (target.has_feature(Target::RegisterMetadata)) {
             register_metadata(name, metadata, wrapper);
+        }
+
+        if (target.has_feature(Target::Matlab)) {
+            define_matlab_wrapper(module, name);
         }
     }
 }
