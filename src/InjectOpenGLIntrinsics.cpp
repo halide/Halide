@@ -33,15 +33,15 @@ private:
             // Create
             //  glsl_texture_load("name",
             //                    name.buffer,
-            //                    x/x_extent,
-            //                    y/y_extent,
+            //                    (x - x_min + 0.5)/x_extent,
+            //                    (y - y_min + 0.5)/y_extent,
             //                    c)
             // from
             //  coordinates_load("name",
             //                   name.buffer,
-            //                   x, x_extent,
-            //                   y, y_extent,
-            //                   c, c_extent
+            //                   x - x_min, x_extent,
+            //                   y - y_min, y_extent,
+            //                   c - c_min, c_extent
             //                   )
             //
             vector<Expr> args(5);
@@ -57,7 +57,26 @@ private:
                   mutate(call_args[from_index + 1]);
             }
 
-            Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
+            Expr c_arg = call_args[2 + 2 * 2];
+            // Remind users to explicitly specify the 'min' values of
+            // ImageParams accessed by GLSL-based filters.
+            if (call->param.defined()) {
+                bool const_min_constraint =
+                    call->param.min_constraint(2).defined() &&
+                    is_const(call->param.min_constraint(2));
+                if (!const_min_constraint) {
+                    user_warning
+                        << "Coordinates: Assuming min[2]==0 for ImageParam '"
+                        << args[0] << "'. "
+                        << "Call set_min(2, min) or set_bounds(2, "
+                           "min, extent) to override.\n";
+                    // If min value for 3rd dimension(c) is not defined or is
+                    // not constant, assume it is 0.
+                    c_arg = c_arg.as<Sub>()->a - Expr(0);
+                }
+            }
+
+            Expr c_coordinate = mutate(c_arg);
             args[4] = c_coordinate;
 
             Type load_type = call->type;

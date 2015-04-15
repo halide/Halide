@@ -68,7 +68,8 @@ private:
         }
 
         // Create coordinates_load("name", name.buffer, x, x_extent, y, y_extent, ...)
-        // Extents can be used by successive passes.
+        // Extents can be used by successive passes. OpenGL, for example, uses them
+        // for coordinates normalization.
         vector<Expr> args(2);
         args[0] = call->name;
         args[1] = Variable::make(Handle(), call->name + ".buffer");
@@ -86,23 +87,6 @@ private:
             }
 
             Expr min = Variable::make(Int(32), min_name);
-
-            // Remind users to explicitly specify the 'min' values of
-            // ImageParams accessed by coordinate-based filters.
-            if (i == 2 && call->param.defined()) {
-                bool const_min_constraint =
-                    call->param.min_constraint(i).defined() &&
-                    is_const(call->param.min_constraint(i));
-                if (!const_min_constraint) {
-                    user_warning
-                        << "Coordinates: Assuming min[2]==0 for ImageParam '"
-                        << name << "'. "
-                        << "Call set_min(2, min) or set_bounds(2, "
-                           "min, extent) to override.\n";
-                    min = Expr(0);
-                }
-            }
-
             args.push_back(mutate(call_args[i]) - min);
             args.push_back(Variable::make(Int(32), extent_name));
         }
