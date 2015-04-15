@@ -210,14 +210,14 @@ extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
 
 template <typename T>
-void swap(T &a, T &b) {
+__attribute__((always_inline)) void swap(T &a, T &b) {
     T t = a;
     a = b;
     b = t;
 }
 
 template <typename T>
-T max(const T &a, const T &b) {
+__attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
 }
 
