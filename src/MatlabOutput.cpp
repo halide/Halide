@@ -14,10 +14,10 @@ llvm::Function *define_matlab_wrapper(const std::string &pipeline_name, llvm::Mo
 
     llvm::Function *pipeline = module->getFunction(pipeline_name + "_argv");
     internal_assert(pipeline) << "Did not find function '" << pipeline_name << "_argv' in module.\n";
-    llvm::Function *mex_call_pipeline = module->getFunction("halide_matlab_call_pipeline");
-    internal_assert(mex_call_pipeline) << "Did not find function 'halide_matlab_call_pipeline' in module.\n";
     llvm::Value *metadata = module->getGlobalVariable(pipeline_name + "_metadata");
     internal_assert(metadata) << "Did not find global variable '" << pipeline_name << "_metadata' in module.\n";
+    llvm::Function *call_pipeline = module->getFunction("halide_matlab_call_pipeline");
+    internal_assert(call_pipeline) << "Did not find function 'halide_matlab_call_pipeline' in module.\n";
 
     llvm::Type *void_ty = llvm::Type::getVoidTy(ctx);
     llvm::Type *i8_ty = llvm::Type::getInt8Ty(ctx);
@@ -60,7 +60,7 @@ llvm::Function *define_matlab_wrapper(const std::string &pipeline_name, llvm::Mo
         nrhs,
         prhs,
     };
-    ir.CreateCall(mex_call_pipeline, call_pipeline_args);
+    ir.CreateCall(call_pipeline, call_pipeline_args);
     ir.CreateRetVoid();
 
     return mex;
