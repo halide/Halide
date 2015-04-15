@@ -193,13 +193,14 @@ WEAK void halide_matlab_print(void *, const char *msg) {
 }
 
 WEAK int halide_matlab_init(void *user_context) {
-    // Assume that if mexPrintf exists, we've already attempted initialization.
+    // Assume that if mexWarnMsgTxt exists, we've already attempted initialization.
     if (mexWarnMsgTxt != NULL) {
         return halide_error_code_success;
     }
 
     #define MEX_FN(ret, func, args) func = get_symbol<ret (*)args>(user_context, #func, true);
     #define MEX_FN_700(ret, func, func_700, args) func_700 = get_symbol<ret (*)args>(user_context, #func, false);
+    #define MEX_FN_730(ret, func, func_730, args) func_730 = get_symbol<ret (*)args>(user_context, #func_730, false);
     #include "mex_functions.h"
 
     if (!mexWarnMsgTxt) {
