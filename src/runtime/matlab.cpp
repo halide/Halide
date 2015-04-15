@@ -72,11 +72,6 @@ typedef void (*mex_exit_fn)(void);
 
 // Declare function pointers for the mex APIs.
 #define MEX_FN(ret, func, args) ret (*func)args;
-#ifndef BITS_32
-# define MEX_FN_730(ret, func, func_730, args) MEX_FN(ret, func, args)
-#else
-# define MEX_FN_700(ret, func, func_700, args) MEX_FN(ret, func, args)
-#endif
 #include "mex_functions.h"
 
 // Given a halide type code and bit width, find the equivalent matlab class ID.
@@ -143,13 +138,38 @@ INLINE const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
 
 // Search for a symbol in the calling process (i.e. matlab).
 template <typename T>
-INLINE T get_symbol(void *user_context, const char *name) {
+INLINE T get_symbol(void *user_context, const char *name, bool required) {
     T s = (T)find_symbol(name);
-    if (s == NULL) {
+    if (required && s == NULL) {
         error(user_context) << "Matlab API not found: " << name << "\n";
         return NULL;
     }
     return s;
+}
+
+// Provide Matlab API version agnostic wrappers for version specific APIs.
+INLINE size_t get_number_of_dimensions(const mxArray *a) {
+    if (mxGetNumberOfDimensions_730) {
+        return mxGetNumberOfDimensions_730(a);
+    } else {
+        return mxGetNumberOfDimensions_700(a);
+    }
+}
+
+INLINE size_t get_dimension(const mxArray *a, size_t n) {
+    if (mxGetDimensions_730) {
+        return mxGetDimensions_730(a)[n];
+    } else {
+        return mxGetDimensions_700(a)[n];
+    }
+}
+
+INLINE mxArray *create_numeric_matrix(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
+    if (mxCreateNumericMatrix_730) {
+        return mxCreateNumericMatrix_730(M, N, type, complexity);
+    } else {
+        return mxCreateNumericMatrix_700(M, N, type, complexity);
+    }
 }
 
 }  // namespace mex
@@ -178,13 +198,13 @@ WEAK int halide_matlab_init(void *user_context) {
         return halide_error_code_success;
     }
 
-    #define MEX_FN(ret, func, args) func = get_symbol<ret (*)args>(user_context, #func); if (!func) { return halide_error_code_matlab_init_failed; }
-    #ifndef BITS_32
-    # define MEX_FN_730(ret, func, func_730, args) func = get_symbol<ret (*)args>(user_context, #func_730); if (!func) { return halide_error_code_matlab_init_failed; }
-    #else
-    # define MEX_FN_700(ret, func, func_700, args) func = get_symbol<ret (*)args>(user_context, #func_700); if (!func) { return halide_error_code_matlab_init_failed; }
-    #endif
+    #define MEX_FN(ret, func, args) func = get_symbol<ret (*)args>(user_context, #func, true);
+    #define MEX_FN_700(ret, func, func_700, args) func_700 = get_symbol<ret (*)args>(user_context, #func, false);
     #include "mex_functions.h"
+
+    if (!mexWarnMsgTxt) {
+        return halide_error_code_matlab_init_failed;
+    }
 
     // Set up Halide's printing to go through Matlab. Also, don't exit
     // on error. We don't just replace halide_error/halide_printf,
@@ -208,7 +228,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
         return halide_error_code_matlab_bad_param_type;
     }
 
-    int dim_count = mxGetNumberOfDimensions(arr);
+    int dim_count = get_number_of_dimensions(arr);
     int expected_dims = arg->dimensions;
 
     // Validate that the data type of a buffer matches exactly.
@@ -225,7 +245,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     // truncates trailing dimensions of extent 1. So, the only way
     // to have an error here is to have more dimensions with
     // extent != 1 than the Halide pipeline expects.
-    while (dim_count > 0 && mxGetDimensions(arr)[dim_count - 1] == 1) {
+    while (dim_count > 0 && get_dimension(arr, dim_count - 1) == 1) {
         dim_count--;
     }
     if (dim_count > expected_dims) {
@@ -243,7 +263,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     if (expected_dims < 2) expected_dims = 2;
 
     for (int i = 0; i < dim_count && i < expected_dims; i++) {
-        buf->extent[i] = static_cast<int32_t>(mxGetDimensions(arr)[i]);
+        buf->extent[i] = static_cast<int32_t>(get_dimension(arr, i));
     }
 
     // Add back the dimensions with extent 1.
@@ -273,9 +293,9 @@ WEAK int halide_matlab_array_to_scalar(void *user_context,
     }
 
     // Validate that the mxArray has all dimensions of extent 1.
-    int dim_count = mxGetNumberOfDimensions(arr);
+    int dim_count = get_number_of_dimensions(arr);
     for (int i = 0; i < dim_count; i++) {
-        if (mxGetDimensions(arr)[i] != 1) {
+        if (get_dimension(arr, i) != 1) {
             error(user_context) << "Expected scalar argument for parameter " << arg->name << ".\n";
             return halide_error_code_matlab_bad_param_type;
         }
@@ -331,7 +351,7 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
     int32_t result_storage;
     int32_t *result_ptr = &result_storage;
     if (nlhs > 0) {
-        plhs[0] = mxCreateNumericMatrix(1, 1, mxINT32_CLASS, mxREAL);
+        plhs[0] = create_numeric_matrix(1, 1, mxINT32_CLASS, mxREAL);
         result_ptr = get_data<int32_t>(plhs[0]);
     }
     int32_t &result = *result_ptr;

@@ -18,19 +18,11 @@
 #endif
 
 #ifndef MEX_FN_730
-# if MX_API_VER > 0x07030000
-#  define MEX_FN_730(ret, func, func_730, args) MEX_FN(ret, func_730, args)
-# else
-#  define MEX_FN_730(ret, func, func_730, args)
-# endif
+#define MEX_FN_730(ret, func, func_730, args) MEX_FN(ret, func_730, args)
 #endif
 
 #ifndef MEX_FN_700
-# if MX_API_VER >= 0x07000000
-#  define MEX_FN_700(ret, func, func_700, args) MEX_FN(ret, func_700, args)
-# else
-#  define MEX_FN_700(ret, func, func_700, args)
-# endif
+#define MEX_FN_700(ret, func, func_700, args) MEX_FN(ret, func_700, args)
 #endif
 
 // mex.h
