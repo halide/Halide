@@ -11,7 +11,7 @@ namespace Internal {
 using std::string;
 using std::vector;
 
-/** Normalizes coordinate loads/stores and produces glsl_texture_load/stores. */
+/** Normalizes image loads/stores and produces glsl_texture_load/stores. */
 class InjectOpenGLIntrinsics : public IRMutator {
 public:
     InjectOpenGLIntrinsics()
@@ -27,7 +27,7 @@ private:
             IRMutator::visit(call);
             return;
         }
-        if (call->name == Call::coordinates_load) {
+        if (call->name == Call::image_load) {
             vector<Expr> call_args = call->args;
             //
             // Create
@@ -37,7 +37,7 @@ private:
             //                    (y - y_min + 0.5)/y_extent,
             //                    c)
             // from
-            //  coordinates_load("name",
+            //  image_load("name",
             //                   name.buffer,
             //                   x - x_min, x_extent,
             //                   y - y_min, y_extent,
@@ -93,14 +93,14 @@ private:
             // during vectorization.
             expr = Call::make(call->type, Call::shuffle_vector,
                               vec(load_call, c_coordinate), Call::Intrinsic);
-        } else if (call->name == Call::coordinates_store) {
+        } else if (call->name == Call::image_store) {
             user_assert(call->args.size() == 6)
                 << "GLSL stores require three coordinates.\n";
 
             // Create
             //    gl_texture_store(name, name.buffer, x, y, c, value)
             // out of
-            //    coordinate_store(name, name.buffer, x, y, c, value)
+            //    image_store(name, name.buffer, x, y, c, value)
             vector<Expr> args(call->args);
             args[5] = mutate(call->args[5]); // mutate value
             expr = Call::make(call->type, Call::glsl_texture_store,

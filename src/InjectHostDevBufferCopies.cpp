@@ -382,7 +382,7 @@ class InjectBufferCopies : public IRMutator {
                 Expr new_load = Load::make(l->type, l->name, new_index, Buffer(), Parameter());
                 expr = Call::make(op->type, op->name, vec(new_load), Call::Intrinsic);
             }
-        } else if (op->name == Call::coordinates_load && op->call_type == Call::Intrinsic) {
+        } else if (op->name == Call::image_load && op->call_type == Call::Intrinsic) {
             // counts as a device read
             internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
@@ -392,7 +392,7 @@ class InjectBufferCopies : public IRMutator {
             debug(4) << "Adding GLSL read via glsl_texture_load for " << buffer_var->name << "\n";
             state[buf_name].devices_reading.insert(DeviceAPI::GLSL);
             IRMutator::visit(op);
-        } else if (op->name == Call::coordinates_store && op->call_type == Call::Intrinsic) {
+        } else if (op->name == Call::image_store && op->call_type == Call::Intrinsic) {
             // counts as a device store
             internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
