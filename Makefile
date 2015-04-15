@@ -181,7 +181,6 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
-#
 STATIC_TEST_LIBS += -ldl
 
 ifdef BUILD_PREFIX

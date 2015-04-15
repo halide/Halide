@@ -61,7 +61,7 @@ struct Target {
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
-        Matlab,  ///< Enable the Matlab runtime. This flag is enabled automatically when using Func::compile_to_matlab_object.
+        Matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries.
 
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
