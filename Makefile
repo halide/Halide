@@ -46,8 +46,10 @@ WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
+WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_OPENGL ?= not-empty
+
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 
@@ -233,6 +235,7 @@ SOURCE_FILES = \
   HumanReadableStmt.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
+  InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -331,6 +334,7 @@ HEADER_FILES = \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
+  InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
