@@ -2,9 +2,6 @@
 
 #define INLINE inline __attribute__((always_inline))
 
-// This cannot be a function because the result goes out of scope.
-#define alloca __builtin_alloca
-
 #ifndef MX_API_VER
 #define MX_API_VER 0x07040000
 #endif
@@ -71,6 +68,7 @@ typedef ptrdiff_t mwSignedIndex;
 typedef void (*mex_exit_fn)(void);
 typedef void (*mxFunctionPtr)(int, mxArray **, int, const mxArray **);
 
+// Given a halide type code and bit width, find the equivalent matlab class ID.
 WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
     switch (type_code) {
     case halide_type_int:
@@ -101,6 +99,7 @@ WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
     return mxUNKNOWN_CLASS;
 }
 
+// Convert a matlab class ID to a string.
 WEAK const char *get_class_name(mxClassID id) {
     switch (id) {
     case mxCELL_CLASS: return "cell";
@@ -134,11 +133,13 @@ WEAK const char *get_class_name(mxClassID id) {
 #endif
 #include "mex_functions.h"
 
+// Get the real data pointer from an mxArray.
 template <typename T>
 INLINE T* get_data(mxArray *a) { return (T *)mxGetData(a); }
 template <typename T>
 INLINE const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
 
+// Search for a symbol in the calling process (i.e. matlab).
 template <typename T>
 INLINE T get_symbol(void *user_context, const char *name) {
     T s = (T)find_symbol(name);
@@ -173,11 +174,11 @@ WEAK int halide_mex_init(void *user_context) {
         return halide_error_code_success;
     }
 
-    #define MEX_FN(ret, func, args) func = get_symbol<ret (*)args>(user_context, #func); if (!func) { return halide_error_code_generic_error; }
+    #define MEX_FN(ret, func, args) func = get_symbol<ret (*)args>(user_context, #func); if (!func) { return halide_error_code_matlab_init_failed; }
     #ifndef BITS_32
-    # define MEX_FN_730(ret, func, func_730, args) func = get_symbol<ret (*)args>(user_context, #func_730); if (!func) { return halide_error_code_generic_error; }
+    # define MEX_FN_730(ret, func, func_730, args) func = get_symbol<ret (*)args>(user_context, #func_730); if (!func) { return halide_error_code_matlab_init_failed; }
     #else
-    # define MEX_FN_700(ret, func, func_700, args) func = get_symbol<ret (*)args>(user_context, #func_700); if (!func) { return halide_error_code_generic_error; }
+    # define MEX_FN_700(ret, func, func_700, args) func = get_symbol<ret (*)args>(user_context, #func_700); if (!func) { return halide_error_code_matlab_init_failed; }
     #endif
     #include "mex_functions.h"
 
@@ -196,7 +197,7 @@ WEAK int halide_mex_array_to_buffer_t(void *user_context,
 
     if (mxIsComplex(arr)) {
         error(user_context) << "Complex argument not supported for parameter " << arg->name << ".\n";
-        return halide_error_code_generic_error;
+        return halide_error_code_matlab_bad_param_type;
     }
 
     int dim_count = mxGetNumberOfDimensions(arr);
@@ -208,7 +209,7 @@ WEAK int halide_mex_array_to_buffer_t(void *user_context,
         error(user_context) << "Expected type of class " << get_class_name(arg_class_id)
                             << " for argument " << arg->name
                             << ", got class " << mxGetClassName(arr) << ".\n";
-        return halide_error_code_generic_error;
+        return halide_error_code_matlab_bad_param_type;
     }
     // Validate that the dimensionality matches. Matlab is wierd
     // because matrices always have at least 2 dimensions, and it
@@ -222,7 +223,7 @@ WEAK int halide_mex_array_to_buffer_t(void *user_context,
         error(user_context) << "Expected array of rank " << expected_dims
                             << "for argument " << arg->name
                             << ", got array of rank " << dim_count << ".\n";
-        return halide_error_code_generic_error;
+        return halide_error_code_matlab_bad_param_type;
     }
 
     buf->host = (uint8_t *)mxGetData(arr);
@@ -267,13 +268,13 @@ WEAK int halide_mex_array_to_scalar(void *user_context,
     for (int i = 0; i < dim_count; i++) {
         if (mxGetDimensions(arr)[i] != 1) {
             error(user_context) << "Expected scalar argument for parameter " << arg->name << ".\n";
-            return halide_error_code_generic_error;
+            return halide_error_code_matlab_bad_param_type;
         }
     }
     if (!mxIsLogical(arr) && !mxIsNumeric(arr)) {
         error(user_context) << "Expected numeric argument for scalar parameter " << arg->name
                             << ", got " << mxGetClassName(arr) << ".\n";
-        return halide_error_code_generic_error;
+        return halide_error_code_matlab_bad_param_type;
     }
 
     double value = mxGetScalar(arr);
@@ -281,7 +282,6 @@ WEAK int halide_mex_array_to_scalar(void *user_context,
     int32_t type_bits = arg->type_bits;
 
     if (type_code == halide_type_int) {
-
         switch (type_bits) {
         case 1: *reinterpret_cast<bool *>(scalar) = value != 0; return halide_error_code_success;
         case 8: *reinterpret_cast<int8_t *>(scalar) = static_cast<int8_t>(value); return halide_error_code_success;
@@ -289,7 +289,6 @@ WEAK int halide_mex_array_to_scalar(void *user_context,
         case 32: *reinterpret_cast<int32_t *>(scalar) = static_cast<int32_t>(value); return halide_error_code_success;
         case 64: *reinterpret_cast<int64_t *>(scalar) = static_cast<int64_t>(value); return halide_error_code_success;
         }
-        return halide_error_code_generic_error;
     } else if (type_code == halide_type_uint) {
         switch (type_bits) {
         case 1: *reinterpret_cast<bool *>(scalar) = value != 0; return halide_error_code_success;
@@ -298,15 +297,17 @@ WEAK int halide_mex_array_to_scalar(void *user_context,
         case 32: *reinterpret_cast<uint32_t *>(scalar) = static_cast<uint32_t>(value); return halide_error_code_success;
         case 64: *reinterpret_cast<uint64_t *>(scalar) = static_cast<uint64_t>(value); return halide_error_code_success;
         }
-        return halide_error_code_generic_error;
     } else if (type_code == halide_type_float) {
         switch (type_bits) {
         case 32: *reinterpret_cast<float *>(scalar) = static_cast<float>(value); return halide_error_code_success;
         case 64: *reinterpret_cast<double *>(scalar) = static_cast<double>(value); return halide_error_code_success;
         }
-        return halide_error_code_generic_error;
+    } else {
+        error(user_context) << "Parameter " << arg->name << " is of a type not supported by Matlab.\n";
+        return halide_error_code_matlab_bad_param_type;
     }
-    return halide_error_code_generic_error;
+    error(user_context) << "Halide metadata for " << arg->name << " contained invalid or unrecognized type description.\n";
+    return halide_error_code_internal_error;
 }
 
 WEAK int halide_mex_call_pipeline(void *user_context,
@@ -344,14 +345,14 @@ WEAK int halide_mex_call_pipeline(void *user_context,
         return result;
     }
 
-    void **args = (void **)alloca(nrhs * sizeof(void *));
+    void **args = (void **)__builtin_alloca(nrhs * sizeof(void *));
     for (int i = 0; i < nrhs; i++) {
         const mxArray *arg = prhs[i];
         const halide_filter_argument_t *arg_metadata = &metadata->arguments[i];
 
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
-            buffer_t *buf = (buffer_t *)alloca(sizeof(buffer_t));
+            buffer_t *buf = (buffer_t *)__builtin_alloca(sizeof(buffer_t));
             result = halide_mex_array_to_buffer_t(user_context, arg, arg_metadata, buf);
             if (result != 0) {
                 return result;
@@ -359,7 +360,7 @@ WEAK int halide_mex_call_pipeline(void *user_context,
             args[i] = buf;
         } else {
             size_t size_bytes = max(8, (arg_metadata->type_bits + 7) / 8);
-            void *scalar = alloca(size_bytes);
+            void *scalar = __builtin_alloca(size_bytes);
             memset(scalar, 0, size_bytes);
             result = halide_mex_array_to_scalar(user_context, arg, arg_metadata, scalar);
             if (result != 0) {

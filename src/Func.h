@@ -560,8 +560,11 @@ public:
                                   const Target &target = get_target_from_environment());
     // @}
 
-    /** Statically compile this function to an object file that is suitable for use
-     * with Matlab as a mex library. */
+    /** Statically compile this function to an object file that is
+     * suitable for use with Matlab as a mex library. The object will
+     * contain a mexFunction, which enables the function to be called
+     * as a mex compiled library when built via 'mex <filename>' in
+     * Matlab. */
     EXPORT void compile_to_matlab_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
                                          const Target &target = get_target_from_environment());
 

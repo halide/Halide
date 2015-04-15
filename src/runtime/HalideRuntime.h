@@ -371,7 +371,17 @@ enum halide_error_code_t {
 
     /** A device operation was attempted on a buffer with no device
      * interface. */
-    halide_error_code_no_device_interface = -19
+    halide_error_code_no_device_interface = -19,
+
+    /** An error occurred when attempting to initialize the Matlab
+     * runtime. */
+    halide_error_code_matlab_init_failed = -20,
+
+    /** The type of an mxArray did not match the expected type. */
+    halide_error_code_matlab_bad_param_type = -21,
+
+    /** There is a bug in the Halide compiler. */
+    halide_error_code_internal_error = -22,
 };
 
 /** Halide calls the functions below on various error conditions. The

@@ -61,7 +61,7 @@ struct Target {
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
-        Matlab,  ///< Enable Matlab support code.
+        Matlab,  ///< Enable the Matlab runtime. This flag is enabled automatically when using Func::compile_to_matlab_object.
 
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
