@@ -1,6 +1,7 @@
 #include <string>
 #include <stdint.h>
 #include <mutex>
+#include <set>
 
 #include "JITModule.h"
 #include "LLVM_Headers.h"

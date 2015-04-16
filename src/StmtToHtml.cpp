@@ -1,4 +1,5 @@
 #include "StmtToHtml.h"
+#include "IRVisitor.h"
 #include "IROperator.h"
 #include "Scope.h"
 
