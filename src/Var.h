@@ -5,10 +5,7 @@
  * Defines the Var - the front-end variable
  */
 
-#include <sstream>
-
 #include "IR.h"
-#include "Util.h"
 
 namespace Halide {
 
@@ -21,14 +18,10 @@ class Var {
     std::string _name;
 public:
     /** Construct a Var with the given name */
-    Var(const std::string &n) : _name(n) {
-        // Make sure we don't get a unique name with the same name as
-        // this later:
-        Internal::unique_name(n, false);
-    }
+    Var(const std::string &n);
 
     /** Construct a Var with an automatically-generated unique name. */
-    Var() : _name(Internal::make_entity_name(this, "Halide::Var", 'v')) {}
+    Var();
 
     /** Get the name of a Var */
     const std::string &name() const {return _name;}
@@ -114,11 +107,7 @@ public:
      * anonymous functions (e.g. Func(_0 + _1)) this is considered
      * poor style. Instead use \ref lambda.
      */
-    static Var implicit(int n) {
-        std::ostringstream str;
-        str << "_" << n;
-        return Var(str.str());
-    }
+    EXPORT static Var implicit(int n);
 
     /** Return whether a variable name is of the form for an implicit argument.
      * TODO: This is almost guaranteed to incorrectly fire on user
@@ -126,10 +115,7 @@ public:
      * user Var declarations from making names of this form.
      */
     //{
-    static bool is_implicit(const std::string &name) {
-        return Internal::starts_with(name, "_") &&
-            name.find_first_not_of("0123456789", 1) == std::string::npos;
-    }
+    static bool is_implicit(const std::string &name);
     bool is_implicit() const {
         return is_implicit(name());
     }

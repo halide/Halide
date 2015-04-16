@@ -6,8 +6,6 @@
  * Defines Module, an IR container that fully describes a Halide program.
  */
 
-#include <iostream>
-
 #include "IR.h"
 #include "Buffer.h"
 #include "Target.h"
