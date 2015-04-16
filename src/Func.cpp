@@ -1536,48 +1536,54 @@ size_t FuncRefExpr::size() const {
     return func.outputs();
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], sizes);
     }
     Realization r(outputs);
-    realize(r, target);
+    realize(r, target, externs);
     return r;
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
+                            const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
     }
     Realization r(outputs);
-    realize(r, target);
+    realize(r, target, externs);
     return r;
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
-    return realize(x_size, y_size, z_size, 0, target);
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
+    return realize(x_size, y_size, z_size, 0, target, externs);
 }
 
-Realization Func::realize(int x_size, int y_size, const Target &target) {
-    return realize(x_size, y_size, 0, 0, target);
+Realization Func::realize(int x_size, int y_size, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
+    return realize(x_size, y_size, 0, 0, target, externs);
 }
 
-Realization Func::realize(int x_size, const Target &target) {
-    return realize(x_size, 0, 0, 0, target);
+Realization Func::realize(int x_size, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
+    return realize(x_size, 0, 0, 0, target, externs);
 }
 
-void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                              const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
     }
     Realization r(outputs);
-    infer_input_bounds(r);
+    infer_input_bounds(r, externs);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -2175,8 +2181,9 @@ void Func::clear_custom_lowering_passes() {
     custom_lowering_passes.clear();
 }
 
-void Func::realize(Buffer b, const Target &target) {
-    realize(Realization(vec<Buffer>(b)), target);
+void Func::realize(Buffer b, const Target &target,
+                   const std::map<std::string, JITExtern> &externs) {
+  realize(Realization(vec<Buffer>(b)), target, externs);
 }
 
 namespace Internal {
@@ -2267,7 +2274,8 @@ struct JITFuncCallContext {
 
 }  // namespace Internal
 
-void Func::realize(Realization dst, const Target &target) {
+void Func::realize(Realization dst, const Target &target,
+                   const std::map<std::string, JITExtern> & /* externs */) {
     if (!compiled_module.argv_function()) {
         compile_jit(target);
     }
@@ -2331,11 +2339,13 @@ void Func::realize(Realization dst, const Target &target) {
     jit_context.finalize(exit_status);
 }
 
-void Func::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization(vec<Buffer>(dst)));
+void Func::infer_input_bounds(Buffer dst,
+                              const std::map<std::string, JITExtern> &externs) {
+  infer_input_bounds(Realization(vec<Buffer>(dst)), externs);
 }
 
-void Func::infer_input_bounds(Realization dst) {
+void Func::infer_input_bounds(Realization dst,
+                              const std::map<std::string, JITExtern> & /* externs */) {
     if (!compiled_module.argv_function()) {
         compile_jit();
     }

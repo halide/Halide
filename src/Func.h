@@ -20,6 +20,20 @@
 
 namespace Halide {
 
+class Func;
+
+struct JITExtern {
+    // assert func.defined() == (c_function == NULL) -- strictly one or the other
+    Func *func;
+    void *c_function;
+    bool is_void_return; // Is this necessary?
+    Type ret_type;
+    std::vector<ExternFuncArgument> arg_types;
+    JITExtern(Func &func) : func(&func), c_function(NULL) { }
+    template <typename RT, typename ...Args>
+    JITExtern(RT (*f)(Args... args)) { }
+};
+
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
 struct VarOrRVar {
@@ -491,15 +505,20 @@ public:
      *
      */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment(),
+                               const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = get_jit_target_from_environment(),
+                               const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
     EXPORT Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = get_jit_target_from_environment(),
+                               const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
     EXPORT Realization realize(int x_size, int y_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = get_jit_target_from_environment(),
+                               const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
     EXPORT Realization realize(int x_size = 0,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = get_jit_target_from_environment(),
+                               const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -508,13 +527,16 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. */
     // @{
-    EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment());
-    EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
+    EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment(),
+                        const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
+    EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment(),
+                        const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
 
     template<typename T>
-    NO_INLINE void realize(Image<T> dst, const Target &target = get_jit_target_from_environment()) {
+      NO_INLINE void realize(Image<T> dst, const Target &target = get_jit_target_from_environment(),
+                             const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>()) {
         // Images are expected to exist on-host.
-        realize(Buffer(dst), target);
+        realize(Buffer(dst), target, externs);
         dst.copy_to_host();
     }
     // @}
@@ -525,9 +547,12 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(Realization dst);
-    EXPORT void infer_input_bounds(Buffer dst);
+    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                                   const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
+    EXPORT void infer_input_bounds(Realization dst,
+                                   const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
+    EXPORT void infer_input_bounds(Buffer dst,
+                                   const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
