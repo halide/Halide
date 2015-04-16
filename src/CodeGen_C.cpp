@@ -26,7 +26,7 @@ const string buffer_t_definition =
     "  #ifdef _MSC_VER\n"
     "    #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))\n"
     "  #else\n"
-    "    #define HALIDE_ATTRIBUTE_ALIGN __attribute__((aligned(x)))\n"
+    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))\n"
     "  #endif\n"
     "#endif\n"
     "#ifndef BUFFER_T_DEFINED\n"
