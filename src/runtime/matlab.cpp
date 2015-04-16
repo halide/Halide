@@ -290,10 +290,6 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     buf->host = (uint8_t *)mxGetData(arr);
     buf->elem_size = mxGetElementSize(arr);
 
-    // Matlab swaps the first two dimensions, so we need to keep at
-    // least two dimensions for now.
-    if (expected_dims < 2) expected_dims = 2;
-
     for (int i = 0; i < dim_count && i < expected_dims; i++) {
         buf->extent[i] = static_cast<int32_t>(get_dimension(arr, i));
     }
@@ -304,8 +300,6 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
             buf->extent[i] = 1;
         }
     }
-
-    swap(buf->extent[0], buf->extent[1]);
 
     // Compute dense strides.
     buf->stride[0] = 1;
