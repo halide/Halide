@@ -16,10 +16,7 @@ struct ReductionVariable {
     Expr min, extent;
 };
 
-struct ReductionDomainContents {
-    mutable RefCount ref_count;
-    std::vector<ReductionVariable> domain;
-};
+struct ReductionDomainContents;
 
 /** A reference-counted handle on a reduction domain, which is just a
  * vector of ReductionVariable. */
@@ -33,10 +30,7 @@ public:
      * all values of the given ReductionVariable in scanline order,
      * with the start of the vector being innermost, and the end of
      * the vector being outermost. */
-    ReductionDomain(const std::vector<ReductionVariable> &domain) :
-        contents(new ReductionDomainContents) {
-        contents.ptr->domain = domain;
-    }
+    ReductionDomain(const std::vector<ReductionVariable> &domain);
 
     /** Is this handle non-NULL */
     bool defined() const {
@@ -51,9 +45,7 @@ public:
     }
 
     /** Immutable access to the reduction variables. */
-    const std::vector<ReductionVariable> &domain() const {
-        return contents.ptr->domain;
-    }
+    const std::vector<ReductionVariable> &domain() const;
 };
 
 }
