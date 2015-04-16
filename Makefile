@@ -46,8 +46,10 @@ WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
+WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_OPENGL ?= not-empty
+
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 
@@ -231,6 +233,7 @@ SOURCE_FILES = \
   HumanReadableStmt.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
+  InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -328,6 +331,7 @@ HEADER_FILES = \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
+  InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
@@ -826,7 +830,7 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/modules clean
 	make -C apps/modules out.png
 
-# It's just for compiling the runtime, so Clang <3.5 *might* work, 
+# It's just for compiling the runtime, so Clang <3.5 *might* work,
 # but best to peg it to the minimum llvm version.
 ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))
 CLANG_OK=yes
