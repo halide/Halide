@@ -127,14 +127,14 @@ int main(int argc, char **argv) {
     mxArray *lhs[1] = { NULL };
     mxArray *rhs[4] = { NULL, };
 
-    mxArrayImpl<float> input(3, 3);
+    mxArrayImpl<float> input(3, 5);
     mxArrayImpl<float> scale(1, 1);
     mxArrayImpl<int32_t> negate(1, 1);
-    mxArrayImpl<float> output(3, 3);
+    mxArrayImpl<float> output(3, 5);
 
     for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            input(i, j) = i * 3 + j;
+        for (int j = 0; j < 5; j++) {
+            input(i, j) = i * 5 + j;
         }
     }
 
@@ -153,8 +153,8 @@ int main(int argc, char **argv) {
     lhs[0] = NULL;
 
     for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            float in = i * 3 + j;
+        for (int j = 0; j < 5; j++) {
+            float in = input(i, j);
             float expected = in * scale(0, 0) * (negate(0, 0) ? -1.0f : 1.0f);
             assert(output(i, j) == expected);
         }
