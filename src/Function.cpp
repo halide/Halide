@@ -529,6 +529,14 @@ Schedule &Function::update_schedule(int idx) {
     return contents.ptr->updates[idx].schedule;
 }
 
+int Function::num_update_definitions() const {
+    return static_cast<int>(contents.ptr->updates.size());
+}
+
+const UpdateDefinition &Function::update(int idx) const {
+    return contents.ptr->updates[idx];
+}
+
 const std::vector<UpdateDefinition> &Function::updates() const {
     return contents.ptr->updates;
 }
