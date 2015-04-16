@@ -108,6 +108,7 @@ EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 class GeneratorParamBase {
 public:
     EXPORT explicit GeneratorParamBase(const std::string &name);
+    EXPORT explicit GeneratorParamBase(const GeneratorParamBase &that);
     EXPORT virtual ~GeneratorParamBase();
     virtual void from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;

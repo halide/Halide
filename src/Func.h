@@ -93,7 +93,7 @@ public:
     EXPORT Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
-    EXPORT typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args... args) {
         std::vector<VarOrRVar> collected_args;
         collected_args.push_back(x);
@@ -973,7 +973,7 @@ public:
     EXPORT FuncRefVar operator()(std::vector<Var>) const;
 
     template <typename... Args>
-    EXPORT typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRefVar>::type
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRefVar>::type
     operator()(Args... args) const {
         std::vector<Var> collected_args;
         Internal::collect_args(collected_args, args...);
@@ -991,7 +991,7 @@ public:
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
 
     template <typename... Args>
-    EXPORT typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRefExpr>::type
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRefExpr>::type
     operator()(Expr x, Args... args) const {
         std::vector<Expr> collected_args;
         collected_args.push_back(x);
@@ -1082,7 +1082,7 @@ public:
     EXPORT Func &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
-    EXPORT typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args... args) {
         std::vector<VarOrRVar> collected_args;
         collected_args.push_back(x);
@@ -1401,7 +1401,7 @@ public:
 
     EXPORT Func &reorder_storage(Var x, Var y);
     template <typename... Args>
-    EXPORT typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
     reorder_storage(Var x, Var y, Args... args) {
         std::vector<Var> collected_args;
         collected_args.push_back(x);
