@@ -1,4 +1,5 @@
 #include "IREquality.h"
+#include "IRVisitor.h"
 #include "IROperator.h"
 
 namespace Halide {
