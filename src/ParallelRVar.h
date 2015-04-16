@@ -1,13 +1,13 @@
 #ifndef HALIDE_PARALLEL_RVAR_H
 #define HALIDE_PARALLEL_RVAR_H
 
-#include "Function.h"
-
 /** \file
  *
  * Method for checking if it's safe to parallelize an update
  * definition across a reduction variable.
  */
+
+#include "Function.h"
 
 namespace Halide {
 namespace Internal {

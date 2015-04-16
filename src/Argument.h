@@ -1,15 +1,15 @@
 #ifndef HALIDE_ARGUMENT_H
 #define HALIDE_ARGUMENT_H
 
-#include "Error.h"
-#include "Expr.h"
-#include "Type.h"
-#include "runtime/HalideRuntime.h"
-
 /** \file
  * Defines a type used for expressing the type signature of a
  * generated halide pipeline
  */
+
+#include "Error.h"
+#include "Expr.h"
+#include "Type.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 

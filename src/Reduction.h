@@ -5,9 +5,6 @@
  * Defines internal classes related to Reduction Domains
  */
 
-#include <string>
-#include <vector>
-
 #include "IR.h"
 
 namespace Halide {

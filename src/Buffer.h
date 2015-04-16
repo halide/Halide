@@ -6,6 +6,7 @@
  */
 
 #include <stdint.h>
+
 #include "runtime/HalideRuntime.h" // For buffer_t
 #include "IntrusivePtr.h"
 #include "Type.h"
