@@ -672,7 +672,9 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
     llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
-    llvm::ArrayType *padding_bytes = ArrayType::get(i8, 2);
+
+    llvm::Type *padding_bytes_type =
+        buffer_t_type->elements()[buffer_t_type->getNumElements()-1];
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
@@ -683,8 +685,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
         ConstantInt::get(i32, b.elem_size),
         ConstantInt::get(i8, 1), // host_dirty
         ConstantInt::get(i8, 0), // dev_dirty
-        ConstantArray::get(padding_bytes, vec(ConstantInt::get(i8, 0),
-                                              ConstantInt::get(i8, 0)))
+        Constant::getNullValue(padding_bytes_type)
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
     global->setInitializer(buffer_struct);
