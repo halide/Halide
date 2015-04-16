@@ -41,7 +41,7 @@ const string buffer_t_definition =
     "    int32_t elem_size;\n"
     "    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;\n"
     "    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;\n"
-    "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[2];\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];\n"
     "} buffer_t;\n"
     "#endif\n";
 
