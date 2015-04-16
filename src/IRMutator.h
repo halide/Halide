@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {

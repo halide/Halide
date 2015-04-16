@@ -1,5 +1,6 @@
 #include "IR.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -507,6 +508,46 @@ Expr Variable::make(Type type, std::string name, Buffer image, Parameter param, 
     node->reduction_domain = reduction_domain;
     return node;
 }
+
+template<> EXPORT void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
+template<> EXPORT void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
+template<> EXPORT void ExprNode<StringImm>::accept(IRVisitor *v) const { v->visit((const StringImm *)this); }
+template<> EXPORT void ExprNode<Cast>::accept(IRVisitor *v) const { v->visit((const Cast *)this); }
+template<> EXPORT void ExprNode<Variable>::accept(IRVisitor *v) const { v->visit((const Variable *)this); }
+template<> EXPORT void ExprNode<Add>::accept(IRVisitor *v) const { v->visit((const Add *)this); }
+template<> EXPORT void ExprNode<Sub>::accept(IRVisitor *v) const { v->visit((const Sub *)this); }
+template<> EXPORT void ExprNode<Mul>::accept(IRVisitor *v) const { v->visit((const Mul *)this); }
+template<> EXPORT void ExprNode<Div>::accept(IRVisitor *v) const { v->visit((const Div *)this); }
+template<> EXPORT void ExprNode<Mod>::accept(IRVisitor *v) const { v->visit((const Mod *)this); }
+template<> EXPORT void ExprNode<Min>::accept(IRVisitor *v) const { v->visit((const Min *)this); }
+template<> EXPORT void ExprNode<Max>::accept(IRVisitor *v) const { v->visit((const Max *)this); }
+template<> EXPORT void ExprNode<EQ>::accept(IRVisitor *v) const { v->visit((const EQ *)this); }
+template<> EXPORT void ExprNode<NE>::accept(IRVisitor *v) const { v->visit((const NE *)this); }
+template<> EXPORT void ExprNode<LT>::accept(IRVisitor *v) const { v->visit((const LT *)this); }
+template<> EXPORT void ExprNode<LE>::accept(IRVisitor *v) const { v->visit((const LE *)this); }
+template<> EXPORT void ExprNode<GT>::accept(IRVisitor *v) const { v->visit((const GT *)this); }
+template<> EXPORT void ExprNode<GE>::accept(IRVisitor *v) const { v->visit((const GE *)this); }
+template<> EXPORT void ExprNode<And>::accept(IRVisitor *v) const { v->visit((const And *)this); }
+template<> EXPORT void ExprNode<Or>::accept(IRVisitor *v) const { v->visit((const Or *)this); }
+template<> EXPORT void ExprNode<Not>::accept(IRVisitor *v) const { v->visit((const Not *)this); }
+template<> EXPORT void ExprNode<Select>::accept(IRVisitor *v) const { v->visit((const Select *)this); }
+template<> EXPORT void ExprNode<Load>::accept(IRVisitor *v) const { v->visit((const Load *)this); }
+template<> EXPORT void ExprNode<Ramp>::accept(IRVisitor *v) const { v->visit((const Ramp *)this); }
+template<> EXPORT void ExprNode<Broadcast>::accept(IRVisitor *v) const { v->visit((const Broadcast *)this); }
+template<> EXPORT void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Call *)this); }
+template<> EXPORT void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
+template<> EXPORT void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
+template<> EXPORT void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
+template<> EXPORT void StmtNode<Pipeline>::accept(IRVisitor *v) const { v->visit((const Pipeline *)this); }
+template<> EXPORT void StmtNode<For>::accept(IRVisitor *v) const { v->visit((const For *)this); }
+template<> EXPORT void StmtNode<Store>::accept(IRVisitor *v) const { v->visit((const Store *)this); }
+template<> EXPORT void StmtNode<Provide>::accept(IRVisitor *v) const { v->visit((const Provide *)this); }
+template<> EXPORT void StmtNode<Allocate>::accept(IRVisitor *v) const { v->visit((const Allocate *)this); }
+template<> EXPORT void StmtNode<Free>::accept(IRVisitor *v) const { v->visit((const Free *)this); }
+template<> EXPORT void StmtNode<Realize>::accept(IRVisitor *v) const { v->visit((const Realize *)this); }
+template<> EXPORT void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Block *)this); }
+template<> EXPORT void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
+template<> EXPORT void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 
 template<> EXPORT IRNodeType ExprNode<IntImm>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<FloatImm>::_type_info = {};
