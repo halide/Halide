@@ -5,10 +5,11 @@
 * Defines methods for simplifying a stmt into a human-readable form.
 */
 
+#include <map>
+
 #include "IR.h"
-#include "Func.h"
-#include "Image.h"
-#include "Target.h"
+#include "Function.h"
+#include "Buffer.h"
 
 namespace Halide {
 namespace Internal {

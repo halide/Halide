@@ -1,15 +1,15 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
+/** \file
+ * Defines Buffer - A c++ wrapper around a buffer_t.
+ */
+
 #include <stdint.h>
 #include "runtime/HalideRuntime.h" // For buffer_t
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Argument.h"
-
-/** \file
- * Defines Buffer - A c++ wrapper around a buffer_t.
- */
 
 namespace Halide {
 namespace Internal {

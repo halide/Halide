@@ -2,7 +2,6 @@
 #define HALIDE_PARALLEL_RVAR_H
 
 #include "Function.h"
-#include <string>
 
 /** \file
  *

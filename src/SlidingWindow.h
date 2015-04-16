@@ -7,8 +7,9 @@
  * computing provably-already-computed values.
  */
 
-#include "IR.h"
 #include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

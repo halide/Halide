@@ -5,9 +5,10 @@
  * Defines internal classes related to Reduction Domains
  */
 
-#include "IntrusivePtr.h"
 #include <string>
 #include <vector>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

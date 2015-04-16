@@ -6,9 +6,9 @@
  * Defines analyses to extract the functions called a function.
  */
 
-#include "IR.h"
-#include <string>
 #include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

@@ -5,10 +5,10 @@
  * a JIT compiled halide pipeline
  */
 
+#include <map>
+
 #include "IntrusivePtr.h"
 #include "runtime/HalideRuntime.h"
-
-#include <map>
 
 namespace llvm {
 class Module;

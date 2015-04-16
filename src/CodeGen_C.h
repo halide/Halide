@@ -6,12 +6,6 @@
  * Defines an IRPrinter that emits C++ code equivalent to a halide stmt
  */
 
-#include <string>
-#include <vector>
-#include <ostream>
-#include <map>
-#include <set>
-
 #include "IRPrinter.h"
 #include "Module.h"
 #include "Scope.h"

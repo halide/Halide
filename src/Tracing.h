@@ -5,8 +5,9 @@
  * Defines the lowering pass that injects print statements when tracing is turned on
  */
 
-#include "IR.h"
 #include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
