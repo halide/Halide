@@ -446,7 +446,6 @@ typedef enum halide_type_code_t {
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
  * GPU). */
-#pragma pack(push, 1)
 typedef struct buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t dev;
@@ -475,21 +474,60 @@ typedef struct buffer_t {
     * replaced with a more general type code in the future. */
     int32_t elem_size;
 
+    /**
+    * Flag bits from halide_buffer_flag_bits_t.
+    */
+    int32_t flags;
+
+    /** An unused field, used to ensure that the struct is an even multiple
+     * of 64 bits on 32-bit systems. */
+    void* _unused;
+} buffer_t;
+
+#endif
+
+#if defined(__cplusplus) && (__cplusplus > 199711L || _MSC_VER >= 1800)
+// Let's assert specific size expectations, because disagreement
+// between caller and callee produces suboptimal results.
+static_assert(sizeof(buffer_t) == (sizeof(void*) == 4 ? 72 : 80),
+              "sizeof(buffer_t) is incorrect");
+#endif
+
+enum halide_buffer_flag_bits_t {
     /** This should be true if there is an existing device allocation
     * mirroring this buffer, and the data has been modified on the
     * host side. */
-    bool host_dirty;
+    halide_buffer_host_dirty = (1 << 0),
 
     /** This should be true if there is an existing device allocation
     mirroring this buffer, and the data has been modified on the
     device side. */
-    bool dev_dirty;
+    halide_buffer_dev_dirty = (1 << 1)
+};
 
-    uint8_t _padding[2];
-} buffer_t;
-#pragma pack(pop)
+inline bool halide_buffer_get_host_dirty(const buffer_t* buf) {
+    return (buf->flags & halide_buffer_host_dirty) != 0;
+}
 
-#endif
+inline bool halide_buffer_get_dev_dirty(const buffer_t* buf) {
+    return (buf->flags & halide_buffer_dev_dirty) != 0;
+}
+
+inline void halide_buffer_set_host_dirty(buffer_t* buf, bool set) {
+    if (set) {
+        buf->flags |= halide_buffer_host_dirty;
+    } else {
+        buf->flags &= ~halide_buffer_host_dirty;
+    }
+}
+
+inline void halide_buffer_set_dev_dirty(buffer_t* buf, bool set) {
+    if (set) {
+        buf->flags |= halide_buffer_dev_dirty;
+    } else {
+        buf->flags &= ~halide_buffer_dev_dirty;
+    }
+}
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;

@@ -14,21 +14,6 @@
 
 #include "HalideRuntime.h"
 
-#ifndef BUFFER_T_DEFINED
-#define BUFFER_T_DEFINED
-#include <stdint.h>
-typedef struct buffer_t {
-    uint64_t dev;
-    uint8_t* host;
-    int32_t extent[4];
-    int32_t stride[4];
-    int32_t min[4];
-    int32_t elem_size;
-    bool host_dirty;
-    bool dev_dirty;
-} buffer_t;
-#endif
-
 template<typename T>
 class Image {
     struct Contents {
@@ -71,8 +56,8 @@ class Image {
 
         uint8_t *ptr = new uint8_t[sizeof(T)*size + 40];
         buf.host = ptr;
-        buf.host_dirty = false;
-        buf.dev_dirty = false;
+        halide_buffer_set_host_dirty(&buf, false);
+        halide_buffer_set_dev_dirty(&buf, false);
         buf.dev = 0;
         while ((size_t)buf.host & 0x1f) buf.host++;
         contents = new Contents(buf, ptr);
@@ -123,26 +108,26 @@ public:
     void set_host_dirty(bool dirty = true) {
         // If you use data directly, you must also call this so that
         // gpu-side code knows that it needs to copy stuff over.
-        contents->buf.host_dirty = dirty;
+        halide_buffer_set_host_dirty(&contents->buf, dirty);
     }
 
     void copy_to_host() {
-        if (contents->buf.dev_dirty) {
+        if (halide_buffer_get_dev_dirty(&contents->buf)) {
             halide_copy_to_host(NULL, &contents->buf);
-            contents->buf.dev_dirty = false;
+            halide_buffer_set_dev_dirty(&contents->buf, false);
         }
     }
 
     void copy_to_device(const struct halide_device_interface *device_interface) {
-        if (contents->buf.host_dirty) {
+        if (halide_buffer_get_host_dirty(&contents->buf)) {
             // If host
             halide_copy_to_device(NULL, &contents->buf, device_interface);
-            contents->buf.host_dirty = false;
+            halide_buffer_set_host_dirty(&contents->buf, false);
         }
     }
 
     void dev_free() {
-        assert(!contents->buf.dev_dirty);
+        assert(!halide_buffer_get_dev_dirty(&contents->buf));
         contents->dev_free();
     }
 

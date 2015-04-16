@@ -656,7 +656,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     buffer_t b = *(buf.raw_buffer());
     user_assert(b.host)
         << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
-    user_assert(!b.dev_dirty)
+    user_assert(!halide_buffer_get_dev_dirty(&b))
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
@@ -672,7 +672,6 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
     llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
-    llvm::ArrayType *padding_bytes = ArrayType::get(i8, 2);
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
@@ -681,10 +680,8 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
         ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
         ConstantInt::get(i32, b.elem_size),
-        ConstantInt::get(i8, 1), // host_dirty
-        ConstantInt::get(i8, 0), // dev_dirty
-        ConstantArray::get(padding_bytes, vec(ConstantInt::get(i8, 0),
-                                              ConstantInt::get(i8, 0)))
+        ConstantInt::get(i32, halide_buffer_host_dirty), // flags: host_dirty, !dev_dirty
+        Constant::getNullValue(i8->getPointerTo())
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
     global->setInitializer(buffer_struct);
@@ -960,8 +957,7 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     Value *nullity_test = builder->CreateAnd(builder->CreateIsNull(host_ptr),
                                              builder->CreateIsNull(dev_ptr));
     sym_push(name + ".host_and_dev_are_null", nullity_test);
-    sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
-    sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
+    sym_push(name + ".flags", buffer_flags(buffer));
     sym_push(name + ".extent.0", buffer_extent(buffer, 0));
     sym_push(name + ".extent.1", buffer_extent(buffer, 1));
     sym_push(name + ".extent.2", buffer_extent(buffer, 2));
@@ -982,8 +978,7 @@ void CodeGen_LLVM::pop_buffer(const string &name) {
     sym_pop(name + ".host");
     sym_pop(name + ".dev");
     sym_pop(name + ".host_and_dev_are_null");
-    sym_pop(name + ".host_dirty");
-    sym_pop(name + ".dev_dirty");
+    sym_pop(name + ".flags");
     sym_pop(name + ".extent.0");
     sym_pop(name + ".extent.1");
     sym_pop(name + ".extent.2");
@@ -1008,12 +1003,8 @@ Value *CodeGen_LLVM::buffer_dev(Value *buffer) {
     return builder->CreateLoad(buffer_dev_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_host_dirty(Value *buffer) {
-    return builder->CreateLoad(buffer_host_dirty_ptr(buffer));
-}
-
-Value *CodeGen_LLVM::buffer_dev_dirty(Value *buffer) {
-    return builder->CreateLoad(buffer_dev_dirty_ptr(buffer));
+Value *CodeGen_LLVM::buffer_flags(Value *buffer) {
+    return builder->CreateLoad(buffer_flags_ptr(buffer));
 }
 
 Value *CodeGen_LLVM::buffer_extent(Value *buffer, int i) {
@@ -1054,7 +1045,7 @@ Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
         "buf_dev");
 }
 
-Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
+Value *CodeGen_LLVM::buffer_flags_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
 #if LLVM_VERSION >= 37
         buffer_t_type,
@@ -1062,18 +1053,7 @@ Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
         buffer,
         0,
         6,
-        "buffer_host_dirty");
-}
-
-Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
-        buffer_t_type,
-#endif
-        buffer,
-        0,
-        7,
-        "buffer_dev_dirty");
+        "buffer_flags");
 }
 
 Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
@@ -2191,8 +2171,10 @@ void CodeGen_LLVM::visit(const Call *op) {
                 builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
             }
 
-            builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
-            builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
+            // This implement sets device pointer and dirty bits to
+            // zero. GPU codegen should also catch this and do
+            // something smarter.
+            builder->CreateStore(ConstantInt::get(i32, 0), buffer_flags_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
 
             value = buffer;
@@ -2239,13 +2221,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(op->args.size() == 2);
             Value *buffer = codegen(op->args[0]);
             Value *arg = codegen(op->args[1]);
-            builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
+            Value *nflags = set_bit_mask(buffer_flags(buffer), ConstantInt::get(i32, halide_buffer_host_dirty), arg);
+            builder->CreateStore(nflags, buffer_flags_ptr(buffer));
             value = ConstantInt::get(i32, 0);
         } else if (op->name == Call::set_dev_dirty) {
             internal_assert(op->args.size() == 2);
             Value *buffer = codegen(op->args[0]);
             Value *arg = codegen(op->args[1]);
-            builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
+            Value *nflags = set_bit_mask(buffer_flags(buffer), ConstantInt::get(i32, halide_buffer_dev_dirty), arg);
+            builder->CreateStore(nflags, buffer_flags_ptr(buffer));
             value = ConstantInt::get(i32, 0);
         } else if (op->name == Call::null_handle) {
             internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
@@ -3254,6 +3238,24 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     }
 
     return vecs[0];
+}
+
+llvm::Value *CodeGen_LLVM::set_bit_mask(llvm::Value *value, llvm::Value *mask, llvm::Value *flag) {
+    internal_assert(value->getType() == mask->getType());
+    internal_assert(value->getType()->isIntegerTy());
+    internal_assert(flag->getType()->isIntegerTy());
+    // Use the classic bit-twiddling hack to avoid a branch:
+    //     value = (value & ~mask) | (-flag & mask)
+    // this requires that flag is exactly 0 or 1, so also do:
+    //     flag = flag != 0 ? 1 : 0
+    Value *cmp = builder->CreateICmpNE(flag, ConstantInt::get(flag->getType(), 0));
+    flag = builder->CreateSelect(cmp,
+        ConstantInt::get(value->getType(), 1),
+        ConstantInt::get(value->getType(), 0));
+
+    Value *clr = builder->CreateAnd(value, builder->CreateNot(mask));
+    Value *set = builder->CreateAnd(builder->CreateNeg(flag), mask);
+    return builder->CreateOr(clr, set);
 }
 
 std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(const std::string &name, int width) {

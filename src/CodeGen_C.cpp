@@ -21,11 +21,12 @@ using std::ostringstream;
 using std::map;
 
 namespace {
+// Note that we deliberately omit the flag bit definitions and accessors;
+// code that needs to use those should explicitly include HalideRuntime.h
 const string buffer_t_definition =
     "#ifndef BUFFER_T_DEFINED\n"
     "#define BUFFER_T_DEFINED\n"
     "#include <stdint.h>\n"
-    "#pragma pack(push, 1)\n"
     "typedef struct buffer_t {\n"
     "    uint64_t dev;\n"
     "    uint8_t* host;\n"
@@ -33,11 +34,9 @@ const string buffer_t_definition =
     "    int32_t stride[4];\n"
     "    int32_t min[4];\n"
     "    int32_t elem_size;\n"
-    "    bool host_dirty;\n"
-    "    bool dev_dirty;\n"
-    "    uint8_t _padding[2];\n"
+    "    int32_t flags;\n"
+    "    void* _unused;\n"
     "} buffer_t;\n"
-    "#pragma pack(pop)\n"
     "#endif\n";
 
 const string headers =
@@ -484,7 +483,7 @@ void CodeGen_C::compile(const Buffer &buffer) {
 
     // Emit the buffer_t
     user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
-    user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
+    user_assert(!halide_buffer_get_dev_dirty(&b)) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
     stream << "static buffer_t " << name << "_buffer = {"
            << "0, " // dev
            << "&" << name << "_data[0], " // host
@@ -492,8 +491,7 @@ void CodeGen_C::compile(const Buffer &buffer) {
            << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
            << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
            << b.elem_size << ", "
-           << "0, " // host_dirty
-           << "0};\n"; //dev_dirty
+           << "0};\n"; //flags
 
     // Make a global pointer to it
     stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
@@ -947,14 +945,14 @@ void CodeGen_C::visit(const Call *op) {
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             do_indent();
-            stream << "((buffer_t *)(" << a0 << "))->host_dirty = " << a1 << ";\n";
+            stream << "halide_buffer_set_host_dirty((buffer_t *)(" << a0 << "), (" << a1 << "));\n";
             rhs << "0";
         } else if (op->name == Call::set_dev_dirty) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             do_indent();
-            stream << "((buffer_t *)(" << a0 << "))->dev_dirty = " << a1 << ";\n";
+            stream << "halide_buffer_set_dev_dirty((buffer_t *)(" << a0 << "), (" << a1 << "));\n";
             rhs << "0";
         } else if (op->name == Call::abs) {
             internal_assert(op->args.size() == 1);

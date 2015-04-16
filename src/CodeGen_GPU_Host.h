@@ -51,8 +51,7 @@ protected:
     using CodeGen_CPU::sym_pop;
     using CodeGen_CPU::sym_get;
     using CodeGen_CPU::sym_exists;
-    using CodeGen_CPU::buffer_dev_dirty_ptr;
-    using CodeGen_CPU::buffer_host_dirty_ptr;
+    using CodeGen_CPU::buffer_flags_ptr;
     using CodeGen_CPU::buffer_elem_size_ptr;
     using CodeGen_CPU::buffer_min_ptr;
     using CodeGen_CPU::buffer_stride_ptr;

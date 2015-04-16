@@ -23,15 +23,14 @@ int main(int argc, char **argv) {
     //     int32_t stride[4];
     //     int32_t min[4];
     //     int32_t elem_size;
-    //     bool host_dirty;
-    //     bool dev_dirty;
+    //     int32_t flags;
     // } buffer_t;
     //
     // This is how Halide represents input and output images in
     // pre-compiled pipelines. There's a 'host' pointer that points to the
     // start of the image data, some fields that describe how to access
     // pixels, and some fields related to using the GPU that we'll ignore
-    // for now (dev, host_dirty, dev_dirty).
+    // for now (dev, flags).
 
     // Let's make some input data to test with:
     uint8_t input[640 * 480];

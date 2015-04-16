@@ -23,8 +23,8 @@ extern "C" DLLEXPORT int copy(buffer_t *in, buffer_t *out) {
         (*in) = (*out);
         in->host = NULL;
         in->dev = 0;
-        in->host_dirty = false;
-        in->dev_dirty = false;
+        halide_buffer_set_host_dirty(in, false);
+        halide_buffer_set_dev_dirty(in, false);
     } else {
         // Check the sizes and strides match. This is not guaranteed
         // by the interface, but it should happen with this schedule
