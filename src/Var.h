@@ -5,10 +5,10 @@
  * Defines the Var - the front-end variable
  */
 
-#include <string>
-#include "Util.h"
-#include "IR.h"
 #include <sstream>
+
+#include "IR.h"
+#include "Util.h"
 
 namespace Halide {
 

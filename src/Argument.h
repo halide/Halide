@@ -1,7 +1,6 @@
 #ifndef HALIDE_ARGUMENT_H
 #define HALIDE_ARGUMENT_H
 
-#include <string>
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"

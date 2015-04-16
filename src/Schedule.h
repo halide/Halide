@@ -5,9 +5,9 @@
  * Defines the internal representation of the schedule for a function
  */
 
-#include "Expr.h"
-#include <string>
 #include <vector>
+
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
