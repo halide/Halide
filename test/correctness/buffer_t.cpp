@@ -17,7 +17,12 @@ int main(int argc, char **argv) {
     CHECK(dev_dirty, 65, 69);
     CHECK(_padding, 66, 70);
 
-    static_assert(sizeof(buffer_t) == (sizeof(void*) == 8 ? 72 : 68), "size is wrong");
+    static_assert(sizeof(void*) == 8 ?
+                    sizeof(buffer_t) == 72 :
+                    // Some compilers may insert padding at the end of the struct
+                    // so that an array will stay appropriately aligned for
+                    // the int64 field.
+                    (sizeof(buffer_t) == 68 || sizeof(buffer_t) == 72), "size is wrong");
 
     // Ensure alignment is at least that of a pointer.
     static_assert(alignof(buffer_t) >= alignof(uint8_t*), "align is wrong");
