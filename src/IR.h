@@ -13,7 +13,6 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Function.h"
-#include "IRVisitor.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
 #include "Type.h"

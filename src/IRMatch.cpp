@@ -1,6 +1,7 @@
 #include <iostream>
 #include <map>
 
+#include "IRVisitor.h"
 #include "IRMatch.h"
 #include "IREquality.h"
 #include "IROperator.h"
