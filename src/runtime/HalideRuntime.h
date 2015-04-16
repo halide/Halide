@@ -494,7 +494,10 @@ typedef struct buffer_t {
     device side. */
     HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;
 
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[2];
+    // Some compilers will add extra padding at the end to ensure
+    // the size is a multiple of 8; we'll do that explicitly so that
+    // there is no ambiguity.
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
 
 #endif
