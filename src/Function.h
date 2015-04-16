@@ -54,30 +54,6 @@ struct UpdateDefinition {
     ReductionDomain domain;
 };
 
-struct FunctionContents {
-    mutable RefCount ref_count;
-    std::string name;
-    std::vector<std::string> args;
-    std::vector<Expr> values;
-    std::vector<Type> output_types;
-    Schedule schedule;
-
-    std::vector<UpdateDefinition> updates;
-
-    std::string debug_file;
-
-    std::vector<Parameter> output_buffers;
-
-    std::vector<ExternFuncArgument> extern_arguments;
-    std::string extern_function_name;
-
-    bool trace_loads, trace_stores, trace_realizations;
-
-    bool frozen;
-
-    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
-};
-
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
@@ -89,7 +65,7 @@ public:
      * constructor only exists so that you can make vectors of
      * functions, etc.
      */
-    Function() : contents(new FunctionContents) {}
+    Function();
 
     /** Reconstruct a Function from a FunctionContents pointer. */
     Function(const IntrusivePtr<FunctionContents> &c) : contents(c) {}
@@ -110,26 +86,15 @@ public:
      * definition's argument in the same index. */
     void define_update(const std::vector<Expr> &args, std::vector<Expr> values);
 
+
     /** Construct a new function with the given name */
-    Function(const std::string &n) : contents(new FunctionContents) {
-        for (size_t i = 0; i < n.size(); i++) {
-            user_assert(n[i] != '.')
-                << "Func name \"" << n << "\" is invalid. "
-                << "Func names may not contain the character '.', "
-                << "as it is used internally by Halide as a separator\n";
-        }
-        contents.ptr->name = n;
-    }
+    Function(const std::string &n);
 
     /** Get the name of the function */
-    const std::string &name() const {
-        return contents.ptr->name;
-    }
+    const std::string &name() const;
 
     /** Get the pure arguments */
-    const std::vector<std::string> &args() const {
-        return contents.ptr->args;
-    }
+    const std::vector<std::string> &args() const;
 
     /** Get the dimensionality */
     int dimensions() const {
@@ -142,18 +107,14 @@ public:
     }
 
     /** Get the types of the outputs */
-    const std::vector<Type> &output_types() const {
-        return contents.ptr->output_types;
-    }
+    const std::vector<Type> &output_types() const;
 
     /** Get the right-hand-side of the pure definition */
-    const std::vector<Expr> &values() const {
-        return contents.ptr->values;
-    }
+    const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition */
     bool has_pure_definition() const {
-        return !contents.ptr->values.empty();
+        return !values().empty();
     }
 
     /** Does this function *only* have a pure definition */
@@ -165,41 +126,27 @@ public:
 
     /** Get a handle to the schedule for the purpose of modifying
      * it */
-    Schedule &schedule() {
-        return contents.ptr->schedule;
-    }
+    Schedule &schedule();
 
     /** Get a const handle to the schedule for inspecting it */
-    const Schedule &schedule() const {
-        return contents.ptr->schedule;
-    }
+    const Schedule &schedule() const;
 
     /** Get a handle on the output buffer used for setting constraints
      * on it. */
-    const std::vector<Parameter> &output_buffers() const {
-        return contents.ptr->output_buffers;
-    }
+    const std::vector<Parameter> &output_buffers() const;
 
     /** Get a mutable handle to the schedule for the update
      * stage */
-    Schedule &update_schedule(int idx = 0) {
-        return contents.ptr->updates[idx].schedule;
-    }
+    Schedule &update_schedule(int idx = 0);
 
     /** Get a const reference to this function's update definitions. */
-    const std::vector<UpdateDefinition> &updates() const {
-        return contents.ptr->updates;
-    }
+    const std::vector<UpdateDefinition> &updates() const;
 
     /** Does this function have an update definition */
-    bool has_update_definition() const {
-        return !contents.ptr->updates.empty();
-    }
+    bool has_update_definition() const;
 
     /** Check if the function has an extern definition */
-    bool has_extern_definition() const {
-        return !contents.ptr->extern_function_name.empty();
-    }
+    bool has_extern_definition() const;
 
     /** Add an external definition of this Func */
     void define_extern(const std::string &function_name,
@@ -208,15 +155,11 @@ public:
                        int dimensionality);
 
     /** Retrive the arguments of the extern definition */
-    const std::vector<ExternFuncArgument> &extern_arguments() const {
-        return contents.ptr->extern_arguments;
-    }
+    const std::vector<ExternFuncArgument> &extern_arguments() const;
 
     /** Get the name of the extern function called for an extern
      * definition. */
-    const std::string &extern_function_name() const {
-        return contents.ptr->extern_function_name;
-    }
+    const std::string &extern_function_name() const;
 
     /** Equality of identity */
     bool same_as(const Function &other) const {
@@ -224,14 +167,10 @@ public:
     }
 
     /** Get a const handle to the debug filename */
-    const std::string &debug_file() const {
-        return contents.ptr->debug_file;
-    }
+    const std::string &debug_file() const;
 
     /** Get a handle to the debug filename */
-    std::string &debug_file() {
-        return contents.ptr->debug_file;
-    }
+    std::string &debug_file();
 
     /** Use an an extern argument to another function. */
     operator ExternFuncArgument() const {
@@ -241,37 +180,21 @@ public:
     /** Tracing calls and accessors, passed down from the Func
      * equivalents. */
     // @{
-    void trace_loads() {
-        contents.ptr->trace_loads = true;
-    }
-    void trace_stores() {
-        contents.ptr->trace_stores = true;
-    }
-    void trace_realizations() {
-        contents.ptr->trace_realizations = true;
-    }
-    bool is_tracing_loads() {
-        return contents.ptr->trace_loads;
-    }
-    bool is_tracing_stores() {
-        return contents.ptr->trace_stores;
-    }
-    bool is_tracing_realizations() {
-        return contents.ptr->trace_realizations;
-    }
+    void trace_loads();
+    void trace_stores();
+    void trace_realizations();
+    bool is_tracing_loads() const;
+    bool is_tracing_stores() const;
+    bool is_tracing_realizations() const;
     // @}
 
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
-    void freeze() {
-        contents.ptr->frozen = true;
-    }
+    void freeze();
 
     /** Check if a function has been frozen. If so, it is an error to
      * add new definitions. */
-    bool frozen() const {
-        return contents.ptr->frozen;
-    }
+    bool frozen() const;
 };
 
 }}
