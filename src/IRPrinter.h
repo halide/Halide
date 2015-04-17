@@ -4,6 +4,7 @@
 #include <ostream>
 
 #include "Module.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 

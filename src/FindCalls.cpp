@@ -1,4 +1,5 @@
 #include "FindCalls.h"
+#include "IRVisitor.h"
 
 namespace Halide{
 namespace Internal {
