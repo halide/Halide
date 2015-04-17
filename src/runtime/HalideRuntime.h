@@ -438,6 +438,16 @@ typedef enum halide_type_code_t {
     halide_type_handle = 3 //!< opaque pointer type (void *)
 } halide_type_code_t;
 
+// Note that while __attribute__ can go before or after the declaration,
+// __declspec apparently is only allowed before.
+#ifndef HALIDE_ATTRIBUTE_ALIGN
+    #ifdef _MSC_VER
+        #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
+    #else
+        #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
+    #endif
+#endif
+
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
@@ -446,7 +456,6 @@ typedef enum halide_type_code_t {
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
  * GPU). */
-#pragma pack(push, 1)
 typedef struct buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t dev;
@@ -478,16 +487,18 @@ typedef struct buffer_t {
     /** This should be true if there is an existing device allocation
     * mirroring this buffer, and the data has been modified on the
     * host side. */
-    bool host_dirty;
+    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;
 
     /** This should be true if there is an existing device allocation
     mirroring this buffer, and the data has been modified on the
     device side. */
-    bool dev_dirty;
+    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;
 
-    uint8_t _padding[2];
+    // Some compilers will add extra padding at the end to ensure
+    // the size is a multiple of 8; we'll do that explicitly so that
+    // there is no ambiguity.
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
-#pragma pack(pop)
 
 #endif
 
