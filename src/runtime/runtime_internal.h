@@ -222,7 +222,7 @@ __attribute__((always_inline)) T max(const T &a, const T &b) {
 }
 
 // Search the process for a symbol with the given name.
-extern WEAK void *find_symbol(const char *name);
+extern WEAK void *get_symbol(const char *name);
 
 }}}
 
