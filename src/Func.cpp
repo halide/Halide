@@ -208,89 +208,9 @@ int Func::dimensions() const {
     return func.dimensions();
 }
 
-FuncRefVar Func::operator()() const {
-    // Bulk up the vars using implicit vars
-    vector<Var> args;
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x) const {
-    // Bulk up the vars using implicit vars
-    vector<Var> args = vec(x);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y) const {
-    vector<Var> args = vec(x, y);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z) const{
-    vector<Var> args = vec(x, y, z);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) const {
-    vector<Var> args = vec(x, y, z, w);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u) const {
-    vector<Var> args = vec(x, y, z, w, u);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v) const {
-    vector<Var> args = vec(x, y, z, w, u, v);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
 FuncRefVar Func::operator()(vector<Var> args) const {
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x) const {
-    vector<Expr> args = vec(x);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y) const {
-    vector<Expr> args = vec(x, y);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) const {
-    vector<Expr> args = vec(x, y, z);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) const {
-    vector<Expr> args = vec(x, y, z, w);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const {
-    vector<Expr> args = vec(x, y, z, w, u);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const {
-    vector<Expr> args = vec(x, y, z, w, u, v);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(vector<Expr> args) const {
@@ -792,60 +712,6 @@ Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
     return *this;
 }
 
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y) {
-    VarOrRVar vars[] = {x, y};
-    reorder_vars(schedule.dims(), vars, 2, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
-    VarOrRVar vars[] = {x, y, z};
-    reorder_vars(schedule.dims(), vars, 3, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
-    VarOrRVar vars[] = {x, y, z, w};
-    reorder_vars(schedule.dims(), vars, 4, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
-    VarOrRVar vars[] = {x, y, z, w, t};
-    reorder_vars(schedule.dims(), vars, 5, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2};
-    reorder_vars(schedule.dims(), vars, 6, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3};
-    reorder_vars(schedule.dims(), vars, 7, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4};
-    reorder_vars(schedule.dims(), vars, 8, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5};
-    reorder_vars(schedule.dims(), vars, 9, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    reorder_vars(schedule.dims(), vars, 10, *this);
-    return *this;
-}
-
 Stage &Stage::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     parallel(tx);
@@ -1112,68 +978,6 @@ Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
-                    VarOrRVar t5) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
-                    VarOrRVar t5, VarOrRVar t6) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
-    return *this;
-}
-
 Func &Func::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.schedule(), name()).gpu_threads(tx, device_api);
@@ -1298,28 +1102,23 @@ Func &Func::reorder_storage(Var x, Var y) {
     return *this;
 }
 
-Func &Func::reorder_storage(Var x, Var y, Var z) {
-    reorder_storage(x, y);
-    reorder_storage(x, z);
-    reorder_storage(y, z);
+Func &Func::reorder_storage(const std::vector<Var> &dims, size_t start) {
+    // Reorder the first dimension with respect to all others, then
+    // recursively reorder all remaining dimensions.
+    for (size_t i = start + 1; i < dims.size(); i++) {
+        reorder_storage(dims[start], dims[i]);
+    }
+    if ((dims.size() - start) > 2) {
+        reorder_storage(dims, start + 1);
+    }
     return *this;
 }
 
-Func &Func::reorder_storage(Var x, Var y, Var z, Var w) {
-    reorder_storage(x, y);
-    reorder_storage(x, z);
-    reorder_storage(x, w);
-    reorder_storage(y, z, w);
-    return *this;
-}
+Func &Func::reorder_storage(const std::vector<Var> &dims) {
+    user_assert(dims.size() > 1) <<
+        "reorder_storage must have at least two dimensions in reorder list.\n";
 
-Func &Func::reorder_storage(Var x, Var y, Var z, Var w, Var t) {
-    reorder_storage(x, y);
-    reorder_storage(x, z);
-    reorder_storage(x, w);
-    reorder_storage(x, t);
-    reorder_storage(y, z, w, t);
-    return *this;
+    return reorder_storage(dims, 0);
 }
 
 Func &Func::compute_at(Func f, RVar var) {
