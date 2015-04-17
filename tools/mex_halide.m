@@ -15,7 +15,9 @@ function pipeline = mex_halide( generator_filename, varargin )
 
     % Make a temporary directory for our intermediates.
     temp = fullfile(tempdir, 'mex_halide');
-    mkdir(temp);
+    if ~exist(temp, 'dir')
+        mkdir(temp);
+    end
 
     % Write the generator main program to a temporary file.
     gengen_filename = fullfile(temp, 'GenGen.cpp');
@@ -41,6 +43,7 @@ function pipeline = mex_halide( generator_filename, varargin )
     halide_path = getenv('HALIDE_PATH');
 
     libhalide = fullfile(halide_path, 'bin', 'libHalide.so');
+    halide_include = fullfile(halide_path, 'include');
 
     if isempty(getenv('HALIDE_CXX'))
         % If the user hasnt set a compiler for Halide, use g++.
@@ -54,12 +57,12 @@ function pipeline = mex_halide( generator_filename, varargin )
     gen_bin = fullfile(temp, [function_name, '.generator']);
     build_generator = ...
         [halide_cxx, ...
-         ' -g -std=c++11 -fno-rtti -I${HALIDE_PATH}/include ', ...
-         ' -lz -lpthread -ldl ', ...
-         libhalide, ' ', ...
+         ' -g -std=c++11 -fno-rtti -I', halide_include, ' ', ...
          gengen_filename, ' ', ...
          generator_filename, ' ', ...
-         '-o ', gen_bin];
+         libhalide, ' ', ...
+         ' -lz -lpthread -ldl ', ...
+         '-o ', gen_bin]
     status = system(build_generator);
     if status ~= 0
         return;
@@ -73,7 +76,7 @@ function pipeline = mex_halide( generator_filename, varargin )
          '-f ', function_name, ' ', ...
          '-o ', temp, ' ', ...
          'target=', target, ' ', ...
-         generator_args];
+         generator_args]
     status = system(build_object);
     if status ~= 0
         return;
