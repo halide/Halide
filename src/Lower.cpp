@@ -37,6 +37,7 @@
 #include "Func.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
@@ -1510,7 +1511,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
             Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
-                                        vec<Expr>(error_name, dim,
+                                        vec<Expr>(error_name, j,
                                                   min_required_var, max_required,
                                                   actual_min, actual_max),
                                         Call::Extern);
@@ -1905,9 +1906,9 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
     if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Injecting OpenGL texture intrinsics...\n";
-        s = inject_opengl_intrinsics(s);
-        debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
+        debug(1) << "Injecting image intrinsics...\n";
+        s = inject_image_intrinsics(s);
+        debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";
@@ -1918,6 +1919,12 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
+    }
+
+    if (t.has_feature(Target::OpenGL)) {
+        debug(1) << "Injecting OpenGL texture intrinsics...\n";
+        s = inject_opengl_intrinsics(s);
+        debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
     if (t.has_gpu_feature()) {

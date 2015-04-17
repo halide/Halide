@@ -146,6 +146,11 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
                                               this, nullptr);
 }
 
+GeneratorParamBase::GeneratorParamBase(const GeneratorParamBase &that) : name(that.name) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
+                                              this, nullptr);
+}
+
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 /* static */
