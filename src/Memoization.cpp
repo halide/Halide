@@ -137,6 +137,8 @@ public:
     std::map<DependencyKey, DependencyInfo> dependency_info;
 };
 
+typedef std::pair<FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> DependencyKeyInfoPair;
+
 class KeyInfo {
     FindParameterDependencies dependencies;
     Expr key_size_expr;
@@ -145,13 +147,9 @@ class KeyInfo {
 
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
         // Find maximum natural alignment needed.
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
-            int alignment = iter->second.type.bytes();
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+            int alignment = i.second.type.bytes();
             if (alignment > max_alignment) {
                 max_alignment = alignment;
             }
@@ -180,8 +178,6 @@ public:
         : top_level_name(name), function_name(function.name())
     {
         dependencies.visit_function(function);
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
         size_t size_so_far = 0;
 
         size_so_far = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
@@ -193,10 +189,8 @@ public:
         }
         key_size_expr = (int32_t)size_so_far;
 
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
-            key_size_expr += iter->second.size_expr;
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+            key_size_expr += i.second.size_expr;
         }
     }
 
@@ -247,15 +241,11 @@ public:
             }
         }
 
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
-                                         iter->second.value_expr,
-                                         (index / iter->second.size_expr)));
-            index += iter->second.size_expr;
+                                         i.second.value_expr,
+                                         (index / i.second.size_expr)));
+            index += i.second.size_expr;
         }
         Stmt blocks;
         for (size_t i = writes.size(); i > 0; i--) {

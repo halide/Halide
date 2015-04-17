@@ -860,13 +860,11 @@ void realization_order_dfs(string current, map<string, set<string> > &graph, set
     set<string> &inputs = graph[current];
     visited.insert(current);
 
-    for (set<string>::const_iterator i = inputs.begin();
-        i != inputs.end(); ++i) {
-
-        if (visited.find(*i) == visited.end()) {
-            realization_order_dfs(*i, graph, visited, result_set, order);
-        } else if (*i != current) {
-            internal_assert(result_set.find(*i) != result_set.end())
+    for (const string &i : inputs) {
+        if (visited.find(i) == visited.end()) {
+            realization_order_dfs(i, graph, visited, result_set, order);
+        } else if (i != current) {
+            internal_assert(result_set.find(i) != result_set.end())
                 << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
         }
     }
@@ -878,13 +876,10 @@ void realization_order_dfs(string current, map<string, set<string> > &graph, set
 vector<string> realization_order(string output, const map<string, Function> &env, map<string, set<string> > &graph) {
     // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
     // Populate the graph
-    for (map<string, Function>::const_iterator iter = env.begin();
-         iter != env.end(); ++iter) {
-        map<string, Function> calls = find_direct_calls(iter->second);
-
-        for (map<string, Function>::const_iterator j = calls.begin();
-             j != calls.end(); ++j) {
-            graph[iter->first].insert(j->first);
+    for (const pair<string, Function> &i : env) {
+        map<string, Function> calls = find_direct_calls(i.second);
+        for (const pair<string, Function> &j : calls) {
+            graph[i.first].insert(j.first);
         }
     }
 
@@ -1203,19 +1198,18 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
     vector<ParamAssert> asserts;
 
     // Make constrained versions of the params
-    for (map<string, Parameter>::iterator iter = finder.params.begin();
-         iter != finder.params.end(); iter++) {
-        Parameter param = iter->second;
+    for (pair<const string, Parameter> &i : finder.params) {
+        Parameter param = i.second;
 
         if (!param.is_buffer() &&
             (param.get_min_value().defined() ||
              param.get_max_value().defined())) {
 
-            string constrained_name = iter->first + ".constrained";
+            string constrained_name = i.first + ".constrained";
 
             Expr constrained_var = Variable::make(param.type(), constrained_name);
-            Expr constrained_value = Variable::make(param.type(), iter->first, param);
-            replace_with_constrained[iter->first] = constrained_var;
+            Expr constrained_value = Variable::make(param.type(), i.first, param);
+            replace_with_constrained[i.first] = constrained_var;
 
             if (param.get_min_value().defined()) {
                 ParamAssert p = {
@@ -1349,9 +1343,8 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
     // references to the required sizes.
     map<string, Expr> replace_with_required;
 
-    for (map<string, FindBuffers::Result>::iterator iter = bufs.begin();
-         iter != bufs.end(); ++iter) {
-        const string &name = iter->first;
+    for (const pair<string, FindBuffers::Result> &buf : bufs) {
+        const string &name = buf.first;
 
         for (int i = 0; i < 4; i++) {
             string dim = int_to_string(i);
@@ -1373,13 +1366,12 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
     // e.g. for constant folding.
     map<string, Expr> replace_with_constrained;
 
-    for (map<string, FindBuffers::Result>::iterator iter = bufs.begin();
-         iter != bufs.end(); ++iter) {
-        const string &name = iter->first;
-        Buffer &image = iter->second.image;
-        Parameter &param = iter->second.param;
-        Type type = iter->second.type;
-        int dimensions = iter->second.dimensions;
+    for (pair<const string, FindBuffers::Result> &buf : bufs) {
+        const string &name = buf.first;
+        Buffer &image = buf.second.image;
+        Parameter &param = buf.second.param;
+        Type type = buf.second.type;
+        int dimensions = buf.second.dimensions;
 
         // Detect if this is one of the outputs of a multi-output pipeline.
         bool is_output_buffer = false;

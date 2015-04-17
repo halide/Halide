@@ -92,10 +92,10 @@ public:
             s = Allocate::make(kIgnoreBuf, UInt(32), vec(Expr(1)), const_true(), s);
 
             // Tack on code to print the counters.
-            for (map<string, int>::const_iterator it = indices.begin(); it != indices.end(); ++it) {
-                int idx = it->second;
+            for (const std::pair<std::string, int> &i : indices) {
+                int idx = i.second;
                 Expr val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
-                Expr print_val = print(it->first, val);
+                Expr print_val = print(i.first, val);
                 Stmt print_stmt = Evaluate::make(print_val);
                 s = Block::make(s, print_stmt);
             }

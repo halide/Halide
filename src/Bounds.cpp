@@ -1108,9 +1108,8 @@ private:
             op->body.accept(this);
             scope.pop(op->name);
 
-            for (map<string, Box>::iterator iter = boxes.begin();
-                 iter != boxes.end(); ++iter) {
-                Box &box = iter->second;
+            for (pair<const string, Box>& i : boxes) {
+                Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     if (box[i].min.defined()) {
                         box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
@@ -1154,17 +1153,15 @@ private:
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
-            for (map<string, Box>::iterator iter = then_boxes.begin();
-                 iter != then_boxes.end(); ++iter) {
-                else_boxes[iter->first];
+            for (pair<const string, Box> &i : then_boxes) {
+                else_boxes[i.first];
             }
 
             // Merge
-            for (map<string, Box>::iterator iter = else_boxes.begin();
-                 iter != else_boxes.end(); ++iter) {
-                Box &else_box = iter->second;
-                Box &then_box = then_boxes[iter->first];
-                Box &orig_box = boxes[iter->first];
+            for (pair<const string, Box> &i : else_boxes) {
+                Box &else_box = i.second;
+                Box &then_box = then_boxes[i.first];
+                Box &orig_box = boxes[i.first];
 
                 // debug(0) << " Merging boxes for " << iter->first << "\n";
 
