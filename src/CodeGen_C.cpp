@@ -22,10 +22,16 @@ using std::map;
 
 namespace {
 const string buffer_t_definition =
+    "#ifndef HALIDE_ATTRIBUTE_ALIGN\n"
+    "  #ifdef _MSC_VER\n"
+    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))\n"
+    "  #else\n"
+    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))\n"
+    "  #endif\n"
+    "#endif\n"
     "#ifndef BUFFER_T_DEFINED\n"
     "#define BUFFER_T_DEFINED\n"
     "#include <stdint.h>\n"
-    "#pragma pack(push, 1)\n"
     "typedef struct buffer_t {\n"
     "    uint64_t dev;\n"
     "    uint8_t* host;\n"
@@ -33,11 +39,10 @@ const string buffer_t_definition =
     "    int32_t stride[4];\n"
     "    int32_t min[4];\n"
     "    int32_t elem_size;\n"
-    "    bool host_dirty;\n"
-    "    bool dev_dirty;\n"
-    "    uint8_t _padding[2];\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];\n"
     "} buffer_t;\n"
-    "#pragma pack(pop)\n"
     "#endif\n";
 
 const string headers =

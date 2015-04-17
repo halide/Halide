@@ -323,11 +323,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     TargetMachine &Target = *target.get();
 
     // Set up passes
-    std::string outstr;
     #if LLVM_VERSION < 37
+    std::string outstr;
     PassManager PM;
     #else
-    raw_string_ostream ostream(outstr);
+    llvm::SmallString<8> outstr;
+    raw_svector_ostream ostream(outstr);
     ostream.SetUnbuffered();
     legacy::PassManager PM;
     #endif
@@ -419,9 +420,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     PM.run(*module);
 
-    #if LLVM_VERSION < 37
     ostream.flush();
-    #endif
 
     if (debug::debug_level >= 2) {
         module->dump();
