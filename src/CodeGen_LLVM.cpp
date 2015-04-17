@@ -674,7 +674,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
 
     llvm::Type *padding_bytes_type =
-        buffer_t_type->elements()[buffer_t_type->getNumElements()-1];
+        buffer_t_type->getElementType(buffer_t_type->getNumElements()-1);
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
