@@ -158,6 +158,7 @@ foreach ($d in "32_trunk","64_trunk", "32_pnacl", "64_pnacl") {
   mkdir include
   mkdir Release
   mkdir Debug
+  mkdir tools
 
   cp $ROOT\build_${d}_Release\include\Halide.h include\
   cp $ROOT\src\runtime\HalideRuntim*.h include\
@@ -165,6 +166,7 @@ foreach ($d in "32_trunk","64_trunk", "32_pnacl", "64_pnacl") {
   cp $ROOT\build_${d}_Release\bin\Release\Halide.dll Release\
   cp $ROOT\build_${d}_Debug\lib\Debug\Halide.lib Debug\
   cp $ROOT\build_${d}_Debug\bin\Debug\Halide.dll Debug\
+  cp $ROOT\tools\mex_halide.m tools\
   cp $ROOT\README.md .
   &7z a Halide_Windows_${d}_${COMMIT}_${DATE}.zip *
   mv Halide_Windows_${d}_${COMMIT}_${DATE}.zip ..
