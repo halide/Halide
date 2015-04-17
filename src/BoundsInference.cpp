@@ -124,7 +124,7 @@ public:
             if (stage == 0) {
                 exprs = func.values();
             } else {
-                const UpdateDefinition &r = func.updates()[stage-1];
+                const UpdateDefinition &r = func.update(stage - 1);
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
             }
@@ -159,18 +159,17 @@ public:
                 // figure out what those dimensions are, and just have all
                 // stages but the last use the bounds for the last stage.
                 vector<bool> always_pure_dims(func.args().size(), true);
-                const std::vector<UpdateDefinition> &updates = func.updates();
-                for (size_t i = 0; i < updates.size(); i++) {
+                for (UpdateDefinition i : func.updates()) {
                     for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        const Variable *v = updates[i].args[j].as<Variable>();
+                        const Variable *v = i.args[j].as<Variable>();
                         if (!v || v->name != func.args()[j]) {
                             always_pure_dims[j] = false;
                         }
                     }
                 }
 
-                if (stage < (int)func.updates().size()) {
-                    size_t stages = func.updates().size();
+                if (stage < func.num_update_definitions()) {
+                    size_t stages = func.num_update_definitions();
                     string last_stage = func.name() + ".s" + int_to_string(stages) + ".";
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
@@ -277,13 +276,12 @@ public:
             }
 
             if (stage > 0) {
-                const UpdateDefinition &r = func.updates()[stage-1];
+                const UpdateDefinition &r = func.update(stage - 1);
                 if (r.domain.defined()) {
-                    const vector<ReductionVariable> &dom = r.domain.domain();
-                    for (size_t i = 0; i < dom.size(); i++) {
-                        string arg = name + ".s" + int_to_string(stage) + "." + dom[i].var;
-                        s = LetStmt::make(arg + ".min", dom[i].min, s);
-                        s = LetStmt::make(arg + ".max", dom[i].extent + dom[i].min - 1, s);
+                    for (ReductionVariable i : r.domain.domain()) {
+                        string arg = name + ".s" + int_to_string(stage) + "." + i.var;
+                        s = LetStmt::make(arg + ".min", i.min, s);
+                        s = LetStmt::make(arg + ".max", i.extent + i.min - 1, s);
                     }
                 }
             }
@@ -396,7 +394,7 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                const UpdateDefinition &r = func.updates()[stage-1];
+                const UpdateDefinition &r = func.update(stage - 1);
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &dom = r.domain.domain();
                     for (size_t i = 0; i < dom.size(); i++) {
@@ -455,7 +453,7 @@ public:
             s.stage_prefix = s.name + ".s0.";
             stages.push_back(s);
 
-            for (size_t j = 0; j < f[i].updates().size(); j++) {
+            for (int j = 0; j < f[i].num_update_definitions(); j++) {
                 s.stage = (int)(j+1);
                 s.stage_prefix = s.name + ".s" + int_to_string(s.stage) + ".";
                 s.compute_exprs();
@@ -518,7 +516,7 @@ public:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {
                         Function f(args[j].func);
-                        string stage_name = f.name() + ".s" + int_to_string(f.updates().size());
+                        string stage_name = f.name() + ".s" + int_to_string(f.num_update_definitions());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
@@ -730,11 +728,10 @@ public:
             // And the current bounds on its reduction variables.
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
-                const UpdateDefinition &r = s.func.updates()[s.stage-1];
+                const UpdateDefinition &r = s.func.update(s.stage - 1);
                 if (r.domain.defined()) {
-                    const vector<ReductionVariable> &d = r.domain.domain();
-                    for (size_t i = 0; i < d.size(); i++) {
-                        string var = s.stage_prefix + d[i].var;
+                    for (ReductionVariable d : r.domain.domain()) {
+                        string var = s.stage_prefix + d.var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {
                             body = LetStmt::make(var + ".min", in.min, body);
