@@ -29,7 +29,6 @@ class BasicBlock;
 }
 
 #include <map>
-#include <stack>
 #include <string>
 #include <vector>
 

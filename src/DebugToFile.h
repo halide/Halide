@@ -5,8 +5,9 @@
  * Defines the lowering pass that injects code at the end of
  * every realization to dump functions to a file for debugging.  */
 
-#include "IR.h"
 #include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

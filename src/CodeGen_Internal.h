@@ -8,10 +8,10 @@
  * front-end-facing interface to CodeGen).
  */
 
+#include "IR.h"
 #include "IRVisitor.h"
 #include "LLVM_Headers.h"
 #include "Scope.h"
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

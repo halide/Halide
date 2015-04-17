@@ -4,6 +4,7 @@
 #include "CodeGen_GPU_Dev.h"
 #include "Substitute.h"
 #include "FuseGPUThreadLoops.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
