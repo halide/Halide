@@ -1,4 +1,4 @@
-function pipeline = mex_halide( generator_filename, varargin )
+function mex_halide( generator_filename, varargin )
 %mex_halide - Create a mex library from a Halide generator source file.
 % generator_filename identifies a C++ source file containing a generator.
 % The remaining arguments are a list of name-value pairs of the form
@@ -35,7 +35,7 @@ function pipeline = mex_halide( generator_filename, varargin )
     target = 'host-matlab';
 
     if isempty(getenv('HALIDE_PATH'))
-        % If the user hasnt set the halide path, assume its the current
+        % If the user has not set the halide path, assume it is the current
         % directory.
         setenv('HALIDE_PATH', pwd);
         warning('HALIDE_PATH environment variable is unset, assuming current directory.');
@@ -46,8 +46,8 @@ function pipeline = mex_halide( generator_filename, varargin )
     halide_include = fullfile(halide_path, 'include');
 
     if isempty(getenv('HALIDE_CXX'))
-        % If the user hasnt set a compiler for Halide, use g++.
-        setenv('HALIDE_CXX', 'g++');
+        % If the user has not set a compiler for Halide, use c++.
+        setenv('HALIDE_CXX', 'c++');
     end
     halide_cxx = getenv('HALIDE_CXX');
 
@@ -85,8 +85,4 @@ function pipeline = mex_halide( generator_filename, varargin )
     % Run mex on the resulting object file.
     mex(object_file, '-ldl');
 
-    % Get the resulting function.
-    pipeline = str2func(filename);
-
 end
-
