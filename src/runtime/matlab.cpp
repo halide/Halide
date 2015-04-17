@@ -138,10 +138,10 @@ INLINE const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
 
 // Search for a symbol in the calling process (i.e. matlab).
 template <typename T>
-INLINE T get_symbol(void *user_context, const char *name, bool required) {
-    T s = (T)find_symbol(name);
+INLINE T get_mex_symbol(void *user_context, const char *name, bool required) {
+    T s = (T)get_symbol(name);
     if (required && s == NULL) {
-        error(user_context) << "Matlab API not found: " << name << "\n";
+        error(user_context) << "mex API not found: " << name << "\n";
         return NULL;
     }
     return s;
@@ -229,9 +229,9 @@ WEAK int halide_matlab_init(void *user_context) {
         return halide_error_code_success;
     }
 
-    #define MEX_FN(ret, func, args) func = get_symbol<ret (*)args>(user_context, #func, true);
-    #define MEX_FN_700(ret, func, func_700, args) func_700 = get_symbol<ret (*)args>(user_context, #func, false);
-    #define MEX_FN_730(ret, func, func_730, args) func_730 = get_symbol<ret (*)args>(user_context, #func_730, false);
+    #define MEX_FN(ret, func, args) func = get_mex_symbol<ret (*)args>(user_context, #func, true);
+    #define MEX_FN_700(ret, func, func_700, args) func_700 = get_mex_symbol<ret (*)args>(user_context, #func, false);
+    #define MEX_FN_730(ret, func, func_730, args) func_730 = get_mex_symbol<ret (*)args>(user_context, #func_730, false);
     #include "mex_functions.h"
 
     if (!mexWarnMsgTxt) {

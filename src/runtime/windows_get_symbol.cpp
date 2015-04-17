@@ -10,7 +10,7 @@ extern "C" WIN32API void *GetProcAddress(void *, const char *);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK void *find_symbol(const char *name) {
+WEAK void *get_symbol(const char *name) {
     return GetProcAddress(NULL, name);
 }
 

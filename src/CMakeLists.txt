@@ -96,12 +96,13 @@ set(RUNTIME_CPP
   opencl
   opengl
   osx_clock
+  osx_get_symbol
   osx_host_cpu_count
   osx_opengl_context
   posix_allocator
   posix_clock
   posix_error_handler
-  posix_find_symbol
+  posix_get_symbol
   posix_io
   posix_math
   posix_print
@@ -111,7 +112,7 @@ set(RUNTIME_CPP
   tracing
   windows_clock
   windows_cuda
-  windows_find_symbol
+  windows_get_symbol
   windows_io
   windows_opencl
   windows_thread_pool
