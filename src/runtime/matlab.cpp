@@ -387,9 +387,12 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
 
     // Validate the number of arguments is correct.
     if (nrhs != metadata->num_arguments) {
-        error(user_context) << "Expected " << metadata->num_arguments
-                            << " arguments for Halide pipeline " << metadata->name
-                            << ", got " << nrhs << ".\n";
+        if (nrhs > 0) {
+            // Only report an actual error if there were any arguments at all.
+            error(user_context) << "Expected " << metadata->num_arguments
+                                << " arguments for Halide pipeline " << metadata->name
+                                << ", got " << nrhs << ".\n";
+        }
         halide_matlab_note_pipeline_description(user_context, metadata);
         return result;
     }
