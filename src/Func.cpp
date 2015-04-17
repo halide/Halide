@@ -1671,8 +1671,8 @@ private:
     }
 
     void visit_exprs(const std::vector<Expr>& v) {
-        for (std::vector<Expr>::const_iterator it = v.begin(); it != v.end(); ++it) {
-            visit_expr(*it);
+        for (Expr i : v) {
+            visit_expr(i);
         }
     }
 
