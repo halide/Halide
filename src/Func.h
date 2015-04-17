@@ -82,7 +82,7 @@ struct JITExtern {
     template <typename RT, typename ...Args>
     JITExtern(RT (*f)(Args... args)) {
         is_void_return = voidable_halide_type<RT>(ret_type);
-	init_arg_types<Args...>();
+        init_arg_types<Args...>();
     }
 };
 
