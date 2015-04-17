@@ -1108,7 +1108,7 @@ private:
             op->body.accept(this);
             scope.pop(op->name);
 
-            for (pair<const string, Box>& i : boxes) {
+            for (pair<const string, Box> &i : boxes) {
                 Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     if (box[i].min.defined()) {
