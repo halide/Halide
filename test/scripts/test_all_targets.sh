@@ -70,14 +70,12 @@ if [[ ! -f testing/deps/libz32.a ]]; then
 fi
 
 if [[ `uname` == Darwin ]]; then
-    export CXX="clang++ -stdlib=libc++"
-    export GXX="clang++ -stdlib=libc++"
-    export CC="clang"
+    export COMPILERS="clang++"
+    export CXXFLAGS="-stdlib=libc++"
     export LLVMS="trunk release-3.5 release-3.6 pnacl"
 else
-    export CXX="g++-4.8"
-    export GXX="g++-4.8"
-    export CC="gcc-4.8"
+    export COMPILERS="g++-4.8 g++-4.9"
+    export CXXFLAGS=""
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
     export LLVMS="release-3.5 trunk release-3.6 pnacl"
 fi
@@ -87,104 +85,112 @@ rm -rf testing/reports/head/*
 rm -rf testing/reports/head
 ln -s ${HEAD} testing/reports/head
 
-# test several llvm variants
-for LLVM in ${LLVMS}; do
+for COMPILER in ${COMPILERS}; do
+    export CXX="${COMPILER} ${CXXFLAGS}"
+    export CC="${COMPILER/++/}"
+    export CC="${CC/g-/gcc-}"
+    echo $CXX $CC
 
-    if [[ "$LLVM" == pnacl ]]; then
-        LLVM_REPO=https://chromium.googlesource.com/native_client/pnacl-llvm.git
-        CLANG_REPO=https://chromium.googlesource.com/native_client/pnacl-clang.git
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-    elif [[ "$LLVM" == trunk ]]; then
-        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
-        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-    elif [[ "$LLVM" == release-3.3 ]]; then
-        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
-        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-    elif [[ "$LLVM" == release-3.4 ]]; then
-        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
-        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-    elif [[ "$LLVM" == release-3.5 ]]; then
-        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
-        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-    elif [[ "$LLVM" == release-3.6 ]]; then
-        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_36
-        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_36
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-    fi
+    # test several llvm variants
+    for LLVM in ${LLVMS}; do
 
-    # Check out llvm if necessary
-    if [ ! -d llvm/${LLVM} ]; then
-        if [[ "$LLVM_REPO" == *.git ]]; then
-            git clone $LLVM_REPO llvm/${LLVM}
-            git clone $CLANG_REPO llvm/${LLVM}/tools/clang
-        else
-            svn co $LLVM_REPO llvm/${LLVM}
-            svn co $CLANG_REPO llvm/${LLVM}/tools/clang
+        if [[ "$LLVM" == pnacl ]]; then
+            LLVM_REPO=https://chromium.googlesource.com/native_client/pnacl-llvm.git
+            CLANG_REPO=https://chromium.googlesource.com/native_client/pnacl-clang.git
+            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+        elif [[ "$LLVM" == trunk ]]; then
+            LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
+            CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
+            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+        elif [[ "$LLVM" == release-3.3 ]]; then
+            LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
+            CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
+            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+        elif [[ "$LLVM" == release-3.4 ]]; then
+            LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
+            CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
+            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+        elif [[ "$LLVM" == release-3.5 ]]; then
+            LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
+            CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
+            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+        elif [[ "$LLVM" == release-3.6 ]]; then
+            LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_36
+            CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_36
+            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
         fi
-    fi
 
-    # Configure and build it
-    cd llvm/${LLVM}
-    if [ ! -f build-32/bin/llvm-config ]; then
-        mkdir build-32
-        cd build-32
-        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS} -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
-        make -j8
-        cd ..
-    fi
-    if [ ! -f build-64/bin/llvm-config ]; then
-        mkdir build-64
-        cd build-64
-        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS} -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
-        make -j8
-        cd ..
-    fi
-    cd ../../
+        # Check out llvm if necessary
+        if [ ! -d llvm/${LLVM} ]; then
+            if [[ "$LLVM_REPO" == *.git ]]; then
+                git clone $LLVM_REPO llvm/${LLVM}
+                git clone $CLANG_REPO llvm/${LLVM}/tools/clang
+            else
+                svn co $LLVM_REPO llvm/${LLVM}
+                svn co $CLANG_REPO llvm/${LLVM}/tools/clang
+            fi
+        fi
 
-    if [[ "$LLVM" == trunk ]]; then
-        # Update this llvm and rebuild if it's trunk
+        export BUILD32="build-32-${COMPILER}"
+        export BUILD64="build-64-${COMPILER}"
+
+        # Configure and build it
         cd llvm/${LLVM}
-        svn up &&
-        cd tools/clang &&
-        svn up &&
-        cd ../../ &&
-        make -j8 -C build-32 &&
-        make -j8 -C build-64
+        if [ ! -f ${BUILD32}/bin/llvm-config ]; then
+            mkdir ${BUILD32}
+            cd ${BUILD32}
+            cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS} -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
+            make -j16
+            cd ..
+        fi
+        if [ ! -f ${BUILD64}/bin/llvm-config ]; then
+            mkdir ${BUILD64}
+            cd ${BUILD64}
+            cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS} -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+            make -j16
+            cd ..
+        fi
         cd ../../
-    elif [[ "$LLVM" == pnacl ]]; then
-        # Update this llvm and rebuild if it's pnacl
-        cd llvm/${LLVM}
-        git fetch &&
-        # This version works with pepper_41
-        git checkout b82e6c61c08dcd77a97cf6cb5020898bb49f97a8
-        cd tools/clang &&
-        git fetch &&
-        git checkout a46d3ebfd8f295a32e2dab6241d207e04302b483
-        cd ../../ &&
-        make -j8 -C build-32 &&
-        make -j8 -C build-64
-        cd ../../
-    fi
-done
 
-pwd
+        if [[ "$LLVM" == trunk ]]; then
+            # Update this llvm and rebuild if it's trunk
+            cd llvm/${LLVM}
+            svn up &&
+            cd tools/clang &&
+            svn up &&
+            cd ../../ &&
+            make -j16 -C ${BUILD32} &&
+            make -j16 -C ${BUILD64}
+            cd ../../
+        elif [[ "$LLVM" == pnacl ]]; then
+            # Update this llvm and rebuild if it's pnacl
+            cd llvm/${LLVM}
+            git fetch &&
+            # This version works with pepper_41
+            git checkout b82e6c61c08dcd77a97cf6cb5020898bb49f97a8
+            cd tools/clang &&
+            git fetch &&
+            git checkout a46d3ebfd8f295a32e2dab6241d207e04302b483
+            cd ../../ &&
+            make -j16 -C ${BUILD32} &&
+            make -j16 -C ${BUILD64}
+            cd ../../
+        fi
+    done
 
-for LLVM in ${LLVMS}; do
-    if [[ "$LLVM" == pnacl ]]; then
-        TARGETS="x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
-    elif [[ "$LLVM" == trunk ]]; then
-        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx host-cuda host-opencl"
-    else
-        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx"
-    fi
+    for LLVM in ${LLVMS}; do
+        if [[ "$LLVM" == pnacl ]]; then
+            TARGETS="x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
+        elif [[ "$LLVM" == trunk ]]; then
+            TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx host-cuda host-opencl"
+        else
+            TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx"
+        fi
 
-    for TARGET in $TARGETS; do
-        echo Testing $LLVM $TARGET ...
-        test/scripts/test_target.sh $LLVM $TARGET &> testing/reports/${HEAD}/testlog_${TARGET}_${LLVM}.txt
+        for TARGET in $TARGETS; do
+            echo Testing $LLVM $TARGET ...
+            test/scripts/test_target.sh $LLVM $TARGET $COMPILER &> testing/reports/${HEAD}/testlog_${TARGET}_${LLVM}_${COMPILER}.txt
+        done
     done
 done
 
