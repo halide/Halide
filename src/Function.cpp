@@ -41,6 +41,52 @@ struct FunctionContents {
     bool frozen;
 
     FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
+
+    void accept(IRVisitor *visitor) const {
+        for (Expr i : values) {
+            i.accept(visitor);
+        }
+
+        for (UpdateDefinition update : updates) {
+            for (Expr i : update.values) {
+                i.accept(visitor);
+            }
+            for (Expr i : update.args) {
+                i.accept(visitor);
+            }
+
+            if (update.domain.defined()) {
+                for (ReductionVariable rv : update.domain.domain()) {
+                    rv.min.accept(visitor);
+                    rv.extent.accept(visitor);
+                }
+            }
+        }
+
+        if (!extern_function_name.empty()) {
+            for (ExternFuncArgument i : extern_arguments) {
+                if (i.is_func()) {
+                    i.func.ptr->accept(visitor);
+                } else if (i.is_expr()) {
+                    i.expr.accept(visitor);
+                }
+            }
+        }
+
+        for (Parameter i : output_buffers) {
+            for (size_t j = 0; j < args.size() && j < 4; j++) {
+                if (i.min_constraint(j).defined()) {
+                    i.min_constraint(j).accept(visitor);
+                }
+                if (i.stride_constraint(j).defined()) {
+                    i.stride_constraint(j).accept(visitor);
+                }
+                if (i.extent_constraint(j).defined()) {
+                    i.extent_constraint(j).accept(visitor);
+                }
+            }
+        }
+    }
 };
 
 template<>
@@ -494,7 +540,10 @@ void Function::define_extern(const std::string &function_name,
         contents.ptr->args[i] = arg;
         contents.ptr->schedule.storage_dims().push_back(arg);
     }
+}
 
+void Function::accept(IRVisitor *visitor) const {
+    contents.ptr->accept(visitor);
 }
 
 const std::string &Function::name() const {

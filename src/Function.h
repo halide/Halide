@@ -70,6 +70,9 @@ public:
     /** Reconstruct a Function from a FunctionContents pointer. */
     Function(const IntrusivePtr<FunctionContents> &c) : contents(c) {}
 
+    /** Construct a new function with the given name */
+    Function(const std::string &n);
+
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
      * appear in the args list. 'value' must not depend on any
@@ -86,9 +89,9 @@ public:
      * definition's argument in the same index. */
     void define_update(const std::vector<Expr> &args, std::vector<Expr> values);
 
-
-    /** Construct a new function with the given name */
-    Function(const std::string &n);
+    /** Accept a visitor to visit all of the definitions and arguments
+     * of this function. */
+    void accept(IRVisitor *visitor) const;
 
     /** Get the name of the function */
     const std::string &name() const;

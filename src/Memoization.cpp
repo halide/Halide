@@ -18,69 +18,20 @@ public:
     FindParameterDependencies() { }
     ~FindParameterDependencies() { }
 
-  void visit_function(const Function &function) {
-        if (function.has_pure_definition()) {
-            const std::vector<Expr> &values = function.values();
-            for (size_t i = 0; i < values.size(); i++) {
-                values[i].accept(this);
-            }
-        }
-
-        const std::vector<UpdateDefinition> &updates =
-            function.updates();
-        for (size_t i = 0; i < updates.size(); i++) {
-            const std::vector<Expr> &values = updates[i].values;
-            for (size_t j = 0; j < values.size(); j++) {
-                values[j].accept(this);
-            }
-
-            const std::vector<Expr> &args = updates[i].args;
-            for (size_t j = 0; j < args.size(); j++) {
-                args[j].accept(this);
-            }
-
-            if (updates[i].domain.defined()) {
-                const std::vector<ReductionVariable> &rvars =
-                    updates[i].domain.domain();
-                for (size_t j = 0; j < rvars.size(); j++) {
-                    rvars[j].min.accept(this);
-                    rvars[j].extent.accept(this);
-                }
-            }
-        }
+    void visit_function(const Function &function) {
+        function.accept(this);
 
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
                 function.extern_arguments();
             for (size_t i = 0; i < extern_args.size(); i++) {
-                if (extern_args[i].is_func()) {
-                  visit_function(extern_args[i].func);
-                } else if (extern_args[i].is_expr()) {
-                    extern_args[i].expr.accept(this);
-                } else if (extern_args[i].is_buffer()) {
+                if (extern_args[i].is_buffer()) {
                     // Function with an extern definition
                     record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
                                                        extern_args[i].buffer.dimensions(),
                                                        extern_args[i].buffer.name()));
                 } else if (extern_args[i].is_image_param()) {
                     record(extern_args[i].image_param);
-                } else {
-                    assert(!extern_args[i].defined() && "Unexpected ExternFunctionArgument type.");
-                }
-            }
-        }
-        const std::vector<Parameter> &output_buffers =
-            function.output_buffers();
-        for (size_t i = 0; i < output_buffers.size(); i++) {
-            for (int j = 0; j < function.dimensions() && j < 4; j++) {
-                if (output_buffers[i].min_constraint(i).defined()) {
-                    output_buffers[i].min_constraint(i).accept(this);
-                }
-                if (output_buffers[i].stride_constraint(i).defined()) {
-                    output_buffers[i].stride_constraint(i).accept(this);
-                }
-                if (output_buffers[i].extent_constraint(i).defined()) {
-                    output_buffers[i].extent_constraint(i).accept(this);
                 }
             }
         }
@@ -423,7 +374,7 @@ private:
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(f.output_types()[0].bytes());
-            std::string max_stage_num = int_to_string(f.updates().size());
+            std::string max_stage_num = int_to_string(f.num_update_definitions());
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
                 Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");

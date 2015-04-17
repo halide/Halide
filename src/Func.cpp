@@ -120,9 +120,9 @@ const std::vector<Expr> &Func::update_args(int idx) const {
         << "Can't call Func::update_args() on Func \"" << name()
         << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    return func.updates()[idx].args;
+    return func.update(idx).args;
 }
 
 /** Get the right-hand-side of the update definition. An error if
@@ -131,11 +131,11 @@ Expr Func::update_value(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    user_assert(func.updates()[idx].values.size() == 1)
+    user_assert(func.update(idx).values.size() == 1)
         << "Can't call Func::update_value() on Func \"" << name() << "\", because it has multiple values.\n";
-    return func.updates()[idx].values[0];
+    return func.update(idx).values[0];
 }
 
 /** The update values returned by a Func, in Tuple form. */
@@ -143,9 +143,9 @@ Tuple Func::update_values(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    return Tuple(func.updates()[idx].values);
+    return Tuple(func.update(idx).values);
 }
 
 /** Get the reduction domain for the update definition. Returns an
@@ -155,9 +155,9 @@ RDom Func::reduction_domain(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    return func.updates()[idx].domain;
+    return func.update(idx).domain;
 }
 
 bool Func::defined() const {
@@ -171,7 +171,7 @@ bool Func::has_update_definition() const {
 
 /** How many update definitions are there? */
 int Func::num_update_definitions() const {
-    return (int)func.updates().size();
+    return func.num_update_definitions();
 }
 
 /** Is this function external? */
@@ -1643,7 +1643,7 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_update(args, e.as_vector());
 
-    int update_stage = func.updates().size() - 1;
+    int update_stage = func.num_update_definitions() - 1;
     return Stage(func.update_schedule(update_stage),
                  func.name() + ".update(" + int_to_string(update_stage) + ")");
 }
@@ -1818,44 +1818,36 @@ public:
         if (func.has_pure_definition()) {
             visit_exprs(func.values());
         }
-        for (std::vector<UpdateDefinition>::const_iterator update = func.updates().begin();
-             update != func.updates().end();
-             ++update) {
-            visit_exprs(update->values);
-            visit_exprs(update->args);
-            if (update->domain.defined()) {
-                for (std::vector<ReductionVariable>::const_iterator rvar = update->domain.domain().begin();
-                     rvar != update->domain.domain().end();
-                     ++rvar) {
-                visit_expr(rvar->min);
-                visit_expr(rvar->extent);
+        for (const auto &update : func.updates()) {
+            visit_exprs(update.values);
+            visit_exprs(update.args);
+            if (update.domain.defined()) {
+                for (const auto &rvar : update.domain.domain()) {
+                    visit_expr(rvar.min);
+                    visit_expr(rvar.extent);
+                }
             }
-          }
         }
         if (func.has_extern_definition()) {
-            for (std::vector<ExternFuncArgument>::const_iterator extern_arg = func.extern_arguments().begin();
-                 extern_arg != func.extern_arguments().end();
-                 ++extern_arg) {
-            if (extern_arg->is_func()) {
-                visit_function(extern_arg->func);
-            } else if (extern_arg->is_expr()) {
-                visit_expr(extern_arg->expr);
-            } else if (extern_arg->is_buffer()) {
-                include_parameter(Parameter(extern_arg->buffer.type(), true,
-                                            extern_arg->buffer.dimensions(),
-                                            extern_arg->buffer.name()));
-            } else if (extern_arg->is_image_param()) {
-                include_parameter(extern_arg->image_param);
+            for (const auto &extern_arg : func.extern_arguments()) {
+                if (extern_arg.is_func()) {
+                    visit_function(extern_arg.func);
+                } else if (extern_arg.is_expr()) {
+                    visit_expr(extern_arg.expr);
+                } else if (extern_arg.is_buffer()) {
+                    include_parameter(Parameter(extern_arg.buffer.type(), true,
+                                                extern_arg.buffer.dimensions(),
+                                                extern_arg.buffer.name()));
+                } else if (extern_arg.is_image_param()) {
+                    include_parameter(extern_arg.image_param);
+                }
             }
-          }
         }
-        for (std::vector<Parameter>::const_iterator buf = func.output_buffers().begin();
-             buf != func.output_buffers().end();
-             ++buf) {
+        for (const auto &buf : func.output_buffers()) {
             for (int i = 0; i < std::min(func.dimensions(), 4); i++) {
-                visit_expr(buf->min_constraint(i));
-                visit_expr(buf->stride_constraint(i));
-                visit_expr(buf->extent_constraint(i));
+                visit_expr(buf.min_constraint(i));
+                visit_expr(buf.stride_constraint(i));
+                visit_expr(buf.extent_constraint(i));
             }
         }
     }

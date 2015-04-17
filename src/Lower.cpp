@@ -534,8 +534,8 @@ vector<Stmt> build_update(Function f) {
 
     vector<Stmt> updates;
 
-    for (size_t i = 0; i < f.updates().size(); i++) {
-        UpdateDefinition r = f.updates()[i];
+    for (int i = 0; i < f.num_update_definitions(); i++) {
+        UpdateDefinition r = f.update(i);
 
         string prefix = f.name() + ".s" + int_to_string(i+1) + ".";
 
@@ -592,7 +592,7 @@ pair<Stmt, Stmt> build_production(Function func) {
 // large to cover the inferred bounds required.
 Stmt inject_explicit_bounds(Stmt body, Function func) {
     const Schedule &s = func.schedule();
-    for (size_t stage = 0; stage <= func.updates().size(); stage++) {
+    for (int stage = 0; stage <= func.num_update_definitions(); stage++) {
         for (size_t i = 0; i < s.bounds().size(); i++) {
             Bound b = s.bounds()[i];
             Expr max_val = (b.extent + b.min) - 1;
@@ -1024,13 +1024,12 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.schedule().touched();
-    for (size_t i = 0; i < f.updates().size(); i++) {
-        const UpdateDefinition &r = f.updates()[i];
-        any_scheduled = any_scheduled || r.schedule.touched();
+    for (int i = 0; i < f.num_update_definitions(); i++) {
+        any_scheduled = any_scheduled || f.update_schedule(i).touched();
     }
     if (any_scheduled) {
-        for (size_t i = 0; i < f.updates().size(); i++) {
-            const UpdateDefinition &r = f.updates()[i];
+        for (int i = 0; i < f.num_update_definitions(); i++) {
+            const UpdateDefinition &r = f.update(i);
             if (!r.schedule.touched()) {
                 std::cerr << "Warning: Update step " << i
                           << " of function " << f.name()
