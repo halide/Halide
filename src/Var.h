@@ -18,10 +18,10 @@ class Var {
     std::string _name;
 public:
     /** Construct a Var with the given name */
-    Var(const std::string &n);
+    EXPORT Var(const std::string &n);
 
     /** Construct a Var with an automatically-generated unique name. */
-    Var();
+    EXPORT Var();
 
     /** Get the name of a Var */
     const std::string &name() const {return _name;}
@@ -115,7 +115,7 @@ public:
      * user Var declarations from making names of this form.
      */
     //{
-    static bool is_implicit(const std::string &name);
+    EXPORT static bool is_implicit(const std::string &name);
     bool is_implicit() const {
         return is_implicit(name());
     }
