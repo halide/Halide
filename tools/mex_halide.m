@@ -35,10 +35,14 @@ function mex_halide( generator_filename, varargin )
     target = 'host-matlab';
 
     if isempty(getenv('HALIDE_PATH'))
-        % If the user has not set the halide path, assume it is the current
-        % directory.
-        setenv('HALIDE_PATH', pwd);
-        warning('HALIDE_PATH environment variable is unset, assuming current directory.');
+        % If the user has not set the halide path, get the path of
+        % this file (presumably in $HALIDE_PATH/tools/) and use
+        % that.
+        [path, ~] = fileparts(mfilename('fullpath'));
+        halide_path = fullfile(path, '..');
+        setenv('HALIDE_PATH', halide_path);
+        warning(['HALIDE_PATH environment variable is unset, assuming ' ...
+                 '.. relative to mex_halide.']);
     end
     halide_path = getenv('HALIDE_PATH');
 
