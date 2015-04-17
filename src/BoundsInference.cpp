@@ -140,13 +140,12 @@ public:
             // Merge all the relevant boxes.
             Box b;
 
-            for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
-                 iter != bounds.end(); ++iter) {
-                string func_name = iter->first.first;
-                string stage_name = func_name + ".s" + int_to_string(iter->first.second);
+            for (const pair<pair<string, int>, Box> &i : bounds) {
+                string func_name = i.first.first;
+                string stage_name = func_name + ".s" + int_to_string(i.first.second);
                 if (stage_name == producing_stage ||
                     inner_productions.count(func_name)) {
-                    merge_boxes(b, iter->second);
+                    merge_boxes(b, i.second);
                 }
             }
 
@@ -535,9 +534,8 @@ public:
                 const vector<Expr> &exprs = consumer.exprs;
                 for (size_t j = 0; j < exprs.size(); j++) {
                     map<string, Box> new_boxes = boxes_required(exprs[j], scope, func_bounds);
-                    for (map<string, Box>::iterator iter = new_boxes.begin();
-                         iter != new_boxes.end(); ++iter) {
-                        merge_boxes(boxes[iter->first], iter->second);
+                    for (const pair<string, Box> &i : new_boxes) {
+                        merge_boxes(boxes[i.first], i.second);
                     }
                 }
             }
