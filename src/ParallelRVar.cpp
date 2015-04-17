@@ -2,7 +2,6 @@
 #include "ParallelRVar.h"
 #include "IRMutator.h"
 #include "Debug.h"
-#include "CSE.h"
 #include "Simplify.h"
 #include "IROperator.h"
 

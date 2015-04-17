@@ -9,8 +9,6 @@
 #include <map>
 
 #include "IR.h"
-#include "Target.h"
-#include "Scope.h"
 
 namespace Halide {
 namespace Internal {

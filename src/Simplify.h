@@ -5,10 +5,11 @@
  * Methods for simplifying halide statements and expressions
  */
 
+#include <cmath>
+
 #include "IR.h"
 #include "Bounds.h"
 #include "ModulusRemainder.h"
-#include <cmath>
 
 namespace Halide {
 namespace Internal {

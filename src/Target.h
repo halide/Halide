@@ -5,10 +5,10 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <bitset>
-#include <limits>
 #include <stdint.h>
+#include <bitset>
 #include <string>
+
 #include "Error.h"
 #include "Type.h"
 #include "Util.h"

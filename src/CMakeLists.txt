@@ -446,6 +446,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UniquifyVariableNames.cpp
   UnrollLoops.cpp
   Util.cpp
+  Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
