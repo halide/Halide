@@ -28,9 +28,9 @@ int main(int argc, char **argv) {
     {
         ImageParam state(Int(32), 0);
 
-        Expr c_real = cos(state() / 30.0f);
-        Expr c_imag = sin(state() / 30.0f);
-        Expr r_adjust = (cos(state() / 43.0f) + 2.0f) * 0.25f;
+        Expr c_real = cos(state() / 60.0f);
+        Expr c_imag = sin(state() / 43.0f);
+        Expr r_adjust = (cos(state() / 86.0f) + 2.0f) * 0.25f;
         c_real *= r_adjust;
         c_imag *= r_adjust;
 
@@ -51,15 +51,17 @@ int main(int argc, char **argv) {
 
         julia(x, y, t) = Tuple(new_real, new_imag);
 
-        // What's the closest to the origin a point gets in 20 iterations?
+        // Define some arbitrary measure on the complex plane, and
+        // compute the minimum of that measure over the orbit of each
+        // point.
         new_real = julia(x, y, t)[0];
         new_imag = julia(x, y, t)[1];
-        mag = new_real * new_real + new_imag * new_imag;
-        Expr escape = minimum(mag);
+        mag = new_real * c_real - new_imag * new_imag * c_imag;
+        Expr measure = minimum(abs(mag - 0.1f));
 
         // Now pick a color based on that
-        Expr r_f = 16 * sqrt(2.0f/(escape + 0.01f));
-        Expr b_f = 512 * escape * fast_exp(-escape*escape);
+        Expr r_f = 16 * sqrt(2.0f/(measure + 0.01f));
+        Expr b_f = 512 * measure * fast_exp(-measure*measure);
         Expr g_f = (r_f + b_f)/2;
 
         Expr min_c = min(r_f, min(b_f, g_f));
