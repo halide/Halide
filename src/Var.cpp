@@ -1,5 +1,3 @@
-#include <sstream>
-
 #include "Var.h"
 #include "Util.h"
 
@@ -15,9 +13,7 @@ Var::Var() : _name(Internal::make_entity_name(this, "Halide::Var", 'v')) {
 }
 
 Var Var::implicit(int n) {
-    std::ostringstream str;
-    str << "_" << n;
-    return Var(str.str());
+    return Var("_" + Internal::int_to_string(n));
 }
 
 bool Var::is_implicit(const std::string &name) {

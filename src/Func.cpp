@@ -1617,18 +1617,18 @@ public:
         if (func.has_pure_definition()) {
             visit_exprs(func.values());
         }
-        for (const auto &update : func.updates()) {
+        for (const UpdateDefinition &update : func.updates()) {
             visit_exprs(update.values);
             visit_exprs(update.args);
             if (update.domain.defined()) {
-                for (const auto &rvar : update.domain.domain()) {
+                for (const ReductionVariable &rvar : update.domain.domain()) {
                     visit_expr(rvar.min);
                     visit_expr(rvar.extent);
                 }
             }
         }
         if (func.has_extern_definition()) {
-            for (const auto &extern_arg : func.extern_arguments()) {
+            for (const ExternFuncArgument &extern_arg : func.extern_arguments()) {
                 if (extern_arg.is_func()) {
                     visit_function(extern_arg.func);
                 } else if (extern_arg.is_expr()) {
@@ -1642,7 +1642,7 @@ public:
                 }
             }
         }
-        for (const auto &buf : func.output_buffers()) {
+        for (const Parameter &buf : func.output_buffers()) {
             for (int i = 0; i < std::min(func.dimensions(), 4); i++) {
                 visit_expr(buf.min_constraint(i));
                 visit_expr(buf.stride_constraint(i));
