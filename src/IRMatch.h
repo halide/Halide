@@ -5,8 +5,6 @@
  * Defines a method to match a fragment of IR against a pattern containing wildcards
  */
 
-#include <vector>
-
 #include "IR.h"
 
 namespace Halide {

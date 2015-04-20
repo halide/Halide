@@ -11,10 +11,6 @@
 #include "Schedule.h"
 #include "Reduction.h"
 
-#include <string>
-#include <vector>
-#include <sstream>
-
 namespace Halide {
 
 namespace Internal {
