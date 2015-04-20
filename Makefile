@@ -822,7 +822,7 @@ time_compilation_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.gen
 	$(TIME_COMPILATION) compile_times_generator.csv make $(FILTERS_DIR)/tiled_blur_interleaved.o
 
 .PHONY: test_apps
-test_apps: $(BIN_DIR)/libHalide.a include/Halide.h include/HalideRuntime.h
+test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
 	make -C apps/bilateral_grid clean
 	make -C apps/bilateral_grid out.png
 	make -C apps/local_laplacian clean
