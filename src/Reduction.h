@@ -30,7 +30,7 @@ public:
      * all values of the given ReductionVariable in scanline order,
      * with the start of the vector being innermost, and the end of
      * the vector being outermost. */
-    ReductionDomain(const std::vector<ReductionVariable> &domain);
+    EXPORT ReductionDomain(const std::vector<ReductionVariable> &domain);
 
     /** Is this handle non-NULL */
     bool defined() const {
@@ -45,7 +45,7 @@ public:
     }
 
     /** Immutable access to the reduction variables. */
-    const std::vector<ReductionVariable> &domain() const;
+    EXPORT const std::vector<ReductionVariable> &domain() const;
 };
 
 }
