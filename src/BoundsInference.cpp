@@ -112,7 +112,7 @@ public:
 
     struct Stage {
         Function func;
-        int stage; // 0 is the pure definition, 1 is the first update
+        size_t stage; // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
@@ -452,7 +452,7 @@ public:
             s.stage_prefix = s.name + ".s0.";
             stages.push_back(s);
 
-            for (int j = 0; j < f[i].updates().size(); j++) {
+            for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
                 s.stage_prefix = s.name + ".s" + int_to_string(s.stage) + ".";
                 s.compute_exprs();
