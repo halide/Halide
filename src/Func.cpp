@@ -122,7 +122,7 @@ const std::vector<Expr> &Func::update_args(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    return func.update(idx).args;
+    return func.updates()[idx].args;
 }
 
 /** Get the right-hand-side of the update definition. An error if
@@ -133,9 +133,9 @@ Expr Func::update_value(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    user_assert(func.update(idx).values.size() == 1)
+    user_assert(func.updates()[idx].values.size() == 1)
         << "Can't call Func::update_value() on Func \"" << name() << "\", because it has multiple values.\n";
-    return func.update(idx).values[0];
+    return func.updates()[idx].values[0];
 }
 
 /** The update values returned by a Func, in Tuple form. */
@@ -145,7 +145,7 @@ Tuple Func::update_values(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    return Tuple(func.update(idx).values);
+    return Tuple(func.updates()[idx].values);
 }
 
 /** Get the reduction domain for the update definition. Returns an
@@ -157,7 +157,7 @@ RDom Func::reduction_domain(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    return func.update(idx).domain;
+    return func.updates()[idx].domain;
 }
 
 bool Func::defined() const {
@@ -171,7 +171,7 @@ bool Func::has_update_definition() const {
 
 /** How many update definitions are there? */
 int Func::num_update_definitions() const {
-    return func.num_update_definitions();
+    return static_cast<int>(func.updates().size());
 }
 
 /** Is this function external? */
@@ -1442,7 +1442,7 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_update(args, e.as_vector());
 
-    int update_stage = func.num_update_definitions() - 1;
+    size_t update_stage = func.updates().size() - 1;
     return Stage(func.update_schedule(update_stage),
                  func.name() + ".update(" + int_to_string(update_stage) + ")");
 }
