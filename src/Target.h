@@ -61,6 +61,8 @@ struct Target {
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
+        Matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
