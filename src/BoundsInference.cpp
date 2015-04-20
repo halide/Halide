@@ -124,7 +124,7 @@ public:
             if (stage == 0) {
                 exprs = func.values();
             } else {
-                const UpdateDefinition &r = func.update(stage - 1);
+                const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
             }
@@ -167,8 +167,8 @@ public:
                     }
                 }
 
-                if (stage < func.num_update_definitions()) {
-                    size_t stages = func.num_update_definitions();
+                if (stage < func.updates().size()) {
+                    size_t stages = func.updates().size();
                     string last_stage = func.name() + ".s" + int_to_string(stages) + ".";
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
@@ -275,7 +275,7 @@ public:
             }
 
             if (stage > 0) {
-                const UpdateDefinition &r = func.update(stage - 1);
+                const UpdateDefinition &r = func.updates()[stage - 1];
                 if (r.domain.defined()) {
                     for (ReductionVariable i : r.domain.domain()) {
                         string arg = name + ".s" + int_to_string(stage) + "." + i.var;
@@ -393,7 +393,7 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                const UpdateDefinition &r = func.update(stage - 1);
+                const UpdateDefinition &r = func.updates()[stage - 1];
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &dom = r.domain.domain();
                     for (size_t i = 0; i < dom.size(); i++) {
@@ -452,7 +452,7 @@ public:
             s.stage_prefix = s.name + ".s0.";
             stages.push_back(s);
 
-            for (int j = 0; j < f[i].num_update_definitions(); j++) {
+            for (int j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
                 s.stage_prefix = s.name + ".s" + int_to_string(s.stage) + ".";
                 s.compute_exprs();
@@ -515,7 +515,7 @@ public:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {
                         Function f(args[j].func);
-                        string stage_name = f.name() + ".s" + int_to_string(f.num_update_definitions());
+                        string stage_name = f.name() + ".s" + int_to_string(f.updates().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
@@ -726,7 +726,7 @@ public:
             // And the current bounds on its reduction variables.
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
-                const UpdateDefinition &r = s.func.update(s.stage - 1);
+                const UpdateDefinition &r = s.func.updates()[s.stage - 1];
                 if (r.domain.defined()) {
                     for (ReductionVariable d : r.domain.domain()) {
                         string var = s.stage_prefix + d.var;

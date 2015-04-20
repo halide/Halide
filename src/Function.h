@@ -142,12 +142,6 @@ public:
      * stage */
     Schedule &update_schedule(int idx = 0);
 
-    /** Get the number of update definitions in this function. */
-    int num_update_definitions() const;
-
-    /** Get a const reference to the idx'th update definition of this function. */
-    const UpdateDefinition &update(int idx = 0) const;
-
     /** Get a const reference to this function's update definitions. */
     const std::vector<UpdateDefinition> &updates() const;
 
