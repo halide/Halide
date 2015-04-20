@@ -1,12 +1,21 @@
 function mex_halide( generator_filename, varargin )
-%mex_halide - Create a mex library from a Halide generator source file.
+%mex_halide - Create a mex library from a Halide generator source
+%file.
+%
 % generator_filename identifies a C++ source file containing a generator.
 % The remaining arguments are a list of name-value pairs of the form
 % 'generator_param=value' used to assign the generator params, or
 % additional flags:
-%   -s <file>: Add another source file to the Generator build.
-%   -e assembly,bitcode,stmt,html: Which outputs to emit from the generator.
-%   -c <compiler>: Which C++ compiler to use to build the generator.
+%   -e <assembly,bitcode,stmt,html>: Which outputs to emit from the
+%      generator, multiply outputs can be specified with a comma
+%      delimited list.
+%   -c <compiler>: Which C++ compiler to use to build the
+%      generator. Default is 'c++'.
+%   -g <generator>: Which generator to build. If only one generator
+%      is registered, it will be used by default.
+%
+% If a target is specified by a generator param with target=..., the
+% 'matlab' feature flag must be present.
 
     gengen_cpp = ['#include "Halide.h"', sprintf('\n'), ...
                   'int main(int argc, char **argv) {', ...
