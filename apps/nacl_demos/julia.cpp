@@ -28,14 +28,14 @@ int main(int argc, char **argv) {
     {
         ImageParam state(Int(32), 0);
 
-        Expr c_real = cos(state() / 30.0f);
-        Expr c_imag = sin(state() / 30.0f);
-        Expr r_adjust = (cos(state() / 43.0f) + 1.5f) * 0.5f;
+        Expr c_real = cos(state() / 60.0f);
+        Expr c_imag = sin(state() / 43.0f);
+        Expr r_adjust = (cos(state() / 86.0f) + 2.0f) * 0.25f;
         c_real *= r_adjust;
         c_imag *= r_adjust;
 
         Func julia;
-        julia(x, y, c) = Tuple((x - 511.5f)/256.0f, (y - 511.5f)/256.0f);
+        julia(x, y, c) = Tuple((x - 511.5f)/350.0f, (y - 511.5f)/350.0f);
 
         const int iters = 20;
 
@@ -45,29 +45,37 @@ int main(int argc, char **argv) {
 
         Expr new_real = old_real * old_real - old_imag * old_imag + c_real;
         Expr new_imag = 2 * old_real * old_imag + c_imag;
+        Expr mag = new_real * new_real + new_imag * new_imag;
+        new_real = select(mag > 1e20f, old_real, new_real);
+        new_imag = select(mag > 1e20f, old_imag, new_imag);
 
         julia(x, y, t) = Tuple(new_real, new_imag);
 
-        // How many iterations until something escapes a circle of radius 2?
+        // Define some arbitrary measure on the complex plane, and
+        // compute the minimum of that measure over the orbit of each
+        // point.
         new_real = julia(x, y, t)[0];
         new_imag = julia(x, y, t)[1];
-        Expr mag = new_real * new_real + new_imag * new_imag;
-        Expr escape = argmin(select(mag < 4, 1, 0))[0];
+        mag = new_real * c_real - new_imag * new_imag * c_imag;
+        Expr measure = minimum(abs(mag - 0.1f));
 
-        // Now pick a color based on the number of escape iterations.
-        Expr r_scale = 128;
-        Expr g_scale = 200;
-        Expr b_scale = 256;
+        // Now pick a color based on that
+        Expr r_f = 16 * sqrt(2.0f/(measure + 0.01f));
+        Expr b_f = 512 * measure * fast_exp(-measure*measure);
+        Expr g_f = (r_f + b_f)/2;
 
-        Func color_map;
-        Expr escape_f = sqrt(cast<float>(x) / (iters + 1));
-        Expr r = cast<int32_t>(escape_f * r_scale);
-        Expr g = cast<int32_t>(escape_f * g_scale);
-        Expr b = cast<int32_t>(escape_f * b_scale);
-        color_map(x) = (255 << 24) | (r << 16) | (g << 8) | b;
+        Expr min_c = min(r_f, min(b_f, g_f));
+        r_f -= min_c;
+        b_f -= min_c;
+        g_f -= min_c;
+
+        Expr r = cast<int32_t>(min(r_f, 255));
+        Expr g = cast<int32_t>(min(g_f, 255));
+        Expr b = cast<int32_t>(min(b_f, 255));
+        Expr color = (255 << 24) | (r << 16) | (g << 8) | b;
 
         Func render;
-        render(x, y) = color_map(escape);
+        render(x, y) = color;
 
         Var yi;
 

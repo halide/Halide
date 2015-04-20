@@ -289,6 +289,7 @@ SOURCE_FILES = \
   UniquifyVariableNames.cpp \
   UnrollLoops.cpp \
   Util.cpp \
+  Var.cpp \
   VaryingAttributes.cpp \
   VectorizeLoops.cpp
 

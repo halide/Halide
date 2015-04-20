@@ -5,9 +5,6 @@
  * Defines the lowering pass that determines how large internal allocations should be.
  */
 
-#include <map>
-#include <string>
-
 #include "IR.h"
 #include "Bounds.h"
 

@@ -1,6 +1,4 @@
 #include "LLVM_Runtime_Linker.h"
-
-#include <memory>
 #include "LLVM_Headers.h"
 
 namespace Halide {

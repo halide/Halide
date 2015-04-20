@@ -1,8 +1,6 @@
 #ifndef HALIDE_EXTERN_H
 #define HALIDE_EXTERN_H
 
-#include "Debug.h"
-
 /** \file
  *
  * Convenience macros that lift functions that take C types into
@@ -10,6 +8,8 @@
  * function at runtime under the hood. See test/c_function.cpp for
  * example usage.
  */
+
+#include "Debug.h"
 
 #define _halide_check_arg_type(t, name, e, n)                     \
     _halide_user_assert(e.type() == t) << "Type mismatch for argument " << n << " to extern function " << #name << ". Type expected is " << t << " but the argument " << e << " has type " << e.type() << ".\n";

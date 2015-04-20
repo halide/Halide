@@ -1,6 +1,5 @@
 #include "UniquifyVariableNames.h"
 #include "IRMutator.h"
-#include "Scope.h"
 #include <sstream>
 
 namespace Halide {
