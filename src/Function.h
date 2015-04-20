@@ -57,7 +57,7 @@ struct UpdateDefinition {
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
-class Function {
+class EXPORT Function {
 private:
     IntrusivePtr<FunctionContents> contents;
 public:
