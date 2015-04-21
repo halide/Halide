@@ -7,6 +7,11 @@
 #include "static_image.h"
 
 // Provide a simple mock implementation of matlab's API so we can test the mexFunction.
+
+#ifdef _WIN32
+#define EXPORT __declspec(dllexport)
+#endif
+
 enum mxClassID {
     mxSINGLE_CLASS = 7,
     mxINT32_CLASS = 12,
@@ -56,57 +61,57 @@ public:
 
 extern "C" {
 
-int mexWarnMsgTxt(const char *msg) {
+EXPORT int mexWarnMsgTxt(const char *msg) {
     // Don't bother with the varargs.
     printf("%s\n", msg);
     return 0;
 }
 
-size_t mxGetNumberOfDimensions_730(const mxArray *a) {
+EXPORT size_t mxGetNumberOfDimensions_730(const mxArray *a) {
     return a->get_number_of_dimensions();
 }
 
-int mxGetNumberOfDimensions_700(const mxArray *a) {
+EXPORT int mxGetNumberOfDimensions_700(const mxArray *a) {
     return a->get_number_of_dimensions();
 }
 
-const size_t *mxGetDimensions_730(const mxArray *a) {
+EXPORT const size_t *mxGetDimensions_730(const mxArray *a) {
     return a->get_dimensions();
 }
 
-const int *mxGetDimensions_700(const mxArray *a) {
+EXPORT const int *mxGetDimensions_700(const mxArray *a) {
     assert(sizeof(size_t) == sizeof(int));
     return reinterpret_cast<const int *>(a->get_dimensions());
 }
 
-mxClassID mxGetClassID(const mxArray *a) {
+EXPORT mxClassID mxGetClassID(const mxArray *a) {
     return a->get_class_id();
 }
 
-void *mxGetData(const mxArray *a) {
+EXPORT void *mxGetData(const mxArray *a) {
     return const_cast<mxArray *>(a)->get_data();
 }
 
-size_t mxGetElementSize(const mxArray *a) {
+EXPORT size_t mxGetElementSize(const mxArray *a) {
     return a->get_element_size();
 }
 
 // We only support real, numeric classes in this mock implementation.
-bool mxIsNumeric(const mxArray *a) {
+EXPORT bool mxIsNumeric(const mxArray *a) {
     return true;
 }
-bool mxIsLogical(const mxArray *a) {
+EXPORT bool mxIsLogical(const mxArray *a) {
     return false;
 }
-bool mxIsComplex(const mxArray *a) {
+EXPORT bool mxIsComplex(const mxArray *a) {
     return false;
 }
 
-double mxGetScalar(const mxArray *a) {
+EXPORT double mxGetScalar(const mxArray *a) {
     return a->get_scalar();
 }
 
-mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
+EXPORT mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
     assert(complexity == mxREAL);
     switch (type) {
     case mxSINGLE_CLASS: return new mxArrayImpl<float>(M, N);
@@ -115,7 +120,7 @@ mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mxComplex
     }
 }
 
-mxArray *mxCreateNumericMatrix_700(int M, int N, mxClassID type, mxComplexity complexity) {
+EXPORT mxArray *mxCreateNumericMatrix_700(int M, int N, mxClassID type, mxComplexity complexity) {
     return mxCreateNumericMatrix_730(M, N, type, complexity);
 }
 
