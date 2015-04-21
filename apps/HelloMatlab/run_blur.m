@@ -1,5 +1,5 @@
 % Add the path to mex_halide.m.
-addpath('../../tools');
+addpath(fullfile(pwd, '..', '..', 'tools'));
 
 % Build the mex library from the blur generator.
 mex_halide('iir_blur.cpp');
@@ -12,9 +12,11 @@ output = zeros(size(input), 'single');
 alpha = 0.1;
 
 % Call the Halide pipeline.
-tic;
-iir_blur(input, alpha, output);
-toc;
+for i = 1:10
+    tic;
+    iir_blur(input, alpha, output);
+    toc;
+end
 
 % Write the blurred image.
 imwrite(cast(output * 255, 'uint8'), 'blurred.png');

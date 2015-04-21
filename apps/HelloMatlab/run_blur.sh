@@ -10,7 +10,7 @@ if [[ $CXX == *"-m32"* ]]; then
 fi
 
 rm -f blurred.png iir_blur.mex
-octave run.m
+octave run_blur.m
 
 if [ -f blurred.png ]
 then
