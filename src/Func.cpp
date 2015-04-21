@@ -2497,6 +2497,8 @@ void Func::infer_input_bounds(Realization dst,
     }
 }
 
+// TODO: add assertions to make sure this routine never introduces circular references
+// in the deps chain via passing the Func being compiled in as part of the externs list.
 std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
                                                      const std::map<std::string, JITExtern> &externs) {
     std::vector<JITModule> result;
@@ -2507,7 +2509,7 @@ std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
     for (const std::pair<std::string, JITExtern> &map_entry : externs) {
         const JITExtern &jit_extern(map_entry.second);
         if (jit_extern.func != NULL) {
-            if (!jit_extern.func->compiled_module.defined()) {
+            if (!jit_extern.func->compiled_module.compiled()) {
                 jit_extern.func->compile_jit(target, jit_extern.func_externs);
             }
             free_standing_jit_externs.add_dependency(jit_extern.func->compiled_module);
@@ -2516,7 +2518,7 @@ std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
             free_standing_jit_externs.add_extern_for_export(map_entry.first, jit_extern);
         }
     }
-    if (free_standing_jit_externs.defined() && !free_standing_jit_externs.exports().empty()) {
+    if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
         result.push_back(free_standing_jit_externs);
     }
     return result;

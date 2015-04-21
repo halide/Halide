@@ -108,7 +108,8 @@ struct JITExtern {
     Type ret_type;
     std::vector<ScalarOrBufferT> arg_types;
 
-    JITExtern(Func &func, const std::map<std::string, JITExtern> &func_externs)
+   JITExtern(Func &func,
+             const std::map<std::string, JITExtern> &func_externs = std::map<std::string, JITExtern>())
         : func(&func), func_externs(func_externs), c_function(NULL) {
     }
 
@@ -197,8 +198,8 @@ struct JITModule {
     EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
 
-    /** Check if this JIT module has a definition.. */
-    EXPORT bool defined() const;
+    /** Return true if compile_module has been called on this module. */
+    EXPORT bool compiled() const;
 };
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);

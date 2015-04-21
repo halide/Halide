@@ -492,7 +492,6 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 }
 
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
-    internal_assert(defined()) << "JIT module is undefined\n";
     return jit_module.ptr->exports;
 }
 
@@ -516,9 +515,6 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
 }
 
 void *JITModule::main_function() const {
-    if (!defined()) {
-        return NULL;
-    }
     return jit_module.ptr->entrypoint.address;
 }
 
@@ -527,9 +523,6 @@ JITModule::Symbol JITModule::entrypoint_symbol() const {
 }
 
 int (*JITModule::argv_function() const)(const void **) {
-    if (!defined()) {
-        return NULL;
-    }
     return (int (*)(const void **))jit_module.ptr->argv_entrypoint.address;
 }
 
@@ -580,18 +573,16 @@ void JITModule::add_extern_for_export(const std::string &name, const JITExtern &
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {
-    if (defined()) {
-        std::map<std::string, Symbol>::const_iterator f =
-            exports().find("halide_memoization_cache_set_size");
-        if (f != exports().end()) {
-            return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
-        }
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_memoization_cache_set_size");
+    if (f != exports().end()) {
+        return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
     }
 }
 
-bool JITModule::defined() const {
+bool JITModule::compiled() const {
     // TODO: Track down all uses and make sure changing this to not include "module != NULL" doesn't break anything.
-    return jit_module.defined();
+  return jit_module.defined() && jit_module.ptr->module != NULL;
 }
 
 namespace {
@@ -746,8 +737,8 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                        RuntimeKind runtime_kind, const std::vector<JITModule> &deps,
                        bool create) {
     JITModule &runtime = shared_runtimes(runtime_kind);
-    if ((!runtime.defined() || runtime.exports().empty()) && create) {
-        // If the module has not yet been defined, we need a module to clone the target options from.
+    if (!runtime.compiled() && create) {
+        // If the module has not yet been compiled, we need a module to clone the target options from.
         internal_assert(for_module != NULL);
 
         // Ensure that JIT feature is set on target as it must be in
@@ -854,24 +845,24 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     std::vector<JITModule> result;
 
     JITModule m = make_module(for_module, target, MainShared, result, create);
-    if (m.defined())
+    if (m.compiled())
         result.push_back(m);
 
     // Add all requested GPU modules, each only depending on the main shared runtime.
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
         JITModule m = make_module(for_module, target, OpenCL, result, create);
-        if (m.defined())
+        if (m.compiled())
             result.push_back(m);
     }
     if (target.has_feature(Target::CUDA)) {
         JITModule m = make_module(for_module, target, CUDA, result, create);
-        if (m.defined())
+        if (m.compiled())
             result.push_back(m);
     }
     if (target.has_feature(Target::OpenGL)) {
         JITModule m = make_module(for_module, target, OpenGL, result, create);
-        if (m.defined())
+        if (m.compiled())
             result.push_back(m);
     }
 
@@ -909,7 +900,7 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
 
-    if (size != default_cache_size && shared_runtimes(MainShared).defined()) {
+    if (size != default_cache_size) {
         default_cache_size = size;
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
