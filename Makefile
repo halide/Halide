@@ -838,7 +838,7 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h inclu
 	make -C apps/c_backend test
 	make -C apps/modules clean
 	make -C apps/modules out.png
-	cd apps/HelloMatlab; ./run.sh
+	cd apps/HelloMatlab; ./run_blur.sh
 
 # It's just for compiling the runtime, so Clang <3.5 *might* work,
 # but best to peg it to the minimum llvm version.
