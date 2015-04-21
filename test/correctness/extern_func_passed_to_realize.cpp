@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     Func f;
     f.define_extern("extern_func", args, Float(32), 2);
 
-    Image<float> imf = f.realize(32, 32, get_jit_target_from_environment(), { { "extern_func", JITExtern(monitor) }});
+    Image<float> imf = f.realize(32, 32, get_jit_target_from_environment(), { { "extern_func", monitor }});
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
