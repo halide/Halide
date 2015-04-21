@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     Func g;
     g(x, y) = my_func(x, cast<float>(y));
 
-    Image<float> imf2 = g.realize(32, 32, get_jit_target_from_environment(), { { "my_func", JITExtern(my_func2) } });
+    Image<float> imf2 = g.realize(32, 32, get_jit_target_from_environment(), { { "my_func", my_func2 } });
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
