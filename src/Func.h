@@ -20,72 +20,6 @@
 
 namespace Halide {
 
-class Func;
-
-namespace {
-
-template <typename T>
-bool voidable_halide_type(Type &t) {
-    return false;
-}
-
-template<>
-inline bool voidable_halide_type<void>(Type &t) {
-    return true;
-}        
-
-template <typename T>
-bool scalar_arg_type_or_buffer(Type &t) {
-    t = type_of<T>();
-    return false;
-}
-
-template <>
-inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
-    return true;
-}
-
-}
-
-struct JITExtern {
-    // assert func.defined() == (c_function == NULL) -- strictly one or the other
-    Func *func;
-    void *c_function;
-    bool is_void_return; // could use ret_type.bits == 0...
-    Type ret_type;
-    struct ScalarOrBufferT {
-        bool is_buffer;
-        Type scalar_type; // Only meaninful if is_buffer is false.
-    };
-    std::vector<ScalarOrBufferT> arg_types;
-
-    JITExtern(Func &func) : func(&func), c_function(NULL) { }
-
-    template <typename T>
-    ScalarOrBufferT arg_type_info() {
-        ScalarOrBufferT result;
-        result.is_buffer = scalar_arg_type_or_buffer<T>(result.scalar_type);
-        return result;
-    }
-
-    void init_args() { }
-    template <typename A1>
-    void init_arg_types() {
-        arg_types.push_back(arg_type_info<A1>());
-    }
-    template <typename A1, typename ...Args>
-    void init_arg_types() {
-        arg_types.push_back(arg_type_info<A1>());
-        init_arg_types<Args...>();
-    }
-
-    template <typename RT, typename ...Args>
-    JITExtern(RT (*f)(Args... args)) {
-        is_void_return = voidable_halide_type<RT>(ret_type);
-        init_arg_types<Args...>();
-    }
-};
-
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
 struct VarOrRVar {
@@ -501,6 +435,10 @@ class Func {
     // Helper function for recursive reordering support
     EXPORT Func &reorder_storage(const std::vector<Var> &dims, size_t start);
 
+    static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
+                                                                    const std::map<std::string,
+                                                                    JITExtern> &externs);
+
 public:
 
     EXPORT static void test();
@@ -786,7 +724,8 @@ public:
      * pointer to the compiled pipeline. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-     EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
+    EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment(),
+                             const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling

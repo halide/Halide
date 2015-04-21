@@ -2275,9 +2275,9 @@ struct JITFuncCallContext {
 }  // namespace Internal
 
 void Func::realize(Realization dst, const Target &target,
-                   const std::map<std::string, JITExtern> & /* externs */) {
+                   const std::map<std::string, JITExtern> &externs) {
     if (!compiled_module.argv_function()) {
-        compile_jit(target);
+        compile_jit(target, externs);
     }
 
     internal_assert(compiled_module.argv_function());
@@ -2345,9 +2345,9 @@ void Func::infer_input_bounds(Buffer dst,
 }
 
 void Func::infer_input_bounds(Realization dst,
-                              const std::map<std::string, JITExtern> & /* externs */) {
+                              const std::map<std::string, JITExtern> &externs) {
     if (!compiled_module.argv_function()) {
-        compile_jit();
+        compile_jit(get_jit_target_from_environment(), externs);
     }
 
     internal_assert(compiled_module.argv_function());
@@ -2497,7 +2497,33 @@ void Func::infer_input_bounds(Realization dst,
     }
 }
 
-void *Func::compile_jit(const Target &target_arg) {
+std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
+                                                     const std::map<std::string, JITExtern> &externs) {
+    std::vector<JITModule> result;
+
+    // Externs that are Funcs get their own JITModule. All standalone functions are
+    // held in a single JITModule at the end of the list (if there are any).
+    JITModule free_standing_jit_externs;
+    for (const std::pair<std::string, JITExtern> &map_entry : externs) {
+        const JITExtern &jit_extern(map_entry.second);
+        if (jit_extern.func != NULL) {
+            if (!jit_extern.func->compiled_module.defined()) {
+                jit_extern.func->compile_jit(target, jit_extern.func_externs);
+            }
+            free_standing_jit_externs.add_dependency(jit_extern.func->compiled_module);
+            free_standing_jit_externs.add_symbol_for_export(map_entry.first, jit_extern.func->compiled_module.entrypoint_symbol());
+        } else {
+            free_standing_jit_externs.add_extern_for_export(map_entry.first, jit_extern);
+        }
+    }
+    if (free_standing_jit_externs.defined() && !free_standing_jit_externs.exports().empty()) {
+        result.push_back(free_standing_jit_externs);
+    }
+    return result;
+}
+
+void *Func::compile_jit(const Target &target_arg,
+                        const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't jit-compile undefined Func.\n";
 
     Target target(target_arg);
@@ -2554,7 +2580,7 @@ void *Func::compile_jit(const Target &target_arg) {
         compile_module_to_text(module, name() + ".stmt");
     }
 
-    compiled_module = JITModule(module, lfn);
+    compiled_module = JITModule(module, lfn, make_externs_jit_module(target_arg, externs));
     return compiled_module.main_function();
 }
 
