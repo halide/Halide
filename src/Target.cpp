@@ -284,6 +284,8 @@ bool Target::merge_string(const std::string &target) {
             set_feature(Target::Debug);
         } else if (tok == "opengl") {
             set_feature(Target::OpenGL);
+        } else if (tok == "rs") {
+            set_feature(Target::RS);
         } else if (tok == "user_context") {
             set_feature(Target::UserContext);
         } else if (tok == "register_metadata") {
@@ -359,7 +361,7 @@ std::string Target::to_string() const {
       "armv7s", "no_neon",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
-      "opengl",
+      "opengl", "rs",
       "user_context",
       "register_metadata",
       "matlab"

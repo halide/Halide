@@ -223,7 +223,8 @@ enum class DeviceAPI {
     Default_GPU,
     CUDA,
     OpenCL,
-    GLSL
+    GLSL,
+    RS
 };
 
 namespace Internal {
