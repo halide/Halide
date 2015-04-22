@@ -1,5 +1,4 @@
 #include "IRVisitor.h"
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

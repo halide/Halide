@@ -5,9 +5,8 @@
  * Defines Halide's Image data type
  */
 
-#include "Buffer.h"
-#include "Tuple.h"
 #include "Var.h"
+#include "Tuple.h"
 
 namespace Halide {
 

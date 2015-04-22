@@ -1,7 +1,6 @@
 # Set the root dir of the Halide checkout
 $ROOT = "E:\Code\Halide"
 cd $ROOT
-
 $ErrorActionPreference = "Continue"
 
 # Requires:
@@ -141,6 +140,41 @@ foreach (${configuration} in "Release", "Debug") {
   }
 }
 
+# Make the distributions
+foreach ($d in "32_trunk","64_trunk", "32_pnacl", "64_pnacl") {
+  cd $ROOT
+  if (! (Test-Path distrib)) {
+    mkdir distrib
+  }
+  cd distrib
+
+  $DISTRIB_DIR = "distrib_${d}_${COMMIT}_${DATE}"
+  if (Test-Path $DISTRIB_DIR) {
+    rm $DISTRIB_DIR -r -Force
+  }
+  mkdir $DISTRIB_DIR
+  cd $DISTRIB_DIR
+
+  mkdir include
+  mkdir Release
+  mkdir Debug
+  mkdir tools
+
+  cp $ROOT\build_${d}_Release\include\Halide.h include\
+  cp $ROOT\src\runtime\HalideRuntim*.h include\
+  cp $ROOT\build_${d}_Release\lib\Release\Halide.lib Release\
+  cp $ROOT\build_${d}_Release\bin\Release\Halide.dll Release\
+  cp $ROOT\build_${d}_Debug\lib\Debug\Halide.lib Debug\
+  cp $ROOT\build_${d}_Debug\bin\Debug\Halide.dll Debug\
+  cp $ROOT\tools\mex_halide.m tools\
+  cp $ROOT\README.md .
+  &7z a Halide_Windows_${d}_${COMMIT}_${DATE}.zip *
+  mv Halide_Windows_${d}_${COMMIT}_${DATE}.zip ..
+
+  cd ..
+  rm $DISTRIB_DIR -r -Force
+}
+
 # Run the tests. pnacl llvm has relocation issues on Windows 8.1 in 64-bit mode (because it's based on llvm 3.6),
 # so we'll skip jit-testing that. Running generators has already occurred above, so we know at 
 # this stage that things at least compile with pnacl llvm.
@@ -210,33 +244,5 @@ foreach ($d in "32_trunk","64_trunk", "32_pnacl") {
     }
   }
 
-  cd $ROOT
-  if (! (Test-Path distrib)) {
-    mkdir distrib
-  }
-  cd distrib
 
-  $DISTRIB_DIR = "distrib_${d}_${COMMIT}_${DATE}"
-  if (Test-Path $DISTRIB_DIR) {
-    rm $DISTRIB_DIR -r -Force
-  }
-  mkdir $DISTRIB_DIR
-  cd $DISTRIB_DIR
-
-  mkdir include
-  mkdir Release
-  mkdir Debug
-
-  cp $ROOT\build_${d}_Release\include\Halide.h include\
-  cp $ROOT\src\runtime\HalideRuntim*.h include\
-  cp $ROOT\build_${d}_Release\lib\Release\Halide.lib Release\
-  cp $ROOT\build_${d}_Release\bin\Release\Halide.dll Release\
-  cp $ROOT\build_${d}_Debug\lib\Debug\Halide.lib Debug\
-  cp $ROOT\build_${d}_Debug\bin\Debug\Halide.dll Debug\
-  cp $ROOT\README.md .
-  &7z a Halide_Windows_${d}_${COMMIT}_${DATE}.zip *
-  mv Halide_Windows_${d}_${COMMIT}_${DATE}.zip ..
-
-  cd ..
-  rm $DISTRIB_DIR -r -Force
 }
