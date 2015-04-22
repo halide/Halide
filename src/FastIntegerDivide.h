@@ -2,7 +2,6 @@
 #define HALIDE_FAST_INTEGER_DIVIDE_H
 
 #include "IR.h"
-#include "Func.h"
 #include "Image.h"
 
 namespace Halide {

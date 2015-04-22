@@ -13,7 +13,6 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Function.h"
-#include "IRVisitor.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
 #include "Type.h"
@@ -390,6 +389,8 @@ struct Call : public ExprNode<Call> {
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
+        image_load,
+        image_store,
         make_struct,
         stringify,
         memoize_expr,

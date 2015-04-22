@@ -9,7 +9,6 @@
 #include "IR.h"
 #include "IROperator.h"
 #include "Util.h"
-#include <vector>
 
 namespace Halide {
 

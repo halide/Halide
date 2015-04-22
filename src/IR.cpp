@@ -1,5 +1,6 @@
 #include "IR.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -508,45 +509,85 @@ Expr Variable::make(Type type, std::string name, Buffer image, Parameter param, 
     return node;
 }
 
-template<> EXPORT IRNodeType ExprNode<IntImm>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<FloatImm>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<StringImm>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Cast>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Variable>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Add>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Sub>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Mul>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Div>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Mod>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Min>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Max>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<EQ>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<NE>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<LT>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<LE>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<GT>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<GE>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<And>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Or>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Not>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Select>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Load>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Ramp>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Broadcast>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Call>::_type_info = {};
-template<> EXPORT IRNodeType ExprNode<Let>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<LetStmt>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<AssertStmt>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Pipeline>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<For>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Store>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Provide>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Allocate>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Free>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Realize>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Block>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<IfThenElse>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<Evaluate>::_type_info = {};
+template<> void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
+template<> void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
+template<> void ExprNode<StringImm>::accept(IRVisitor *v) const { v->visit((const StringImm *)this); }
+template<> void ExprNode<Cast>::accept(IRVisitor *v) const { v->visit((const Cast *)this); }
+template<> void ExprNode<Variable>::accept(IRVisitor *v) const { v->visit((const Variable *)this); }
+template<> void ExprNode<Add>::accept(IRVisitor *v) const { v->visit((const Add *)this); }
+template<> void ExprNode<Sub>::accept(IRVisitor *v) const { v->visit((const Sub *)this); }
+template<> void ExprNode<Mul>::accept(IRVisitor *v) const { v->visit((const Mul *)this); }
+template<> void ExprNode<Div>::accept(IRVisitor *v) const { v->visit((const Div *)this); }
+template<> void ExprNode<Mod>::accept(IRVisitor *v) const { v->visit((const Mod *)this); }
+template<> void ExprNode<Min>::accept(IRVisitor *v) const { v->visit((const Min *)this); }
+template<> void ExprNode<Max>::accept(IRVisitor *v) const { v->visit((const Max *)this); }
+template<> void ExprNode<EQ>::accept(IRVisitor *v) const { v->visit((const EQ *)this); }
+template<> void ExprNode<NE>::accept(IRVisitor *v) const { v->visit((const NE *)this); }
+template<> void ExprNode<LT>::accept(IRVisitor *v) const { v->visit((const LT *)this); }
+template<> void ExprNode<LE>::accept(IRVisitor *v) const { v->visit((const LE *)this); }
+template<> void ExprNode<GT>::accept(IRVisitor *v) const { v->visit((const GT *)this); }
+template<> void ExprNode<GE>::accept(IRVisitor *v) const { v->visit((const GE *)this); }
+template<> void ExprNode<And>::accept(IRVisitor *v) const { v->visit((const And *)this); }
+template<> void ExprNode<Or>::accept(IRVisitor *v) const { v->visit((const Or *)this); }
+template<> void ExprNode<Not>::accept(IRVisitor *v) const { v->visit((const Not *)this); }
+template<> void ExprNode<Select>::accept(IRVisitor *v) const { v->visit((const Select *)this); }
+template<> void ExprNode<Load>::accept(IRVisitor *v) const { v->visit((const Load *)this); }
+template<> void ExprNode<Ramp>::accept(IRVisitor *v) const { v->visit((const Ramp *)this); }
+template<> void ExprNode<Broadcast>::accept(IRVisitor *v) const { v->visit((const Broadcast *)this); }
+template<> void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Call *)this); }
+template<> void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
+template<> void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
+template<> void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
+template<> void StmtNode<Pipeline>::accept(IRVisitor *v) const { v->visit((const Pipeline *)this); }
+template<> void StmtNode<For>::accept(IRVisitor *v) const { v->visit((const For *)this); }
+template<> void StmtNode<Store>::accept(IRVisitor *v) const { v->visit((const Store *)this); }
+template<> void StmtNode<Provide>::accept(IRVisitor *v) const { v->visit((const Provide *)this); }
+template<> void StmtNode<Allocate>::accept(IRVisitor *v) const { v->visit((const Allocate *)this); }
+template<> void StmtNode<Free>::accept(IRVisitor *v) const { v->visit((const Free *)this); }
+template<> void StmtNode<Realize>::accept(IRVisitor *v) const { v->visit((const Realize *)this); }
+template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Block *)this); }
+template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
+template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
+
+template<> IRNodeType ExprNode<IntImm>::_type_info = {};
+template<> IRNodeType ExprNode<FloatImm>::_type_info = {};
+template<> IRNodeType ExprNode<StringImm>::_type_info = {};
+template<> IRNodeType ExprNode<Cast>::_type_info = {};
+template<> IRNodeType ExprNode<Variable>::_type_info = {};
+template<> IRNodeType ExprNode<Add>::_type_info = {};
+template<> IRNodeType ExprNode<Sub>::_type_info = {};
+template<> IRNodeType ExprNode<Mul>::_type_info = {};
+template<> IRNodeType ExprNode<Div>::_type_info = {};
+template<> IRNodeType ExprNode<Mod>::_type_info = {};
+template<> IRNodeType ExprNode<Min>::_type_info = {};
+template<> IRNodeType ExprNode<Max>::_type_info = {};
+template<> IRNodeType ExprNode<EQ>::_type_info = {};
+template<> IRNodeType ExprNode<NE>::_type_info = {};
+template<> IRNodeType ExprNode<LT>::_type_info = {};
+template<> IRNodeType ExprNode<LE>::_type_info = {};
+template<> IRNodeType ExprNode<GT>::_type_info = {};
+template<> IRNodeType ExprNode<GE>::_type_info = {};
+template<> IRNodeType ExprNode<And>::_type_info = {};
+template<> IRNodeType ExprNode<Or>::_type_info = {};
+template<> IRNodeType ExprNode<Not>::_type_info = {};
+template<> IRNodeType ExprNode<Select>::_type_info = {};
+template<> IRNodeType ExprNode<Load>::_type_info = {};
+template<> IRNodeType ExprNode<Ramp>::_type_info = {};
+template<> IRNodeType ExprNode<Broadcast>::_type_info = {};
+template<> IRNodeType ExprNode<Call>::_type_info = {};
+template<> IRNodeType ExprNode<Let>::_type_info = {};
+template<> IRNodeType StmtNode<LetStmt>::_type_info = {};
+template<> IRNodeType StmtNode<AssertStmt>::_type_info = {};
+template<> IRNodeType StmtNode<Pipeline>::_type_info = {};
+template<> IRNodeType StmtNode<For>::_type_info = {};
+template<> IRNodeType StmtNode<Store>::_type_info = {};
+template<> IRNodeType StmtNode<Provide>::_type_info = {};
+template<> IRNodeType StmtNode<Allocate>::_type_info = {};
+template<> IRNodeType StmtNode<Free>::_type_info = {};
+template<> IRNodeType StmtNode<Realize>::_type_info = {};
+template<> IRNodeType StmtNode<Block>::_type_info = {};
+template<> IRNodeType StmtNode<IfThenElse>::_type_info = {};
+template<> IRNodeType StmtNode<Evaluate>::_type_info = {};
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::shuffle_vector = "shuffle_vector";
@@ -583,6 +624,8 @@ Call::ConstString Call::if_then_else = "if_then_else";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
 Call::ConstString Call::glsl_texture_store = "glsl_texture_store";
 Call::ConstString Call::glsl_varying = "glsl_varying";
+Call::ConstString Call::image_load = "image_load";
+Call::ConstString Call::image_store = "image_store";
 Call::ConstString Call::make_struct = "make_struct";
 Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";

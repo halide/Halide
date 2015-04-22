@@ -1,14 +1,12 @@
 #ifndef HALIDE_INJECT_OPENGL_INTRINSICS_H
 #define HALIDE_INJECT_OPENGL_INTRINSICS_H
 
-
 /** \file
  * Defines the lowering pass that injects texture loads and texture
  * stores for opengl.
  */
 
 #include "IR.h"
-#include "Scope.h"
 
 namespace Halide {
 namespace Internal {

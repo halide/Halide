@@ -88,6 +88,7 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  matlab
   metadata
   module_aot_ref_count
   module_jit_ref_count
@@ -95,11 +96,13 @@ set(RUNTIME_CPP
   opencl
   opengl
   osx_clock
+  osx_get_symbol
   osx_host_cpu_count
   osx_opengl_context
   posix_allocator
   posix_clock
   posix_error_handler
+  posix_get_symbol
   posix_io
   posix_math
   posix_print
@@ -109,6 +112,7 @@ set(RUNTIME_CPP
   tracing
   windows_clock
   windows_cuda
+  windows_get_symbol
   windows_io
   windows_opencl
   windows_thread_pool
@@ -283,6 +287,7 @@ set(HEADER_FILES
   IRVisitor.h
   Image.h
   InjectHostDevBufferCopies.h
+  InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
   Inline.h
   InlineReductions.h
@@ -296,6 +301,7 @@ set(HEADER_FILES
   Lerp.h
   Lower.h
   MainPage.h
+  MatlabWrapper.h
   Memoization.h
   Module.h
   ModulusRemainder.h
@@ -400,6 +406,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRVisitor.cpp
   Image.cpp
   InjectHostDevBufferCopies.cpp
+  InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp
   InlineReductions.cpp
@@ -410,6 +417,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
   Lower.cpp
+  MatlabWrapper.cpp
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp
@@ -445,6 +453,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UniquifyVariableNames.cpp
   UnrollLoops.cpp
   Util.cpp
+  Var.cpp
   VaryingAttributes.cpp
   ExprUsesVar.cpp
   Introspection.cpp

@@ -6,9 +6,6 @@
  * Classes for declaring scalar and image parameters to halide pipelines
  */
 
-#include <sstream>
-#include <vector>
-
 #include "IR.h"
 #include "Var.h"
 #include "Util.h"

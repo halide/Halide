@@ -10,13 +10,14 @@
 
 #include "Debug.h"
 #include "Error.h"
-#include "IRVisitor.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Util.h"
 
 namespace Halide {
 namespace Internal {
+
+class IRVisitor;
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
  * For). We use it for rtti (without having to compile with rtti). */
@@ -79,18 +80,14 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    void accept(IRVisitor *v) const {
-        v->visit((const T *)this);
-    }
+    EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType *type_info() const {return &_type_info;}
     static EXPORT IRNodeType _type_info;
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    void accept(IRVisitor *v) const {
-        v->visit((const T *)this);
-    }
+    EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType *type_info() const {return &_type_info;}
     static EXPORT IRNodeType _type_info;
 };

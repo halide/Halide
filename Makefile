@@ -46,8 +46,10 @@ WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
+WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_OPENGL ?= not-empty
+
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_JAVASCRIPT_V8 ?=
@@ -195,6 +197,8 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
+STATIC_TEST_LIBS += -ldl
+
 ifdef BUILD_PREFIX
 BUILD_DIR = build/$(BUILD_PREFIX)
 BIN_DIR = bin/$(BUILD_PREFIX)
@@ -246,6 +250,7 @@ SOURCE_FILES = \
   HumanReadableStmt.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
+  InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -264,6 +269,7 @@ SOURCE_FILES = \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   Lower.cpp \
+  MatlabWrapper.cpp \
   Memoization.cpp \
   Module.cpp \
   ModulusRemainder.cpp \
@@ -299,6 +305,7 @@ SOURCE_FILES = \
   UniquifyVariableNames.cpp \
   UnrollLoops.cpp \
   Util.cpp \
+  Var.cpp \
   VaryingAttributes.cpp \
   VectorizeLoops.cpp
 
@@ -345,6 +352,7 @@ HEADER_FILES = \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
+  InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
@@ -366,6 +374,7 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   Lower.h \
   MainPage.h \
+  MatlabWrapper.h \
   Memoization.h \
   Module.h \
   ModulusRemainder.h \
@@ -424,6 +433,7 @@ RUNTIME_CPP_COMPONENTS = \
   linux_clock \
   linux_host_cpu_count \
   linux_opengl_context \
+  matlab \
   metadata \
   module_aot_ref_count \
   module_jit_ref_count \
@@ -431,11 +441,13 @@ RUNTIME_CPP_COMPONENTS = \
   opencl \
   opengl \
   osx_clock \
+  osx_get_symbol \
   osx_host_cpu_count \
   osx_opengl_context \
   posix_allocator \
   posix_clock \
   posix_error_handler \
+  posix_get_symbol \
   posix_io \
   posix_math \
   posix_print \
@@ -445,8 +457,9 @@ RUNTIME_CPP_COMPONENTS = \
   tracing \
   windows_clock \
   windows_cuda \
-  windows_opencl \
+  windows_get_symbol \
   windows_io \
+  windows_opencl \
   windows_thread_pool \
   write_debug_image
 
@@ -827,7 +840,7 @@ time_compilation_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.gen
 	$(TIME_COMPILATION) compile_times_generator.csv make $(FILTERS_DIR)/tiled_blur_interleaved.o
 
 .PHONY: test_apps
-test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
+test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
 	make -C apps/bilateral_grid clean
 	make -C apps/bilateral_grid out.png
 	make -C apps/local_laplacian clean
@@ -843,8 +856,9 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/c_backend test
 	make -C apps/modules clean
 	make -C apps/modules out.png
+	cd apps/HelloMatlab; ./run_blur.sh
 
-# It's just for compiling the runtime, so Clang <3.5 *might* work, 
+# It's just for compiling the runtime, so Clang <3.5 *might* work,
 # but best to peg it to the minimum llvm version.
 ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))
 CLANG_OK=yes
@@ -905,12 +919,13 @@ doc: src test
 	doxygen
 
 $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
-	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images
+	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
 	cp include/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
+	cp tools/mex_halide.m $(DISTRIB_DIR)/tools
 	cp README.md $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
 	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/include halide/tutorial halide/README.md
