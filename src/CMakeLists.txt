@@ -107,6 +107,7 @@ set(RUNTIME_CPP
   posix_math
   posix_print
   posix_thread_pool
+  rs
   ssp
   to_string
   tracing
@@ -127,6 +128,7 @@ set (RUNTIME_LL
   pnacl_math
   posix_math
   ptx_dev
+  rs_dev
   win32_math
   x86
   x86_avx
@@ -261,6 +263,7 @@ set(HEADER_FILES
   CodeGen_PNaCl.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
+  CodeGen_RS_Dev.h
   CodeGen_X86.h
   Debug.h
   DebugToFile.h
@@ -355,6 +358,7 @@ file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeRS.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
@@ -379,6 +383,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_PNaCl.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
+  CodeGen_RS_Dev.cpp
   CodeGen_X86.cpp
   Debug.cpp
   Debug.cpp
@@ -455,6 +460,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  BitWriter_3_2/BitcodeWriter.cpp
+  BitWriter_3_2/BitcodeWriterPass.cpp
+  BitWriter_3_2/ValueEnumerator.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
 )

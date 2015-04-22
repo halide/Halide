@@ -49,7 +49,7 @@ WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_OPENGL ?= not-empty
-
+WITH_RS ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 
@@ -78,6 +78,8 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
 OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
 
+RS_CXX_FLAGS=$(if $(WITH_RS), -DWITH_RS=1, )
+
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
@@ -94,6 +96,7 @@ CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGL_CXX_FLAGS)
+CXX_FLAGS += $(RS_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
@@ -139,6 +142,12 @@ endif
 ifneq ($(WITH_OPENCL), )
 ifneq (,$(findstring opencl,$(HL_TARGET)))
 TEST_OPENCL = 1
+endif
+endif
+
+ifneq ($(WITH_RS), )
+ifneq (,$(findstring rs,$(HL_TARGET)))
+TEST_RS = 1
 endif
 endif
 
@@ -216,6 +225,7 @@ SOURCE_FILES = \
   CodeGen_PNaCl.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PTX_Dev.cpp \
+  CodeGen_RS_Dev.cpp \
   CodeGen_X86.cpp \
   CSE.cpp \
   Debug.cpp \
@@ -293,6 +303,11 @@ SOURCE_FILES = \
   VaryingAttributes.cpp \
   VectorizeLoops.cpp
 
+BITWRITER_SOURCE_FILES = \
+  BitWriter_3_2/BitcodeWriter.cpp \
+  BitWriter_3_2/BitcodeWriterPass.cpp \
+  BitWriter_3_2/ValueEnumerator.cpp
+
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
   AllocationBoundsInference.h \
@@ -313,6 +328,7 @@ HEADER_FILES = \
   CodeGen_PNaCl.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_RS_Dev.h \
   CodeGen_X86.h \
   CSE.h \
   Debug.h \
@@ -397,6 +413,7 @@ HEADER_FILES = \
   VectorizeLoops.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
+OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
 RUNTIME_CPP_COMPONENTS = \
@@ -434,8 +451,9 @@ RUNTIME_CPP_COMPONENTS = \
   posix_math \
   posix_print \
   posix_thread_pool \
-  to_string \
+  rs \
   ssp \
+  to_string \
   tracing \
   windows_clock \
   windows_cuda \
@@ -453,12 +471,13 @@ RUNTIME_LL_COMPONENTS = \
   pnacl_math \
   posix_math \
   ptx_dev \
+  rs_dev \
   win32_math \
   x86 \
   x86_avx \
   x86_sse41
 
-RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h
+RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h include/HalideRuntimeRS.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
@@ -573,6 +592,10 @@ $(BUILD_DIR)/initmod_ptx.%_ll.o: $(BUILD_DIR)/initmod_ptx.%_ll.cpp
 $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 	$(CXX) $(BUILD_BIT_SIZE) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+$(BUILD_DIR)/BitWriter_3_2/%.o: src/BitWriter_3_2/%.cpp $(BUILD_DIR)/llvm_ok
+	@-mkdir -p $(BUILD_DIR)/BitWriter_3_2
+	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/BitWriter_3_2/$*.d -MT $(BUILD_DIR)/BitWriter_3_2/$*.o
+
 $(BUILD_DIR)/%.o: src/%.cpp src/%.h $(BUILD_DIR)/llvm_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
@@ -592,6 +615,7 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
+RS_TESTS := $(shell ls test/rs/*.cpp)
 GENERATOR_TESTS := $(shell ls test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
 
@@ -606,6 +630,7 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
+test_rs: $(RS_TESTS:test/rs/%.cpp=rs_%)
 test_generators: $(GENERATOR_TESTS:test/generator/%_aottest.cpp=generator_aot_%) $(GENERATOR_TESTS:test/generator/%_jittest.cpp=generator_jit_%)
 
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
@@ -615,6 +640,7 @@ ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warni
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
+time_compilation_rs: init_time_compilation_rs $(RS_TESTS:test/rs/%.cpp=time_compilation_rs_%)
 time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=time_compilation_generator_%)
 
 init_time_compilation_%:
@@ -648,6 +674,9 @@ $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/opengl_%: test/opengl/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
+
+$(BIN_DIR)/rs_%: test/rs/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 tmp/static/%/%.o: $(BIN_DIR)/static_%_generate
@@ -788,6 +817,18 @@ opengl_%: $(BIN_DIR)/opengl_%
 	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
 	@-echo
 
+rs_jit_%: HL_JIT_TARGET = host-rs
+rs_jit_%: HL_TARGET =
+rs_aot_%: HL_TARGET = arm-32-android-armv7s-rs
+rs_aot_%: HL_JIT_TARGET =
+rs_%_error: $(BIN_DIR)/rs_%_error
+	@-mkdir -p tmp
+	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) HL_TARGET=$(HL_TARGET) $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
+	@-echo
+rs_%: $(BIN_DIR)/rs_%
+	@-mkdir -p tmp
+	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) HL_TARGET=$(HL_TARGET) $(LD_PATH_SETUP) ../$<
+	@-echo
 
 generator_%: $(BIN_DIR)/generator_%
 	@-mkdir -p tmp
@@ -811,6 +852,9 @@ time_compilation_performance_%: $(BIN_DIR)/performance_%
 
 time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 	$(TIME_COMPILATION) compile_times_opengl.csv make $(@:time_compilation_opengl_%=opengl_%)
+
+time_compilation_rs_%: $(BIN_DIR)/rs_%
+	$(TIME_COMPILATION) compile_times_rs.csv make $(@:time_compilation_rs_%=rs_%)
 
 time_compilation_static_%: $(BIN_DIR)/static_%_generate
 	$(TIME_COMPILATION) compile_times_static.csv make $(@:time_compilation_static_%=tmp/static/%/%.o)

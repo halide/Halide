@@ -1351,11 +1351,17 @@ public:
     }
     // @}
 
-    /** Schedule for execution using GLSL. Conceptually, this is similar to
-     * parallelization over 'x' and 'y' (since GLSL shaders compute individual
-     * output pixels in parallel) and vectorization over 'c' (since GLSL
-     * implicitly vectorizes the color channel). */
+    /** Schedule for execution using coordinate-based hardware api.
+     * GLSL and Renderscript are examples of those. Conceptually, this is
+     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
+     * individual output pixels in parallel) and vectorization over 'c'
+     * (since GLSL/RS implicitly vectorizes the color channel). */
+    EXPORT Func &image(Var x, Var y, Var c, DeviceAPI device_api);
+
     EXPORT Func &glsl(Var x, Var y, Var c);
+
+    EXPORT Func &rs(Var x, Var y, Var c);
+    EXPORT Func &rs(Var x, Var y);
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
