@@ -6,6 +6,10 @@
 #include "runtime/HalideRuntime.h"
 #include <vector>
 
+// Avoid unused function warning if not configured with JavaScript.
+// TODO: Move routine to Utils.h
+#if WITH_JAVASCRIPT_V8 || WITH_JAVASCRIPT_SPIDERMONKEY
+
 namespace {
 
 int32_t buffer_total_size(const buffer_t *buf) {
@@ -21,6 +25,9 @@ int32_t buffer_total_size(const buffer_t *buf) {
 }
 
 }
+
+#endif
+
 #if WITH_JAVASCRIPT_V8
 
 #include "include/v8.h"
