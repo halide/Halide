@@ -1,6 +1,7 @@
 #include <string>
 #include <stdint.h>
 #include <mutex>
+#include <set>
 
 #include "CodeGen_Internal.h"
 #include "JITModule.h"

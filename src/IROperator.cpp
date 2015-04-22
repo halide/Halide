@@ -1,11 +1,10 @@
 #include <iostream>
 #include <sstream>
-#include <math.h>
+#include <cmath>
 #include <algorithm>
 
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Simplify.h"
 #include "Debug.h"
 #include "CSE.h"
 

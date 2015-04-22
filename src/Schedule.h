@@ -6,8 +6,6 @@
  */
 
 #include "Expr.h"
-#include <string>
-#include <vector>
 
 namespace Halide {
 namespace Internal {

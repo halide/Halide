@@ -5,13 +5,12 @@
  * Defines the code-generator for producing GLSL kernel code
  */
 
+#include <sstream>
+#include <map>
+
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "Target.h"
-
-#include <sstream>
-#include <map>
-#include <string>
 
 namespace Halide {
 namespace Internal {

@@ -5,7 +5,6 @@
  * Defines the internal representation of parameters to halide piplines
  */
 
-#include <string>
 #include "Expr.h"
 
 namespace Halide {

@@ -5,13 +5,14 @@
  * Defines the code-generator for producing GPU host code
  */
 
+#include <map>
+
 #include "CodeGen_ARM.h"
 #include "CodeGen_X86.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
 
 #include "IR.h"
-#include <map>
 
 namespace Halide {
 namespace Internal {
