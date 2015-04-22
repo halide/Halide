@@ -6,16 +6,23 @@ function mex_halide( generator_filename, varargin )
 % The remaining arguments are a list of name-value pairs of the form
 % 'generator_param=value' used to assign the generator params, or
 % additional flags:
-%   -e <assembly,bitcode,stmt,html>: Which outputs to emit from the
-%      generator, multiply outputs can be specified with a comma
-%      delimited list.
-%   -c <compiler>: Which C++ compiler to use to build the
-%      generator. Default is 'c++'.
-%   -g <generator>: Which generator to build. If only one generator
-%      is registered, it will be used by default.
+%  -e <assembly,bitcode,stmt,html>: Which outputs to emit from the
+%     generator, multiply outputs can be specified with a comma
+%     delimited list.
+%  -c <compiler>: Which C++ compiler to use to build the
+%     generator. Default is 'c++'.
+%  -g <generator>: Which generator to build. If only one generator
+%     is registered, it will be used by default.
 %
 % If a target is specified by a generator param with target=..., the
 % 'matlab' feature flag must be present.
+%
+% This script uses two environment variables that can optionally be
+% set or changed:
+%  - HALIDE_PATH: The path to the root directory of Halide. If
+%    unspecified, this defaults to '..' relative to mex_halide.m.
+%  - HALIDE_CXX: The C++ compiler to use to build generators. The
+%    default is 'c++'.
 
     gengen_cpp = ['#include "Halide.h"', sprintf('\n'), ...
                   'int main(int argc, char **argv) {', ...
@@ -50,8 +57,6 @@ function mex_halide( generator_filename, varargin )
         [path, ~] = fileparts(mfilename('fullpath'));
         halide_path = fullfile(path, '..');
         setenv('HALIDE_PATH', halide_path);
-        warning(['HALIDE_PATH environment variable is unset, assuming ' ...
-                 '.. relative to mex_halide.']);
     end
     halide_path = getenv('HALIDE_PATH');
 
@@ -78,6 +83,7 @@ function mex_halide( generator_filename, varargin )
          '-o ', gen_bin];
     status = system(build_generator);
     if status ~= 0
+        error('mex_halide:build_failed', 'Generator build failed.');
         return;
     end
 
@@ -92,6 +98,8 @@ function mex_halide( generator_filename, varargin )
          generator_args];
     status = system(build_object);
     if status ~= 0
+        error('mex_halide:build_failed', ['Generator failed to build ' ...
+                            'pipeline.']);
         return;
     end
 
