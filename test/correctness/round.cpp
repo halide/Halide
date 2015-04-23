@@ -113,5 +113,8 @@ int main(int argc, char **argv) {
         ok = ok && test(ceil(input(x)), "ceil", N, input, ceil_result);
         ok = ok && test(trunc(input(x)), "trunc", N, input, trunc_result);
     }
+    if (ok) {
+        printf("Success!\n");
+    }
     return ok ? 0 : -1;
 }
