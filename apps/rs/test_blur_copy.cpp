@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-void Blur(std::string suffix, ImageParam input8, const int nChannels,
+void blur(std::string suffix, ImageParam input8, const int channels,
           bool vectorized) {
     Var x, y, c;
     Func input;
@@ -15,7 +15,7 @@ void Blur(std::string suffix, ImageParam input8, const int nChannels,
     blur_x.output_buffer()
         .set_stride(0, input8.stride(0))
         .set_stride(2, input8.stride(2))
-        .set_bounds(2, 0, nChannels);
+        .set_bounds(2, 0, channels);
 
     Func result("result");
     result(x, y, c) = cast<uint8_t>(
@@ -23,9 +23,9 @@ void Blur(std::string suffix, ImageParam input8, const int nChannels,
     result.output_buffer()
         .set_stride(0, input8.stride(0))
         .set_stride(2, input8.stride(2))
-        .set_bounds(2, 0, nChannels);
+        .set_bounds(2, 0, channels);
 
-    result.bound(c, 0, nChannels);
+    result.bound(c, 0, channels);
     if (suffix == "_rs") {
         result.rs(x, y, c);
     } else {
@@ -42,7 +42,7 @@ void Blur(std::string suffix, ImageParam input8, const int nChannels,
         filename + (vectorized ? "_vectorized" : "") + suffix, args);
 }
 
-void Copy(std::string suffix, ImageParam input8, const int nChannels,
+void copy(std::string suffix, ImageParam input8, const int channels,
           bool vectorized) {
     Var x, y, c;
     Func input;
@@ -54,9 +54,9 @@ void Copy(std::string suffix, ImageParam input8, const int nChannels,
     result.output_buffer()
         .set_stride(0, input8.stride(0))
         .set_stride(2, input8.stride(2))
-        .set_bounds(2, 0, nChannels);
+        .set_bounds(2, 0, channels);
 
-    result.bound(c, 0, nChannels);
+    result.bound(c, 0, channels);
     if (suffix == "_rs") {
         result.rs(x, y, c);
     } else {
@@ -74,19 +74,19 @@ void Copy(std::string suffix, ImageParam input8, const int nChannels,
 }
 
 int main(int argc, char **argv) {
-    const int nChannels = 4;
+    const int channels = 4;
 
-    ImageParam inputPlanar(UInt(8), 3, "input");
-    inputPlanar.set_stride(0, 1).set_bounds(2, 0, nChannels);
-    Blur(argc > 1 ? argv[1] : "", inputPlanar, nChannels, false);
-    Copy(argc > 1 ? argv[1] : "", inputPlanar, nChannels, false);
+    ImageParam input_planar(UInt(8), 3, "input");
+    input_planar.set_stride(0, 1).set_bounds(2, 0, channels);
+    blur(argc > 1 ? argv[1] : "", input_planar, channels, false);
+    copy(argc > 1 ? argv[1] : "", input_planar, channels, false);
 
-    ImageParam inputInterleaved(UInt(8), 3, "input");
-    inputInterleaved.set_stride(0, nChannels)
+    ImageParam input_interleaved(UInt(8), 3, "input");
+    input_interleaved.set_stride(0, channels)
         .set_stride(2, 1)
-        .set_bounds(2, 0, nChannels);
-    Blur(argc > 1 ? argv[1] : "", inputInterleaved, nChannels, true);
-    Copy(argc > 1 ? argv[1] : "", inputInterleaved, nChannels, true);
+        .set_bounds(2, 0, channels);
+    blur(argc > 1 ? argv[1] : "", input_interleaved, channels, true);
+    copy(argc > 1 ? argv[1] : "", input_interleaved, channels, true);
 
     std::cout << "Done!" << std::endl;
 }

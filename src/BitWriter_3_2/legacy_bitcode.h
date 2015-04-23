@@ -1,3 +1,8 @@
+//
+//  Copied from https://android.googlesource.com/platform/frameworks/compile/slang/+/master/BitWriter_3_2/
+//  DO NOT EDIT
+//
+
 /*
  * Copyright 2013, The Android Open Source Project
  *

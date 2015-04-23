@@ -3,14 +3,14 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-Image<uint8_t> make_interleaved_image(uint8_t *host, int W, int H, int nChannels) {
+Image<uint8_t> make_interleaved_image(uint8_t *host, int W, int H, int channels) {
     buffer_t buf = {0};
     buf.host = host;
     buf.extent[0] = W;
-    buf.stride[0] = nChannels;
+    buf.stride[0] = channels;
     buf.extent[1] = H;
     buf.stride[1] = buf.stride[0] * buf.extent[0];
-    buf.extent[2] = nChannels;
+    buf.extent[2] = channels;
     buf.stride[2] = 1;
     buf.elem_size = 1;
     return Image<uint8_t>(&buf);
@@ -48,12 +48,8 @@ void copy_interleaved(bool vectorize, int channels) {
 }
 
 int main(int argc, char **argv) {
-    // const bool VECTORIZE = true;
-    const bool DONT_VECTORIZE = false;
-
-    // copy_interleaved(VECTORIZE, 4);
-    copy_interleaved(DONT_VECTORIZE, 4);
-    copy_interleaved(DONT_VECTORIZE, 3);
+    copy_interleaved(false, 4);
+    copy_interleaved(false, 3);
 
     std::cout << "Done!" << std::endl;
     return 0;
