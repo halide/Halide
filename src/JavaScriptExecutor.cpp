@@ -1203,7 +1203,7 @@ int run_javascript(const Target &target, const std::string &source, const std::s
 #endif
 
 #ifdef WITH_JAVASCRIPT_V8
-    if (!target.has_feature(Target::SpiderMonkey)) {
+    if (!target.has_feature(Target::JavaScript_SpiderMonkey)) {
         return run_javascript_v8(source, fn_name, args);
     }
 #else    
