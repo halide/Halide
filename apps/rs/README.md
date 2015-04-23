@@ -2,14 +2,15 @@ Halide Renderscript "blur" and "copy" samples
 ===
 
 These samples demonstrates two supported modes of operation for Renderscript codegen:
- - vectorized operations over interleavead RGBA images;
+ - vectorized operations over interleaved RGBA images;
  - single-element operations over planar images.
 
 Prerequisites
 ---
 
 You will need to have Android NDK in the path.
-This app only runs on arm-based Android devices.
+This app at the moment only runs on arm-based Android devices.
+TODO(aam): Investigate and confirm that the app runs on x86 Android devices as well.
 
 Building and running
 ---

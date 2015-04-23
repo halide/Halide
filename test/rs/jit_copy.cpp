@@ -49,8 +49,6 @@ std::string copy_interleaved(bool isVectorized = false, int nChannels = 4) {
     uint8_t out_buf[128 * 128 * nChannels];
     Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, nChannels);
     Image<uint8_t> out = make_interleaved_image(out_buf, 128, 128, nChannels);
-    // Image<uint8_t> in = make_planar_image(in_buf, 128, 128);
-    // Image<uint8_t> out = make_planar_image(out_buf, 128, 128);
     input8.set(in);
 
     Var x, y, c;

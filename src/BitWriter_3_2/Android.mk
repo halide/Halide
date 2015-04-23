@@ -1,3 +1,8 @@
+#
+#  Copied from https://android.googlesource.com/platform/frameworks/compile/slang/+/master/BitWriter_3_2/
+#  DO NOT EDIT
+#
+
 LOCAL_PATH:= $(call my-dir)
 
 LLVM_ROOT_PATH := $(LOCAL_PATH)/../../../../external/llvm

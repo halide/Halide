@@ -1,5 +1,4 @@
 #include "runtime_internal.h"
-// #include "scoped_spin_lock.h"
 #include "device_interface.h"
 #include "HalideRuntimeRS.h"
 
@@ -193,103 +192,89 @@ WEAK int create_rs_context(void *user_context, RsDevice *dev, RsContext *ctx) {
 }
 }  // namespace Halide::Runtime::Internal:RS:
 
-bool loadSymbols(void *handle, dispatchTable &dispatchTab, int device_api) {
-// fucntion to set the native lib path for 64bit compat lib.
+//
+// Function below is taken from https://android.googlesource.com/platform/frameworks/rs/+/master/cpp/rsDispatch.cpp
+//
+bool loadSymbols(void* handle, dispatchTable& dispatchTab, int device_api) {
+    //fucntion to set the native lib path for 64bit compat lib.
 #ifdef __LP64__
-    dispatchTab.SetNativeLibDir =
-        (SetNativeLibDirFnPtr)dlsym(handle, "rsaContextSetNativeLibDir");
+    dispatchTab.SetNativeLibDir = (SetNativeLibDirFnPtr)dlsym(handle, "rsaContextSetNativeLibDir");
     if (dispatchTab.SetNativeLibDir == NULL) {
         LOG_API("Couldn't initialize dispatchTab.SetNativeLibDir");
         return false;
     }
 #endif
-    dispatchTab.AllocationGetType =
-        (AllocationGetTypeFnPtr)dlsym(handle, "rsaAllocationGetType");
+    dispatchTab.AllocationGetType = (AllocationGetTypeFnPtr)dlsym(handle, "rsaAllocationGetType");
     if (dispatchTab.AllocationGetType == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationGetType");
         return false;
     }
-    dispatchTab.TypeGetNativeData =
-        (TypeGetNativeDataFnPtr)dlsym(handle, "rsaTypeGetNativeData");
+    dispatchTab.TypeGetNativeData = (TypeGetNativeDataFnPtr)dlsym(handle, "rsaTypeGetNativeData");
     if (dispatchTab.TypeGetNativeData == NULL) {
         LOG_API("Couldn't initialize dispatchTab.TypeGetNativeData");
         return false;
     }
-    dispatchTab.ElementGetNativeData =
-        (ElementGetNativeDataFnPtr)dlsym(handle, "rsaElementGetNativeData");
+    dispatchTab.ElementGetNativeData = (ElementGetNativeDataFnPtr)dlsym(handle, "rsaElementGetNativeData");
     if (dispatchTab.ElementGetNativeData == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ElementGetNativeData");
         return false;
     }
-    dispatchTab.ElementGetSubElements =
-        (ElementGetSubElementsFnPtr)dlsym(handle, "rsaElementGetSubElements");
+    dispatchTab.ElementGetSubElements = (ElementGetSubElementsFnPtr)dlsym(handle, "rsaElementGetSubElements");
     if (dispatchTab.ElementGetSubElements == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ElementGetSubElements");
         return false;
     }
-    dispatchTab.DeviceCreate =
-        (DeviceCreateFnPtr)dlsym(handle, "rsDeviceCreate");
+    dispatchTab.DeviceCreate = (DeviceCreateFnPtr)dlsym(handle, "rsDeviceCreate");
     if (dispatchTab.DeviceCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.DeviceCreate");
         return false;
     }
-    dispatchTab.DeviceDestroy =
-        (DeviceDestroyFnPtr)dlsym(handle, "rsDeviceDestroy");
+    dispatchTab.DeviceDestroy = (DeviceDestroyFnPtr)dlsym(handle, "rsDeviceDestroy");
     if (dispatchTab.DeviceDestroy == NULL) {
         LOG_API("Couldn't initialize dispatchTab.DeviceDestroy");
         return false;
     }
-    dispatchTab.DeviceSetConfig =
-        (DeviceSetConfigFnPtr)dlsym(handle, "rsDeviceSetConfig");
+    dispatchTab.DeviceSetConfig = (DeviceSetConfigFnPtr)dlsym(handle, "rsDeviceSetConfig");
     if (dispatchTab.DeviceSetConfig == NULL) {
         LOG_API("Couldn't initialize dispatchTab.DeviceSetConfig");
         return false;
     }
-    dispatchTab.ContextCreate =
-        (ContextCreateFnPtr)dlsym(handle, "rsContextCreate");
-    ;
+    dispatchTab.ContextCreate = (ContextCreateFnPtr)dlsym(handle, "rsContextCreate");;
     if (dispatchTab.ContextCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextCreate");
         return false;
     }
-    dispatchTab.GetName = (GetNameFnPtr)dlsym(handle, "rsaGetName");
-    ;
+    dispatchTab.GetName = (GetNameFnPtr)dlsym(handle, "rsaGetName");;
     if (dispatchTab.GetName == NULL) {
         LOG_API("Couldn't initialize dispatchTab.GetName");
         return false;
     }
-    dispatchTab.ContextDestroy =
-        (ContextDestroyFnPtr)dlsym(handle, "rsContextDestroy");
+    dispatchTab.ContextDestroy = (ContextDestroyFnPtr)dlsym(handle, "rsContextDestroy");
     if (dispatchTab.ContextDestroy == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextDestroy");
         return false;
     }
-    dispatchTab.ContextGetMessage =
-        (ContextGetMessageFnPtr)dlsym(handle, "rsContextGetMessage");
+    dispatchTab.ContextGetMessage = (ContextGetMessageFnPtr)dlsym(handle, "rsContextGetMessage");
     if (dispatchTab.ContextGetMessage == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextGetMessage");
         return false;
     }
-    dispatchTab.ContextPeekMessage =
-        (ContextPeekMessageFnPtr)dlsym(handle, "rsContextPeekMessage");
+    dispatchTab.ContextPeekMessage = (ContextPeekMessageFnPtr)dlsym(handle, "rsContextPeekMessage");
     if (dispatchTab.ContextPeekMessage == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextPeekMessage");
         return false;
     }
-    dispatchTab.ContextSendMessage =
-        (ContextSendMessageFnPtr)dlsym(handle, "rsContextSendMessage");
+    dispatchTab.ContextSendMessage = (ContextSendMessageFnPtr)dlsym(handle, "rsContextSendMessage");
     if (dispatchTab.ContextSendMessage == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextSendMessage");
         return false;
     }
-    dispatchTab.ContextInitToClient =
-        (ContextInitToClientFnPtr)dlsym(handle, "rsContextInitToClient");
+    dispatchTab.ContextInitToClient = (ContextInitToClientFnPtr)dlsym(handle, "rsContextInitToClient");
     if (dispatchTab.ContextInitToClient == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextInitToClient");
         return false;
     }
-    dispatchTab.ContextDeinitToClient =
-        (ContextDeinitToClientFnPtr)dlsym(handle, "rsContextDeinitToClient");
+    dispatchTab.ContextDeinitToClient = (ContextDeinitToClientFnPtr)dlsym(handle, "rsContextDeinitToClient");
     if (dispatchTab.ContextDeinitToClient == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextDeinitToClient");
         return false;
@@ -299,41 +284,32 @@ bool loadSymbols(void *handle, dispatchTable &dispatchTab, int device_api) {
         LOG_API("Couldn't initialize dispatchTab.TypeCreate");
         return false;
     }
-    dispatchTab.AllocationCreateTyped =
-        (AllocationCreateTypedFnPtr)dlsym(handle, "rsAllocationCreateTyped");
+    dispatchTab.AllocationCreateTyped = (AllocationCreateTypedFnPtr)dlsym(handle, "rsAllocationCreateTyped");
     if (dispatchTab.AllocationCreateTyped == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationCreateTyped");
         return false;
     }
-    dispatchTab.AllocationCreateFromBitmap =
-        (AllocationCreateFromBitmapFnPtr)dlsym(handle,
-                                               "rsAllocationCreateFromBitmap");
+    dispatchTab.AllocationCreateFromBitmap = (AllocationCreateFromBitmapFnPtr)dlsym(handle, "rsAllocationCreateFromBitmap");
     if (dispatchTab.AllocationCreateFromBitmap == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationCreateFromBitmap");
         return false;
     }
-    dispatchTab.AllocationCubeCreateFromBitmap =
-        (AllocationCubeCreateFromBitmapFnPtr)dlsym(
-            handle, "rsAllocationCubeCreateFromBitmap");
+    dispatchTab.AllocationCubeCreateFromBitmap = (AllocationCubeCreateFromBitmapFnPtr)dlsym(handle, "rsAllocationCubeCreateFromBitmap");
     if (dispatchTab.AllocationCubeCreateFromBitmap == NULL) {
-        LOG_API(
-            "Couldn't initialize dispatchTab.AllocationCubeCreateFromBitmap");
+        LOG_API("Couldn't initialize dispatchTab.AllocationCubeCreateFromBitmap");
         return false;
     }
-    dispatchTab.AllocationGetSurface =
-        (AllocationGetSurfaceFnPtr)dlsym(handle, "rsAllocationGetSurface");
+    dispatchTab.AllocationGetSurface = (AllocationGetSurfaceFnPtr)dlsym(handle, "rsAllocationGetSurface");
     if (dispatchTab.AllocationGetSurface == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationGetSurface");
         return false;
     }
-    dispatchTab.AllocationSetSurface =
-        (AllocationSetSurfaceFnPtr)dlsym(handle, "rsAllocationSetSurface");
+    dispatchTab.AllocationSetSurface = (AllocationSetSurfaceFnPtr)dlsym(handle, "rsAllocationSetSurface");
     if (dispatchTab.AllocationSetSurface == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationSetSurface");
         return false;
     }
-    dispatchTab.ContextFinish =
-        (ContextFinishFnPtr)dlsym(handle, "rsContextFinish");
+    dispatchTab.ContextFinish = (ContextFinishFnPtr)dlsym(handle, "rsContextFinish");
     if (dispatchTab.ContextFinish == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextFinish");
         return false;
@@ -343,8 +319,7 @@ bool loadSymbols(void *handle, dispatchTable &dispatchTab, int device_api) {
         LOG_API("Couldn't initialize dispatchTab.ContextDump");
         return false;
     }
-    dispatchTab.ContextSetPriority =
-        (ContextSetPriorityFnPtr)dlsym(handle, "rsContextSetPriority");
+    dispatchTab.ContextSetPriority = (ContextSetPriorityFnPtr)dlsym(handle, "rsContextSetPriority");
     if (dispatchTab.ContextSetPriority == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ContextSetPriority");
         return false;
@@ -359,301 +334,258 @@ bool loadSymbols(void *handle, dispatchTable &dispatchTab, int device_api) {
         LOG_API("Couldn't initialize dispatchTab.ObjDestroy");
         return false;
     }
-    dispatchTab.ElementCreate =
-        (ElementCreateFnPtr)dlsym(handle, "rsElementCreate");
+    dispatchTab.ElementCreate = (ElementCreateFnPtr)dlsym(handle, "rsElementCreate");
     if (dispatchTab.ElementCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ElementCreate");
         return false;
     }
-    dispatchTab.ElementCreate2 =
-        (ElementCreate2FnPtr)dlsym(handle, "rsElementCreate2");
+    dispatchTab.ElementCreate2 = (ElementCreate2FnPtr)dlsym(handle, "rsElementCreate2");
     if (dispatchTab.ElementCreate2 == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ElementCreate2");
         return false;
     }
-    dispatchTab.AllocationCopyToBitmap =
-        (AllocationCopyToBitmapFnPtr)dlsym(handle, "rsAllocationCopyToBitmap");
+    dispatchTab.AllocationCopyToBitmap = (AllocationCopyToBitmapFnPtr)dlsym(handle, "rsAllocationCopyToBitmap");
     if (dispatchTab.AllocationCopyToBitmap == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationCopyToBitmap");
         return false;
     }
-    dispatchTab.Allocation1DData =
-        (Allocation1DDataFnPtr)dlsym(handle, "rsAllocation1DData");
+    dispatchTab.Allocation1DData = (Allocation1DDataFnPtr)dlsym(handle, "rsAllocation1DData");
     if (dispatchTab.Allocation1DData == NULL) {
         LOG_API("Couldn't initialize dispatchTab.Allocation1DData");
         return false;
     }
-    dispatchTab.Allocation1DElementData = (Allocation1DElementDataFnPtr)dlsym(
-        handle, "rsAllocation1DElementData");
+    dispatchTab.Allocation1DElementData = (Allocation1DElementDataFnPtr)dlsym(handle, "rsAllocation1DElementData");
     if (dispatchTab.Allocation1DElementData == NULL) {
         LOG_API("Couldn't initialize dispatchTab.Allocation1DElementData");
         return false;
     }
-    dispatchTab.Allocation2DData =
-        (Allocation2DDataFnPtr)dlsym(handle, "rsAllocation2DData");
+    dispatchTab.Allocation2DData = (Allocation2DDataFnPtr)dlsym(handle, "rsAllocation2DData");
     if (dispatchTab.Allocation2DData == NULL) {
         LOG_API("Couldn't initialize dispatchTab.Allocation2DData");
         return false;
     }
-    dispatchTab.Allocation3DData =
-        (Allocation3DDataFnPtr)dlsym(handle, "rsAllocation3DData");
+    dispatchTab.Allocation3DData = (Allocation3DDataFnPtr)dlsym(handle, "rsAllocation3DData");
     if (dispatchTab.Allocation3DData == NULL) {
         LOG_API("Couldn't initialize dispatchTab.Allocation3DData");
         return false;
     }
-    dispatchTab.AllocationGenerateMipmaps =
-        (AllocationGenerateMipmapsFnPtr)dlsym(handle,
-                                              "rsAllocationGenerateMipmaps");
+    dispatchTab.AllocationGenerateMipmaps = (AllocationGenerateMipmapsFnPtr)dlsym(handle, "rsAllocationGenerateMipmaps");
     if (dispatchTab.AllocationGenerateMipmaps == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationGenerateMipmaps");
         return false;
     }
-    dispatchTab.AllocationRead =
-        (AllocationReadFnPtr)dlsym(handle, "rsAllocationRead");
+    dispatchTab.AllocationRead = (AllocationReadFnPtr)dlsym(handle, "rsAllocationRead");
     if (dispatchTab.AllocationRead == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationRead");
         return false;
     }
-    dispatchTab.Allocation1DRead =
-        (Allocation1DReadFnPtr)dlsym(handle, "rsAllocation1DRead");
+    dispatchTab.Allocation1DRead = (Allocation1DReadFnPtr)dlsym(handle, "rsAllocation1DRead");
     if (dispatchTab.Allocation1DRead == NULL) {
         LOG_API("Couldn't initialize dispatchTab.Allocation1DRead");
         return false;
     }
-    dispatchTab.Allocation2DRead =
-        (Allocation2DReadFnPtr)dlsym(handle, "rsAllocation2DRead");
+    dispatchTab.Allocation2DRead = (Allocation2DReadFnPtr)dlsym(handle, "rsAllocation2DRead");
     if (dispatchTab.Allocation2DRead == NULL) {
         LOG_API("Couldn't initialize dispatchTab.Allocation2DRead");
         return false;
     }
-    dispatchTab.AllocationSyncAll =
-        (AllocationSyncAllFnPtr)dlsym(handle, "rsAllocationSyncAll");
+    dispatchTab.AllocationSyncAll = (AllocationSyncAllFnPtr)dlsym(handle, "rsAllocationSyncAll");
     if (dispatchTab.AllocationSyncAll == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationSyncAll");
         return false;
     }
-    dispatchTab.AllocationResize1D =
-        (AllocationResize1DFnPtr)dlsym(handle, "rsAllocationResize1D");
+    dispatchTab.AllocationResize1D = (AllocationResize1DFnPtr)dlsym(handle, "rsAllocationResize1D");
     if (dispatchTab.AllocationResize1D == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationResize1D");
         return false;
     }
-    dispatchTab.AllocationCopy2DRange =
-        (AllocationCopy2DRangeFnPtr)dlsym(handle, "rsAllocationCopy2DRange");
+    dispatchTab.AllocationCopy2DRange = (AllocationCopy2DRangeFnPtr)dlsym(handle, "rsAllocationCopy2DRange");
     if (dispatchTab.AllocationCopy2DRange == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationCopy2DRange");
         return false;
     }
-    dispatchTab.AllocationCopy3DRange =
-        (AllocationCopy3DRangeFnPtr)dlsym(handle, "rsAllocationCopy3DRange");
+    dispatchTab.AllocationCopy3DRange = (AllocationCopy3DRangeFnPtr)dlsym(handle, "rsAllocationCopy3DRange");
     if (dispatchTab.AllocationCopy3DRange == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationCopy3DRange");
         return false;
     }
-    dispatchTab.SamplerCreate =
-        (SamplerCreateFnPtr)dlsym(handle, "rsSamplerCreate");
+    dispatchTab.SamplerCreate = (SamplerCreateFnPtr)dlsym(handle, "rsSamplerCreate");
     if (dispatchTab.SamplerCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.SamplerCreate");
         return false;
     }
-    dispatchTab.ScriptBindAllocation =
-        (ScriptBindAllocationFnPtr)dlsym(handle, "rsScriptBindAllocation");
+    dispatchTab.ScriptBindAllocation = (ScriptBindAllocationFnPtr)dlsym(handle, "rsScriptBindAllocation");
     if (dispatchTab.ScriptBindAllocation == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptBindAllocation");
         return false;
     }
-    dispatchTab.ScriptSetTimeZone =
-        (ScriptSetTimeZoneFnPtr)dlsym(handle, "rsScriptSetTimeZone");
+    dispatchTab.ScriptSetTimeZone = (ScriptSetTimeZoneFnPtr)dlsym(handle, "rsScriptSetTimeZone");
     if (dispatchTab.ScriptSetTimeZone == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetTimeZone");
         return false;
     }
-    dispatchTab.ScriptInvoke =
-        (ScriptInvokeFnPtr)dlsym(handle, "rsScriptInvoke");
+    dispatchTab.ScriptInvoke = (ScriptInvokeFnPtr)dlsym(handle, "rsScriptInvoke");
     if (dispatchTab.ScriptInvoke == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptInvoke");
         return false;
     }
-    dispatchTab.ScriptInvokeV =
-        (ScriptInvokeVFnPtr)dlsym(handle, "rsScriptInvokeV");
+    dispatchTab.ScriptInvokeV = (ScriptInvokeVFnPtr)dlsym(handle, "rsScriptInvokeV");
     if (dispatchTab.ScriptInvokeV == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptInvokeV");
         return false;
     }
-    dispatchTab.ScriptForEach =
-        (ScriptForEachFnPtr)dlsym(handle, "rsScriptForEach");
+    dispatchTab.ScriptForEach = (ScriptForEachFnPtr)dlsym(handle, "rsScriptForEach");
     if (dispatchTab.ScriptForEach == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptForEach");
         return false;
     }
-    dispatchTab.ScriptSetVarI =
-        (ScriptSetVarIFnPtr)dlsym(handle, "rsScriptSetVarI");
+    dispatchTab.ScriptSetVarI = (ScriptSetVarIFnPtr)dlsym(handle, "rsScriptSetVarI");
     if (dispatchTab.ScriptSetVarI == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetVarI");
         return false;
     }
-    dispatchTab.ScriptSetVarObj =
-        (ScriptSetVarObjFnPtr)dlsym(handle, "rsScriptSetVarObj");
+    dispatchTab.ScriptSetVarObj = (ScriptSetVarObjFnPtr)dlsym(handle, "rsScriptSetVarObj");
     if (dispatchTab.ScriptSetVarObj == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetVarObj");
         return false;
     }
-    dispatchTab.ScriptSetVarJ =
-        (ScriptSetVarJFnPtr)dlsym(handle, "rsScriptSetVarJ");
+    dispatchTab.ScriptSetVarJ = (ScriptSetVarJFnPtr)dlsym(handle, "rsScriptSetVarJ");
     if (dispatchTab.ScriptSetVarJ == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetVarJ");
         return false;
     }
-    dispatchTab.ScriptSetVarF =
-        (ScriptSetVarFFnPtr)dlsym(handle, "rsScriptSetVarF");
+    dispatchTab.ScriptSetVarF = (ScriptSetVarFFnPtr)dlsym(handle, "rsScriptSetVarF");
     if (dispatchTab.ScriptSetVarF == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetVarF");
         return false;
     }
-    dispatchTab.ScriptSetVarD =
-        (ScriptSetVarDFnPtr)dlsym(handle, "rsScriptSetVarD");
+    dispatchTab.ScriptSetVarD = (ScriptSetVarDFnPtr)dlsym(handle, "rsScriptSetVarD");
     if (dispatchTab.ScriptSetVarD == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetVarD");
         return false;
     }
-    dispatchTab.ScriptSetVarV =
-        (ScriptSetVarVFnPtr)dlsym(handle, "rsScriptSetVarV");
+    dispatchTab.ScriptSetVarV = (ScriptSetVarVFnPtr)dlsym(handle, "rsScriptSetVarV");
     if (dispatchTab.ScriptSetVarV == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetVarV");
         return false;
     }
-    dispatchTab.ScriptGetVarV =
-        (ScriptGetVarVFnPtr)dlsym(handle, "rsScriptGetVarV");
+    dispatchTab.ScriptGetVarV = (ScriptGetVarVFnPtr)dlsym(handle, "rsScriptGetVarV");
     if (dispatchTab.ScriptGetVarV == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptGetVarV");
         return false;
     }
-    dispatchTab.ScriptSetVarVE =
-        (ScriptSetVarVEFnPtr)dlsym(handle, "rsScriptSetVarVE");
+    dispatchTab.ScriptSetVarVE = (ScriptSetVarVEFnPtr)dlsym(handle, "rsScriptSetVarVE");
     if (dispatchTab.ScriptSetVarVE == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptSetVarVE");
         return false;
     }
-    dispatchTab.ScriptCCreate =
-        (ScriptCCreateFnPtr)dlsym(handle, "rsScriptCCreate");
+    dispatchTab.ScriptCCreate = (ScriptCCreateFnPtr)dlsym(handle, "rsScriptCCreate");
     if (dispatchTab.ScriptCCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptCCreate");
         return false;
     }
-    dispatchTab.ScriptIntrinsicCreate =
-        (ScriptIntrinsicCreateFnPtr)dlsym(handle, "rsScriptIntrinsicCreate");
+    dispatchTab.ScriptIntrinsicCreate = (ScriptIntrinsicCreateFnPtr)dlsym(handle, "rsScriptIntrinsicCreate");
     if (dispatchTab.ScriptIntrinsicCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptIntrinsicCreate");
         return false;
     }
-    dispatchTab.ScriptKernelIDCreate =
-        (ScriptKernelIDCreateFnPtr)dlsym(handle, "rsScriptKernelIDCreate");
+    dispatchTab.ScriptKernelIDCreate = (ScriptKernelIDCreateFnPtr)dlsym(handle, "rsScriptKernelIDCreate");
     if (dispatchTab.ScriptKernelIDCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptKernelIDCreate");
         return false;
     }
-    dispatchTab.ScriptFieldIDCreate =
-        (ScriptFieldIDCreateFnPtr)dlsym(handle, "rsScriptFieldIDCreate");
+    dispatchTab.ScriptFieldIDCreate = (ScriptFieldIDCreateFnPtr)dlsym(handle, "rsScriptFieldIDCreate");
     if (dispatchTab.ScriptFieldIDCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptFieldIDCreate");
         return false;
     }
-    dispatchTab.ScriptGroupCreate =
-        (ScriptGroupCreateFnPtr)dlsym(handle, "rsScriptGroupCreate");
+    dispatchTab.ScriptGroupCreate = (ScriptGroupCreateFnPtr)dlsym(handle, "rsScriptGroupCreate");
     if (dispatchTab.ScriptGroupCreate == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptGroupCreate");
         return false;
     }
-    dispatchTab.ScriptGroupSetOutput =
-        (ScriptGroupSetOutputFnPtr)dlsym(handle, "rsScriptGroupSetOutput");
+    dispatchTab.ScriptGroupSetOutput = (ScriptGroupSetOutputFnPtr)dlsym(handle, "rsScriptGroupSetOutput");
     if (dispatchTab.ScriptGroupSetOutput == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptGroupSetOutput");
         return false;
     }
-    dispatchTab.ScriptGroupSetInput =
-        (ScriptGroupSetInputFnPtr)dlsym(handle, "rsScriptGroupSetInput");
+    dispatchTab.ScriptGroupSetInput = (ScriptGroupSetInputFnPtr)dlsym(handle, "rsScriptGroupSetInput");
     if (dispatchTab.ScriptGroupSetInput == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptGroupSetInput");
         return false;
     }
-    dispatchTab.ScriptGroupExecute =
-        (ScriptGroupExecuteFnPtr)dlsym(handle, "rsScriptGroupExecute");
+    dispatchTab.ScriptGroupExecute = (ScriptGroupExecuteFnPtr)dlsym(handle, "rsScriptGroupExecute");
     if (dispatchTab.ScriptGroupExecute == NULL) {
         LOG_API("Couldn't initialize dispatchTab.ScriptGroupExecute");
         return false;
     }
-    dispatchTab.AllocationIoSend =
-        (AllocationIoSendFnPtr)dlsym(handle, "rsAllocationIoSend");
+    dispatchTab.AllocationIoSend = (AllocationIoSendFnPtr)dlsym(handle, "rsAllocationIoSend");
     if (dispatchTab.AllocationIoSend == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationIoSend");
         return false;
     }
-    dispatchTab.AllocationIoReceive =
-        (AllocationIoReceiveFnPtr)dlsym(handle, "rsAllocationIoReceive");
+    dispatchTab.AllocationIoReceive = (AllocationIoReceiveFnPtr)dlsym(handle, "rsAllocationIoReceive");
     if (dispatchTab.AllocationIoReceive == NULL) {
         LOG_API("Couldn't initialize dispatchTab.AllocationIoReceive");
         return false;
     }
-    dispatchTab.AllocationGetPointer =
-        (AllocationGetPointerFnPtr)dlsym(handle, "rsAllocationGetPointer");
-    if (dispatchTab.AllocationGetPointer == NULL) {
-        LOG_API("Couldn't initialize dispatchTab.AllocationGetPointer");
-        return false;
+    // API_21 functions
+    if (device_api >= 21) {
+        dispatchTab.AllocationGetPointer = (AllocationGetPointerFnPtr)dlsym(handle, "rsAllocationGetPointer");
+        if (dispatchTab.AllocationGetPointer == NULL) {
+            LOG_API("Couldn't initialize dispatchTab.AllocationGetPointer");
+            return false;
+        }
     }
-
     // API_23 functions
     if (device_api >= 23) {
-        // ScriptGroup V2 functions
-        dispatchTab.ScriptInvokeIDCreate =
-            (ScriptInvokeIDCreateFnPtr)dlsym(handle, "rsScriptInvokeIDCreate");
+        //ScriptGroup V2 functions
+        dispatchTab.ScriptInvokeIDCreate = (ScriptInvokeIDCreateFnPtr)dlsym(handle, "rsScriptInvokeIDCreate");
         if (dispatchTab.ScriptInvokeIDCreate == NULL) {
             LOG_API("Couldn't initialize dispatchTab.ScriptInvokeIDCreate");
             return false;
         }
-        dispatchTab.ClosureCreate =
-            (ClosureCreateFnPtr)dlsym(handle, "rsClosureCreate");
+        dispatchTab.ClosureCreate = (ClosureCreateFnPtr)dlsym(handle, "rsClosureCreate");
         if (dispatchTab.ClosureCreate == NULL) {
             LOG_API("Couldn't initialize dispatchTab.ClosureCreate");
             return false;
         }
-        dispatchTab.ClosureSetArg =
-            (ClosureSetArgFnPtr)dlsym(handle, "rsClosureSetArg");
+        dispatchTab.InvokeClosureCreate = (InvokeClosureCreateFnPtr)dlsym(handle, "rsInvokeClosureCreate");
+        if (dispatchTab.InvokeClosureCreate == NULL) {
+            LOG_API("Couldn't initialize dispatchTab.InvokeClosureCreate");
+            return false;
+        }
+        dispatchTab.ClosureSetArg = (ClosureSetArgFnPtr)dlsym(handle, "rsClosureSetArg");
         if (dispatchTab.ClosureSetArg == NULL) {
             LOG_API("Couldn't initialize dispatchTab.ClosureSetArg");
             return false;
         }
-        dispatchTab.ClosureSetGlobal =
-            (ClosureSetGlobalFnPtr)dlsym(handle, "rsClosureSetGlobal");
+        dispatchTab.ClosureSetGlobal = (ClosureSetGlobalFnPtr)dlsym(handle, "rsClosureSetGlobal");
         if (dispatchTab.ClosureSetGlobal == NULL) {
             LOG_API("Couldn't initialize dispatchTab.ClosureSetGlobal");
             return false;
         }
-        dispatchTab.ScriptGroup2Create =
-            (ScriptGroup2CreateFnPtr)dlsym(handle, "rsScriptGroup2Create");
+        dispatchTab.ScriptGroup2Create = (ScriptGroup2CreateFnPtr)dlsym(handle, "rsScriptGroup2Create");
         if (dispatchTab.ScriptGroup2Create == NULL) {
             LOG_API("Couldn't initialize dispatchTab.ScriptGroup2Create");
             return false;
         }
-        dispatchTab.AllocationElementData = (AllocationElementDataFnPtr)dlsym(
-            handle, "rsAllocationElementData");
+        dispatchTab.AllocationElementData = (AllocationElementDataFnPtr)dlsym(handle, "rsAllocationElementData");
         if (dispatchTab.AllocationElementData == NULL) {
             LOG_API("Couldn't initialize dispatchTab.AllocationElementData");
             return false;
         }
-        dispatchTab.AllocationElementRead = (AllocationElementReadFnPtr)dlsym(
-            handle, "rsAllocationElementRead");
+        dispatchTab.AllocationElementRead = (AllocationElementReadFnPtr)dlsym(handle, "rsAllocationElementRead");
         if (dispatchTab.AllocationElementRead == NULL) {
             LOG_API("Couldn't initialize dispatchTab.AllocationElementRead");
             return false;
         }
-        dispatchTab.Allocation3DRead =
-            (Allocation3DReadFnPtr)dlsym(handle, "rsAllocation3DRead");
+        dispatchTab.Allocation3DRead = (Allocation3DReadFnPtr)dlsym(handle, "rsAllocation3DRead");
         if (dispatchTab.Allocation3DRead == NULL) {
             LOG_API("Couldn't initialize dispatchTab.Allocation3DRead");
             return false;
         }
     }
-
     return true;
 }
 

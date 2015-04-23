@@ -1,3 +1,8 @@
+//
+//  Copied from https://android.googlesource.com/platform/frameworks/compile/slang/+/master/BitWriter_3_2/
+//  DO NOT EDIT
+//
+
 //===-- Bitcode/Writer/ValueEnumerator.h - Number values --------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure

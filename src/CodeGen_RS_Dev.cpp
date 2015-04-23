@@ -76,22 +76,17 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
     stmt.accept(&bounds_names);
 
     // Type Definitions
-    StructType *StructTy_struct_rs_allocation =
-        module->getTypeByName("struct.rs_allocation");
+    StructType *StructTy_struct_rs_allocation = module->getTypeByName("struct.rs_allocation");
 
     // Put the arguments in the symbol table
-    vector<std::tuple<string, Value *> > globals_sym_names;
+    vector<std::tuple<string, Value *>> globals_sym_names;
 
     // Constant Definitions
-    ConstantAggregateZero *const_empty_allocation_struct =
-        ConstantAggregateZero::get(StructTy_struct_rs_allocation);
-    ConstantInt *const_0 =
-        ConstantInt::get(*context, APInt(32, StringRef("0"), 10));
+    ConstantAggregateZero *const_empty_allocation_struct = ConstantAggregateZero::get(StructTy_struct_rs_allocation);
+    ConstantInt *const_0 = ConstantInt::get(*context, APInt(32, StringRef("0"), 10));
 
-    NamedMDNode *rs_export_var =
-        module->getOrInsertNamedMetadata("#rs_export_var");
-    NamedMDNode *rs_objects_slots =
-        module->getOrInsertNamedMetadata("#rs_object_slots");
+    NamedMDNode *rs_export_var = module->getOrInsertNamedMetadata("#rs_export_var");
+    NamedMDNode *rs_objects_slots = module->getOrInsertNamedMetadata("#rs_object_slots");
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types_1(args.size());
@@ -118,8 +113,7 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
                 vec<LLVMMDNodeArgumentType>(MDString::get(*context, arg_name),
                                             MDString::get(*context, "6"))));
         } else {
-            argument_type =
-                VectorType::get(llvm_type_of(UInt(8)), args[i].type.width);
+            argument_type = VectorType::get(llvm_type_of(UInt(8)), args[i].type.width);
 
             GlobalVariable *gvar =
                 new GlobalVariable(*module, StructTy_struct_rs_allocation,
@@ -248,8 +242,7 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
     builder->CreateBr(body_block);
 
     // Add Renderscript standard set of metadata.
-    NamedMDNode *meta_llvm_module_flags =
-        module->getOrInsertNamedMetadata("llvm.module.flags");
+    NamedMDNode *meta_llvm_module_flags = module->getOrInsertNamedMetadata("llvm.module.flags");
     meta_llvm_module_flags->addOperand(MDNode::get(
         *context, vec<LLVMMDNodeArgumentType>(
                       value_as_metadata_type(ConstantInt::get(i32, 1)),
@@ -261,8 +254,7 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
                       MDString::get(*context, "min_enum_size"),
                       value_as_metadata_type(ConstantInt::get(i32, 4)))));
 
-    module->getOrInsertNamedMetadata("llvm.ident")
-        ->addOperand(
+    module->getOrInsertNamedMetadata("llvm.ident") ->addOperand(
             MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(
                                       *context, "clang version 3.6 "))));
 
@@ -276,8 +268,7 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
         vec<LLVMMDNodeArgumentType>(MDString::get(*context, "rs_fp_relaxed"),
                                     MDString::get(*context, ""))));
 
-    NamedMDNode *rs_export_foreach_name =
-        module->getOrInsertNamedMetadata("#rs_export_foreach_name");
+    NamedMDNode *rs_export_foreach_name = module->getOrInsertNamedMetadata("#rs_export_foreach_name");
     rs_export_foreach_name->addOperand(MDNode::get(
         *context,
         vec<LLVMMDNodeArgumentType>(MDString::get(*context, "root"))));
@@ -286,8 +277,7 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
         vec<LLVMMDNodeArgumentType>(MDString::get(*context, kernel_name))));
 
     const char* kernel_signature = "57";
-    NamedMDNode *rs_export_foreach =
-        module->getOrInsertNamedMetadata("#rs_export_foreach");
+    NamedMDNode *rs_export_foreach = module->getOrInsertNamedMetadata("#rs_export_foreach");
     rs_export_foreach->addOperand(MDNode::get(
         *context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, "0"))));
     rs_export_foreach->addOperand(MDNode::get(
@@ -356,6 +346,9 @@ void CodeGen_RS_Dev::visit(const Free *f) {
 }
 
 llvm::Function *CodeGen_RS_Dev::fetch_GetElement_func(int width) {
+    // Following symbols correspond to public Android API functions.
+    // The symbols will be resolved once the code compiles on the target
+    // Android device.
     std::string func_name = width == 1
                                 ? "_Z20rsGetElementAt_uchar13rs_allocationjjj"
                                 : "_Z21rsGetElementAt_uchar413rs_allocationjj";
@@ -365,6 +358,9 @@ llvm::Function *CodeGen_RS_Dev::fetch_GetElement_func(int width) {
 }
 
 llvm::Function *CodeGen_RS_Dev::fetch_SetElement_func(int width) {
+    // Following symbols correspond to public Android API functions.
+    // The symbols will be resolved once the code compiles on the target
+    // Android device.
     std::string func_name =
         width == 1 ? "_Z20rsSetElementAt_uchar13rs_allocationhjjj"
                    : "_Z21rsSetElementAt_uchar413rs_allocationDv4_hjj";
@@ -394,8 +390,7 @@ vector<Value *> CodeGen_RS_Dev::add_x_y_c_args(Expr name, Expr x, Expr y,
         args.push_back(codegen(b_y->value));
     } else {
         // Use all three coordinates to retrieve single byte.
-        user_assert(b_name == NULL && b_x == NULL && b_y == NULL &&
-                    ramp_c == NULL);
+        user_assert(b_name == NULL && b_x == NULL && b_y == NULL && ramp_c == NULL);
         args.push_back(sym_get(name.as<StringImm>()->value));
         args.push_back(codegen(x));
         args.push_back(codegen(y));
@@ -461,6 +456,8 @@ llvm::Triple CodeGen_RS_Dev::get_target_triple() const {
     return Triple(Triple::normalize(march() + "-" + mcpu() + "-" + mattrs()));
 }
 
+// Data structures below as well as writeAndroidBitcodeWrapper function are
+// taken from https://android.googlesource.com/platform/frameworks/compile/libbcc/+/master/include/bcinfo/BitcodeWrapper.h
 struct AndroidBitcodeWrapper {
     uint32_t Magic;
     uint32_t Version;

@@ -1,3 +1,8 @@
+//
+//  Copied from https://android.googlesource.com/platform/frameworks/compile/slang/+/android-5.0.0_r7/BitWriter_3_2/
+//  DO NOT EDIT
+//
+
 //===-- llvm/Bitcode/ReaderWriter.h - Bitcode reader/writers ----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
