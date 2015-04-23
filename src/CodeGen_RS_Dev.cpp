@@ -1,4 +1,8 @@
+#if LLVM_VERSION >= 36
 #include "BitWriter_3_2/ReaderWriter_3_2.h"
+#else
+#include "BitWriter_3_2.35/ReaderWriter_3_2.h"
+#endif
 #include "CodeGen_RS_Dev.h"
 #include "CodeGen_Internal.h"
 #include "IROperator.h"
@@ -244,6 +248,34 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
     builder->CreateBr(body_block);
 
     // Add Renderscript standard set of metadata.
+    NamedMDNode *meta_llvm_module_flags =
+        module->getOrInsertNamedMetadata("llvm.module.flags");
+    meta_llvm_module_flags->addOperand(MDNode::get(
+        *context, vec<LLVMMDNodeArgumentType>(
+                      value_as_metadata_type(ConstantInt::get(i32, 1)),
+                      MDString::get(*context, "wchar_size"),
+                      value_as_metadata_type(ConstantInt::get(i32, 4)))));
+    meta_llvm_module_flags->addOperand(MDNode::get(
+        *context, vec<LLVMMDNodeArgumentType>(
+                      value_as_metadata_type(ConstantInt::get(i32, 1)),
+                      MDString::get(*context, "min_enum_size"),
+                      value_as_metadata_type(ConstantInt::get(i32, 4)))));
+
+    module->getOrInsertNamedMetadata("llvm.ident")
+        ->addOperand(
+            MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(
+                                      *context, "clang version 3.6 "))));
+
+    NamedMDNode *meta_pragma = module->getOrInsertNamedMetadata("#pragma");
+    meta_pragma->addOperand(MDNode::get(
+        *context,
+        vec<LLVMMDNodeArgumentType>(MDString::get(*context, "version"),
+                                    MDString::get(*context, "1"))));
+    meta_pragma->addOperand(MDNode::get(
+        *context,
+        vec<LLVMMDNodeArgumentType>(MDString::get(*context, "rs_fp_relaxed"),
+                                    MDString::get(*context, ""))));
+
     NamedMDNode *rs_export_foreach_name =
         module->getOrInsertNamedMetadata("#rs_export_foreach_name");
     rs_export_foreach_name->addOperand(MDNode::get(
