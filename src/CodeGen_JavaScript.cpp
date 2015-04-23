@@ -49,6 +49,11 @@ const string preamble =
     " b.stride[3] = stride3;\n"
     " return true;\n"
     "}\n"
+    "function halide_round(num) {\n"
+    " var r = Math.round(num);\n"
+    " if (r == num + 0.5 && (r % 2)) { r = Math.floor(num); }\n"
+    " return r;\n"
+    "}\n"
   //...
     "";
 }
@@ -592,8 +597,8 @@ std::map<string, std::pair<string, int> > js_math_functions {
     { "floor_f64", { "Math.floor", 1 } },
     { "ceil_f32", { "Math.ceil", 1 } },
     { "ceil_f64", { "Math.ceil", 1 } },
-    { "round_f32", { "Math.round", 1 } },
-    { "round_f64", { "Math.round", 1 } },
+    { "round_f32", { "halide_round", 1 } }, // TODO: Figure out if we want a Halide top-level object.
+    { "round_f64", { "halide_round", 1 } },
     { "trunc_f32", { "Math.trunc", 1 } },
     { "trunc_f64", { "Math.trunc", 1 } },
     { "pow_f32", { "Math.pow", 2 } },
