@@ -284,8 +284,8 @@ bool Target::merge_string(const std::string &target) {
             set_feature(Target::Debug);
         } else if (tok == "opengl") {
             set_feature(Target::OpenGL);
-        } else if (tok == "rs") {
-            set_feature(Target::RS);
+        } else if (tok == "renderscript") {
+            set_feature(Target::Renderscript);
         } else if (tok == "user_context") {
             set_feature(Target::UserContext);
         } else if (tok == "register_metadata") {

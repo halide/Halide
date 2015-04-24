@@ -1,30 +1,31 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
-#include "HalideRuntimeRS.h"
+#include "HalideRuntimeRenderscript.h"
 
 extern "C" void *dlopen(const char *, int);
 extern "C" void *dlsym(void *, const char *);
+extern "C" char* *dlerror();
 
 #define     RTLD_LAZY   0x1
 #define     RTLD_LOCAL   0x4
 
-#define LOG_API(...)
+#define LOG_API(...) ALOGV(__VA_ARGS__)
 
 #define LOG_TAG "halide_rs"
 
-#include "mini_rs.h"
+#include "mini_renderscript.h"
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
-namespace RS {
+namespace Renderscript {
 
-extern WEAK halide_device_interface rs_device_interface;
+extern WEAK halide_device_interface renderscript_device_interface;
 
 WEAK const char *get_error_name(RSError err);
-WEAK int create_rs_context(void *user_context, RsDevice *dev, RsContext *ctx);
+WEAK int create_renderscript_context(void *user_context, RsDevice *dev, RsContext *ctx);
 
-// An RS context/device/synchronization lock defined in
+// An Renderscript context/device/synchronization lock defined in
 // this module with weak linkage
 RsContext WEAK context = 0;
 RsDevice WEAK device = 0;
@@ -32,9 +33,9 @@ volatile int WEAK thread_lock = 0;
 }
 }
 }
-}  // namespace Halide::Runtime::Internal:RS:
+}  // namespace Halide::Runtime::Internal:Renderscript:
 
-using namespace Halide::Runtime::Internal::RS;
+using namespace Halide::Runtime::Internal::Renderscript;
 
 extern "C" {
 
@@ -50,9 +51,9 @@ extern int halide_start_clock(void *user_context);
 extern int64_t halide_current_time_ns(void *user_context);
 #endif
 
-// The default implementation of halide_rs_acquire_context uses the global
+// The default implementation of halide_renderscript_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
-WEAK int halide_rs_acquire_context(void *user_context, RsDevice *dev,
+WEAK int halide_renderscript_acquire_context(void *user_context, RsDevice *dev,
                                    RsContext *ctx, bool create = true) {
     halide_assert(user_context, dev != NULL);
     halide_assert(user_context, ctx != NULL);
@@ -63,7 +64,7 @@ WEAK int halide_rs_acquire_context(void *user_context, RsDevice *dev,
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
     if (context == NULL && create) {
-        int error = create_rs_context(user_context, &device, &context);
+        int error = create_renderscript_context(user_context, &device, &context);
         if (error != RS_SUCCESS) {
             __sync_lock_release(&thread_lock);
             return error;
@@ -75,7 +76,7 @@ WEAK int halide_rs_acquire_context(void *user_context, RsDevice *dev,
     return 0;
 }
 
-WEAK int halide_rs_release_context(void *user_context) {
+WEAK int halide_renderscript_release_context(void *user_context) {
     __sync_lock_release(&thread_lock);
     return 0;
 }
@@ -85,7 +86,7 @@ WEAK int halide_rs_release_context(void *user_context) {
 namespace Halide {
 namespace Runtime {
 namespace Internal {
-namespace RS {
+namespace Renderscript {
 
 static uint32_t getProp(const char *) { return 0; }
 
@@ -122,12 +123,12 @@ public:
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
-        error = halide_rs_acquire_context(user_context, &mDev, &mContext);
+        error = halide_renderscript_acquire_context(user_context, &mDev, &mContext);
         halide_assert(user_context, mDev != NULL);
         halide_assert(user_context, mContext != NULL);
     }
 
-    ~Context() { halide_rs_release_context(user_context); }
+    ~Context() { halide_renderscript_release_context(user_context); }
 };
 
 WEAK dispatchTable *Context::dispatch;
@@ -142,7 +143,7 @@ struct module_state {
 };
 WEAK module_state *state_list = NULL;
 
-WEAK int create_rs_context(void *user_context, RsDevice *dev, RsContext *ctx) {
+WEAK int create_renderscript_context(void *user_context, RsDevice *dev, RsContext *ctx) {
     uint32_t flags = 0;
 
     int targetApi = RS_VERSION;
@@ -591,16 +592,16 @@ bool loadSymbols(void* handle, dispatchTable& dispatchTab, int device_api) {
 
 extern "C" {
 
-WEAK int halide_rs_initialize_kernels(void *user_context, void **state_ptr,
+WEAK int halide_renderscript_initialize_kernels(void *user_context, void **state_ptr,
                                       const char *src, int size) {
-    debug(user_context) << "RS: halide_rs_initialize_kernels (user_context: "
+    debug(user_context) << "RS: halide_renderscript_initialize_kernels (user_context: "
                         << user_context << ", state_ptr: " << state_ptr
                         << ", program: " << (void *)src << ", size: " << size
                         << "\n";
 
     Context ctx(user_context);
     if (ctx.error != RS_SUCCESS) {
-        debug(user_context) << "RS: halide_rs_init_kernels failed "
+        debug(user_context) << "RS: halide_renderscript_init_kernels failed "
                             << "to create RSContext. error is " << ctx.error
                             << "\n";
         return ctx.error;
@@ -635,7 +636,7 @@ WEAK int halide_rs_initialize_kernels(void *user_context, void **state_ptr,
             size  // codeLength
             );
 
-        debug(user_context) << "RS:halide_rs_init_kernels created script "
+        debug(user_context) << "RS:halide_renderscript_init_kernels created script "
                             << (void *)((*state)->module) << "\n";
     }
 
@@ -648,14 +649,14 @@ WEAK int halide_rs_initialize_kernels(void *user_context, void **state_ptr,
     return RS_SUCCESS;
 }
 
-WEAK int halide_rs_device_free(void *user_context, buffer_t *buf) {
+WEAK int halide_renderscript_device_free(void *user_context, buffer_t *buf) {
     if (buf->dev == 0) {
         return 0;
     }
 
     void *dev_ptr = (void *)halide_get_device_handle(buf->dev);
 
-    debug(user_context) << "RS: halide_rs_device_free (user_context: "
+    debug(user_context) << "RS: halide_renderscript_device_free (user_context: "
                         << user_context << ", buf: " << buf << ")\n";
 
     Context ctx(user_context);
@@ -679,13 +680,13 @@ WEAK int halide_rs_device_free(void *user_context, buffer_t *buf) {
     return RS_SUCCESS;
 }
 
-WEAK int halide_rs_device_release(void *user_context) {
-    debug(user_context) << "RS: halide_rs_device_release (user_context: "
+WEAK int halide_renderscript_device_release(void *user_context) {
+    debug(user_context) << "RS: halide_renderscript_device_release (user_context: "
                         << user_context << ")\n";
 
     Context ctx(user_context);
     if (ctx.error != RS_SUCCESS) {
-        debug(user_context) << "RS: halide_rs_device_release failed to "
+        debug(user_context) << "RS: halide_renderscript_device_release failed to "
                             << "create Context. error is " << ctx.error << "\n";
         return ctx.error;
     }
@@ -720,7 +721,7 @@ WEAK int halide_rs_device_release(void *user_context) {
         context = NULL;
     }
 
-    halide_rs_release_context(user_context);
+    halide_renderscript_release_context(user_context);
 
     return RS_SUCCESS;
 }
@@ -744,8 +745,8 @@ WEAK bool is_interleaved_rgba_buffer_t(buffer_t *buf) {
 }
 }
 
-WEAK int halide_rs_device_malloc(void *user_context, buffer_t *buf) {
-    debug(user_context) << "RS: halide_rs_device_malloc (user_context: "
+WEAK int halide_renderscript_device_malloc(void *user_context, buffer_t *buf) {
+    debug(user_context) << "RS: halide_renderscript_device_malloc (user_context: "
                         << user_context << ", buf: " << buf << ")\n";
 
     Context ctx(user_context);
@@ -757,7 +758,7 @@ WEAK int halide_rs_device_malloc(void *user_context, buffer_t *buf) {
 
     if (buf->dev) {
         // This buffer already has a device allocation
-        debug(user_context) << "rs_device_malloc: This buffer already has a "
+        debug(user_context) << "renderscript_device_malloc: This buffer already has a "
                                "device allocation\n";
         return 0;
     }
@@ -821,7 +822,7 @@ WEAK int halide_rs_device_malloc(void *user_context, buffer_t *buf) {
     } else {
         debug(user_context) << (void *)p << "\n";
     }
-    buf->dev = halide_new_device_wrapper((uint64_t)p, &rs_device_interface);
+    buf->dev = halide_new_device_wrapper((uint64_t)p, &renderscript_device_interface);
     if (buf->dev == 0) {
         error(user_context) << "RS: out of memory allocating device wrapper.\n";
         return -1;
@@ -837,8 +838,8 @@ WEAK int halide_rs_device_malloc(void *user_context, buffer_t *buf) {
     return RS_SUCCESS;
 }
 
-WEAK int halide_rs_copy_to_device(void *user_context, buffer_t *buf) {
-    debug(user_context) << "RS: halide_rs_copy_to_device (user_context: "
+WEAK int halide_renderscript_copy_to_device(void *user_context, buffer_t *buf) {
+    debug(user_context) << "RS: halide_renderscript_copy_to_device (user_context: "
                         << user_context << ", "
                         << (is_interleaved_rgba_buffer_t(buf)? "interleaved": "plain")
                         << " buf: " << buf << ")\n";
@@ -886,7 +887,7 @@ WEAK int halide_rs_copy_to_device(void *user_context, buffer_t *buf) {
     return RS_SUCCESS;
 }
 
-WEAK int halide_rs_copy_to_host(void *user_context, buffer_t *buf) {
+WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
     debug(user_context) << "RS: halide_copy_to_host user_context: "
                         << user_context << ", "
                         << (is_interleaved_rgba_buffer_t(buf)? "interleaved": "plain")
@@ -987,8 +988,8 @@ WEAK int halide_rs_copy_to_host(void *user_context, buffer_t *buf) {
     return RS_SUCCESS;
 }
 
-WEAK int halide_rs_device_sync(void *user_context, struct buffer_t *) {
-    debug(user_context) << "RS: halide_rs_device_sync (user_context: "
+WEAK int halide_renderscript_device_sync(void *user_context, struct buffer_t *) {
+    debug(user_context) << "RS: halide_renderscript_device_sync (user_context: "
                         << user_context << ")\n";
 
     Context ctx(user_context);
@@ -1011,14 +1012,14 @@ WEAK int halide_rs_device_sync(void *user_context, struct buffer_t *) {
     return RS_SUCCESS;
 }
 
-WEAK int halide_rs_run(void *user_context, void *state_ptr,
+WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
                        const char *entry_name, int blocksX, int blocksY,
                        int blocksZ, int threadsX, int threadsY, int threadsZ,
                        int shared_mem_bytes, size_t arg_sizes[], void *args[],
                        int8_t arg_is_buffer[], int num_attributes,
                        float *vertex_buffer, int num_coords_dim0,
                        int num_coords_dim1) {
-    debug(user_context) << "RS: halide_rs_run (user_context: " << user_context
+    debug(user_context) << "RS: halide_renderscript_run (user_context: " << user_context
                         << ", "
                         << "entry: " << entry_name << ", "
                         << "blocks: " << blocksX << "x" << blocksY << "x"
@@ -1048,7 +1049,7 @@ WEAK int halide_rs_run(void *user_context, void *state_ptr,
     uint64_t input_arg = 0;
     uint64_t output_arg = 0;
     while (arg_sizes[num_args] != 0) {
-        debug(user_context) << "RS:    halide_rs_run " << (int64_t)num_args << " "
+        debug(user_context) << "RS:    halide_renderscript_run " << (int64_t)num_args << " "
                             << (int64_t)arg_sizes[num_args] << " ["
                             << (*((void **)args[num_args])) << " ...] "
                             << arg_is_buffer[num_args] << "\n";
@@ -1071,7 +1072,7 @@ WEAK int halide_rs_run(void *user_context, void *state_ptr,
         num_args++;
     }
 
-    debug(user_context) << "RS: halide_rs_run starting now with " << module
+    debug(user_context) << "RS: halide_renderscript_run starting now with " << module
                         << " script "
                         << " input: "
                         << ((void *)halide_get_device_handle(input_arg))
@@ -1102,13 +1103,13 @@ WEAK int halide_rs_run(void *user_context, void *state_ptr,
     return 0;
 }
 
-WEAK const struct halide_device_interface *halide_rs_device_interface() {
-    return &rs_device_interface;
+WEAK const struct halide_device_interface *halide_renderscript_device_interface() {
+    return &renderscript_device_interface;
 }
 
 namespace {
-__attribute__((destructor)) WEAK void halide_rs_cleanup() {
-    halide_rs_device_release(NULL);
+__attribute__((destructor)) WEAK void halide_renderscript_cleanup() {
+    halide_renderscript_device_release(NULL);
 }
 }
 
@@ -1117,7 +1118,7 @@ __attribute__((destructor)) WEAK void halide_rs_cleanup() {
 namespace Halide {
 namespace Runtime {
 namespace Internal {
-namespace RS {
+namespace Renderscript {
 
 WEAK const char *get_error_name(RSError error) {
     switch (error) {
@@ -1134,12 +1135,14 @@ WEAK const char *get_error_name(RSError error) {
     }
 }
 
-WEAK halide_device_interface rs_device_interface = {
-    halide_use_jit_module,  halide_release_jit_module, halide_rs_device_malloc,
-    halide_rs_device_free,  halide_rs_device_sync,     halide_rs_device_release,
-    halide_rs_copy_to_host, halide_rs_copy_to_device,
+WEAK halide_device_interface renderscript_device_interface = {
+    halide_use_jit_module,  halide_release_jit_module,
+    halide_renderscript_device_malloc,
+    halide_renderscript_device_free,  halide_renderscript_device_sync,
+    halide_renderscript_device_release,
+    halide_renderscript_copy_to_host, halide_renderscript_copy_to_device,
 };
 }
 }
 }
-}  // namespace Halide::Runtime::Internal::RS
+}  // namespace Halide::Runtime::Internal::Renderscript

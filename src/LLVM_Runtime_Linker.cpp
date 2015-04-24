@@ -117,7 +117,7 @@ DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(posix_get_symbol)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(windows_get_symbol)
-DECLARE_CPP_INITMOD(rs)
+DECLARE_CPP_INITMOD(renderscript)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -135,7 +135,7 @@ DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
-DECLARE_LL_INITMOD(rs_dev)
+DECLARE_LL_INITMOD(renderscript_dev)
 #ifdef WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
@@ -514,8 +514,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
-        } else if (t.has_feature(Target::RS)) {
-            modules.push_back(get_initmod_rs(c, bits_64, debug));
+        } else if (t.has_feature(Target::Renderscript)) {
+            modules.push_back(get_initmod_renderscript(c, bits_64, debug));
         }
     }
 
@@ -594,9 +594,9 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
 }
 #endif
 
-#ifdef WITH_RS
-llvm::Module *get_initial_module_for_rs_device(Target target, llvm::LLVMContext *c) {
-    return get_initmod_rs_dev_ll(c);
+#ifdef WITH_RENDERSCRIPT
+llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c) {
+    return get_initmod_renderscript_dev_ll(c);
 }
 #endif
 
