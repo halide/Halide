@@ -76,8 +76,8 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::GLSL:
         out << "<GLSL>";
         break;
-    case DeviceAPI::RS:
-        out << "<RS>";
+    case DeviceAPI::Renderscript:
+        out << "<Renderscript>";
         break;    }
     return out;
 }

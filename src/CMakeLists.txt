@@ -107,7 +107,7 @@ set(RUNTIME_CPP
   posix_math
   posix_print
   posix_thread_pool
-  rs
+  renderscript
   ssp
   to_string
   tracing
@@ -128,7 +128,7 @@ set (RUNTIME_LL
   pnacl_math
   posix_math
   ptx_dev
-  rs_dev
+  renderscript_dev
   win32_math
   x86
   x86_avx
@@ -263,7 +263,7 @@ set(HEADER_FILES
   CodeGen_PNaCl.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
-  CodeGen_RS_Dev.h
+  CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
   Debug.h
   DebugToFile.h
@@ -383,7 +383,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_PNaCl.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
-  CodeGen_RS_Dev.cpp
+  CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
   Debug.cpp
   Debug.cpp

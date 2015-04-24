@@ -1085,10 +1085,6 @@ Func &Func::glsl(Var x, Var y, Var c) {
     return image(x, y, c, DeviceAPI::GLSL).vectorize(c);
 }
 
-Func &Func::rs(Var x, Var y, Var c) {
-    return image(x, y, c, DeviceAPI::RS);
-}
-
 Func &Func::reorder_storage(Var x, Var y) {
     invalidate_cache();
 

@@ -1,9 +1,31 @@
 #define RS_VERSION 21
 
-#define ALOGE(...)
-#define ALOGW(...)
-#define ALOGD(...)
-#define ALOGV(...)
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern int __android_log_print(int, const char *, const char *, ...);
+#ifdef __cplusplus
+}
+#endif
+
+enum {
+  ANDROID_LOG_UNKNOWN = 0,
+  ANDROID_LOG_DEFAULT,    /* only for SetMinPriority() */
+
+  ANDROID_LOG_VERBOSE,
+  ANDROID_LOG_DEBUG,
+  ANDROID_LOG_INFO,
+  ANDROID_LOG_WARN,
+  ANDROID_LOG_ERROR,
+  ANDROID_LOG_FATAL,
+
+  ANDROID_LOG_SILENT,     /* only for SetMinPriority(); must be last */
+};
+
+#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__);
+#define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__);
+#define ALOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__);
+#define ALOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__);
 
 enum RSError {
     RS_SUCCESS = 0,  ///< No error

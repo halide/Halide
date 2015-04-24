@@ -1,8 +1,8 @@
-#ifndef HALIDE_CODEGEN_RS_DEV_H
-#define HALIDE_CODEGEN_RS_DEV_H
+#ifndef HALIDE_CODEGEN_RENDERSCRIPT_DEV_H
+#define HALIDE_CODEGEN_RENDERSCRIPT_DEV_H
 
 /** \file
- * Defines the code-generator for producing RS host code
+ * Defines the code-generator for producing Renderscript host code
  */
 
 #include "CodeGen_LLVM.h"
@@ -16,15 +16,15 @@ class BasicBlock;
 namespace Halide {
 namespace Internal {
 
-/** A code generator that emits RS code from a given Halide stmt. */
-class CodeGen_RS_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
+/** A code generator that emits Renderscript code from a given Halide stmt. */
+class CodeGen_Renderscript_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     friend class CodeGen_GPU_Host<CodeGen_X86>;
     friend class CodeGen_GPU_Host<CodeGen_ARM>;
 
-    /** Create a RS device code generator. */
-    CodeGen_RS_Dev(Target host);
-    ~CodeGen_RS_Dev();
+    /** Create a Renderscript device code generator. */
+    CodeGen_Renderscript_Dev(Target host);
+    ~CodeGen_Renderscript_Dev();
 
     void add_kernel(Stmt stmt, const std::string &name,
                     const std::vector<GPU_Argument> &args);
@@ -38,13 +38,13 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "rs"; }
+    std::string api_unique_name() { return "renderscript"; }
 
 protected:
     using CodeGen_LLVM::visit;
 
-    /** (Re)initialize the RS module. This is separate from compile, since
-     * a RS device module will often have many kernels compiled into it for
+    /** (Re)initialize the Renderscript module. This is separate from compile, since
+     * a Renderscript device module will often have many kernels compiled into it for
      * a single pipeline. */
     /* override */ virtual void init_module();
 
@@ -55,7 +55,7 @@ protected:
      * function in order to inject allocas */
     llvm::BasicBlock *entry_block;
 
-    /** Nodes for which we need to override default behavior for the RS runtime
+    /** Nodes for which we need to override default behavior for the Renderscript runtime
      */
     // @{
     void visit(const For *);

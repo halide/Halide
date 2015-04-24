@@ -3,7 +3,7 @@
 #else
 #include "BitWriter_3_2.35/ReaderWriter_3_2.h"
 #endif
-#include "CodeGen_RS_Dev.h"
+#include "CodeGen_Renderscript_Dev.h"
 #include "CodeGen_Internal.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -54,23 +54,23 @@ private:
     }
 };
 
-CodeGen_RS_Dev::CodeGen_RS_Dev(Target host) : CodeGen_LLVM(host) {
-    debug(2) << "Created CodeGen_RS_Dev for target " << host.to_string().c_str()
+CodeGen_Renderscript_Dev::CodeGen_Renderscript_Dev(Target host) : CodeGen_LLVM(host) {
+    debug(2) << "Created CodeGen_Renderscript_Dev for target " << host.to_string().c_str()
              << "\n";
-#if !(WITH_RS)
+#if !(WITH_RENDERSCRIPT)
     user_error << "rs not enabled for this build of Halide.\n";
 #endif
     context = new llvm::LLVMContext();
 }
 
-CodeGen_RS_Dev::~CodeGen_RS_Dev() { delete context; }
+CodeGen_Renderscript_Dev::~CodeGen_Renderscript_Dev() { delete context; }
 
-void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
+void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
                                 const std::vector<GPU_Argument> &args) {
     internal_assert(module != NULL);
 
     // Use [kernel_name] as the function name.
-    debug(2) << "In CodeGen_RS_Dev::add_kernel name=" << kernel_name << "\n";
+    debug(2) << "In CodeGen_Renderscript_Dev::add_kernel name=" << kernel_name << "\n";
 
     ExtractBoundsNames bounds_names;
     stmt.accept(&bounds_names);
@@ -93,7 +93,7 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
     llvm::Type *argument_type = NULL;
     for (size_t i = 0; i < args.size(); i++) {
         string arg_name = args[i].name;
-        debug(1) << "CodeGen_RS_Dev arg[" << i << "].name=" << arg_name << "\n";
+        debug(1) << "CodeGen_Renderscript_Dev arg[" << i << "].name=" << arg_name << "\n";
         if (!args[i].is_buffer) {
             GlobalVariable *gvar =
                 new GlobalVariable(*module, llvm::Type::getInt32Ty(*context),
@@ -298,12 +298,12 @@ void CodeGen_RS_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
     }
 }
 
-void CodeGen_RS_Dev::init_module() {
-    debug(2) << "CodeGen_RS_Dev::init_module\n";
+void CodeGen_Renderscript_Dev::init_module() {
+    debug(2) << "CodeGen_Renderscript_Dev::init_module\n";
     init_context();
-#ifdef WITH_RS
+#ifdef WITH_RENDERSCRIPT
     delete module;
-    module = get_initial_module_for_rs_device(target, context);
+    module = get_initial_module_for_renderscript_device(target, context);
 #endif
 }
 
@@ -311,7 +311,7 @@ llvm::Triple CodeGen_LLVM::get_target_triple() const {
     return Triple(Triple::normalize("armv7-none-linux-gnueabi"));
 }
 
-llvm::DataLayout CodeGen_RS_Dev::get_data_layout() const {
+llvm::DataLayout CodeGen_Renderscript_Dev::get_data_layout() const {
     return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
 }
 
@@ -319,7 +319,7 @@ llvm::DataLayout CodeGen_RS_Dev::get_data_layout() const {
 // Loops become kernels. There should be no explicit loops in
 // generated RenderScript code.
 //
-void CodeGen_RS_Dev::visit(const For *loop) {
+void CodeGen_Renderscript_Dev::visit(const For *loop) {
     debug(2) << "RS: Visiting for loop, loop->name is " << loop->name
              << " is_gpu_var? " << is_gpu_var(loop->name) << "\n";
     if (is_gpu_var(loop->name)) {
@@ -335,17 +335,17 @@ void CodeGen_RS_Dev::visit(const For *loop) {
     }
 }
 
-void CodeGen_RS_Dev::visit(const Allocate *alloc) {
+void CodeGen_Renderscript_Dev::visit(const Allocate *alloc) {
     debug(2) << "RS: Allocate " << alloc->name << " on device\n";
     codegen(alloc->body);
 }
 
-void CodeGen_RS_Dev::visit(const Free *f) {
+void CodeGen_Renderscript_Dev::visit(const Free *f) {
     // TODO(aam): Implement this.
     debug(2) << "RS: Free on device\n";
 }
 
-llvm::Function *CodeGen_RS_Dev::fetch_GetElement_func(int width) {
+llvm::Function *CodeGen_Renderscript_Dev::fetch_GetElement_func(int width) {
     // Following symbols correspond to public Android API functions.
     // The symbols will be resolved once the code compiles on the target
     // Android device.
@@ -357,7 +357,7 @@ llvm::Function *CodeGen_RS_Dev::fetch_GetElement_func(int width) {
     return func;
 }
 
-llvm::Function *CodeGen_RS_Dev::fetch_SetElement_func(int width) {
+llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(int width) {
     // Following symbols correspond to public Android API functions.
     // The symbols will be resolved once the code compiles on the target
     // Android device.
@@ -369,7 +369,7 @@ llvm::Function *CodeGen_RS_Dev::fetch_SetElement_func(int width) {
     return func;
 }
 
-vector<Value *> CodeGen_RS_Dev::add_x_y_c_args(Expr name, Expr x, Expr y,
+vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr y,
                                                Expr c) {
     vector<Value *> args;
     const Broadcast *b_name = name.as<Broadcast>();
@@ -399,7 +399,7 @@ vector<Value *> CodeGen_RS_Dev::add_x_y_c_args(Expr name, Expr x, Expr y,
     return args;
 }
 
-void CodeGen_RS_Dev::visit(const Call *op) {
+void CodeGen_Renderscript_Dev::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::image_load || op->name == Call::image_store) {
             //
@@ -441,18 +441,18 @@ void CodeGen_RS_Dev::visit(const Call *op) {
     CodeGen_LLVM::visit(op);
 }
 
-string CodeGen_RS_Dev::march() const { return "armv7"; }
+string CodeGen_Renderscript_Dev::march() const { return "armv7"; }
 
-string CodeGen_RS_Dev::mcpu() const { return "none"; }
+string CodeGen_Renderscript_Dev::mcpu() const { return "none"; }
 
-string CodeGen_RS_Dev::mattrs() const { return "linux-gnueabi"; }
+string CodeGen_Renderscript_Dev::mattrs() const { return "linux-gnueabi"; }
 
-bool CodeGen_RS_Dev::use_soft_float_abi() const {
+bool CodeGen_Renderscript_Dev::use_soft_float_abi() const {
     // Taken from CodeGen_ARM::use_soft_float_abit.
     return target.bits == 32;
 }
 
-llvm::Triple CodeGen_RS_Dev::get_target_triple() const {
+llvm::Triple CodeGen_Renderscript_Dev::get_target_triple() const {
     return Triple(Triple::normalize(march() + "-" + mcpu() + "-" + mattrs()));
 }
 
@@ -523,11 +523,11 @@ static inline size_t writeAndroidBitcodeWrapper(AndroidBitcodeWrapper *wrapper,
     return sizeof(*wrapper);
 }
 
-vector<char> CodeGen_RS_Dev::compile_to_src() {
+vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
     // Generic llvm optimizations on the module.
     optimize_module();
 
-    debug(2) << "CodeGen_RS_Dev::compile_to_src resultant module:\n";
+    debug(2) << "CodeGen_Renderscript_Dev::compile_to_src resultant module:\n";
     if (debug::debug_level >= 2) {
         module->dump();
     }
@@ -565,16 +565,16 @@ vector<char> CodeGen_RS_Dev::compile_to_src() {
     return buffer;
 }
 
-int CodeGen_RS_Dev::native_vector_bits() const {
+int CodeGen_Renderscript_Dev::native_vector_bits() const {
     // as per CodeGen_ARM.
     return 128;
 }
 
-string CodeGen_RS_Dev::get_current_kernel_name() { return function->getName(); }
+string CodeGen_Renderscript_Dev::get_current_kernel_name() { return function->getName(); }
 
-void CodeGen_RS_Dev::dump() { module->dump(); }
+void CodeGen_Renderscript_Dev::dump() { module->dump(); }
 
-std::string CodeGen_RS_Dev::print_gpu_name(const std::string &name) {
+std::string CodeGen_Renderscript_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 }

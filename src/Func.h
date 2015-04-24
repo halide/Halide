@@ -1361,10 +1361,6 @@ public:
     /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
-    /** Schedule for execution as Renderscript kernel. */
-    EXPORT Func &rs(Var x, Var y, Var c);
-    EXPORT Func &rs(Var x, Var y);
-
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
      * example, foo.reorder_storage(y, x) tells Halide to use

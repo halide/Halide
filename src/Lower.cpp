@@ -1906,7 +1906,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL) || t.has_feature(Target::RS)) {
+    if (t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
         debug(1) << "Injecting image intrinsics...\n";
         s = inject_image_intrinsics(s);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";

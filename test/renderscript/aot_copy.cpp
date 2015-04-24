@@ -38,7 +38,7 @@ void copy_interleaved(bool vectorize, int channels) {
         .set_bounds(2, 0, channels);  // expecting interleaved image
 
     result.bound(c, 0, channels);
-    result.rs(x, y, c);
+    result.image(x, y, c, DeviceAPI::Renderscript);
     if (vectorize) result.vectorize(c);
 
     std::vector<Argument> args;

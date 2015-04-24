@@ -4,7 +4,7 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
-#include "CodeGen_RS_Dev.h"
+#include "CodeGen_Renderscript_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -211,10 +211,10 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
         cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
         default_api = DeviceAPI::OpenCL;
     }
-    if (target.has_feature(Target::RS)) {
-        debug(1) << "Constructing RS device codegen\n";
-        cgdev[DeviceAPI::RS] = new CodeGen_RS_Dev(target);
-        default_api = DeviceAPI::RS;
+    if (target.has_feature(Target::Renderscript)) {
+        debug(1) << "Constructing Renderscript device codegen\n";
+        cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
+        default_api = DeviceAPI::Renderscript;
     }
 
     if (cgdev.empty()) {
