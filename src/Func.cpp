@@ -1540,48 +1540,54 @@ size_t FuncRefExpr::size() const {
     return func.outputs();
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], sizes);
     }
     Realization r(outputs);
-    realize(r, target);
+    realize(r, target, externs);
     return r;
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
+                            const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
     }
     Realization r(outputs);
-    realize(r, target);
+    realize(r, target, externs);
     return r;
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
-    return realize(x_size, y_size, z_size, 0, target);
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
+    return realize(x_size, y_size, z_size, 0, target, externs);
 }
 
-Realization Func::realize(int x_size, int y_size, const Target &target) {
-    return realize(x_size, y_size, 0, 0, target);
+Realization Func::realize(int x_size, int y_size, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
+    return realize(x_size, y_size, 0, 0, target, externs);
 }
 
-Realization Func::realize(int x_size, const Target &target) {
-    return realize(x_size, 0, 0, 0, target);
+Realization Func::realize(int x_size, const Target &target,
+                          const std::map<std::string, JITExtern> &externs) {
+    return realize(x_size, 0, 0, 0, target, externs);
 }
 
-void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                              const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
     }
     Realization r(outputs);
-    infer_input_bounds(r);
+    infer_input_bounds(r, externs);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -2197,8 +2203,9 @@ void Func::clear_custom_lowering_passes() {
     custom_lowering_passes.clear();
 }
 
-void Func::realize(Buffer b, const Target &target) {
-    realize(Realization(vec<Buffer>(b)), target);
+void Func::realize(Buffer b, const Target &target,
+                   const std::map<std::string, JITExtern> &externs) {
+  realize(Realization(vec<Buffer>(b)), target, externs);
 }
 
 namespace Internal {
@@ -2292,12 +2299,13 @@ struct JITFuncCallContext {
 
 }  // namespace Internal
 
-void Func::realize(Realization dst, const Target &target) {
+void Func::realize(Realization dst, const Target &target,
+                   const std::map<std::string, JITExtern> &externs) {
     // TODO: see if JS and non-JS can share more code.
     if (target.has_feature(Target::JavaScript)) {
     #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
         if (cached_javascript.empty()) {
-            compile_jit(target);
+	    compile_jit(target, externs);
         }
 
         internal_assert(!cached_javascript.empty());
@@ -2306,7 +2314,7 @@ void Func::realize(Realization dst, const Target &target) {
     #endif
     } else {
         if (!compiled_module.argv_function()) {
-            compile_jit(target);
+  	    compile_jit(target, externs);
         }
 
         internal_assert(compiled_module.argv_function());
@@ -2392,18 +2400,20 @@ void Func::realize(Realization dst, const Target &target) {
     jit_context.finalize(exit_status);
 }
 
-void Func::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization(vec<Buffer>(dst)));
+void Func::infer_input_bounds(Buffer dst,
+                              const std::map<std::string, JITExtern> &externs) {
+  infer_input_bounds(Realization(vec<Buffer>(dst)), externs);
 }
 
-void Func::infer_input_bounds(Realization dst) {
+void Func::infer_input_bounds(Realization dst,
+                              const std::map<std::string, JITExtern> &externs) {
     Target target = get_jit_target_from_environment();
 
     // TODO: see if JS and non-JS can share more code.
     if (target.has_feature(Target::JavaScript)) {
     #if WITH_JAVASCRIPT_V8
         if (cached_javascript.empty()) {
-            compile_jit(target);
+	  compile_jit(target, externs);
         }
 
         internal_assert(!cached_javascript.empty());
@@ -2412,7 +2422,7 @@ void Func::infer_input_bounds(Realization dst) {
     #endif
     } else {
         if (!compiled_module.argv_function()) {
-            compile_jit(target);
+	  compile_jit(target, externs);
         }
 
         internal_assert(compiled_module.argv_function());
@@ -2588,7 +2598,35 @@ void Func::infer_input_bounds(Realization dst) {
     }
 }
 
-void Func::compile_jit(const Target &target_arg) {
+// TODO: add assertions to make sure this routine never introduces circular references
+// in the deps chain via passing the Func being compiled in as part of the externs list.
+std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
+                                                     const std::map<std::string, JITExtern> &externs) {
+    std::vector<JITModule> result;
+
+    // Externs that are Funcs get their own JITModule. All standalone functions are
+    // held in a single JITModule at the end of the list (if there are any).
+    JITModule free_standing_jit_externs;
+    for (const std::pair<std::string, JITExtern> &map_entry : externs) {
+        const JITExtern &jit_extern(map_entry.second);
+        if (jit_extern.func != NULL) {
+            if (!jit_extern.func->compiled_module.compiled()) {
+                jit_extern.func->compile_jit(target, jit_extern.func_externs);
+            }
+            free_standing_jit_externs.add_dependency(jit_extern.func->compiled_module);
+            free_standing_jit_externs.add_symbol_for_export(map_entry.first, jit_extern.func->compiled_module.entrypoint_symbol());
+        } else {
+            free_standing_jit_externs.add_extern_for_export(map_entry.first, jit_extern);
+        }
+    }
+    if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
+        result.push_back(free_standing_jit_externs);
+    }
+    return result;
+}
+
+void Func::compile_jit(const Target &target_arg,
+                        const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Can't jit-compile undefined Func.\n";
 
     Target target(target_arg);

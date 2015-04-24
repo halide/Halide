@@ -8,6 +8,7 @@
 #include <map>
 
 #include "IntrusivePtr.h"
+#include "Type.h"
 #include "runtime/HalideRuntime.h"
 
 namespace llvm {
@@ -19,6 +20,106 @@ namespace Halide {
 
 struct Target;
 class Module;
+
+class Func;
+
+struct ScalarOrBufferT {
+    bool is_buffer;
+    Type scalar_type; // Only meaningful if is_buffer is false.
+};
+
+namespace {
+
+template <typename T>
+bool voidable_halide_type(Type &t) {
+    t = type_of<T>();
+    return false;
+}
+
+template<>
+inline bool voidable_halide_type<void>(Type &t) {
+    return true;
+}        
+
+template <typename T>
+bool scalar_arg_type_or_buffer(Type &t) {
+    t = type_of<T>();
+    return false;
+}
+
+template <>
+inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
+    return true;
+}
+
+template <typename T>
+ScalarOrBufferT arg_type_info() {
+    ScalarOrBufferT result;
+    result.is_buffer = scalar_arg_type_or_buffer<T>(result.scalar_type);
+    return result;
+}
+
+template <typename A1, typename... Args>
+struct make_argument_list {
+    static void add_args(std::vector<ScalarOrBufferT> &arg_types) {
+        arg_types.push_back(arg_type_info<A1>());
+        make_argument_list<Args...>::add_args(arg_types);
+    }
+};
+
+template <>
+struct make_argument_list<void> {
+    static void add_args(std::vector<ScalarOrBufferT> &) { }
+};
+
+
+template <typename... Args>
+void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
+  make_argument_list<Args..., void>::add_args(arg_types);
+}
+
+#if 0
+//template <typename A1, typename... Args>
+//void init_arg_types_helper(std::vector<ScalarOrBufferT> &arg_types) {
+//    arg_types.push_back(arg_type_info<A1>());
+//    init_arg_types<Args...>(arg_types);
+//}
+
+template <typename A1, typename... Args>
+void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
+    arg_types.push_back(arg_type_info<A1>());
+    init_arg_types<Args...>(arg_types);
+}
+
+template <>
+void init_arg_types<void, >(std::vector<ScalarOrBufferT> &arg_types) {
+}
+#endif
+
+}
+
+struct JITExtern {
+    // assert func.defined() == (c_function == NULL) -- strictly one or the other
+    Func *func;
+    std::map<std::string, JITExtern> func_externs;
+
+    void *c_function;
+    bool is_void_return; // could use ret_type.bits == 0...
+    Type ret_type;
+    std::vector<ScalarOrBufferT> arg_types;
+
+   JITExtern(Func &func,
+             const std::map<std::string, JITExtern> &func_externs = std::map<std::string, JITExtern>())
+        : func(&func), func_externs(func_externs), c_function(NULL) {
+    }
+
+    template <typename RT, typename... Args>
+    JITExtern(RT (*f)(Args... args)) : func(NULL) {
+        c_function = (void *)f;
+        is_void_return = voidable_halide_type<RT>(ret_type);
+        init_arg_types<Args...>(arg_types);
+    }
+};
 
 namespace Internal {
 
@@ -36,9 +137,8 @@ struct JITModule {
     };
 
     EXPORT JITModule();
-    EXPORT JITModule(const Module &m, const LoweredFunc &fn);
-    EXPORT JITModule(const std::map<std::string, Symbol> &exports);
-
+    EXPORT JITModule(const Module &m, const LoweredFunc &fn,
+                     const std::vector<JITModule> &dependencies = std::vector<JITModule>());
     /** The exports map of a JITModule contains all symbols which are
      * available to other JITModules which depend on this one. For
      * runtime modules, this is all of the symbols exported from the
@@ -59,6 +159,12 @@ struct JITModule {
      * a Halide Func compilation at all. */
     EXPORT void *main_function() const;
 
+    /** TODO: docs */
+    EXPORT Symbol entrypoint_symbol() const;
+
+    /** TODO: docs */
+    EXPORT Symbol argv_entrypoint_symbol() const;
+
     /** A slightly more type-safe wrapper around the raw halide
      * module. Takes it arguments as an array of pointers that
      * correspond to the arguments to \ref main_function . This will
@@ -68,6 +174,13 @@ struct JITModule {
     typedef int (*argv_wrapper)(const void **args);
     EXPORT argv_wrapper argv_function() const;
     // @}
+
+    /** TODO: docs */
+    EXPORT void add_dependency(JITModule &dep);
+    /** TODO: docs */
+    EXPORT void add_symbol_for_export(const std::string &name, const Symbol &extern_symbol);
+    /** TODO: docs */
+    EXPORT void add_extern_for_export(const std::string &name, const JITExtern &jit_extern);
 
     // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will
@@ -85,8 +198,8 @@ struct JITModule {
     EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
 
-    /** Check if this JIT module has a definition.. */
-    EXPORT bool defined() const;
+    /** Return true if compile_module has been called on this module. */
+    EXPORT bool compiled() const;
 };
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
