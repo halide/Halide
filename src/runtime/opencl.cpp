@@ -37,18 +37,6 @@ using namespace Halide::Runtime::Internal::OpenCL;
 
 extern "C" {
 
-extern void free(void *);
-extern void *malloc(size_t);
-extern const char * strstr(const char *, const char *);
-extern char *strncpy(char *dst, const char *src, size_t n);
-extern int atoi(const char *);
-extern char *getenv(const char *);
-
-#ifdef DEBUG_RUNTIME
-extern int halide_start_clock(void *user_context);
-extern int64_t halide_current_time_ns(void *user_context);
-#endif
-
 WEAK void halide_opencl_set_platform_name(const char *n) {
     if (n) {
         strncpy(platform_name, n, 255);

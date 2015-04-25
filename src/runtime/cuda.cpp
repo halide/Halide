@@ -58,13 +58,6 @@ using namespace Halide::Runtime::Internal::Cuda;
 
 extern "C" {
 
-extern void *malloc(size_t);
-
-#ifdef DEBUG_RUNTIME
-extern int halide_start_clock(void *user_context);
-extern int64_t halide_current_time_ns(void *user_context);
-#endif
-
 // The default implementation of halide_cuda_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
