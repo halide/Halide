@@ -6,6 +6,42 @@
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
 
+#define CUDA_FN(ret, fn, args) WEAK ret (CUDAAPI *fn)args;
+#define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret (CUDAAPI *fn)args;
+#define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret (CUDAAPI *fn)args;
+#include "cuda_functions.h"
+
+template <typename T>
+T get_symbol(void *user_context, void *lib, const char *name) {
+    T s = (T)get_library_symbol(lib, name);
+    if (!s) {
+        error(user_context) << "CUDA API not found: " << name << "\n";
+        return NULL;
+    }
+    return s;
+}
+
+WEAK void init_cuda_api(void *user_context) {
+    void *libs[] = {
+        load_library("libcuda.so"),
+        load_library("libcuda.dylib"),
+        load_library("/Library/Frameworks/CUDA.framework/CUDA"),
+        load_library("nvcuda.dll")
+    };
+    void *cuda_lib = NULL;
+    for (int i = 0; i < sizeof(libs)/sizeof(libs[0]); i++) {
+        if (libs[i]) {
+            cuda_lib = libs[i];
+            break;
+        }
+    }
+
+    #define CUDA_FN(ret, fn, args) fn = get_symbol<ret (CUDAAPI *)args>(user_context, cuda_lib, #fn);
+    #define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_symbol<ret (CUDAAPI *)args>(user_context, cuda_lib, #fn_3020);
+    #define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_symbol<ret (CUDAAPI *)args>(user_context, cuda_lib, #fn_4000);
+    #include "cuda_functions.h"
+}
+
 extern WEAK halide_device_interface cuda_device_interface;
 
 WEAK const char *get_error_name(CUresult error);
@@ -112,6 +148,10 @@ struct module_state {
 WEAK module_state *state_list = NULL;
 
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
+    if (!cuInit) {
+        init_cuda_api(user_context);
+    }
+
     // Initialize CUDA
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
