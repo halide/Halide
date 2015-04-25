@@ -221,8 +221,12 @@ __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
 }
 
-// Search the process for a symbol with the given name.
+// Search the current process for a symbol with the given name.
 extern WEAK void *get_symbol(const char *name);
+// Platform specific implementations of dlopen/dlsym/dlclose.
+extern WEAK void *load_library(const char *name);
+extern WEAK void *get_library_symbol(void *lib, const char *name);
+extern WEAK void free_library(void *lib);
 
 }}}
 
