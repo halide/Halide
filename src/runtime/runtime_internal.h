@@ -73,6 +73,7 @@ int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
+char *strncpy(char *dst, const char *src, size_t n);
 
 // Similar to strncpy, but with various non-string arguments. Writes
 // arg to dst. Does not write to pointer end or beyond. Returns
@@ -83,6 +84,11 @@ WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scienti
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits);
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
+
+#ifdef DEBUG_RUNTIME
+WEAK int halide_start_clock(void *user_context);
+WEAK int64_t halide_current_time_ns(void *user_context);
+#endif
 
 }
 
