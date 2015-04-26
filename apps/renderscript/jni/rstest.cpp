@@ -101,10 +101,45 @@ buffer_t make_interleaved_image(int width, int height, int channels,
     return bt_input;
 }
 
+typedef int  (filter_t) (buffer_t *, buffer_t *);
+
+struct timing {
+    filter_t *filter;
+    buffer_t *bt_input;
+    buffer_t *bt_output;
+    double worst_t = 0;
+    int worst_rep = 0;
+    double best_t = DBL_MAX;
+    int best_rep = 0;
+
+    timing(filter_t _filter, buffer_t *_bt_input, buffer_t *_bt_output):
+        filter(_filter), bt_input(_bt_input), bt_output(_bt_output) {}
+
+    int run(int n_reps) {
+        timeval t1, t2;
+        for (int i = 0; i < n_reps; i++) {
+            gettimeofday(&t1, NULL);
+            int error = filter(bt_input, bt_output);
+            gettimeofday(&t2, NULL);
+            if (error) {
+                return(error);
+            }
+            double t = (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0;
+            if (t < best_t) {
+                best_t = t;
+                best_rep = i;
+            }
+            if (t > worst_t) {
+                worst_t = t;
+                worst_rep = i;
+            }
+        }
+        return 0;
+    }
+};
+
 bool test(buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm,
-          int(generated_rs)(buffer_t *_input_buffer, buffer_t *_result_buffer),
-          int(generated_arm)(buffer_t *_input_buffer,
-                             buffer_t *_result_buffer)) {
+          filter_t generated_rs, filter_t generated_arm) {
     for (int j = 0; j < std::min(bt_input.extent[1], 10); j++) {
         for (int i = 0; i < std::min(bt_input.extent[0], 10); i++) {
             std::cout << " [";
@@ -122,37 +157,25 @@ bool test(buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm,
 
         std::cout << std::endl;
     }
-    timeval t1, t2;
-
     const int n_reps = 500;
-    gettimeofday(&t1, NULL);
-    int error = 0;
-    for (int i = 0; i < n_reps; i++) {
-        error = generated_rs(&bt_input, &bt_output);
-    }
-    gettimeofday(&t2, NULL);
-    double t_rs =
-        (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0;
-    if (error) {
+    timing rs(generated_rs, &bt_input, &bt_output);
+    int error;
+    if (error = rs.run(n_reps) != 0) {
         std::cout << "Halide returned error: " << error << std::endl;
     }
     if (bt_output.dev) {
         halide_copy_to_host(NULL, &bt_output);
     }
 
-    gettimeofday(&t1, NULL);
-    for (int i = 0; i < n_reps; i++) {
-        error = generated_arm(&bt_input, &bt_output_arm);
-    }
-    // host_blur(&bt_input, &bt_output_arm);
-    gettimeofday(&t2, NULL);
-    double t_arm =
-        (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0;
-    if (error) {
+    timing arm(generated_arm, &bt_input, &bt_output_arm);
+    if (error = arm.run(n_reps) != 0) {
         std::cout << "Halide returned error: " << error << std::endl;
     }
-    printf("Ran %d reps. One rep times:\nRS:  %fms\nARM: %fms\n", n_reps,
-           t_rs / n_reps, t_arm / n_reps);
+
+    printf("Out of %d runs best times are:\nRS:  %fms(@%d) \nARM: %fms(@%d)\n", n_reps,
+           rs.best_t, rs.best_rep, arm.best_t, arm.best_rep);
+    printf("Out of %d runs worst times are:\nRS:  %fms(@%d)\nARM: %fms(@%d)\n", n_reps,
+           rs.worst_t, rs.worst_rep, arm.worst_t, arm.worst_rep);
 
     return validate(bt_output, bt_output_arm);
 }
