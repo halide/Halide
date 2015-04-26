@@ -7,7 +7,52 @@
 
 #include "cuda_opencl_shared.h"
 
+#define INLINE inline __attribute__((always_inline))
+
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
+
+// Define the function pointers for the OpenCL API.
+#define CL_FN(ret, fn, args) WEAK ret (CL_API_CALL *fn) args;
+#include "cl_functions.h"
+
+template <typename T>
+INLINE T get_cl_symbol(void *user_context, void *lib, const char *name) {
+    T s = (T)halide_get_library_symbol(lib, name);
+    if (!s) {
+        error(user_context) << "OpenCL API not found: " << name << "\n";
+        return NULL;
+    }
+    return s;
+}
+
+// Load an OpenCL shared object/dll, and get the function pointers for the OpenCL API from it.
+WEAK void load_opencl(void *user_context) {
+    halide_assert(user_context, clCreateContext == NULL);
+
+    const char *lib_names[] = {
+#ifdef WINDOWS
+        "opencl.dll",
+#else
+        "libOpenCL.so",
+        "/System/Library/Frameworks/OpenCL.framework/OpenCL",
+#endif
+    };
+    void *lib = NULL;
+    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+        lib = halide_load_library(lib_names[i]);
+        if (lib) {
+            debug(user_context) << "Loaded OpenCL library: " << lib_names[i];
+            break;
+        }
+    }
+    if (!lib) {
+        error(user_context) << "OpenCL runtime library not found\n";
+        return;
+    }
+
+    #define CL_FN(ret, fn, args) fn = get_cl_symbol<ret (CL_API_CALL *)args>(user_context, lib, #fn);
+    #include "cl_functions.h"
+}
 
 extern WEAK halide_device_interface opencl_device_interface;
 
@@ -131,9 +176,14 @@ public:
                                     context(NULL),
                                     cmd_queue(NULL),
                                     error(CL_SUCCESS) {
+        if (clCreateContext == NULL) {
+            load_opencl(user_context);
+        }
+
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
+
         error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
         halide_assert(user_context, context != NULL && cmd_queue != NULL);
     }

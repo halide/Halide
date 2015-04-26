@@ -201,12 +201,6 @@ typedef struct CUDA_MEMCPY3D_st {
 
 #define CU_POINTER_ATTRIBUTE_CONTEXT 1
 
-#define CUDA_FN(ret, fn, args) extern WEAK ret (CUDAAPI *fn)args;
-// Declare the pointers with the name we actually want.
-#define CUDA_FN_3020(ret, fn, fn_3020, args) extern WEAK ret (CUDAAPI *fn)args;
-#define CUDA_FN_4000(ret, fn, fn_4000, args) extern WEAK ret (CUDAAPI *fn)args;
-#include "cuda_functions.h"
-
 }}}}
 
 #endif
