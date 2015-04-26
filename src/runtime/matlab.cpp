@@ -139,7 +139,7 @@ INLINE const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
 // Search for a symbol in the calling process (i.e. matlab).
 template <typename T>
 INLINE T get_mex_symbol(void *user_context, const char *name, bool required) {
-    T s = (T)get_symbol(name);
+    T s = (T)halide_get_symbol(name);
     if (required && s == NULL) {
         error(user_context) << "mex API not found: " << name << "\n";
         return NULL;
