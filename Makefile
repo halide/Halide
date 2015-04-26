@@ -151,7 +151,7 @@ ifneq ($(TEST_OPENCL), )
 STATIC_TEST_LIBS ?= -lOpenCL
 endif
 HOST_OS=linux
-endif
+endif	
 
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below

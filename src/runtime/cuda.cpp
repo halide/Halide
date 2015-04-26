@@ -4,16 +4,19 @@
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
 
+#define INLINE inline __attribute__((always_inline))
+
 namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
 
+// Define the function poiners for the CUDA API.
 #define CUDA_FN(ret, fn, args) WEAK ret (CUDAAPI *fn)args;
 #define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret (CUDAAPI *fn)args;
 #define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret (CUDAAPI *fn)args;
 #include "cuda_functions.h"
 
 template <typename T>
-T get_symbol(void *user_context, void *lib, const char *name) {
-    T s = (T)get_library_symbol(lib, name);
+INLINE T get_cuda_symbol(void *user_context, void *lib, const char *name) {
+    T s = (T)halide_get_library_symbol(lib, name);
     if (!s) {
         error(user_context) << "CUDA API not found: " << name << "\n";
         return NULL;
@@ -21,24 +24,35 @@ T get_symbol(void *user_context, void *lib, const char *name) {
     return s;
 }
 
-WEAK void init_cuda_api(void *user_context) {
-    void *libs[] = {
-        load_library("libcuda.so"),
-        load_library("libcuda.dylib"),
-        load_library("/Library/Frameworks/CUDA.framework/CUDA"),
-        load_library("nvcuda.dll")
+// Load a CUDA shared object/dll and get the CUDA API function pointers from it.
+WEAK void load_cuda(void *user_context) {
+    halide_assert(user_context, cuInit == NULL);
+
+    const char *lib_names[] = {
+#ifdef WINDOWS
+        "nvcuda.dll",
+#else
+        "libcuda.so",
+        "libcuda.dylib",
+        "/Library/Frameworks/CUDA.framework/CUDA",
+#endif
     };
-    void *cuda_lib = NULL;
-    for (int i = 0; i < sizeof(libs)/sizeof(libs[0]); i++) {
-        if (libs[i]) {
-            cuda_lib = libs[i];
+    void *lib = NULL;
+    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+        lib = halide_load_library(lib_names[i]);
+        if (lib) {
+            debug(user_context) << "Loaded CUDA runtime library: " << lib_names[i];
             break;
         }
     }
+    if (!lib) {
+        error(user_context) << "CUDA runtime library not found.\n";
+        return;
+    }
 
-    #define CUDA_FN(ret, fn, args) fn = get_symbol<ret (CUDAAPI *)args>(user_context, cuda_lib, #fn);
-    #define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_symbol<ret (CUDAAPI *)args>(user_context, cuda_lib, #fn_3020);
-    #define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_symbol<ret (CUDAAPI *)args>(user_context, cuda_lib, #fn_4000);
+    #define CUDA_FN(ret, fn, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, lib, #fn);
+    #define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, lib, #fn_3020);
+    #define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, lib, #fn_4000);
     #include "cuda_functions.h"
 }
 
@@ -110,6 +124,10 @@ public:
     Context(void *user_context) : user_context(user_context),
                                   context(NULL),
                                   error(CUDA_SUCCESS) {
+        if (cuInit == NULL) {
+            load_cuda(user_context);
+        }
+
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
@@ -141,10 +159,6 @@ struct module_state {
 WEAK module_state *state_list = NULL;
 
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
-    if (!cuInit) {
-        init_cuda_api(user_context);
-    }
-
     // Initialize CUDA
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
