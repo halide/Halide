@@ -3,175 +3,227 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-// This visitor takes a string snapshot of all Pipeline IR nodes.
-class SnapshotPipeline : public IRMutator {
-    void visit(const Pipeline *op) {
-        pipeline << op->produce;
+class ValidateInterleavedPipeline: public IRMutator {
+//
+// This is roughly the structure that we are trying to validate in this custom pass:
+//
+// parallel<Renderscript> (result$2.s0.y$2.__block_id_y, 0, result$2.extent.1) {
+//   parallel<Renderscript> (result$2.s0.x$2.__block_id_x, 0, result$2.extent.0) {
+//     ...
+//     parallel<Renderscript> (.__thread_id_x, 0, 1) {
+//       for<Renderscript> (result$2.s0.c$2, 0, 4) {
+//         image_store("result$2",
+//                     result$2.buffer,
+//                     (result$2.s0.x$2.__block_id_x + result$2.min.0),
+//                     (result$2.s0.y$2.__block_id_y + result$2.min.1),
+//                     result$2.s0.c$2,
+//                     image_load("input",
+//                                input.buffer,
+//                                ((result$2.s0.x$2.__block_id_x + result$2.min.0) - input.min.0),
+//                                input.extent.0,
+//                                ((result$2.s0.y$2.__block_id_y + result$2.min.1) - input.min.1),
+//                                input.extent.1,
+//                                result$2.s0.c$2,
+//                                4))
+//       }
+//     }
+//     ...
+//   }
+// }
+//
+    virtual void visit(const Call *call) {
+        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+            assert(for_nest_level == 4);
+
+            std::map<std::string, Expr> matches;
+
+            assert(expr_match(
+                StringImm::make("result"),
+                call->args[0],
+                matches));
+            assert(expr_match(
+                Variable::make(Handle(1), "result.buffer"),
+                call->args[1],
+                matches));
+            assert(expr_match(
+                Variable::make(Int(32), "result.s0.x.__block_id_x") + Variable::make(Int(32), "result.min.0"),
+                call->args[2],
+                matches));
+            assert(expr_match(
+                Variable::make(Int(32), "result.s0.y.__block_id_y") + Variable::make(Int(32), "result.min.1"),
+                call->args[3],
+                matches));
+            assert(expr_match(
+                Variable::make(Int(32), "result.s0.c"),
+                call->args[4],
+                matches));
+            assert(expr_match(
+                Call::make(
+                    UInt(8),
+                    Call::image_load,
+                    {
+                        StringImm::make("input"),
+                        Variable::make(Handle(1), "input.buffer"),
+                        (Variable::make(Int(32), "result.s0.x.__block_id_x") +
+                            Variable::make(Int(32), "result.min.0")) -
+                            Variable::make(Int(32), "input.min.0"),
+                        Variable::make(Int(32), "input.extent.0"),
+                        (Variable::make(Int(32), "result.s0.y.__block_id_y") +
+                            Variable::make(Int(32), "result.min.1")) -
+                            Variable::make(Int(32), "input.min.1"),
+                        Variable::make(Int(32), "input.extent.1"),
+                        Variable::make(Int(32), "result.s0.c"),
+                        IntImm::make(channels)
+                    },
+                    Call::CallType::Intrinsic),
+                call->args[5],
+                matches));
+        }
+        IRMutator::visit(call);
     }
 
+    void visit(const For *op) {
+        if (in_pipeline) {
+            assert(for_nest_level >= 0); // For-loop should show up in Pipeline.
+            for_nest_level++;
+            if (for_nest_level <= 3) {
+                assert(op->for_type == ForType::Parallel);
+            }
+            assert(op->device_api == DeviceAPI::Renderscript);
+        }
+        IRMutator::visit(op);
+    }
+
+    void visit(const Pipeline* op) {
+        assert(!in_pipeline); // There should be only one pipeline in the test.
+        for_nest_level = 0;
+        in_pipeline = true;
+
+        assert(op->produce.defined());
+        assert(!op->update.defined());
+        assert(op->consume.defined());
+
+        IRMutator::visit(op);
+        stmt = Stmt();
+    }
+protected:
+    int for_nest_level = -1;
+    bool in_pipeline = false;
+    int channels;
+
 public:
-    std::ostringstream pipeline;
+    ValidateInterleavedPipeline(int _channels) : channels(_channels) {}
 };
 
-Image<uint8_t> make_interleaved_image(uint8_t *host, int W, int H, int nChannels) {
+class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline {
+    virtual void visit(const Call *call) {
+        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+            assert(for_nest_level == 3); // Should be three nested for-loops before we get to the first call.
+
+            std::map<std::string, Expr> matches;
+
+            assert(expr_match(
+                Broadcast::make(StringImm::make("result"), channels),
+                call->args[0],
+                matches));
+            assert(expr_match(
+                Broadcast::make(Variable::make(Handle(1), "result.buffer"), channels),
+                call->args[1],
+                matches));
+            assert(expr_match(
+                Broadcast::make(Variable::make(Int(32), "result.s0.x.__block_id_x") + Variable::make(Int(32), "result.min.0"), channels),
+                call->args[2],
+                matches));
+            assert(expr_match(
+                Broadcast::make(Variable::make(Int(32), "result.s0.y.__block_id_y") + Variable::make(Int(32), "result.min.1"), channels),
+                call->args[3],
+                matches));
+            assert(expr_match(
+                Ramp::make(0, 1, channels), call->args[4], matches));
+            assert(expr_match(
+                Call::make(
+                    UInt(8, channels),
+                    Call::image_load,
+                    {
+                        Broadcast::make(StringImm::make("input"), channels),
+                        Broadcast::make(Variable::make(Handle(1), "input.buffer"), channels),
+                        Broadcast::make(
+                            Add::make(
+                                Variable::make(Int(32), "result.s0.x.__block_id_x"),
+                                Variable::make(Int(32), "result.min.0")) -
+                            Variable::make(Int(32), "input.min.0"),
+                            channels),
+                        Broadcast::make(Variable::make(Int(32), "input.extent.0"), channels),
+                        Broadcast::make(
+                            Add::make(
+                                Variable::make(Int(32), "result.s0.y.__block_id_y"),
+                                Variable::make(Int(32), "result.min.1")) -
+                            Variable::make(Int(32), "input.min.1"),
+                            channels),
+                        Broadcast::make(Variable::make(Int(32), "input.extent.1"), channels),
+                        Ramp::make(0, 1, channels),
+                        Broadcast::make(IntImm::make(channels), channels)
+                    },
+                    Call::CallType::Intrinsic),
+                call->args[5],
+                matches));
+        }
+        IRMutator::visit(call);
+    }
+public:
+    ValidateInterleavedVectorizedPipeline(int _channels) : ValidateInterleavedPipeline(_channels) {}
+};
+
+Image<uint8_t> make_interleaved_image(uint8_t *host, int W, int H, int channels) {
     buffer_t buf = { 0 };
     buf.host = host;
     buf.extent[0] = W;
-    buf.stride[0] = nChannels;
+    buf.stride[0] = channels;
     buf.extent[1] = H;
     buf.stride[1] = buf.stride[0] * buf.extent[0];
-    buf.extent[2] = nChannels;
+    buf.extent[2] = channels;
     buf.stride[2] = 1;
     buf.elem_size = 1;
     return Image<uint8_t>(&buf);
 }
 
-Image<uint8_t> make_planar_image(uint8_t *host, int W, int H, int nChannels) {
-    buffer_t buf = { 0 };
-    buf.host = host;
-    buf.extent[0] = W;
-    buf.stride[0] = 1;
-    buf.extent[1] = H;
-    buf.stride[1] = buf.stride[0] * buf.extent[0];
-    buf.extent[2] = nChannels;
-    buf.stride[2] = buf.stride[1] * buf.extent[1];
-    buf.elem_size = 1;
-    return Image<uint8_t>(&buf);
-}
-
-std::string copy_interleaved(bool isVectorized = false, int nChannels = 4) {
+void copy_interleaved(bool vectorized = false, int channels = 4) {
     ImageParam input8(UInt(8), 3, "input");
-    input8.set_stride(0, nChannels)
+    input8.set_stride(0, channels)
         .set_stride(1, Halide::Expr())
         .set_stride(2, 1)
-        .set_bounds(2, 0, nChannels);  // expecting interleaved image
-    uint8_t in_buf[128 * 128 * nChannels];
-    uint8_t out_buf[128 * 128 * nChannels];
-    Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, nChannels);
-    Image<uint8_t> out = make_interleaved_image(out_buf, 128, 128, nChannels);
+        .set_bounds(2, 0, channels);  // expecting interleaved image
+    uint8_t in_buf[128 * 128 * channels];
+    uint8_t out_buf[128 * 128 * channels];
+    Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, channels);
+    Image<uint8_t> out = make_interleaved_image(out_buf, 128, 128, channels);
     input8.set(in);
 
     Var x, y, c;
     Func result("result");
     result(x, y, c) = input8(x, y, c);
     result.output_buffer()
-        .set_stride(0, nChannels)
+        .set_stride(0, channels)
         .set_stride(1, Halide::Expr())
         .set_stride(2, 1)
-        .set_bounds(2, 0, nChannels);  // expecting interleaved image
+        .set_bounds(2, 0, channels);  // expecting interleaved image
 
-    result.bound(c, 0, nChannels);
+    result.bound(c, 0, channels);
     result.image(x, y, c, DeviceAPI::Renderscript);
-    if (isVectorized) result.vectorize(c);
+    if (vectorized) result.vectorize(c);
 
-    auto p = new SnapshotPipeline();
-    result.add_custom_lowering_pass(p);
+    result.add_custom_lowering_pass(
+        vectorized?
+            new ValidateInterleavedVectorizedPipeline(channels):
+            new ValidateInterleavedPipeline(channels));
     result.realize(out);
-
-    return p->pipeline.str();
-}
-
-std::string copy_interleaved_vectorized(int nChannels = 4) {
-    return copy_interleaved(true, nChannels);
 }
 
 int main(int argc, char **argv) {
-    std::string expected_vectorized_ir =
-        R"|(let copy_to_device_result$2 = halide_copy_to_device(result.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result$2 == 0), copy_to_device_result$2)
-let copy_to_device_result = halide_copy_to_device(input.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result == 0), copy_to_device_result)
-parallel<Renderscript> (result.s0.y.__block_id_y, 0, result.extent.1) {
-  parallel<Renderscript> (result.s0.x.__block_id_x, 0, result.extent.0) {
-    allocate __shared[uint8 * 0]
-    parallel<Renderscript> (.__thread_id_x, 0, 1) {
-      image_store(x4("result"), x4(result.buffer), x4((result.s0.x.__block_id_x + result.min.0)), x4((result.s0.y.__block_id_y + result.min.1)), ramp(0, 1, 4), image_load(x4("input"), x4(input.buffer), x4(((result.s0.x.__block_id_x + result.min.0) - input.min.0)), x4(input.extent.0), x4(((result.s0.y.__block_id_y + result.min.1) - input.min.1)), x4(input.extent.1), ramp(0, 1, 4), x4(4)))
-    }
-    free __shared
-  }
-}
-set_dev_dirty(result.buffer, uint8(1))
-)|";
-    std::string pipeline_ir = copy_interleaved_vectorized(4);
-    if (expected_vectorized_ir != pipeline_ir) {
-        std::cout << "FAIL: Expected vectorized output:\n"
-                  << expected_vectorized_ir
-                  << "Actual output:\n" << pipeline_ir;
-        return 1;
-    }
-
-    std::string expected_ir =
-        R"|(let copy_to_device_result$5 = halide_copy_to_device(result$2.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result$5 == 0), copy_to_device_result$5)
-let copy_to_device_result$4 = halide_copy_to_device(input.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result$4 == 0), copy_to_device_result$4)
-parallel<Renderscript> (result$2.s0.y$2.__block_id_y, 0, result$2.extent.1) {
-  parallel<Renderscript> (result$2.s0.x$2.__block_id_x, 0, result$2.extent.0) {
-    allocate __shared[uint8 * 0]
-    parallel<Renderscript> (.__thread_id_x, 0, 1) {
-      for<Renderscript> (result$2.s0.c$2, 0, 4) {
-        image_store("result$2", result$2.buffer, (result$2.s0.x$2.__block_id_x + result$2.min.0), (result$2.s0.y$2.__block_id_y + result$2.min.1), result$2.s0.c$2, image_load("input", input.buffer, ((result$2.s0.x$2.__block_id_x + result$2.min.0) - input.min.0), input.extent.0, ((result$2.s0.y$2.__block_id_y + result$2.min.1) - input.min.1), input.extent.1, result$2.s0.c$2, 4))
-      }
-    }
-    free __shared
-  }
-}
-set_dev_dirty(result$2.buffer, uint8(1))
-)|";
-    pipeline_ir = copy_interleaved(false, 4);
-    if (expected_ir != pipeline_ir) {
-        std::cout << "FAIL: Expected output:\n" << expected_ir
-                  << "Actual output:\n" << pipeline_ir;
-        return 2;
-    }
-
-    std::string expected_3_ir =
-        R"|(let copy_to_device_result$8 = halide_copy_to_device(result$3.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result$8 == 0), copy_to_device_result$8)
-let copy_to_device_result$7 = halide_copy_to_device(input.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result$7 == 0), copy_to_device_result$7)
-parallel<Renderscript> (result$3.s0.y$3.__block_id_y, 0, result$3.extent.1) {
-  parallel<Renderscript> (result$3.s0.x$3.__block_id_x, 0, result$3.extent.0) {
-    allocate __shared[uint8 * 0]
-    parallel<Renderscript> (.__thread_id_x, 0, 1) {
-      for<Renderscript> (result$3.s0.c$3, 0, 3) {
-        image_store("result$3", result$3.buffer, (result$3.s0.x$3.__block_id_x + result$3.min.0), (result$3.s0.y$3.__block_id_y + result$3.min.1), result$3.s0.c$3, image_load("input", input.buffer, ((result$3.s0.x$3.__block_id_x + result$3.min.0) - input.min.0), input.extent.0, ((result$3.s0.y$3.__block_id_y + result$3.min.1) - input.min.1), input.extent.1, result$3.s0.c$3, 3))
-      }
-    }
-    free __shared
-  }
-}
-set_dev_dirty(result$3.buffer, uint8(1))
-)|";
-    pipeline_ir = copy_interleaved(false, 3);
-    if (expected_3_ir != pipeline_ir) {
-        std::cout << "FAIL: Expected 3-channel output:\n" << expected_3_ir
-                  << "Actual output:\n" << pipeline_ir;
-        return 4;
-    }
-
-    std::string expected_vectorized_3_ir =
-        R"|(let copy_to_device_result$11 = halide_copy_to_device(result$4.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result$11 == 0), copy_to_device_result$11)
-let copy_to_device_result$10 = halide_copy_to_device(input.buffer, halide_renderscript_device_interface())
-assert((copy_to_device_result$10 == 0), copy_to_device_result$10)
-parallel<Renderscript> (result$4.s0.y$4.__block_id_y, 0, result$4.extent.1) {
-  parallel<Renderscript> (result$4.s0.x$4.__block_id_x, 0, result$4.extent.0) {
-    allocate __shared[uint8 * 0]
-    parallel<Renderscript> (.__thread_id_x, 0, 1) {
-      image_store(x3("result$4"), x3(result$4.buffer), x3((result$4.s0.x$4.__block_id_x + result$4.min.0)), x3((result$4.s0.y$4.__block_id_y + result$4.min.1)), ramp(0, 1, 3), image_load(x3("input"), x3(input.buffer), x3(((result$4.s0.x$4.__block_id_x + result$4.min.0) - input.min.0)), x3(input.extent.0), x3(((result$4.s0.y$4.__block_id_y + result$4.min.1) - input.min.1)), x3(input.extent.1), ramp(0, 1, 3), x3(3)))
-    }
-    free __shared
-  }
-}
-set_dev_dirty(result$4.buffer, uint8(1))
-)|";
-    pipeline_ir = copy_interleaved(true, 3);
-    if (expected_vectorized_3_ir != pipeline_ir) {
-        std::cout << "FAIL: Expected vectorized x3 output:\n" << expected_vectorized_3_ir
-                  << "Actual output:\n" << pipeline_ir;
-        return 4;
-    }
+    copy_interleaved(true, 4);
+    copy_interleaved(false, 4);
+    copy_interleaved(true, 3);
+    copy_interleaved(false, 3);
 
     std::cout << "Done!" << std::endl;
     return 0;
