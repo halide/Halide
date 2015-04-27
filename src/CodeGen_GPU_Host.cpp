@@ -443,8 +443,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             Value *val;
 
             if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle
-                val = buffer_dev(sym_get(name + ".buffer"));
+                // If it's a buffer, dereference the "dev handle" which is the
+                // name tagged with ".buffer"
+                if (ends_with(name, ".buffer")) {
+                    val = buffer_dev(sym_get(name));
+                } else {
+                    val = buffer_dev(sym_get(name + ".buffer"));
+                }
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
                 // expression mesh. Pass a non-NULL value in the argument array

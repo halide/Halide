@@ -402,6 +402,20 @@ class InjectBufferCopies : public IRMutator {
             debug(4) << "Adding GLSL write via glsl_texture_load for " << buffer_var->name << "\n";
             state[buf_name].devices_writing.insert(DeviceAPI::GLSL);
             IRMutator::visit(op);
+        } else if (op->call_type == Call::Extern) {
+            // Check if we are passing a variable tagged with ".buffer" to an
+            // extern call node. If so, track the buffer. We don't have enough
+            // information to determine if it is read from or written to.
+            for (int i = 0; i != op->args.size(); ++i) {
+                const Variable *buffer_var = op->args[i].as<Variable>();
+                if (buffer_var && ends_with(buffer_var->name, ".buffer")) {
+                    debug(4) << "Adding extern read/write for " << buffer_var->name << "\n";
+                    string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
+                    state[buf_name].devices_reading.insert(DeviceAPI::GLSL);
+                    state[buf_name].devices_writing.insert(DeviceAPI::GLSL);
+                }
+                IRMutator::visit(op);
+            }
         } else {
             IRMutator::visit(op);
         }

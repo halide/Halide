@@ -13,7 +13,10 @@ class QualifyExpr : public IRMutator {
     const string &prefix;
 
     void visit(const Variable *v) {
-        if (v->param.defined()) {
+        // Avoid renaming defined parameters, or variables tagged .buffer. At
+        // this point in lowering, the only variables tagged this way are those
+        // explicitly named by the developer.
+        if (v->param.defined() || ends_with(v->name, ".buffer")) {
             expr = v;
         } else {
             expr = Variable::make(v->type, prefix + v->name, v->reduction_domain);

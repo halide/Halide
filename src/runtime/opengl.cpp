@@ -821,10 +821,15 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
             return 1;
         }
 
-        // Set parameters for this texture: no interpolation and clamp to edges.
+        // Set parameters for this texture: linear interpolation and clamp to
+        // edges. Ordinary lookups from glsl_texture_load intriniscs will always
+        // be placed on texel centers in normalized coordinates. Setting the
+        // interpolation mode to GL_LINEAR allows developers to use extern calls
+        //  to GLSL texture2D to perform bilinear interpolation on textures
+        // created by the halide runtime.
         global_state.BindTexture(GL_TEXTURE_2D, tex);
-        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture")) {
@@ -1411,8 +1416,8 @@ WEAK int halide_opengl_run(void *user_context,
 
             // Textures not created by the Halide runtime might not have
             // parameters set, or might have had parameters set differently
-            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 

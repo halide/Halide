@@ -621,6 +621,7 @@ Call::ConstString Call::trace = "trace";
 Call::ConstString Call::trace_expr = "trace_expr";
 Call::ConstString Call::return_second = "return_second";
 Call::ConstString Call::if_then_else = "if_then_else";
+Call::ConstString Call::glsl_code_and_call = "glsl_code_and_call";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
 Call::ConstString Call::glsl_texture_store = "glsl_texture_store";
 Call::ConstString Call::glsl_varying = "glsl_varying";

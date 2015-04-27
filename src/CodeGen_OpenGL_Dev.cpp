@@ -74,6 +74,63 @@ Expr call_builtin(const Type &result_type, const std::string &func,
     return simplify(Cast::make(result_type, val));
 }
 
+// This visitor traverses the IR tree and produces a set of string values inside
+// GLSL_code_and_call intrinsics. These values will be output in order before
+// the main(..) function in the GLSL fragment shader.
+class FindGLSLCodeIntrinsics : public IRVisitor {
+public:
+    using IRVisitor::visit;
+    using ResultType = std::set<std::string>;
+
+    FindGLSLCodeIntrinsics() : collect_source(false) {}
+
+    virtual void visit(const StringImm *op) {
+        if (collect_source && (results.count(op->value) == 0))
+            results.insert(op->value);
+    }
+
+    void visit(const Variable *op) {
+        // Check and see if this variable is in scope, and if so, visit its
+        // value
+        if (scope.contains(op->name)) {
+            scope.get(op->name).accept(this);
+        }
+    }
+
+    virtual void visit(const Call *op) {
+        if (op->call_type == Call::Intrinsic) {
+            // See CodeGen_OpenGL_Dev::visit(const Call*) for a description of
+            // this intrinisc.
+            if (op->name == Call::glsl_code_and_call) {
+                internal_assert(op->args.size() == 2);
+                // Visit the first argument which should be a StringImm or a
+                // variable to one added by simplification.
+                collect_source = true;
+                op->args[0].accept(this);
+                collect_source = false;
+                return;
+            }
+        }
+
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Let *op) {
+        scope.push(op->name, op->value);
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+
+    void visit(const LetStmt *op) {
+        scope.push(op->name, op->value);
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+
+    bool collect_source;
+    ResultType results;
+    Scope<Expr> scope;
+};
 }
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
@@ -176,7 +233,18 @@ string CodeGen_GLSL::print_type(Type type) {
 // Identifiers containing double underscores '__' are reserved in GLSL, so we
 // have to use a different name mangling scheme than in the C code generator.
 std::string CodeGen_GLSL::print_name(const std::string &name) {
-    std::string mangled = CodeGen_C::print_name(name);
+
+    std::string mangled;
+
+    // Check if this variable is tagged as a buffer for an image. If so, remove
+    // the tag e.g. the sampler for "i0.buffer" will be "_i0".
+    if (ends_with(name, ".buffer")) {
+       internal_assert(name.length() > 7);
+       mangled = CodeGen_C::print_name(name.substr(0,name.length()-7));
+    } else {
+        mangled = CodeGen_C::print_name(name);
+    }
+
     return replace_all(mangled, "__", "XX");
 }
 
@@ -303,6 +371,9 @@ void CodeGen_GLSL::visit(const Select *op) {
         // directly without lowering to a sequence of "if" statements.
         internal_assert(op->condition.type().width == op->type.width);
         int width = op->type.width;
+
+        // Note that the Deinterleaver is used by evaluate_vector_select and it
+        // only has special cases for specific intrinsics and extern calls.
         std::vector<Expr> result = evaluate_vector_select(op);
         std::vector<std::string> ids(width);
         for (int i = 0; i < width; i++) {
@@ -378,7 +449,25 @@ void CodeGen_GLSL::visit(const Evaluate *op) {
 void CodeGen_GLSL::visit(const Call *op) {
     ostringstream rhs;
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::glsl_texture_load) {
+        if (op->name == Call::glsl_code_and_call) {
+            // The first argument to the intrinsic must be a StringImm
+            // containing a GLSL function definition to be included in the
+            // generated GLSL source code, it will be included above the main
+            // function definition. The second argument should be a Call node
+            // with type Extern that invokes one of the functions defined in the
+            // source code block.
+            internal_assert(op->args.size() == 2);
+            const Call *call = op->args[1].as<Call>();
+
+            internal_assert((call != NULL) && (call->call_type == Call::Extern))
+                << "The second argument of glsl_code_and_call must be a Call"
+                   " of type Call::Extern";
+
+            // The source code should be already output in the GLSL source
+            // string. Here we codegen the extern call.
+            print_expr(call);
+            return;
+        } else if (op->name == Call::glsl_texture_load) {
             // This intrinsic takes four arguments
             // glsl_texture_load(<tex name>, <buffer>, <x>, <y>)
             internal_assert(op->args.size() == 4);
@@ -525,11 +614,20 @@ void CodeGen_GLSL::visit(const Call *op) {
             return;
         }
     } else {
-        if (builtin.count(op->name) == 0) {
-            user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
+        // Otherwise check to see if the call name matches a halide library
+        // function that we can map to a GLSL built-in call.
+        if (builtin.count(op->name)) {
+            rhs << builtin[op->name];
+        } else {
+            // If the call has Extern type but is not recognized as a halide
+            // library function, output GLSL function call syntax for it.
+            // There is no explicit check here that the GLSL call actually exists,
+            // code compilation will fail at runtime if it does not.
+            rhs << op->name;
         }
 
-        rhs << builtin[op->name] << "(";
+        // Codegen the arguments to the function.
+        rhs << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) rhs << ", ";
             rhs << print_expr(op->args[i]);
@@ -669,6 +767,19 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
 
     for (int i = 0; i != num_uniform_ints; ++i) {
         stream << "uniform ivec4 _uniformi" << i << ";\n";
+    }
+
+    // Find Call::glsl_code_and_call intrinsic nodes and output the source they
+    // contain here.
+    FindGLSLCodeIntrinsics glsl_code_finder;
+    stmt.accept(&glsl_code_finder);
+
+    for (FindGLSLCodeIntrinsics::ResultType::iterator
+             i = glsl_code_finder.results.begin(),
+             e = glsl_code_finder.results.end();
+         i != e; ++i) {
+
+        stream << *i;
     }
 
     stream << "void main() {\n";

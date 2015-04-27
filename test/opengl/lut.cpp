@@ -117,7 +117,11 @@ int main() {
         return 1;
     }
 
-    test_lut1d();
+    if (!test_lut1d()) {
+        fprintf(stderr,"Success!\n");
+    }
+
+
 
     return 0;
 }
