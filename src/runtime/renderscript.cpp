@@ -81,6 +81,8 @@ WEAK int halide_renderscript_release_context(void *user_context) {
     return 0;
 }
 
+extern int __system_property_get(const char *name, char *value);
+
 }  // extern "C"
 
 namespace Halide {
@@ -88,7 +90,26 @@ namespace Runtime {
 namespace Internal {
 namespace Renderscript {
 
-static uint32_t getProp(const char *) { return 0; }
+WEAK int property_get(const char *key, char *value, const char *default_value) {
+    int len;
+
+    len = __system_property_get(key, value);
+    if (len > 0) {
+        return len;
+    }
+
+    if (default_value) {
+        len = strlen(default_value);
+        memcpy(value, default_value, len + 1);
+    }
+    return len;
+}
+
+static uint32_t getProp(const char *str) {
+    char buf[256];
+    property_get(str, buf, "0");
+    return atoi(buf);
+}
 
 // Helper object to acquire and release the RsContext context.
 class Context {
@@ -108,7 +129,7 @@ public:
             return false;
         }
 
-        if (loadSymbols(handle, *dispatch) == false) {
+        if (loadSymbols(handle, *dispatch, getProp("ro.build.version.sdk")) == false) {
             ALOGV("%s init failed!", filename);
             return false;
         }
@@ -148,6 +169,7 @@ WEAK int create_renderscript_context(void *user_context, RsDevice *dev, RsContex
 
     int targetApi = RS_VERSION;
     Context::dispatch = new dispatchTable;
+    memset(Context::dispatch, 0, sizeof(dispatchTable));
 
     bool usingNative = false;
 
@@ -581,10 +603,14 @@ bool loadSymbols(void* handle, dispatchTable& dispatchTab, int device_api) {
             LOG_API("Couldn't initialize dispatchTab.AllocationElementRead");
             return false;
         }
+    }
+    // Function below is part of future API_23, but since it has not been released yet,
+    // we are poking to see if that function is available even if we are
+    // on device_api == 22.
+    if (device_api >= 22) {
         dispatchTab.Allocation3DRead = (Allocation3DReadFnPtr)dlsym(handle, "rsAllocation3DRead");
         if (dispatchTab.Allocation3DRead == NULL) {
             LOG_API("Couldn't initialize dispatchTab.Allocation3DRead");
-            return false;
         }
     }
     return true;
@@ -794,7 +820,7 @@ WEAK int halide_renderscript_device_malloc(void *user_context, buffer_t *buf) {
         // 4-byte type:
         //
         void *elementID_RGBA_8888 = Context::dispatch->ElementCreate(
-            ctx.mContext, RS_TYPE_UNSIGNED_8, RS_KIND_PIXEL_RGBA, true, 
+            ctx.mContext, RS_TYPE_UNSIGNED_8, RS_KIND_PIXEL_RGBA, true,
             4 /*size*/);  // 4 for uchar4
         typeID = Context::dispatch->TypeCreate(
             ctx.mContext, elementID_RGBA_8888, buf->extent[0], buf->extent[1],
@@ -912,16 +938,6 @@ WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
                         << buf->extent[2] << "*" << buf->elem_size
                         << " bytes into " << buf->host << "\n";
 
-    // Context::dispatch->Allocation2DRead(
-    //     ctx.mContext, (void *)halide_get_device_handle(buf->dev), 0 /*xoff*/,
-    //     0 /*yoff*/, 0 /*mSelectedLOD*/,
-    //     RS_ALLOCATION_CUBEMAP_FACE_POSITIVE_X,
-    //     0 /*w*/, 0 /*h*/, buf->host, 0, 0);
-
-    Context::dispatch->ContextFinish(ctx.mContext);
-
-    debug(user_context) << "ContextFinish done\n";
-
     Context::dispatch->AllocationSyncAll(
         ctx.mContext, (void *)halide_get_device_handle(buf->dev),
         RS_ALLOCATION_USAGE_SCRIPT);
@@ -929,6 +945,7 @@ WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
     debug(user_context) << "AllocationSyncAll done\n";
 
     if (is_interleaved_rgba_buffer_t(buf)) {
+        halide_assert(user_context, Context::dispatch->Allocation2DRead != NULL);
         Context::dispatch->Allocation2DRead(
             ctx.mContext, (void *)halide_get_device_handle(buf->dev), 0 /*xoff*/,
             0 /*yoff*/, 0 /*mSelectedLOD*/, RS_ALLOCATION_CUBEMAP_FACE_POSITIVE_X,
@@ -936,7 +953,9 @@ WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
             buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->elem_size /* byte size */,
             buf->extent[0] * buf->extent[2] /* stride */);
     } else {
-        debug(user_context) << "staring Allocation3DRead(w=" << buf->extent[0] 
+        debug(user_context) << "staring Allocation3DRead("
+            << (void*)Context::dispatch->Allocation3DRead
+            << ")(w=" << buf->extent[0]
             << " h=" << buf->extent[1]
             << " d=" << buf->extent[2]
             << " buf->host=" << buf->host
@@ -945,6 +964,7 @@ WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
 
         // per rsdAllocationRead3D in frameworks/rs/driver/rsdAllocation.cpp
         // data has to be planar layout.
+        halide_assert(user_context, Context::dispatch->Allocation3DRead != NULL);
         Context::dispatch->Allocation3DRead(
             ctx.mContext, (void *)halide_get_device_handle(buf->dev), 0 /*xoff*/,
             0 /*yoff*/, 0 /*zoff*/, 0 /*mSelectedLOD*/, buf->extent[0] /* w */,
@@ -955,23 +975,6 @@ WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
         debug(user_context) << "Allocation3DRead done\n";
     }
 
-    Context::dispatch->AllocationSyncAll(
-        ctx.mContext, (void *)halide_get_device_handle(buf->dev),
-        RS_ALLOCATION_USAGE_SCRIPT);
-
-    debug(user_context) << "AllocationSyncAll done\n";
-
-    Context::dispatch->ContextFinish(ctx.mContext);
-
-    // Context::dispatch->Allocation3DRead(
-    //     ctx.mContext, (void *)halide_get_device_handle(buf->dev), 0 /*xoff*/,
-    //     0 /*yoff*/, 0 /*zoff*/, 0 /*mSelectedLOD*/, buf->extent[0] /*w*/,
-    //     buf->extent[1] /*h*/, buf->extent[2] /*d*/, buf->host,
-    //     buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->elem_size,
-    //     0);
-    // //        buf->extent[0] * buf->elem_size);
-
-    //(*(int8_t *)buf->host) = 43;
     debug(user_context) << "RS: copied from device " << buf->extent[0] << "x"
                         << buf->extent[1] << "x" << buf->extent[2] << "*"
                         << buf->elem_size << " dev handle: "
@@ -1090,10 +1093,6 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
         NULL, 0);
 
     debug(user_context) << "ScriptForEach completed\n";
-
-    Context::dispatch->ContextFinish(ctx.mContext);
-
-    debug(user_context) << "ContextFinish done\n";
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);

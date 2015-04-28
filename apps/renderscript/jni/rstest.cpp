@@ -9,8 +9,10 @@
 #include "generated_copy_vectorized_arm.h"
 
 #include <iostream>
+#include <sys/system_properties.h>
 
 extern "C" int halide_copy_to_host(void *, buffer_t *);
+extern "C" int halide_device_sync(void *, buffer_t *);
 
 bool validate(buffer_t actual, buffer_t expected) {
     int count_mismatches = 0;
@@ -115,11 +117,18 @@ struct timing {
     timing(filter_t _filter, buffer_t *_bt_input, buffer_t *_bt_output):
         filter(_filter), bt_input(_bt_input), bt_output(_bt_output) {}
 
-    int run(int n_reps) {
+    int run(int n_reps, bool with_copying) {
         timeval t1, t2;
         for (int i = 0; i < n_reps; i++) {
             gettimeofday(&t1, NULL);
             int error = filter(bt_input, bt_output);
+            halide_device_sync(NULL, bt_output);
+
+            if (with_copying) {
+                if (bt_output->dev) {
+                    halide_copy_to_host(NULL, bt_output);
+                }
+            }
             gettimeofday(&t2, NULL);
             if (error) {
                 return(error);
@@ -158,62 +167,87 @@ bool test(buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm,
         std::cout << std::endl;
     }
     const int n_reps = 500;
-    timing rs(generated_rs, &bt_input, &bt_output);
+    timing rs_with_copying(generated_rs, &bt_input, &bt_output);
     int error;
-    if (error = rs.run(n_reps) != 0) {
+    if (error = rs_with_copying.run(n_reps, true) != 0) {
+        std::cout << "Halide returned error: " << error << std::endl;
+    }
+
+    timing rs(generated_rs, &bt_input, &bt_output);
+    if (error = rs.run(n_reps, false) != 0) {
         std::cout << "Halide returned error: " << error << std::endl;
     }
     if (bt_output.dev) {
+        timeval t1, t2;
+        gettimeofday(&t1, NULL);
         halide_copy_to_host(NULL, &bt_output);
+        gettimeofday(&t2, NULL);
+        if (error) {
+            return(error);
+        }
+        double t = (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0;
+        std::cout << "Copied to host in " << t << "ms\n";
     }
 
     timing arm(generated_arm, &bt_input, &bt_output_arm);
-    if (error = arm.run(n_reps) != 0) {
+    if (error = arm.run(n_reps, false) != 0) {
         std::cout << "Halide returned error: " << error << std::endl;
     }
 
-    printf("Out of %d runs best times are:\nRS:  %fms(@%d) \nARM: %fms(@%d)\n", n_reps,
-           rs.best_t, rs.best_rep, arm.best_t, arm.best_rep);
-    printf("Out of %d runs worst times are:\nRS:  %fms(@%d)\nARM: %fms(@%d)\n", n_reps,
-           rs.worst_t, rs.worst_rep, arm.worst_t, arm.worst_rep);
+    printf("Out of %d runs best times are:\nRS:  %fms(@%d)\nRS(with copy): %fms(@%d)\nARM: %fms(@%d)\n", n_reps,
+           rs.best_t, rs.best_rep, rs_with_copying.best_t, rs_with_copying.best_rep, arm.best_t, arm.best_rep);
+    printf("Out of %d runs worst times are:\nRS:  %fms(@%d)\nRS(with copy): %fms(@%d)\nARM: %fms(@%d)\n", n_reps,
+           rs.worst_t, rs.worst_rep, rs_with_copying.worst_t, rs_with_copying.worst_rep, arm.worst_t, arm.worst_rep);
 
     return validate(bt_output, bt_output_arm);
 }
 
+int sdk_version() {
+    char sdk_ver_str[32] = "0";
+    __system_property_get("ro.build.version.sdk", sdk_ver_str);
+    int sdk_ver = atoi(sdk_ver_str);
+    std::cout << "sdk ver=" << sdk_ver << "\n";
+    return sdk_ver;
+}
+
 int main(int argc, char **argv) {
-    const int width = 256;
-    const int height = 512;
+
+    const int width = 768;
+    const int height = 768;
     const int channels = 4;
 
     uint8_t input_image[width * height * channels];
     uint8_t output_image[width * height * channels];
     uint8_t output_image_arm[width * height * channels];
+    bool correct = true;
 
-    buffer_t bt_input = make_planar_image(width, height, channels, input_image);
-    const int channels_stride = 1;  // chunky image
-    for (int i = 0; i < std::min(bt_input.extent[0], width); i++) {
-        for (int j = 0; j < std::min(bt_input.extent[1], height); j++) {
-            for (int k = 0; k < bt_input.extent[2]; k++) {
-                input_image[i * bt_input.stride[0] + j * bt_input.stride[1] +
-                            k * bt_input.stride[2]] = ((i + j) % 2) * 6;
+    if (sdk_version() >= 23) { // 3-dim image support was not added until 23
+
+        buffer_t bt_input = make_planar_image(width, height, channels, input_image);
+        const int channels_stride = 1;  // chunky image
+        for (int i = 0; i < std::min(bt_input.extent[0], width); i++) {
+            for (int j = 0; j < std::min(bt_input.extent[1], height); j++) {
+                for (int k = 0; k < bt_input.extent[2]; k++) {
+                    input_image[i * bt_input.stride[0] + j * bt_input.stride[1] +
+                                k * bt_input.stride[2]] = ((i + j) % 2) * 6;
+                }
             }
         }
-    }
-    buffer_t bt_output =
-        make_planar_image(width, height, channels, output_image);
-    buffer_t bt_output_arm =
-        make_planar_image(width, height, channels, output_image_arm);
+        buffer_t bt_output =
+            make_planar_image(width, height, channels, output_image);
+        buffer_t bt_output_arm =
+            make_planar_image(width, height, channels, output_image_arm);
 
-    std::cout << "Planar blur:\n";
-    bool correct = true;
-    if (!test(bt_input, bt_output, bt_output_arm, generated_blur_rs,
-              generated_blur_arm)) {
-        correct = false;
-    }
-    std::cout << "Planar copy:\n";
-    if (!test(bt_input, bt_output, bt_output_arm, generated_copy_rs,
-              generated_copy_arm)) {
-        correct = false;
+        std::cout << "Planar blur:\n";
+        if (!test(bt_input, bt_output, bt_output_arm, generated_blur_rs,
+                  generated_blur_arm)) {
+            correct = false;
+        }
+        std::cout << "Planar copy:\n";
+        if (!test(bt_input, bt_output, bt_output_arm, generated_copy_rs,
+                  generated_copy_arm)) {
+            correct = false;
+        }
     }
 
     buffer_t bt_interleaved_input =
