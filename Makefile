@@ -245,7 +245,7 @@ SOURCE_FILES = \
   HumanReadableStmt.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
-  InjectImageIntrinsics.cpp \
+  InjectShaderIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -358,7 +358,7 @@ HEADER_FILES = \
   HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
-  InjectImageIntrinsics.h \
+  InjectShaderIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \

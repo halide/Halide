@@ -118,9 +118,9 @@ protected:
     void visit(const Call *op) {
         if (op->call_type == Call::Intrinsic &&
             (op->name == Call::glsl_texture_load ||
-             op->name == Call::image_load ||
+             op->name == Call::shader_load ||
              op->name == Call::glsl_texture_store ||
-             op->name == Call::image_store)) {
+             op->name == Call::shader_store)) {
 
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
@@ -139,10 +139,10 @@ protected:
             // TODO: do we need to set ref.dimensions?
 
             if (op->name == Call::glsl_texture_load ||
-                op->name == Call::image_load) {
+                op->name == Call::shader_load) {
                 ref.read = true;
             } else if (op->name == Call::glsl_texture_store ||
-                op->name == Call::image_store) {
+                op->name == Call::shader_store) {
                 ref.write = true;
             }
 
