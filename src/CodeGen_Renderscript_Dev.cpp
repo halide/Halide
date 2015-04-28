@@ -176,6 +176,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
     // Add kernel function's parameters to the scope.
     llvm::Function::arg_iterator input_arg = function->arg_begin();
+    input_arg->setName("in");
     input_arg++;  // skip "in" buffer
     for (int i = 0; i < 4; i++, input_arg++) {
         string bounds_name = bounds_names.names[i];
@@ -191,12 +192,12 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         }
     }
 
-    // Mark the buffer args as no alias.
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            function->setDoesNotAlias(i + 1);
-        }
-    }
+    // // Mark the buffer args as no alias.
+    // for (size_t i = 0; i < args.size(); i++) {
+    //     if (args[i].is_buffer) {
+    //         function->setDoesNotAlias(i + 1);
+    //     }
+    // }
 
     // Make the initial basic block.
     entry_block = BasicBlock::Create(*context, "entry", function);

@@ -12,10 +12,7 @@ void blur(std::string suffix, ImageParam input8, const int channels,
     Func blur_x("blur_x");
     blur_x(x, y, c) = cast<uint8_t>(
         (input(x, y, c) + input(x + 1, y, c) + input(x + 2, y, c)) / 3);
-    blur_x.output_buffer()
-        .set_stride(0, input8.stride(0))
-        .set_stride(2, input8.stride(2))
-        .set_bounds(2, 0, channels);
+    blur_x.output_buffer() .set_stride(0, input8.stride(0)) .set_stride(2, input8.stride(2)) .set_bounds(2, 0, channels);
 
     Func result("result");
     result(x, y, c) = cast<uint8_t>(
