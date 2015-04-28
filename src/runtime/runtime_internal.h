@@ -54,6 +54,8 @@ extern "C" {
 WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_print(void *user_context, const char *msg);
 WEAK void halide_error(void *user_context, const char *msg);
+WEAK void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
+WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
 
 char *getenv(const char *);
 void free(void *);
@@ -207,9 +209,23 @@ typedef SinkPrinter debug;
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
 
+template <typename T>
+__attribute__((always_inline)) void swap(T &a, T &b) {
+    T t = a;
+    a = b;
+    b = t;
+}
+
+template <typename T>
+__attribute__((always_inline)) T max(const T &a, const T &b) {
+    return a > b ? a : b;
+}
+
+// Search the process for a symbol with the given name.
+extern WEAK void *get_symbol(const char *name);
+
 }}}
 
 using namespace Halide::Runtime::Internal;
 
 #endif
-

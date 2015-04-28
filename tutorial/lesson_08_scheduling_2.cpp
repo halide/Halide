@@ -8,11 +8,11 @@
 // Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
+// g++ lesson_08*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
 // LD_LIBRARY_PATH=../bin ./lesson_08
 
 // On os x:
-// g++ lesson_08*.cpp -g -I ../include -L ../bin -lHalide -o lesson_08
+// g++ lesson_08*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -o lesson_08
 // DYLD_LIBRARY_PATH=../bin ./lesson_08
 
 #include "Halide.h"
