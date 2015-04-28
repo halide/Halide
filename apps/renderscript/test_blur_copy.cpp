@@ -24,7 +24,7 @@ void blur(std::string suffix, ImageParam input8, const int channels,
 
     result.bound(c, 0, channels);
     if (suffix == "_rs") {
-        result.image(x, y, c, DeviceAPI::Renderscript);
+        result.shader(x, y, c, DeviceAPI::Renderscript);
     } else {
         result.parallel(y);
     }
@@ -55,7 +55,7 @@ void copy(std::string suffix, ImageParam input8, const int channels,
 
     result.bound(c, 0, channels);
     if (suffix == "_rs") {
-        result.image(x, y, c, DeviceAPI::Renderscript);
+        result.shader(x, y, c, DeviceAPI::Renderscript);
     } else {
         result.parallel(y);
     }

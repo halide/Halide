@@ -1356,7 +1356,7 @@ public:
      * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
      * individual output pixels in parallel) and vectorization over 'c'
      * (since GLSL/RS implicitly vectorizes the color channel). */
-    EXPORT Func &image(Var x, Var y, Var c, DeviceAPI device_api);
+    EXPORT Func &shader(Var x, Var y, Var c, DeviceAPI device_api);
 
     /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);

@@ -37,7 +37,7 @@
 #include "Func.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
-#include "InjectImageIntrinsics.h"
+#include "InjectShaderIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
@@ -1907,9 +1907,9 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
     if (t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
-        debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s);
-        debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
+        debug(1) << "Injecting shader intrinsics...\n";
+        s = inject_shader_intrinsics(s);
+        debug(2) << "Lowering after shader intrinsics:\n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";

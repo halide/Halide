@@ -1056,7 +1056,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_si
     return *this;
 }
 
-Func &Func::image(Var x, Var y, Var c, DeviceAPI device_api) {
+Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
 
     reorder(c, x, y);
@@ -1077,12 +1077,12 @@ Func &Func::image(Var x, Var y, Var c, DeviceAPI device_api) {
         }
     }
     user_assert(constant_bounds)
-        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
+        << "The color channel for shader loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
     return *this;
 }
 
 Func &Func::glsl(Var x, Var y, Var c) {
-    return image(x, y, c, DeviceAPI::GLSL).vectorize(c);
+    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
 }
 
 Func &Func::reorder_storage(Var x, Var y) {

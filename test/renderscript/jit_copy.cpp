@@ -12,12 +12,12 @@ class ValidateInterleavedPipeline: public IRMutator {
 //     ...
 //     parallel<Renderscript> (.__thread_id_x, 0, 1) {
 //       for<Renderscript> (result$2.s0.c$2, 0, 4) {
-//         image_store("result$2",
+//         shader_store("result$2",
 //                     result$2.buffer,
 //                     (result$2.s0.x$2.__block_id_x + result$2.min.0),
 //                     (result$2.s0.y$2.__block_id_y + result$2.min.1),
 //                     result$2.s0.c$2,
-//                     image_load("input",
+//                     shader_load("input",
 //                                input.buffer,
 //                                ((result$2.s0.x$2.__block_id_x + result$2.min.0) - input.min.0),
 //                                input.extent.0,
@@ -32,7 +32,7 @@ class ValidateInterleavedPipeline: public IRMutator {
 // }
 //
     virtual void visit(const Call *call) {
-        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::shader_store) {
             assert(for_nest_level == 4);
 
             std::map<std::string, Expr> matches;
@@ -60,7 +60,7 @@ class ValidateInterleavedPipeline: public IRMutator {
             assert(expr_match(
                 Call::make(
                     UInt(8),
-                    Call::image_load,
+                    Call::shader_load,
                     {
                         StringImm::make("input"),
                         Variable::make(Handle(1), "input.buffer"),
@@ -117,7 +117,7 @@ public:
 
 class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline {
     virtual void visit(const Call *call) {
-        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::shader_store) {
             assert(for_nest_level == 3); // Should be three nested for-loops before we get to the first call.
 
             std::map<std::string, Expr> matches;
@@ -143,7 +143,7 @@ class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline 
             assert(expr_match(
                 Call::make(
                     UInt(8, channels),
-                    Call::image_load,
+                    Call::shader_load,
                     {
                         Broadcast::make(StringImm::make("input"), channels),
                         Broadcast::make(Variable::make(Handle(1), "input.buffer"), channels),
@@ -209,7 +209,7 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
         .set_bounds(2, 0, channels);  // expecting interleaved image
 
     result.bound(c, 0, channels);
-    result.image(x, y, c, DeviceAPI::Renderscript);
+    result.shader(x, y, c, DeviceAPI::Renderscript);
     if (vectorized) result.vectorize(c);
 
     result.add_custom_lowering_pass(
