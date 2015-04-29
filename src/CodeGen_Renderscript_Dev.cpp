@@ -313,7 +313,7 @@ llvm::Triple CodeGen_LLVM::get_target_triple() const {
 }
 
 llvm::DataLayout CodeGen_Renderscript_Dev::get_data_layout() const {
-    return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
+    return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
 }
 
 //
@@ -526,6 +526,16 @@ static inline size_t writeAndroidBitcodeWrapper(AndroidBitcodeWrapper *wrapper,
 vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
     // Generic llvm optimizations on the module.
     optimize_module();
+
+    llvm::Triple triple = get_target_triple();
+    llvm::DataLayout dl = get_data_layout();
+    module->setTargetTriple(triple.str());
+
+    #if LLVM_VERSION > 36
+    module->setDataLayout(dl);
+    #else
+    module->setDataLayout(&dl);
+    #endif
 
     debug(2) << "CodeGen_Renderscript_Dev::compile_to_src resultant module:\n";
     if (debug::debug_level >= 2) {
