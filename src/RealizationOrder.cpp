@@ -13,13 +13,13 @@ using std::vector;
 using std::pair;
 
 void realization_order_dfs(string current,
-                           const map<string, set<string> > &graph,
+                           const map<string, set<string>> &graph,
                            set<string> &visited,
                            set<string> &result_set,
                            vector<string> &order) {
     visited.insert(current);
 
-    map<string, set<string> >::const_iterator iter = graph.find(current);
+    map<string, set<string>>::const_iterator iter = graph.find(current);
     internal_assert(iter != graph.end());
 
     for (const string &fn : iter->second) {
@@ -41,7 +41,7 @@ vector<string> realization_order(const Function &output,
 
     // Make a DAG representing the pipeline. Each function maps to the
     // set describing its inputs.
-    map<string, set<string> > graph;
+    map<string, set<string>> graph;
 
     for (const pair<string, Function> &caller : env) {
         set<string> &s = graph[caller.first];
