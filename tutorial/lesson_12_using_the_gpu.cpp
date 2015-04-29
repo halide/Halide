@@ -8,11 +8,11 @@
 // Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
 
 #include "Halide.h"
