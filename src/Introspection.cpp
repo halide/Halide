@@ -838,7 +838,7 @@ private:
         // Open the object file in question. The API to do this keeps changing.
         #if LLVM_VERSION >= 36
 
-        llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile> > maybe_obj =
+        llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
 
         if (!maybe_obj) {
@@ -850,7 +850,7 @@ private:
 
         #elif LLVM_VERSION >= 35
 
-        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile> > maybe_obj =
+        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
 
         if (!maybe_obj) {
@@ -1013,10 +1013,10 @@ private:
 
             uint8_t address_size = e.getU8(&off);
 
-            vector<pair<FunctionInfo, int> > func_stack;
-            vector<pair<TypeInfo, int> > type_stack;
-            vector<pair<std::string, int> > namespace_stack;
-            vector<pair<vector<LiveRange>, int> > live_range_stack;
+            vector<pair<FunctionInfo, int>> func_stack;
+            vector<pair<TypeInfo, int>> type_stack;
+            vector<pair<std::string, int>> namespace_stack;
+            vector<pair<vector<LiveRange>, int>> live_range_stack;
 
             int stack_depth = 0;
 

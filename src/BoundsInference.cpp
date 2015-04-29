@@ -295,7 +295,7 @@ public:
 
             vector<Expr> bounds_inference_args;
 
-            vector<pair<string, Expr> > lets;
+            vector<pair<string, Expr>> lets;
 
             // Iterate through all of the input args to the extern
             // function building a suitable argument list for the
@@ -628,7 +628,7 @@ public:
         // Walk inside of any let statements that don't depend on
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
-        vector<pair<string, Expr> > lets;
+        vector<pair<string, Expr>> lets;
         while (const LetStmt *let = body.as<LetStmt>()) {
             if (depends_on_bounds_inference(let->value)) {
                 break;

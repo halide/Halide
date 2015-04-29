@@ -1606,8 +1606,8 @@ class InferArguments : public IRGraphVisitor {
 public:
     vector<Argument> arg_types;
     vector<const void *> arg_values;
-    vector<pair<int, Internal::Parameter> > image_param_args;
-    vector<pair<int, Buffer> > image_args;
+    vector<pair<int, Internal::Parameter>> image_param_args;
+    vector<pair<int, Buffer>> image_args;
 
     InferArguments(const string &o, bool include_buffers = true)
         : output(o), include_buffers(include_buffers) {
