@@ -651,15 +651,20 @@ WEAK int halide_renderscript_initialize_kernels(void *user_context, void **state
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
-        const char *cacheDir = "/data/tmp";
+        // TODO(aam): Figure out better mechanism of passing cacheDir
+        // from the client to the halide Renderscript infrastructure.
+        const char *cacheDir = (char*)user_context;
+        // TODO(aam): Figure out good "cachedName" we can use. The one below
+        // is chosen randomly.
+        const char *cachedName = "halide_renderscript_kernel";
         (*state)->module = Context::dispatch->ScriptCCreate(
-            ctx.mContext,  // rs->getContext(),
-            "kernel_result_s0_v1___block_id_y",  // cachedName
-            strlen("kernel_result_s0_v1___block_id_y"),  // cachedNameLength
-            cacheDir,  // rs->mCacheDir.c_str()
-            strlen(cacheDir),  // rs->mCacheDir.length()
-            (const char *)src,  // (const char *)codeTxt*/
-            size  // codeLength
+            ctx.mContext,
+            cachedName,
+            strlen(cachedName),
+            cacheDir,
+            strlen(cacheDir),
+            (const char *)src,
+            size  // length of src, code size
             );
 
         debug(user_context) << "RS:halide_renderscript_init_kernels created script "

@@ -1,3 +1,5 @@
+#include <android/log.h>
+#include <jni.h>
 #include "generated_blur_rs.h"
 #include "generated_blur_arm.h"
 #include "generated_blur_vectorized_rs.h"
@@ -10,6 +12,10 @@
 
 #include <iostream>
 #include <sys/system_properties.h>
+
+#define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "rstest", __VA_ARGS__)
+#define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "rstest", __VA_ARGS__)
+
 
 extern "C" int halide_copy_to_host(void *, buffer_t *);
 extern "C" int halide_device_sync(void *, buffer_t *);
@@ -28,46 +34,14 @@ bool validate(buffer_t actual, buffer_t expected) {
                               k * expected.stride[2]];
                 if (actual_value != expected_value) {
                     if (count_mismatches < 100) {
-                        char buf[512];
-                        sprintf(buf, "actual and expected results differ at "
+                        LOGI("actual and expected results differ at "
                                      "(%d, %d, %d): %d != %d\n",
                                 i, j, k, actual_value, expected_value);
-                        std::cout << buf;
                     }
                     count_mismatches++;
                 }
             }
         }
-    }
-
-    std::cout << "---===---===---===---" << std::endl;
-    std::cout << "RS(ARM):" << std::endl;
-
-    for (int j = 0; j < std::min(actual.extent[1], 10); j++) {
-        for (int i = 0; i < std::min(actual.extent[0], 10); i++) {
-            std::cout << " [";
-            for (int k = 0; k < actual.extent[2]; k++) {
-                std::cout.width(2);
-
-                char buffer[33];
-                uint8_t actual_value =
-                    actual.host[i * actual.stride[0] + j * actual.stride[1] +
-                                k * actual.stride[2]];
-                uint8_t expected_value =
-                    expected
-                        .host[i * expected.stride[0] + j * expected.stride[1] +
-                              k * expected.stride[2]];
-                if (actual_value != expected_value) {
-                    sprintf(buffer, "%2d(%2d)", actual_value, expected_value);
-                } else {
-                    sprintf(buffer, "%2d", actual_value);
-                }
-                std::cout << buffer;
-            }
-            std::cout << "]";
-        }
-
-        std::cout << std::endl;
     }
 
     return count_mismatches == 0;
@@ -103,10 +77,11 @@ buffer_t make_interleaved_image(int width, int height, int channels,
     return bt_input;
 }
 
-typedef int  (filter_t) (buffer_t *, buffer_t *);
+typedef int  (filter_t) (const void*, buffer_t *, buffer_t *);
 
 struct timing {
     filter_t *filter;
+    const char* cacheDir;
     buffer_t *bt_input;
     buffer_t *bt_output;
     double worst_t = 0;
@@ -114,14 +89,14 @@ struct timing {
     double best_t = DBL_MAX;
     int best_rep = 0;
 
-    timing(filter_t _filter, buffer_t *_bt_input, buffer_t *_bt_output):
-        filter(_filter), bt_input(_bt_input), bt_output(_bt_output) {}
+    timing(filter_t _filter, const char* _cacheDir, buffer_t *_bt_input, buffer_t *_bt_output):
+        filter(_filter), cacheDir(_cacheDir), bt_input(_bt_input), bt_output(_bt_output) {}
 
     int run(int n_reps, bool with_copying) {
         timeval t1, t2;
         for (int i = 0; i < n_reps; i++) {
             gettimeofday(&t1, NULL);
-            int error = filter(bt_input, bt_output);
+            int error = filter(cacheDir, bt_input, bt_output);
             halide_device_sync(NULL, bt_output);
 
             if (with_copying) {
@@ -147,35 +122,19 @@ struct timing {
     }
 };
 
-bool test(buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm,
+bool test(const char* cacheDir,
+          buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm,
           filter_t generated_rs, filter_t generated_arm) {
-    for (int j = 0; j < std::min(bt_input.extent[1], 10); j++) {
-        for (int i = 0; i < std::min(bt_input.extent[0], 10); i++) {
-            std::cout << " [";
-            for (int k = 0; k < bt_input.extent[2]; k++) {
-                std::cout.width(2);
-
-                char buffer[33];
-                sprintf(buffer, "%d", bt_input.host[i * bt_input.stride[0] +
-                                                    j * bt_input.stride[1] +
-                                                    k * bt_input.stride[2]]);
-                std::cout << buffer;
-            }
-            std::cout << "]";
-        }
-
-        std::cout << std::endl;
-    }
     const int n_reps = 500;
-    timing rs_with_copying(generated_rs, &bt_input, &bt_output);
+    timing rs_with_copying(generated_rs, cacheDir, &bt_input, &bt_output);
     int error;
     if (error = rs_with_copying.run(n_reps, true) != 0) {
-        std::cout << "Halide returned error: " << error << std::endl;
+        LOGI("Halide returned error: %d", error);
     }
 
-    timing rs(generated_rs, &bt_input, &bt_output);
+    timing rs(generated_rs, cacheDir, &bt_input, &bt_output);
     if (error = rs.run(n_reps, false) != 0) {
-        std::cout << "Halide returned error: " << error << std::endl;
+        LOGI("Halide returned error: %d", error);
     }
     if (bt_output.dev) {
         timeval t1, t2;
@@ -186,18 +145,28 @@ bool test(buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm,
             return(error);
         }
         double t = (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0;
-        std::cout << "Copied to host in " << t << "ms\n";
+        LOGI("Copied to host in %fms\n", t);
     }
 
-    timing arm(generated_arm, &bt_input, &bt_output_arm);
+    timing arm(generated_arm, cacheDir, &bt_input, &bt_output_arm);
     if (error = arm.run(n_reps, false) != 0) {
-        std::cout << "Halide returned error: " << error << std::endl;
+        LOGI("Halide returned error: %d\n", error);
     }
 
-    printf("Out of %d runs best times are:\nRS:  %fms(@%d)\nRS(with copy): %fms(@%d)\nARM: %fms(@%d)\n", n_reps,
-           rs.best_t, rs.best_rep, rs_with_copying.best_t, rs_with_copying.best_rep, arm.best_t, arm.best_rep);
-    printf("Out of %d runs worst times are:\nRS:  %fms(@%d)\nRS(with copy): %fms(@%d)\nARM: %fms(@%d)\n", n_reps,
-           rs.worst_t, rs.worst_rep, rs_with_copying.worst_t, rs_with_copying.worst_rep, arm.worst_t, arm.worst_rep);
+    LOGI("Out of %d runs best times are:\n"
+        "RS:            %fms(@%d)\n"
+        "RS(with copy): %fms(@%d)\n"
+        "ARM:           %fms(@%d)\n",
+        n_reps,
+        rs.best_t, rs.best_rep,
+        rs_with_copying.best_t, rs_with_copying.best_rep,
+        arm.best_t, arm.best_rep);
+    LOGI("Out of %d runs worst times are:\n"
+        "RS:            %fms(@%d)\n"
+        "RS(with copy): %fms(@%d)\n"
+        "ARM:           %fms(@%d)\n",
+        n_reps,
+        rs.worst_t, rs.worst_rep, rs_with_copying.worst_t, rs_with_copying.worst_rep, arm.worst_t, arm.worst_rep);
 
     return validate(bt_output, bt_output_arm);
 }
@@ -206,11 +175,12 @@ int sdk_version() {
     char sdk_ver_str[32] = "0";
     __system_property_get("ro.build.version.sdk", sdk_ver_str);
     int sdk_ver = atoi(sdk_ver_str);
-    std::cout << "sdk ver=" << sdk_ver << "\n";
+    LOGI("sdk ver=%d\n", sdk_ver);
     return sdk_ver;
 }
 
-int main(int argc, char **argv) {
+void runTest(const char* cacheDir) {
+    LOGI("Started...\n");
 
     const int width = 768;
     const int height = 768;
@@ -222,7 +192,6 @@ int main(int argc, char **argv) {
     bool correct = true;
 
     if (sdk_version() >= 23) { // 3-dim image support was not added until 23
-
         buffer_t bt_input = make_planar_image(width, height, channels, input_image);
         const int channels_stride = 1;  // chunky image
         for (int i = 0; i < std::min(bt_input.extent[0], width); i++) {
@@ -238,13 +207,13 @@ int main(int argc, char **argv) {
         buffer_t bt_output_arm =
             make_planar_image(width, height, channels, output_image_arm);
 
-        std::cout << "Planar blur:\n";
-        if (!test(bt_input, bt_output, bt_output_arm, generated_blur_rs,
+        LOGI("Planar blur:\n");
+        if (!test(cacheDir, bt_input, bt_output, bt_output_arm, generated_blur_rs,
                   generated_blur_arm)) {
             correct = false;
         }
-        std::cout << "Planar copy:\n";
-        if (!test(bt_input, bt_output, bt_output_arm, generated_copy_rs,
+        LOGI("Planar copy:\n");
+        if (!test(cacheDir, bt_input, bt_output, bt_output_arm, generated_copy_rs,
                   generated_copy_arm)) {
             correct = false;
         }
@@ -268,22 +237,35 @@ int main(int argc, char **argv) {
     buffer_t bt_interleaved_output_arm =
         make_interleaved_image(width, height, channels, output_image_arm);
 
-    std::cout << "\nInterleaved(vectorized) blur:\n";
-    if (!test(bt_interleaved_input, bt_interleaved_output,
+    LOGI("\nInterleaved(vectorized) blur:\n");
+    if (!test(cacheDir, bt_interleaved_input, bt_interleaved_output,
               bt_interleaved_output_arm, generated_blur_vectorized_rs,
               generated_blur_vectorized_arm)) {
         correct = false;
     }
-    std::cout << "\nInterleaved(vectorized) copy:\n";
-    if (!test(bt_interleaved_input, bt_interleaved_output,
+    LOGI("\nInterleaved(vectorized) copy:\n");
+    if (!test(cacheDir, bt_interleaved_input, bt_interleaved_output,
               bt_interleaved_output_arm, generated_copy_vectorized_rs,
               generated_copy_vectorized_arm)) {
         correct = false;
     }
 
     if (correct) {
-        std::cout << "Done!" << std::endl;
+        LOGI("Done!\n");
     } else {
-        std::cout << "Failed!" << std::endl;
+        LOGI("Failed!\n");
     }
+}
+
+int main(int argc, char **argv) {
+    runTest("/data/tmp");
+}
+
+extern "C" {
+JNIEXPORT void JNICALL Java_com_example_hellohaliderenderscript_HalideRenderscriptActivity_runTest(JNIEnv *env, jobject obj, jstring jCacheDir) {
+    const char *pchCacheDir = env->GetStringUTFChars(jCacheDir, 0);
+    runTest(pchCacheDir);
+    env->ReleaseStringUTFChars(jCacheDir, pchCacheDir);
+
+}
 }

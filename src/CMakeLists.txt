@@ -292,7 +292,7 @@ set(HEADER_FILES
   IRVisitor.h
   Image.h
   InjectHostDevBufferCopies.h
-  InjectImageIntrinsics.h
+  InjectShaderIntrinsics.h
   InjectOpenGLIntrinsics.h
   Inline.h
   InlineReductions.h
@@ -362,9 +362,23 @@ file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
-file(COPY runtime/HalideRuntimeRS.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
+
+IF (LLVM_VERSION LESS 36)
+  set(BITWRITER_FILES
+    BitWriter_3_2.35/BitcodeWriter.cpp
+    BitWriter_3_2.35/BitcodeWriterPass.cpp
+    BitWriter_3_2.35/ValueEnumerator.cpp
+  )
+ELSE()
+  set(BITWRITER_FILES
+    BitWriter_3_2/BitcodeWriter.cpp
+    BitWriter_3_2/BitcodeWriterPass.cpp
+    BitWriter_3_2/ValueEnumerator.cpp
+  )
+ENDIF()
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
@@ -415,7 +429,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRVisitor.cpp
   Image.cpp
   InjectHostDevBufferCopies.cpp
-  InjectImageIntrinsics.cpp
+  InjectShaderIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp
   InlineReductions.cpp
@@ -467,9 +481,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
-  BitWriter_3_2/BitcodeWriter.cpp
-  BitWriter_3_2/BitcodeWriterPass.cpp
-  BitWriter_3_2/ValueEnumerator.cpp
+  ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
 )
