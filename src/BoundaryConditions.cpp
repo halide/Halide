@@ -5,7 +5,7 @@ namespace Halide {
 namespace BoundaryConditions {
 
 Func repeat_edge(const Func &source,
-                 const std::vector<std::pair<Expr, Expr> > &bounds) {
+                 const std::vector<std::pair<Expr, Expr>> &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
         "repeat_edge called with more bounds (" << bounds.size() <<
@@ -38,7 +38,7 @@ Func repeat_edge(const Func &source,
 }
 
 Func constant_exterior(const Func &source, Expr value,
-                       const std::vector<std::pair<Expr, Expr> > &bounds) {
+                       const std::vector<std::pair<Expr, Expr>> &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
         "constant_exterior called with more bounds (" << bounds.size() <<
@@ -70,7 +70,7 @@ Func constant_exterior(const Func &source, Expr value,
 
 
 Func repeat_image(const Func &source,
-                  const std::vector<std::pair<Expr, Expr> > &bounds) {
+                  const std::vector<std::pair<Expr, Expr>> &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
         "repeat_image called with more bounds (" << bounds.size() <<
@@ -111,7 +111,7 @@ Func repeat_image(const Func &source,
 }
 
 Func mirror_image(const Func &source,
-                  const std::vector<std::pair<Expr, Expr> > &bounds) {
+                  const std::vector<std::pair<Expr, Expr>> &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
         "mirror_image called with more bounds (" << bounds.size() <<
@@ -152,7 +152,7 @@ Func mirror_image(const Func &source,
 }
 
 Func mirror_interior(const Func &source,
-                     const std::vector<std::pair<Expr, Expr> > &bounds) {
+                     const std::vector<std::pair<Expr, Expr>> &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
         "mirror_interior called with more bounds (" << bounds.size() <<

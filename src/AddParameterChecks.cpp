@@ -34,7 +34,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
     s.accept(&finder);
 
     map<string, Expr> replace_with_constrained;
-    vector<pair<string, Expr> > lets;
+    vector<pair<string, Expr>> lets;
 
     struct ParamAssert {
         Expr condition;

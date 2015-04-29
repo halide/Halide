@@ -72,7 +72,7 @@ RDom::RDom(ReductionDomain d) : dom(d) {
     }
 }
 
-void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr> > &ranges, string name) {
+void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
     if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }

@@ -1071,7 +1071,7 @@ public:
 
     // Expressions for the spatial values of each coordinate in the GPU scheduled
     // loop dimensions.
-    typedef std::map<std::string, std::vector<Expr> > DimsType;
+    typedef std::map<std::string, std::vector<Expr>> DimsType;
     DimsType dims;
 
     // The channel of each varying attribute in the interleaved vertex buffer
@@ -1160,7 +1160,7 @@ public:
             Expr loop0_max = Add::make(loop0->min, loop0->extent);
             Expr loop1_max = Add::make(loop1->min, loop1->extent);
 
-            std::vector<std::vector<Expr> > coords(2);
+            std::vector<std::vector<Expr>> coords(2);
 
             coords[0].push_back(loop0->min);
             coords[0].push_back(loop0_max);
