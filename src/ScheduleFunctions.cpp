@@ -118,7 +118,7 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the function args in terms of the loop variables using the splits
-    map<string, pair<string, Expr> > base_values;
+    map<string, pair<string, Expr>> base_values;
     for (const Split &split : splits) {
         Expr outer = Variable::make(Int(32), prefix + split.outer);
         if (split.is_split()) {
@@ -342,7 +342,7 @@ Stmt build_produce(Function f) {
 
         const string &extern_name = f.extern_function_name();
 
-        vector<pair<string, Expr> > lets;
+        vector<pair<string, Expr>> lets;
 
         // Iterate through all of the input args to the extern
         // function building a suitable argument list for the
@@ -660,7 +660,7 @@ private:
         Stmt body = for_loop->body;
 
         // Dig through any let statements
-        vector<pair<string, Expr> > lets;
+        vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
             lets.push_back(make_pair(l->name, l->value));
             body = l->body;

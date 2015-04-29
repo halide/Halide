@@ -88,10 +88,10 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
 
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
-    vector<pair<string, Expr> > lets_overflow;
-    vector<pair<string, Expr> > lets_required;
-    vector<pair<string, Expr> > lets_constrained;
-    vector<pair<string, Expr> > lets_proposed;
+    vector<pair<string, Expr>> lets_overflow;
+    vector<pair<string, Expr>> lets_required;
+    vector<pair<string, Expr>> lets_constrained;
+    vector<pair<string, Expr>> lets_proposed;
     vector<Stmt> dims_no_overflow_asserts;
     vector<Stmt> asserts_required;
     vector<Stmt> asserts_constrained;
@@ -338,7 +338,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
         buffer_rewrites.push_back(rewrite);
 
         // Build the constraints tests and proposed sizes.
-        vector<pair<string, Expr> > constraints;
+        vector<pair<string, Expr>> constraints;
         for (int i = 0; i < dimensions; i++) {
             string dim = int_to_string(i);
             string min_name = name + ".min." + dim;
