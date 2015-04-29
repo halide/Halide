@@ -7,6 +7,7 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::vector;
+using std::pair;
 
 using namespace llvm;
 
@@ -93,11 +94,11 @@ Closure::Closure(Stmt s, const string &loop_variable, llvm::StructType *buffer_t
 
 vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
     vector<llvm::Type *> res;
-    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
-        res.push_back(llvm_type_of(context, iter->second));
+    for (const pair<string, Type> &i : vars) {
+        res.push_back(llvm_type_of(context, i.second));
     }
-    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        res.push_back(llvm_type_of(context, iter->second.type)->getPointerTo());
+    for (const pair<string, BufferRef> &i : buffers) {
+        res.push_back(llvm_type_of(context, i.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
     return res;
@@ -105,14 +106,14 @@ vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
 
 vector<string> Closure::names() {
     vector<string> res;
-    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
-        debug(2) << "vars:  " << iter->first << "\n";
-        res.push_back(iter->first);
+    for (const pair<string, Type> &i : vars) {
+        debug(2) << "vars:  " << i.first << "\n";
+        res.push_back(i.first);
     }
-    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        debug(2) << "buffers: " << iter->first << "\n";
-        res.push_back(iter->first + ".host");
-        res.push_back(iter->first + ".buffer");
+    for (const pair<string, BufferRef> &i : buffers) {
+        debug(2) << "buffers: " << i.first << "\n";
+        res.push_back(i.first + ".host");
+        res.push_back(i.first + ".buffer");
     }
     return res;
 }

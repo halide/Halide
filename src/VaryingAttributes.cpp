@@ -471,16 +471,16 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
 
     std::vector<std::string> remove_list;
 
-    for (std::map<std::string, Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
-        const std::string &name = i->first;
+    for (const std::pair<std::string, Expr> &i : varying) {
+        const std::string &name = i.first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
             remove_list.push_back(name);
         }
     }
 
-    for (std::vector<std::string>::iterator name = remove_list.begin(); name != remove_list.end(); ++name) {
-        varying.erase(*name);
+    for (const std::string &i : remove_list) {
+        varying.erase(i);
     }
 }
 
@@ -1147,8 +1147,8 @@ public:
             attribute_order["__vertex_y"] = 1;
 
             int idx = 2;
-            for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-                attribute_order[v->first] = idx++;
+            for (const std::pair<std::string, Expr> &v : varyings) {
+                attribute_order[v.first] = idx++;
             }
 
             // Construct a list of expressions giving to coordinate locations along
