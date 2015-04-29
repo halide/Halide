@@ -45,19 +45,18 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
     vector<ParamAssert> asserts;
 
     // Make constrained versions of the params
-    for (map<string, Parameter>::iterator iter = finder.params.begin();
-         iter != finder.params.end(); iter++) {
-        Parameter param = iter->second;
+    for (pair<const string, Parameter> &i : finder.params) {
+        Parameter param = i.second;
 
         if (!param.is_buffer() &&
             (param.get_min_value().defined() ||
              param.get_max_value().defined())) {
 
-            string constrained_name = iter->first + ".constrained";
+            string constrained_name = i.first + ".constrained";
 
             Expr constrained_var = Variable::make(param.type(), constrained_name);
-            Expr constrained_value = Variable::make(param.type(), iter->first, param);
-            replace_with_constrained[iter->first] = constrained_var;
+            Expr constrained_value = Variable::make(param.type(), i.first, param);
+            replace_with_constrained[i.first] = constrained_var;
 
             if (param.get_min_value().defined()) {
                 ParamAssert p = {
@@ -136,4 +135,4 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 
 }
 }
-    
+

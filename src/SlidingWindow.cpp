@@ -143,8 +143,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             // If the function is not pure in the given dimension, give up
             bool pure = true;
-            for (size_t i = 0; i < func.updates().size(); i++) {
-                const Variable *var = func.updates()[i].args[dim_idx].as<Variable>();
+            for (const UpdateDefinition &i : func.updates()) {
+                const Variable *var = i.args[dim_idx].as<Variable>();
                 if (!var) {
                     pure = false;
                 } else if (var->name != dim) {

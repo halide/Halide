@@ -246,3 +246,5 @@ foreach ($d in "32_trunk","64_trunk", "32_pnacl") {
 
 
 }
+
+echo "All tests completed"
