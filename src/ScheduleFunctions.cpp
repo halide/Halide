@@ -45,14 +45,14 @@ Stmt build_provide_loop_nest(Function f,
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
     // First hunt through the bounds for them.
-    for (size_t i = 0; i < s.bounds().size(); i++) {
-        known_size_dims[s.bounds()[i].var] = s.bounds()[i].extent;
+    for (const Bound &i : s.bounds()) {
+        known_size_dims[i.var] = i.extent;
     }
     // Then use any reduction domain.
     const ReductionDomain &rdom = s.reduction_domain();
     if (rdom.defined()) {
-        for (size_t i = 0; i < rdom.domain().size(); i++) {
-            known_size_dims[rdom.domain()[i].var] = rdom.domain()[i].extent;
+        for (const ReductionVariable &i : rdom.domain()) {
+            known_size_dims[i.var] = i.extent;
         }
     }
 
@@ -119,8 +119,7 @@ Stmt build_provide_loop_nest(Function f,
 
     // Define the function args in terms of the loop variables using the splits
     map<string, pair<string, Expr> > base_values;
-    for (size_t i = 0; i < splits.size(); i++) {
-        const Split &split = splits[i];
+    for (const Split &split : splits) {
         Expr outer = Variable::make(Int(32), prefix + split.outer);
         if (split.is_split()) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
@@ -286,8 +285,8 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
-    for (size_t i = 0; i < f.args().size(); i++) {
-        string var = prefix + f.args()[i];
+    for (const std::string &i : f.args()) {
+        string var = prefix + i;
         Expr max = Variable::make(Int(32), var + ".max");
         Expr min = Variable::make(Int(32), var + ".min"); // Inject instance name here? (compute instance names during lowering)
         stmt = LetStmt::make(var + ".loop_extent",
@@ -348,11 +347,11 @@ Stmt build_produce(Function f) {
         // Iterate through all of the input args to the extern
         // function building a suitable argument list for the
         // extern function call.
-        for (size_t j = 0; j < args.size(); j++) {
-            if (args[j].is_expr()) {
-                extern_call_args.push_back(args[j].expr);
-            } else if (args[j].is_func()) {
-                Function input(args[j].func);
+        for (const ExternFuncArgument &arg : args) {
+            if (arg.is_expr()) {
+                extern_call_args.push_back(arg.expr);
+            } else if (arg.is_func()) {
+                Function input(arg.func);
                 for (int k = 0; k < input.outputs(); k++) {
                     string buf_name = input.name();
                     if (input.outputs() > 1) {
@@ -362,14 +361,14 @@ Stmt build_produce(Function f) {
                     Expr buffer = Variable::make(Handle(), buf_name);
                     extern_call_args.push_back(buffer);
                 }
-            } else if (args[j].is_buffer()) {
-                Buffer b = args[j].buffer;
+            } else if (arg.is_buffer()) {
+                Buffer b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
                 Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
-            } else if (args[j].is_image_param()) {
-                Parameter p = args[j].image_param;
+            } else if (arg.is_image_param()) {
+                Parameter p = arg.image_param;
                 Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else {
@@ -584,7 +583,7 @@ public:
 
 };
 
-bool function_is_used_in_stmt(Function f, Stmt s) {    
+bool function_is_used_in_stmt(Function f, Stmt s) {
     IsUsedInStmt is_called(f);
     s.accept(&is_called);
     return is_called.result;
@@ -851,8 +850,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
-        for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-            ExternFuncArgument arg = f.extern_arguments()[i];
+        for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
                 if (g.schedule().compute_level().is_inline()) {
@@ -866,8 +864,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.schedule().touched();
-    for (size_t i = 0; i < f.updates().size(); i++) {
-        const UpdateDefinition &r = f.updates()[i];
+    for (const UpdateDefinition &r : f.updates()) {
         any_scheduled = any_scheduled || r.schedule.touched();
     }
     if (any_scheduled) {
@@ -1058,9 +1055,9 @@ Stmt schedule_functions(Function output,
 
     // And finally we can propagate loop device types.
     s = PropagateLoopDeviceAPI().mutate(s);
-    
+
     return s;
-        
+
 }
 
 }
