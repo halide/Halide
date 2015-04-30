@@ -385,24 +385,24 @@ class InjectBufferCopies : public IRMutator {
                 Expr new_load = Load::make(l->type, l->name, new_index, Buffer(), Parameter());
                 expr = Call::make(op->type, op->name, vec(new_load), Call::Intrinsic);
             }
-        } else if (op->name == Call::shader_load && op->call_type == Call::Intrinsic) {
+        } else if (op->name == Call::image_load && op->call_type == Call::Intrinsic) {
             // counts as a device read
             internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
-            debug(4) << "Adding shader read via shader_load for " << buffer_var->name << "\n";
+            debug(4) << "Adding image read via image_load for " << buffer_var->name << "\n";
             state[buf_name].devices_reading.insert(device_api);
             IRMutator::visit(op);
-        } else if (op->name == Call::shader_store && op->call_type == Call::Intrinsic) {
+        } else if (op->name == Call::image_store && op->call_type == Call::Intrinsic) {
             // counts as a device store
             internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
-            debug(4) << "Adding shader write via shader_store for " << buffer_var->name << "\n";
+            debug(4) << "Adding image write via image_store for " << buffer_var->name << "\n";
             state[buf_name].devices_writing.insert(device_api);
             IRMutator::visit(op);
         } else {

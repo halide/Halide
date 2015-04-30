@@ -370,7 +370,8 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(int width) {
     return func;
 }
 
-vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr y, Expr c) {
+vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr y,
+                                               Expr c) {
     vector<Value *> args;
     const Broadcast *b_name = name.as<Broadcast>();
     const Broadcast *b_x = x.as<Broadcast>();
@@ -382,9 +383,9 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
         user_assert(stride->value == 1 && ramp_c->width == 4)
             << "Only vectorized RGBA format is supported at present.\n";
         user_assert(b_x->value.type().width == 1)
-            << "shader_load/store x coordinate is not scalar.\n";
+            << "image_load/store x coordinate is not scalar.\n";
         user_assert(b_y->value.type().width == 1)
-            << "shader_load/store y coordinate is not scalar.\n";
+            << "image_load/store y coordinate is not scalar.\n";
         args.push_back(sym_get(b_name->value.as<StringImm>()->value));
         args.push_back(codegen(b_x->value));
         args.push_back(codegen(b_y->value));
@@ -401,22 +402,22 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
 
 void CodeGen_Renderscript_Dev::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::shader_load || op->name == Call::shader_store) {
+        if (op->name == Call::image_load || op->name == Call::image_store) {
             //
-            // shader_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
+            // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
             // <y-extent>, <c>, <c-extent>)
             // or
-            // shader_store(<image name>, <buffer>, <x>, <y>, <c>, <value>)
+            // image_store(<image name>, <buffer>, <x>, <y>, <c>, <value>)
             //
             const int index_name = 0;
-            const int index_x = op->name == Call::shader_load ? 2 : 2;
-            const int index_y = op->name == Call::shader_load ? 4 : 3;
-            const int index_c = op->name == Call::shader_load ? 6 : 4;
+            const int index_x = op->name == Call::image_load ? 2 : 2;
+            const int index_y = op->name == Call::image_load ? 4 : 3;
+            const int index_c = op->name == Call::image_load ? 6 : 4;
             vector<Value *> args =
                 add_x_y_c_args(op->args[index_name], op->args[index_x],
                                op->args[index_y], op->args[index_c]);
 
-            if (op->name == Call::shader_store) {
+            if (op->name == Call::image_store) {
                 args.insert(args.begin() + 1, codegen(op->args[5]));
             }
 
@@ -431,7 +432,7 @@ void CodeGen_Renderscript_Dev::visit(const Call *op) {
                 }
             }
 
-            llvm::Function *func = op->name == Call::shader_load
+            llvm::Function *func = op->name == Call::image_load
                                        ? fetch_GetElement_func(op->type.width)
                                        : fetch_SetElement_func(op->type.width);
             value = builder->CreateCall(func, args);

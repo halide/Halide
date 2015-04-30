@@ -292,7 +292,7 @@ set(HEADER_FILES
   IRVisitor.h
   Image.h
   InjectHostDevBufferCopies.h
-  InjectShaderIntrinsics.h
+  InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
   Inline.h
   InlineReductions.h
@@ -429,7 +429,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRVisitor.cpp
   Image.cpp
   InjectHostDevBufferCopies.cpp
-  InjectShaderIntrinsics.cpp
+  InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp
   InlineReductions.cpp

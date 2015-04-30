@@ -1077,7 +1077,7 @@ Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
         }
     }
     user_assert(constant_bounds)
-        << "The color channel for shader loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
+        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
     return *this;
 }
 
