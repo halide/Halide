@@ -40,11 +40,11 @@ inline bool uses_extern_image(Stmt s) {
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const string &output, const map<string, Function> &e)
-        : output(output), env(e) {}
+    FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e)
+        : outputs(outputs), env(e) {}
     Scope<int> scope;
 private:
-    const string &output;
+    const vector<Function> &outputs;
     const map<string, Function> &env;
     Scope<int> realizations;
 
@@ -228,12 +228,16 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        bool is_output = false;
+        for (Function f : outputs) {
+            is_output |= f.name() == provide->name;
+        }
+
         Stmt result;
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
-            Expr idx = mutate(flatten_args(cv.name, provide->args,
-                                           provide->name != output));
+            Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
             Expr var = Variable::make(cv.value.type(), cv.name + ".value");
             Stmt store = Store::make(cv.name, var, idx);
 
@@ -256,12 +260,16 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        bool is_output = false;
+        for (Function f : outputs) {
+            is_output |= f.name() == provide->name;
+        }
+
         Stmt result;
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
-            Expr idx = mutate(flatten_args(cv.name, provide->args,
-                                           provide->name != output));
+            Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
             Stmt store = Store::make(cv.name, cv.value, idx);
 
             if (result.defined()) {
@@ -326,13 +334,18 @@ private:
                 name = name + '.' + int_to_string(call->value_index);
             }
 
+            bool is_output = false;
+            for (Function f : outputs) {
+                is_output |= f.name() == call->name;
+            }
+
+            bool is_input = env.find(call->name) == env.end();
+
             // Promote the type to be a multiple of 8 bits
             Type t = call->type;
             t.bits = t.bytes() * 8;
 
-            Expr idx = mutate(flatten_args(name, call->args,
-                                           call->name != output &&
-                                           env.find(call->name) != env.end()));
+            Expr idx = mutate(flatten_args(name, call->args, !(is_output || is_input)));
             expr = Load::make(t, name, idx, call->image, call->param);
 
             if (call->type.bits != t.bits) {
@@ -357,8 +370,10 @@ private:
 };
 
 
-Stmt storage_flattening(Stmt s, const string &output, const map<string, Function> &env) {
-    return FlattenDimensions(output, env).mutate(s);
+Stmt storage_flattening(Stmt s,
+                        const vector<Function> &outputs,
+                        const map<string, Function> &env) {
+    return FlattenDimensions(outputs, env).mutate(s);
 }
 
 }

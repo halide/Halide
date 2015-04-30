@@ -21,7 +21,7 @@ class Function;
 
 /** Build loop nests and inject Function realizations at the
  * appropriate places using the schedule. */
-Stmt schedule_functions(Function output,
+Stmt schedule_functions(const std::vector<Function> &outputs,
                         const std::vector<std::string> &order,
                         const std::map<std::string, Function> &env,
                         const Target &t);

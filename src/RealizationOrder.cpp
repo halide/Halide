@@ -36,7 +36,7 @@ void realization_order_dfs(string current,
     order.push_back(current);
 }
 
-vector<string> realization_order(const Function &output,
+vector<string> realization_order(const vector<Function> &outputs,
                                  const map<string, Function> &env) {
 
     // Make a DAG representing the pipeline. Each function maps to the
@@ -54,7 +54,11 @@ vector<string> realization_order(const Function &output,
     set<string> result_set;
     set<string> visited;
 
-    realization_order_dfs(output.name(), graph, visited, result_set, order);
+    for (Function f : outputs) {
+        if (visited.find(f.name()) == visited.end()) {
+            realization_order_dfs(f.name(), graph, visited, result_set, order);
+        }
+    }
 
     return order;
 }

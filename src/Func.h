@@ -47,7 +47,7 @@ class Stage {
     std::string stage_name;
 public:
     Stage(Internal::Schedule s, const std::string &n) :
-        schedule(s), stage_name(n) {s.touched();}
+        schedule(s), stage_name(n) {s.touched() = true;}
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
