@@ -477,7 +477,7 @@ public:
                                                         const GeneratorParamValues &params);
 
 private:
-    using GeneratorFactoryMap = std::map<const std::string, std::unique_ptr<GeneratorFactory> >;
+    using GeneratorFactoryMap = std::map<const std::string, std::unique_ptr<GeneratorFactory>>;
 
     GeneratorFactoryMap factories;
     std::mutex mutex;
