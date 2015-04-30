@@ -19,10 +19,10 @@ TODO(aam): Investigate and confirm that the app runs on x86 Android devices as w
 Building and running
 ---
 
-1) ./build.sh script will build and deploy sample Java application to the
-connected device. Results of the run are written to the device log, so scripts
+1) 'build.sh' script will build and deploy sample Java application to the
+connected device. Results of the run are written to the device log, so script
 ends with 'adb logcat', which will contains those results.
 
-2) Invoking make will build and run C++ sample app with same tests as above,
+2) Invoking 'make' will build and run C++ sample app with same tests as above,
 but this will work only on rooted device where host machine can copy binary
 files over to the device and run them via 'adb shell'.

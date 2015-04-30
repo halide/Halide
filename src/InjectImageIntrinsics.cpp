@@ -1,4 +1,4 @@
-#include "InjectShaderIntrinsics.h"
+#include "InjectImageIntrinsics.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "CodeGen_GPU_Dev.h"
@@ -11,9 +11,9 @@ namespace Internal {
 using std::string;
 using std::vector;
 
-class InjectShaderIntrinsics : public IRMutator {
+class InjectImageIntrinsics : public IRMutator {
 public:
-    InjectShaderIntrinsics() : inside_kernel_loop(false) {}
+    InjectImageIntrinsics() : inside_kernel_loop(false) {}
     Scope<int> scope;
     bool inside_kernel_loop;
 
@@ -31,7 +31,7 @@ private:
         user_assert(provide->args.size() == 3)
             << "Image stores require three coordinates.\n";
 
-        // Create shader_store("name", name.buffer, x, y, c, value)
+        // Create image_store("name", name.buffer, x, y, c, value)
         // intrinsic.
         Expr value_arg = mutate(provide->values[0]);
         vector<Expr> args = {
@@ -43,7 +43,7 @@ private:
             value_arg};
 
         stmt = Evaluate::make(Call::make(value_arg.type(),
-                                         Call::shader_store,
+                                         Call::image_store,
                                          args,
                                          Call::Intrinsic));
     }
@@ -67,7 +67,7 @@ private:
             call_args.push_back(IntImm::make(0));
         }
 
-        // Create shader_load("name", name.buffer, x, x_extent, y, y_extent, ...).
+        // Create image_load("name", name.buffer, x, x_extent, y, y_extent, ...).
         // Extents can be used by successive passes. OpenGL, for example, uses them
         // for coordinates normalization.
         vector<Expr> args(2);
@@ -95,7 +95,7 @@ private:
         // load_type.width = 4;
 
         Expr load_call = Call::make(load_type,
-                          Call::shader_load,
+                          Call::image_load,
                           args,
                           Call::Intrinsic,
                           Function(),
@@ -133,12 +133,12 @@ private:
     }
 };
 
-Stmt inject_shader_intrinsics(Stmt s) {
+Stmt inject_image_intrinsics(Stmt s) {
     debug(4)
-        << "InjectShaderIntrinsics: inject_shader_intrinsics stmt: "
+        << "InjectImageIntrinsics: inject_image_intrinsics stmt: "
         << s << "\n";
     s = zero_gpu_loop_mins(s);
-    InjectShaderIntrinsics gl;
+    InjectImageIntrinsics gl;
     return gl.mutate(s);
 }
 }

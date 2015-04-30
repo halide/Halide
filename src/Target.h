@@ -141,7 +141,7 @@ struct Target {
      * OpenGL, because it is not capable of gpgpu, and is not
      * scheduled via Func::gpu_tile. */
     bool has_gpu_feature() const {
-        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Renderscript);
+        return has_feature(CUDA) || has_feature(OpenCL);
     }
 
     bool operator==(const Target &other) const {
