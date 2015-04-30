@@ -57,7 +57,9 @@ public:
     }
 };
 
-Stmt add_image_checks(Stmt s, Function f, const Target &t,
+Stmt add_image_checks(Stmt s,
+                      const vector<Function> &outputs,
+                      const Target &t,
                       const vector<string> &order,
                       const map<string, Function> &env,
                       const FuncValueBounds &fb) {
@@ -71,15 +73,17 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
     map<string, FindBuffers::Result> bufs = finder.buffers;
 
     // Add the output buffer(s)
-    for (size_t i = 0; i < f.values().size(); i++) {
-        FindBuffers::Result output_buffer;
-        output_buffer.type = f.values()[i].type();
-        output_buffer.param = f.output_buffers()[i];
-        output_buffer.dimensions = f.dimensions();
-        if (f.values().size() > 1) {
-            bufs[f.name() + '.' + int_to_string(i)] = output_buffer;
-        } else {
-            bufs[f.name()] = output_buffer;
+    for (Function f : outputs) {
+        for (size_t i = 0; i < f.values().size(); i++) {
+            FindBuffers::Result output_buffer;
+            output_buffer.type = f.values()[i].type();
+            output_buffer.param = f.output_buffers()[i];
+            output_buffer.dimensions = f.dimensions();
+            if (f.values().size() > 1) {
+                bufs[f.name() + '.' + int_to_string(i)] = output_buffer;
+            } else {
+                bufs[f.name()] = output_buffer;
+            }
         }
     }
 
@@ -141,19 +145,21 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
         // Detect if this is one of the outputs of a multi-output pipeline.
         bool is_output_buffer = false;
         bool is_secondary_output_buffer = false;
-        for (size_t i = 0; i < f.output_buffers().size(); i++) {
-            if (param.defined() &&
-                param.same_as(f.output_buffers()[i])) {
-                is_output_buffer = true;
-                if (i > 0) {
-                    is_secondary_output_buffer = true;
+        string buffer_name = name;
+        for (Function f : outputs) {
+            for (size_t i = 0; i < f.output_buffers().size(); i++) {
+                if (param.defined() &&
+                    param.same_as(f.output_buffers()[i])) {
+                    is_output_buffer = true;
+                    // If we're one of multiple output buffers, we should use the
+                    // region inferred for the func in general.
+                    buffer_name = f.name();
+                    if (i > 0) {
+                        is_secondary_output_buffer = true;
+                    }
                 }
             }
         }
-
-        // If we're one of multiple output buffers, we should use the
-        // region inferred for the output Func.
-        string buffer_name = is_output_buffer ? f.name() : name;
 
         Box touched = boxes[buffer_name];
         internal_assert(touched.empty() || (int)(touched.size()) == dimensions);
@@ -377,14 +383,14 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
                     stride_constrained = image.stride(i);
                 }
 
-                std::string min0_name = f.name() + ".0.min." + dim;
+                std::string min0_name = buffer_name + ".0.min." + dim;
                 if (replace_with_constrained.count(min0_name) > 0 ) {
                     min_constrained = replace_with_constrained[min0_name];
                 } else {
                     min_constrained = Variable::make(Int(32), min0_name);
                 }
 
-                std::string extent0_name = f.name() + ".0.extent." + dim;
+                std::string extent0_name = buffer_name + ".0.extent." + dim;
                 if (replace_with_constrained.count(extent0_name) > 0 ) {
                     extent_constrained = replace_with_constrained[extent0_name];
                 } else {

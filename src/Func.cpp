@@ -1816,12 +1816,14 @@ vector<Argument> Func::infer_arguments() const {
 }
 
 void Func::lower(const Target &t) {
+    compute_root();
+    store_root();
     if (!lowered.defined() || t != lowered_target) {
         vector<IRMutator *> custom_passes;
         for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
             custom_passes.push_back(custom_lowering_passes[i].pass);
         }
-        lowered = Halide::Internal::lower(func, t, custom_passes);
+        lowered = Halide::Internal::lower({func}, t, custom_passes);
         lowered_target = t;
 
         // Forbid new definitions of the func

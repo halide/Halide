@@ -18,12 +18,10 @@ using std::string;
 class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
-    Function output;
     int global_level;
-    InjectTracing(const map<string, Function> &e,
-                  Function o) : env(e),
-                                output(o),
-                                global_level(tracing_level()) {}
+    InjectTracing(const map<string, Function> &e)
+        : env(e),
+          global_level(tracing_level()) {}
 
 private:
     using IRMutator::visit;
@@ -80,7 +78,7 @@ private:
         }
 
         Function f = op->func;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
+        bool inlined = f.schedule().compute_level().is_inline();
 
         if (f.is_tracing_loads() || (global_level > 2 && !inlined)) {
 
@@ -106,7 +104,7 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
+        bool inlined = f.schedule().compute_level().is_inline();
 
         if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
             // Wrap each expr in a tracing call
@@ -224,29 +222,33 @@ private:
     }
 };
 
-Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
+Stmt inject_tracing(Stmt s, const map<string, Function> &env, const vector<Function> &outputs) {
     Stmt original = s;
-    InjectTracing tracing(env, output);
+    InjectTracing tracing(env);
 
     // Add a dummy realize block for the output buffers
-    Region output_region;
-    Parameter output_buf = output.output_buffers()[0];
-    internal_assert(output_buf.is_buffer());
-    for (int i = 0; i < output.dimensions(); i++) {
-        string d = int_to_string(i);
-        Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
-        Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
-        output_region.push_back(Range(min, extent));
+    for (Function output : outputs) {
+        Region output_region;
+        Parameter output_buf = output.output_buffers()[0];
+        internal_assert(output_buf.is_buffer());
+        for (int i = 0; i < output.dimensions(); i++) {
+            string d = int_to_string(i);
+            Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
+            Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
+            output_region.push_back(Range(min, extent));
+        }
+        s = Realize::make(output.name(), output.output_types(), output_region, const_true(), s);
     }
-    s = Realize::make(output.name(), output.output_types(), output_region, const_true(), s);
 
     // Inject tracing calls
     s = tracing.mutate(s);
 
-    // Strip off the dummy realize block
-    const Realize *r = s.as<Realize>();
-    internal_assert(r);
-    s = r->body;
+    // Strip off the dummy realize blocks
+    for (Function output : outputs) {
+        const Realize *r = s.as<Realize>();
+        internal_assert(r);
+        s = r->body;
+    }
 
     // Unless tracing was a no-op, add a call to shut down the trace
     // (which flushes the output stream)

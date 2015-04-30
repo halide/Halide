@@ -417,10 +417,10 @@ public:
     vector<Stage> stages;
 
     BoundsInference(const vector<Function> &f,
+                    const vector<Function> &outputs,
                     const FuncValueBounds &fb) :
         funcs(f), func_bounds(fb) {
         internal_assert(!f.empty());
-        Function output_function = f[f.size()-1];
 
         // Compute the intrinsic relationships between the stages of
         // the functions.
@@ -462,7 +462,7 @@ public:
         }
 
         // Do any pure inlining (TODO: This is currently slow)
-        for (size_t i = f.size()-1; i > 0; i--) {
+        for (size_t i = f.size(); i > 0; i--) {
             Function func = f[i-1];
             if (inlined[i-1]) {
                 for (size_t j = 0; j < stages.size(); j++) {
@@ -477,8 +477,7 @@ public:
         // Remove the inlined stages
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (stages[i].func.same_as(output_function) ||
-                !stages[i].func.schedule().compute_level().is_inline() ||
+            if (!stages[i].func.schedule().compute_level().is_inline() ||
                 !stages[i].func.is_pure()) {
                 new_stages.push_back(stages[i]);
             }
@@ -569,35 +568,36 @@ public:
             }
         }
 
-        // The region required of the last function is expanded to include output size
-        Function output = stages[stages.size()-1].func;
-        Box output_box;
-        string buffer_name = output.name();
-        if (output.outputs() > 1) {
-            // Use the output size of the first output buffer
-            buffer_name += ".0";
-        }
-        for (int d = 0; d < output.dimensions(); d++) {
-            Expr min = Variable::make(Int(32), buffer_name + ".min." + int_to_string(d));
-            Expr extent = Variable::make(Int(32), buffer_name + ".extent." + int_to_string(d));
-
-            // Respect any output min and extent constraints
-            Expr min_constraint = output.output_buffers()[0].min_constraint(d);
-            Expr extent_constraint = output.output_buffers()[0].extent_constraint(d);
-
-            if (min_constraint.defined()) {
-                min = min_constraint;
+        // The region required of the each output is expanded to include the size of the output buffer.
+        for (Function output : outputs) {
+            Box output_box;
+            string buffer_name = output.name();
+            if (output.outputs() > 1) {
+                // Use the output size of the first output buffer
+                buffer_name += ".0";
             }
-            if (extent_constraint.defined()) {
-                extent = extent_constraint;
-            }
+            for (int d = 0; d < output.dimensions(); d++) {
+                Expr min = Variable::make(Int(32), buffer_name + ".min." + int_to_string(d));
+                Expr extent = Variable::make(Int(32), buffer_name + ".extent." + int_to_string(d));
 
-            output_box.push_back(Interval(min, (min + extent) - 1));
-        }
-        for (size_t i = 0; i < stages.size(); i++) {
-            Stage &s = stages[i];
-            if (!s.func.same_as(output)) continue;
-            s.bounds[make_pair(s.name, s.stage)] = output_box;
+                // Respect any output min and extent constraints
+                Expr min_constraint = output.output_buffers()[0].min_constraint(d);
+                Expr extent_constraint = output.output_buffers()[0].extent_constraint(d);
+
+                if (min_constraint.defined()) {
+                    min = min_constraint;
+                }
+                if (extent_constraint.defined()) {
+                    extent = extent_constraint;
+                }
+
+                output_box.push_back(Interval(min, (min + extent) - 1));
+            }
+            for (size_t i = 0; i < stages.size(); i++) {
+                Stage &s = stages[i];
+                if (!s.func.same_as(output)) continue;
+                s.bounds[make_pair(s.name, s.stage)] = output_box;
+            }
         }
 
         // Dump out the region required of each stage for debugging.
@@ -772,7 +772,9 @@ public:
 
 
 
-Stmt bounds_inference(Stmt s, const vector<string> &order,
+Stmt bounds_inference(Stmt s,
+                      const vector<Function> &outputs,
+                      const vector<string> &order,
                       const map<string, Function> &env,
                       const FuncValueBounds &func_bounds) {
 
@@ -783,7 +785,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order,
 
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
-    s = BoundsInference(funcs, func_bounds).mutate(s);
+    s = BoundsInference(funcs, outputs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }
 
