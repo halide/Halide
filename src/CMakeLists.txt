@@ -242,6 +242,8 @@ add_dependencies(InitialModules
   bitcode2cpp)
 
 set(HEADER_FILES
+  AddImageChecks.h
+  AddParameterChecks.h
   AllocationBoundsInference.h
   Argument.h
   BlockFlattening.h
@@ -316,11 +318,13 @@ set(HEADER_FILES
   Qualify.h
   RDom.h
   Random.h
+  RealizationOrder.h
   Reduction.h
   RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
   Schedule.h
+  ScheduleFunctions.h
   Scope.h
   Simplify.h
   SkipStages.h
@@ -359,7 +363,8 @@ file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include
 add_definitions("-DCOMPILING_HALIDE")
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
-
+  AddImageChecks.cpp
+  AddParameterChecks.cpp
   AllocationBoundsInference.cpp
   BlockFlattening.cpp
   BoundaryConditions.cpp
@@ -431,11 +436,13 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Qualify.cpp
   RDom.cpp
   Random.cpp
+  RealizationOrder.cpp
   Reduction.cpp
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
+  ScheduleFunctions.cpp
   Simplify.cpp
   SkipStages.cpp
   SlidingWindow.cpp

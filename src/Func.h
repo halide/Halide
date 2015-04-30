@@ -416,7 +416,7 @@ class Func {
     /** Some of the arg_values need to be rebound on every call if the
      * image params change. The pointers for the scalar params will
      * still be valid though. */
-    std::vector<std::pair<int, Internal::Parameter> > image_param_args;
+    std::vector<std::pair<int, Internal::Parameter>> image_param_args;
 
     /** The user context that's used when jitting. This is not settable
      * by user code, but is reserved for internal use.
