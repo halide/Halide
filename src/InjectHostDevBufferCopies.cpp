@@ -216,16 +216,14 @@ class InjectBufferCopies : public IRMutator {
 
         debug(4) << "At loop level " << loop_level << "\n";
 
-        for (map<string, BufferInfo>::iterator iter = state.begin();
-             iter != state.end(); ++iter) {
-
+        for (pair<const string, BufferInfo> &i : state) {
             CopyDirection direction = NoCopy;
-            BufferInfo &buf = iter->second;
+            BufferInfo &buf = i.second;
             if (buf.loop_level != loop_level) {
                 continue;
             }
 
-            debug(4) << "do_copies for " << iter->first << "\n"
+            debug(4) << "do_copies for " << i.first << "\n"
                      << "Host current: " << buf.host_current << " Device current: " << buf.dev_current << "\n"
                      << "Host touched: " << buf.host_touched << " Device touched: " << buf.dev_touched << "\n"
                      << "Internal: " << buf.internal << " Device touching first: "
@@ -235,12 +233,12 @@ class InjectBufferCopies : public IRMutator {
             bool host_read = false;
             size_t non_host_devices_reading_count = 0;
             DeviceAPI reading_device = DeviceAPI::Parent;
-            for (std::set<DeviceAPI>::const_iterator dev = buf.devices_reading.begin(); dev != buf.devices_reading.end(); dev++) {
-                debug(4) << "Device " << static_cast<int>(*dev) << " read buffer\n";
-                if (*dev != DeviceAPI::Host) {
+            for (DeviceAPI dev : buf.devices_reading) {
+                debug(4) << "Device " << static_cast<int>(dev) << " read buffer\n";
+                if (dev != DeviceAPI::Host) {
                     non_host_devices_reading_count++;
-                    reading_device = *dev;
-                    touching_device = *dev;
+                    reading_device = dev;
+                    touching_device = dev;
                 } else {
                     host_read = true;
                 }
@@ -248,12 +246,12 @@ class InjectBufferCopies : public IRMutator {
             bool host_wrote = false;
             size_t non_host_devices_writing_count = 0;
             DeviceAPI writing_device = DeviceAPI::Parent;
-            for (std::set<DeviceAPI>::const_iterator dev = buf.devices_writing.begin(); dev != buf.devices_writing.end(); dev++) {
-                debug(4) << "Device " << static_cast<int>(*dev) << " wrote buffer\n";
-                if (*dev != DeviceAPI::Host) {
+            for (DeviceAPI dev : buf.devices_writing) {
+                debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer\n";
+                if (dev != DeviceAPI::Host) {
                     non_host_devices_writing_count++;
-                    writing_device = *dev;
-                    touching_device = *dev;
+                    writing_device = dev;
+                    touching_device = dev;
                 } else {
                     host_wrote = true;
                 }
@@ -307,11 +305,11 @@ class InjectBufferCopies : public IRMutator {
                 debug(4) << "Invalidating host_current\n";
             }
 
-            Expr buffer = Variable::make(Handle(), iter->first + ".buffer");
+            Expr buffer = Variable::make(Handle(), i.first + ".buffer");
             Expr t = make_one(UInt(8));
 
             if (host_wrote) {
-                debug(4) << "Setting host dirty for " << iter->first << "\n";
+                debug(4) << "Setting host dirty for " << i.first << "\n";
                 // If we just invalidated the dev pointer, we need to set the host dirty bit.
                 Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, vec(buffer, t), Call::Intrinsic);
                 s = Block::make(s, Evaluate::make(set_host_dirty));
@@ -328,14 +326,14 @@ class InjectBufferCopies : public IRMutator {
             buf.devices_writing.clear();
 
             if (direction != NoCopy && touching_device != DeviceAPI::Host) {
-                s = Block::make(make_buffer_copy(direction, iter->first, touching_device), s);
+                s = Block::make(make_buffer_copy(direction, i.first, touching_device), s);
             }
 
             // Inject a dev_malloc if needed.
             if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::Parent) {
-                debug(4) << "Injecting device malloc for " << iter->first << " on " <<
+                debug(4) << "Injecting device malloc for " << i.first << " on " <<
                     static_cast<int>(buf.device_first_touched) << "\n";
-                Stmt dev_malloc = make_dev_malloc(iter->first, buf.device_first_touched);
+                Stmt dev_malloc = make_dev_malloc(i.first, buf.device_first_touched);
                 s = Block::make(dev_malloc, s);
                 buf.dev_allocated = true;
             }
@@ -418,11 +416,10 @@ class InjectBufferCopies : public IRMutator {
 
         bool is_output = true;
         // The buffers associated with this pipeline should get this loop level
-        for (map<string, BufferInfo>::iterator iter = state.begin();
-             iter != state.end(); ++iter) {
-            const string &buf_name = iter->first;
+        for (pair<const string, BufferInfo> &i : state) {
+            const string &buf_name = i.first;
             if (buf_name == op->name || starts_with(buf_name, op->name + ".")) {
-                iter->second.loop_level = loop_level;
+                i.second.loop_level = loop_level;
                 is_output = false;
            }
         }
@@ -449,18 +446,17 @@ class InjectBufferCopies : public IRMutator {
 
         // Need to make all output buffers touched on device valid
         if (is_output) {
-            for (map<string, BufferInfo>::iterator iter = state.begin();
-                 iter != state.end(); ++iter) {
-                const string &buf_name = iter->first;
+            for (pair<const string, BufferInfo> &i : state) {
+                const string &buf_name = i.first;
                 if ((buf_name == op->name || starts_with(buf_name, op->name + ".")) &&
-                    iter->second.dev_touched && iter->second.current_device != DeviceAPI::Host) {
+                    i.second.dev_touched && i.second.current_device != DeviceAPI::Host) {
                     // Inject a device copy, which will make sure the device buffer is allocated
                     // on the right device and that the host dirty bit is false so the device
                     // can write. (Which will involve copying to the device if host was dirty
                     // for the passed in buffer.)
                     debug(4) << "Injecting device copy for output " << buf_name << " on " <<
-                        static_cast<int>(iter->second.current_device) << "\n";
-                    stmt = Block::make(make_buffer_copy(ToDevice, buf_name, iter->second.current_device), stmt);
+                        static_cast<int>(i.second.current_device) << "\n";
+                    stmt = Block::make(make_buffer_copy(ToDevice, buf_name, i.second.current_device), stmt);
                 }
             }
         }
@@ -555,15 +551,14 @@ class InjectBufferCopies : public IRMutator {
         Stmt else_case = mutate(op->else_case);
         else_case = do_copies(else_case);
 
-        for (map<string, BufferInfo>::iterator iter = copy.begin();
-             iter != copy.end(); ++iter) {
-            const string &buf_name = iter->first;
-            if (loop_level != iter->second.loop_level) {
+        for (const pair<string, BufferInfo> &i : copy) {
+            const string &buf_name = i.first;
+            if (loop_level != i.second.loop_level) {
                 continue;
             }
 
-            BufferInfo &then_state = iter->second;
-            BufferInfo &else_state = state[buf_name];
+            const BufferInfo &then_state = i.second;
+            const BufferInfo &else_state = state[buf_name];
             BufferInfo merged_state;
 
             merged_state.loop_level = loop_level;
@@ -634,9 +629,8 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     s.accept(&f);
 
     debug(4) << "Tracking host <-> dev copies for the following buffers:\n";
-    for (set<string>::iterator iter = f.buffers_to_track.begin();
-         iter != f.buffers_to_track.end(); ++iter) {
-        debug(4) << *iter << "\n";
+    for (const std::string &i : f.buffers_to_track) {
+        debug(4) << i << "\n";
     }
 
     return InjectBufferCopies(f.buffers_to_track, t).mutate(s);

@@ -20,6 +20,7 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::map;
+using std::pair;
 
 using namespace llvm;
 
@@ -163,19 +164,19 @@ protected:
 
 vector<GPU_Argument> GPU_Host_Closure::arguments() {
     vector<GPU_Argument> res;
-    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
-        debug(2) << "var: " << iter->first << "\n";
-        res.push_back(GPU_Argument(iter->first, false, iter->second, 0));
+    for (const pair<string, Type> &i : vars) {
+        debug(2) << "var: " << i.first << "\n";
+        res.push_back(GPU_Argument(i.first, false, i.second, 0));
     }
-    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        debug(2) << "buffer: " << iter->first << " " << iter->second.size;
-        if (iter->second.read) debug(2) << " (read)";
-        if (iter->second.write) debug(2) << " (write)";
+    for (const pair<string, BufferRef> &i : buffers) {
+        debug(2) << "buffer: " << i.first << " " << i.second.size;
+        if (i.second.read) debug(2) << " (read)";
+        if (i.second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        GPU_Argument arg(iter->first, true, iter->second.type, iter->second.dimensions, iter->second.size);
-        arg.read = iter->second.read;
-        arg.write = iter->second.write;
+        GPU_Argument arg(i.first, true, i.second.type, i.second.dimensions, i.second.size);
+        arg.read = i.second.read;
+        arg.write = i.second.write;
         res.push_back(arg);
     }
     return res;
@@ -226,10 +227,9 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
-    std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
-    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        if (iter->first != DeviceAPI::Default_GPU) {
-            delete iter->second;
+    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+        if (i.first != DeviceAPI::Default_GPU) {
+            delete i.second;
         }
     }
 }
@@ -239,9 +239,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
     function_name = f.name;
 
     // Create a new module for all of the kernels we find in this function.
-    std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
-    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        iter->second->init_module();
+    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+        i.second->init_module();
     }
 
     // Call the base implementation to create the function.
@@ -270,12 +269,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
     // Fill out the init kernels block
     builder->SetInsertPoint(init_kernels_bb);
 
-    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        if (iter->first == DeviceAPI::Default_GPU) {
+    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+        if (i.first == DeviceAPI::Default_GPU) {
             continue;
         }
 
-        CodeGen_GPU_Dev *gpu_codegen = iter->second;
+        CodeGen_GPU_Dev *gpu_codegen = i.second;
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
         // If the module state for this API/function did not get created, there were
