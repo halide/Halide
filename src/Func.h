@@ -362,6 +362,11 @@ struct Outputs {
     }
 };
 
+/** A custom lowering pass. See Func::add_custom_lowering_pass. */
+struct CustomLoweringPass {
+    Internal::IRMutator *pass;
+    void (*deleter)(Internal::IRMutator *);
+};
 
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
@@ -400,7 +405,7 @@ class Func {
     /** Invalidate the cached lowered stmt and compiled module. */
     void invalidate_cache();
 
-    Halide::Internal::JITHandlers jit_handlers;
+    Halide::Internal::JITHandlers jit_handlers_;
 
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
@@ -424,13 +429,8 @@ class Func {
      * so that we can exclude it from the ObjectInstanceRegistry. */
     Internal::Parameter jit_user_context;
 
-    struct CustomLoweringPass {
-        Internal::IRMutator *pass;
-        void (*deleter)(Internal::IRMutator *);
-    };
-
     /** A set of custom passes to use when lowering this Func. */
-    std::vector<CustomLoweringPass> custom_lowering_passes;
+    std::vector<CustomLoweringPass> custom_lowering_passes_;
 
     // Helper function for recursive reordering support
     EXPORT Func &reorder_storage(const std::vector<Var> &dims, size_t start);
@@ -696,7 +696,7 @@ public:
      */
     //@{
     EXPORT void compile_to(const Outputs &output_files,
-                           std::vector<Argument> args,
+                           const std::vector<Argument> &args,
                            const std::string &fn_name,
                            const Target &target = get_target_from_environment());
     // @}
@@ -807,6 +807,10 @@ public:
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
+    /** Get a struct containing the currently set custom functions
+     * used by JIT. */
+    EXPORT const Internal::JITHandlers &jit_handlers();
+
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
      * the lowered Stmt, instrument it with extra code, or otherwise
@@ -832,6 +836,9 @@ public:
 
     /** Remove all previously-set custom lowering passes */
     EXPORT void clear_custom_lowering_passes();
+
+    /** Get the custom lowering passes. */
+    EXPORT const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
@@ -1708,6 +1715,96 @@ public:
     EXPORT std::vector<Argument> infer_arguments() const;
 
 };
+
+/** Compile and generate multiple target files with single call.
+ * Deduces target files based on filenames specified in
+ * output_files struct.
+ */
+EXPORT void compile_to(const std::vector<Func> &output_funcs,
+                       const Outputs &output_files,
+                       const std::vector<Argument> &args,
+                       const std::string &fn_name,
+                       const Target &target);
+
+/** Statically compile a pipeline with multiple output functions to
+ * llvm bitcode, with the given filename (which should probably end in
+ * .bc), type signature, and C function name. If you're compiling a
+ * pipeline with a single output Func, see
+ * Func::compile_to_bitcode. */
+EXPORT void compile_to_bitcode(const std::vector<Func> &outputs,
+                               const std::string &filename,
+                               const std::vector<Argument> &args,
+                               const std::string &fn_name,
+                               const Target &target = get_target_from_environment());
+
+/** Statically compile a pipeline with multiple output functions to an
+ * object file, with the given filename (which should probably end in
+ * .o or .obj), type signature, and C function name (which defaults to
+ * the same name as this halide function. You probably don't want to
+ * use this directly; call compile_to_file instead. */
+EXPORT void compile_to_object(const std::vector<Func> &outputs,
+                              const std::string &filename,
+                              const std::vector<Argument> &,
+                              const std::string &fn_name,
+                              const Target &target = get_target_from_environment());
+
+/** Emit a header file with the given filename for a pipeline with
+ * multiple output functions. The header will define a function with
+ * the type signature given by the third argument, and a name given by
+ * the fourth. You don't actually have to have defined any of these
+ * functions yet to call this. You probably don't want to use this
+ * directly; call compile_to_file instead. */
+EXPORT void compile_to_header(const std::vector<Func> &outputs,
+                              const std::string &filename,
+                              const std::vector<Argument> &,
+                              const std::string &fn_name,
+                              const Target &target = get_target_from_environment());
+
+/** Statically compile a pipeline with multiple outputs to text
+ * assembly equivalent to the object file generated by
+ * compile_to_object. This is useful for checking what Halide is
+ * producing without having to disassemble anything, or if you need to
+ * feed the assembly into some custom toolchain to produce an object
+ * file. */
+EXPORT void compile_to_assembly(const std::vector<Func> &outputs,
+                                const std::string &filename,
+                                const std::vector<Argument> &,
+                                const std::string &fn_name,
+                                const Target &target = get_target_from_environment());
+
+/** Statically compile a pipeline with multiple outputs to C source code. This is
+ * useful for providing fallback code paths that will compile on
+ * many platforms. Vectorization will fail, and parallelization
+ * will produce serial code. */
+EXPORT void compile_to_c(const std::vector<Func> &outputs,
+                         const std::string &filename,
+                         const std::vector<Argument> &,
+                         const std::string &fn_name,
+                         const Target &target = get_target_from_environment());
+
+/** Write out an internal representation of lowered code. Useful
+ * for analyzing and debugging scheduling. Can emit html or plain
+ * text. */
+EXPORT void compile_to_lowered_stmt(const std::vector<Func> &outputs,
+                                    const std::string &filename,
+                                    const std::vector<Argument> &args,
+                                    StmtOutputFormat fmt = Text,
+                                    const Target &target = get_target_from_environment());
+
+/** Compile to object file and header pair, with the given
+ * arguments. Also names the C function to match the filename
+ * argument. */
+EXPORT void compile_to_file(const std::vector<Func> &outputs,
+                            const std::string &filename_prefix,
+                            const std::vector<Argument> &args,
+                            const Target &target = get_target_from_environment());
+
+/** Create an internal representation of lowered code as a self
+ * contained Module suitable for further compilation. */
+EXPORT Module compile_to_module(const std::vector<Func> &funcs,
+                                const std::vector<Argument> &args,
+                                const std::string &fn_name,
+                                const Target &target = get_target_from_environment());
 
  /** JIT-Compile and run enough code to evaluate a Halide
   * expression. This can be thought of as a scalar version of

@@ -1609,8 +1609,8 @@ public:
     vector<pair<int, Internal::Parameter>> image_param_args;
     vector<pair<int, Buffer>> image_args;
 
-    InferArguments(const string &o, bool include_buffers = true)
-        : output(o), include_buffers(include_buffers) {
+    InferArguments(const vector<Function> &o, bool include_buffers = true)
+        : outputs(o), include_buffers(include_buffers) {
     }
 
     void visit_function(const Function& func) {
@@ -1652,15 +1652,17 @@ public:
     }
 
 private:
-    const string &output;
+    vector<Function> outputs;
     const bool include_buffers;
 
     using IRGraphVisitor::visit;
 
     bool already_have(const string &name) {
         // Ignore dependencies on the output buffers
-        if (name == output || starts_with(name, output + ".")) {
-            return true;
+        for (const Function &output : outputs) {
+            if (name == output.name() || starts_with(name, output.name() + ".")) {
+                return true;
+            }
         }
         for (size_t i = 0; i < arg_types.size(); i++) {
             if (arg_types[i].name == name) {
@@ -1738,11 +1740,11 @@ private:
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are placed in
  * the images_to_embed list. */
-void validate_arguments(const string &output,
+void validate_arguments(const vector<Function> &outputs,
                         const vector<Argument> &args,
                         Stmt lowered,
                         vector<Buffer> &images_to_embed) {
-    InferArguments infer_args(output);
+    InferArguments infer_args(outputs);
     lowered.accept(&infer_args);
     const vector<Argument> &required_args = infer_args.arg_types;
 
@@ -1807,7 +1809,7 @@ struct ArgumentComparator {
 vector<Argument> Func::infer_arguments() const {
     user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
 
-    InferArguments infer_args(name(), /*include_buffers*/ false);
+    InferArguments infer_args({function()}, /*include_buffers*/ false);
     infer_args.visit_function(func);
 
     std::sort(infer_args.arg_types.begin(), infer_args.arg_types.end(), ArgumentComparator());
@@ -1820,8 +1822,8 @@ void Func::lower(const Target &t) {
     store_root();
     if (!lowered.defined() || t != lowered_target) {
         vector<IRMutator *> custom_passes;
-        for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
-            custom_passes.push_back(custom_lowering_passes[i].pass);
+        for (size_t i = 0; i < custom_lowering_passes().size(); i++) {
+            custom_passes.push_back(custom_lowering_passes()[i].pass);
         }
         lowered = Halide::Internal::lower({func}, t, custom_passes);
         lowered_target = t;
@@ -1832,103 +1834,20 @@ void Func::lower(const Target &t) {
 }
 
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
-    // TODO: This is a bit of a wart. Right now, IR cannot directly
-    // reference Buffers because neither CodeGen_LLVM nor
-    // CodeGen_C can generate the correct buffer unpacking code.
-
-    // To work around this, we generate two functions. The private
-    // function is one where every buffer referenced is an argument,
-    // and the public function is a wrapper that calls the private
-    // function, passing the global buffers to the private
-    // function. This works because the public function does not
-    // attempt to directly access any of the fields of the buffer.
-
-    string public_name = fn_name.empty() ? name() : fn_name;
-    string private_name = "__" + public_name;
-
-    lower(target);
-    Stmt private_body = lowered;
-
-    // Get all the arguments/global images referenced in this function.
-    vector<Argument> public_args = add_user_context_arg(args, target);
-
-    vector<Buffer> global_images;
-    validate_arguments(name(), public_args, private_body, global_images);
-    for (int i = 0; i < outputs(); i++) {
-        public_args.push_back(output_buffers()[i]);
-        internal_assert(public_args.back().is_output()) << "Expected only output Arguments here";
-    }
-
-    // Create a module with all the global images in it.
-    Module module(public_name, target);
-
-    // Add all the global images to the module, and add the global
-    // images used to the private argument list.
-    vector<Argument> private_args = public_args;
-    for (size_t i = 0; i < global_images.size(); i++) {
-        Buffer buf = global_images[i];
-        module.append(buf);
-        private_args.push_back(Argument(buf.name(), Argument::InputBuffer, buf.type(), buf.dimensions()));
-    }
-
-    module.append(LoweredFunc(private_name, private_args, private_body, LoweredFunc::Internal));
-
-    // Generate a call to the private function, adding an arguments
-    // for the global images.
-    vector<Expr> private_params;
-    for (size_t i = 0; i < private_args.size(); i++) {
-        const Argument &arg = private_args[i];
-        if (arg.is_buffer()) {
-            private_params.push_back(Variable::make(type_of<void*>(), arg.name + ".buffer"));
-        } else {
-            private_params.push_back(Variable::make(arg.type, arg.name));
-        }
-    }
-    string private_result_name = unique_name(private_name + "_result", false);
-    Expr private_result_var = Variable::make(Int(32), private_result_name);
-    Expr call_private = Call::make(Int(32), private_name, private_params, Call::Extern);
-    Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
-    public_body = LetStmt::make(private_result_name, call_private, public_body);
-
-    module.append(LoweredFunc(public_name, public_args, public_body, LoweredFunc::External));
-
-    return module;
+    return Halide::compile_to_module({*this}, args, fn_name, target);
 }
 
 
-void Func::compile_to(const Outputs &output_files, vector<Argument> args,
-                      const string &fn_name, const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    Module m = compile_to_module(args, fn_name, target);
-
-    llvm::LLVMContext context;
-    llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
-
-    if (!output_files.object_name.empty()) {
-        if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.object_name);
-        } else {
-            compile_llvm_module_to_object(llvm_module, output_files.object_name);
-        }
-    }
-    if (!output_files.assembly_name.empty()) {
-        if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_assembly(llvm_module, output_files.assembly_name);
-        } else {
-            compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
-        }
-    }
-    if (!output_files.bitcode_name.empty()) {
-        compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
-    }
-
-    delete llvm_module;
+void Func::compile_to(const Outputs &output_files,
+                      const vector<Argument> &args,
+                      const string &fn_name,
+                      const Target &target) {
+    Halide::compile_to({*this}, output_files, args, fn_name, target);
 }
 
 void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
                               const Target &target) {
-    compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
+    Halide::compile_to_bitcode({*this}, filename, args, fn_name, target);
 }
 
 void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const Target &target) {
@@ -1937,7 +1856,7 @@ void Func::compile_to_bitcode(const string &filename, const vector<Argument> &ar
 
 void Func::compile_to_object(const string &filename, const vector<Argument> &args,
                              const string &fn_name, const Target &target) {
-    compile_module_to_object(compile_to_module(args, fn_name, target), filename);
+    Halide::compile_to_object({*this}, filename, args, fn_name, target);
 }
 
 void Func::compile_to_object(const string &filename, const vector<Argument> &args, const Target &target) {
@@ -1945,21 +1864,19 @@ void Func::compile_to_object(const string &filename, const vector<Argument> &arg
 }
 
 void Func::compile_to_header(const string &filename, const vector<Argument> &args, const string &fn_name, const Target &target) {
-    compile_module_to_c_header(compile_to_module(args, fn_name, target), filename);
+    Halide::compile_to_header({*this}, filename, args, fn_name, target);
 }
 
 void Func::compile_to_c(const string &filename, const vector<Argument> &args,
                         const string &fn_name, const Target &target) {
-    compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
+    Halide::compile_to_c({*this}, filename, args, fn_name, target);
 }
 
-void Func::compile_to_lowered_stmt(const string &filename, const vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
-    Module m = compile_to_module(args, "", target);
-    if (fmt == HTML) {
-        compile_module_to_html(m, filename);
-    } else {
-        compile_module_to_text(m, filename);
-    }
+void Func::compile_to_lowered_stmt(const string &filename,
+                                   const vector<Argument> &args,
+                                   StmtOutputFormat fmt,
+                                   const Target &target) {
+    Halide::compile_to_lowered_stmt({*this}, filename, args, fmt, target);
 }
 
 void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
@@ -2074,19 +1991,10 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                        std::map<std::string, Expr>(), fmt, t);
 }
 
-void Func::compile_to_file(const string &filename_prefix, const vector<Argument> &args,
+void Func::compile_to_file(const string &filename_prefix,
+                           const vector<Argument> &args,
                            const Target &target) {
-    // Although it is possibly confusing, in order To preserve
-    // existing behavior, we need to pass filename_prefix as the new
-    // function name.
-    Module m = compile_to_module(args, filename_prefix, target);
-    compile_module_to_c_header(m, filename_prefix + ".h");
-
-    if (target.arch == Target::PNaCl) {
-        compile_module_to_llvm_bitcode(m, filename_prefix + ".o");
-    } else {
-        compile_module_to_object(m, filename_prefix + ".o");
-    }
+    Halide::compile_to_file({*this}, filename_prefix, args, target);
 }
 
 void Func::compile_to_file(const string &filename_prefix, const Target &target) {
@@ -2120,53 +2028,263 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
-    compile_module_to_assembly(compile_to_module(args, fn_name, target), filename);
+    Halide::compile_to_assembly({*this}, filename, args, fn_name, target);
 }
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_assembly(filename, args, "", target);
 }
 
+
+
+void compile_to(const std::vector<Func> &output_funcs,
+                const Outputs &output_files,
+                const std::vector<Argument> &args,
+                const std::string &fn_name,
+                const Target &target = get_target_from_environment()) {
+
+    for (Func f : output_funcs) {
+        user_assert(f.defined()) << "Can't compile undefined Func.\n";
+    }
+
+    Module m = compile_to_module(output_funcs, args, fn_name, target);
+
+    llvm::LLVMContext context;
+    llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
+
+    if (!output_files.object_name.empty()) {
+        if (target.arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.object_name);
+        } else {
+            compile_llvm_module_to_object(llvm_module, output_files.object_name);
+        }
+    }
+    if (!output_files.assembly_name.empty()) {
+        if (target.arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_assembly(llvm_module, output_files.assembly_name);
+        } else {
+            compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
+        }
+    }
+    if (!output_files.bitcode_name.empty()) {
+        compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
+    }
+
+    delete llvm_module;
+}
+
+void compile_to_bitcode(const std::vector<Func> &outputs,
+                        const std::string &filename,
+                        const std::vector<Argument> &args,
+                        const std::string &fn_name,
+                        const Target &target) {
+    compile_module_to_llvm_bitcode(compile_to_module(outputs, args, fn_name, target), filename);
+}
+
+void compile_to_object(const std::vector<Func> &outputs,
+                       const std::string &filename,
+                       const std::vector<Argument> &args,
+                       const std::string &fn_name,
+                       const Target &target) {
+    compile_module_to_object(compile_to_module(outputs, args, fn_name, target), filename);
+}
+
+void compile_to_header(const std::vector<Func> &outputs,
+                       const std::string &filename,
+                       const std::vector<Argument> &args,
+                       const std::string &fn_name,
+                       const Target &target) {
+    compile_module_to_c_header(compile_to_module(outputs, args, fn_name, target), filename);
+}
+
+void compile_to_assembly(const std::vector<Func> &outputs,
+                         const std::string &filename,
+                         const std::vector<Argument> &args,
+                         const std::string &fn_name,
+                         const Target &target) {
+    compile_module_to_assembly(compile_to_module(outputs, args, fn_name, target), filename);
+}
+
+void compile_to_c(const std::vector<Func> &outputs,
+                  const std::string &filename,
+                  const std::vector<Argument> &args,
+                  const std::string &fn_name,
+                  const Target &target) {
+    compile_module_to_c_source(compile_to_module(outputs, args, fn_name, target), filename);
+}
+
+void compile_to_lowered_stmt(const std::vector<Func> &outputs,
+                             const std::string &filename,
+                             const std::vector<Argument> &args,
+                             StmtOutputFormat fmt,
+                             const Target &target) {
+    Module m = compile_to_module(outputs, args, "", target);
+    if (fmt == HTML) {
+        compile_module_to_html(m, filename);
+    } else {
+        compile_module_to_text(m, filename);
+    }
+}
+
+void compile_to_file(const std::vector<Func> &outputs,
+                     const std::string &filename_prefix,
+                     const std::vector<Argument> &args,
+                     const Target &target) {
+    // Although it is possibly confusing, in order To preserve
+    // existing behavior, we need to pass filename_prefix as the new
+    // function name.
+    Module m = compile_to_module(outputs, args, filename_prefix, target);
+    compile_module_to_c_header(m, filename_prefix + ".h");
+
+    if (target.arch == Target::PNaCl) {
+        compile_module_to_llvm_bitcode(m, filename_prefix + ".o");
+    } else {
+        compile_module_to_object(m, filename_prefix + ".o");
+    }
+}
+
+namespace {
+Stmt lower_funcs(const std::vector<Func> &funcs, Target target) {
+    vector<IRMutator *> custom_passes;
+    vector<Function> functions;
+    for (Func func : funcs) {
+        func.compute_root();
+        func.store_root();
+
+        for (size_t i = 0; i < func.custom_lowering_passes().size(); i++) {
+            custom_passes.push_back(func.custom_lowering_passes()[i].pass);
+        }
+        // Forbid new definitions of the func
+        func.function().freeze();
+        functions.push_back(func.function());
+    }
+    return Halide::Internal::lower(functions, target, custom_passes);
+}
+}
+
+Module compile_to_module(const std::vector<Func> &funcs,
+                         const std::vector<Argument> &args,
+                         const std::string &public_name,
+                         const Target &target) {
+    // TODO: This is a bit of a wart. Right now, IR cannot directly
+    // reference Buffers because neither CodeGen_LLVM nor
+    // CodeGen_C can generate the correct buffer unpacking code.
+
+    // To work around this, we generate two functions. The private
+    // function is one where every buffer referenced is an argument,
+    // and the public function is a wrapper that calls the private
+    // function, passing the global buffers to the private
+    // function. This works because the public function does not
+    // attempt to directly access any of the fields of the buffer.
+
+    Stmt private_body = lower_funcs(funcs, target);
+
+    string private_name = "__" + public_name;
+
+    vector<Function> functions;
+    for (Func func : funcs) {
+        functions.push_back(func.function());
+    }
+
+    // Get all the arguments/global images referenced in this function.
+    vector<Argument> public_args = add_user_context_arg(args, target);
+
+    vector<Buffer> global_images;
+    validate_arguments(functions, public_args, private_body, global_images);
+    for (Func out : funcs) {
+        for (int i = 0; i < out.outputs(); i++) {
+            public_args.push_back(Argument(out.output_buffers()[i]));
+            internal_assert(public_args.back().is_output()) << "Expected only output Arguments here";
+        }
+    }
+
+    // Create a module with all the global images in it.
+    Module module(public_name, target);
+
+    // Add all the global images to the module, and add the global
+    // images used to the private argument list.
+    vector<Argument> private_args = public_args;
+    for (size_t i = 0; i < global_images.size(); i++) {
+        Buffer buf = global_images[i];
+        module.append(buf);
+        private_args.push_back(Argument(buf.name(), Argument::InputBuffer, buf.type(), buf.dimensions()));
+    }
+
+    module.append(LoweredFunc(private_name, private_args, private_body, LoweredFunc::Internal));
+
+    // Generate a call to the private function, adding an arguments
+    // for the global images.
+    vector<Expr> private_params;
+    for (size_t i = 0; i < private_args.size(); i++) {
+        const Argument &arg = private_args[i];
+        if (arg.is_buffer()) {
+            private_params.push_back(Variable::make(type_of<void*>(), arg.name + ".buffer"));
+        } else {
+            private_params.push_back(Variable::make(arg.type, arg.name));
+        }
+    }
+    string private_result_name = unique_name(private_name + "_result", false);
+    Expr private_result_var = Variable::make(Int(32), private_result_name);
+    Expr call_private = Call::make(Int(32), private_name, private_params, Call::Extern);
+    Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
+    public_body = LetStmt::make(private_result_name, call_private, public_body);
+
+    module.append(LoweredFunc(public_name, public_args, public_body, LoweredFunc::External));
+
+    return module;
+}
+
+
+// JIT-related code
+
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    jit_handlers.custom_error = handler;
+    jit_handlers_.custom_error = handler;
 }
 
 void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                 void (*cust_free)(void *, void *)) {
-    jit_handlers.custom_malloc = cust_malloc;
-    jit_handlers.custom_free = cust_free;
+    jit_handlers_.custom_malloc = cust_malloc;
+    jit_handlers_.custom_free = cust_free;
 }
 
 void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    jit_handlers.custom_do_par_for = cust_do_par_for;
+    jit_handlers_.custom_do_par_for = cust_do_par_for;
 }
 
 void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    jit_handlers.custom_do_task = cust_do_task;
+    jit_handlers_.custom_do_task = cust_do_task;
 }
 
 void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
-    jit_handlers.custom_trace = trace_fn;
+    jit_handlers_.custom_trace = trace_fn;
 }
 
 void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    jit_handlers.custom_print = cust_print;
+    jit_handlers_.custom_print = cust_print;
 }
 
 void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
     invalidate_cache();
     CustomLoweringPass p = {pass, deleter};
-    custom_lowering_passes.push_back(p);
+    custom_lowering_passes_.push_back(p);
 }
 
 void Func::clear_custom_lowering_passes() {
     invalidate_cache();
-    for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
-        if (custom_lowering_passes[i].deleter) {
-            custom_lowering_passes[i].deleter(custom_lowering_passes[i].pass);
+    for (size_t i = 0; i < custom_lowering_passes().size(); i++) {
+        if (custom_lowering_passes()[i].deleter) {
+            custom_lowering_passes()[i].deleter(custom_lowering_passes()[i].pass);
         }
     }
-    custom_lowering_passes.clear();
+    custom_lowering_passes_.clear();
+}
+
+const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
+    return custom_lowering_passes_;
+}
+
+const Internal::JITHandlers &Func::jit_handlers() {
+    return jit_handlers_;
 }
 
 void Func::realize(Buffer b, const Target &target) {
@@ -2286,7 +2404,7 @@ void Func::realize(Realization dst, const Target &target) {
             << "\" has type " << func.output_types()[i] << ".\n";
     }
 
-    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
+    JITFuncCallContext jit_context(jit_handlers(), jit_user_context);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2336,7 +2454,7 @@ void Func::infer_input_bounds(Realization dst) {
 
     internal_assert(compiled_module.argv_function());
 
-    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
+    JITFuncCallContext jit_context(jit_handlers(), jit_user_context);
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2491,7 +2609,7 @@ void *Func::compile_jit(const Target &target_arg) {
     lower(target);
 
     // Infer arguments
-    InferArguments infer_args(name());
+    InferArguments infer_args({function()});
     lowered.accept(&infer_args);
 
     // For jitting, we always add jit_user_context,
