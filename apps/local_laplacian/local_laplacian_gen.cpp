@@ -145,7 +145,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    output.compile_to_file("local_laplacian", levels, alpha, beta, input, target);
+    output.compile_to_file("local_laplacian", {levels, alpha, beta, input}, target);
+    output.compile_to_assembly("local_laplacian.s", {levels, alpha, beta, input}, target);
 
     return 0;
 }
