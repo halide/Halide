@@ -14,8 +14,7 @@ int main(int argc, char **argv) {
 
     flip.vectorize(x, 4);
 
-    flip.compile_to_file("flip_impl", in, total_width);
+    flip.compile_to_file("flip_impl", {in, total_width});
 
     return 0;
 }
-
