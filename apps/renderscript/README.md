@@ -5,10 +5,6 @@ These samples demonstrates two supported modes of operation for Renderscript cod
  - vectorized operations over interleaved RGBA images;
  - single-element operations over planar images.
 
-Filters have to be built with '-user_context' option because currently
-Halide Renderscript runtime expects cache directory for Renderscript artifacts
-to be passed via user_context argument.
-
 Prerequisites
 ---
 
@@ -20,7 +16,8 @@ Building and running
 ---
 
 1) 'build.sh' script will build and deploy sample Java application to the
-connected device. Results of the run are written to the device log, so script
+connected device. It needs apache ant and Android SDK available in the path.
+Results of the run are written to the device log, so script
 ends with 'adb logcat', which will contains those results.
 
 2) Invoking 'make' will build and run C++ sample app with same tests as above,

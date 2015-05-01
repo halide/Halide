@@ -1,4 +1,5 @@
 #include "runtime_internal.h"
+#include "scoped_spin_lock.h"
 #include "device_interface.h"
 #include "HalideRuntimeRenderscript.h"
 
@@ -82,6 +83,32 @@ WEAK int halide_renderscript_release_context(void *user_context) {
 }
 
 extern int __system_property_get(const char *name, char *value);
+
+// runtime stores the cache dir. It's a global, so it's initialized to null.
+WEAK const char *halide_renderscript_cache_dir;
+WEAK int halide_renderscript_cache_dir_lock = 0;
+
+// Setter for the above. Can be called by the user.
+WEAK void halide_set_renderscript_cache_dir(const char *c) {
+    ScopedSpinLock lock(&halide_renderscript_cache_dir_lock);
+    halide_renderscript_cache_dir = c;
+}
+
+// Getter. The user can alternatively override this to return a custom cache dir based on the user context.
+WEAK const char *halide_get_renderscript_cache_dir(void *user_context) {
+    // Prevent multiple threads both trying to initialize the trace
+    // file at the same time.
+    if (halide_renderscript_cache_dir) {
+        return halide_renderscript_cache_dir;
+    } else {
+        const char *name = getenv("HL_RENDERSCRIPT_CACHE_DIR");
+        if (name) {
+            return name;
+        } else {
+            return "/mnt/sdcard";
+        }
+    }
+}
 
 }  // extern "C"
 
@@ -651,9 +678,8 @@ WEAK int halide_renderscript_initialize_kernels(void *user_context, void **state
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
-        // TODO(aam): Figure out better mechanism of passing cacheDir
-        // from the client to the halide Renderscript infrastructure.
-        const char *cacheDir = (char*)user_context;
+        const char *cacheDir = halide_get_renderscript_cache_dir(user_context);
+        debug(user_context) << "RS:halide_renderscript_init_kernels cacheDir is " << cacheDir << "\n";
         // TODO(aam): Figure out good "cachedName" we can use. The one below
         // is chosen randomly.
         const char *cachedName = "halide_renderscript_kernel";

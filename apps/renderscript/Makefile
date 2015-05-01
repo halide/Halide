@@ -11,10 +11,10 @@ test_%: test_%.cpp
 	g++ -std=c++11 -I ../../include/ $< -L ../../bin/ -lHalide -o $@ -g
 
 generated_blur_rs.o generated_blur_rs.h generated_blur_vectorized_rs.o generated_blur_vectorized_rs.h generated_copy_rs.o generated_copy_rs.h generated_copy_vectorized_rs.o generated_copy_vectorized_rs.h: test_blur_copy $(HALIDE_LIB)
-	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-renderscript-user_context ./$< "_rs"
+	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-renderscript ./$< "_rs"
 
 generated_blur_arm.o generated_blur_arm.h generated_blur_vectorized_arm.o generated_blur_vectorized_arm.h generated_copy_arm.o generated_copy_arm.h generated_copy_vectorized_arm.o generated_copy_vectorized_arm.h: test_blur_copy $(HALIDE_LIB)
-	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-user_context ./$< "_arm"
+	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s ./$< "_arm"
 
 libs/armeabi-v7a/rstest: $(HALIDE_LIB) \
                          jni/rstest.cpp \
