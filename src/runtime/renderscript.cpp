@@ -85,7 +85,6 @@ extern int __system_property_get(const char *name, char *value);
 
 // runtime stores the cache dir. It's a global, so it's initialized to null.
 WEAK const char *halide_renderscript_cache_dir;
-WEAK int halide_renderscript_cache_dir_lock = 0;
 
 // Setter for the above. Can be called by the user.
 WEAK void halide_set_renderscript_cache_dir(const char *c) {
