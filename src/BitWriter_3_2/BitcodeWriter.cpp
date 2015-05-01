@@ -652,7 +652,7 @@ static void WriteModuleMetadata(const Module *M,
     MDSAbbrev = Stream.EmitAbbrev(Abbv);
   }
 
-  if (VE.hasMDLocation()) {
+  if (VE.hasDILocation()) {
     // TODO(srhines): Should be unreachable for RenderScript.
     // Abbrev for METADATA_LOCATION.
     //
@@ -1570,7 +1570,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
 #if LLVM_VERSION >= 37
         MDNode* Scope = DL.getScope();
         assert(Scope && "Expected valid scope");
-        MDLocation *IA = DL.getInlinedAt();
+        DILocation *IA = DL.getInlinedAt();
 #else
         MDNode *Scope, *IA;
         DL.getScopeAndInlinedAt(Scope, IA, I->getContext());

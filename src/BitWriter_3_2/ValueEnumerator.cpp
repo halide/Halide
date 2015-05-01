@@ -41,7 +41,7 @@ static bool isIntOrIntVectorValue(const std::pair<const Value*, unsigned> &V) {
 /// ValueEnumerator - Enumerate module-level information.
 ValueEnumerator::ValueEnumerator(const llvm::Module &M,
                                  bool ShouldPreserveUseListOrder)
-    : HasMDString(false), HasMDLocation(false),
+    : HasMDString(false), HasDILocation(false),
     ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {
   assert(!ShouldPreserveUseListOrder &&
          "not supported UseListOrders = predictUseListOrder(M)");
@@ -125,7 +125,7 @@ ValueEnumerator::ValueEnumerator(const llvm::Module &M,
         if (I.getDebugLoc()) {
           MDNode* Scope = I.getDebugLoc().getScope();
           if (Scope) EnumerateMetadata(Scope);
-          MDLocation *IA = I.getDebugLoc().getInlinedAt();
+          DILocation *IA = I.getDebugLoc().getInlinedAt();
           if (IA) EnumerateMetadata(IA);
         }
 #else
@@ -300,7 +300,12 @@ void ValueEnumerator::EnumerateMetadata(const llvm::Metadata *MD) {
     EnumerateValue(C->getValue());
 
   HasMDString |= isa<MDString>(MD);
-  HasMDLocation |= isa<MDLocation>(MD);
+  #if LLVM_VERSION >= 37
+  HasDILocation |= isa<DILocation>(MD);
+  #else
+  HasDILocation |= isa<MDLocation>(MD);
+  #endif
+
 
   // Replace the dummy ID inserted above with the correct one.  MDValueMap may
   // have changed by inserting operands, so we need a fresh lookup here.
