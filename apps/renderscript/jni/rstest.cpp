@@ -19,6 +19,7 @@
 
 extern "C" int halide_copy_to_host(void *, buffer_t *);
 extern "C" int halide_device_sync(void *, buffer_t *);
+extern "C" void halide_set_renderscript_cache_dir(const char *c);
 
 bool validate(buffer_t actual, buffer_t expected) {
     int count_mismatches = 0;
@@ -77,7 +78,7 @@ buffer_t make_interleaved_image(int width, int height, int channels,
     return bt_input;
 }
 
-typedef int  (filter_t) (const void*, buffer_t *, buffer_t *);
+typedef int  (filter_t) (buffer_t *, buffer_t *);
 
 struct timing {
     filter_t *filter;
@@ -94,9 +95,10 @@ struct timing {
 
     int run(int n_reps, bool with_copying) {
         timeval t1, t2;
+        halide_set_renderscript_cache_dir(cacheDir);
         for (int i = 0; i < n_reps; i++) {
             gettimeofday(&t1, NULL);
-            int error = filter(cacheDir, bt_input, bt_output);
+            int error = filter(bt_input, bt_output);
             halide_device_sync(NULL, bt_output);
 
             if (with_copying) {
@@ -266,6 +268,5 @@ JNIEXPORT void JNICALL Java_com_example_hellohaliderenderscript_HalideRenderscri
     const char *pchCacheDir = env->GetStringUTFChars(jCacheDir, 0);
     runTest(pchCacheDir);
     env->ReleaseStringUTFChars(jCacheDir, pchCacheDir);
-
 }
 }
