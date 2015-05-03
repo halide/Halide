@@ -18,8 +18,8 @@ void blur(std::string suffix, ImageParam input8, const int channels,
         (blur_x(x, y, c) + blur_x(x, y + 1, c) + blur_x(x, y + 2, c)) / 3);
 
     result.output_buffer()
-        .set_stride(0, channels)
-        .set_stride(2, 1)
+        .set_stride(0, input8.stride(0))
+        .set_stride(2, input8.stride(2))
         .set_bounds(2, 0, channels);
 
     result.bound(c, 0, channels);
@@ -60,8 +60,8 @@ void copy(std::string suffix, ImageParam input8, const int channels,
     Func result("result");
     result(x, y, c) = input(x, y, c);
     result.output_buffer()
-        .set_stride(0, channels)
-        .set_stride(2, 1)
+        .set_stride(0, input8.stride(0))
+        .set_stride(2, input8.stride(2))
         .set_bounds(2, 0, channels);
 
     result.bound(c, 0, channels);
