@@ -119,6 +119,9 @@ struct JITExtern {
         is_void_return = voidable_halide_type<RT>(ret_type);
         init_arg_types<Args...>(arg_types);
     }
+
+    // Necessary for constructing a JITExtern dynamically.
+    JITExtern() : func(NULL), c_function(NULL) { }
 };
 
 namespace Internal {
@@ -139,6 +142,16 @@ struct JITModule {
     EXPORT JITModule();
     EXPORT JITModule(const Module &m, const LoweredFunc &fn,
                      const std::vector<JITModule> &dependencies = std::vector<JITModule>());
+
+    /** Take a list of JITExterns and generate trampoline functions
+     * which can be called dynamically via a function pointer that
+     * takes an array of void *'s for each argument and the return
+     * value.
+     */
+    static JITModule make_trampolines_module(const Target &target,
+                                             const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix);
+
     /** The exports map of a JITModule contains all symbols which are
      * available to other JITModules which depend on this one. For
      * runtime modules, this is all of the symbols exported from the
@@ -180,7 +193,7 @@ struct JITModule {
     /** TODO: docs */
     EXPORT void add_symbol_for_export(const std::string &name, const Symbol &extern_symbol);
     /** TODO: docs */
-    EXPORT void add_extern_for_export(const std::string &name, const JITExtern &jit_extern);
+    EXPORT Symbol add_extern_for_export(const std::string &name, const JITExtern &jit_extern);
 
     // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will
@@ -238,6 +251,9 @@ public:
 
     EXPORT static void release_all();
 };
+
+void *get_symbol_address(const char *s);
+
 }
 }
 

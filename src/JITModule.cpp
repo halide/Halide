@@ -4,6 +4,7 @@
 #include <set>
 
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
@@ -11,25 +12,30 @@
 #include "LLVM_Output.h"
 
 
-#ifdef _WIN32
-#define NOMINMAX
-#include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
-}
-#else
-#include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(NULL, s) != NULL;
-}
-#endif
-
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+void *get_symbol_address(const char *s) {
+    return GetProcAddress(GetModuleHandle(NULL), s);
+}
+#else
+#include <dlfcn.h>
+void *get_symbol_address(const char *s) {
+  debug(0) << "dlsym looking up " << s << "\n";
+    return dlsym(RTLD_DEFAULT, s);
+}
+#endif
+
 namespace {
+
+bool have_symbol(const char *s) {
+    return get_symbol_address(s) != NULL;
+}
 
 llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_type) {
     llvm::LLVMContext &context(to_module->getContext());
@@ -492,6 +498,27 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     jit_module.ptr->name = function_name;
 }
 
+JITModule JITModule::make_trampolines_module(const Target &target_arg, const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix) {
+    Target target = target_arg;
+    target.set_feature(Target::JIT);
+
+    JITModule result; 
+    CodeGen_LLVM *codegen = CodeGen_LLVM::new_for_target(target, result.jit_module.ptr->context);
+    codegen->init_for_codegen();
+    std::vector<std::string> requested_exports;
+    for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
+        Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second);
+        codegen->add_argv_wrapper(cast<llvm::FunctionType>(sym.llvm_type),
+                                  extern_entry.first + suffix, extern_entry.first,
+                                  CodeGen_LLVM::FirstArgPointsToResult);
+        requested_exports.push_back(extern_entry.first + suffix);
+    }
+    result.compile_module(codegen->finalize_module(), "", target, std::vector<JITModule>(),
+                          requested_exports);
+    return result;
+}
+
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module.ptr->exports;
 }
@@ -539,13 +566,13 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module.ptr->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const JITExtern &jit_extern) {
+JITModule::Symbol JITModule::add_extern_for_export(const std::string &name, const JITExtern &jit_extern) {
     internal_assert(jit_extern.func == NULL && jit_extern.c_function != NULL) << "add_extern_for_export does not support taking a Func based JITExtern.\n";
     Symbol symbol;
     symbol.address = jit_extern.c_function;
 
     // Struct types are uniqued on the context, but the lookup API is only available
-    // ont he Module, not hte Context.
+    // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module.ptr->context);
     llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
     if (buffer_t == NULL) {
@@ -571,6 +598,7 @@ void JITModule::add_extern_for_export(const std::string &name, const JITExtern &
 
     symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
     jit_module.ptr->exports[name] = symbol;
+    return symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {

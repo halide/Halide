@@ -22,6 +22,7 @@
 #include "Param.h"
 #include "Debug.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "HumanReadableStmt.h"
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
@@ -1753,6 +1754,60 @@ private:
     }
 };
 
+class FindExterns : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    bool buffer_like_name(const Expr &name) {
+        const StringImm *str = name.as<StringImm>();
+        return str != NULL &&
+               (ends_with(str->value, ".buffer") || ends_with(str->value, ".tmp_buffer"));
+    }
+
+    void visit(const Call *op) {
+        IRGraphVisitor::visit(op);
+
+        if (op->call_type == Call::Extern &&
+            externs.count(op->name) == 0) {
+      debug(0) << "Looking for extern " << op->name << "\n";
+            void *address = get_symbol_address(op->name.c_str());
+            if (address == NULL && !starts_with(op->name, "_")) {
+                std::string underscored_name = "_" + op->name;
+                address = get_symbol_address(underscored_name.c_str());
+            }
+            if (address != NULL) {
+      debug(0) << "Found address for extern " << op->name << "\n";
+                struct JITExtern jit_extern;
+                jit_extern.c_function = address;
+                jit_extern.is_void_return = op->type.bits == 0;
+                jit_extern.ret_type = op->type;
+                for (Expr e : op->args) {
+                    ScalarOrBufferT this_arg;
+                    this_arg.scalar_type = e.type();
+                    if (e.type().is_handle()) {
+                        // This code heuristically matches the patterns define_extern uses to pass buffer argumetns and result parameters.
+                        // TODO: Come up with a way to keep the buffer typing through lowering.
+                        Expr buffer_param_pattern = Variable::make(Handle(), "*");
+                        std::vector<Expr> matched_parts;
+                        this_arg.is_buffer = expr_match(buffer_param_pattern, e, matched_parts) &&
+                                              buffer_like_name(matched_parts[0]);
+                    } else {
+                        this_arg.is_buffer = false;
+                    }
+                    jit_extern.arg_types.push_back(this_arg);
+                }
+                externs[op->name] = jit_extern;
+            }
+        }
+    }
+
+public:
+    FindExterns(std::map<std::string, JITExtern> &externs) : externs(externs) {
+    }
+
+    std::map<std::string, JITExtern> &externs;
+};
+
+
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are placed in
  * the images_to_embed list. */
@@ -2301,20 +2356,24 @@ struct JITFuncCallContext {
 
 void Func::realize(Realization dst, const Target &target,
                    const std::map<std::string, JITExtern> &externs) {
+    std::map<std::string, JITExtern> externs_js;
     // TODO: see if JS and non-JS can share more code.
     if (target.has_feature(Target::JavaScript)) {
     #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
         if (cached_javascript.empty()) {
-	    compile_jit(target, externs);
+            compile_jit(target, externs);
         }
 
         internal_assert(!cached_javascript.empty());
+        externs_js = externs;
+        FindExterns find_externs(externs_js);
+        lowered.accept(&find_externs);
     #else
         user_error << "Cannot JIT JavaScript without a JavaScript execution engine (e.g. V8) configured at compile time.\n";
     #endif
     } else {
         if (!compiled_module.argv_function()) {
-  	    compile_jit(target, externs);
+            compile_jit(target, externs);
         }
 
         internal_assert(compiled_module.argv_function());
@@ -2387,7 +2446,7 @@ void Func::realize(Realization dst, const Target &target,
         }
 
         Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
-        exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args);
+        exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args, externs_js);
         Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
     } else
     #endif
@@ -2410,19 +2469,23 @@ void Func::infer_input_bounds(Realization dst,
     Target target = get_jit_target_from_environment();
 
     // TODO: see if JS and non-JS can share more code.
+    std::map<std::string, JITExtern> externs_js;
     if (target.has_feature(Target::JavaScript)) {
     #if WITH_JAVASCRIPT_V8
         if (cached_javascript.empty()) {
-	  compile_jit(target, externs);
+          compile_jit(target, externs);
         }
 
         internal_assert(!cached_javascript.empty());
+        externs_js = externs;
+        FindExterns find_externs(externs_js);
+        lowered.accept(&find_externs);
     #else
         user_error << "Cannot JIT JavaScript without a JavaScript execution engine (e.g. V8) configured at compile time.\n";
     #endif
     } else {
         if (!compiled_module.argv_function()) {
-	  compile_jit(target, externs);
+          compile_jit(target, externs);
         }
 
         internal_assert(compiled_module.argv_function());
@@ -2516,7 +2579,7 @@ void Func::infer_input_bounds(Realization dst,
             }
 
             Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
-            exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args);
+            exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args, externs_js);
             Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
         } else
         #endif

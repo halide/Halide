@@ -360,7 +360,6 @@ void CodeGen_LLVM::init_context() {
     f64x4 = VectorType::get(f64, 4);
 }
 
-
 void CodeGen_LLVM::init_module() {
     init_context();
 
@@ -373,14 +372,7 @@ CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
 
-bool CodeGen_LLVM::llvm_initialized = false;
-bool CodeGen_LLVM::llvm_X86_enabled = false;
-bool CodeGen_LLVM::llvm_ARM_enabled = false;
-bool CodeGen_LLVM::llvm_AArch64_enabled = false;
-bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
-bool CodeGen_LLVM::llvm_Mips_enabled = false;
-
-llvm::Module *CodeGen_LLVM::compile(const Module &input) {
+void CodeGen_LLVM::init_for_codegen() {
     init_module();
 
     llvm::Triple triple = get_target_triple();
@@ -393,10 +385,6 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     module->setDataLayout(&dl);
     #endif
 
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    module->setModuleIdentifier(input.name());
-
     // Add some target specific info to the module as metadata.
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     #if LLVM_VERSION < 36
@@ -406,6 +394,37 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
     #endif
+}
+
+llvm::Module *CodeGen_LLVM::finalize_module() {
+    // Verify the module is ok
+    verifyModule(*module);
+    debug(2) << "Done generating llvm bitcode\n";
+    debug(0) << "Dumping module in finalize_module.\n";
+    module->dump();
+
+    // Optimize
+    CodeGen_LLVM::optimize_module();
+
+    // Disown the module and return it.
+    llvm::Module *m = module;
+    module = NULL;
+    return m;
+}
+
+bool CodeGen_LLVM::llvm_initialized = false;
+bool CodeGen_LLVM::llvm_X86_enabled = false;
+bool CodeGen_LLVM::llvm_ARM_enabled = false;
+bool CodeGen_LLVM::llvm_AArch64_enabled = false;
+bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
+bool CodeGen_LLVM::llvm_Mips_enabled = false;
+
+llvm::Module *CodeGen_LLVM::compile(const Module &input) {
+    init_for_codegen();
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
+    module->setModuleIdentifier(input.name());
 
     if (target.has_feature(Target::JIT)) {
         std::vector<JITModule> shared_runtime = JITSharedRuntime::get(module, target);
@@ -441,33 +460,22 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
 
     debug(2) << module << "\n";
 
-    // Verify the module is ok
-    verifyModule(*module);
-    debug(2) << "Done generating llvm bitcode\n";
-
-    // Optimize
-    CodeGen_LLVM::optimize_module();
-
-    // Disown the module and return it.
-    llvm::Module *m = module;
-    module = NULL;
-    return m;
+    return finalize_module();
 }
 
-namespace {
+llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn, const std::string &name,
+                                               ARGVWrapperReturnResultKind result_kind) {
+    llvm::Type *buffer_t_type = module->getTypeByName("struct.buffer_t");
+    llvm::Type *i8 = llvm::Type::getInt8Ty(module->getContext());
+    llvm::Type *i32 = llvm::Type::getInt32Ty(module->getContext());
+    llvm::Type *void_type = llvm::Type::getVoidTy(module->getContext());
 
-// Make a wrapper to call the function with an array of pointer
-// args. This is easier for the JIT to call than a function with an
-// unknown (at compile time) argument list.
-llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &name) {
-    llvm::Type *buffer_t_type = m->getTypeByName("struct.buffer_t");
-    llvm::Type *i8 = llvm::Type::getInt8Ty(m->getContext());
-    llvm::Type *i32 = llvm::Type::getInt32Ty(m->getContext());
+    llvm::Type *result_type = (result_kind == IntFunctionResult) ? i32 : void_type;
 
-    llvm::FunctionType *func_t = llvm::FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
-    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, m);
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", wrapper);
-    llvm::IRBuilder<> builder(m->getContext());
+    llvm::FunctionType *func_t = llvm::FunctionType::get(result_type, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
+    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, module);
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
+    llvm::IRBuilder<> builder(module->getContext());
     builder.SetInsertPoint(block);
 
     llvm::Value *arg_array = wrapper->arg_begin();
@@ -487,12 +495,28 @@ llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std:
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
+
     llvm::Value *result = builder.CreateCall(fn, wrapper_args);
-    builder.CreateRet(result);
+    if (result_kind == IntFunctionResult) {
+        builder.CreateRet(result);
+    } else if (fn->getReturnType() != void_type) {
+        llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, wrapper_args.size());
+        ptr = builder.CreateLoad(ptr);
+        // Cast to the appropriate type and store
+        ptr = builder.CreatePointerCast(ptr, fn->getReturnType()->getPointerTo());
+        builder.CreateStore(result, ptr);
+        builder.CreateRetVoid();
+    }
+
     llvm::verifyFunction(*wrapper);
     return wrapper;
 }
 
+llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::FunctionType *fn_type,
+                                               const std::string &wrapper_name, const std::string &callee_name,
+                                               ARGVWrapperReturnResultKind result_kind) {
+    llvm::Function *callee = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, callee_name, module);
+    return add_argv_wrapper(callee, wrapper_name, result_kind);
 }
 
 void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
@@ -568,7 +592,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
     if (f.linkage == LoweredFunc::External) {
-        llvm::Function *wrapper = add_argv_wrapper(module, function, name + "_argv");
+        llvm::Function *wrapper = add_argv_wrapper(function, name + "_argv", IntFunctionResult);
         llvm::Constant *metadata = embed_metadata(name + "_metadata", name, args);
         if (target.has_feature(Target::RegisterMetadata)) {
             register_metadata(name, metadata, wrapper);

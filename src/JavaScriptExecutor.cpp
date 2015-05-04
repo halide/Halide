@@ -4,6 +4,7 @@
 #include "Target.h"
 
 #include "runtime/HalideRuntime.h"
+#include <valarray>
 #include <vector>
 
 // Avoid unused function warning if not configured with JavaScript.
@@ -26,6 +27,11 @@ int32_t buffer_total_size(const buffer_t *buf) {
 
 }
 
+// TODO: Filter math routines, runtime routines, etc.
+std::map<std::string, Halide::JITExtern> filter_externs(const std::map<std::string, Halide::JITExtern> &externs) {
+    return externs;
+}
+
 #endif
 
 #if WITH_JAVASCRIPT_V8
@@ -38,6 +44,8 @@ namespace Halide { namespace Internal {
 namespace JS_V8 {
 
 using namespace v8;
+
+
 
 template <typename T>
 void get_host_array(Local<String> property,
@@ -452,7 +460,160 @@ void trace_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     }
 }
 
-Local<ObjectTemplate> make_callbacks(Isolate *isolate) {
+void js_buffer_t_to_struct(const Local<Value> &val, struct buffer_t *slot) {
+  //    Local<Object> buf_obj = val->ToObject();
+
+    // slot->host = buf_obj->Get(String::NewFromUtf8(isolate, "host"))->Int32Value();
+}
+
+template <typename T>
+void val_to_slot(const Local<Value> &val, uint64_t *slot) {
+    T js_value = (T)val->NumberValue();
+    *(T *)slot = js_value;
+}
+
+void js_value_to_uint64_slot(const Halide::Type &type, const Local<Value> &val, uint64_t *slot) {
+    if (type.is_handle()) {
+    } else if (type.is_float()) {
+        if (type.bits == 32) {
+            val_to_slot<float>(val, slot);
+        } else {
+            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            val_to_slot<double>(val, slot);
+        }
+    } else if (type.is_uint()) {
+        if (type.bits == 1) {
+            val_to_slot<bool>(val, slot);
+        } else if (type.bits == 8) {
+            val_to_slot<uint8_t>(val, slot);
+        } else if (type.bits == 16) {
+            val_to_slot<uint16_t>(val, slot);
+        } else if (type.bits == 32) {
+            val_to_slot<uint32_t>(val, slot);
+        } else if (type.bits == 64) {
+            user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
+            val_to_slot<uint64_t>(val, slot);
+        }
+    } else {
+        if (type.bits == 1) {
+            val_to_slot<bool>(val, slot);
+        } else if (type.bits == 8) {
+            val_to_slot<int8_t>(val, slot);
+        } else if (type.bits == 16) {
+            val_to_slot<int16_t>(val, slot);
+        } else if (type.bits == 32) {
+            val_to_slot<int32_t>(val, slot);
+        } else if (type.bits == 64) {
+            user_error << "64-bit integer types are not supported with JavaScript.\n";
+            val_to_slot<int64_t>(val, slot);
+        }
+    }
+}
+
+void buffer_t_struct_to_js(const buffer_t *slot, Local<Value> val) {
+}
+
+template <typename T, typename S>
+void slot_to_return_val(const uint64_t *slot, ReturnValue<Value> val) {
+    T slot_value = *(T *)slot;
+    val.Set((S)slot_value);
+}
+
+void uint64_slot_to_return_value(const Halide::Type &type, const uint64_t *slot, ReturnValue<Value> val) {
+    if (type.is_handle()) {
+    } else if (type.is_float()) {
+        if (type.bits == 32) {
+          slot_to_return_val<float, double>(slot, val);
+        } else {
+            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            slot_to_return_val<double, double>(slot, val);
+        }
+    } else if (type.is_uint()) {
+        if (type.bits == 1) {
+          slot_to_return_val<bool, bool>(slot, val);
+        } else if (type.bits == 8) {
+          slot_to_return_val<uint8_t, uint32_t>(slot, val);
+        } else if (type.bits == 16) {
+          slot_to_return_val<uint16_t, uint32_t>(slot, val);
+        } else if (type.bits == 32) {
+          slot_to_return_val<uint32_t, uint32_t>(slot, val);
+        } else if (type.bits == 64) {
+            user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
+            slot_to_return_val<uint64_t, double>(slot, val);
+        }
+    } else {
+        if (type.bits == 1) {
+          slot_to_return_val<bool, bool>(slot, val);
+        } else if (type.bits == 8) {
+          slot_to_return_val<int8_t, int32_t>(slot, val);
+        } else if (type.bits == 16) {
+          slot_to_return_val<int16_t, int32_t>(slot, val);
+        } else if (type.bits == 32) {
+          slot_to_return_val<int32_t, int32_t>(slot, val);
+        } else if (type.bits == 64) {
+            user_error << "64-bit integer types are not supported with JavaScript.\n";
+            slot_to_return_val<int64_t, double>(slot, val);
+        }
+    }
+}
+
+void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    Isolate *isolate = args.GetIsolate();
+    HandleScope scope(isolate);
+    Local<Object> wrapper_data = args.Data()->ToObject();
+    Local<External> jit_extern_wrap = Local<External>::Cast(wrapper_data->GetInternalField(0));
+    const JITExtern *jit_extern = (const JITExtern *)jit_extern_wrap->Value();
+    Local<External> trampoline_wrap = Local<External>::Cast(wrapper_data->GetInternalField(1));
+    void (*trampoline)(void **) = (void (*)(void **))trampoline_wrap->Value();
+
+    // Each scalar args is stored in a 64-bit slot
+    size_t scalar_args_count = 0;
+    // Each buffer_t gets a slot in an array of buffer_t structs
+    size_t buffer_t_args_count = 0;
+
+    std::vector<void *> trampoline_args;
+    internal_assert(jit_extern->func == NULL);
+    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+        if (scalar_or_buffer_t.is_buffer) {
+            buffer_t_args_count++;
+        } else {
+            scalar_args_count++;
+        }
+    }
+
+    std::valarray<struct buffer_t> buffer_t_args(buffer_t_args_count);
+    std::valarray<uint64_t> scalar_args(scalar_args_count);
+
+    size_t args_index = 0;
+    size_t buffer_t_arg_index = 0;
+    size_t scalar_arg_index = 0;
+    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+        if (scalar_or_buffer_t.is_buffer) {
+            js_buffer_t_to_struct(args[args_index++], &buffer_t_args[buffer_t_arg_index]);
+            trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
+        } else {
+            js_value_to_uint64_slot(scalar_or_buffer_t.scalar_type, args[args_index++], &scalar_args[scalar_arg_index]);
+            trampoline_args.push_back(&scalar_args[scalar_arg_index++]);
+        }
+    }
+
+    (*trampoline)(&trampoline_args[0]);
+
+    args_index = 0;
+    buffer_t_arg_index = 0;
+    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+        if (scalar_or_buffer_t.is_buffer) {
+            buffer_t_struct_to_js(&buffer_t_args[buffer_t_arg_index], args[args_index++]);
+        }
+        // No need to retrieve scalar args as they are passed by value.
+    }
+    
+    if (!jit_extern->is_void_return) {
+        uint64_slot_to_return_value(jit_extern->ret_type, &scalar_args[scalar_arg_index - 1], args.GetReturnValue());
+    }
+}
+
+Local<ObjectTemplate> make_global_template(Isolate *isolate) {
     // Create a template for the global object where we set the
     // built-in global functions.
     Local<ObjectTemplate> global = ObjectTemplate::New(isolate);
@@ -465,10 +626,33 @@ Local<ObjectTemplate> make_callbacks(Isolate *isolate) {
     return global;
 }
 
+void add_extern_callbacks(Isolate *isolate, Local<Context> &context,
+                          const std::map<std::string, JITExtern> &externs,
+                          JITModule trampolines) {
+    for (const std::pair<std::string, JITExtern> &jit_extern : externs) {
+        Local<ObjectTemplate> extern_callback_template = ObjectTemplate::New(isolate);
+        extern_callback_template->SetInternalFieldCount(2);
+
+      debug(0) << "Making callback for " << jit_extern.first << "\n";
+        Local<Object> wrapper_data = extern_callback_template->NewInstance();
+        Local<External> jit_extern_wrap(External::New(isolate, (void *)(&jit_extern.second)));
+        Local<External> trampoline_wrap(External::New(isolate,
+            const_cast<void *>(trampolines.exports().find(jit_extern.first + "_js_trampoline")->second.address)));
+        wrapper_data->SetInternalField(0, jit_extern_wrap);
+        wrapper_data->SetInternalField(1, trampoline_wrap);
+        Local<FunctionTemplate> function_template = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data);
+        Local<v8::Function> f = function_template->GetFunction();
+        context->Global()->Set(String::NewFromUtf8(isolate, jit_extern.first.c_str()),
+                               f->NewInstance());
+    }
+  }
+
 } // namespace JS_V8;
 
 int run_javascript_v8(const std::string &source, const std::string &fn_name,
-                      std::vector<std::pair<Argument, const void *> > args) {
+                      std::vector<std::pair<Argument, const void *>> args,
+                      const std::map<std::string, JITExtern> &externs,
+                      JITModule trampolines) {
     using namespace JS_V8;
 
     debug(0) << "Calling JavaScript function " << fn_name << " with " << args.size() << " args.\n";
@@ -503,10 +687,12 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
     HandleScope handle_scope(isolate);
 
     // Create a new context.
-    Local<Context> context = Context::New(isolate, NULL, make_callbacks(isolate));
+    Local<Context> context = Context::New(isolate, NULL, make_global_template(isolate));
 
     // Enter the context for compiling and running the hello world script.
     Context::Scope context_scope(context);
+
+    add_extern_callbacks(isolate, context, externs, trampolines);
 
     // Create a string containing the JavaScript source code.
     Local<String> source_v8 = String::NewFromUtf8(isolate, source.c_str());
@@ -1080,7 +1266,9 @@ bool make_callbacks(JSContext *context, HandleObject global) {
 } // namespace JS_SpiderMonkey
 
 int run_javascript_spidermonkey(const std::string &source, const std::string &fn_name,
-                                std::vector<std::pair<Argument, const void *> > args) {
+                                std::vector<std::pair<Argument, const void *>> args,
+                                const std::map<std::string, JITExtern> &externs,
+                                JITModule trampolines) {
     int32_t result = 0; 
 
     using namespace JS_SpiderMonkey;
@@ -1196,15 +1384,22 @@ int run_javascript_spidermonkey(const std::string &source, const std::string &fn
 namespace Halide { namespace Internal {
 
 int run_javascript(const Target &target, const std::string &source, const std::string &fn_name,
-                   const std::vector<std::pair<Argument, const void *> > &args) {
+                   const std::vector<std::pair<Argument, const void *>> &args,
+                   const std::map<std::string, JITExtern> &externs) {
 #if !defined(WITH_JAVASCRIPT_V8) && !defined(WITH_JAVASCRIPT_SPIDERMONKEY)
     user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
     return -1;
 #endif
 
+    // This call explicitly does not use "_argv" as the suffix because
+    // that name may already exist and if so, will return an int
+    // instead of taking a pointer at the end of the args list to
+    // receive the result value.
+    JITModule trampolines = JITModule::make_trampolines_module(target, externs, "_js_trampoline");
+
 #ifdef WITH_JAVASCRIPT_V8
     if (!target.has_feature(Target::JavaScript_SpiderMonkey)) {
-        return run_javascript_v8(source, fn_name, args);
+      return run_javascript_v8(source, fn_name, args, externs, trampolines);
     }
 #else    
     if (target.has_feature(Target::JavaScript_V8)) {
@@ -1213,7 +1408,7 @@ int run_javascript(const Target &target, const std::string &source, const std::s
 #endif
 
 #ifdef WITH_JAVASCRIPT_SPIDERMONKEY
-    return run_javascript_spidermonkey(source, fn_name, args);
+    return run_javascript_spidermonkey(source, fn_name, args, externs, trampolines);
 #else    
     if (target.has_feature(Target::JavaScript_SpiderMonkey)) {
         user_error << "V8 JavaScript requrested without configuring V8 JavaScript engine.";
