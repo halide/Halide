@@ -1997,35 +1997,6 @@ void Func::compile_to_file(const string &filename_prefix,
     Halide::compile_to_file({*this}, filename_prefix, args, target);
 }
 
-void Func::compile_to_file(const string &filename_prefix, const Target &target) {
-    compile_to_file(filename_prefix, vector<Argument>(), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e), target);
-}
-
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
     Halide::compile_to_assembly({*this}, filename, args, fn_name, target);
