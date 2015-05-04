@@ -242,7 +242,7 @@ Expr common_subexpression_elimination(Expr e) {
     debug(4) << "Canonical form without lets " << e << "\n";
 
     // Figure out which ones we'll pull out as lets and variables.
-    vector<pair<string, Expr> > lets;
+    vector<pair<string, Expr>> lets;
     vector<Expr> new_version(gvn.entries.size());
     map<Expr, Expr, ExprCompare> replacements;
     for (size_t i = 0; i < gvn.entries.size(); i++) {

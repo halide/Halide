@@ -18,69 +18,20 @@ public:
     FindParameterDependencies() { }
     ~FindParameterDependencies() { }
 
-  void visit_function(const Function &function) {
-        if (function.has_pure_definition()) {
-            const std::vector<Expr> &values = function.values();
-            for (size_t i = 0; i < values.size(); i++) {
-                values[i].accept(this);
-            }
-        }
-
-        const std::vector<UpdateDefinition> &updates =
-            function.updates();
-        for (size_t i = 0; i < updates.size(); i++) {
-            const std::vector<Expr> &values = updates[i].values;
-            for (size_t j = 0; j < values.size(); j++) {
-                values[j].accept(this);
-            }
-
-            const std::vector<Expr> &args = updates[i].args;
-            for (size_t j = 0; j < args.size(); j++) {
-                args[j].accept(this);
-            }
-
-            if (updates[i].domain.defined()) {
-                const std::vector<ReductionVariable> &rvars =
-                    updates[i].domain.domain();
-                for (size_t j = 0; j < rvars.size(); j++) {
-                    rvars[j].min.accept(this);
-                    rvars[j].extent.accept(this);
-                }
-            }
-        }
+    void visit_function(const Function &function) {
+        function.accept(this);
 
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
                 function.extern_arguments();
             for (size_t i = 0; i < extern_args.size(); i++) {
-                if (extern_args[i].is_func()) {
-                  visit_function(extern_args[i].func);
-                } else if (extern_args[i].is_expr()) {
-                    extern_args[i].expr.accept(this);
-                } else if (extern_args[i].is_buffer()) {
+                if (extern_args[i].is_buffer()) {
                     // Function with an extern definition
                     record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
                                                        extern_args[i].buffer.dimensions(),
                                                        extern_args[i].buffer.name()));
                 } else if (extern_args[i].is_image_param()) {
                     record(extern_args[i].image_param);
-                } else {
-                    assert(!extern_args[i].defined() && "Unexpected ExternFunctionArgument type.");
-                }
-            }
-        }
-        const std::vector<Parameter> &output_buffers =
-            function.output_buffers();
-        for (size_t i = 0; i < output_buffers.size(); i++) {
-            for (int j = 0; j < function.dimensions() && j < 4; j++) {
-                if (output_buffers[i].min_constraint(i).defined()) {
-                    output_buffers[i].min_constraint(i).accept(this);
-                }
-                if (output_buffers[i].stride_constraint(i).defined()) {
-                    output_buffers[i].stride_constraint(i).accept(this);
-                }
-                if (output_buffers[i].extent_constraint(i).defined()) {
-                    output_buffers[i].extent_constraint(i).accept(this);
                 }
             }
         }
@@ -186,6 +137,8 @@ public:
     std::map<DependencyKey, DependencyInfo> dependency_info;
 };
 
+typedef std::pair<FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> DependencyKeyInfoPair;
+
 class KeyInfo {
     FindParameterDependencies dependencies;
     Expr key_size_expr;
@@ -194,13 +147,9 @@ class KeyInfo {
 
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
         // Find maximum natural alignment needed.
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
-            int alignment = iter->second.type.bytes();
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+            int alignment = i.second.type.bytes();
             if (alignment > max_alignment) {
                 max_alignment = alignment;
             }
@@ -229,8 +178,6 @@ public:
         : top_level_name(name), function_name(function.name())
     {
         dependencies.visit_function(function);
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
         size_t size_so_far = 0;
 
         size_so_far = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
@@ -242,10 +189,8 @@ public:
         }
         key_size_expr = (int32_t)size_so_far;
 
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
-            key_size_expr += iter->second.size_expr;
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+            key_size_expr += i.second.size_expr;
         }
     }
 
@@ -296,15 +241,11 @@ public:
             }
         }
 
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
-                                         iter->second.value_expr,
-                                         (index / iter->second.size_expr)));
-            index += iter->second.size_expr;
+                                         i.second.value_expr,
+                                         (index / i.second.size_expr)));
+            index += i.second.size_expr;
         }
         Stmt blocks;
         for (size_t i = writes.size(); i > 0; i--) {

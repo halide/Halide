@@ -64,16 +64,16 @@ int main(int argc, char **argv) {
     Func wavelet_clamped = BoundaryConditions::repeat_edge(wavelet);
 
     Func inv_haar_x = inverse_haar_x(wavelet_clamped);
-    inv_haar_x.compile_to_file("inverse_haar_x", wavelet);
+    inv_haar_x.compile_to_file("inverse_haar_x", {wavelet});
 
     Func for_haar_x = haar_x(clamped);
-    for_haar_x.compile_to_file("haar_x", image);
+    for_haar_x.compile_to_file("haar_x", {image});
 
     Func inv_daub_x = inverse_daubechies_x(wavelet_clamped);
-    inv_daub_x.compile_to_file("inverse_daubechies_x", wavelet);
+    inv_daub_x.compile_to_file("inverse_daubechies_x", {wavelet});
 
     Func for_daub_x = daubechies_x(clamped);
-    for_daub_x.compile_to_file("daubechies_x", image);
+    for_daub_x.compile_to_file("daubechies_x", {image});
 
     return 0;
 }

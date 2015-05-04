@@ -416,7 +416,7 @@ class Func {
     /** Some of the arg_values need to be rebound on every call if the
      * image params change. The pointers for the scalar params will
      * still be valid though. */
-    std::vector<std::pair<int, Internal::Parameter> > image_param_args;
+    std::vector<std::pair<int, Internal::Parameter>> image_param_args;
 
     /** The user context that's used when jitting. This is not settable
      * by user code, but is reserved for internal use.
@@ -684,20 +684,6 @@ public:
     // @{
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
-// TODO: Add C++11 varargs template, which is trickier due to final optional argument.
-    EXPORT void compile_to_file(const std::string &filename_prefix,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
-                                const Target &target = get_target_from_environment());
-
     // @}
 
     /** Store an internal representation of lowered code as a self
