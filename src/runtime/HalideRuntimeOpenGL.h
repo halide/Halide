@@ -63,7 +63,7 @@ extern uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *
  * indicating that the OpenGL object corresponding to the buffer_t is bound by
  * the app and not by the Halide runtime. For example, the buffer_t may be
  * backed by an FBO already bound by the application. */
-extern uint64_t halide_opengl_output_client_bound();
+extern uint64_t halide_opengl_output_client_bound(void *user_context);
 
 /** Forget all state associated with the previous OpenGL context.  This is
  * similar to halide_opengl_release, except that we assume that all OpenGL
