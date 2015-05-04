@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
-if [ -z $HALIDE_ANDROID_SDK_VERSION ]; then
-    HALIDE_ANDROID_SDK_VERSION="android-17"
-fi
-android update project -p . --target $HALIDE_ANDROID_SDK_VERSION
+android update project -p . --target android-17
 cd jni
 c++ -std=c++11 halide.cpp -L ../../../bin -lHalide -I ../../../include -ldl -lpthread -lz
 
