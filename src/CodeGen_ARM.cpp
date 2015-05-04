@@ -327,6 +327,15 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
         left_shifts.push_back(Pattern("vshiftu.v4i32",  4, wild_u32x_*wild_u32x_, Pattern::LeftShift));
         left_shifts.push_back(Pattern("vshiftu.v2i64",  2, wild_u64x_*wild_u64x_, Pattern::LeftShift));
 
+        // Overflow for int32 is not defined by Halide, so for those we can take
+        // advantage of special add-and-halve instructions.
+        //
+        // 64-bit averaging round-down
+        averagings.push_back(Pattern("vhadds.v2i32", 2, (wild_i32x2 + wild_i32x2)));
+
+        // 128-bit
+        averagings.push_back(Pattern("vhadds.v4i32",  4, (wild_i32x_ + wild_i32x_)));
+
         // 64-bit halving subtract
         averagings.push_back(Pattern("vhsubs.v8i8",  8, (wild_i8x8  - wild_i8x8)));
         averagings.push_back(Pattern("vhsubu.v8i8",  8, (wild_u8x8  - wild_u8x8)));

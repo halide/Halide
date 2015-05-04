@@ -761,13 +761,9 @@ void check_neon_all() {
         check("vhadd.s32", 2*w, i32((i64(i32_1) + i64(i32_2))/2));
         check("vhadd.u32", 2*w, u32((u64(u32_1) + u64(u32_2))/2));
 
-        // This is common enough that we also allow a version that ignores overflow issues
-        check("vhadd.s8", 8*w, (i8_1 + i8_2)/i8(2));
-        check("vhadd.u8", 8*w, (u8_1 + u8_2)/2);
-        check("vhadd.s16", 4*w, (i16_1 + i16_2)/2);
-        check("vhadd.u16", 4*w, (u16_1 + u16_2)/2);
+        // Halide doesn't define overflow behavior for i32 so we
+        // can use vhadd instruction. We can't use it for unsigned u8,i16,u16,u32.
         check("vhadd.s32", 2*w, (i32_1 + i32_2)/2);
-        check("vhadd.u32", 2*w, (u32_1 + u32_2)/2);
 
         // VHSUB    I       -       Halving Subtract
         check("vhsub.s8", 8*w, i8((i16(i8_1) - i16(i8_2))/2));
