@@ -983,5 +983,5 @@ distrib: $(DISTRIB_DIR)/halide.tgz
 $(BIN_DIR)/HalideProf: util/HalideProf.cpp
 	$(CXX) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -o $@
 
-$(BIN_DIR)/HalideTrace: util/HalideTrace.cpp
+$(BIN_DIR)/HalideTraceViz: util/HalideTraceViz.cpp
 	$(CXX) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -o $@
