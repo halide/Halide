@@ -327,22 +327,6 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
         left_shifts.push_back(Pattern("vshiftu.v4i32",  4, wild_u32x_*wild_u32x_, Pattern::LeftShift));
         left_shifts.push_back(Pattern("vshiftu.v2i64",  2, wild_u64x_*wild_u64x_, Pattern::LeftShift));
 
-        // 64-bit averaging round-down
-        averagings.push_back(Pattern("vhadds.v8i8",  8, (wild_i8x8 + wild_i8x8)));
-        averagings.push_back(Pattern("vhaddu.v8i8",  8, (wild_u8x8 + wild_u8x8)));
-        averagings.push_back(Pattern("vhadds.v4i16", 4, (wild_i16x4 + wild_i16x4)));
-        averagings.push_back(Pattern("vhaddu.v4i16", 4, (wild_u16x4 + wild_u16x4)));
-        averagings.push_back(Pattern("vhadds.v2i32", 2, (wild_i32x2 + wild_i32x2)));
-        averagings.push_back(Pattern("vhaddu.v2i32", 2, (wild_u32x2 + wild_u32x2)));
-
-        // 128-bit
-        averagings.push_back(Pattern("vhadds.v16i8", 16, (wild_i8x_  + wild_i8x_)));
-        averagings.push_back(Pattern("vhaddu.v16i8", 16, (wild_u8x_  + wild_u8x_)));
-        averagings.push_back(Pattern("vhadds.v8i16",  8, (wild_i16x_ + wild_i16x_)));
-        averagings.push_back(Pattern("vhaddu.v8i16",  8, (wild_u16x_ + wild_u16x_)));
-        averagings.push_back(Pattern("vhadds.v4i32",  4, (wild_i32x_ + wild_i32x_)));
-        averagings.push_back(Pattern("vhaddu.v4i32",  4, (wild_u32x_ + wild_u32x_)));
-
         // 64-bit halving subtract
         averagings.push_back(Pattern("vhsubs.v8i8",  8, (wild_i8x8  - wild_i8x8)));
         averagings.push_back(Pattern("vhsubu.v8i8",  8, (wild_u8x8  - wild_u8x8)));
