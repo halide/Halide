@@ -11,7 +11,7 @@ void blur(std::string suffix, ImageParam input8, const int channels,
 
     Func blur_x("blur_x");
     blur_x(x, y, c) = cast<uint8_t>(
-        cast<uint16_t>(input(x, y, c)) +
+        (cast<uint16_t>(input(x, y, c)) +
         input(x + 1, y, c) +
         input(x + 2, y, c)) / 3);
 
