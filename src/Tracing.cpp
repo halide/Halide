@@ -75,20 +75,25 @@ private:
         op = expr.as<Call>();
         internal_assert(op);
 
-        if (op->call_type != Call::Halide) {
-            return;
+        bool trace_it = false;
+        Expr trace_parent;
+        if (op->call_type == Call::Halide) {
+            Function f = op->func;
+            bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
+            trace_it = f.is_tracing_loads() || (global_level > 2 && !inlined);
+            trace_parent = Variable::make(Int(32), op->name + ".trace_id");
+        } else if (op->call_type == Call::Image) {
+            trace_it = global_level > 2;
+            trace_parent = -1;
         }
 
-        Function f = op->func;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
-
-        if (f.is_tracing_loads() || (global_level > 2 && !inlined)) {
+        if (trace_it) {
 
             // Wrap the load in a call to trace_load
             vector<Expr> args;
-            args.push_back(f.name());
+            args.push_back(op->name);
             args.push_back(halide_trace_load);
-            args.push_back(Variable::make(Int(32), op->name + ".trace_id"));
+            args.push_back(trace_parent);
             args.push_back(op->value_index);
             args.push_back(op);
             args.insert(args.end(), op->args.begin(), op->args.end());

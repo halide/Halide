@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 
         // The state is just a counter
         initial() = 0;
-        initial.compile_to_file("julia_init");
+        initial.compile_to_file("julia_init", {});
     }
 
     // Then the function that updates the state. Also depends on user input.
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         Func new_state;
         // Increment the counter
         new_state() = state() + 1;
-        new_state.compile_to_file("julia_update", state, mouse_x, mouse_y);
+        new_state.compile_to_file("julia_update", {state, mouse_x, mouse_y});
     }
 
     // Now the function that converts the state into an argb image.
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         render.vectorize(x, 4);
         julia.update().vectorize(x, 4);
         final.vectorize(x, 4);
-        final.compile_to_file("julia_render", state);
+        final.compile_to_file("julia_render", {state});
     }
 
     return 0;

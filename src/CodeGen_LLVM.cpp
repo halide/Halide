@@ -258,22 +258,22 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                    Target::OpenGL))) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_X86> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
         }
 #endif
 #if defined(WITH_ARM) || defined(WITH_AARCH64)
         if (target.arch == Target::ARM) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM>>(target, context);
         }
 #endif
 #ifdef WITH_MIPS
         if (target.arch == Target::MIPS) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS>>(target, context);
         }
 #endif
 #ifdef WITH_NATIVE_CLIENT
         if (target.arch == Target::PNaCl) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl>>(target, context);
         }
 #endif
 
