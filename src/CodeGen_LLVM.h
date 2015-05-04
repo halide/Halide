@@ -106,7 +106,7 @@ protected:
     llvm::Module *module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
+    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     //@}

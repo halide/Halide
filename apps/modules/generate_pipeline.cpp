@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     vignette.compute_at(output, xo);
     flip.compute_at(output, xo);
 
-    output.compile_to_file("pipeline", in);
+    output.compile_to_file("pipeline", {in});
 
     return 0;
 }

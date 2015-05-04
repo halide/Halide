@@ -130,7 +130,7 @@ private:
 
     // A set of let statements for common subexpressions inside the
     // min_vals and max_vals.
-    vector<pair<string, Expr> > containing_lets;
+    vector<pair<string, Expr>> containing_lets;
 
     bool likely;
 
@@ -341,7 +341,7 @@ private:
         }
 
         // Peel off lets.
-        vector<pair<string, Expr> > new_lets;
+        vector<pair<string, Expr>> new_lets;
         while (const Let *let = solved.as<Let>()) {
             new_lets.push_back(make_pair(let->name, let->value) );
             solved = let->body;
@@ -646,7 +646,7 @@ class PartitionLoops : public IRMutator {
             bool make_epilogue = max_steady.defined();
 
             // Accrue a stack of let statements defining the steady state start and end.
-            vector<pair<string, Expr> > lets;
+            vector<pair<string, Expr>> lets;
 
             if (make_prologue) {
                 // Clamp the prologue end to within the existing loop bounds,
