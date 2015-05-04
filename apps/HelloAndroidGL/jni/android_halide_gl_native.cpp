@@ -7,12 +7,10 @@
 #include <stdlib.h>
 
 #include "halide_gl_filter.h"
+#include "HalideRuntimeOpenGL.h"
 
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
-
-extern "C" void halide_opengl_context_lost(void *user_context);
-extern "C" uint64_t halide_opengl_output_client_bound(void *user_context);
 
 extern "C"
 JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
