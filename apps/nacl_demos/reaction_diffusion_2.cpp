@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
         Expr r = dx * dx + dy * dy;
         Expr mask = r < 200 * 200;
         initial(x, y, c) = random_float() * select(mask, 1.0f, 0.001f);
-        initial.compile_to_file("reaction_diffusion_2_init");
+        initial.compile_to_file("reaction_diffusion_2_init", {});
     }
 
     // Then the function that updates the state. Also depends on user input.
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
         blur_x.vectorize(x, 4);
         blur_y.vectorize(x, 4);
 
-        new_state.compile_to_file("reaction_diffusion_2_update", state, mouse_x, mouse_y);
+        new_state.compile_to_file("reaction_diffusion_2_update", {state, mouse_x, mouse_y});
     }
 
     // Now the function that converts the state into an argb image.
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 
-        render.compile_to_file("reaction_diffusion_2_render", state);
+        render.compile_to_file("reaction_diffusion_2_render", {state});
     }
 
     return 0;

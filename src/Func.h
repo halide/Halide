@@ -669,20 +669,6 @@ public:
     // @{
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
-// TODO: Add C++11 varargs template, which is trickier due to final optional argument.
-    EXPORT void compile_to_file(const std::string &filename_prefix,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
-                                const Target &target = get_target_from_environment());
-
     // @}
 
     /** Store an internal representation of lowered code as a self
