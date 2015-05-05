@@ -1625,7 +1625,7 @@ void Func::compile_to_lowered_stmt(const string &filename,
 }
 
 void Func::print_loop_nest() {
-    std::cerr << Internal::print_loop_nest(func);
+    pipeline().print_loop_nest();
 }
 
 void Func::compile_to_file(const string &filename_prefix,
