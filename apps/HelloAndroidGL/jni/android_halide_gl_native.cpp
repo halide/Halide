@@ -30,11 +30,17 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     dstBuf.min[2] = 0;
     dstBuf.elem_size = 1;
     dstBuf.host = NULL;
-    // If dst == 0, let Halide render directly to the current framebuffer.
-    uintptr_t textureId = (dst == 0) ? halide_opengl_client_bound_texture : dst;
-    int result = halide_opengl_wrap_texture(user_context, &dstBuf, textureId);
-    if (result != 0) {
-        halide_error(user_context, "halide_opengl_wrap_texture failed");
+    // If dst == 0, let Halide render directly to the current render target.
+    if (dst == 0) {
+        int result = halide_opengl_wrap_render_target(user_context, &dstBuf);
+        if (result != 0) {
+            halide_error(user_context, "halide_opengl_wrap_render_target failed");
+        }
+    } else {
+        int result = halide_opengl_wrap_texture(user_context, &dstBuf, dst);
+        if (result != 0) {
+            halide_error(user_context, "halide_opengl_wrap_texture failed");
+        }
     }
 
     static float time = 0.0f;
