@@ -179,6 +179,11 @@ public:
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
 
+    /** Write out the loop nests specified by the schedule for this
+     * Pipeline's Funcs. Helpful for understanding what a schedule is
+     * doing. */
+    EXPORT void print_loop_nest();
+
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the filename
      * argument. */

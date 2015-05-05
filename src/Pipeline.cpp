@@ -8,6 +8,7 @@
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Output.h"
+#include "PrintLoopNest.h"
 
 using namespace Halide::Internal;
 
@@ -185,6 +186,11 @@ void Pipeline::compile_to_c(const string &filename,
                             const string &fn_name,
                             const Target &target) {
     compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
+}
+
+void Pipeline::print_loop_nest() {
+    user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
+    std::cerr << Halide::Internal::print_loop_nest(contents.ptr->outputs);
 }
 
 void Pipeline::compile_to_lowered_stmt(const string &filename,
