@@ -245,8 +245,17 @@ WEAK void debug_buffer(void *user_context, buffer_t *buf) {
 
 WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
-    debug(user_context) << "SHADER SOURCE:\n"
+#ifdef DEBUG_RUNTIME
+{
+    // Output the shader source with a larger statically sized printer
+    // TODO: The debug(..) printer should changed to handle dynamically sized
+    // output
+    Printer<BasicPrinter, 4*1024>(user_context)
+                        << ((type == GL_VERTEX_SHADER) ? "GL_VERTEX_SHADER" : "GL_FRAGMENT_SHADER")
+                        << " SOURCE:\n"
                         << source << "\n";
+}
+#endif
 
     GLuint shader = global_state.CreateShader(type);
     if (global_state.CheckAndReportError(user_context, "make_shader(1)")) {
@@ -335,29 +344,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     kernel->arguments = NULL;
     kernel->program_id = 0;
 
-    #ifdef DEBUG_RUNTIME
-    {
-        // Android logcat output clips at ~1000 character chunks by default;
-        // to avoid clipping the interesting stuff, emit a line at a time.
-        // This is less efficient, but it's DEBUG-only.
-        debug(user_context) << "Compiling GLSL kernel (size = " << size << "):\n";
-        const int kBufSize = 255;
-        char buf[kBufSize + 1];
-        const char* s = src;
-        int d = 0;
-        while (s < src + size) {
-            while (*s != '\n' && *s != '\0' && d < kBufSize) {
-                buf[d++] = *s++;
-            }
-            buf[d++] = '\0';
-            debug(user_context) << buf << "\n";
-            d = 0;
-            while (*s == '\n' || *s == '\0') {
-                s++;
-            }
-        }
-    }
-    #endif
+    debug(user_context) << "Compiling GLSL kernel (size = " << size << "):\n";
 
     // Parse initial comment block
     const char *line = kernel->source;
@@ -487,30 +474,23 @@ WEAK int load_gl_func(void *user_context, const char *name, void **ptr, bool req
 }
 
 WEAK bool extension_supported(void *user_context, const char *name) {
-    if (global_state.major_version >= 3) {
-        GLint num_extensions = 0;
-        global_state.GetIntegerv(GL_NUM_EXTENSIONS, &num_extensions);
-        for (int i = 0; i < num_extensions; i++) {
-            const char *ext = (const char *)global_state.GetStringi(GL_EXTENSIONS, i);
-            if (strcmp(ext, name) == 0) {
-                return true;
-            }
-        }
-    } else {
-        const char *start = (const char *)global_state.GetString(GL_EXTENSIONS);
-        if (!start) {
-            return false;
-        }
-        while (const char *pos = strstr(start, name)) {
-            const char *end = pos + strlen(name);
-            // Ensure the found match is a full word, not a substring.
-            if ((pos == start || pos[-1] == ' ') &&
-                (*end == ' ' || *end == '\0')) {
-                return true;
-            }
-            start = end;
-        }
+    // Iterate over space delimited extension strings. Note that glGetStringi
+    // is not part of GL ES 2.0, and not reliable in all implementations of
+    // GL ES 3.0.
+    const char *start = (const char *)global_state.GetString(GL_EXTENSIONS);
+    if (!start) {
+        return false;
     }
+    while (const char *pos = strstr(start, name)) {
+        const char *end = pos + strlen(name);
+        // Ensure the found match is a full word, not a substring.
+        if ((pos == start || pos[-1] == ' ') &&
+            (*end == ' ' || *end == '\0')) {
+            return true;
+        }
+        start = end;
+    }
+
     return false;
 }
 
@@ -980,7 +960,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         // vertex expressions interpolated by varying attributes are evaluated
         // by host code on the CPU and passed to the GPU as values in the
         // vertex buffer.
-        enum { PrinterLength = 1024*256 };
+        enum { PrinterLength = 1024*4 };
         Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
 
         // Count the number of varying attributes, this is 2 for the spatial
@@ -1021,6 +1001,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         vertex_src << "}\n";
 
         // Check to see if there was sufficient storage for the vertex program.
+        // TODO: since Printer doesn't dynamically expand, this won't really work.
         if (vertex_src.size() >= PrinterLength) {
             error(user_context) << "Vertex shader source truncated";
             return 1;
