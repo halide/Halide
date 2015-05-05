@@ -606,7 +606,7 @@ private:
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func);
 
-        return Pipeline::make(func.name(), realization.first, realization.second, s);
+        return ProducerConsumer::make(func.name(), realization.first, realization.second, s);
     }
 
     Stmt build_realize(Stmt s) {
@@ -634,7 +634,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         string old = producing;
         producing = op->name;
         Stmt produce = mutate(op->produce);
@@ -650,7 +650,7 @@ private:
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 
@@ -742,7 +742,7 @@ Stmt create_initial_loop_nest(Function f, const Target &t) {
     pair<Stmt, Stmt> r = build_production(f);
     Stmt s = r.first;
     // This must be in a pipeline so that bounds inference understands the update step
-    s = Pipeline::make(f.name(), r.first, r.second, Evaluate::make(0));
+    s = ProducerConsumer::make(f.name(), r.first, r.second, Evaluate::make(0));
     if (t.has_feature(Target::NoAsserts)) {
         return s;
     } else {

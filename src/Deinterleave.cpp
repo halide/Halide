@@ -54,7 +54,7 @@ private:
     // Don't enter any inner constructs for which it's not safe to pull out stores.
     void visit(const For *op) {stmt = op;}
     void visit(const IfThenElse *op) {stmt = op;}
-    void visit(const Pipeline *op) {stmt = op;}
+    void visit(const ProducerConsumer *op) {stmt = op;}
     void visit(const Allocate *op) {stmt = op;}
     void visit(const Realize *op) {stmt = op;}
 

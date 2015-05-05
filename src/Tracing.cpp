@@ -174,9 +174,9 @@ private:
 
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         IRMutator::visit(op);
-        op = stmt.as<Pipeline>();
+        op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
@@ -216,7 +216,7 @@ private:
             call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
             new_consume = Block::make(new_consume, Evaluate::make(call));
 
-            stmt = Pipeline::make(op->name, op->produce, new_update, new_consume);
+            stmt = ProducerConsumer::make(op->name, op->produce, new_update, new_consume);
 
             args[1] = halide_trace_produce;
             call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
