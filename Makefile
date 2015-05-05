@@ -266,6 +266,7 @@ SOURCE_FILES = \
   Param.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
+  Pipeline.cpp \
   Profiling.cpp \
   Qualify.cpp \
   Random.cpp \
@@ -373,6 +374,7 @@ HEADER_FILES = \
   Parameter.h \
   Param.h \
   PartitionLoops.h \
+  Pipeline.h \
   Profiling.h \
   Qualify.h \
   Random.h \
