@@ -505,14 +505,17 @@ public:
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
 
+    /** Write out the loop nests specified by the schedule for this
+     * Function. Helpful for understanding what a schedule is
+     * doing. */
+    EXPORT void print_loop_nest();
+
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.
      */
-    // @{
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
-    // @}
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
@@ -523,12 +526,10 @@ public:
      * Deduces target files based on filenames specified in
      * output_files struct.
      */
-    //@{
     EXPORT void compile_to(const Outputs &output_files,
                            const std::vector<Argument> &args,
                            const std::string &fn_name,
                            const Target &target = get_target_from_environment());
-    // @}
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're

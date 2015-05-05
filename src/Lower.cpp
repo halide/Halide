@@ -74,7 +74,7 @@ Stmt lower(const vector<Function> &outputs, const Target &t, const vector<IRMuta
     string pipeline_name = outputs[0].name();
 
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(outputs, order, env, t);
+    Stmt s = schedule_functions(outputs, order, env, !t.has_feature(Target::NoAsserts));
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     debug(1) << "Injecting memoization...\n";

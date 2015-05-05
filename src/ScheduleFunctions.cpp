@@ -594,11 +594,13 @@ bool function_is_used_in_stmt(Function f, Stmt s) {
 class InjectRealization : public IRMutator {
 public:
     const Function &func;
-    bool is_output, found_store_level, found_compute_level;
-    const Target &target;
+    bool is_output, found_store_level, found_compute_level, inject_asserts;
 
-    InjectRealization(const Function &f, bool o, const Target &t) :
-        func(f), is_output(o), found_store_level(false), found_compute_level(false), target(t) {}
+    InjectRealization(const Function &f, bool o, bool asserts) :
+        func(f), is_output(o),
+        found_store_level(false), found_compute_level(false),
+        inject_asserts(asserts) {}
+
 private:
 
     string producing;
@@ -625,10 +627,10 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        if (target.has_feature(Target::NoAsserts)) {
-            return s;
-        } else {
+        if (inject_asserts) {
             return inject_explicit_bounds(s, func);
+        } else {
+            return s;
         }
     }
 
@@ -735,21 +737,6 @@ private:
         }
     }
 };
-
-// Create the loop nest for the output function
-Stmt create_initial_loop_nest(Function f, const Target &t) {
-    // Generate initial loop nest
-    pair<Stmt, Stmt> r = build_production(f);
-    Stmt s = r.first;
-    // This must be in a pipeline so that bounds inference understands the update step
-    s = ProducerConsumer::make(f.name(), r.first, r.second, Evaluate::make(0));
-    if (t.has_feature(Target::NoAsserts)) {
-        return s;
-    } else {
-        return inject_explicit_bounds(s, f);
-    }
-}
-
 
 
 class ComputeLegalSchedules : public IRVisitor {
@@ -1019,9 +1006,8 @@ public:
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
-                        const Target &t) {
+                        bool inject_asserts) {
 
-    // Inject a loop over root containing a no-op to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
@@ -1042,7 +1028,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
-            InjectRealization injector(f, is_output, t);
+            InjectRealization injector(f, is_output, inject_asserts);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
