@@ -773,7 +773,7 @@ WEAK TextureInfo *find_texture(GLuint tex) {
 }
 
 // Allocate new TextureInfo, fill it in, add to global list.
-static TextureInfo *new_texture(GLuint tex, int32_t min[4], int32_t extent[4], bool halide_allocated) {
+WEAK TextureInfo *new_texture(GLuint tex, int32_t min[4], int32_t extent[4], bool halide_allocated) {
     TextureInfo *texinfo = (TextureInfo*)malloc(sizeof(TextureInfo));
     texinfo->id = tex;
     for (int i=0; i<3; i++) {
@@ -790,7 +790,7 @@ static TextureInfo *new_texture(GLuint tex, int32_t min[4], int32_t extent[4], b
 
 // Find TextureInfo with the given texture ID and remove it from the global list,
 // but DO NOT free the TextureInfo itself. If not found, return NULL.
-static TextureInfo *unlink_texture(GLuint tex) {
+WEAK TextureInfo *unlink_texture(GLuint tex) {
     TextureInfo **ptr = &global_state.textures;
     TextureInfo *texinfo = *ptr;
     for (; texinfo != NULL; ptr = &texinfo->next, texinfo = *ptr) {
