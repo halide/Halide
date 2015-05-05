@@ -34,6 +34,14 @@ extern int halide_opengl_run(void *user_context,
                              int num_coords_dim1);
 // @}
 
+/** When passed to halide_opengl_wrap_texture, this value for texture id is used
+ * to mark the buffer_t.dev field with a constantindicating that the OpenGL object
+ * corresponding to the buffer_t is bound by the app and not by the Halide runtime.
+ * For example, the buffer_t may be backed by an FBO already bound by the application.
+ * (Note that 0 is never a legal OpenGL texture ID, so this should never overlap a valid id.)
+ */
+const uintptr_t halide_opengl_client_bound_texture = 0;
+
 /** Set the underlying OpenGL texture for a buffer. The texture must
  * have an extent large enough to cover that specified by the buffer_t
  * extent fields. The dev field of the buffer_t must be NULL when this
@@ -44,7 +52,7 @@ extern int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, 
 
 /** Disconnect this buffer_t from the texture it was previously
  * wrapped around. Should only be called for a buffer_t that
- * halide_cuda_wrap_device_ptr was previously called on. Frees any
+ * halide_opengl_wrap_texture was previously called on. Frees any
  * storage associated with the binding of the buffer_t and the device
  * pointer, but does not free the texture. The previously wrapped
  * texture is returned. . The dev field of the buffer_t will be NULL
@@ -58,12 +66,6 @@ extern uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_
  *  returns 0.
  */
 extern uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *buf);
-
-/** This function is called to populate the buffer_t.dev field with a constant
- * indicating that the OpenGL object corresponding to the buffer_t is bound by
- * the app and not by the Halide runtime. For example, the buffer_t may be
- * backed by an FBO already bound by the application. */
-extern uint64_t halide_opengl_output_client_bound();
 
 /** Forget all state associated with the previous OpenGL context.  This is
  * similar to halide_opengl_release, except that we assume that all OpenGL

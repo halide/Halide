@@ -12,6 +12,8 @@
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
 
+void * const user_context = NULL;
+
 extern "C"
 JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
     JNIEnv *env, jobject obj, jint dst, jint width, jint height) {
@@ -28,11 +30,11 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     dstBuf.min[2] = 0;
     dstBuf.elem_size = 1;
     dstBuf.host = NULL;
-    if (dst == 0) {
-        // Let Halide render directly to the current framebuffer.
-        dstBuf.dev = halide_opengl_output_client_bound();
-    } else {
-        dstBuf.dev = dst;
+    // If dst == 0, let Halide render directly to the current framebuffer.
+    uintptr_t textureId = (dst == 0) ? halide_opengl_client_bound_texture : dst;
+    int result = halide_opengl_wrap_texture(user_context, &dstBuf, textureId);
+    if (result != 0) {
+        halide_error(user_context, "halide_opengl_wrap_texture failed");
     }
 
     static float time = 0.0f;
@@ -40,6 +42,11 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
         LOGD("Halide filter failed with error code %d\n", err);
     }
     time += 1.0f/16.0f;
+
+    uintptr_t detached = halide_opengl_detach_texture(user_context, &dstBuf);
+    if (detached != dst) {
+        halide_error(user_context, "halide_opengl_detach_texture failed");
+    }
 }
 
 extern "C"
