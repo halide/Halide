@@ -74,6 +74,12 @@ int main(int argc, char **argv) {
             }
         }
         printf("\n");
+
+        // If we look at the loop nest, the producer doesn't appear
+        // at all. It has been inlined into the consumer.
+        printf("Pseudo-code for the schedule:\n");
+        consumer.print_loop_nest();
+        printf("\n");
     }
 
     // Next we'll examine the next simplest option - computing all
@@ -133,6 +139,12 @@ int main(int argc, char **argv) {
         // box. This is the same 'bounds inference' logic we saw in
         // the previous lesson, where it was used to detect and avoid
         // out-of-bounds reads from an input image.
+
+        // If we print the loop nest, we'll see something very
+        // similar to the C above.
+        printf("Pseudo-code for the schedule:\n");
+        consumer.print_loop_nest();
+        printf("\n");
     }
 
     // Let's compare the two approaches above from a performance
@@ -224,6 +236,12 @@ int main(int argc, char **argv) {
             }
         }
 
+        // Again, if we print the loop nest, we'll see something very
+        // similar to the C above.
+        printf("Pseudo-code for the schedule:\n");
+        consumer.print_loop_nest();
+        printf("\n");
+
         // The performance characteristics of this strategy are in
         // between inlining and compute root. We still allocate some
         // temporary memory, but less that compute_root, and with
@@ -306,6 +324,10 @@ int main(int argc, char **argv) {
             }
         }
 
+        printf("Pseudo-code for the schedule:\n");
+        consumer.print_loop_nest();
+        printf("\n");
+
         // The performance characteristics of this strategy are pretty
         // good! The numbers are similar compute_root, except locality
         // is better. We're doing the minimum number of sqrt calls,
@@ -351,7 +373,7 @@ int main(int argc, char **argv) {
     // We can do even better, by leaving the storage outermost, but
     // moving the computation into the innermost loop:
     {
-        Func producer("producer_store_root_compute_y"), consumer("consumer_store_root_compute_y");
+        Func producer("producer_store_root_compute_x"), consumer("consumer_store_root_compute_x");
         producer(x, y) = sqrt(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
@@ -400,6 +422,10 @@ int main(int argc, char **argv) {
             }
         }
 
+        printf("Pseudo-code for the schedule:\n");
+        consumer.print_loop_nest();
+        printf("\n");
+
         // The performance characteristics of this strategy are the
         // best so far. One of the four values of the producer we need
         // is probably still sitting in a register, so I won't count
@@ -432,7 +458,7 @@ int main(int argc, char **argv) {
     // into new inner and outer sub-variables and then schedule with
     // respect to those. We'll use this to express fusion in tiles:
     {
-        Func producer("producer_store_root_compute_y"), consumer("consumer_store_root_compute_y");
+        Func producer("producer_tile"), consumer("consumer_tile");
         producer(x, y) = sqrt(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
@@ -497,6 +523,10 @@ int main(int argc, char **argv) {
                 }
             }
         }
+
+        printf("Pseudo-code for the schedule:\n");
+        consumer.print_loop_nest();
+        printf("\n");
 
         // Tiling can make sense for problems like this one with
         // stencils that reach outwards in x and y. Each tile can be
@@ -611,6 +641,10 @@ int main(int argc, char **argv) {
 
             }
         }
+        printf("Pseudo-code for the schedule:\n");
+        consumer.print_loop_nest();
+        printf("\n");
+
         // Look on my code, ye mighty, and despair!
 
         // Let's check the C result against the Halide result. Doing

@@ -24,7 +24,7 @@ class Function;
 Stmt schedule_functions(const std::vector<Function> &outputs,
                         const std::vector<std::string> &order,
                         const std::map<std::string, Function> &env,
-                        const Target &t);
+                        bool inject_asserts = true);
 
 }
 }

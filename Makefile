@@ -234,7 +234,6 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
-  HumanReadableStmt.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
@@ -267,6 +266,7 @@ SOURCE_FILES = \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
+  PrintLoopNest.cpp \
   Profiling.cpp \
   Qualify.cpp \
   Random.cpp \
@@ -339,7 +339,6 @@ HEADER_FILES = \
   FuseGPUThreadLoops.h \
   Generator.h \
   runtime/HalideRuntime.h \
-  HumanReadableStmt.h \
   Image.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \

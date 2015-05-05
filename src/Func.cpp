@@ -17,9 +17,9 @@
 #include "Lower.h"
 #include "Image.h"
 #include "Param.h"
+#include "PrintLoopNest.h"
 #include "Debug.h"
 #include "IREquality.h"
-#include "HumanReadableStmt.h"
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
 #include "Output.h"
@@ -1624,6 +1624,9 @@ void Func::compile_to_lowered_stmt(const string &filename,
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
 }
 
+void Func::print_loop_nest() {
+    std::cerr << Internal::print_loop_nest(func);
+}
 
 void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
