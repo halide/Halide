@@ -387,7 +387,15 @@ inline Expr abs(Expr a) {
         t.code = Type::UInt;
     } else if (t.is_uint()) {
         user_warning << "Warning: abs of an unsigned type is a no-op\n";
-        return a;
+        /* Issue a warning, but do not discard the abs. This is because
+           on Hexagon, we have instructions that deal with unsigned overflow
+           and underflow in two different ways. Removing the abs would mean
+           unsigned arithmetic that leads to overflow/underflow will wrap
+           around, which is the way C defines it. However, on Hexagon we
+           have the absdiff instruction that relies on getting the magnitude
+           of the overflow, if any. For instance, abs(a-b), where b > a and
+           a and b are unsigned values, is not the same as (a-b)*/
+        //        return a;
     }
     return Internal::Call::make(t, Internal::Call::abs,
                                 vec(a), Internal::Call::Intrinsic);

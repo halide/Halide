@@ -64,6 +64,12 @@ protected:
 
     llvm::Value *emitBinaryOp(const BaseExprNode *op,
                               std::vector<Pattern> &Patterns);
+    llvm::Value *CallLLVMIntrinsic(llvm::Function *F,
+                                   std::vector<llvm::Value *> &Ops);
+    void getHighAndLowVectors(llvm::Value *DoubleVec,
+                               std::vector<llvm::Value *> &Res);
+    llvm::Value *concatVectors(llvm::Value *High, llvm::Value *Low);
+    llvm::Value *convertValueType(llvm::Value *V, llvm::Type *T);
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;

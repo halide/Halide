@@ -1972,8 +1972,10 @@ private:
                 }
                 expr = Cast::make(op->type, ia);
             } else if (ta.is_uint()) {
-                // abs(uint) is a no-op.
-                expr = a;
+              // abs(uint) is a no-op.
+              // For Hexagon, do not treat this as a no-op. See explanation
+              // in IROperator.h:inline Expr abs(Expr a)
+              expr = abs(a);
             } else if (a.same_as(op->args[0])) {
                 expr = op;
             } else {
