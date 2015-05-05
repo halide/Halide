@@ -97,7 +97,7 @@ void IRPrinter::test() {
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x);
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
-    Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
+    Stmt pipeline = ProducerConsumer::make("buf", for_loop, Stmt(), for_loop2);
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
                                                          vec<Expr>(string("y"), y, 3), Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
@@ -458,7 +458,7 @@ void IRPrinter::visit(const AssertStmt *op) {
     stream << ")\n";
 }
 
-void IRPrinter::visit(const Pipeline *op) {
+void IRPrinter::visit(const ProducerConsumer *op) {
 
     do_indent();
     stream << "produce " << op->name << " {\n";

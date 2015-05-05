@@ -117,7 +117,7 @@ class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
     // BufferInfo tracks the state of a givven buffer over an IR scope.
-    // Generally the scope is a Pipeline. The data herein is mutable.
+    // Generally the scope is a ProducerConsumer. The data herein is mutable.
     struct BufferInfo {
         bool host_touched,  // Is there definitely a host-side allocation?
             dev_touched,    // Is there definitely a device-side allocation?
@@ -405,7 +405,7 @@ class InjectBufferCopies : public IRMutator {
         }
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
@@ -438,7 +438,7 @@ class InjectBufferCopies : public IRMutator {
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
 
         // Need to make all output buffers touched on device valid

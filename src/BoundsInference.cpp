@@ -761,7 +761,7 @@ public:
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 
-    void visit(const Pipeline *p) {
+    void visit(const ProducerConsumer *p) {
         in_pipeline.insert(p->name);
         IRMutator::visit(p);
         in_pipeline.erase(p->name);

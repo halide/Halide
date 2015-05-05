@@ -1158,7 +1158,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     close_scope("");
 }
 
-void CodeGen_C::visit(const Pipeline *op) {
+void CodeGen_C::visit(const ProducerConsumer *op) {
 
     do_indent();
     stream << "// produce " << op->name << '\n';

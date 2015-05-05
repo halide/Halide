@@ -206,7 +206,7 @@ private:
         return s;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (level >= 1) {
             Stmt produce, update, consume;
             {
@@ -226,7 +226,7 @@ private:
             update = update.defined() ? add_count_and_ticks("update", op->name, update) : Stmt();
             consume = add_count_and_ticks("consume", op->name, consume);
 
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         } else {
             IRMutator::visit(op);
         }
