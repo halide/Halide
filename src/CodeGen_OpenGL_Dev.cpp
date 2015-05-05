@@ -143,6 +143,7 @@ CodeGen_GLSL::CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {
     builtin["mod"] = "mod";
     builtin["abs"] = "abs";
     builtin["isnan"] = "isnan";
+    builtin["trunc_f32"] = "_trunc_f32";
 }
 
 string CodeGen_GLSL::print_type(Type type) {
@@ -670,6 +671,13 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
     for (int i = 0; i != num_uniform_ints; ++i) {
         stream << "uniform ivec4 _uniformi" << i << ";\n";
     }
+
+    // Output additional builtin functions.
+    stream << R"EOF(
+    float _trunc_f32(float x) {
+      return floor(abs(x)) * sign(x);
+    }
+    )EOF";
 
     stream << "void main() {\n";
     indent += 2;
