@@ -6,7 +6,7 @@
 // This constant is used to indicate that the application will take
 // responsibility for binding the output render target before calling the
 // Halide function.
-#define HALIDE_OPENGL_CLIENT_BOUND ((uint64_t)-1)
+#define HALIDE_OPENGL_RENDER_TARGET ((uint64_t)-1)
 
 // Implementation note: all function that directly or indirectly access the
 // runtime state in halide_opengl_state must be declared as WEAK, otherwise
@@ -227,18 +227,10 @@ WEAK char *strndup(const char *s, size_t n) {
     return p;
 }
 
-WEAK GLuint get_texture_id(buffer_t *buf) {
-    if (buf->dev == 0) {
-        return 0;
-    } else {
-        return halide_get_device_handle(buf->dev) & 0xffffffff;
-    }
-}
-
 WEAK void debug_buffer(void *user_context, buffer_t *buf) {
     debug(user_context)
         << "  dev: " << buf->dev << "\n"
-        << "  texture_id: " << get_texture_id(buf) << "\n"
+        << "  texture_id: " << (GLuint)halide_get_device_handle(buf->dev) << "\n"
         << "  host: " << buf->host << "\n"
         << "  extent: " << buf->extent[0] << " " << buf->extent[1]
         << " " << buf->extent[2] << " " << buf->extent[3] <<  "\n"
@@ -765,7 +757,7 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
 }
 
 
-WEAK TextureInfo *find_texture(GLuint tex) {
+WEAK TextureInfo *find_texture_info(GLuint tex) {
     TextureInfo *texinfo = global_state.textures;
     while (texinfo && texinfo->id != tex) {
         texinfo = texinfo->next;
@@ -773,6 +765,36 @@ WEAK TextureInfo *find_texture(GLuint tex) {
     return texinfo;
 }
 
+// Allocate new TextureInfo, fill it in, add to global list.
+WEAK TextureInfo *new_texture_info(GLuint tex, int32_t min[4], int32_t extent[4], bool halide_allocated) {
+    TextureInfo *texinfo = (TextureInfo*)malloc(sizeof(TextureInfo));
+    texinfo->id = tex;
+    for (int i=0; i<3; i++) {
+        texinfo->min[i] = min[i];
+        texinfo->extent[i] = extent[i];
+    }
+    texinfo->halide_allocated = halide_allocated;
+
+    texinfo->next = global_state.textures;
+    global_state.textures = texinfo;
+
+   return texinfo;
+}
+
+// Find TextureInfo with the given texture ID and remove it from the global list,
+// but DO NOT free the TextureInfo itself. If not found, return NULL.
+WEAK TextureInfo *unlink_texture_info(GLuint tex) {
+    TextureInfo **ptr = &global_state.textures;
+    TextureInfo *texinfo = *ptr;
+    for (; texinfo != NULL; ptr = &texinfo->next, texinfo = *ptr) {
+        if (texinfo->id == tex) {
+            *ptr = texinfo->next;
+            texinfo->next = NULL;
+            return texinfo;
+        }
+    }
+    return NULL;
+}
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
 WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
@@ -788,76 +810,85 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
     // If the texture was already created by the host application, check that
     // it has the correct format. Otherwise, allocate and set up an
     // appropriate texture.
-    GLuint tex = get_texture_id(buf);
+    uint64_t dev = halide_get_device_handle(buf->dev);
+    GLuint tex = (GLuint)dev;
     bool halide_allocated = false;
-    GLint width, height;
-    if (tex != 0) {
-#ifdef HAVE_GLES3
-        global_state.BindTexture(GL_TEXTURE_2D, tex);
-        global_state.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-        global_state.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture (GLES3)")) {
-            return 1;
-        }
-        if (width < buf->extent[0] || height < buf->extent[1]) {
-
-            error(user_context)
-                << "Existing texture is smaller than buffer. "
-                << "Texture size: " << width << "x" << height
-                << ", buffer size: " << buf->extent[0] << "x" << buf->extent[1];
-
-            return 1;
-        }
-#endif
+    if (dev != HALIDE_OPENGL_RENDER_TARGET) {
+        tex = 0;
     } else {
-        if (buf->extent[3] > 1) {
-            error(user_context) << "3D textures are not supported";
-            return 1;
-        }
+        GLint width, height;
+        if (tex != 0) {
+    #ifdef HAVE_GLES3
+            global_state.BindTexture(GL_TEXTURE_2D, tex);
+            global_state.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+            global_state.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture (GLES3)")) {
+                return 1;
+            }
+            if (width < buf->extent[0] || height < buf->extent[1]) {
 
-        // Generate texture ID
-        global_state.GenTextures(1, &tex);
-        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc GenTextures")) {
-            return 1;
-        }
+                error(user_context)
+                    << "Existing texture is smaller than buffer. "
+                    << "Texture size: " << width << "x" << height
+                    << ", buffer size: " << buf->extent[0] << "x" << buf->extent[1];
 
-        // Set parameters for this texture: no interpolation and clamp to edges.
-        global_state.BindTexture(GL_TEXTURE_2D, tex);
-        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture")) {
-            return 1;
-        }
+                return 1;
+            }
+    #endif
+        } else {
+            if (buf->extent[3] > 1) {
+                error(user_context) << "3D textures are not supported";
+                return 1;
+            }
 
-        // Create empty texture here and fill it with glTexSubImage2D later.
-        GLint internal_format = 0;
-        GLint format = 0;
-        GLint type = GL_UNSIGNED_BYTE;
-        if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
-            error(user_context) << "Invalid texture format";
-            return 1;
-        }
-        width = buf->extent[0];
-        height = buf->extent[1];
-        global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format,
-                      width, height, 0, format, type, NULL);
-        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc TexImage2D")) {
-            return 1;
-        }
+            // Generate texture ID
+            global_state.GenTextures(1, &tex);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc GenTextures")) {
+                global_state.DeleteTextures(1, &tex);
+                return 1;
+            }
 
-        buf->dev = halide_new_device_wrapper(tex, &opengl_device_interface);
-        if (buf->dev == 0) {
-            error(user_context) << "OpenGL: out of memory allocating device wrapper.\n";
-            global_state.DeleteTextures(1, &tex);
-            return -1;
-        }
-        halide_allocated = true;
-        debug(user_context) << "Allocated texture " << tex
-                            << " of size " << width << " x " << height << "\n";
+            // Set parameters for this texture: no interpolation and clamp to edges.
+            global_state.BindTexture(GL_TEXTURE_2D, tex);
+            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture")) {
+                global_state.DeleteTextures(1, &tex);
+                return 1;
+            }
 
-        global_state.BindTexture(GL_TEXTURE_2D, 0);
+            // Create empty texture here and fill it with glTexSubImage2D later.
+            GLint internal_format = 0;
+            GLint format = 0;
+            GLint type = GL_UNSIGNED_BYTE;
+            if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
+                error(user_context) << "Invalid texture format";
+                global_state.DeleteTextures(1, &tex);
+                return 1;
+            }
+            width = buf->extent[0];
+            height = buf->extent[1];
+            global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format,
+                          width, height, 0, format, type, NULL);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc TexImage2D")) {
+                global_state.DeleteTextures(1, &tex);
+                return 1;
+            }
+
+            buf->dev = halide_new_device_wrapper(tex, &opengl_device_interface);
+            if (buf->dev == 0) {
+                error(user_context) << "OpenGL: out of memory allocating device wrapper.\n";
+                global_state.DeleteTextures(1, &tex);
+                return -1;
+            }
+            halide_allocated = true;
+            debug(user_context) << "Allocated texture " << tex
+                                << " of size " << width << " x " << height << "\n";
+
+            global_state.BindTexture(GL_TEXTURE_2D, 0);
+        }
     }
 
     // Record main information about texture and remember it for later. In
@@ -865,17 +896,8 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
     // buffer_t, so we copy the interesting information here.  Note: there can
     // be multiple dev_malloc calls for the same buffer_t; only record texture
     // information once.
-    if (!find_texture(tex)) {
-        TextureInfo *texinfo = (TextureInfo*)malloc(sizeof(TextureInfo));
-        texinfo->id = tex;
-        for (int i=0; i<3; i++) {
-            texinfo->min[i] = buf->min[i];
-            texinfo->extent[i] = buf->extent[i];
-        }
-        texinfo->halide_allocated = halide_allocated;
-
-        texinfo->next = global_state.textures;
-        global_state.textures = texinfo;
+    if (!find_texture_info(tex)) {
+        (void) new_texture_info(tex, buf->min, buf->extent, halide_allocated);
     }
     return 0;
 }
@@ -889,21 +911,15 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
         return 1;
     }
 
-    GLuint tex = get_texture_id(buf);
-    if (tex == 0) {
+    uint64_t dev = halide_get_device_handle(buf->dev);
+    if (dev == 0) {
         return 0;
     }
 
+    GLuint tex = (dev == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)dev;
+
     // Look up corresponding TextureInfo and unlink it from the list.
-    TextureInfo **ptr = &global_state.textures;
-    TextureInfo *texinfo = *ptr;
-    for (; texinfo != NULL; ptr = &texinfo->next, texinfo = *ptr) {
-        if (texinfo->id == tex) {
-            *ptr = texinfo->next;
-            texinfo->next = NULL;
-            break;
-        }
-    }
+    TextureInfo *texinfo = unlink_texture_info(tex);
     if (!texinfo) {
         error(user_context) << "Internal error: texture " << tex << " not found.";
         return 1;
@@ -1103,7 +1119,12 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         return 1;
     }
 
-    GLuint tex = get_texture_id(buf);
+    uint64_t dev = halide_get_device_handle(buf->dev);
+    if (dev == HALIDE_OPENGL_RENDER_TARGET) {
+        // device_interface shouldn't really call us in this case
+        return 0;
+    }
+    GLuint tex = (GLuint)dev;
     debug(user_context) << "halide_opengl_copy_to_device: " << tex << "\n";
 
     global_state.BindTexture(GL_TEXTURE_2D, tex);
@@ -1176,10 +1197,13 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
 
 // Copy pixel data from a texture to a CPU buffer.
 WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type, void *dest) {
-    GLuint tex = get_texture_id(buf);
-    global_state.BindFramebuffer(GL_FRAMEBUFFER, global_state.framebuffer_id);
-    global_state.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                            GL_TEXTURE_2D, tex, 0);
+    uint64_t dev = halide_get_device_handle(buf->dev);
+    if (dev != HALIDE_OPENGL_RENDER_TARGET) {
+        GLuint tex = (GLuint)dev;
+        global_state.BindFramebuffer(GL_FRAMEBUFFER, global_state.framebuffer_id);
+        global_state.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                GL_TEXTURE_2D, tex, 0);
+    }
 
     // Check that framebuffer is set up correctly
     GLenum status = global_state.CheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -1208,8 +1232,11 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     }
 
     #ifdef DEBUG_RUNTIME
-    GLuint tex = get_texture_id(buf);
-    debug(user_context) << "halide_copy_to_host: " << tex << "\n";
+    {
+        uint64_t dev = halide_get_device_handle(buf->dev);
+        GLuint tex = (dev == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)dev;
+        debug(user_context) << "halide_copy_to_host: " << tex << "\n";
+    }
     #endif
 
     GLint internal_format, format, type;
@@ -1387,8 +1414,8 @@ WEAK int halide_opengl_run(void *user_context,
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            GLuint tex = *((GLuint *)halide_get_device_handle((uint64_t)args[i]));
-            if (tex == (GLuint)HALIDE_OPENGL_CLIENT_BOUND) {
+            uint64_t dev = halide_get_device_handle(*(uint64_t *)args[i]);
+            if (dev == HALIDE_OPENGL_RENDER_TARGET) {
                 bind_render_targets = false;
             }
             // Outbuf textures are handled explicitly below
@@ -1404,9 +1431,9 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            GLuint tex = *((GLuint *)halide_get_device_handle((uint64_t)args[i]));
+            uint64_t dev = halide_get_device_handle(*(uint64_t *)args[i]);
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
-            global_state.BindTexture(GL_TEXTURE_2D, tex);
+            global_state.BindTexture(GL_TEXTURE_2D, dev == HALIDE_OPENGL_RENDER_TARGET ? 0 : (GLuint)dev);
             global_state.Uniform1iv(loc, 1, &num_active_textures);
 
             // Textures not created by the Halide runtime might not have
@@ -1533,7 +1560,8 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        GLuint tex = *((GLuint *)halide_get_device_handle((uint64_t)args[i]));
+        uint64_t dev = halide_get_device_handle(*(uint64_t *)args[i]);
+        GLuint tex = (dev == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)dev;
 
         // Check to see if the object name is actually a FBO
         if (bind_render_targets) {
@@ -1547,9 +1575,9 @@ WEAK int halide_opengl_run(void *user_context,
             }
         }
 
-        TextureInfo *texinfo = find_texture(tex);
+        TextureInfo *texinfo = find_texture_info(tex);
         if (!texinfo) {
-            error(user_context) << "Undefined output texture";
+            error(user_context) << "Undefined output texture " << tex;
             return 1;
         }
         output_min[0] = texinfo->min[0];
@@ -1918,6 +1946,10 @@ WEAK void halide_opengl_context_lost(void *user_context) {
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t texture_id) {
+    if (texture_id == 0) {
+        error(user_context) << "Texture " << texture_id << " is not a valid texture name.";
+        return -3;
+    }
     halide_assert(user_context, buf->dev == 0);
     if (buf->dev != 0) {
         return -2;
@@ -1929,15 +1961,53 @@ WEAK int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, ui
     return 0;
 }
 
+WEAK int halide_opengl_wrap_render_target(void *user_context, struct buffer_t *buf) {
+    if (!global_state.initialized) {
+        // Must initialize here: if not, we risk having the TextureInfo
+        // blown away when global state really is inited.
+        if (int error = halide_opengl_init(user_context)) {
+            return error;
+        }
+    }
+    halide_assert(user_context, buf->dev == 0);
+    if (buf->dev != 0) {
+        return -2;
+    }
+    const GLuint tex = 0;
+    if (find_texture_info(tex)) {
+        error(user_context) << "Internal error: texture " << tex << " is already wrapped.";
+        return -3;
+    }
+    (void) new_texture_info(tex, buf->min, buf->extent, /* halide_allocated */ false);
+    buf->dev = halide_new_device_wrapper(HALIDE_OPENGL_RENDER_TARGET, &opengl_device_interface);
+    if (buf->dev == 0) {
+        return -1;
+    }
+    return 0;
+}
+
 WEAK uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf) {
     if (buf->dev == NULL) {
         return 0;
     }
     halide_assert(user_context, halide_get_device_interface(buf->dev) == &opengl_device_interface);
-    uint64_t texture_id = halide_get_device_handle(buf->dev);
+    uint64_t handle = halide_get_device_handle(buf->dev);
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
-    return (uintptr_t)texture_id;
+    if (handle == HALIDE_OPENGL_RENDER_TARGET) {
+        const GLuint tex = 0;
+        TextureInfo *texinfo = unlink_texture_info(tex);
+        if (!texinfo) {
+            error(user_context) << "Internal error: texture " << tex << " not found.";
+            return -3;
+        }
+        halide_assert(user_context, !texinfo->halide_allocated);
+        free(texinfo);
+        // client_bound always return 0 here.
+        return 0;
+    } else {
+        return (uintptr_t)handle;
+    }
 }
 
 WEAK uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *buf) {
@@ -1945,16 +2015,9 @@ WEAK uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *bu
         return 0;
     }
     halide_assert(user_context, halide_get_device_interface(buf->dev) == &opengl_device_interface);
-    uint64_t texture_id = halide_get_device_handle(buf->dev);
-    return (uintptr_t)texture_id;
-}
-
-// This function is called to populate the buffer_t.dev field with a constant
-// indicating that the OpenGL object corresponding to the buffer_t is bound by
-// the app and not by the Halide runtime. For example, the buffer_t may be
-// backed by an FBO already bound by the application.
-WEAK uint64_t halide_opengl_output_client_bound() {
-    return HALIDE_OPENGL_CLIENT_BOUND;
+    uint64_t handle = halide_get_device_handle(buf->dev);
+    // client_bound always return 0 here.
+    return handle == HALIDE_OPENGL_RENDER_TARGET ? 0 : (uintptr_t)handle;
 }
 
 namespace {
