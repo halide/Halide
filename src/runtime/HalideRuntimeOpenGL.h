@@ -35,7 +35,7 @@ extern int halide_opengl_run(void *user_context,
 // @}
 
 /** When passed to halide_opengl_wrap_texture, this value for texture id is used
- * to mark the buffer_t.dev field with a constantindicating that the OpenGL object
+ * to mark the buffer_t.dev field with a constant indicating that the OpenGL object
  * corresponding to the buffer_t is bound by the app and not by the Halide runtime.
  * For example, the buffer_t may be backed by an FBO already bound by the application.
  * (Note that 0 is never a legal OpenGL texture ID, so this should never overlap a valid id.)
