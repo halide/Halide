@@ -721,22 +721,42 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
     }
 
     const int channels = buf->extent[2];
-    if (channels <= 2 && !global_state.have_texture_rg) {
-        error(user_context) << "OpenGL: This version of OpenGL doesn't support <=2 channels.";
-        return false;
+
+    // TODO: Support GL_LUMINANCE_ALPHA for two channel textures, since this is
+    // supported on both GLES 2.0 and later desktop GL versions. This will
+    // require GLSL codegen to change swizzling operations since the second
+    // value is stored in the alpha channel, not in the .g or .y channel of a
+    // vec4 read from a texture
+    if (channels == 2 && !global_state.have_texture_rg) {
+      error(user_context) << "OpenGL: Two channel textures are not supported for this version of OpenGL.";
+      return false;
     }
-    if (channels == 1) {
-        *format = GL_RED;
-    } else if (channels == 2) {
-        *format = GL_RG;
-    } else if (channels == 3) {
-        *format = GL_RGB;
-    } else if (channels == 4) {
-        *format = GL_RGBA;
-    } else {
-        error(user_context) << "OpenGL: Only 3 or 4 color channels are supported.";
-        return false;
-    }
+
+    // Common formats supported by both GLES 2.0 and GL 2.1 are selected below
+    //
+    switch(channels) {
+    case 0:
+    case 1:
+      // Component groups are converted to RGBA texels with the format: LLL1
+      *format = GL_LUMINANCE;
+      break;
+    case 2:
+      // Converted to: RG01
+      *format = GL_RG;
+      // Converted to: LLLA
+      // *format = GL_LUMINANCE_ALPHA;
+      break;
+    case 3:
+      // Converted to RGB1
+      *format = GL_RGB;
+      break;
+    case 4:
+      *format = GL_RGBA;
+      break;
+    default:
+      error(user_context) << "OpenGL: Invalid number of color channels: " << channels;
+      return false;
+    };
 
     switch (global_state.profile) {
     case OpenGLES:
@@ -750,16 +770,43 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
         // precise data type, see ARB_texture_float.
         if (*type == GL_FLOAT) {
             switch (*format) {
-            case GL_RED: *internal_format = GL_R32F; break;
-            case GL_RG: *internal_format = GL_RG32F; break;
-            case GL_RGB: *internal_format = GL_RGB32F; break;
-            case GL_RGBA: *internal_format = GL_RGBA32F; break;
+            case GL_LUMINANCE:
+            case GL_RG:
+            case GL_LUMINANCE_ALPHA:
+            case GL_RGB:
+            case GL_RGBA:
+              *internal_format = GL_RGBA32F;
+              break;
+            default:
+              error(user_context) << "OpenGL: Cannot select internal format for format " << *format;
+              return false;
             }
         } else {
             *internal_format = *format;
         }
         break;
     }
+
+    return true;
+}
+
+// This function returns the width, height and number of color channels that the
+// texture for the specified buffer_t will contain. It provides a single place
+// to implement the logic snapping zero sized dimensions to one element.
+WEAK bool get_texture_dimensions(void *user_context, buffer_t *buf, GLint &width,
+                            GLint &height, GLint &channels) {
+
+    width = buf->extent[0];
+    if (width == 0) {
+        error(user_context) << "Invalid extent[0]: " << width << "\n";
+        return false;
+    }
+
+    // GLES 2.0 supports GL_TEXTURE_2D (plus cube map), but not 1d or 3d. If we
+    // end up with a buffer that has a zero extent, set the corresponding size
+    // to one.
+    height = (buf->extent[1]) ? buf->extent[1] : 1;
+    channels = (buf->extent[2]) ? buf->extent[2] : 1;
 
     return true;
 }
@@ -790,7 +837,6 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
     // appropriate texture.
     GLuint tex = get_texture_id(buf);
     bool halide_allocated = false;
-    GLint width, height;
     if (tex != 0) {
 #ifdef HAVE_GLES3
         global_state.BindTexture(GL_TEXTURE_2D, tex);
@@ -839,8 +885,13 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
             error(user_context) << "Invalid texture format";
             return 1;
         }
-        width = buf->extent[0];
-        height = buf->extent[1];
+
+        GLint width, height, channels;
+        if (!get_texture_dimensions(user_context, buf, width, height, channels)) {
+            error(user_context) << "Invalid texture dimensions";
+            return 1;
+        }
+
         global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format,
                       width, height, 0, format, type, NULL);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc TexImage2D")) {
@@ -1087,6 +1138,7 @@ __attribute__((always_inline)) void interleaved_to_halide(buffer_t *buf, T *src,
 
 // Copy image data from host memory to texture.
 WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
+
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_copy_to_device).";
         return 1;
@@ -1116,8 +1168,12 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         error(user_context) << "Invalid texture format";
         return 1;
     }
-    GLint width = buf->extent[0];
-    GLint height = buf->extent[1];
+
+    GLint width, height, channels;
+    if (!get_texture_dimensions(user_context, buf, width, height, channels)) {
+        error(user_context) << "Invalid texture dimensions";
+        return 1;
+    }
 
     // To use TexSubImage2D directly, the colors must be stored interleaved
     // and rows must be stored consecutively.
@@ -1140,18 +1196,18 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         debug(user_context)
             << "Warning: In copy_to_device, host buffer is not interleaved. Doing slow interleave.\n";
 
-        size_t size = width * height * buf->extent[2] * buf->elem_size;
+        size_t size = width * height * channels * buf->elem_size;
         void *tmp = halide_malloc(user_context, size);
 
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            halide_to_interleaved<uint8_t>(buf, (uint8_t*)tmp, width, height, buf->extent[2]);
+            halide_to_interleaved<uint8_t>(buf, (uint8_t*)tmp, width, height, channels);
             break;
         case GL_UNSIGNED_SHORT:
-            halide_to_interleaved<uint16_t>(buf, (uint16_t*)tmp, width, height, buf->extent[2]);
+            halide_to_interleaved<uint16_t>(buf, (uint16_t*)tmp, width, height, channels);
             break;
         case GL_FLOAT:
-            halide_to_interleaved<float>(buf, (float*)tmp, width, height, buf->extent[2]);
+            halide_to_interleaved<float>(buf, (float*)tmp, width, height, channels);
             break;
         }
 
@@ -1217,7 +1273,12 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         error(user_context) << "Invalid texture format";
         return 1;
     }
-    GLint width = buf->extent[0], height = buf->extent[1];
+
+    GLint width, height, channels;
+    if (!get_texture_dimensions(user_context, buf, width, height, channels)) {
+        error(user_context) << "Invalid texture dimensions";
+        return 1;
+    }
 
     // To download the texture directly, the colors must be stored interleaved
     // and rows must be stored consecutively.
@@ -1251,13 +1312,13 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            interleaved_to_halide<uint8_t>(buf, (uint8_t*)tmp, width, height, buf->extent[2]);
+            interleaved_to_halide<uint8_t>(buf, (uint8_t*)tmp, width, height, channels);
             break;
         case GL_UNSIGNED_SHORT:
-            interleaved_to_halide<uint16_t>(buf, (uint16_t*)tmp, width, height, buf->extent[2]);
+            interleaved_to_halide<uint16_t>(buf, (uint16_t*)tmp, width, height, channels);
             break;
         case GL_FLOAT:
-            interleaved_to_halide<float>(buf, (float*)tmp, width, height, buf->extent[2]);
+            interleaved_to_halide<float>(buf, (float*)tmp, width, height, channels);
             break;
         }
 
