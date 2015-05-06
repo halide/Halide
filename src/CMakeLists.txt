@@ -282,7 +282,6 @@ set(HEADER_FILES
   Func.h
   Function.h
   Generator.h
-  HumanReadableStmt.h
   IR.h
   IREquality.h
   IRMatch.h
@@ -419,7 +418,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Function.cpp
   FuseGPUThreadLoops.cpp
   Generator.cpp
-  HumanReadableStmt.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -451,6 +449,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
+  PrintLoopNest.cpp
   Profiling.cpp
   Qualify.cpp
   RDom.cpp

@@ -66,7 +66,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     vector<string> order = realization_order(f, env);
 
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(f, order, env, t);
+    Stmt s = schedule_functions(f, order, env, !t.has_feature(Target::NoAsserts));
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     debug(1) << "Injecting memoization...\n";

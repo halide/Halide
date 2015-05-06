@@ -115,11 +115,13 @@ namespace {
 template<int type, uint64_t length = 1024>
 class Printer {
 public:
-    char buf[length];
-    char *dst, *end;
+    char *buf, *dst, *end;
     void *user_context;
 
-    Printer(void *ctx) : dst(buf), end(buf + (length-1)), user_context(ctx) {
+    Printer(void *ctx) : user_context(ctx) {
+        buf = new char[length];
+        dst = buf;
+        end = buf + (length-1);
         *end = 0;
     }
 
@@ -170,7 +172,7 @@ public:
 
     // Returns the number of characters in the buffer
     uint64_t size() const {
-        return (uint64_t)(end-dst);
+        return (uint64_t)(dst-buf);
     }
 
     ~Printer() {
@@ -181,6 +183,7 @@ public:
         } else {
             // It's a stringstream. Do nothing.
         }
+        delete [] buf;
     }
 };
 
