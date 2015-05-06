@@ -37,7 +37,7 @@ public:
     // GeneratorParams can be float or ints: {default} or {default, min, max}
     // (Note that if you want to specify min and max, you must specify both.)
     GeneratorParam<float> compiletime_factor{ "compiletime_factor", 1, 0, 100 };
-    GeneratorParam<int> channels{ "channels", 3 };
+    GeneratorParam<int> channels{ "channels", 4 };
     // ...or enums: {default, name->value map}
     GeneratorParam<SomeEnum> enummy{ "enummy",
                                      SomeEnum::Foo,
@@ -46,9 +46,9 @@ public:
     // ...or bools: {default}
     GeneratorParam<bool> flag{ "flag", true };
 
-    // Halide::Type is supported as though it was an enum.
+    // Halide::Type is supported as though it were an enum.
     // It's most useful for customizing the type of input or output image params.
-    GeneratorParam<Halide::Type> output_type{ "output_type", Int(32) };
+    GeneratorParam<Halide::Type> output_type{ "output_type", UInt(8) };
 
     // These are bad names that will produce errors at build time:
     // GeneratorParam<bool> badname{ " flag", true };
@@ -72,9 +72,11 @@ public:
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
 
+    // The build() method of a generator defines the actual pipeline
+    // and returns the output Func.
     Func build() override {
-        Var x, y, c;
         Func f("f"), g("g");
+        Var x, y, c;
 
         f(x, y) = max(x, y);
 
@@ -96,10 +98,13 @@ public:
         // Note that we can use the Generator method natural_vector_size()
         // here; this produces the width of the SIMD vector being targeted
         // divided by the width of the data type.
-        if (get_target().arch != Target::PNaCl) {
-           g.vectorize(x, natural_vector_size(output_type));
+        if (get_target().has_feature(Target::OpenGL)) {
+          g.glsl(x, y, c);
+        } else {
+            if (get_target().arch != Target::PNaCl) {
+               g.vectorize(x, natural_vector_size(output_type));
+            }
         }
-
         return g;
     }
 };
