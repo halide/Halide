@@ -699,8 +699,8 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
     // value is stored in the alpha channel, not in the .g or .y channel of a
     // vec4 read from a texture
     if (channels == 2 && !global_state.have_texture_rg) {
-      error(user_context) << "OpenGL: Two channel textures are not supported for this version of OpenGL.";
-      return false;
+        error(user_context) << "OpenGL: Two channel textures are not supported for this version of OpenGL.";
+        return false;
     }
 
     // Common formats supported by both GLES 2.0 and GL 2.1 are selected below
@@ -708,25 +708,25 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
     switch(channels) {
     case 0:
     case 1:
-      // Component groups are converted to RGBA texels with the format: LLL1
-      *format = GL_LUMINANCE;
-      break;
+        // Component groups are converted to RGBA texels with the format: LLL1
+        *format = GL_LUMINANCE;
+        break;
     case 2:
-      // Converted to: RG01
-      *format = GL_RG;
-      // Converted to: LLLA
-      // *format = GL_LUMINANCE_ALPHA;
-      break;
+        // Converted to: RG01
+        *format = GL_RG;
+        // Converted to: LLLA
+        // *format = GL_LUMINANCE_ALPHA;
+        break;
     case 3:
-      // Converted to RGB1
-      *format = GL_RGB;
-      break;
+        // Converted to RGB1
+        *format = GL_RGB;
+        break;
     case 4:
-      *format = GL_RGBA;
-      break;
+        *format = GL_RGBA;
+        break;
     default:
-      error(user_context) << "OpenGL: Invalid number of color channels: " << channels;
-      return false;
+        error(user_context) << "OpenGL: Invalid number of color channels: " << channels;
+        return false;
     };
 
     switch (global_state.profile) {
@@ -746,11 +746,11 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
             case GL_LUMINANCE_ALPHA:
             case GL_RGB:
             case GL_RGBA:
-              *internal_format = GL_RGBA32F;
-              break;
+                *internal_format = GL_RGBA32F;
+                break;
             default:
-              error(user_context) << "OpenGL: Cannot select internal format for format " << *format;
-              return false;
+                error(user_context) << "OpenGL: Cannot select internal format for format " << *format;
+                return false;
             }
         } else {
             *internal_format = *format;
@@ -781,7 +781,6 @@ WEAK bool get_texture_dimensions(void *user_context, buffer_t *buf, GLint &width
 
     return true;
 }
-
 
 WEAK TextureInfo *find_texture_info(GLuint tex) {
     TextureInfo *texinfo = global_state.textures;
@@ -1134,7 +1133,6 @@ __attribute__((always_inline)) void interleaved_to_halide(buffer_t *buf, T *src,
 
 // Copy image data from host memory to texture.
 WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
-
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_copy_to_device).";
         return 1;
