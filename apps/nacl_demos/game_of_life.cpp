@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
         Func initial;
 
         initial(x, y, c) = random_bit;
-        initial.compile_to_file("game_of_life_init");
+        initial.compile_to_file("game_of_life_init", {});
     }
 
     // Then the function that updates the state. Also depends on user input.
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         Var yi;
         output.split(y, y, yi, 16).reorder(x, yi, c, y).parallel(y);
 
-        output.compile_to_file("game_of_life_update", state, mouse_x, mouse_y);
+        output.compile_to_file("game_of_life_update", {state, mouse_x, mouse_y});
     }
 
     // Now the function that converts the state into an argb image.
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 
-        render.compile_to_file("game_of_life_render", state);
+        render.compile_to_file("game_of_life_render", {state});
     }
 
     return 0;

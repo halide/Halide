@@ -991,7 +991,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
     // First dig through let expressions
     Expr rhs = op->value;
-    vector<pair<string, Expr> > lets;
+    vector<pair<string, Expr>> lets;
     while (const Let *let = rhs.as<Let>()) {
         rhs = let->body;
         lets.push_back(make_pair(let->name, let->value));

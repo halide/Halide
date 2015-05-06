@@ -28,17 +28,6 @@ int main(int argc, char **argv) {
         #endif
     }
 
-    {
-        const char *result_file = "compile_to_lowered_stmt-simplified.stmt";
-        std::map<std::string, Expr> params;
-        params["myParam"] = 1.0f;
-        j.compile_to_simplified_lowered_stmt(result_file, 100, 100, params);
-
-        #ifndef _MSC_VER
-        assert(access(result_file, F_OK) == 0 && "Output file not created.");
-        #endif
-    }
-
     printf("Success!\n");
     return 0;
 }
