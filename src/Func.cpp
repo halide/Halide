@@ -17,9 +17,9 @@
 #include "Lower.h"
 #include "Image.h"
 #include "Param.h"
+#include "PrintLoopNest.h"
 #include "Debug.h"
 #include "IREquality.h"
-#include "HumanReadableStmt.h"
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
 #include "Output.h"
@@ -120,7 +120,7 @@ const std::vector<Expr> &Func::update_args(int idx) const {
         << "Can't call Func::update_args() on Func \"" << name()
         << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     return func.updates()[idx].args;
 }
@@ -131,7 +131,7 @@ Expr Func::update_value(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     user_assert(func.updates()[idx].values.size() == 1)
         << "Can't call Func::update_value() on Func \"" << name() << "\", because it has multiple values.\n";
@@ -143,7 +143,7 @@ Tuple Func::update_values(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     return Tuple(func.updates()[idx].values);
 }
@@ -155,7 +155,7 @@ RDom Func::reduction_domain(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     return func.updates()[idx].domain;
 }
@@ -171,7 +171,7 @@ bool Func::has_update_definition() const {
 
 /** How many update definitions are there? */
 int Func::num_update_definitions() const {
-    return (int)func.updates().size();
+    return static_cast<int>(func.updates().size());
 }
 
 /** Is this function external? */
@@ -1442,7 +1442,7 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_update(args, e.as_vector());
 
-    int update_stage = func.updates().size() - 1;
+    size_t update_stage = func.updates().size() - 1;
     return Stage(func.update_schedule(update_stage),
                  func.name() + ".update(" + int_to_string(update_stage) + ")");
 }
@@ -1606,8 +1606,8 @@ class InferArguments : public IRGraphVisitor {
 public:
     vector<Argument> arg_types;
     vector<const void *> arg_values;
-    vector<pair<int, Internal::Parameter> > image_param_args;
-    vector<pair<int, Buffer> > image_args;
+    vector<pair<int, Internal::Parameter>> image_param_args;
+    vector<pair<int, Buffer>> image_args;
 
     InferArguments(const string &o, bool include_buffers = true)
         : output(o), include_buffers(include_buffers) {
@@ -1617,44 +1617,36 @@ public:
         if (func.has_pure_definition()) {
             visit_exprs(func.values());
         }
-        for (std::vector<UpdateDefinition>::const_iterator update = func.updates().begin();
-             update != func.updates().end();
-             ++update) {
-            visit_exprs(update->values);
-            visit_exprs(update->args);
-            if (update->domain.defined()) {
-                for (std::vector<ReductionVariable>::const_iterator rvar = update->domain.domain().begin();
-                     rvar != update->domain.domain().end();
-                     ++rvar) {
-                visit_expr(rvar->min);
-                visit_expr(rvar->extent);
+        for (const UpdateDefinition &update : func.updates()) {
+            visit_exprs(update.values);
+            visit_exprs(update.args);
+            if (update.domain.defined()) {
+                for (const ReductionVariable &rvar : update.domain.domain()) {
+                    visit_expr(rvar.min);
+                    visit_expr(rvar.extent);
+                }
             }
-          }
         }
         if (func.has_extern_definition()) {
-            for (std::vector<ExternFuncArgument>::const_iterator extern_arg = func.extern_arguments().begin();
-                 extern_arg != func.extern_arguments().end();
-                 ++extern_arg) {
-            if (extern_arg->is_func()) {
-                visit_function(extern_arg->func);
-            } else if (extern_arg->is_expr()) {
-                visit_expr(extern_arg->expr);
-            } else if (extern_arg->is_buffer()) {
-                include_parameter(Parameter(extern_arg->buffer.type(), true,
-                                            extern_arg->buffer.dimensions(),
-                                            extern_arg->buffer.name()));
-            } else if (extern_arg->is_image_param()) {
-                include_parameter(extern_arg->image_param);
+            for (const ExternFuncArgument &extern_arg : func.extern_arguments()) {
+                if (extern_arg.is_func()) {
+                    visit_function(extern_arg.func);
+                } else if (extern_arg.is_expr()) {
+                    visit_expr(extern_arg.expr);
+                } else if (extern_arg.is_buffer()) {
+                    include_parameter(Parameter(extern_arg.buffer.type(), true,
+                                                extern_arg.buffer.dimensions(),
+                                                extern_arg.buffer.name()));
+                } else if (extern_arg.is_image_param()) {
+                    include_parameter(extern_arg.image_param);
+                }
             }
-          }
         }
-        for (std::vector<Parameter>::const_iterator buf = func.output_buffers().begin();
-             buf != func.output_buffers().end();
-             ++buf) {
+        for (const Parameter &buf : func.output_buffers()) {
             for (int i = 0; i < std::min(func.dimensions(), 4); i++) {
-                visit_expr(buf->min_constraint(i));
-                visit_expr(buf->stride_constraint(i));
-                visit_expr(buf->extent_constraint(i));
+                visit_expr(buf.min_constraint(i));
+                visit_expr(buf.stride_constraint(i));
+                visit_expr(buf.extent_constraint(i));
             }
         }
     }
@@ -1679,8 +1671,8 @@ private:
     }
 
     void visit_exprs(const std::vector<Expr>& v) {
-        for (std::vector<Expr>::const_iterator it = v.begin(); it != v.end(); ++it) {
-            visit_expr(*it);
+        for (Expr i : v) {
+            visit_expr(i);
         }
     }
 
@@ -1968,116 +1960,8 @@ void Func::compile_to_lowered_stmt(const string &filename, const vector<Argument
     }
 }
 
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Realization dst,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst[0], std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Realization dst,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst[0], std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Buffer dst,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst, std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Buffer dst,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-
-    lower(t);
-
-    Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
-
-    Module m(name(), t);
-    m.append(LoweredFunc(name(), infer_arguments(), s, LoweredFunc::External));
-
-    if (fmt == HTML) {
-        compile_module_to_html(m, filename);
-    } else {
-        compile_module_to_text(m, filename);
-    }
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size, int w_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    // Make a dummy host pointer to avoid a pointless allocation.
-    uint8_t dummy_data = 0;
-    Buffer output_buf(output_types()[0], x_size, y_size, z_size, w_size, &dummy_data);
-
-    compile_to_simplified_lowered_stmt(filename, output_buf, additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size, int w_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, w_size,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0, additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0,
-                                       additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0,
-                                       additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
+void Func::print_loop_nest() {
+    std::cerr << Internal::print_loop_nest(func);
 }
 
 void Func::compile_to_file(const string &filename_prefix, const vector<Argument> &args,
@@ -2093,35 +1977,6 @@ void Func::compile_to_file(const string &filename_prefix, const vector<Argument>
     } else {
         compile_module_to_object(m, filename_prefix + ".o");
     }
-}
-
-void Func::compile_to_file(const string &filename_prefix, const Target &target) {
-    compile_to_file(filename_prefix, vector<Argument>(), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e), target);
 }
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,

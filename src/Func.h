@@ -416,7 +416,7 @@ class Func {
     /** Some of the arg_values need to be rebound on every call if the
      * image params change. The pointers for the scalar params will
      * still be valid though. */
-    std::vector<std::pair<int, Internal::Parameter> > image_param_args;
+    std::vector<std::pair<int, Internal::Parameter>> image_param_args;
 
     /** The user context that's used when jitting. This is not settable
      * by user code, but is reserved for internal use.
@@ -591,75 +591,11 @@ public:
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
 
-    /** Write out an internal representation of lowered code as above
-     * but simplified using the provided realization bounds and other
-     * concrete parameter values. Can emit html or plain text. */
-    // @{
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Realization dst,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
+    /** Write out the loop nests specified by the schedule for this
+     * Function. Helpful for understanding what a schedule is
+     * doing. */
+    EXPORT void print_loop_nest();
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Realization dst,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Buffer dst,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &target = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Buffer dst,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &target = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size, int w_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size, int w_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
     // @}
 
     /** Compile to object file and header pair, with the given
@@ -669,20 +605,6 @@ public:
     // @{
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
-// TODO: Add C++11 varargs template, which is trickier due to final optional argument.
-    EXPORT void compile_to_file(const std::string &filename_prefix,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
-                                const Target &target = get_target_from_environment());
-
     // @}
 
     /** Store an internal representation of lowered code as a self
