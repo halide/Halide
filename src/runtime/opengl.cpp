@@ -808,8 +808,8 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
             return 1;
         }
 #endif
-        uint64_t dev = halide_get_device_handle(buf->dev);
-        tex = (dev == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)dev;
+        uint64_t handle = halide_get_device_handle(buf->dev);
+        tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
     } else {
         if (buf->extent[3] > 1) {
             error(user_context) << "3D textures are not supported";
@@ -889,8 +889,8 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    uint64_t dev = halide_get_device_handle(buf->dev);
-    GLuint tex = (dev == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)dev;
+    uint64_t handle = halide_get_device_handle(buf->dev);
+    GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
 
     // Look up corresponding TextureInfo and unlink it from the list.
     TextureInfo *texinfo = unlink_texture_info(tex);
@@ -1094,13 +1094,13 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         return 1;
     }
 
-    uint64_t dev = halide_get_device_handle(buf->dev);
-    if (dev == HALIDE_OPENGL_RENDER_TARGET) {
-        // device_interface shouldn't really call us in this case
-        debug(user_context) << "halide_opengl_copy_to_device: called needlessly\n";
+    uint64_t handle = halide_get_device_handle(buf->dev);
+    if (handle == HALIDE_OPENGL_RENDER_TARGET) {
+        // TODO: this isn't correct; we want to ensure we copy to the current render_target.
+        debug(user_context) << "halide_opengl_copy_to_device: called for HALIDE_OPENGL_RENDER_TARGET\n";
         return 0;
     }
-    GLuint tex = (GLuint)dev;
+    GLuint tex = (GLuint)handle;
     debug(user_context) << "halide_opengl_copy_to_device: " << tex << "\n";
 
     global_state.BindTexture(GL_TEXTURE_2D, tex);
@@ -1178,9 +1178,9 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
             << "get_pixels: buffer has no dev field";
         return 1;
     }
-    uint64_t dev = halide_get_device_handle(buf->dev);
-    if (dev != HALIDE_OPENGL_RENDER_TARGET) {
-        GLuint tex = (GLuint)dev;
+    uint64_t handle = halide_get_device_handle(buf->dev);
+    if (handle != HALIDE_OPENGL_RENDER_TARGET) {
+        GLuint tex = (GLuint)handle;
         global_state.BindFramebuffer(GL_FRAMEBUFFER, global_state.framebuffer_id);
         global_state.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                 GL_TEXTURE_2D, tex, 0);
@@ -1214,8 +1214,8 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
     #ifdef DEBUG_RUNTIME
     {
-        uint64_t dev = halide_get_device_handle(buf->dev);
-        GLuint tex = (dev == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)dev;
+        uint64_t handle = buf->dev ? halide_get_device_handle(buf->dev) : 0;
+        GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
         debug(user_context) << "halide_copy_to_host: " << tex << "\n";
     }
     #endif
@@ -1395,8 +1395,13 @@ WEAK int halide_opengl_run(void *user_context,
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            uint64_t dev = halide_get_device_handle(*(uint64_t *)args[i]);
-            if (dev == HALIDE_OPENGL_RENDER_TARGET) {
+            uint64_t dev = *(uint64_t *)args[i];
+            if (!dev) {
+                error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+                return 1;
+            }
+            uint64_t handle = halide_get_device_handle(dev);
+            if (handle == HALIDE_OPENGL_RENDER_TARGET) {
                 bind_render_targets = false;
             }
             // Outbuf textures are handled explicitly below
@@ -1412,9 +1417,14 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            uint64_t dev = halide_get_device_handle(*(uint64_t *)args[i]);
+            uint64_t dev = *(uint64_t *)args[i];
+            if (!dev) {
+                error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+                return 1;
+            }
+            uint64_t handle = halide_get_device_handle(dev);
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
-            global_state.BindTexture(GL_TEXTURE_2D, dev == HALIDE_OPENGL_RENDER_TARGET ? 0 : (GLuint)dev);
+            global_state.BindTexture(GL_TEXTURE_2D, handle == HALIDE_OPENGL_RENDER_TARGET ? 0 : (GLuint)handle);
             global_state.Uniform1iv(loc, 1, &num_active_textures);
 
             // Textures not created by the Halide runtime might not have
@@ -1541,8 +1551,13 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        uint64_t dev = halide_get_device_handle(*(uint64_t *)args[i]);
-        GLuint tex = (dev == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)dev;
+        uint64_t dev = *(uint64_t *)args[i];
+        if (!dev) {
+            error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
+            return 1;
+        }
+        uint64_t handle = halide_get_device_handle(dev);
+        GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
 
         // Check to see if the object name is actually a FBO
         if (bind_render_targets) {
