@@ -16,8 +16,9 @@ namespace Halide {
 
 using std::vector;
 using std::string;
+using std::set;
 
-/** An inferred arguments. Inferred args are either Params,
+/** An inferred argument. Inferred args are either Params,
  * ImageParams, or Buffers. The first two are handled by the param
  * field, and global images are tracked via the buf field. These
  * are used directly when jitting, or used for validation when
@@ -46,11 +47,13 @@ struct PipelineContents {
 
     // Cached jit-compiled code
     JITModule jit_module;
+    Target jit_target;
 
     /** Clear all cached state */
     void invalidate_cache() {
         module = Module("", Target());
         jit_module = JITModule();
+        jit_target = Target();
         inferred_args.clear();
     }
 
@@ -76,8 +79,22 @@ struct PipelineContents {
     PipelineContents() :
         module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, Handle(), 0);
-        user_context_arg.param = Parameter(type_of<void*>(), false, 0, "__user_context",
-                                                     /*is_explicit_name*/ true, /*register_instance*/ false);
+        user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
+                                           /*is_explicit_name*/ true, /*register_instance*/ false);
+    }
+
+    ~PipelineContents() {
+        clear_custom_lowering_passes();
+    }
+
+    void clear_custom_lowering_passes() {
+        invalidate_cache();
+        for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
+            if (custom_lowering_passes[i].deleter) {
+                custom_lowering_passes[i].deleter(custom_lowering_passes[i].pass);
+            }
+        }
+        custom_lowering_passes.clear();
     }
 };
 
@@ -228,12 +245,13 @@ public:
                    const vector<Function> &o) : args(a), outputs(o) {
         args.clear();
         for (const Function &f : outputs) {
-            f.accept(this);
+            visit_function(f);
         }
     }
 
 private:
     vector<Function> outputs;
+    set<string> visited_functions;
 
     using IRGraphVisitor::visit;
 
@@ -261,6 +279,28 @@ private:
     void visit_expr(Expr e) {
         if (!e.defined()) return;
         e.accept(this);
+    }
+
+    void visit_function(const Function& func) {
+        if (visited_functions.count(func.name())) return;
+        visited_functions.insert(func.name());
+
+        func.accept(this);
+
+        // Function::accept hits all the Expr children of the
+        // Function, but misses the buffers and images that might be
+        // extern arguments.
+        if (func.has_extern_definition()) {
+            for (const ExternFuncArgument &extern_arg : func.extern_arguments()) {
+                if (extern_arg.is_func()) {
+                    visit_function(extern_arg.func);
+                } else if (extern_arg.is_buffer()) {
+                    include_buffer(extern_arg.buffer);
+                } else if (extern_arg.is_image_param()) {
+                    include_parameter(extern_arg.image_param);
+                }
+            }
+        }
     }
 
     void include_parameter(Parameter p) {
@@ -307,7 +347,7 @@ private:
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
-        op->func.accept(this);
+        visit_function(op->func);
         include_buffer(op->image);
         include_parameter(op->param);
     }
@@ -318,27 +358,30 @@ private:
 vector<Argument> Pipeline::infer_arguments() {
     user_assert(defined()) << "Can't infer arguments on an undefined Pipeline\n";
 
-    // TODO: cache this too
+    if (contents.ptr->inferred_args.empty()) {
+        // Infer an arguments vector by walking the IR
+        InferArguments infer_args(contents.ptr->inferred_args,
+                                  contents.ptr->outputs);
 
-    // Infer an arguments vector by walking the IR
-    InferArguments infer_args(contents.ptr->inferred_args,
-                                        contents.ptr->outputs);
+        // Sort the Arguments with all buffers first (alphabetical by name),
+        // followed by all non-buffers (alphabetical by name).
+        std::sort(contents.ptr->inferred_args.begin(), contents.ptr->inferred_args.end());
 
-    // Sort the Arguments with all buffers first (alphabetical by name),
-    // followed by all non-buffers (alphabetical by name).
-    std::sort(contents.ptr->inferred_args.begin(), contents.ptr->inferred_args.end());
+        // Add the user context argument.
+        contents.ptr->inferred_args.push_back(contents.ptr->user_context_arg);
+    }
 
     // Return the inferred argument types, minus any constant images
-    // (we'll embed those in the binary by default).
+    // (we'll embed those in the binary by default), and minus the user_context arg.
     vector<Argument> result;
     for (const InferredArgument &arg : contents.ptr->inferred_args) {
-        if (!arg.buffer.defined()) {
+        debug(1) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
+        if (!arg.buffer.defined() &&
+            arg.arg.name != contents.ptr->user_context_arg.arg.name) {
             result.push_back(arg.arg);
         }
     }
 
-    // Add the user context argument.
-    contents.ptr->inferred_args.push_back(contents.ptr->user_context_arg);
 
     return result;
 }
@@ -403,8 +446,6 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const Target &target) {
     user_assert(defined()) << "Can't compile undefined Pipeline\n";
 
-    // TODO: Cache the lowered module
-
     // TODO: This is a bit of a wart. Right now, IR cannot directly
     // reference Buffers because neither CodeGen_LLVM nor
     // CodeGen_C can generate the correct buffer unpacking code.
@@ -416,12 +457,25 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // function. This works because the public function does not
     // attempt to directly access any of the fields of the buffer.
 
-    vector<IRMutator *> custom_passes;
-    for (CustomLoweringPass p : contents.ptr->custom_lowering_passes) {
-        custom_passes.push_back(p.pass);
-    }
+    Stmt private_body;
 
-    Stmt private_body = lower(contents.ptr->outputs, target, custom_passes);
+    const Module &old_module = contents.ptr->module;
+    if (!old_module.functions.empty() &&
+        old_module.target() == target) {
+        internal_assert(old_module.functions.size() == 2);
+        // We can avoid relowering and just reuse the private body
+        // from the old module. We expect two functions in the old
+        // module: the private one then the public one.
+        private_body = old_module.functions[0].body;
+        debug(2) << "Reusing old module\n";
+    } else {
+        vector<IRMutator *> custom_passes;
+        for (CustomLoweringPass p : contents.ptr->custom_lowering_passes) {
+            custom_passes.push_back(p.pass);
+        }
+
+        private_body = lower(contents.ptr->outputs, target, custom_passes);
+    }
 
     string private_name = "__" + fn_name;
 
@@ -487,16 +541,29 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     module.append(LoweredFunc(fn_name, public_args, public_body, LoweredFunc::External));
 
+    contents.ptr->module = module;
+
     return module;
 }
 
 void *Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
-    // TODO: reuse cached JITModule
     Target target(target_arg);
     target.set_feature(Target::JIT);
     target.set_feature(Target::UserContext);
+
+    debug(2) << "jit-compiling for: " << target_arg.to_string() << "\n";
+
+    // If we're re-jitting for the same target, we can just keep the
+    // old jit module.
+    if (contents.ptr->jit_target == target &&
+        contents.ptr->jit_module.defined()) {
+        debug(2) << "Reusing old jit module compiled for :\n" << contents.ptr->jit_target.to_string() << "\n";
+        return contents.ptr->jit_module.main_function();
+    }
+
+    contents.ptr->jit_target = target;
 
     // Infer an arguments vector
     infer_arguments();
@@ -573,19 +640,9 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutat
     contents.ptr->custom_lowering_passes.push_back(p);
 }
 
-Pipeline::~Pipeline() {
-    clear_custom_lowering_passes();
-}
-
 void Pipeline::clear_custom_lowering_passes() {
     if (!defined()) return;
-    contents.ptr->invalidate_cache();
-    for (size_t i = 0; i < custom_lowering_passes().size(); i++) {
-        if (custom_lowering_passes()[i].deleter) {
-            custom_lowering_passes()[i].deleter(custom_lowering_passes()[i].pass);
-        }
-    }
-    contents.ptr->custom_lowering_passes.clear();
+    contents.ptr->clear_custom_lowering_passes();
 }
 
 const vector<CustomLoweringPass> &Pipeline::custom_lowering_passes() {
@@ -700,6 +757,14 @@ struct JITFuncCallContext {
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
         user_context_param.set_scalar(&jit_context);
+
+        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
+                 << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << '\n'
+                 << "custom_free: " << (void *)jit_context.handlers.custom_free << '\n'
+                 << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << '\n'
+                 << "custom_do_par_for: " << (void *)jit_context.handlers.custom_do_par_for << '\n'
+                 << "custom_error: " << (void *)jit_context.handlers.custom_error << '\n'
+                 << "custom_trace: " << (void *)jit_context.handlers.custom_trace << '\n';
     }
 
     void report_if_error(int exit_status) {
@@ -720,14 +785,15 @@ struct JITFuncCallContext {
 };
 }
 
-void Pipeline::realize(Realization dst, const Target &target) {
+// Make a vector of void *'s to pass to the jit call using the
+// currently bound value for all of the params and image
+// params. Unbound image params produce null values.
+vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
+
+    compile_jit(target);
+
     JITModule &compiled_module = contents.ptr->jit_module;
-
-    if (!compiled_module.argv_function()) {
-        compile_jit(target);
-    }
-
     internal_assert(compiled_module.argv_function());
 
     struct OutputBufferType {
@@ -769,8 +835,6 @@ void Pipeline::realize(Realization dst, const Target &target) {
             << "\" has type " << type << ".\n";
     }
 
-    JITFuncCallContext jit_context(jit_handlers(), contents.ptr->user_context_arg.param);
-
     // Come up with the void * arguments to pass to the argv function
     const vector<InferredArgument> &input_args = contents.ptr->inferred_args;
     vector<const void *> arg_values;
@@ -780,52 +844,206 @@ void Pipeline::realize(Realization dst, const Target &target) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
             Buffer buf = arg.param.get_buffer();
-            user_assert(buf.defined())
-                << "Can't realize a pipeline because ImageParam "
-                << arg.param.name() << " is not bound to a Buffer\n";
-            arg_values.push_back(buf.raw_buffer());
+            if (buf.defined()) {
+                arg_values.push_back(buf.raw_buffer());
+            } else {
+                // Unbound
+                arg_values.push_back(NULL);
+            }
+            debug(1) << "JIT input ImageParam argument ";
         } else if (arg.param.defined()) {
             arg_values.push_back(arg.param.get_scalar_address());
+            debug(1) << "JIT input scalar argument ";
         } else {
+            debug(1) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
             arg_values.push_back(arg.buffer.raw_buffer());
         }
-
+        const void *ptr = arg_values.back();
+        debug(1) << arg.arg.name << " @ " << ptr << "\n";
     }
 
     // Then the outputs
     for (Buffer buf : dst.as_vector()) {
-        internal_assert(buf.defined()) << "Realization contains undefined Buffer\n";
+        internal_assert(buf.defined()) << "Can't realize into an undefined Buffer\n";
         arg_values.push_back(buf.raw_buffer());
+        const void *ptr = arg_values.back();
+        debug(1) << "JIT output buffer " << buf.name()
+                 << " @ " << ptr << "\n";
     }
 
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void * const *)arg_values[i] << ")\n";
-        internal_assert(arg_values[i])
-            << "An argument to a jitted function is null\n";
+    return arg_values;
+}
+
+void Pipeline::realize(Realization dst, const Target &t) {
+    Target target = t;
+    user_assert(defined()) << "Can't realize an undefined Pipeline\n";
+
+    debug(2) << "Realizing Pipeline for " << target.to_string() << "\n";
+
+    // If target is unspecified...
+    if (target.os == Target::OSUnknown) {
+        // If we've already jit-compiled for a specific target, use that.
+        if (contents.ptr->jit_module.defined()) {
+            target = contents.ptr->jit_target;
+        } else {
+            // Otherwise get the target from the environment
+            target = get_jit_target_from_environment();
+        }
     }
 
-    // Always add a custom error handler to capture any error messages.
-    // (If there is a user-set error handler, it will be called as well.)
+    vector<const void *> args = prepare_jit_call_arguments(dst, target);
+
+    for (size_t i = 0; i < contents.ptr->inferred_args.size(); i++) {
+        const InferredArgument &arg = contents.ptr->inferred_args[i];
+        const void *arg_value = args[i];
+        if (arg.param.defined()) {
+            user_assert(arg_value != NULL)
+                << "Can't realize a pipeline because ImageParam "
+                << arg.param.name() << " is not bound to a Buffer\n";
+        }
+    }
+
+    JITFuncCallContext jit_context(jit_handlers(), contents.ptr->user_context_arg.param);
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.argv_function()(&(arg_values[0]));
+    int exit_status = contents.ptr->jit_module.argv_function()(&(args[0]));
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
-    // TODO
+void Pipeline::infer_input_bounds(Realization dst) {
+
+    Target target = get_jit_target_from_environment();
+
+    vector<const void *> args = prepare_jit_call_arguments(dst, target);
+
+    struct TrackedBuffer {
+        // The query buffer.
+        buffer_t query;
+        // A backup copy of it to test if it changed.
+        buffer_t orig;
+    };
+    vector<TrackedBuffer> tracked_buffers(args.size());
+
+    vector<size_t> query_indices;
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i] == NULL) {
+            query_indices.push_back(i);
+            memset(&tracked_buffers[i], 0, sizeof(TrackedBuffer));
+            args[i] = &tracked_buffers[i].query;
+        }
+    }
+
+    // No need to query if all the inputs are bound already.
+    if (query_indices.empty()) {
+        debug(1) << "All inputs are bound. No need for bounds inference\n";
+        return;
+    }
+
+    JITFuncCallContext jit_context(jit_handlers(), contents.ptr->user_context_arg.param);
+
+    int iter = 0;
+    const int max_iters = 16;
+    for (iter = 0; iter < max_iters; iter++) {
+        // Make a copy of the buffers that might be mutated
+        for (TrackedBuffer &tb : tracked_buffers) {
+            tb.orig = tb.query;
+        }
+
+        Internal::debug(2) << "Calling jitted function\n";
+        int exit_status = contents.ptr->jit_module.argv_function()(&(args[0]));
+        jit_context.report_if_error(exit_status);
+        Internal::debug(2) << "Back from jitted function\n";
+        bool changed = false;
+
+        // Check if there were any changed
+        for (TrackedBuffer &tb : tracked_buffers) {
+            if (memcmp(&tb.query, &tb.orig, sizeof(buffer_t))) {
+                changed = true;
+            }
+        }
+        if (!changed) {
+            break;
+        }
+    }
+
+    jit_context.finalize(0);
+
+    user_assert(iter < max_iters)
+        << "Inferring input bounds on Pipeline"
+        << " didn't converge after " << max_iters
+        << " iterations. There may be unsatisfiable constraints\n";
+
+    debug(1) << "Bounds inference converged after " << iter << " iterations\n";
+
+    // Now allocate the resulting buffers
+    for (size_t i : query_indices) {
+        InferredArgument ia = contents.ptr->inferred_args[i];
+        internal_assert(!ia.param.get_buffer().defined());
+        buffer_t buf = tracked_buffers[i].query;
+
+        Internal::debug(1) << "Inferred bounds for " << ia.param.name() << ": ("
+                           << buf.min[0] << ","
+                           << buf.min[1] << ","
+                           << buf.min[2] << ","
+                           << buf.min[3] << ")..("
+                           << buf.min[0] + buf.extent[0] << ","
+                           << buf.min[1] + buf.extent[1] << ","
+                           << buf.min[2] + buf.extent[2] << ","
+                           << buf.min[3] + buf.extent[3] << ")\n";
+
+        // Figure out how much memory to allocate for this buffer
+        size_t min_idx = 0, max_idx = 0;
+        for (int d = 0; d < 4; d++) {
+            if (buf.stride[d] > 0) {
+                min_idx += buf.min[d] * buf.stride[d];
+                max_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
+            } else {
+                max_idx += buf.min[d] * buf.stride[d];
+                min_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
+            }
+        }
+        size_t total_size = (max_idx - min_idx);
+        while (total_size & 0x1f) total_size++;
+
+        // Allocate enough memory with the right dimensionality.
+        Buffer buffer(ia.param.type(), total_size,
+                      buf.extent[1] > 0 ? 1 : 0,
+                      buf.extent[2] > 0 ? 1 : 0,
+                      buf.extent[3] > 0 ? 1 : 0);
+
+        // Rewrite the buffer fields to match the ones returned
+        for (int d = 0; d < 4; d++) {
+            buffer.raw_buffer()->min[d] = buf.min[d];
+            buffer.raw_buffer()->stride[d] = buf.stride[d];
+            buffer.raw_buffer()->extent[d] = buf.extent[d];
+        }
+        ia.param.set_buffer(buffer);
+    }
 }
 
-void Pipeline::infer_input_bounds(Realization dst) {
-    // TODO
+void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+    user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
+
+    vector<Buffer> bufs;
+    for (Type t : contents.ptr->outputs[0].output_types()) {
+        bufs.push_back(Buffer(t, x_size, y_size, z_size, w_size));
+    }
+    Realization r(bufs);
+    infer_input_bounds(r);
 }
+
 
 void Pipeline::infer_input_bounds(Buffer dst) {
-    // TODO
+    infer_input_bounds(Realization({dst}));
 }
 
+void Pipeline::invalidate_cache() {
+    if (defined()) {
+        contents.ptr->invalidate_cache();
+    }
+}
 
 }  // namespace Halide

@@ -47,6 +47,8 @@ struct FunctionContents {
             i.accept(visitor);
         }
 
+        schedule.accept(visitor);
+
         for (UpdateDefinition update : updates) {
             for (Expr i : update.values) {
                 i.accept(visitor);
@@ -61,6 +63,8 @@ struct FunctionContents {
                     rv.extent.accept(visitor);
                 }
             }
+
+            update.schedule.accept(visitor);
         }
 
         if (!extern_function_name.empty()) {

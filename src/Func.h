@@ -405,15 +405,15 @@ public:
      *
      */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size = 0,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -422,11 +422,11 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. */
     // @{
-    EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment());
-    EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
+    EXPORT void realize(Realization dst, const Target &target = Target());
+    EXPORT void realize(Buffer dst, const Target &target = Target());
 
     template<typename T>
-    NO_INLINE void realize(Image<T> dst, const Target &target = get_jit_target_from_environment()) {
+    NO_INLINE void realize(Image<T> dst, const Target &target = Target()) {
         // Images are expected to exist on-host.
         realize(Buffer(dst), target);
         dst.copy_to_host();
