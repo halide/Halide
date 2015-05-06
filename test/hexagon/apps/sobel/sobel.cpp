@@ -52,6 +52,9 @@ void test_sobel(Target &target) {
 #ifdef ASSEMBLY
   Sobel.compile_to_assembly("sobel.s", args, target);
 #endif
+#ifdef STMT
+  Sobel.compile_to_lowered_stmt("sobel.html", HTML);
+#endif
 #ifdef RUN
   COMPILE_OBJ(Sobel);
 #endif

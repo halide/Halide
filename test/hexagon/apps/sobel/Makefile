@@ -3,7 +3,7 @@ HALIDE_TOP = `pwd`/../../../..
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 
 
-sobel.o sobel.h: sobel.cpp
+sobel.o sobel.h: sobel.cpp ${HALIDE_TOP}/libHalide.so
 	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 	./sobel.generate.out
@@ -21,18 +21,18 @@ sobel.out: sobel_run.o sobel.o sobel.h rt.o
 all: sobel.out
 
 clean:
-	rm -rf *.o sobel.h *~ *.out *.bc *.ll *.s *.txt pmu*
+	rm -rf *.o sobel.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html
 
 .PHONY: assembly
 
-assembly: sobel.cpp
+assembly: sobel.cpp ${HALIDE_TOP}/libHalide.so
 	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 	./sobel.generate.out
 
 .PHONY: bitcode
 
-bitcode: sobel.cpp
+bitcode: sobel.cpp ${HALIDE_TOP}/libHalide.so
 	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 	./sobel.generate.out
@@ -46,3 +46,9 @@ run: sobel.out
 	${HEX_TOOLS}/bin/hexagon-sim sobel.out --timing
 
 
+.PHONY: stmt
+
+stmt: sobel.cpp ${HALIDE_TOP}/libHalide.so
+	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
+	./sobel.generate.out
