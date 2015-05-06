@@ -96,14 +96,11 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Buffer> validate_arguments(const std::vector<Argument> &args);
+    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
 public:
     /** Make an undefined Pipeline object. */
     EXPORT Pipeline();
-
-    /** An explicit constructor so we can delete the custom lowering
-     * passes. */
-    EXPORT ~Pipeline();
 
     /** Make a pipeline that computes the given Func. Schedules the
      * Func compute_root(). */
@@ -390,6 +387,10 @@ public:
     /** Check if this pipeline object is defined. That is, does it
      * have any outputs? */
     EXPORT bool defined() const;
+
+    /** Invalidate any internal cached state, e.g. because Funcs have
+     * been rescheduled. */
+    EXPORT void invalidate_cache();
 
 };
 

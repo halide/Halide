@@ -41,7 +41,9 @@ Func::Func(const string &name) : func(unique_name(name)) {}
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')) {}
 
-Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {}
+Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {
+    (*this)(_) = e;
+}
 
 Func::Func(Function f) : func(f) {}
 
@@ -825,7 +827,9 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 }
 
 void Func::invalidate_cache() {
-    pipeline_ = Pipeline();
+    if (pipeline_.defined()) {
+        pipeline_.invalidate_cache();
+    }
 }
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor) {
@@ -1687,7 +1691,7 @@ const Internal::JITHandlers &Func::jit_handlers() {
 }
 
 void Func::realize(Buffer b, const Target &target) {
-    return pipeline().realize(b, target);
+    pipeline().realize(b, target);
 }
 
 void Func::realize(Realization dst, const Target &target) {
