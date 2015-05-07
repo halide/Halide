@@ -7,7 +7,7 @@ public:
     Param<float> f1{ "f1", 1.0 };
     Param<float> f2{ "f2", 1.0 };
 
-    Func build() override {
+    Func build() {
         Var x, y, c;
         Func f("f"), g("g");
 

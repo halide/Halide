@@ -72,7 +72,7 @@ public:
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
 
-    Func build() override {
+    Func build() {
         Var x, y, c;
         Func f("f"), g("g");
 

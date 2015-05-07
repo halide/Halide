@@ -131,6 +131,14 @@ Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents)
     }
 }
 
+vector<Func> Pipeline::outputs() {
+    vector<Func> funcs;
+    for (Function f : contents.ptr->outputs) {
+        funcs.push_back(Func(f));
+    }
+    return funcs;
+}
+
 void Pipeline::compile_to(const Outputs &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
