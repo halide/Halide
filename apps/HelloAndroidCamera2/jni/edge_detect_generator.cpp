@@ -23,12 +23,10 @@ public:
 
         // CPU schedule:
         //   Parallelize over scan lines, 4 scanlines per task.
-        //   Independently, use vectors of size 32 in x.
-        result.parallel(y, 4).vectorize(x, 8);
-
-        // OpenCL schedule.
-        // result.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16,
-        // Device_OpenCL);
+        //   Independently, vectorize in x.
+        result
+            .parallel(y, 4)
+            .vectorize(x, natural_vector_size(UInt(8)));
 
         return result;
     }

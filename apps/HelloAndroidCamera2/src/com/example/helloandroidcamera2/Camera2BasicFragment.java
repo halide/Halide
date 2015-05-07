@@ -60,7 +60,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.Semaphore;
 
 public class Camera2BasicFragment extends Fragment implements View.OnClickListener {
 
@@ -72,7 +71,7 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
     private static final int STATE_TIMEOUT_MS = 5000;
     private static final int SESSION_WAIT_TIMEOUT_MS = 2500;
 
-    private static final Size IMAGE_READER_SIZE = new Size(1920, 1440);
+    private static final Size DESIRED_IMAGE_READER_SIZE = new Size(1920, 1440);
     private static final int IMAGE_READER_BUFFER_SIZE = 16;
 
     private final SurfaceHolder.Callback mSurfaceCallback
@@ -94,12 +93,20 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width,
                 int height) {
-
+            // Deliberately left empty. Everything is initialized in surfaceCreated().
+            // If you decide to allow device rotation and to decouple the Surface
+            // lifecycle from the Activity/Fragment UI lifecycle, then proper handling
+            // of the YV12+JNI Surface configuration is much more complicated. You
+            // will need to handle the logic in all three callbacks.
         }
 
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
-
+            // Deliberately left empty. Everything is initialized in surfaceCreated().
+            // If you decide to allow device rotation and to decouple the Surface
+            // lifecycle from the Activity/Fragment UI lifecycle, then proper handling
+            // of the YV12+JNI Surface configuration is much more complicated. You
+            // will need to handle the logic in all three callbacks.
         }
 
     };
@@ -233,7 +240,8 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
     @Override
     public void onViewCreated(final View view, Bundle savedInstanceState) {
         mSurfaceView = (AutoFitSurfaceView) view.findViewById(R.id.surface_view);
-        mSurfaceView.setAspectRatio(IMAGE_READER_SIZE.getWidth(), IMAGE_READER_SIZE.getHeight());
+        mSurfaceView.setAspectRatio(DESIRED_IMAGE_READER_SIZE.getWidth(),
+                DESIRED_IMAGE_READER_SIZE.getHeight());
         // This must be called here, before the initial buffer creation.
         // Putting this inside surfaceCreated() is insufficient.
         mSurfaceView.getHolder().setFormat(ImageFormat.YV12);
@@ -323,21 +331,22 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
 
                 // See if the camera supports a YUV resolution that we want and create an
                 // ImageReader if it does.
-                List<Size> sizes = Arrays.asList(map.getOutputSizes(
-                        ImageFormat.YUV_420_888));
+                Size[] sizes = map.getOutputSizes(ImageFormat.YUV_420_888);
                 Log.d(TAG, "Available YUV_420_888 sizes:");
                 for (Size size : sizes) {
                     Log.d(TAG, size.toString());
                 }
 
-                // You can use chooseOptimalSize() here to find the smallest size that exceeds the
-                // desired one which also matches the desired aspect ratio. But then you will need
-                // to set the SurfaceView aspect ratio again in case it does not match, and also
-                // use JNI to reconfigure the buffers again to match the new ImageReader size.
-                if (sizes.contains(IMAGE_READER_SIZE)) {
+                Size optimalSize = chooseOptimalSize(sizes,
+                        DESIRED_IMAGE_READER_SIZE.getWidth(),
+                        DESIRED_IMAGE_READER_SIZE.getHeight(),
+                        DESIRED_IMAGE_READER_SIZE /* aspect ratio */);
+                if (optimalSize != null) {
+                    Log.d(TAG, "Desired image size was: " + DESIRED_IMAGE_READER_SIZE
+                            + " closest size was: " + optimalSize);
                     // Create an ImageReader to receive images at that resolution.
-                    mImageReader = ImageReader.newInstance(IMAGE_READER_SIZE.getWidth(),
-                            IMAGE_READER_SIZE.getHeight(), ImageFormat.YUV_420_888,
+                    mImageReader = ImageReader.newInstance(optimalSize.getWidth(),
+                            optimalSize.getHeight(), ImageFormat.YUV_420_888,
                             IMAGE_READER_BUFFER_SIZE);
                     mImageReader.setOnImageAvailableListener(
                             mOnImageAvailableListener, mBackgroundHandler);
@@ -345,6 +354,9 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
                     // Save the camera id to open later.
                     mCameraId = cameraId;
                     return;
+                } else {
+                    Log.e(TAG, "Could not find suitable supported resolution.");
+                    new ErrorDialog().show(getFragmentManager(), "dialog");
                 }
             }
         } catch (Exception e) {
@@ -535,34 +547,34 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
     }
 
     /**
-     * Given {@code choices} of {@code Size}s supported by a camera, chooses the smallest one whose
-     * width and height are at least as large as the respective requested values, and whose aspect
-     * ratio matches with the specified value.
+     * Given {@code choices} of {@code Size}s supported by a camera, chooses the <b>largest</b>
+     * one whose width and height are less than the desired ones, and whose aspect ratio matches
+     * the specified value.
      *
      * @param choices     The list of sizes that the camera supports for the intended output class
      * @param width       The minimum desired width
      * @param height      The minimum desired height
      * @param aspectRatio The aspect ratio
-     * @return The optimal {@code Size}, or an arbitrary one if none were big enough
+     * @return The optimal {@code Size}, or null if none were big enough
      */
     private static Size chooseOptimalSize(Size[] choices, int width, int height, Size aspectRatio) {
-        // Collect the supported resolutions that are at least as big as the preview Surface
-        List<Size> bigEnough = new ArrayList<Size>();
+        // Collect the supported resolutions that are at least as big as the desired size.
+        List<Size> ok = new ArrayList<>();
         int w = aspectRatio.getWidth();
         int h = aspectRatio.getHeight();
         for (Size option : choices) {
             if (option.getHeight() == option.getWidth() * h / w &&
-                    option.getWidth() >= width && option.getHeight() >= height) {
-                bigEnough.add(option);
+                    option.getWidth() <= width && option.getHeight() <= height) {
+                ok.add(option);
             }
         }
 
-        // Pick the smallest of those, assuming we found any
-        if (bigEnough.size() > 0) {
-            return Collections.min(bigEnough, new CompareSizesByArea());
+        // Pick the biggest of those, assuming we found any.
+        if (!ok.isEmpty()) {
+            return Collections.max(ok, new CompareSizesByArea());
         } else {
             Log.e(TAG, "Couldn't find any suitable preview size");
-            return choices[0];
+            return null;
         }
     }
 }

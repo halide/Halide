@@ -9,13 +9,13 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:1.0.0'
+        classpath 'com.android.tools.build:gradle:1.2.2'
     }
 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Use gradle's native C++ plugin to build the halide generator.
+// Use gradle's native C++ plugin to build the Halide generator.
 //
 // sources: defines all the C++ source files. We only have one SourceSet called
 // halide_generator.
@@ -24,12 +24,13 @@ buildscript {
 // we pass compiler and linker flags.
 //
 // binaries.withType: binaries is a collection, which in our case is just the
-// haldie_generator executable. withType() filters the collection by type.
+// halide_generator executable. withType() filters the collection by type.
 // binary is the iteration variable. -> defines the body of the lambda:
 // for each binary:
 //     for each halide_target / Android ABI mapping:
 //         for each generator:
 //             run the generator with -g and target set
+//         make the later ndkBuild task depend on this task.
 
 apply plugin: "cpp"
 
@@ -96,14 +97,13 @@ binaries.withType(NativeExecutableBinary) { binary ->
                 }
             }
         }
+
+        // Call this task generateHalideTask.
         binary.builtBy generateHalideTask
-        project.tasks.each {
-            if(it.name.endsWith("NdkClassic")) {
-                it.inputs.dir destDir
-                it.dependsOn generateHalideTask
-                println "Updated $it.name"
-            }
-        }
+
+        // Tell gradle that the task called "ndkBuild" below depends
+        // on generateHalideTask.
+        ndkBuild.dependsOn generateHalideTask
     }
     println "done with archs"
 }
@@ -125,6 +125,11 @@ android {
         versionName "1.0"
     }
 
+    compileOptions {
+        sourceCompatibility 1.7
+        targetCompatibility 1.7
+    }
+
     sourceSets {
         main {
             java.srcDirs = ["src/"]
@@ -138,9 +143,10 @@ android {
         }
     }
 
-    // call regular ndk-build(.cmd) script from app directory
+    // Call regular ndk-build (ndk-build.cmd on Windows) script from
+    // app directory.
     task ndkBuild(type: Exec) {
-        def ndkDir = project.plugins.findPlugin('com.android.application').getNdkFolder()
+        def ndkDir = project.android.ndkDirectory
         def ndkBuildCmd = ""
         if (Os.isFamily(Os.FAMILY_WINDOWS)) {
             ndkBuildCmd = "ndk-build.cmd"
@@ -153,7 +159,6 @@ android {
     tasks.withType(JavaCompile) {
         compileTask -> compileTask.dependsOn ndkBuild
     }
-
 
     buildTypes {
         release {
