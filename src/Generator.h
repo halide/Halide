@@ -344,6 +344,7 @@ protected:
     using Expr = Halide::Expr;
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
+    using Pipeline = Halide::Pipeline;
     using ImageParam = Halide::ImageParam;
     using RDom = Halide::RDom;
     using Target = Halide::Target;
