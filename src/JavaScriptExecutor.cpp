@@ -1,6 +1,7 @@
 #include "Error.h"
 #include "JavaScriptExecutor.h"
 #include "JITModule.h"
+#include "Func.h"
 #include "Target.h"
 
 #include "runtime/HalideRuntime.h"
@@ -44,8 +45,6 @@ namespace Halide { namespace Internal {
 namespace JS_V8 {
 
 using namespace v8;
-
-
 
 template <typename T>
 void get_host_array(Local<String> property,
@@ -461,9 +460,12 @@ void trace_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 void js_buffer_t_to_struct(const Local<Value> &val, struct buffer_t *slot) {
-  //    Local<Object> buf_obj = val->ToObject();
+#if 0
+    Local<Object> buf = val->ToObject();
 
-    // slot->host = buf_obj->Get(String::NewFromUtf8(isolate, "host"))->Int32Value();
+    Local<TypedArray> host_array = Cast<TypedArray>(buf->Get(String::NewFromUtf8(isolate, "host")));
+    Local<ArrayBuffer> array_buffer = host_array->Buffer();
+#endif
 }
 
 template <typename T>
@@ -473,6 +475,8 @@ void val_to_slot(const Local<Value> &val, uint64_t *slot) {
 }
 
 void js_value_to_uint64_slot(const Halide::Type &type, const Local<Value> &val, uint64_t *slot) {
+  String::Utf8Value printable(val);
+  //  debug(0) << "Argument is " << *printable << "\n";
     if (type.is_handle()) {
     } else if (type.is_float()) {
         if (type.bits == 32) {
@@ -508,9 +512,13 @@ void js_value_to_uint64_slot(const Halide::Type &type, const Local<Value> &val, 
             val_to_slot<int64_t>(val, slot);
         }
     }
+    //    debug(0) << "Slot is " << *slot << "(or " << *(float *)slot << ")\n";
 }
 
 void buffer_t_struct_to_js(const buffer_t *slot, Local<Value> val) {
+#if 0
+    Local<Object> buf = val->ToObject();
+#endif
 }
 
 template <typename T, typename S>
@@ -523,7 +531,7 @@ void uint64_slot_to_return_value(const Halide::Type &type, const uint64_t *slot,
     if (type.is_handle()) {
     } else if (type.is_float()) {
         if (type.bits == 32) {
-          slot_to_return_val<float, double>(slot, val);
+            slot_to_return_val<float, double>(slot, val);
         } else {
             internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
             slot_to_return_val<double, double>(slot, val);
@@ -561,10 +569,15 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     Isolate *isolate = args.GetIsolate();
     HandleScope scope(isolate);
     Local<Object> wrapper_data = args.Data()->ToObject();
-    Local<External> jit_extern_wrap = Local<External>::Cast(wrapper_data->GetInternalField(0));
-    const JITExtern *jit_extern = (const JITExtern *)jit_extern_wrap->Value();
-    Local<External> trampoline_wrap = Local<External>::Cast(wrapper_data->GetInternalField(1));
+    Local<String> extern_name = Local<String>::Cast(wrapper_data->GetInternalField(0));
+    Local<External> jit_extern_wrap = Local<External>::Cast(wrapper_data->GetInternalField(1));
+    const std::map<std::string, JITExtern> *jit_externs = (const std::map<std::string, JITExtern> *)jit_extern_wrap->Value();
+    Local<External> trampoline_wrap = Local<External>::Cast(wrapper_data->GetInternalField(2));
     void (*trampoline)(void **) = (void (*)(void **))trampoline_wrap->Value();
+
+    String::Utf8Value str_val(extern_name);
+    auto iter = jit_externs->find(*str_val);
+    internal_assert(iter != jit_externs->end()) << "jit_extern " << *str_val << " not found in map.";
 
     // Each scalar args is stored in a 64-bit slot
     size_t scalar_args_count = 0;
@@ -572,8 +585,8 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     size_t buffer_t_args_count = 0;
 
     std::vector<void *> trampoline_args;
-    internal_assert(jit_extern->func == NULL);
-    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+    internal_assert(iter->second.func == NULL);
+    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             buffer_t_args_count++;
         } else {
@@ -587,7 +600,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     size_t args_index = 0;
     size_t buffer_t_arg_index = 0;
     size_t scalar_arg_index = 0;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             js_buffer_t_to_struct(args[args_index++], &buffer_t_args[buffer_t_arg_index]);
             trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
@@ -597,19 +610,23 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
         }
     }
 
+    uint64_t ret_val;
+    if (!iter->second.is_void_return) {
+        trampoline_args.push_back(&ret_val);
+    }
     (*trampoline)(&trampoline_args[0]);
 
     args_index = 0;
     buffer_t_arg_index = 0;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             buffer_t_struct_to_js(&buffer_t_args[buffer_t_arg_index], args[args_index++]);
         }
         // No need to retrieve scalar args as they are passed by value.
     }
     
-    if (!jit_extern->is_void_return) {
-        uint64_slot_to_return_value(jit_extern->ret_type, &scalar_args[scalar_arg_index - 1], args.GetReturnValue());
+    if (!iter->second.is_void_return) {
+        uint64_slot_to_return_value(iter->second.ret_type, &ret_val, args.GetReturnValue());
     }
 }
 
@@ -631,19 +648,19 @@ void add_extern_callbacks(Isolate *isolate, Local<Context> &context,
                           JITModule trampolines) {
     for (const std::pair<std::string, JITExtern> &jit_extern : externs) {
         Local<ObjectTemplate> extern_callback_template = ObjectTemplate::New(isolate);
-        extern_callback_template->SetInternalFieldCount(2);
+        extern_callback_template->SetInternalFieldCount(3);
 
-      debug(0) << "Making callback for " << jit_extern.first << "\n";
+        debug(0) << "Making callback for " << jit_extern.first << " c_function is " << jit_extern.second.c_function << "\n";
         Local<Object> wrapper_data = extern_callback_template->NewInstance();
-        Local<External> jit_extern_wrap(External::New(isolate, (void *)(&jit_extern.second)));
+        Local<External> jit_externs_wrap(External::New(isolate, (void *)&externs));
         Local<External> trampoline_wrap(External::New(isolate,
             const_cast<void *>(trampolines.exports().find(jit_extern.first + "_js_trampoline")->second.address)));
-        wrapper_data->SetInternalField(0, jit_extern_wrap);
-        wrapper_data->SetInternalField(1, trampoline_wrap);
-        Local<FunctionTemplate> function_template = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data);
-        Local<v8::Function> f = function_template->GetFunction();
+        wrapper_data->SetInternalField(0, String::NewFromUtf8(isolate, jit_extern.first.c_str()));
+        wrapper_data->SetInternalField(1, jit_externs_wrap);
+        wrapper_data->SetInternalField(2, trampoline_wrap);
+        Local<v8::Function> f = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data)->GetFunction();
         context->Global()->Set(String::NewFromUtf8(isolate, jit_extern.first.c_str()),
-                               f->NewInstance());
+                               f);
     }
   }
 
@@ -959,7 +976,7 @@ bool elem_size_setter(JSContext *cx, unsigned argc, JS::Value *vp) {
 }
 
 static JSClass buffer_t_class = {
-  "buffer_T",
+  "buffer_t",
   JSCLASS_HAS_PRIVATE,
   JS_PropertyStub,
   NULL,
@@ -1113,7 +1130,7 @@ bool error_callback(JSContext *context, unsigned argc, JS::Value *vp) {
     internal_assert(args.length() >= 2) << "Not enough arguments to error_callback in JavaScriptExecutor(SpiderMonkey).\n";
 
     JITUserContext *jit_user_context = get_user_context(args[0]);
-    RootedString arg_str(context, args[1].toString());
+    RootedString arg_str(context, JS::ToString(context, args[1]));
     char *msg = JS_EncodeStringToUTF8(context, arg_str);
 
     if (jit_user_context != NULL && jit_user_context->handlers.custom_error != NULL) {
@@ -1132,7 +1149,7 @@ bool print_callback(JSContext *context, unsigned argc, JS::Value *vp) {
     JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
 
     JITUserContext *jit_user_context = get_user_context(args[0]);
-    RootedString arg_str(context, args[1].toString());
+    RootedString arg_str(context, JS::ToString(context, args[1]));
     char *msg = JS_EncodeStringToUTF8(context, arg_str);
 
     if (jit_user_context != NULL && jit_user_context->handlers.custom_print != NULL) {
@@ -1206,7 +1223,7 @@ bool trace_callback(JSContext *context, unsigned argc, JS::Value *vp) {
 
     RootedValue temp(context);
     JS_GetProperty(context, js_event, "func", &temp);
-    RootedString func_str(context, temp.toString());
+    RootedString func_str(context, JS::ToString(context, temp));
     char *func_save = JS_EncodeStringToUTF8(context, func_str);
     event.func = func_save;
     JS_GetProperty(context, js_event, "event", &temp);
@@ -1250,6 +1267,179 @@ bool trace_callback(JSContext *context, unsigned argc, JS::Value *vp) {
     return true;
 }
 
+void js_buffer_t_to_struct(HandleValue val, struct buffer_t *slot) {
+#if 0
+    Local<Object> buf = val->ToObject();
+
+    Local<TypedArray> host_array = Cast<TypedArray>(buf->Get(String::NewFromUtf8(isolate, "host")));
+    Local<ArrayBuffer> array_buffer = host_array->Buffer();
+#endif
+}
+
+template <typename T>
+void val_to_slot(HandleValue val, uint64_t *slot) {
+    T js_value = (T)val.toNumber();
+    *(T *)slot = js_value;
+}
+
+void js_value_to_uint64_slot(const Halide::Type &type, HandleValue val, uint64_t *slot) {
+    if (type.is_handle()) {
+    } else if (type.is_float()) {
+        if (type.bits == 32) {
+            val_to_slot<float>(val, slot);
+        } else {
+            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            val_to_slot<double>(val, slot);
+        }
+    } else if (type.is_uint()) {
+        if (type.bits == 1) {
+            val_to_slot<bool>(val, slot);
+        } else if (type.bits == 8) {
+            val_to_slot<uint8_t>(val, slot);
+        } else if (type.bits == 16) {
+            val_to_slot<uint16_t>(val, slot);
+        } else if (type.bits == 32) {
+            val_to_slot<uint32_t>(val, slot);
+        } else if (type.bits == 64) {
+            user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
+            val_to_slot<uint64_t>(val, slot);
+        }
+    } else {
+        if (type.bits == 1) {
+            val_to_slot<bool>(val, slot);
+        } else if (type.bits == 8) {
+            val_to_slot<int8_t>(val, slot);
+        } else if (type.bits == 16) {
+            val_to_slot<int16_t>(val, slot);
+        } else if (type.bits == 32) {
+            val_to_slot<int32_t>(val, slot);
+        } else if (type.bits == 64) {
+            user_error << "64-bit integer types are not supported with JavaScript.\n";
+            val_to_slot<int64_t>(val, slot);
+        }
+    }
+    //    debug(0) << "Slot is " << *slot << "(or " << *(float *)slot << ")\n";
+}
+
+void buffer_t_struct_to_js(const buffer_t *slot, HandleValue val) {
+#if 0
+    Local<Object> buf = val->ToObject();
+#endif
+}
+
+template <typename T, typename S>
+void slot_to_return_val(const uint64_t *slot, MutableHandleValue val) {
+    T slot_value = *(T *)slot;
+    val.setDouble((S)slot_value);
+}
+
+void uint64_slot_to_return_value(const Halide::Type &type, const uint64_t *slot, MutableHandleValue val) {
+    if (type.is_handle()) {
+    } else if (type.is_float()) {
+        if (type.bits == 32) {
+            slot_to_return_val<float, double>(slot, val);
+        } else {
+            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            slot_to_return_val<double, double>(slot, val);
+        }
+    } else if (type.is_uint()) {
+        if (type.bits == 1) {
+          slot_to_return_val<bool, bool>(slot, val);
+        } else if (type.bits == 8) {
+          slot_to_return_val<uint8_t, uint32_t>(slot, val);
+        } else if (type.bits == 16) {
+          slot_to_return_val<uint16_t, uint32_t>(slot, val);
+        } else if (type.bits == 32) {
+          slot_to_return_val<uint32_t, uint32_t>(slot, val);
+        } else if (type.bits == 64) {
+            user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
+            slot_to_return_val<uint64_t, double>(slot, val);
+        }
+    } else {
+        if (type.bits == 1) {
+          slot_to_return_val<bool, bool>(slot, val);
+        } else if (type.bits == 8) {
+          slot_to_return_val<int8_t, int32_t>(slot, val);
+        } else if (type.bits == 16) {
+          slot_to_return_val<int16_t, int32_t>(slot, val);
+        } else if (type.bits == 32) {
+          slot_to_return_val<int32_t, int32_t>(slot, val);
+        } else if (type.bits == 64) {
+            user_error << "64-bit integer types are not supported with JavaScript.\n";
+            slot_to_return_val<int64_t, double>(slot, val);
+        }
+    }
+}
+
+struct CallbackInfo {
+    JITExtern jit_extern;
+    void (*trampoline)(void **args);
+};
+
+bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    RootedObject callee(context, &args.callee());
+    
+    RootedValue callback_info_holder_val(context);
+    JS_GetProperty(context, callee, "trampoline", &callback_info_holder_val);
+    RootedObject callback_info_holder(context, &callback_info_holder_val.toObject());
+
+    CallbackInfo *callback_info = (CallbackInfo *)JS_GetPrivate(callback_info_holder);
+    JITExtern *jit_extern = &callback_info->jit_extern;
+
+    // Each scalar args is stored in a 64-bit slot
+    size_t scalar_args_count = 0;
+    // Each buffer_t gets a slot in an array of buffer_t structs
+    size_t buffer_t_args_count = 0;
+
+    std::vector<void *> trampoline_args;
+    internal_assert(jit_extern->func == NULL);
+    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+        if (scalar_or_buffer_t.is_buffer) {
+            buffer_t_args_count++;
+        } else {
+            scalar_args_count++;
+        }
+    }
+
+    std::valarray<struct buffer_t> buffer_t_args(buffer_t_args_count);
+    std::valarray<uint64_t> scalar_args(scalar_args_count);
+
+    size_t args_index = 0;
+    size_t buffer_t_arg_index = 0;
+    size_t scalar_arg_index = 0;
+    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+        if (scalar_or_buffer_t.is_buffer) {
+            js_buffer_t_to_struct(args[args_index++], &buffer_t_args[buffer_t_arg_index]);
+            trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
+        } else {
+            js_value_to_uint64_slot(scalar_or_buffer_t.scalar_type, args[args_index++], &scalar_args[scalar_arg_index]);
+            trampoline_args.push_back(&scalar_args[scalar_arg_index++]);
+        }
+    }
+
+    uint64_t ret_val;
+    if (!jit_extern->is_void_return) {
+        trampoline_args.push_back(&ret_val);
+    }
+    (*callback_info->trampoline)(&trampoline_args[0]);
+
+    args_index = 0;
+    buffer_t_arg_index = 0;
+    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+        if (scalar_or_buffer_t.is_buffer) {
+            buffer_t_struct_to_js(&buffer_t_args[buffer_t_arg_index], args[args_index++]);
+        }
+        // No need to retrieve scalar args as they are passed by value.
+    }
+    
+    if (!jit_extern->is_void_return) {
+        uint64_slot_to_return_value(jit_extern->ret_type, &ret_val, args.rval());
+    }
+
+    return true;
+}
+
 bool make_callbacks(JSContext *context, HandleObject global) {
     if (!JS_DefineFunction(context, global, "halide_error", &error_callback, 2, 0)) {
         return false;
@@ -1261,6 +1451,29 @@ bool make_callbacks(JSContext *context, HandleObject global) {
         return false;
     }
     return true;    // Create a template for the global object where we set the
+}
+
+bool add_extern_callbacks(JSContext *context, HandleObject global,
+                          const std::map<std::string, JITExtern> &externs,
+                          JITModule trampolines,
+                          std::vector<CallbackInfo> &callback_storage) {
+    size_t storage_index = 0;
+    for (const std::pair<std::string, JITExtern> &jit_extern : externs) {
+        JSFunction *f = JS_DefineFunction(context, global, jit_extern.first.c_str(), &extern_wrapper, 0, 0);
+        if (f == NULL) {
+            return false;
+        }
+        callback_storage[storage_index].jit_extern = jit_extern.second;
+        callback_storage[storage_index].trampoline =
+            (void (*)(void **))trampolines.exports().find(jit_extern.first + "_js_trampoline")->second.address;
+        RootedObject temp(context);
+        temp = JS_NewObject(context, &handle_class);
+        JS_SetPrivate(temp, &callback_storage[storage_index]);
+        RootedObject holder(context, JS_GetFunctionObject(f));
+        JS_DefineProperty(context, holder, "trampoline", temp, JSPROP_READONLY);
+        storage_index++;
+    }
+    return true;
 }
 
 } // namespace JS_SpiderMonkey
@@ -1320,10 +1533,15 @@ int run_javascript_spidermonkey(const std::string &source, const std::string &fn
             return -1;
         }
 
-
-
-
         make_callbacks(context, global);
+
+        std::vector<CallbackInfo> callback_info_storage(externs.size());
+        if (!add_extern_callbacks(context, global, externs, trampolines, callback_info_storage)) {
+            debug(0) << "Failure adding extern callbacks to SpiderMonkey globals.\n";
+            JS_DestroyContext(context);
+            JS_DestroyRuntime(runtime);
+            return -1;
+        }
 
         RootedValue script_result(context);
         CompileOptions options(context);
@@ -1385,7 +1603,8 @@ namespace Halide { namespace Internal {
 
 int run_javascript(const Target &target, const std::string &source, const std::string &fn_name,
                    const std::vector<std::pair<Argument, const void *>> &args,
-                   const std::map<std::string, JITExtern> &externs) {
+                   const std::map<std::string, JITExtern> &externs,
+                   const std::vector<JITModule> &extern_deps) {
 #if !defined(WITH_JAVASCRIPT_V8) && !defined(WITH_JAVASCRIPT_SPIDERMONKEY)
     user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
     return -1;
@@ -1395,7 +1614,7 @@ int run_javascript(const Target &target, const std::string &source, const std::s
     // that name may already exist and if so, will return an int
     // instead of taking a pointer at the end of the args list to
     // receive the result value.
-    JITModule trampolines = JITModule::make_trampolines_module(target, externs, "_js_trampoline");
+    JITModule trampolines = JITModule::make_trampolines_module(target, externs, "_js_trampoline", extern_deps);
 
 #ifdef WITH_JAVASCRIPT_V8
     if (!target.has_feature(Target::JavaScript_SpiderMonkey)) {

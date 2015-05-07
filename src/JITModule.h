@@ -108,8 +108,8 @@ struct JITExtern {
     Type ret_type;
     std::vector<ScalarOrBufferT> arg_types;
 
-   JITExtern(Func &func,
-             const std::map<std::string, JITExtern> &func_externs = std::map<std::string, JITExtern>())
+    JITExtern(Func &func,
+              const std::map<std::string, JITExtern> &func_externs = std::map<std::string, JITExtern>())
         : func(&func), func_externs(func_externs), c_function(NULL) {
     }
 
@@ -150,7 +150,8 @@ struct JITModule {
      */
     static JITModule make_trampolines_module(const Target &target,
                                              const std::map<std::string, JITExtern> &externs,
-                                             const std::string &suffix);
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps);
 
     /** The exports map of a JITModule contains all symbols which are
      * available to other JITModules which depend on this one. For

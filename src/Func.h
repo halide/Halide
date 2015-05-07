@@ -441,9 +441,9 @@ class Func {
     // Helper function for recursive reordering support
     EXPORT Func &reorder_storage(const std::vector<Var> &dims, size_t start);
 
+    /** TODO: docuemnt. Note that externs is modified. */
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
-                                                                    const std::map<std::string,
-                                                                    JITExtern> &externs);
+                                                                    std::map<std::string, JITExtern> &externs_in_out);
 
 public:
 

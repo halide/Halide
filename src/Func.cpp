@@ -1760,14 +1760,12 @@ class FindExterns : public IRGraphVisitor {
 
         if (op->call_type == Call::Extern &&
             externs.count(op->name) == 0) {
-      debug(0) << "Looking for extern " << op->name << "\n";
             void *address = get_symbol_address(op->name.c_str());
             if (address == NULL && !starts_with(op->name, "_")) {
                 std::string underscored_name = "_" + op->name;
                 address = get_symbol_address(underscored_name.c_str());
             }
             if (address != NULL) {
-      debug(0) << "Found address for extern " << op->name << "\n";
                 struct JITExtern jit_extern;
                 jit_extern.c_function = address;
                 jit_extern.is_void_return = op->type.bits == 0;
@@ -2409,7 +2407,8 @@ void Func::realize(Realization dst, const Target &target,
         }
 
         Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
-        exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args, externs_js);
+        std::vector<JITModule> extern_deps = make_externs_jit_module(target, externs_js);
+        exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args, externs_js, extern_deps);
         Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
     } else
     #endif
@@ -2542,7 +2541,8 @@ void Func::infer_input_bounds(Realization dst,
             }
 
             Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
-            exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args, externs_js);
+            std::vector<JITModule> extern_deps = make_externs_jit_module(target, externs_js);
+            exit_status = run_javascript(target, cached_javascript, js_fn_name, js_args, externs_js, extern_deps);
             Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
         } else
         #endif
@@ -2627,22 +2627,44 @@ void Func::infer_input_bounds(Realization dst,
 // TODO: add assertions to make sure this routine never introduces circular references
 // in the deps chain via passing the Func being compiled in as part of the externs list.
 std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
-                                                     const std::map<std::string, JITExtern> &externs) {
+                                                     std::map<std::string, JITExtern> &externs_in_out) {
     std::vector<JITModule> result;
+
+    // Turn off JavaScript when compiling dependent Funcs so they are compiled to native.
+    Target no_js_target = target;
+    no_js_target.set_feature(Target::JavaScript, false);
+    no_js_target.set_feature(Target::JavaScript_V8, false);
+    no_js_target.set_feature(Target::JavaScript_SpiderMonkey, false);
 
     // Externs that are Funcs get their own JITModule. All standalone functions are
     // held in a single JITModule at the end of the list (if there are any).
     JITModule free_standing_jit_externs;
-    for (const std::pair<std::string, JITExtern> &map_entry : externs) {
-        const JITExtern &jit_extern(map_entry.second);
-        if (jit_extern.func != NULL) {
+    for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
+         iter != externs_in_out.end();
+         iter++) {
+        const JITExtern &jit_extern(iter->second);
+        if (iter->second.func != NULL) {
             if (!jit_extern.func->compiled_module.compiled()) {
-                jit_extern.func->compile_jit(target, jit_extern.func_externs);
+                jit_extern.func->compile_jit(no_js_target, jit_extern.func_externs);
             }
-            free_standing_jit_externs.add_dependency(jit_extern.func->compiled_module);
-            free_standing_jit_externs.add_symbol_for_export(map_entry.first, jit_extern.func->compiled_module.entrypoint_symbol());
+            free_standing_jit_externs.add_dependency(iter->second.func->compiled_module);
+            free_standing_jit_externs.add_symbol_for_export(iter->first, iter->second.func->compiled_module.entrypoint_symbol());
+            iter->second.c_function = iter->second.func->compiled_module.entrypoint_symbol().address;
+            debug(0) << "Setting c_function to " << iter->second.c_function << "\n";
+            iter->second.is_void_return = false;
+            iter->second.ret_type = Int(32);
+            std::vector<Argument> args = iter->second.func->infer_arguments();
+            for (const Argument &arg : args) {
+                 ScalarOrBufferT arg_type_info;
+                 arg_type_info.is_buffer = arg.kind != Argument::InputScalar;
+                 if (!arg_type_info.is_buffer) {
+                     arg_type_info.scalar_type = arg.type;
+                 }
+                 iter->second.arg_types.push_back(arg_type_info);
+            }
+            iter->second.func = NULL;
         } else {
-            free_standing_jit_externs.add_extern_for_export(map_entry.first, jit_extern);
+            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern);
         }
     }
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
@@ -2721,7 +2743,8 @@ void Func::compile_jit(const Target &target_arg,
             compile_module_to_text(module, name() + ".stmt");
         }
 
-        compiled_module = JITModule(module, lfn);
+        std::map<std::string, JITExtern> lowered_externs = externs;
+        compiled_module = JITModule(module, lfn, make_externs_jit_module(target_arg, lowered_externs));
     }
 }
 

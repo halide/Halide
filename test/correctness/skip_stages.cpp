@@ -35,13 +35,6 @@ void check_counts(int a = 0, int b = 0, int c = 0, int d = 0) {
 }
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::JavaScript)) {
-        // TODO: Add JavaScript extern support.
-        printf("Skipping skip stages test for JavaScript as it uses a C extern function.\n");
-        return 0;
-    }
-
     Var x;
     Param<bool> toggle1, toggle2;
 

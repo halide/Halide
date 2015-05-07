@@ -400,8 +400,6 @@ llvm::Module *CodeGen_LLVM::finalize_module() {
     // Verify the module is ok
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
-    debug(0) << "Dumping module in finalize_module.\n";
-    module->dump();
 
     // Optimize
     CodeGen_LLVM::optimize_module();

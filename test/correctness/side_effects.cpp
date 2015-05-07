@@ -80,14 +80,6 @@ Expr magnitude(Complex a) {
 
 
 int main(int argc, char **argv) {
-#if 0
-    Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::JavaScript)) {
-        // TODO: Add JavaScript extern support.
-        printf("Skipping side_effects test for JavaScript as it uses a C extern function.\n");
-        return 0;
-    }
-#endif
     Var x, y;
 
     Func mandelbrot;

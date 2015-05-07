@@ -31,7 +31,8 @@ std::map<std::string, JITExtern> filter_externs(const std::map<std::string, JITE
  * is not ideal. Current intended use is to facilitate testing. */
 EXPORT int run_javascript(const Target &target, const std::string &source, const std::string &fn_name,
                           const std::vector<std::pair<Argument, const void *>> &args,
-                          const std::map<std::string, JITExtern> &externs = std::map<std::string, JITExtern>());
+                          const std::map<std::string, JITExtern> &externs,
+                          const std::vector<JITModule> &extern_deps);
 
 }}
 

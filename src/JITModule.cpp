@@ -26,7 +26,6 @@ void *get_symbol_address(const char *s) {
 #else
 #include <dlfcn.h>
 void *get_symbol_address(const char *s) {
-  debug(0) << "dlsym looking up " << s << "\n";
     return dlsym(RTLD_DEFAULT, s);
 }
 #endif
@@ -327,8 +326,8 @@ class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> modules;
 
 public:
-    HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
-
+    HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) { }
+  
     virtual uint64_t getSymbolAddress(const std::string &name) {
         for (size_t i = 0; i < modules.size(); i++) {
             const JITModule &m = modules[i];
@@ -497,7 +496,8 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 }
 
 JITModule JITModule::make_trampolines_module(const Target &target_arg, const std::map<std::string, JITExtern> &externs,
-                                             const std::string &suffix) {
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps) {
     Target target = target_arg;
     target.set_feature(Target::JIT);
 
@@ -512,7 +512,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg, const std
                                   CodeGen_LLVM::FirstArgPointsToResult);
         requested_exports.push_back(extern_entry.first + suffix);
     }
-    result.compile_module(codegen->finalize_module(), "", target, std::vector<JITModule>(),
+    result.compile_module(codegen->finalize_module(), "", target, deps,
                           requested_exports);
     return result;
 }
@@ -588,7 +588,7 @@ JITModule::Symbol JITModule::add_extern_for_export(const std::string &name, cons
         if (scalar_or_buffer_t.is_buffer) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module.ptr->context, jit_extern.ret_type));
+            llvm_arg_types.push_back(llvm_type_of(&jit_module.ptr->context, scalar_or_buffer_t.scalar_type));
         }
     }
 
