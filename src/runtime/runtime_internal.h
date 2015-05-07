@@ -51,6 +51,8 @@ typedef int32_t intptr_t;
 
 // Commonly-used extern functions
 extern "C" {
+void *halide_malloc(void *user_context, size_t x);
+void halide_free(void *user_context, void *ptr);
 WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_print(void *user_context, const char *msg);
 WEAK void halide_error(void *user_context, const char *msg);
@@ -119,7 +121,7 @@ public:
     void *user_context;
 
     Printer(void *ctx) : user_context(ctx) {
-        buf = new char[length];
+        buf = (char *)halide_malloc(NULL, length);
         dst = buf;
         end = buf + (length-1);
         *end = 0;
@@ -183,7 +185,7 @@ public:
         } else {
             // It's a stringstream. Do nothing.
         }
-        delete [] buf;
+        halide_free(NULL, buf);
     }
 };
 
