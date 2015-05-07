@@ -71,16 +71,16 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Multiple output Funcs that call each other and some of them are Tuples.
+    // Multiple output Funcs of different dimensionalities that call each other and some of them are Tuples.
     {
         Func f, g, h;
-        Var x;
+        Var x, y;
 
         f(x) = x;
         h(x) = {f(x) + 17, f(x) - 17};
-        g(x) = {f(x) * 2, h(x)[0] * 3, h(x)[1] - 2};
+        g(x, y) = {f(x + y) * 2, h(x)[0] * y, h(x)[1] - 2};
 
-        Image<int> f_im(100), g_im0(20), g_im1(20), g_im2(20), h_im0(50), h_im1(50);
+        Image<int> f_im(100), g_im0(20, 20), g_im1(20, 20), g_im2(20, 20), h_im0(50), h_im1(50);
 
         Pipeline({h, g, f}).realize({h_im0, h_im1, g_im0, g_im1, g_im2, f_im});
 
@@ -99,17 +99,18 @@ int main(int argc, char **argv) {
                 }
             }
             if (x < 20) {
-                int c0 = f_im(x) * 2;
-                int c1 = h_im0(x) * 3;
-                int c2 = h_im1(x) - 2;
-                if (g_im0(x) != c0 || g_im1(x) != c1 || g_im2(x) != c2) {
-                    printf("g(%d) = {%d, %d, %d} instead of {%d, %d, %d}\n",
-                           x, g_im0(x), g_im1(x), g_im2(x), c0, c1, c2);
-                    return -1;
+                for (int y = 0; y < 20; y++) {
+                    int c0 = f_im(x + y) * 2;
+                    int c1 = h_im0(x) * y;
+                    int c2 = h_im1(x) - 2;
+                    if (g_im0(x, y) != c0 || g_im1(x, y) != c1 || g_im2(x, y) != c2) {
+                        printf("g(%d) = {%d, %d, %d} instead of {%d, %d, %d}\n",
+                               x, g_im0(x, y), g_im1(x, y), g_im2(x, y), c0, c1, c2);
+                        return -1;
+                    }
                 }
             }
         }
-
     }
 
     printf("Success!\n");
