@@ -10,12 +10,14 @@ public:
         Var x, y;
 
         Func result("result");
-        result(x, y) = Tuple(uvInterleaved(2 * x, y), uvInterleaved(2 * x + 1, y));
+        result(x, y) = { uvInterleaved(2 * x, y), uvInterleaved(2 * x + 1, y) };
 
         // CPU schedule:
         //   Parallelize over scan lines, 4 scanlines per task.
-        //   Independently, use vectors of size 32 in x.
-        result.parallel(y, 4).vectorize(x, 32);
+        //   Independently, vectorize over x.
+        result
+            .parallel(y, 4)
+            .vectorize(x, natural_vector_size(UInt(8)));
 
         return result;
     }
