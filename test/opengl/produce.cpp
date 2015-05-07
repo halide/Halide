@@ -42,39 +42,6 @@ int test_lut1d() {
 
     out0.copy_to_host();
 
-#if 0
-    printf("Input:\n");
-    for (int c = 0; c != input.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y = 0; y != input.extent(1); ++y) {
-            for (int x = 0; x != input.extent(0); ++x) {
-                printf("%d ", (int)input(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-    printf("\n");
-
-#if 0
-    printf("LUT1D:\n");
-    for (int x = 0; x != lut1d_out.extent(0); ++x) {
-        printf("%1.1f ", lut1d_out(x));
-    }
-    printf("\n");
-#endif
-
-    printf("Output:\n");
-    for (int c = 0; c != out0.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y = 0; y != out0.extent(1); ++y) {
-            for (int x = 0; x != out0.extent(0); ++x) {
-                printf("%1.1f ", out0(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-#endif
-
     for (int c = 0; c != out0.extent(2); ++c) {
         for (int y = 0; y != out0.extent(1); ++y) {
             for (int x = 0; x != out0.extent(0); ++x) {
