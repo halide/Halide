@@ -2,13 +2,9 @@
 #include <jni.h>
 #include "generated_blur_rs.h"
 #include "generated_blur_arm.h"
-#include "generated_blur_vectorized_rs.h"
-#include "generated_blur_vectorized_arm.h"
 
 #include "generated_copy_rs.h"
 #include "generated_copy_arm.h"
-#include "generated_copy_vectorized_rs.h"
-#include "generated_copy_vectorized_arm.h"
 
 #include <iostream>
 #include <sys/system_properties.h>
@@ -241,14 +237,14 @@ void runTest(const char* cacheDir) {
 
     LOGI("\nInterleaved(vectorized) blur:\n");
     if (!test(cacheDir, bt_interleaved_input, bt_interleaved_output,
-              bt_interleaved_output_arm, generated_blur_vectorized_rs,
-              generated_blur_vectorized_arm)) {
+              bt_interleaved_output_arm, generated_blur_rs,
+              generated_blur_arm)) {
         correct = false;
     }
     LOGI("\nInterleaved(vectorized) copy:\n");
     if (!test(cacheDir, bt_interleaved_input, bt_interleaved_output,
-              bt_interleaved_output_arm, generated_copy_vectorized_rs,
-              generated_copy_vectorized_arm)) {
+              bt_interleaved_output_arm, generated_copy_rs,
+              generated_copy_arm)) {
         correct = false;
     }
 

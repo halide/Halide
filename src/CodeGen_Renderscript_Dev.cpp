@@ -192,13 +192,6 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         }
     }
 
-    // // Mark the buffer args as no alias.
-    // for (size_t i = 0; i < args.size(); i++) {
-    //     if (args[i].is_buffer) {
-    //         function->setDoesNotAlias(i + 1);
-    //     }
-    // }
-
     // Make the initial basic block.
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
@@ -242,6 +235,37 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
     builder->SetInsertPoint(entry_block);
     builder->CreateBr(body_block);
 
+    // Generated kernels have to be added to the list kept in module's metadata.
+    rs_export_foreach_name->addOperand(MDNode::get(
+        *context,
+        vec<LLVMMDNodeArgumentType>(MDString::get(*context, kernel_name))));
+
+    const char* kernel_signature = "57";
+    rs_export_foreach->addOperand(MDNode::get(
+        *context, vec<LLVMMDNodeArgumentType>(MDString::get(
+                      *context, kernel_signature))));
+
+    // Now verify the function is ok
+    verifyFunction(*function);
+
+    // Finally, verify the module is ok
+    verifyModule(*module);
+
+    debug(2) << "Done generating llvm bitcode for RS\n";
+
+    // Clear the symbol table
+    for (size_t i = 0; i < arg_sym_names.size(); i++) {
+        sym_pop(arg_sym_names[i]);
+    }
+}
+
+void CodeGen_Renderscript_Dev::init_module() {
+    debug(2) << "CodeGen_Renderscript_Dev::init_module\n";
+    init_context();
+#ifdef WITH_RENDERSCRIPT
+    delete module;
+    module = get_initial_module_for_renderscript_device(target, context);
+
     // Add Renderscript standard set of metadata.
     NamedMDNode *meta_llvm_module_flags = module->getOrInsertNamedMetadata("llvm.module.flags");
     meta_llvm_module_flags->addOperand(MDNode::get(
@@ -269,42 +293,14 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         vec<LLVMMDNodeArgumentType>(MDString::get(*context, "rs_fp_relaxed"),
                                     MDString::get(*context, ""))));
 
-    NamedMDNode *rs_export_foreach_name = module->getOrInsertNamedMetadata("#rs_export_foreach_name");
+    rs_export_foreach_name = module->getOrInsertNamedMetadata("#rs_export_foreach_name");
     rs_export_foreach_name->addOperand(MDNode::get(
         *context,
         vec<LLVMMDNodeArgumentType>(MDString::get(*context, "root"))));
-    rs_export_foreach_name->addOperand(MDNode::get(
-        *context,
-        vec<LLVMMDNodeArgumentType>(MDString::get(*context, kernel_name))));
 
-    const char* kernel_signature = "57";
-    NamedMDNode *rs_export_foreach = module->getOrInsertNamedMetadata("#rs_export_foreach");
+    rs_export_foreach = module->getOrInsertNamedMetadata("#rs_export_foreach");
     rs_export_foreach->addOperand(MDNode::get(
         *context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, "0"))));
-    rs_export_foreach->addOperand(MDNode::get(
-        *context, vec<LLVMMDNodeArgumentType>(MDString::get(
-                      *context, kernel_signature))));
-
-    // Now verify the function is ok
-    verifyFunction(*function);
-
-    // Finally, verify the module is ok
-    verifyModule(*module);
-
-    debug(2) << "Done generating llvm bitcode for RS\n";
-
-    // Clear the symbol table
-    for (size_t i = 0; i < arg_sym_names.size(); i++) {
-        sym_pop(arg_sym_names[i]);
-    }
-}
-
-void CodeGen_Renderscript_Dev::init_module() {
-    debug(2) << "CodeGen_Renderscript_Dev::init_module\n";
-    init_context();
-#ifdef WITH_RENDERSCRIPT
-    delete module;
-    module = get_initial_module_for_renderscript_device(target, context);
 #endif
 }
 

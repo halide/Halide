@@ -79,6 +79,10 @@ protected:
     llvm::Function *fetch_SetElement_func(int width);
     std::vector<llvm::Value *> add_x_y_c_args(Expr name, Expr x, Expr y,
                                               Expr c);
+private:
+    // Metadata records keep track of all Renderscript kernels.
+    llvm::NamedMDNode *rs_export_foreach_name;
+    llvm::NamedMDNode *rs_export_foreach;
 };
 }
 }
