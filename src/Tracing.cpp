@@ -226,6 +226,24 @@ private:
     }
 };
 
+class RemoveRealizeOverOutput : public IRMutator {
+    using IRMutator::visit;
+    const vector<Function> &outputs;
+
+    void visit(const Realize *op) {
+        for (Function f : outputs) {
+            if (op->name == f.name()) {
+                stmt = mutate(op->body);
+                return;
+            }
+        }
+        IRMutator::visit(op);
+    }
+
+public:
+    RemoveRealizeOverOutput(const vector<Function> &o) : outputs(o) {}
+};
+
 Stmt inject_tracing(Stmt s, const map<string, Function> &env, const vector<Function> &outputs) {
     Stmt original = s;
     InjectTracing tracing(env);
@@ -248,11 +266,7 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, const vector<Funct
     s = tracing.mutate(s);
 
     // Strip off the dummy realize blocks
-    for (Function output : outputs) {
-        const Realize *r = s.as<Realize>();
-        internal_assert(r);
-        s = r->body;
-    }
+    s = RemoveRealizeOverOutput(outputs).mutate(s);
 
     // Unless tracing was a no-op, add a call to shut down the trace
     // (which flushes the output stream)
