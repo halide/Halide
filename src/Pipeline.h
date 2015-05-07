@@ -110,6 +110,9 @@ public:
      * outputs. Schedules the Funcs compute_root(). */
     EXPORT Pipeline(const std::vector<Func> &outputs);
 
+    /** Get the Funcs this pipeline outputs. */
+    EXPORT std::vector<Func> outputs();
+
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in
      * output_files struct.
