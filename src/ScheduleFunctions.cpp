@@ -595,10 +595,10 @@ class InjectRealization : public IRMutator {
 public:
     const Function &func;
     bool found_store_level, found_compute_level;
-    const Target &target;
+    bool inject_asserts;
 
-    InjectRealization(const Function &f, const Target &t) :
-        func(f), found_store_level(false), found_compute_level(false), target(t) {}
+    InjectRealization(const Function &f, bool asserts) :
+        func(f), found_store_level(false), found_compute_level(false), inject_asserts(asserts) {}
 private:
 
     string producing;
@@ -623,10 +623,10 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        if (target.has_feature(Target::NoAsserts)) {
-            return s;
-        } else {
+        if (inject_asserts) {
             return inject_explicit_bounds(s, func);
+        } else {
+            return s;
         }
     }
 
@@ -735,16 +735,16 @@ private:
 };
 
 // Create the loop nest for the output function
-Stmt create_initial_loop_nest(Function f, const Target &t) {
+Stmt create_initial_loop_nest(Function f, bool inject_asserts) {
     // Generate initial loop nest
     pair<Stmt, Stmt> r = build_production(f);
     Stmt s = r.first;
     // This must be in a pipeline so that bounds inference understands the update step
     s = Pipeline::make(f.name(), r.first, r.second, Evaluate::make(0));
-    if (t.has_feature(Target::NoAsserts)) {
-        return s;
-    } else {
+    if (inject_asserts) {
         return inject_explicit_bounds(s, f);
+    } else {
+        return s;
     }
 }
 
@@ -1015,9 +1015,9 @@ public:
 Stmt schedule_functions(Function output,
                         const vector<string> &order,
                         const map<string, Function> &env,
-                        const Target &t) {
+                        bool inject_asserts) {
 
-    Stmt s = create_initial_loop_nest(output, t);
+    Stmt s = create_initial_loop_nest(output, inject_asserts);
 
     // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
@@ -1038,7 +1038,7 @@ Stmt schedule_functions(Function output,
             s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
-            InjectRealization injector(f, t);
+            InjectRealization injector(f, inject_asserts);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
