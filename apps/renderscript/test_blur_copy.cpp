@@ -20,34 +20,42 @@ void blur(std::string suffix, ImageParam input8, const int channels) {
         blur_x(x, y + 1, c) +
         blur_x(x, y + 2, c)) / 3);
 
-    // Unsed default constraints so that specialization works.
-    result.output_buffer()
-        .set_stride(0, Expr())
-        .set_stride(2, Expr());
+    // Unset default constraints so that specialization works.
+    result.output_buffer().set_stride(0, Expr());
 
     result.bound(c, 0, channels);
 
-    Expr interleaved = result.output_buffer().stride(0) == channels &&
-            result.output_buffer().stride(2) == 1 &&
-            result.output_buffer().min(2) == 0 &&
-            result.output_buffer().extent(2) == channels;
+    Expr interleaved =
+        (result.output_buffer().stride(0) == channels &&
+         result.output_buffer().stride(2) == 1);
+    Expr planar = result.output_buffer().stride(0) == 1;
+
+    /*result.output_buffer().min(2) == 0 &&
+      result.output_buffer().extent(2) == channels); */
 
     if (suffix == "_rs") {
         result.shader(x, y, c, DeviceAPI::Renderscript);
         result.specialize(interleaved).vectorize(c);
+        // non-specialized version is planar
     } else {
         Var yi;
         result
-            .reorder(c, x, y).unroll(c)
-            .split(y, y, yi, 8)
+            .reorder(c, x, y)
+            .unroll(c)
+            .split(y, y, yi, 32)
             .parallel(y)
-            .specialize(interleaved).vectorize(x,16);
+            .vectorize(x, 8);
+        result.specialize(interleaved);
+        result.specialize(planar);
+        // blur_x is compute at result, so it's included in result's
+        // specializations.
         blur_x.store_at(result, y)
             .compute_at(result, yi)
-            .reorder(c, x, y).unroll(c)
-            .specialize(interleaved).vectorize(x,16);
+            .reorder(c, x, y)
+            .unroll(c)
+            .vectorize(x, 8);
+
     }
-    // non-specialized version is planar
 
     std::vector<Argument> args;
     args.push_back(input8);
@@ -65,26 +73,22 @@ void copy(std::string suffix, ImageParam input8, const int channels) {
     result(x, y, c) = input(x, y, c);
     result.bound(c, 0, channels);
 
-    // Unsed default constraints so that specialization works.
-    result.output_buffer()
-        .set_stride(0, Expr())
-        .set_stride(2, Expr());
+    // Unset default constraints so that specialization works.
+    result.output_buffer().set_stride(0, Expr());
 
     Expr interleaved =
-            result.output_buffer().stride(0) == channels &&
-            result.output_buffer().stride(2) == 1 &&
-            result.output_buffer().min(2) == 0 &&
-            result.output_buffer().extent(2) == channels;
+        (result.output_buffer().stride(0) == channels &&
+         result.output_buffer().stride(2) == 1);
 
     if (suffix == "_rs") {
         result.shader(x, y, c, DeviceAPI::Renderscript);
         result.specialize(interleaved).vectorize(c);
     } else {
-        Var xc;
         result.reorder(c, x, y)
             .parallel(y)
             .unroll(c)
-            .specialize(interleaved).vectorize(x,16);
+            .vectorize(x, 16)
+            .specialize(interleaved);
     }
     // non-specialized version is planar
 
