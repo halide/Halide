@@ -217,6 +217,10 @@ public:
      * parameter in the given dimension */
     EXPORT Expr extent(int x) const;
 
+    /** Get an expression representing the maximum coordinates of this image
+     * parameter in the given dimension. */
+    EXPORT Expr max(int x) const;
+
     /** Get an expression representing the stride of this image in the
      * given dimension */
     EXPORT Expr stride(int x) const;

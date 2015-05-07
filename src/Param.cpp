@@ -54,6 +54,10 @@ Expr OutputImageParam::extent(int x) const {
     return Internal::Variable::make(Int(32), s.str(), param);
 }
 
+Expr OutputImageParam::max(int x) const {
+    return Internal::Add::make(min(x), Internal::Sub::make(extent(x), 1));
+}
+
 Expr OutputImageParam::stride(int x) const {
     std::ostringstream s;
     s << name() << ".stride." << x;
