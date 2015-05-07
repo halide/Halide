@@ -365,7 +365,7 @@ file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/i
 
 add_definitions("-DCOMPILING_HALIDE")
 
-IF (LLVM_VERSION LESS 36)
+IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
   set(BITWRITER_FILES
     BitWriter_3_2.35/BitcodeWriter.cpp
     BitWriter_3_2.35/BitcodeWriterPass.cpp

@@ -308,16 +308,15 @@ SOURCE_FILES = \
   VectorizeLoops.cpp
 
 ifeq ($(LLVM_VERSION_TIMES_10),35)
-BITWRITER_SOURCE_FILES = \
-  BitWriter_3_2.35/BitcodeWriter.cpp \
-  BitWriter_3_2.35/BitcodeWriterPass.cpp \
-  BitWriter_3_2.35/ValueEnumerator.cpp
+BITWRITER_VERSION=.35
 else
-BITWRITER_SOURCE_FILES = \
-  BitWriter_3_2/BitcodeWriter.cpp \
-  BitWriter_3_2/BitcodeWriterPass.cpp \
-  BitWriter_3_2/ValueEnumerator.cpp
+BITWRITER_VERSION = $(if $(WITH_NATIVE_CLIENT),.35,)
 endif
+
+BITWRITER_SOURCE_FILES = \
+  BitWriter_3_2$(BITWRITER_VERSION)/BitcodeWriter.cpp \
+  BitWriter_3_2$(BITWRITER_VERSION)/BitcodeWriterPass.cpp \
+  BitWriter_3_2$(BITWRITER_VERSION)/ValueEnumerator.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
@@ -606,15 +605,9 @@ $(BUILD_DIR)/initmod_ptx.%_ll.o: $(BUILD_DIR)/initmod_ptx.%_ll.cpp
 $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 	$(CXX) $(BUILD_BIT_SIZE) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
-ifeq ($(LLVM_VERSION_TIMES_10),35)
-$(BUILD_DIR)/BitWriter_3_2.35/%.o: src/BitWriter_3_2.35/%.cpp $(BUILD_DIR)/llvm_ok
-	@-mkdir -p $(BUILD_DIR)/BitWriter_3_2.35
-	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/BitWriter_3_2.35/$*.d -MT $(BUILD_DIR)/BitWriter_3_2.35/$*.o
-else
-$(BUILD_DIR)/BitWriter_3_2/%.o: src/BitWriter_3_2/%.cpp $(BUILD_DIR)/llvm_ok
-	@-mkdir -p $(BUILD_DIR)/BitWriter_3_2
-	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/BitWriter_3_2/$*.d -MT $(BUILD_DIR)/BitWriter_3_2/$*.o
-endif
+$(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)/%.o: src/BitWriter_3_2$(BITWRITER_VERSION)/%.cpp $(BUILD_DIR)/llvm_ok
+	@-mkdir -p $(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)
+	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)/$*.d -MT $(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)/$*.o
 
 $(BUILD_DIR)/%.o: src/%.cpp src/%.h $(BUILD_DIR)/llvm_ok
 	@-mkdir -p $(BUILD_DIR)
