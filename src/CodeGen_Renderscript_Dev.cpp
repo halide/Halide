@@ -1,7 +1,7 @@
-#if LLVM_VERSION >= 36
-#include "BitWriter_3_2/ReaderWriter_3_2.h"
-#else
+#if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
 #include "BitWriter_3_2.35/ReaderWriter_3_2.h"
+#else
+#include "BitWriter_3_2/ReaderWriter_3_2.h"
 #endif
 #include "CodeGen_Renderscript_Dev.h"
 #include "CodeGen_Internal.h"
