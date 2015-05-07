@@ -727,7 +727,7 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
     default:
         error(user_context) << "OpenGL: Invalid number of color channels: " << channels;
         return false;
-    };
+    }
 
     switch (global_state.profile) {
     case OpenGLES:
@@ -764,20 +764,20 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
 // This function returns the width, height and number of color channels that the
 // texture for the specified buffer_t will contain. It provides a single place
 // to implement the logic snapping zero sized dimensions to one element.
-WEAK bool get_texture_dimensions(void *user_context, buffer_t *buf, GLint &width,
-                            GLint &height, GLint &channels) {
+WEAK bool get_texture_dimensions(void *user_context, buffer_t *buf, GLint *width,
+                            GLint *height, GLint *channels) {
 
-    width = buf->extent[0];
-    if (width == 0) {
-        error(user_context) << "Invalid extent[0]: " << width << "\n";
+    *width = buf->extent[0];
+    if (*width == 0) {
+        error(user_context) << "Invalid extent[0]: " << *width << "\n";
         return false;
     }
 
     // GLES 2.0 supports GL_TEXTURE_2D (plus cube map), but not 1d or 3d. If we
     // end up with a buffer that has a zero extent, set the corresponding size
     // to one.
-    height = (buf->extent[1]) ? buf->extent[1] : 1;
-    channels = (buf->extent[2]) ? buf->extent[2] : 1;
+    *height = (buf->extent[1]) ? buf->extent[1] : 1;
+    *channels = (buf->extent[2]) ? buf->extent[2] : 1;
 
     return true;
 }
@@ -895,7 +895,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
         }
 
         GLint width, height, channels;
-        if (!get_texture_dimensions(user_context, buf, width, height, channels)) {
+        if (!get_texture_dimensions(user_context, buf, &width, &height, &channels)) {
             error(user_context) << "Invalid texture dimensions";
             return 1;
         }
@@ -1170,7 +1170,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     }
 
     GLint width, height, channels;
-    if (!get_texture_dimensions(user_context, buf, width, height, channels)) {
+    if (!get_texture_dimensions(user_context, buf, &width, &height, &channels)) {
         error(user_context) << "Invalid texture dimensions";
         return 1;
     }
@@ -1286,7 +1286,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     }
 
     GLint width, height, channels;
-    if (!get_texture_dimensions(user_context, buf, width, height, channels)) {
+    if (!get_texture_dimensions(user_context, buf, &width, &height, &channels)) {
         error(user_context) << "Invalid texture dimensions";
         return 1;
     }
