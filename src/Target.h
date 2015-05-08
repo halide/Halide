@@ -57,6 +57,8 @@ struct Target {
 
         OpenGL,  ///< Enable the OpenGL runtime.
 
+        Renderscript, ///< Enable the Renderscript runtime.
+
         UserContext,  ///< Generated code takes a user_context pointer as first argument
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
