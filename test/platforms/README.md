@@ -1,11 +1,13 @@
-This directory contains code for writing very simple apps to test, prototype, demo, or debug Halide features. You may create apps for iOS or OS X using a generator, test function, and a pair of CMAKE function calls.
+This directory contains framework and build files for writing very simple apps to test, prototype, demo, or debug Halide features, especially on mobile platforms. You may create apps for iOS or OS X using a generator, test function, and a pair of CMake function calls. (A similar framework for Android will be added in the future.)
 
 Very Simple Apps
 ================
 
-The apps are very simple and consist of about 400 lines of boiler plate code automatically included in your project by the CMAKE functions. The apps are wired up to display `halide_print` messages and may use functions that are part of the HalideRuntime. New runtime functions like `halide_buffer_display` are available to the tests to display input or output images in the app. 
+The apps are very simple and consist of a small amount of boilerplate code automatically included in your project by the CMake functions. 
 
-The basic app structure and behavior is the same across all platforms. You can use this mechism to prototype features on mobile devices. You can develop on your laptop using the OS X app and then demo on an iPad.
+The basic app structure and behavior is the same across all platforms: one or more self-contained test functions, which can output text and images to a simple HTML view via a simple API (specified in SimpleAppAPI.h); additionally, the standard halide_print() and halide_error() functions in the Halide runtime are captured and displayed.
+
+Although it is easy to add "tests" (really, any Halide-based experiments) directly to this project, the intended use case is really to provide a simple harness that can be duplicated and used for experimentation (especially device-specific testing and profiling) without requiring extensive knowledge of OS-specific app design and implementation.
 
 Test Functions
 --------------
@@ -19,36 +21,22 @@ The test function is a simple C function of the form `bool test(void)` that cont
     example(runtime_factor,&g);
     halide_buffer_display(&g);
 
-You can print error messages to the app using `halide_error` and the return  value from the test function will be printed by the app as well. Printed  messages may contain HTML.
+You can log error messages to the app using `halide_error` and the return value from the test function will be printed by the app as well. Printed messages may contain HTML.
 
 Building Apps
 -------------
 
-The iOS and OSX apps may be build using CMAKE and Xcode on OS X. You should start with a build of Halide based on the instructions in [README.md](../../README.md) in the Halide repository root directory. Build a static library version of libHalide.a.
+The iOS and OSX apps may be build using CMake and Xcode on OS X. You should start with a build of Halide based on the instructions in [README.md](../../README.md) in the Halide repository root directory. Build a static library version of libHalide.a.
 
-Each app is built using a separate CMAKE project per platform using ahead-of-time compilation.
+To customize this harness to add your own tests or experiments:
 
-Create a CMakeLists.txt file for your app and include [HalideAppTests.cmake](HalideAppTests.cmake).  
+  * Select a Halide::Generator derived class to include in the app. 
+  * Write a test function and put it in a separate .cpp file. 
+  * Edit the CMakeLists.txt in the ios/ and/or osx/ directories to add calls to `halide_add_*_generator_to_app()` function variants (for iOS, Mac OS X, etc.) to add the platform specific boilerplate code and Halide generated code for your app. 
 
-Select a Halide::Generator derived class to include in the app. Write a test function and put it in a separate .cpp file.
-
-Use the `halide_add_*_app()` and `halide_add_*_generator_to_app()` function variants (for iOS, Mac OS X, etc.) to add the platform specific boilerplate code and Halide generated code for your app. 
-
-The CMakeLists.txt file must contain a few other  directives like a `cmake_minimum_required version()` and `project()`. See [ios/CMakeLists.txt](ios/CMakeLists.txt) for a complete example.
-
-Create a build directory for the app and platform. From the base directory of your Halide build, alongside the `build` directory you created following [README.md](../../README.md):
+To build and run, you then use CMake to build an XCode project. From the base directory of your Halide build, alongside the `build` directory you created following [README.md](../../README.md):
 
     mkdir build-ios
     cd build-ios
-    cmake -GXcode ../test/platforms/ios  -DHALIDE_INCLUDE_PATH=../include/ -DHALIDE_LIB_PATH=../bin/libHalide.a
-
-Set the following CMake variables:
-
-1. HALIDE_INCLUDE_PATH the path to the directory containing Halide.h and 
-HalideRuntime*.h. Following the directions for building Halide with CMake, it 
-is likely `~/Halide/build/include`
-2. HALIDE_LIB_PATH the path to the file libHalide.a e.g. 
-`~/Halide/build/lib/Debug/libHalide.a`
-
-Configure and generate the CMake project. Build the target that you defined in the CMakeLists.txt file.
-
+    cmake -GXcode ../test/platforms/ios -DHALIDE_INCLUDE_PATH=../include/ -DHALIDE_LIB_PATH=../bin/libHalide.a
+    open test_ios.xcodeproj
