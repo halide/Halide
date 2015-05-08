@@ -4,6 +4,7 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_Renderscript_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -118,7 +119,9 @@ protected:
     void visit(const Call *op) {
         if (op->call_type == Call::Intrinsic &&
             (op->name == Call::glsl_texture_load ||
-             op->name == Call::glsl_texture_store)) {
+             op->name == Call::image_load ||
+             op->name == Call::glsl_texture_store ||
+             op->name == Call::image_store)) {
 
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
@@ -136,9 +139,11 @@ protected:
             ref.type = op->type;
             // TODO: do we need to set ref.dimensions?
 
-            if (op->name == Call::glsl_texture_load) {
+            if (op->name == Call::glsl_texture_load ||
+                op->name == Call::image_load) {
                 ref.read = true;
-            } else if (op->name == Call::glsl_texture_store) {
+            } else if (op->name == Call::glsl_texture_store ||
+                op->name == Call::image_store) {
                 ref.write = true;
             }
 
@@ -206,6 +211,11 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
         debug(1) << "Constructing OpenCL device codegen\n";
         cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
         default_api = DeviceAPI::OpenCL;
+    }
+    if (target.has_feature(Target::Renderscript)) {
+        debug(1) << "Constructing Renderscript device codegen\n";
+        cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
+        default_api = DeviceAPI::Renderscript;
     }
 
     if (cgdev.empty()) {
@@ -282,8 +292,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
             CodeGen_CPU::create_constant_binary_blob(kernel_src,
                                                      "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
+        if (f.args[0].name == "__user_context") {
+            // The user context is first argument of the function.
+            // We retrieve it here so it's available for subsequent calls of
+            // get_user_context().
+            sym_push("__user_context", function->arg_begin());
+        }
 
         Value *user_context = get_user_context();
+        debug(2) << "CodeGen_CPU_Host compile_func user_context:";
+        if (debug::debug_level >= 2) {
+            user_context->dump();
+        }
         Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);
@@ -524,6 +544,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
+        debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),
