@@ -65,18 +65,19 @@ binaries.withType(NativeExecutableBinary) { binary ->
     def linkTask = binary.tasks.link
     println "linktask output file is " + linkTask.outputFile
     Map<String, String> archs = [
-        "arm-32-android": "armeabi",
-        "arm-32-android-armv7s": "armeabi-v7a",
-        "arm-64-android": "arm64-v8a",
-        "mips-32-android": "mips",
-        "x86-64-android-sse41": "x86_64",
-        "x86-32-android": "x86",
-        ]
+        // armeabi and armeabi-v7a are the same as far as Halide is concerned
+        "armeabi":      "arm-32-android",
+        "armeabi-v7a":  "arm-32-android",
+        "arm64-v8a":    "arm-64-android",
+        "mips":         "mips-32-android",
+        "x86_64":       "x86-64-android-sse41",
+        "x86":          "x86-32-android"
+    ]
     def generators = ["deinterleave", "edge_detect"]
     archs.each {
         arch -> println "creating task for: " + arch.key + " -> " + arch.value
-        def hl_target = arch.key
-        def android_abi = arch.value
+        def android_abi = arch.key
+        def hl_target = arch.value
         def task_name = "generate_halide_binary_${binary.name.capitalize()}_${android_abi}"
         def destDir = new File(jnis, "/halide_generated_${android_abi}")
         def generateHalideTask = task(task_name) {
