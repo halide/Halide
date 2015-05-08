@@ -40,3 +40,15 @@ To build and run, you then use CMake to build an XCode project. From the base di
     cd build-ios
     cmake -GXcode ../test/platforms/ios -DHALIDE_INCLUDE_PATH=../include/ -DHALIDE_LIB_PATH=../bin/libHalide.a
     open test_ios.xcodeproj
+
+NOTE: the iOS build is configured to build for arm64 only at this time; if you are building for an older 32-bit iOS device, change 
+
+    target=ios-arm-64
+    target=ios-arm-64-opengl
+
+to
+
+    target=ios-arm-32 
+    target=ios-arm-32-opengl
+
+in ios/CMakeLists.txt. (This will be updated to allow for 'fat' builds in the future.)
