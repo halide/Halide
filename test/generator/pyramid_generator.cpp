@@ -5,6 +5,7 @@ namespace {
 class Pyramid : public Halide::Generator<Pyramid> {
 public:
     ImageParam input{ Float(32), 2, "input" };
+    GeneratorParam<int> levels {"levels", 10};
 
     Var x, y;
 
@@ -18,22 +19,22 @@ public:
     }
 
     Pipeline build() {
-        std::vector<Func> levels(10);
+        std::vector<Func> pyramid(levels);
         Func in = Halide::BoundaryConditions::repeat_edge(input);
 
-        levels[0](x, y) = in(x, y);
+        pyramid[0](x, y) = in(x, y);
 
         for (int i = 1; i < 10; i++) {
-            levels[i](x, y) = downsample(levels[i-1])(x, y);
+            pyramid[i](x, y) = downsample(pyramid[i-1])(x, y);
         }
 
         for (int i = 0; i < 10; i++) {
-            levels[i].compute_root().parallel(y);
+            pyramid[i].compute_root().parallel(y);
             // Vectorize if we're still wide enough at this level
-            levels[i].specialize(levels[i].output_buffer().width() >= 8).vectorize(x, 8);
+            pyramid[i].specialize(pyramid[i].output_buffer().width() >= 8).vectorize(x, 8);
         }
 
-        return levels;
+        return pyramid;
     }
 };
 
