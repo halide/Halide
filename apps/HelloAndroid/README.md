@@ -5,10 +5,10 @@ This application builds for multiple native ABIs. (At present armeabi,
 armeabi-v7a, arm64-v8a, mips, x86_64, and x86 are supported. mips64 is
 not presently working.) Halide code is generated for each architecture.
 
-This build is meant to use Android command line tools. (And IDE is not
+This build is meant to use Android command line tools. (An IDE is not
 required.) In order to build, the following will be required:
 
-*Android NDK -- This can be download here:
+*Android NDK -- This can be downloaded here:
     https://developer.android.com/tools/sdk/ndk/index.html
 After installing, make sure the top-level directory of the install is
 in the PATH. (It should contain an executable ndk-build file.)
@@ -50,7 +50,7 @@ They are listed in jni/Application.mk APP_ABI variable
 and in build.gradle archs map. For example, if your Halide installation was
 built without mips support or without arm64-v8a, remove them from APP_ABI and
 archs. Both list and map should match, otherwise you will be getting compilation
-errors complaining about missing halide_generated.h file:
+errors complaining about a missing halide_generated.h file:
 
 ```
 :compileDebugNdkClassic FAILED

@@ -22,6 +22,9 @@ llvm::Module *get_initial_module_for_target(Target, llvm::LLVMContext *, bool fo
 /** Create an llvm module containing the support code for ptx device. */
 llvm::Module *get_initial_module_for_ptx_device(Target, llvm::LLVMContext *c);
 
+/** Create an llvm module containing the support code for renderscript. */
+llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c);
+
 }
 
 }

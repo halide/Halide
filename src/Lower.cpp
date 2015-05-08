@@ -138,7 +138,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL)) {
+    if (t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
         debug(1) << "Injecting image intrinsics...\n";
         s = inject_image_intrinsics(s);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
@@ -148,7 +148,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = storage_flattening(s, order.back(), env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
-    if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
+    if (t.has_gpu_feature() || t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
@@ -160,7 +160,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
-    if (t.has_gpu_feature()) {
+    if (t.has_gpu_feature() || t.has_feature(Target::Renderscript)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
