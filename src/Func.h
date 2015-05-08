@@ -574,6 +574,7 @@ public:
     EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
                                     const Target &target = get_target_from_environment());
     // @}
+
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -596,8 +597,6 @@ public:
      * doing. */
     EXPORT void print_loop_nest();
 
-    // @}
-
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.
@@ -616,12 +615,10 @@ public:
      * Deduces target files based on filenames specified in
      * output_files struct.
      */
-    //@{
     EXPORT void compile_to(const Outputs &output_files,
                            std::vector<Argument> args,
                            const std::string &fn_name,
                            const Target &target = get_target_from_environment());
-    // @}
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
