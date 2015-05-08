@@ -1095,15 +1095,16 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
     return 0;
 }
 
+// This method copies image data from the layout specified by the strides of the
+// buffer_t to the packed interleaved format needed by GL.
 template <class T>
  __attribute__((always_inline)) void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, int channels) {
     T *src = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int dstidx = y * width * channels;
         for (int x = 0; x < width; x++) {
-            int srcidx = (y - buf->min[1]) * buf->stride[1] +
-                         (x - buf->min[0]) * buf->stride[0] +
-                         -buf->min[2] * buf->stride[2];
+            int srcidx = y * buf->stride[1] +
+                         x * buf->stride[0];
             for (int c = 0; c < channels; c++) {
                 dst[dstidx] = src[srcidx];
                 dstidx++;
@@ -1113,15 +1114,16 @@ template <class T>
     }
 }
 
+// This method copies image data from the packed interleaved format needed by GL
+// to the strided layout specified by the buffer_t
 template <class T>
 __attribute__((always_inline)) void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, int channels) {
     T *dst = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int srcidx = y * width * channels;
         for (int x = 0; x < width; x++) {
-            int dstidx = (y - buf->min[1]) * buf->stride[1] +
-                         (x - buf->min[0]) * buf->stride[0] +
-                         -buf->min[2] * buf->stride[2];
+            int dstidx = y * buf->stride[1] +
+                         x * buf->stride[0];
             for (int c = 0; c < channels; c++) {
                 dst[dstidx] = src[srcidx];
                 srcidx++;
