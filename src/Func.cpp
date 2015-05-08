@@ -1028,7 +1028,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_si
     return *this;
 }
 
-Func &Func::glsl(Var x, Var y, Var c) {
+Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
 
     reorder(c, x, y);
@@ -1037,7 +1037,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule(), name()).gpu_blocks(x, y, DeviceAPI::GLSL);
+    Stage(func.schedule(), name()).gpu_blocks(x, y, device_api);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
@@ -1049,9 +1049,12 @@ Func &Func::glsl(Var x, Var y, Var c) {
         }
     }
     user_assert(constant_bounds)
-        << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    vectorize(c);
+        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
     return *this;
+}
+
+Func &Func::glsl(Var x, Var y, Var c) {
+    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
 }
 
 Func &Func::reorder_storage(Var x, Var y) {

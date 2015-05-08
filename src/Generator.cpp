@@ -215,15 +215,15 @@ void GeneratorBase::build_params() {
             internal_assert(param != nullptr);
             user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
-            user_assert(filter_params.find(param->name()) == filter_params.end())
-                << "Duplicate Param name: " << param->name();
+            for (const Argument& arg : filter_arguments) {
+                user_assert(arg.name != param->name()) << "Duplicate Param name: " << param->name();
+            }
             Expr def, min, max;
             if (!param->is_buffer()) {
                 def = param->get_scalar_expr();
                 min = param->get_min_value();
                 max = param->get_max_value();
             }
-            filter_params[param->name()] = param;
             filter_arguments.push_back(Argument(param->name(),
                 param->is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                 param->type(), param->dimensions(), def, min, max));
@@ -241,15 +241,6 @@ void GeneratorBase::build_params() {
         }
         params_built = true;
     }
-}
-
-std::vector<Internal::Parameter> GeneratorBase::get_filter_parameters() {
-    build_params();
-    std::vector<Internal::Parameter> result;
-    for (size_t i = 0; i < filter_arguments.size(); ++i) {
-        result.push_back(*filter_params[filter_arguments[i].name]);
-    }
-    return result;
 }
 
 GeneratorParamValues GeneratorBase::get_generator_param_values() {
