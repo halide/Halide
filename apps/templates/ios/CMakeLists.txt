@@ -37,7 +37,7 @@ halide_add_ios_generator_to_app(TARGET test_ios
   GENERATOR_TARGET example
   GENERATOR_NAME example
   GENERATED_FUNCTION example
-  GENERATOR_SOURCES ../../generator/example_generator.cpp
+  GENERATOR_SOURCES ../../../test/generator/example_generator.cpp
   GENERATOR_ARGS -e html target=ios-arm-64
   )
 
@@ -49,6 +49,6 @@ halide_add_ios_generator_to_app(TARGET test_ios
   GENERATOR_TARGET example
   GENERATOR_NAME example
   GENERATED_FUNCTION example_glsl
-  GENERATOR_SOURCES ../../generator/example_generator.cpp
+  GENERATOR_SOURCES ../../../test/generator/example_generator.cpp
   GENERATOR_ARGS -e html target=ios-arm-64-opengl
   )
