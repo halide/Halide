@@ -23,6 +23,7 @@ int main(int argc, char **argv) {
         levels[l] = Image<float>(1024 >> l, 1024 >> l);
     }
 
+    // Will throw a compiler error if we didn't compile the generator with 10 levels.
     pyramid(input,
             levels[0], levels[1], levels[2], levels[3], levels[4],
             levels[5], levels[6], levels[7], levels[8], levels[9]);
