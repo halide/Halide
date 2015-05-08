@@ -1,18 +1,9 @@
-#include "HalideRuntime.h"
-#include "HalideRuntimeOpenGL.h"
-
 #include <cstdint>
 #include <vector>
 
-// This function outputs the buffer in text form in a platform specific manner.
-extern "C"
-int halide_buffer_print(const buffer_t* buffer);
-
-// This function outputs the buffer as an image in a platform specific manner.
-// For example, in a web based application the buffer contents might be
-// displayed as a png image.
-extern "C"
-int halide_buffer_display(const buffer_t* buffer);
+#include "HalideRuntime.h"
+#include "HalideRuntimeOpenGL.h"
+#include "SimpleAppAPI.h"
 
 #include "example.h"
 #include "example_glsl.h"

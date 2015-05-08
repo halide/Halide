@@ -113,6 +113,7 @@ function(halide_add_osx_app)
   target_include_directories(${args_TARGET} PUBLIC
     ${HALIDE_INCLUDE_PATH}
     ${out_dir}
+    "${CMAKE_CURRENT_SOURCE_DIR}/.."
     )
 
 endfunction(halide_add_osx_app)
