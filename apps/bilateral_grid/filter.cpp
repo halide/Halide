@@ -10,22 +10,23 @@
 
 int main(int argc, char **argv) {
 
-    if (argc < 4) {
-        printf("Usage: ./filter input.png output.png range_sigma\n"
-               "e.g. ./filter input.png output.png 0.1\n");
+    if (argc < 5) {
+        printf("Usage: ./filter input.png output.png range_sigma timing_iterations\n"
+               "e.g. ./filter input.png output.png 0.1 10\n");
         return 0;
     }
+
+    int timing_iterations = atoi(argv[4]);
 
     Image<float> input = load<float>(argv[1]);
     Image<float> output(input.width(), input.height(), 1);
 
     bilateral_grid(atof(argv[3]), input, output);
 
-#if 1
     // Timing code
     timeval t1, t2;
     double min_t = 1e10f;
-    for (int j = 0; j < 10; j++) {
+    for (int j = 0; j < timing_iterations; j++) {
         gettimeofday(&t1, NULL);
         for (int i = 0; i < 10; i++) {
             bilateral_grid(atof(argv[3]), input, output);
@@ -38,7 +39,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Time: %fms\n", min_t/10);
-#endif
 
     save(output, argv[2]);
 
