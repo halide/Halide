@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 android update project -p . --subprojects --target android-21
+if [ -z "$ANDROID_NDK_HOME" ]; then
+    echo "Set ANDROID_NDK_HOME to point to your android ndk root directory"
+    exit 1
+fi
 cd jni
 # Compile the program that when executed, creates an architecture-specific .so.
 # GenGen.cpp is a stub main().
@@ -28,7 +32,8 @@ done
 
 cd ..
 pwd
-ndk-build # NDK_LOG=1
+${ANDROID_NDK_HOME}/ndk-build -C jni # NDK_LOG=1
 ant debug
-#adb install -r bin/HelloAndroidCamera2-debug.apk
-#adb logcat
+adb install -r bin/HelloAndroidCamera2-debug.apk
+adb shell am start com.example.helloandroidcamera2/com.example.helloandroidcamera2.CameraActivity
+adb logcat
