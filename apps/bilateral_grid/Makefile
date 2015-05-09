@@ -18,7 +18,7 @@ filter: bilateral_grid.o filter.cpp
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
-bilateral_grid.avi: bilateral_grid.cpp $(LIB_HALIDE) viz.sh ../../bin/HalideTraceViz
+bilateral_grid.avi: bilateral_grid.cpp viz.sh ../../bin/HalideTraceViz
 	bash viz.sh
 
 out.png: filter

@@ -30,7 +30,7 @@ out.png: process
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
-camera_pipe.avi: camera_pipe.cpp viz.sh $(LIB_HALIDE) $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
+camera_pipe.avi: camera_pipe.cpp viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
 	bash viz.sh
 
 clean:
