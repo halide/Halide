@@ -121,7 +121,7 @@ public:
     void *user_context;
 
     Printer(void *ctx) : user_context(ctx) {
-        buf = (char *)halide_malloc(NULL, length);
+        buf = (char *)halide_malloc(user_context, length);
         dst = buf;
         end = buf + (length-1);
         *end = 0;
@@ -185,7 +185,7 @@ public:
         } else {
             // It's a stringstream. Do nothing.
         }
-        halide_free(NULL, buf);
+        halide_free(user_context, buf);
     }
 };
 

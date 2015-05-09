@@ -574,6 +574,7 @@ public:
     EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
                                     const Target &target = get_target_from_environment());
     // @}
+
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -596,8 +597,6 @@ public:
      * doing. */
     EXPORT void print_loop_nest();
 
-    // @}
-
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.
@@ -616,12 +615,10 @@ public:
      * Deduces target files based on filenames specified in
      * output_files struct.
      */
-    //@{
     EXPORT void compile_to(const Outputs &output_files,
                            std::vector<Argument> args,
                            const std::string &fn_name,
                            const Target &target = get_target_from_environment());
-    // @}
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -1273,10 +1270,14 @@ public:
     }
     // @}
 
-    /** Schedule for execution using GLSL. Conceptually, this is similar to
-     * parallelization over 'x' and 'y' (since GLSL shaders compute individual
-     * output pixels in parallel) and vectorization over 'c' (since GLSL
-     * implicitly vectorizes the color channel). */
+    /** Schedule for execution using coordinate-based hardware api.
+     * GLSL and Renderscript are examples of those. Conceptually, this is
+     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
+     * individual output pixels in parallel) and vectorization over 'c'
+     * (since GLSL/RS implicitly vectorizes the color channel). */
+    EXPORT Func &shader(Var x, Var y, Var c, DeviceAPI device_api);
+
+    /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
     /** Specify how the storage for the function is laid out. These

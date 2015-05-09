@@ -162,6 +162,9 @@ class InjectBufferCopies : public IRMutator {
           case DeviceAPI::GLSL:
             interface_name = "halide_opengl_device_interface";
             break;
+          case DeviceAPI::Renderscript:
+            interface_name = "halide_renderscript_device_interface";
+            break;
           default:
             internal_error << "Bad DeviceAPI " << static_cast<int>(device_api) << "\n";
             break;
@@ -382,23 +385,23 @@ class InjectBufferCopies : public IRMutator {
             }
         } else if (op->name == Call::image_load && op->call_type == Call::Intrinsic) {
             // counts as a device read
-            internal_assert(device_api == DeviceAPI::GLSL);
+            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
-            debug(4) << "Adding GLSL read via glsl_texture_load for " << buffer_var->name << "\n";
-            state[buf_name].devices_reading.insert(DeviceAPI::GLSL);
+            debug(4) << "Adding image read via image_load for " << buffer_var->name << "\n";
+            state[buf_name].devices_reading.insert(device_api);
             IRMutator::visit(op);
         } else if (op->name == Call::image_store && op->call_type == Call::Intrinsic) {
             // counts as a device store
-            internal_assert(device_api == DeviceAPI::GLSL);
+            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
-            debug(4) << "Adding GLSL write via glsl_texture_load for " << buffer_var->name << "\n";
-            state[buf_name].devices_writing.insert(DeviceAPI::GLSL);
+            debug(4) << "Adding image write via image_store for " << buffer_var->name << "\n";
+            state[buf_name].devices_writing.insert(device_api);
             IRMutator::visit(op);
         } else {
             IRMutator::visit(op);

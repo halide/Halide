@@ -432,7 +432,7 @@ int main(int argc, char **argv) {
         case 2: // begin realization
         case 3: // end realization
             // Add a time cost to the beginning and end of realizations
-            halide_clock += 10000;
+            //halide_clock += 10000;
             // TODO: draw a rectangle of some color?
             break;
         case 4: // produce
