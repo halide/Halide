@@ -16,14 +16,15 @@ extern "C" {
 #include "fcam/Demosaic_ARM.h"
 
 int main(int argc, char **argv) {
-    if (argc < 6) {
-        printf("Usage: ./process raw.png color_temp gamma contrast output.png\n"
-               "e.g. ./process raw.png 3200 2 50 output.png");
+    if (argc < 7) {
+        printf("Usage: ./process raw.png color_temp gamma contrast timing_iterations output.png\n"
+               "e.g. ./process raw.png 3200 2 50 5 output.png");
         return 0;
     }
 
     Image<uint16_t> input = load<uint16_t>(argv[1]);
-    Image<uint8_t> output(2560-32, 1920, 3); // image size is hard-coded for the N900 raw pipeline
+    fprintf(stderr, "%d %d\n", input.width(), input.height());
+    Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
@@ -45,10 +46,11 @@ int main(int argc, char **argv) {
     float color_temp = atof(argv[2]);
     float gamma = atof(argv[3]);
     float contrast = atof(argv[4]);
+    int timing_iterations = atoi(argv[5]);
 
     timeval t1, t2;
     unsigned int bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < timing_iterations; i++) {
         gettimeofday(&t1, NULL);
         curved(color_temp, gamma, contrast,
                input, matrix_3200, matrix_7000, output);
@@ -57,11 +59,11 @@ int main(int argc, char **argv) {
         if (t < bestT) bestT = t;
         if (i % 5 == 0) sleep(1);
     }
-    printf("Halide:\t%u\n", bestT);
-    save(output, argv[5]);
+    fprintf(stderr, "Halide:\t%u\n", bestT);
+    save(output, argv[6]);
 
     bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < timing_iterations; i++) {
         gettimeofday(&t1, NULL);
         FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
         gettimeofday(&t2, NULL);
@@ -69,11 +71,11 @@ int main(int argc, char **argv) {
         if (t < bestT) bestT = t;
         if (i % 5 == 0) sleep(1);
     }
-    printf("C++:\t%u\n", bestT);
+    fprintf(stderr, "C++:\t%u\n", bestT);
     save(output, "fcam_c.png");
 
     bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < timing_iterations; i++) {
         gettimeofday(&t1, NULL);
         FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
         gettimeofday(&t2, NULL);
@@ -81,7 +83,7 @@ int main(int argc, char **argv) {
         if (t < bestT) bestT = t;
         if (i % 5 == 0) sleep(1);
     }
-    printf("ASM:\t%u\n", bestT);
+    fprintf(stderr, "ASM:\t%u\n", bestT);
     save(output, "fcam_arm.png");
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
