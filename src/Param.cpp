@@ -94,7 +94,7 @@ Expr OutputImageParam::left() const {
 
 Expr OutputImageParam::right() const {
     user_assert(dimensions() > 0) << "Can't ask for the right of a zero-dimensional image\n";
-    return Internal::Add::make(min(0), Internal::Sub::make(extent(0), 1));
+    return max(0);
 }
 
 Expr OutputImageParam::top() const {
@@ -104,7 +104,7 @@ Expr OutputImageParam::top() const {
 
 Expr OutputImageParam::bottom() const {
     user_assert(dimensions() > 1) << "Can't ask for the bottom of a zero- or one-dimensional image\n";
-    return Internal::Add::make(min(1), Internal::Sub::make(extent(1), 1));
+    return max(1);
 }
 
 Expr OutputImageParam::width() const {
