@@ -22,8 +22,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # state and compile and link in the specified test source files. Generators are
 # added to the test below.
 halide_add_ios_app(TARGET test_ios
-  TEST_SOURCES ../tests/test_example_generator.cpp
-  TEST_FUNCTIONS test_example_generator
+  TEST_SOURCES ../tests/example_test.cpp
+  TEST_FUNCTIONS example_test
   )
 
 # Note that the Halide target string passed to these generators is ios-arm-64
@@ -37,7 +37,7 @@ halide_add_ios_generator_to_app(TARGET test_ios
   GENERATOR_TARGET example
   GENERATOR_NAME example
   GENERATED_FUNCTION example
-  GENERATOR_SOURCES ../../../test/generator/example_generator.cpp
+  GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS -e html target=ios-arm-64
   )
 
@@ -49,6 +49,6 @@ halide_add_ios_generator_to_app(TARGET test_ios
   GENERATOR_TARGET example
   GENERATOR_NAME example
   GENERATED_FUNCTION example_glsl
-  GENERATOR_SOURCES ../../../test/generator/example_generator.cpp
+  GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS -e html target=ios-arm-64-opengl
   )
