@@ -20,6 +20,9 @@ out.png: process
 process_viz: local_laplacian_viz.o
 	$(CXX) $(CXXFLAGS) -Wall -O3 process.cpp local_laplacian_viz.o -o process_viz -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
+../../bin/HalideTraceViz:
+	$(MAKE) -C ../../ bin/HalideTraceViz
+
 local_laplacian_viz.o: local_laplacian_gen
 	HL_TRACE=3 ./local_laplacian_gen 6
 	mv local_laplacian.o local_laplacian_viz.o
