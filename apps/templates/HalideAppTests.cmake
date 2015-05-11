@@ -10,6 +10,7 @@
 # halide_add_*_app(TARGET <target>
 #                  TEST_SOURCES <file> ...
 #                  TEST_FUNCTIONS <name> ...
+#                  TEST_RESOURCES <file> ...
 #                  )
 #   TARGET is the name of the test app target
 #   TEST_SOURCES list the source files of the Halide generator tests. Other
@@ -17,6 +18,7 @@
 #   target.
 #   TEST_FUNCTIONS list of C symbol names of "bool name(void)" functions for the
 #   test to call. These will be added to the export list for the app.
+#   TEST_RESOURCES list of files to include in the app Resources bundle
 #
 # halide_add_*_generator_to_app(TARGET <target>
 #                               GENERATOR_TARGET <gen_target>
@@ -49,7 +51,7 @@ function(halide_add_osx_app)
   # Parse arguments
   set(options )
   set(oneValueArgs TARGET)
-  set(multiValueArgs TEST_SOURCES TEST_FUNCTIONS)
+  set(multiValueArgs TEST_SOURCES TEST_FUNCTIONS TEST_RESOURCES)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN} )
 
   # Set the string for the bundle identifier in ccmake. The value passed here will
@@ -60,9 +62,11 @@ function(halide_add_osx_app)
   # passed to add_executable and to the RESOURCE property in set_target_properties
   set(resources
     index.html
+    ${args_TEST_RESOURCES}
     )
 
   add_executable(${args_TARGET} MACOSX_BUNDLE
+    ../SimpleAppAPI.h
     main.m
     AppDelegate.h
     AppDelegate.mm
@@ -167,7 +171,7 @@ function(halide_add_ios_app)
   # Parse arguments
   set(options )
   set(oneValueArgs TARGET)
-  set(multiValueArgs TEST_SOURCES TEST_FUNCTIONS)
+  set(multiValueArgs TEST_SOURCES TEST_FUNCTIONS TEST_RESOURCES)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN} )
 
   # Set the string for the bundle identifier in ccmake. The value passed here will
@@ -186,9 +190,11 @@ function(halide_add_ios_app)
   # passed to add_executable and to the RESOURCE property in set_target_properties
   set(RESOURCES
     index.html
+    ${args_TEST_RESOURCES}
     )
 
   add_executable(${args_TARGET} MACOSX_BUNDLE
+    ../SimpleAppAPI.h
     AppDelegate.h
     AppDelegate.m
     AppProtocol.h
