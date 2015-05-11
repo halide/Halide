@@ -131,38 +131,43 @@ void halide_error(void *user_context, const char * message)
 extern "C"
 int halide_buffer_display(const buffer_t* buffer)
 {
-  // Convert the buffer_t to an NSImage
+  // Convert the buffer_t to a UIImage
 
-  // TODO: This code should check whether or not the data is planar and handle
-  // channel types larger than one byte.
-  void* data_ptr = buffer->host;
+  // TODO: This code should handle channel types larger than one byte.
+  void *data_ptr = buffer->host;
 
-  size_t width            = buffer->extent[0];
-  size_t height           = buffer->extent[1];
-  size_t channels         = buffer->extent[2];
-  size_t bitsPerComponent = buffer->elem_size*8;
+  size_t width = buffer->extent[0];
+  size_t height = buffer->extent[1];
+  size_t channels = buffer->extent[2];
+  size_t bitsPerComponent = buffer->elem_size * 8;
 
-  // For planar data, there is one channel across the row
-  size_t src_bytesPerRow      = width*buffer->elem_size;
-  size_t dst_bytesPerRow      = width*channels*buffer->elem_size;
+  size_t totalBytes = width * height * channels * buffer->elem_size;
 
-  size_t totalBytes = width*height*channels*buffer->elem_size;
+  size_t src_bytesPerRow = width * buffer->elem_size;
+  size_t dst_bytesPerRow = width * channels * buffer->elem_size;
 
-  // Unlike Mac OS X Cocoa which directly supports planar data via
-  // NSBitmapImageRep, in iOS we must create a CGImage from the pixel data and
-  // Quartz only supports interleaved formats.
-  unsigned char* src_buffer = (unsigned char*)data_ptr;
-  unsigned char* dst_buffer = (unsigned char*)malloc(totalBytes);
+  unsigned char *dst_buffer = NULL;
+  if (buffer->stride[0] == 1) {
 
-  // Interleave the data
-  for (size_t c=0;c!=buffer->extent[2];++c) {
-    for (size_t y=0;y!=buffer->extent[1];++y) {
-      for (size_t x=0;x!=buffer->extent[0];++x) {
-        size_t src = x + y*src_bytesPerRow + c * (height*src_bytesPerRow);
-        size_t dst = c + x*channels + y*dst_bytesPerRow;
-        dst_buffer[dst] = src_buffer[src];
+    // Unlike Mac OS X Cocoa which directly supports planar data via
+    // NSBitmapImageRep, in iOS we must create a CGImage from the pixel data and
+    // Quartz only supports interleaved formats.
+    unsigned char *src_buffer = (unsigned char *)data_ptr;
+
+    dst_buffer = (unsigned char *)malloc(totalBytes);
+
+    // Interleave the data
+    for (size_t c = 0; c != buffer->extent[2]; ++c) {
+      for (size_t y = 0; y != buffer->extent[1]; ++y) {
+          for (size_t x = 0; x != buffer->extent[0]; ++x) {
+              size_t src = x + y * src_bytesPerRow + c * (height * src_bytesPerRow);
+              size_t dst = c + x * channels + y * dst_bytesPerRow;
+              dst_buffer[dst] = src_buffer[src];
+          }
       }
     }
+  } else {
+    dst_buffer = (unsigned char *)data_ptr;
   }
 
   CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, dst_buffer, totalBytes, NULL);
