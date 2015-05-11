@@ -117,7 +117,9 @@ int main() {
         return 1;
     }
 
-    test_lut1d();
+    if (test_lut1d() == 0) {
+        printf("PASSED\n");
+    }
 
     return 0;
 }

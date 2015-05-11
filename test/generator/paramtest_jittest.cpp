@@ -7,7 +7,6 @@ using Halide::Expr;
 using Halide::Func;
 using Halide::Image;
 using Halide::Internal::GeneratorParamValues;
-using Halide::Internal::Parameter;
 
 const int kSize = 32;
 
@@ -115,11 +114,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Test Generator::get_filter_arguments() and Generator::get_filter_parameters()
+    // Test Generator::get_filter_arguments()
     {
         ParamTest gen;
         std::vector<Argument> args = gen.get_filter_arguments();
-        std::vector<Parameter> params = gen.get_filter_parameters();
         if (args.size() != 3 ||
             args[0].name != "input" || args[1].name != "float_arg" || args[2].name != "int_arg" ||
             !args[0].is_buffer() || !args[1].is_scalar() || !args[2].is_scalar() ||
@@ -137,32 +135,6 @@ int main(int argc, char **argv) {
             args[2].min.defined() ||
             args[2].max.defined()) {
             fprintf(stderr, "constraints for int_arg are incorrect\n");
-            exit(-1);
-        }
-        if (params.size() != 3 || params[0].name() != "input" || params[1].name() != "float_arg" || params[2].name() != "int_arg") {
-            fprintf(stderr, "get_filter_parameters is incorrect\n");
-            exit(-1);
-        }
-        // Default type for param[0] should be UInt(8)
-        if (params[0].type() != Halide::UInt(8)) {
-            fprintf(stderr, "params[0].type() should be uint8\n");
-            exit(-1);
-        }
-        // Change the GeneratorParam for input_type; this shouldn't affect anything
-        // until after build() is called.
-        gen.set_generator_param_values({ { "input_type", "float32" } });
-        params = gen.get_filter_parameters();
-        if (params[0].type() != Halide::UInt(8)) {
-            fprintf(stderr, "params[0].type() should be uint8\n");
-            exit(-1);
-        }
-
-        // This should change the type of param[0] (for subsequent calls to get_filter_parameters)
-        gen.build();
-
-        params = gen.get_filter_parameters();
-        if (params[0].type() != Halide::Float(32)) {
-            fprintf(stderr, "params[0].type() should be float32\n");
             exit(-1);
         }
     }
