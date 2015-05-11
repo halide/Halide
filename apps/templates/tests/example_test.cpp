@@ -4,6 +4,7 @@
 #include "HalideRuntime.h"
 #include "HalideRuntimeOpenGL.h"
 #include "SimpleAppAPI.h"
+#include "static_image.h"
 
 #include "example.h"
 #include "example_glsl.h"
@@ -82,6 +83,16 @@ bool example_test() {
   }
 
   halide_buffer_display(&buf);
+
+  // -------- Other stuff
+
+  halide_print(NULL, "Here is a random image.\n");
+
+  Image<uint8_t> randomness(300, 400, 3);
+  if (!halide_randomize_buffer_host<uint8_t>(0, 0, 255, randomness)) {
+    halide_error(NULL, "halide_randomize_buffer_host failed!");
+  }
+  halide_buffer_display(randomness);
 
   return errors > 0;
 }
