@@ -138,7 +138,7 @@ enum halide_trace_event_code {halide_trace_load = 0,
 #pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
-    halide_trace_event_code event;
+    enum halide_trace_event_code event;
     int32_t parent_id;
     int32_t type_code;
     int32_t bits;
@@ -179,7 +179,7 @@ struct halide_trace_event {
  * realization. Within a single production, the ordering of events is
  * meaningful.
  */
-extern int32_t halide_trace(void *user_context, const halide_trace_event *event);
+extern int32_t halide_trace(void *user_context, const struct halide_trace_event *event);
 
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
