@@ -142,8 +142,7 @@ int halide_buffer_display(const buffer_t* buffer)
 {
   // Convert the buffer_t to an NSImage
 
-  // TODO: This code should check whether or not the data is planar and handle
-  // channel types larger than one byte.
+  // TODO: This code should handle channel types larger than one byte.
   void* data_ptr = buffer->host;
 
   size_t width            = buffer->extent[0];
