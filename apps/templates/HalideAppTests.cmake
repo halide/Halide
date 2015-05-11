@@ -118,6 +118,7 @@ function(halide_add_osx_app)
     ${HALIDE_INCLUDE_PATH}
     ${out_dir}
     "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../support"
     )
 
 endfunction(halide_add_osx_app)
@@ -246,6 +247,7 @@ function(halide_add_ios_app)
     ${HALIDE_INCLUDE_PATH}
     ${out_dir}
     "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../support"
     )
 
 endfunction(halide_add_ios_app)

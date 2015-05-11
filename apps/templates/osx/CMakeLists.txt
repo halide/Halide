@@ -17,8 +17,8 @@ set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)")
 # state and compile and link in the specified test source files. Generators are
 # added to the test below.
 halide_add_osx_app(TARGET test_osx
-  TEST_SOURCES ../tests/test_example_generator.cpp
-  TEST_FUNCTIONS test_example_generator
+  TEST_SOURCES ../tests/example_test.cpp
+  TEST_FUNCTIONS example_test
   )
 
 # Create a generator executable and use it to generate a halide function for the
@@ -27,7 +27,7 @@ halide_add_osx_generator_to_app(TARGET test_osx
   GENERATOR_TARGET example
   GENERATOR_NAME example
   GENERATED_FUNCTION example
-  GENERATOR_SOURCES ../../../test/generator/example_generator.cpp
+  GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS -e html target=host
   )
 
@@ -39,6 +39,6 @@ halide_add_osx_generator_to_app(TARGET test_osx
   GENERATOR_TARGET example
   GENERATOR_NAME example
   GENERATED_FUNCTION example_glsl
-  GENERATOR_SOURCES ../../../test/generator/example_generator.cpp
+  GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS -e html target=host-opengl
   )

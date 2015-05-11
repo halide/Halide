@@ -4,6 +4,7 @@
 #include "HalideRuntime.h"
 #include "HalideRuntimeOpenGL.h"
 #include "SimpleAppAPI.h"
+#include "static_image.h"
 
 #include "example.h"
 #include "example_glsl.h"
@@ -30,7 +31,7 @@ static int check(const buffer_t &buf, float runtime_factor) {
 }
 
 extern "C"
-bool test_example_generator() {
+bool example_test() {
 
   halide_print(NULL, "Running filter example. This should produce two blue and "
                "green patterns.\n");
@@ -82,6 +83,16 @@ bool test_example_generator() {
   }
 
   halide_buffer_display(&buf);
+
+  // -------- Other stuff
+
+  halide_print(NULL, "Here is a random image.\n");
+
+  Image<uint8_t> randomness(300, 400, 3);
+  if (!halide_randomize_buffer_host<uint8_t>(0, 0, 255, randomness)) {
+    halide_error(NULL, "halide_randomize_buffer_host failed!");
+  }
+  halide_buffer_display(randomness);
 
   return errors > 0;
 }
