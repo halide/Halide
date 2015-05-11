@@ -30,7 +30,7 @@ static int check(const buffer_t &buf, float runtime_factor) {
 }
 
 extern "C"
-bool test_example_generator() {
+bool example_test() {
 
   halide_print(NULL, "Running filter example. This should produce two blue and "
                "green patterns.\n");
