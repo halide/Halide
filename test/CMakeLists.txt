@@ -65,7 +65,7 @@ if (WITH_TEST_GENERATORS)
   # and make an executable target for it named 'generator_foo' that contains the
   # generator executable.
 
-  include(HalideGenerator.cmake)
+  include(../HalideGenerator.cmake)
 
   # First create Halide linked executables for the generators using
   # halide_project(...). These are used during the build.
