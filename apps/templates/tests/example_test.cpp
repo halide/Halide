@@ -53,13 +53,17 @@ bool example_test() {
   // ------ CPU target
 
   halide_print(NULL, "CPU target\n");
-  if (example(runtime_factor, &buf) != 0) {
-    halide_error(NULL, "example failed!");
+
+  {
+    ScopedTimer timer(NULL, "CPU example");
+    // Normally you'd check the result, but in this case we'll just rely
+    // on halide_error() dumping an error message to our console.
+    (void) example(runtime_factor, &buf);
   }
 
   int errors = check(buf, runtime_factor);
   if (errors > 0) {
-    halide_error(NULL, "CPU Target had errors!");
+    halide_errorf(NULL, "CPU Target had %d errors!", errors);
   }
 
   halide_buffer_display(&buf);
@@ -68,18 +72,28 @@ bool example_test() {
 
   runtime_factor *= 2;
   halide_print(NULL,"GLSL target\n");
-  if (example_glsl(runtime_factor, &buf) != 0) {
-    halide_error(NULL, "example_glsl failed!");
+
+  {
+    ScopedTimer timer(NULL, "halide_copy_to_device");
+    halide_copy_to_device(NULL, &buf, halide_opengl_device_interface());
+  }
+
+  {
+    ScopedTimer timer(NULL, "GLSL example");
+    (void) example_glsl(runtime_factor, &buf);
   }
 
   if (!buf.dev) {
       halide_error(NULL, "Expected dev output here");
   }
-  halide_copy_to_host(NULL, &buf);
+  {
+    ScopedTimer timer(NULL, "halide_copy_to_host");
+    halide_copy_to_host(NULL, &buf);
+  }
 
   errors = check(buf, runtime_factor);
   if (errors > 0) {
-    halide_error(NULL, "GPU Target had errors!");
+    halide_errorf(NULL, "GPU Target had %d errors!", errors);
   }
 
   halide_buffer_display(&buf);

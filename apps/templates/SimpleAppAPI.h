@@ -1,6 +1,8 @@
 #ifndef _H_SimpleAppAPI
 #define _H_SimpleAppAPI
 
+#include <stdarg.h>
+
 #include <random>
 #include <vector>
 
@@ -20,7 +22,84 @@ int halide_buffer_print(const buffer_t* buffer);
 // displayed as a png image.
 int halide_buffer_display(const buffer_t* buffer);
 
+// These aren't "official" public runtime API, so please don't use them outside of this code.
+int halide_start_clock(void *user_context);
+int64_t halide_current_time_ns(void *user_context);
+
 }  // extern "C"
+
+// VarArg wrapper around halide_print()
+void halide_printf(void* user_context, const char* fmt, ...) {
+  char buffer[4096];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buffer, sizeof(buffer), fmt, args);
+  halide_print(user_context, buffer);
+  va_end(args);
+}
+
+// VarArg wrapper around halide_error()
+void halide_errorf(void* user_context, const char* fmt, ...) {
+  char buffer[4096];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buffer, sizeof(buffer), fmt, args);
+  halide_error(user_context, buffer);
+  va_end(args);
+}
+
+class SimpleTimer {
+ public:
+  SimpleTimer(void *user_context)
+      : user_context_(user_context), time_net_(0), time_start_(0), running_(false) {
+    halide_start_clock(user_context_);
+  }
+  void start() {
+    if (!running_) {
+      time_start_ = halide_current_time_ns(user_context_);
+      running_ = true;
+    }
+  }
+  void stop() {
+    if (running_) {
+      int64_t time_end = halide_current_time_ns(user_context_);
+      time_net_ += (time_end - time_start_);
+      time_start_ = 0;
+      running_ = false;
+    }
+  }
+  void reset() {
+    time_net_ = 0;
+    time_start_ = 0;
+    running_ = false;
+  }
+  int64_t net_nsec() { return running_ ? 0 : time_net_; }
+  double net_usec() { return running_ ? 0 : (double) time_net_ / 1e3; }
+  double net_msec() { return running_ ? 0 : (double)time_net_ / 1e6; }
+  double net_sec() { return running_ ? 0 : (double)time_net_ / 1e9; }
+ private:
+  void *user_context_;
+  int64_t time_net_;
+  int64_t time_start_;
+  bool running_;
+};
+
+class ScopedTimer {
+ public:
+  ScopedTimer(void *user_context, const char *msg)
+      : user_context_(user_context), timer_(user_context), msg_(msg) {
+    timer_.start();
+  }
+  ~ScopedTimer() {
+    timer_.stop();
+    halide_printf(user_context_, "%s: %f usec", msg_, timer_.net_usec());
+  }
+ private:
+  void *user_context_;
+  SimpleTimer timer_;
+  const char *msg_;
+};
+
 
 // Fill the buffer's host storage field with random data of the given type
 // in the given range. Not very rigorous, but convenient for simple testing
