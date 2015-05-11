@@ -85,6 +85,11 @@ public:
      * into this image. */
     EXPORT int min(int dim) const;
 
+    /** Get the max coordinate of a dimension. The bottom right of the
+     * image represents this point in a function that was realized
+     * into this image. */
+    EXPORT int max(int dim) const;
+
     /** Set the min coordinates of a dimension. */
     EXPORT void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0);
 

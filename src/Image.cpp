@@ -141,6 +141,15 @@ int ImageBase::min(int dim) const {
     return buffer.min(dim);
 }
 
+int ImageBase::max(int dim) const {
+    user_assert(defined()) << "max of undefined Image\n";
+    user_assert(dim >= 0 && dim < dims)
+        << "Requested max of dimension " << dim
+        << " in " << dims << "-dimensional Image \""
+        << buffer.name() << "\".\n";
+    return buffer.max(dim);
+}
+
 void ImageBase::set_min(int m0, int m1, int m2, int m3) {
     user_assert(defined()) << "set_min of undefined Image\n";
     buffer.set_min(m0, m1, m2, m3);
@@ -179,7 +188,7 @@ int ImageBase::left() const {
 
 int ImageBase::right() const {
     if (dimensions() < 1) return 0;
-    return min(0) + extent(0) - 1;
+    return max(0);
 }
 
 int ImageBase::top() const {
@@ -189,7 +198,7 @@ int ImageBase::top() const {
 
 int ImageBase::bottom() const {
     if (dimensions() < 2) return 0;
-    return min(1) + extent(1) - 1;
+    return max(1);
 }
 
 Expr ImageBase::operator()() const {

@@ -89,6 +89,10 @@ public:
      * that corresponds to the base address of the buffer. */
     EXPORT int min(int dim) const;
 
+    /** Get the coordinate in the function that this buffer represents
+     * that corresponds to the largest valid address of the buffer. */
+    EXPORT int max(int dim) const;
+
     /** Set the coordinate in the function that this buffer represents
      * that corresponds to the base address of the buffer. */
     EXPORT void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0);
