@@ -527,7 +527,26 @@ JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
     return jit_module.ptr->argv_entrypoint;
 }
 
+static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set <const JITModuleContents *> &already_seen) {
+    if (start == target) {
+        return true;
+    }
+    if (already_seen.count(start) != 0) {
+        return false;
+    }
+    already_seen.insert(start);
+    for (const JITModule &dep_holder : start->dependencies) {
+        const JITModuleContents *dep = dep_holder.jit_module.ptr;
+        if (module_already_in_graph(dep, target, already_seen)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void JITModule::add_dependency(JITModule &dep) {
+    std::set<const JITModuleContents *> already_seen;
+    internal_assert(!module_already_in_graph(dep.jit_module.ptr, jit_module.ptr, already_seen)) << "JITModule::add_dependency: creating circular dependency graph.\n";
     jit_module.ptr->dependencies.push_back(dep);
 }
 
@@ -902,7 +921,6 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
 }
-
 
 }
 }

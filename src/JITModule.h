@@ -220,6 +220,7 @@ public:
 
     EXPORT static void release_all();
 };
+
 }
 }
 
