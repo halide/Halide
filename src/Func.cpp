@@ -2358,22 +2358,37 @@ void Func::infer_input_bounds(Realization dst,
 // TODO: add assertions to make sure this routine never introduces circular references
 // in the deps chain via passing the Func being compiled in as part of the externs list.
 std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
-                                                     const std::map<std::string, JITExtern> &externs) {
+                                                     std::map<std::string, JITExtern> &externs_in_out) {
     std::vector<JITModule> result;
 
     // Externs that are Funcs get their own JITModule. All standalone functions are
     // held in a single JITModule at the end of the list (if there are any).
     JITModule free_standing_jit_externs;
-    for (const std::pair<std::string, JITExtern> &map_entry : externs) {
-        const JITExtern &jit_extern(map_entry.second);
-        if (jit_extern.func != NULL) {
+    for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
+         iter != externs_in_out.end();
+         iter++) {
+        const JITExtern &jit_extern(iter->second);
+        if (iter->second.func != NULL) {
             if (!jit_extern.func->compiled_module.compiled()) {
                 jit_extern.func->compile_jit(target, jit_extern.func_externs);
             }
-            free_standing_jit_externs.add_dependency(jit_extern.func->compiled_module);
-            free_standing_jit_externs.add_symbol_for_export(map_entry.first, jit_extern.func->compiled_module.entrypoint_symbol());
+            free_standing_jit_externs.add_dependency(iter->second.func->compiled_module);
+            free_standing_jit_externs.add_symbol_for_export(iter->first, iter->second.func->compiled_module.entrypoint_symbol());
+            iter->second.c_function = iter->second.func->compiled_module.entrypoint_symbol().address;
+            iter->second.is_void_return = false;
+            iter->second.ret_type = Int(32);
+            std::vector<Argument> args = iter->second.func->arg_types;
+            for (const Argument &arg : args) {
+                 ScalarOrBufferT arg_type_info;
+                 arg_type_info.is_buffer = arg.kind != Argument::InputScalar;
+                 if (!arg_type_info.is_buffer) {
+                     arg_type_info.scalar_type = arg.type;
+                 }
+                 iter->second.arg_types.push_back(arg_type_info);
+            }
+            iter->second.func = NULL;
         } else {
-            free_standing_jit_externs.add_extern_for_export(map_entry.first, jit_extern);
+            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern);
         }
     }
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
@@ -2401,6 +2416,7 @@ void *Func::compile_jit(const Target &target_arg,
     Expr uc_expr = Internal::Variable::make(type_of<void*>(), jit_user_context.name(), jit_user_context);
     uc_expr.accept(&infer_args);
 
+    arg_types = infer_args.arg_types;
     arg_values = infer_args.arg_values;
 
     for (int i = 0; i < func.outputs(); i++) {
@@ -2411,6 +2427,7 @@ void *Func::compile_jit(const Target &target_arg,
         Type t = func.output_types()[i];
         Argument me(buffer_name, Argument::OutputBuffer, t, dimensions());
         infer_args.arg_types.push_back(me);
+        arg_types.push_back(me);
         arg_values.push_back(NULL); // A spot to put the address of this output buffer
     }
     image_param_args = infer_args.image_param_args;
@@ -2440,7 +2457,8 @@ void *Func::compile_jit(const Target &target_arg,
         compile_module_to_text(module, name() + ".stmt");
     }
 
-    compiled_module = JITModule(module, lfn, make_externs_jit_module(target_arg, externs));
+    std::map<std::string, JITExtern> lowered_externs = externs;
+    compiled_module = JITModule(module, lfn, make_externs_jit_module(target_arg, lowered_externs));
     return compiled_module.main_function();
 }
 
