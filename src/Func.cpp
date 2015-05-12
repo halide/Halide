@@ -23,7 +23,6 @@
 #include "PrintLoopNest.h"
 #include "Debug.h"
 #include "IREquality.h"
-#include "HumanReadableStmt.h"
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
 #include "Output.h"
