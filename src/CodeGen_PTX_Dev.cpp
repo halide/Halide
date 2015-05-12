@@ -296,7 +296,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.NoInfsFPMath = false;
     Options.NoNaNsFPMath = false;
     Options.HonorSignDependentRoundingFPMathOption = false;
+    #if LLVM_VERSION < 37
     Options.UseSoftFloat = false;
+    #endif
     /* if (FloatABIForCalls != FloatABI::Default) */
         /* Options.FloatABIType = FloatABIForCalls; */
     Options.NoZerosInBSS = false;
