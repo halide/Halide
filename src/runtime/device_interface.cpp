@@ -156,6 +156,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
                                 << " halide_copy_to_device call to halide_device_malloc failed\n";
             return result;
         }
+        buf->host_dirty = true; // force copy back to new device below.
     }
 
     if (buf->host_dirty) {
