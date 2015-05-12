@@ -78,24 +78,6 @@ void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
   make_argument_list<Args..., void>::add_args(arg_types);
 }
 
-#if 0
-//template <typename A1, typename... Args>
-//void init_arg_types_helper(std::vector<ScalarOrBufferT> &arg_types) {
-//    arg_types.push_back(arg_type_info<A1>());
-//    init_arg_types<Args...>(arg_types);
-//}
-
-template <typename A1, typename... Args>
-void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
-    arg_types.push_back(arg_type_info<A1>());
-    init_arg_types<Args...>(arg_types);
-}
-
-template <>
-void init_arg_types<void, >(std::vector<ScalarOrBufferT> &arg_types) {
-}
-#endif
-
 }
 
 struct JITExtern {
