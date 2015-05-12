@@ -115,6 +115,8 @@
 /apps/HelloNaCl/halide_game_of_life.h
 bin/*
 build/*
+build-ios/*
+build-osx/*
 cmake_build/*
 tmp/*
 doc/*

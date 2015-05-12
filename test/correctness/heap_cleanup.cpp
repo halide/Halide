@@ -52,7 +52,9 @@ int main(int argc, char **argv) {
 
     Image<int> im = h.realize(g_size+100);
 
-    assert(error_occurred && malloc_count == 1 && free_count == 1);
+    // One of the malloc/free pairs comes from constructing the error
+    // message about the bound being wrong.
+    assert(error_occurred && malloc_count == 2 && free_count == 2);
 
     printf("Success!\n");
     return 0;

@@ -165,7 +165,9 @@ class VectorizeLoops : public IRMutator {
                     // let, we need to eliminate any use of the vectorized
                     // dimension variable inside the shuffled expression
                     Expr shuffled_expr = op->args[0];
-                    if (expr_uses_var(shuffled_expr,var)) {
+
+                    bool has_scalarized_expr = expr_uses_var(shuffled_expr,var);
+                    if (has_scalarized_expr) {
                         shuffled_expr = scalarize(op);
                     }
 
@@ -213,10 +215,18 @@ class VectorizeLoops : public IRMutator {
                                           op->func, op->value_index, op->image,
                                           op->param);
 
+                    } else if (has_scalarized_expr) {
+                        internal_assert(mutated_width == 1);
+                        // Otherwise, the channel expression is independent of
+                        // the dimension being vectorized, but the shuffled
+                        // expression is not. Scalarize the whole node including
+                        // the independent channel expression.
+                        expr = scalarize(op);
                     } else {
                         internal_assert(mutated_width == 1);
-                        // Otherwise this shuffle_vector is independent of the
-                        // dimension being vectorized.
+                        // Otherwise, both the shuffled expression and the
+                        // channel expressions of this shuffle_vector is
+                        // independent of the dimension being vectorized
                         expr = op;
                     }
 

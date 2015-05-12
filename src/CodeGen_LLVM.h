@@ -25,6 +25,7 @@ class AllocaInst;
 class Constant;
 class Triple;
 class MDNode;
+class NamedMDNode;
 class DataLayout;
 class BasicBlock;
 }
