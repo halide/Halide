@@ -142,19 +142,19 @@ if (WITH_TEST_GENERATORS)
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATOR_ARGS "target=host-user_context")
     elseif(TEST_SRC STREQUAL "user_context_insanity_aottest.cpp")
-      halide_add_generator_dependency("${TEST_RUNNER}"
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "generator_${GEN_NAME}"
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATOR_ARGS "target=host-user_context")
     # metadata_tester_aottest.cpp depends on two variants of metadata_generator
     elseif(TEST_SRC STREQUAL "metadata_tester_aottest.cpp")
-      halide_add_generator_dependency("${TEST_RUNNER}"
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "generator_${GEN_NAME}"
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATOR_ARGS "target=host-register_metadata")
-      halide_add_generator_dependency("${TEST_RUNNER}"
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "generator_${GEN_NAME}"
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}_ucon"

@@ -109,7 +109,7 @@ function(halide_add_generator_dependency)
     if (NOT target_is_pnacl)
       add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
         DEPENDS "${args_GENERATOR_TARGET}"
-        COMMAND "${CMAKE_BINARY_DIR}/bin/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${SCRATCH_DIR}" "${ARGN}"
+        COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
         # Create an archive using ar (or similar)
         COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
         WORKING_DIRECTORY "${SCRATCH_DIR}"
@@ -118,7 +118,7 @@ function(halide_add_generator_dependency)
       # No archive step for pnacl targets
       add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
         DEPENDS "${args_GENERATOR_TARGET}"
-        COMMAND "${CMAKE_BINARY_DIR}/bin/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${SCRATCH_DIR}" ${ARGN}
+        COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
         WORKING_DIRECTORY "${SCRATCH_DIR}"
         )
     endif()
