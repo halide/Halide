@@ -589,6 +589,7 @@ public:
     EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
                                     const Target &target = get_target_from_environment());
     // @}
+
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -606,76 +607,10 @@ public:
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
 
-    /** Write out an internal representation of lowered code as above
-     * but simplified using the provided realization bounds and other
-     * concrete parameter values. Can emit html or plain text. */
-    // @{
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Realization dst,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Realization dst,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Buffer dst,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &target = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Buffer dst,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &target = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size, int w_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size, int w_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-    // @}
+    /** Write out the loop nests specified by the schedule for this
+     * Function. Helpful for understanding what a schedule is
+     * doing. */
+    EXPORT void print_loop_nest();
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
@@ -695,12 +630,10 @@ public:
      * Deduces target files based on filenames specified in
      * output_files struct.
      */
-    //@{
     EXPORT void compile_to(const Outputs &output_files,
                            std::vector<Argument> args,
                            const std::string &fn_name,
                            const Target &target = get_target_from_environment());
-    // @}
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -1353,10 +1286,14 @@ public:
     }
     // @}
 
-    /** Schedule for execution using GLSL. Conceptually, this is similar to
-     * parallelization over 'x' and 'y' (since GLSL shaders compute individual
-     * output pixels in parallel) and vectorization over 'c' (since GLSL
-     * implicitly vectorizes the color channel). */
+    /** Schedule for execution using coordinate-based hardware api.
+     * GLSL and Renderscript are examples of those. Conceptually, this is
+     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
+     * individual output pixels in parallel) and vectorization over 'c'
+     * (since GLSL/RS implicitly vectorizes the color channel). */
+    EXPORT Func &shader(Var x, Var y, Var c, DeviceAPI device_api);
+
+    /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
     /** Specify how the storage for the function is laid out. These
