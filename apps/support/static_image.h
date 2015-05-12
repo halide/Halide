@@ -36,16 +36,23 @@ class Image {
 
     Contents *contents;
 
-    void initialize(int x, int y, int z, int w) {
+    void initialize(int x, int y, int z, int w, bool interleaved) {
         buffer_t buf = {0};
         buf.extent[0] = x;
         buf.extent[1] = y;
         buf.extent[2] = z;
         buf.extent[3] = w;
-        buf.stride[0] = 1;
-        buf.stride[1] = x;
-        buf.stride[2] = x*y;
-        buf.stride[3] = x*y*z;
+        if (interleaved) {
+            buf.stride[0] = z;
+            buf.stride[1] = x*z;
+            buf.stride[2] = 1;
+            buf.stride[3] = x*y*z;
+        } else {
+            buf.stride[0] = 1;
+            buf.stride[1] = x;
+            buf.stride[2] = x*y;
+            buf.stride[3] = x*y*z;
+        }
         buf.elem_size = sizeof(T);
 
         size_t size = 1;
@@ -67,8 +74,8 @@ public:
     Image() : contents(NULL) {
     }
 
-    Image(int x, int y = 0, int z = 0, int w = 0) {
-        initialize(x, y, z, w);
+    Image(int x, int y = 0, int z = 0, int w = 0, bool interleaved = false) {
+        initialize(x, y, z, w, interleaved);
     }
 
     Image(const Image &other) : contents(other.contents) {
