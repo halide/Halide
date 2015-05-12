@@ -132,6 +132,7 @@ bool halide_randomize_buffer_host(int seed, T min, T max, buffer_t* buf) {
         }
         p0 += buf->stride[0];
     }
+    buf->host_dirty = true;
     return true;
 }
 
