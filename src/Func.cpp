@@ -17,9 +17,9 @@
 #include "Lower.h"
 #include "Image.h"
 #include "Param.h"
+#include "PrintLoopNest.h"
 #include "Debug.h"
 #include "IREquality.h"
-#include "HumanReadableStmt.h"
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
 #include "Output.h"
@@ -1056,7 +1056,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_si
     return *this;
 }
 
-Func &Func::glsl(Var x, Var y, Var c) {
+Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
 
     reorder(c, x, y);
@@ -1065,7 +1065,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule(), name()).gpu_blocks(x, y, DeviceAPI::GLSL);
+    Stage(func.schedule(), name()).gpu_blocks(x, y, device_api);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
@@ -1077,9 +1077,12 @@ Func &Func::glsl(Var x, Var y, Var c) {
         }
     }
     user_assert(constant_bounds)
-        << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    vectorize(c);
+        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
     return *this;
+}
+
+Func &Func::glsl(Var x, Var y, Var c) {
+    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
 }
 
 Func &Func::reorder_storage(Var x, Var y) {
@@ -1966,116 +1969,8 @@ void Func::compile_to_lowered_stmt(const string &filename, const vector<Argument
     }
 }
 
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Realization dst,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst[0], std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Realization dst,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst[0], std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Buffer dst,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst, std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Buffer dst,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-
-    lower(t);
-
-    Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
-
-    Module m(name(), t);
-    m.append(LoweredFunc(name(), infer_arguments(), s, LoweredFunc::External));
-
-    if (fmt == HTML) {
-        compile_module_to_html(m, filename);
-    } else {
-        compile_module_to_text(m, filename);
-    }
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size, int w_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    // Make a dummy host pointer to avoid a pointless allocation.
-    uint8_t dummy_data = 0;
-    Buffer output_buf(output_types()[0], x_size, y_size, z_size, w_size, &dummy_data);
-
-    compile_to_simplified_lowered_stmt(filename, output_buf, additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size, int w_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, w_size,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0, additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0,
-                                       additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0,
-                                       additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
+void Func::print_loop_nest() {
+    std::cerr << Internal::print_loop_nest(func);
 }
 
 void Func::compile_to_file(const string &filename_prefix, const vector<Argument> &args,
