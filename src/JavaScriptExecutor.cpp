@@ -780,6 +780,39 @@ namespace JS_SpiderMonkey {
 
 using namespace JS;
 
+void dump_object(const char *label, JSContext *context, HandleObject obj) {
+    JSIdArray *ids = JS_Enumerate(context, obj);
+    if (ids == NULL) {
+      debug(0) << label << ": getting ids failed.\n";
+    } else {
+      uint32_t len = JS_IdArrayLength(context, ids);
+      if (len == 0) {
+          debug(0) << label << ": object is empty.\n";
+      }
+      for (uint32_t i = 0; i < len; i++) {
+          jsid cur_id = JS_IdArrayGet(context, ids, i);
+          RootedId cur_rooted_id(context, cur_id);
+          RootedValue id_val(context);
+          JS_IdToValue(context, cur_id, &id_val);
+
+          RootedValue val(context);
+          JS_GetPropertyById(context, obj, cur_rooted_id, &val);
+
+          RootedString id_str(context, JS_ValueToSource(context, id_val));
+          RootedString val_str(context, JS_ValueToSource(context, val));
+
+          char *id_utf8 = JS_EncodeStringToUTF8(context, id_str);
+          char *val_utf8 = JS_EncodeStringToUTF8(context, val_str);
+
+          // debug(0) << label << ": id is " << id_utf8 << " val is " << val_utf8 << "\n";
+
+          JS_free(context, val_utf8);
+          JS_free(context, id_utf8);
+      }
+      JS_DestroyIdArray(context, ids);
+    }
+}
+
 // The class of the global object.
 static JSClass global_class = {
   "global",
@@ -869,6 +902,7 @@ ExternalArrayType halide_type_to_external_array_type(const Type &t) {
    return kExternalUint8Array;
 }
 
+#if 0
 struct WrappedBuffer {
     JSContext *context; // TODO: Can we get this from objects?
     RootedObject buffer;
@@ -893,6 +927,7 @@ struct WrappedBuffer {
         JS_StealArrayBufferContents(context, extent_buffer);
     }
 };
+#endif
 
 JSObject *make_array_of_type(JSContext *context, HandleObject array_buffer, ExternalArrayType element_type) {
     internal_assert(JS_IsArrayBufferObject(&*array_buffer)) << "Passed array buffer is not an array buffer object (SpiderMonkey).\n";
@@ -999,27 +1034,27 @@ Value make_buffer_t(JSContext *context, struct buffer_t *buf, ExternalArrayType 
     if (buf->host != NULL) {
         RootedObject host_buffer(context, JS_NewArrayBufferWithContents(context, buffer_total_size(buf) * buf->elem_size, buf->host));
         RootedObject host_array(context, make_array_of_type(context, host_buffer, element_type));
-        JS_DefineProperty(context, buffer, "host", host_array, JSPROP_READONLY);
+        JS_DefineProperty(context, buffer, "host", host_array, JSPROP_READONLY | JSPROP_ENUMERATE);
     } else {
         RootedValue temp_null(context, JSVAL_NULL);
-        JS_DefineProperty(context, buffer, "host", temp_null, JSPROP_READONLY);
+        JS_DefineProperty(context, buffer, "host", temp_null, JSPROP_READONLY | JSPROP_ENUMERATE);
     }
 
     //    debug(0) << "Making min buffer of length " << sizeof(buf->min) << "\n";
     RootedObject min_buffer(context, JS_NewArrayBufferWithContents(context, sizeof(buf->min), &buf->min[0]));
     RootedObject min_array(context, JS_NewInt32ArrayWithBuffer(context, min_buffer, 0, -1));
-    JS_DefineProperty(context, buffer, "min", min_array, JSPROP_READONLY);
+    JS_DefineProperty(context, buffer, "min", min_array, JSPROP_READONLY | JSPROP_ENUMERATE);
 
     RootedObject stride_buffer(context, JS_NewArrayBufferWithContents(context, sizeof(buf->stride), &buf->stride[0]));
     RootedObject stride_array(context, JS_NewInt32ArrayWithBuffer(context, stride_buffer, 0, -1));
-    JS_DefineProperty(context, buffer, "stride", stride_array, JSPROP_READONLY);
+    JS_DefineProperty(context, buffer, "stride", stride_array, JSPROP_READONLY | JSPROP_ENUMERATE);
 
     RootedObject extent_buffer(context, JS_NewArrayBufferWithContents(context, sizeof(buf->extent), &buf->extent[0]));
     RootedObject extent_array(context, JS_NewInt32ArrayWithBuffer(context, extent_buffer, 0, -1));
-    JS_DefineProperty(context, buffer, "extent", extent_array, JSPROP_READONLY);
+    JS_DefineProperty(context, buffer, "extent", extent_array, JSPROP_READONLY | JSPROP_ENUMERATE);
 
-    JS_DefineProperty(context, buffer, "dev", 0, 0, dev_getter, dev_setter);
-    JS_DefineProperty(context, buffer, "elem_size", 0, 0, elem_size_getter, elem_size_setter);
+    JS_DefineProperty(context, buffer, "dev", 0, JSPROP_ENUMERATE, dev_getter, dev_setter);
+    JS_DefineProperty(context, buffer, "elem_size", 0, JSPROP_ENUMERATE, elem_size_getter, elem_size_setter);
 
     result.setObject(*buffer);
     return result;
@@ -1267,13 +1302,72 @@ bool trace_callback(JSContext *context, unsigned argc, JS::Value *vp) {
     return true;
 }
 
-void js_buffer_t_to_struct(HandleValue val, struct buffer_t *slot) {
-#if 0
-    Local<Object> buf = val->ToObject();
+bool get_array_buffer_from_typed_array_field(JSContext *context, HandleObject buffer_obj, const char *name, MutableHandleObject result) {
+    RootedValue typed_array_val(context);
+    if (JS_GetProperty(context, buffer_obj, name, &typed_array_val)) {
+        if (!typed_array_val.isNull() && !typed_array_val.isUndefined()) {
+            RootedObject typed_array(context, &typed_array_val.toObject());
+            RootedValue array_buffer_val(context);
+            if (JS_GetProperty(context, typed_array, "buffer", &array_buffer_val)) {
+                result.set(&array_buffer_val.toObject());
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
-    Local<TypedArray> host_array = Cast<TypedArray>(buf->Get(String::NewFromUtf8(isolate, "host")));
-    Local<ArrayBuffer> array_buffer = host_array->Buffer();
-#endif
+void copy_out_int32_array(JSContext *context, HandleObject buffer_obj, const char *name, int32_t *result, size_t result_length) {
+    RootedValue array_val(context);
+    JS_GetProperty(context, buffer_obj, name, &array_val);
+    RootedObject array(context, &array_val.toObject());
+    uint32_t array_length = 0;
+    JS_GetArrayLength(context, array, &array_length);
+    for (size_t i = 0; i < result_length; i++) {
+      result[i] = 0;
+    }
+    result_length = std::min(result_length, (size_t)array_length);
+    for (int32_t i = 0; i < (int32_t)result_length; i++) {
+        RootedValue temp(context);
+        RootedId index(context);
+        JS_IndexToId(context, i, &index);
+        JS_GetPropertyById(context, array, index, &temp);
+        result[i] = temp.toInt32();
+    }
+}
+
+void js_buffer_t_to_struct(JSContext *context, HandleValue val, struct buffer_t *slot) {
+  debug(0) << "js_buffer_t_to_struct entered.\n";
+
+    RootedObject buffer_obj(context, &val.toObject());
+    
+    dump_object("js_buffer_t_to_struct object", context, buffer_obj);
+
+    uint32_t length = 0;
+    uint8_t *data = NULL;
+    RootedObject array_buffer(context);
+
+    if (get_array_buffer_from_typed_array_field(context, buffer_obj, "host", &array_buffer)) {
+        GetArrayBufferLengthAndData(array_buffer, &length, &data);
+    }
+    slot->host = data;
+
+    // TODO: support GPU stuff....
+    slot->dev = 0;
+
+    copy_out_int32_array(context, buffer_obj, "min", slot->min, sizeof(slot->min) / sizeof(slot->min[0]));
+    copy_out_int32_array(context, buffer_obj, "extent", slot->extent, sizeof(slot->extent) / sizeof(slot->extent[0]));
+    copy_out_int32_array(context, buffer_obj, "stride", slot->stride, sizeof(slot->stride) / sizeof(slot->stride[0]));
+
+    RootedValue temp(context);
+    JS_GetProperty(context, buffer_obj, "elem_size", &temp);
+    slot->elem_size = temp.toInt32();
+    JS_GetProperty(context, buffer_obj, "host_dirty", &temp);
+    slot->host_dirty = temp.toBoolean();
+    JS_GetProperty(context, buffer_obj, "dev_dirty", &temp);
+    slot->dev_dirty = temp.toBoolean();
+
+  debug(0) << "js_buffer_t_to_struct exit.\n";
 }
 
 template <typename T>
@@ -1284,6 +1378,8 @@ void val_to_slot(HandleValue val, uint64_t *slot) {
 
 void js_value_to_uint64_slot(const Halide::Type &type, HandleValue val, uint64_t *slot) {
     if (type.is_handle()) {
+      debug(0) << "Handle value for argument.\n";
+        *(void **)slot = get_user_context(val);
     } else if (type.is_float()) {
         if (type.bits == 32) {
             val_to_slot<float>(val, slot);
@@ -1321,10 +1417,57 @@ void js_value_to_uint64_slot(const Halide::Type &type, HandleValue val, uint64_t
     //    debug(0) << "Slot is " << *slot << "(or " << *(float *)slot << ")\n";
 }
 
-void buffer_t_struct_to_js(const buffer_t *slot, HandleValue val) {
-#if 0
-    Local<Object> buf = val->ToObject();
-#endif
+void copy_in_int32_array(JSContext *context, MutableHandleObject buffer_obj, const char *name, const int32_t *source, size_t source_length) {
+    // This code is careful not to allocate a new array if an adequate one is already present as
+    // the passe din object may have a typed array or be a proxy on a buffer_t.
+    RootedValue array_val(context);
+    JS_GetProperty(context, buffer_obj, name, &array_val);
+    RootedObject array(context);
+    if (array_val.isUndefined()) {
+        array = JS_NewArrayObject(context, source_length);
+    } else {
+        array = &array_val.toObject();
+    }
+    uint32_t array_length = 0;
+    JS_GetArrayLength(context, array, &array_length);
+    if ((size_t)array_length != source_length) {
+        JS_SetArrayLength(context, array, (uint32_t)source_length);
+    }
+    for (int32_t i = 0; i < (int32_t)source_length; i++) {
+        RootedValue temp(context);
+        RootedId index(context);
+        JS_IndexToId(context, i, &index);
+        temp.setInt32(source[i]);
+        JS_SetPropertyById(context, array, index, temp);
+    }
+}
+
+void buffer_t_struct_to_js(JSContext *context, const buffer_t *slot, HandleValue val) {
+  debug(0) << "buffer_t_struct_to_js entered.\n";
+    RootedObject buffer_obj(context, &val.toObject());
+    
+    dump_object("buffer_t_struct_to_js object", context, buffer_obj);
+    RootedObject array_buffer(context);
+
+    // If there was host data, this is not a bounds query and results do not need to be copied back.
+    if (get_array_buffer_from_typed_array_field(context, buffer_obj, "host", &array_buffer)) {
+        return;
+    }
+  debug(0) << "buffer_t_struct_to_js copying out buffer...\n";
+
+    copy_in_int32_array(context, &buffer_obj, "min", slot->min, sizeof(slot->min) / sizeof(slot->min[0]));
+    copy_in_int32_array(context, &buffer_obj, "extent", slot->extent, sizeof(slot->extent) / sizeof(slot->extent[0]));
+    copy_in_int32_array(context, &buffer_obj, "stride", slot->stride, sizeof(slot->stride) / sizeof(slot->stride[0]));
+
+    RootedValue temp(context);
+    temp.setInt32(slot->elem_size);
+    JS_SetProperty(context, buffer_obj, "elem_size", temp);
+    temp.setBoolean(slot->host_dirty);
+    JS_SetProperty(context, buffer_obj, "host_dirty", temp);
+    temp.setBoolean(slot->dev_dirty);
+    JS_SetProperty(context, buffer_obj, "dev_dirty", temp);
+
+  debug(0) << "buffer_t_struct_to_js exited.\n";
 }
 
 template <typename T, typename S>
@@ -1335,6 +1478,7 @@ void slot_to_return_val(const uint64_t *slot, MutableHandleValue val) {
 
 void uint64_slot_to_return_value(const Halide::Type &type, const uint64_t *slot, MutableHandleValue val) {
     if (type.is_handle()) {
+        internal_error << "Returning handles to JavaScript is not supported.\n";
     } else if (type.is_float()) {
         if (type.bits == 32) {
             slot_to_return_val<float, double>(slot, val);
@@ -1377,6 +1521,7 @@ struct CallbackInfo {
 };
 
 bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
+  debug(0) << "In extern_wrapper with " << argc << " args.\n";
     JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
     RootedObject callee(context, &args.callee());
     
@@ -1410,9 +1555,11 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     size_t scalar_arg_index = 0;
     for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
-            js_buffer_t_to_struct(args[args_index++], &buffer_t_args[buffer_t_arg_index]);
+          debug(0) << "Handling buffer arg\n";
+            js_buffer_t_to_struct(context, args[args_index++], &buffer_t_args[buffer_t_arg_index]);
             trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
         } else {
+          debug(0) << "Handling arg of type " << scalar_or_buffer_t.scalar_type << "\n";
             js_value_to_uint64_slot(scalar_or_buffer_t.scalar_type, args[args_index++], &scalar_args[scalar_arg_index]);
             trampoline_args.push_back(&scalar_args[scalar_arg_index++]);
         }
@@ -1422,14 +1569,17 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     if (!jit_extern->is_void_return) {
         trampoline_args.push_back(&ret_val);
     }
+    debug(0) << "Calling extern_wrapper trampoline.\n";
     (*callback_info->trampoline)(&trampoline_args[0]);
+    debug(0) << "Returning from extern_wrapper trampoline.\n";
 
     args_index = 0;
     buffer_t_arg_index = 0;
     for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
-            buffer_t_struct_to_js(&buffer_t_args[buffer_t_arg_index], args[args_index++]);
+            buffer_t_struct_to_js(context, &buffer_t_args[buffer_t_arg_index++], args[args_index]);
         }
+        args_index++;
         // No need to retrieve scalar args as they are passed by value.
     }
     
@@ -1437,6 +1587,7 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
         uint64_slot_to_return_value(jit_extern->ret_type, &ret_val, args.rval());
     }
 
+    debug(0) << "Leaving extern_wrapper.\n";
     return true;
 }
 
@@ -1470,7 +1621,7 @@ bool add_extern_callbacks(JSContext *context, HandleObject global,
         temp = JS_NewObject(context, &handle_class);
         JS_SetPrivate(temp, &callback_storage[storage_index]);
         RootedObject holder(context, JS_GetFunctionObject(f));
-        JS_DefineProperty(context, holder, "trampoline", temp, JSPROP_READONLY);
+        JS_DefineProperty(context, holder, "trampoline", temp, JSPROP_READONLY | JSPROP_ENUMERATE);
         storage_index++;
     }
     return true;

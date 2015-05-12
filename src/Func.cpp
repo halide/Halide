@@ -1749,10 +1749,10 @@ private:
 class FindExterns : public IRGraphVisitor {
     using IRGraphVisitor::visit;
 
-    bool buffer_like_name(const Expr &name) {
-        const StringImm *str = name.as<StringImm>();
-        return str != NULL &&
-               (ends_with(str->value, ".buffer") || ends_with(str->value, ".tmp_buffer"));
+    bool buffer_like_name(const std::string &name) {
+        bool is_bounds_query = name.find(".bounds_query") != std::string::npos;
+        return is_bounds_query ||
+            (ends_with(name, ".buffer") || ends_with(name, ".tmp_buffer"));
     }
 
     void visit(const Call *op) {
@@ -1774,12 +1774,10 @@ class FindExterns : public IRGraphVisitor {
                     ScalarOrBufferT this_arg;
                     this_arg.scalar_type = e.type();
                     if (e.type().is_handle()) {
-                        // This code heuristically matches the patterns define_extern uses to pass buffer argumetns and result parameters.
+                        const Variable *v = e.as<Variable>();
+                        // This code heuristically matches the patterns define_extern uses to pass buffer arguments and result parameters.
                         // TODO: Come up with a way to keep the buffer typing through lowering.
-                        Expr buffer_param_pattern = Variable::make(Handle(), "*");
-                        std::vector<Expr> matched_parts;
-                        this_arg.is_buffer = expr_match(buffer_param_pattern, e, matched_parts) &&
-                                              buffer_like_name(matched_parts[0]);
+                        this_arg.is_buffer = (v != NULL) && buffer_like_name(v->name);
                     } else {
                         this_arg.is_buffer = false;
                     }
@@ -2653,12 +2651,15 @@ std::vector<JITModule> Func::make_externs_jit_module(const Target &target,
             debug(0) << "Setting c_function to " << iter->second.c_function << "\n";
             iter->second.is_void_return = false;
             iter->second.ret_type = Int(32);
-            std::vector<Argument> args = iter->second.func->infer_arguments();
+            std::vector<Argument> args = iter->second.func->arg_types;
             for (const Argument &arg : args) {
                  ScalarOrBufferT arg_type_info;
                  arg_type_info.is_buffer = arg.kind != Argument::InputScalar;
                  if (!arg_type_info.is_buffer) {
+                   debug(0) << "Pushing scalar arg for " << iter->first << "\n";
                      arg_type_info.scalar_type = arg.type;
+                 } else {
+                   debug(0) << "Pushing buffer arg for " << iter->first << "\n";
                  }
                  iter->second.arg_types.push_back(arg_type_info);
             }
