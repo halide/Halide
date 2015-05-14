@@ -54,7 +54,7 @@ const string preamble =
     "if (typeof(halide_shutdown_trace) != \"function\") { halide_shutdown_trace = function () { return 0; } }\n"
     "if (typeof(halide_debug_to_file) != \"function\") { halide_debug_to_file = function (user_context, filename, data, s0, s1, s2, s3, type_code, bytes_per_element) { halide_print(user_context, \"halide_debug_to_file called. Implementation needed.\\n\"); return 0; } }\n"
     "if (typeof(fast_inverse_f32) != \"function\") { fast_inverse_f32 = function(x) { return 1 / x; } }\n"
-    "if (typeof(fast_inverse_sqrt_f32) != \"function\") { fast_inverse_f32 = function(x) { return 1 / Math.sqrt(x); } }\n"
+    "if (typeof(fast_inverse_sqrt_f32) != \"function\") { fast_inverse_sqrt_f32 = function(x) { return 1 / Math.sqrt(x); } }\n"
     "if (typeof(halide_error_bounds_inference_call_failed) !=\"function\") { halide_error_bounds_inference_call_failed = \n"
     "    function(user_context, extern_stage_name, result) {\n"
     "        halide_error(user_context, \"Bounds inference call to external stage \" + extern_stage_name + \" returned non-zero value: \" + result);\n"
@@ -1070,6 +1070,15 @@ void CodeGen_JavaScript::visit(const Call *op) {
             string arg = print_expr(op->args[0]);
             // TODO: Should this use Math.abs?
             rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
+        } else if (op->name == Call::absd) {
+            internal_assert(op->args.size() == 2);
+            string temp = unique_name('_');
+            string arg_a = print_expr(op->args[0]);
+            string arg_b = print_expr(op->args[1]);
+            do_indent();
+            stream << "var " << temp << " = " << arg_a << " - " << arg_b << ";\n";
+            // TODO: Should this use Math.abs?
+            rhs << "(" << temp << " > 0 ? " << temp << " : -" << temp << ")";
         } else if (op->name == Call::memoize_expr) {
             internal_assert(op->args.size() >= 1);
             string arg = print_expr(op->args[0]);

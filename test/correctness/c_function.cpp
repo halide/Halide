@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
             float correct = (float)(i*j);
-	    float delta = imf2(i, j) - correct;
+            float delta = imf2(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf2[%d, %d] = %f instead of %f\n", i, j, imf2(i, j), correct);
                 return -1;

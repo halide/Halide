@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     // If we computed the convolution everywhere, call_count would be
     // 100*100*10*10. Because we only compute it in half of the
     // places, it should be smaller; roughly 100*100*10*10*0.5.
-    if (call_count > 510000) {
+    if (call_count > 520000) {
         printf("Expected call_count ~= 500000. Instead it's %d\n", call_count);
         return -1;
     }
