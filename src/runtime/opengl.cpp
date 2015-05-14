@@ -246,13 +246,11 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
 #ifdef DEBUG_RUNTIME
 {
-    // Output the shader source with a larger statically sized printer
-    // TODO: The debug(..) printer should changed to handle dynamically sized
-    // output
-    Printer<BasicPrinter, 4*1024>(user_context)
-                        << ((type == GL_VERTEX_SHADER) ? "GL_VERTEX_SHADER" : "GL_FRAGMENT_SHADER")
-                        << " SOURCE:\n"
-                        << source << "\n";
+    debug(user_context) << ((type == GL_VERTEX_SHADER) ? "GL_VERTEX_SHADER" : "GL_FRAGMENT_SHADER")
+                        << " SOURCE:\n";
+    // debug() will go thru Printer<> which has a fixed, non-growing size.
+    // Just pass the source directly to halide_print instead, so it won't get clipped.
+    halide_print(user_context, source);
 }
 #endif
 
