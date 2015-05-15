@@ -474,23 +474,35 @@ void CodeGen_GLSL::visit(const Call *op) {
                 rhs << expr << "." << swizzle;
 
             } else {
-
                 // Otherwise, create a result type variable and copy each channel to
                 // it individually.
-                string v = unique_name('_');
-                do_indent();
-                stream << print_type(op->type) << " " << v << ";\n";
 
-                for (int i = 0; i != shuffle_width; ++i) {
+                // Check to see if the result is a scalar, i.e. we are
+                // extracting a single channel from a vector
+                if (op->type.is_scalar()) {
+                    internal_assert(shuffle_width == 1) << "Invalid shuffle width for scalar result";
+
+                    // In this case, no vector suffix is necessary on the LHS
+                    rhs << expr << get_vector_suffix(op->args[1]);
+
+                } else {
+
+                    string v = unique_name('_');
                     do_indent();
-                    stream << v << get_vector_suffix(i) << " = "
-                    << expr << get_vector_suffix(op->args[1 + i]) << ";\n";
+                    stream << print_type(op->type) << " " << v << ";\n";
+
+                    // Otherwise, output a vector suffix for the assignment.
+                    for (int i = 0; i != shuffle_width; ++i) {
+                        do_indent();
+                        stream << v << get_vector_suffix(i) << " = "
+                               << expr << get_vector_suffix(op->args[1 + i])
+                               << ";\n";
+                    }
+
+                    id = v;
+                    return;
                 }
-
-                id = v;
-                return;
             }
-
         } else if (op->name == Call::lerp) {
             // Implement lerp using GLSL's mix() function, which always uses
             // floating point arithmetic.
