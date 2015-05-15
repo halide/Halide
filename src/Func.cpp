@@ -2221,6 +2221,7 @@ void Func::realize(Realization dst, const Target &target,
         externs_js = externs;
         FindExterns find_externs(externs_js);
         lowered.accept(&find_externs);
+        externs_js = filter_externs(externs_js);
     #else
         user_error << "Cannot JIT JavaScript without a JavaScript execution engine (e.g. V8) configured at compile time.\n";
     #endif
@@ -2334,6 +2335,7 @@ void Func::infer_input_bounds(Realization dst,
         externs_js = externs;
         FindExterns find_externs(externs_js);
         lowered.accept(&find_externs);
+        externs_js = filter_externs(externs_js);
     #else
         user_error << "Cannot JIT JavaScript without a JavaScript execution engine (e.g. V8) configured at compile time.\n";
     #endif

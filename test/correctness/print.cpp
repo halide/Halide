@@ -18,6 +18,7 @@ extern "C" void halide_print(void *user_context, const char *message) {
 #endif
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
     Var x;
 
     {
@@ -82,7 +83,10 @@ int main(int argc, char **argv) {
 
     messages.clear();
 
-    {
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript support for 64-bit integers
+        printf("Skipping int64_t based print test for JavaScript as it depends on 64-bit integer support.\n");
+    } else {
         Func f;
 
         // Test a single message longer than 8K.
@@ -118,7 +122,11 @@ int main(int argc, char **argv) {
 
     #ifndef _MSC_VER
     // msvc's library has different ideas about how %f and %e should come out.
-    {
+    // And so does JavaScript, plus rounding, etc. Basically these tests are too tight
+    // in their behavior.
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping floating-point print tests for JavaScript as they depend on exact formatting and rounding.\n");
+    } else {
         Func f, g;
 
         const int N = 1000000;
@@ -154,6 +162,23 @@ int main(int argc, char **argv) {
             #ifdef __APPLE__
             if (messages[i] == "-nan\n") messages[i] = "nan\n";
             #endif
+            if (target.has_feature(Target::JavaScript)) {
+                if (messages[i] == "Infinity\n") {
+                    messages[i] = "inf\n";
+                } else if (messages[i] == "-Infinity\n") {
+                    messages[i] = "-inf\n";
+                } else if (messages[i] == "NaN\n") {
+                    messages[i] = "nan\n";
+                } else if (messages[i] == "-NaN\n") {
+                    messages[i] = "-nan\n";
+                } else if (imf(i) >= 1e21 || imf(i) <= -1e21) {
+                    // The following does not work as JavaScript uses a varying number of characters
+                    // after the decimal point.
+                    // snprintf(correct, sizeof(correct), "%.16e\n", imf(i));
+                    // TODO: Figure out a way to test this.
+                    continue;
+                }
+            }
             if (messages[i] != correct) {
                 printf("float %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, imf(i));
                 return -1;
@@ -162,24 +187,27 @@ int main(int argc, char **argv) {
 
         messages.clear();
 
-        g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_int()) << 32) | random_int()));
-        g.set_custom_print(halide_print);
-        Image<double> img = g.realize(N);
+        if (target.has_feature(Target::JavaScript)) {
+            // TODO: Add JavaScript support for 64-bit integers
+            printf("Skipping int64_t based print test for JavaScript as it depends on 64-bit integer support.\n");
+        } else {
+            g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_int()) << 32) | random_int()));
+            g.set_custom_print(halide_print);
+            Image<double> img = g.realize(N);
 
-        assert(messages.size() == (size_t)N);
+            assert(messages.size() == (size_t)N);
 
-        for (int i = 0; i < N; i++) {
-            snprintf(correct, sizeof(correct), "%e\n", img(i));
-            #ifdef __APPLE__
-            if (messages[i] == "-nan\n") messages[i] = "nan\n";
-            #endif
-            if (messages[i] != correct) {
-                printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
-                return -1;
+            for (int i = 0; i < N; i++) {
+                snprintf(correct, sizeof(correct), "%e\n", img(i));
+                #ifdef __APPLE__
+                if (messages[i] == "-nan\n") messages[i] = "nan\n";
+                #endif
+                if (messages[i] != correct) {
+                    printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
+                    return -1;
+                }
             }
         }
-
-
     }
     #endif
 

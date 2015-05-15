@@ -185,6 +185,7 @@ string CodeGen_JavaScript::make_js_int_cast(string value, bool src_unsigned, int
             mask = "0xffffffff";
             break;
         default:
+          debug(0) << "unknown bit width is " << dst_bits << "\n";
             internal_error << "Unknown bit width making JavaScript cast.\n";
             break;
         }
@@ -1122,9 +1123,16 @@ void CodeGen_JavaScript::visit(const Call *op) {
             string buf_name = unique_name('b');
 
             // Print all args that are general Exprs before starting output on stream.
-            std::vector<Expr> printed_args(op->args.size());
+            std::vector<string> printed_args(op->args.size());
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (op->args[i].as<StringImm>() == NULL && !op->args[i].type().is_handle()) {
+              if (op->args[i].type().is_float()) {
+                  do_indent();
+                  string temp = unique_name('f');
+                  string e = print_expr(op->args[i]);
+                  string format_function = (op->args[i].type().bits == 32) ? "toFixed" : "toScientifc";
+                  stream << "var " << temp << " = (" << e << ")." << format_function << "(6);\n";
+                  printed_args[i] = temp;
+                } else if (op->args[i].as<StringImm>() == NULL && !op->args[i].type().is_handle()) {
                     printed_args[i] = print_expr(op->args[i]);
                 }
             }
@@ -1134,8 +1142,11 @@ void CodeGen_JavaScript::visit(const Call *op) {
                 Type t = op->args[i].type();
 
                 do_indent();
-                if (op->args[i].as<StringImm>()) {
-                  stream << buf_name << " = " << buf_name << ".concat(" << op->args[i] << ");\n";
+
+                if (op->args[i].type().is_float()) {
+                    stream << buf_name << " = " << buf_name << ".concat(" << printed_args[i] << ");\n";
+                } else if (op->args[i].as<StringImm>()) {
+                    stream << buf_name << " = " << buf_name << ".concat(" << op->args[i] << ");\n";
                 } else if (t.is_handle()) {
                     stream << buf_name << " = " << buf_name << ".concat(\"<Object>\");\n";
                 } else {

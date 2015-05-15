@@ -28,10 +28,16 @@ int32_t buffer_total_size(const buffer_t *buf) {
 
 }
 
+namespace Halide { namespace Internal {
+
 // TODO: Filter math routines, runtime routines, etc.
 std::map<std::string, Halide::JITExtern> filter_externs(const std::map<std::string, Halide::JITExtern> &externs) {
-    return externs;
+    std::map<std::string, Halide::JITExtern> result = externs;
+    result.erase("halide_print");
+    return result;
 }
+
+}} // close Halide::Internal namespace
 
 #endif
 
