@@ -48,6 +48,7 @@ const string preamble =
     "var halide_error_code_matlab_init_failed = -20;\n"
     "var halide_error_code_matlab_bad_param_type = -21;\n"
     "var halide_error_code_internal_error = -22;\n"
+    "if (typeof(Math.fround) != \"function\") { Math.fround = function (x) { return new Float32Array([x])[0]; } }\n"
     "if (typeof(halide_print) != \"function\") { halide_print = function (user_context, msg) { Console.log(msg); } }\n"
     "if (typeof(halide_error) != \"function\") { halide_error = function (user_context, msg) { halide_print(user_context, msg); } }\n"
     "if (typeof(halide_trace) != \"function\") { var id = 0; halide_trace = function (user_context, event) { return id++; } }\n"
@@ -414,9 +415,12 @@ string CodeGen_JavaScript::print_assignment(Type t, const std::string &rhs) {
     map<string, string>::iterator cached = cache.find(rhs);
 
     if (cached == cache.end()) {
+        const char *fround_start = (t.is_float() && t.bits == 32) ? "Math.fround(" : "";
+        const char *fround_end = (t.is_float() && t.bits == 32) ? ")" : "";
+
         id = unique_name('_');
         do_indent();
-        stream << "var " << id << " = " << rhs << ";\n";
+        stream << "var " << id << " = " << fround_start << rhs << fround_end << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -465,9 +469,7 @@ void CodeGen_JavaScript::visit(const Cast *op) {
     } else if (src.is_uint() && dst.is_float()) {
     } else {
         internal_assert(src.is_float() && dst.is_float());
-        if (dst.bits == 32 && src.bits == 64) {
-            value = "Math.fround(" + value + ")";
-        } // otherwise a no-op
+        // fround happens in print assignment always at the moment.
     }
   
     print_assignment(op->type, value);

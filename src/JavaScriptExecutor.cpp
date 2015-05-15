@@ -208,6 +208,7 @@ Local<Object> make_buffer_t(Isolate *isolate, struct buffer_t *buf, ExternalArra
 ExternalArrayType halide_type_to_external_array_type(const Type &t) {
   if (t.is_uint()) {
       switch (t.bits) {
+          case 1:
           case 8:
               return kExternalUint8Array;
               break;
@@ -269,6 +270,7 @@ Local<Value> wrap_scalar(Isolate *isolate, const Type &t, const void *val_ptr) {
         double val = 0;
         if (t.is_uint()) {
             switch (t.bits) {
+                case 1:
                 case 8:
                     val = *reinterpret_cast<const uint8_t *>(val_ptr);
                     break;
@@ -853,6 +855,7 @@ enum ExternalArrayType {
 ExternalArrayType halide_type_to_external_array_type(const Type &t) {
   if (t.is_uint()) {
       switch (t.bits) {
+          case 1:
           case 8:
               return kExternalUint8Array;
               break;
@@ -1105,6 +1108,7 @@ Value wrap_scalar(JSContext *context, const Type &t, const void *val_ptr) {
     } else {
         if (t.is_uint()) {
             switch (t.bits) {
+                case 1:
                 case 8:
                     result.setInt32(*reinterpret_cast<const uint8_t *>(val_ptr));
                     break;
