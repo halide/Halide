@@ -736,9 +736,8 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
         // precise data type, see ARB_texture_float.
         if (*type == GL_FLOAT) {
             switch (*format) {
-            case GL_LUMINANCE:
+            case GL_RED:
             case GL_RG:
-            case GL_LUMINANCE_ALPHA:
             case GL_RGB:
             case GL_RGBA:
                 *internal_format = GL_RGBA32F;
