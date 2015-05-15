@@ -494,7 +494,7 @@ WEAK bool extension_supported(void *user_context, const char *name) {
 // Check for availability of various version- and extension-specific features
 // and hook up functions pointers as necessary
 WEAK void init_extensions(void *user_context) {
-    if (global_state.major_version >= 3) { // This is likely valied for both OpenGL and OpenGL ES
+    if (global_state.major_version >= 3) { // This is likely valid for both OpenGL and OpenGL ES
         load_gl_func(user_context, "glGenVertexArrays", (void**)&global_state.GenVertexArrays, false);
         load_gl_func(user_context, "glBindVertexArray", (void**)&global_state.BindVertexArray, false);
         load_gl_func(user_context, "glDeleteVertexArrays", (void**)&global_state.DeleteVertexArrays, false);
@@ -691,13 +691,15 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
 
     const int channels = buf->extent[2];
 
-    // TODO: Support GL_LUMINANCE_ALPHA for two channel textures, since this is
-    // supported on both GLES 2.0 and later desktop GL versions. This will
-    // require GLSL codegen to change swizzling operations since the second
-    // value is stored in the alpha channel, not in the .g or .y channel of a
-    // vec4 read from a texture
-    if (channels == 2 && !global_state.have_texture_rg) {
-        error(user_context) << "OpenGL: Two channel textures are not supported for this version of OpenGL.";
+    // GL_LUMINANCE and GL_LUMINANCE_ALPHA aren't color-renderable in ES2, period,
+    // thus can't be read back via ReadPixels, thus are nearly useless to us.
+    // GL_RED and GL_RG are technically optional in ES2 (required in ES3),
+    // but as a practical matter, they are supported on pretty much every recent device
+    // (iOS: everything >= iPhone 4s; Android: everything >= 4.3 plus various older devices).
+    // This is definitely suboptimal; the only real alternative would be to implement
+    // these as GL_RGB or GL_RGBA, ignoring the extra channels.
+    if (channels <= 2 && !global_state.have_texture_rg) {
+        error(user_context) << "OpenGL: 1 and 2 channel textures are not supported for this version of OpenGL.";
         return false;
     }
 
@@ -706,17 +708,12 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
     switch(channels) {
     case 0:
     case 1:
-        // Component groups are converted to RGBA texels with the format: LLL1
-        *format = GL_LUMINANCE;
+        *format = GL_RED;
         break;
     case 2:
-        // Converted to: RG01
         *format = GL_RG;
-        // Converted to: LLLA
-        // *format = GL_LUMINANCE_ALPHA;
         break;
     case 3:
-        // Converted to RGB1
         *format = GL_RGB;
         break;
     case 4:
@@ -1225,14 +1222,6 @@ using namespace Halide::Runtime::Internal::OpenGL;
 
 extern "C" {
 
-class IndexSorter {
-public:
-    IndexSorter(float* values_) : values(values_) {  }
-
-    bool operator()(int a, int b) { return values[a] < values[b]; }
-    float* values;
-};
-
 WEAK int halide_opengl_run(void *user_context,
                            void *state_ptr,
                            const char *entry_name,
@@ -1580,7 +1569,8 @@ WEAK int halide_opengl_run(void *user_context,
     // TODO(abestephensg): Sort coordinate dimensions when the linear solver is integrated
     // Sort the coordinates
 
-    // Construct an element buffer using the sorted vertex order
+    // Construct an element buffer using the sorted vertex order.
+    // Note that this is "width" and "height" of the vertices, not the output image.
     int width = num_coords_dim0;
     int height = num_coords_dim1;
 
@@ -1633,12 +1623,12 @@ WEAK int halide_opengl_run(void *user_context,
     // Setup the vertex and element buffers
     GLuint vertex_array_object = 0;
     if (global_state.have_vertex_array_objects) {
-        global_state.GenVertexArrays(1,&vertex_array_object);
+        global_state.GenVertexArrays(1, &vertex_array_object);
         global_state.BindVertexArray(vertex_array_object);
     }
 
     GLuint vertex_buffer_id;
-    global_state.GenBuffers(1,&vertex_buffer_id);
+    global_state.GenBuffers(1, &vertex_buffer_id);
     global_state.BindBuffer(GL_ARRAY_BUFFER, vertex_buffer_id);
     global_state.BufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_buffer_size, vertex_buffer, GL_STATIC_DRAW);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run vertex BufferData et al")) {
@@ -1646,7 +1636,7 @@ WEAK int halide_opengl_run(void *user_context,
     }
 
     GLuint element_buffer_id;
-    global_state.GenBuffers(1,&element_buffer_id);
+    global_state.GenBuffers(1, &element_buffer_id);
     global_state.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_id);
     global_state.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(float)*element_buffer_size, element_buffer, GL_STATIC_DRAW);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run element BufferData et al")) {
@@ -1716,11 +1706,11 @@ WEAK int halide_opengl_run(void *user_context,
 
     if (global_state.have_vertex_array_objects) {
         global_state.BindVertexArray(0);
-        global_state.DeleteVertexArrays(1,&vertex_array_object);
+        global_state.DeleteVertexArrays(1, &vertex_array_object);
     }
 
-    global_state.DeleteBuffers(1,&vertex_buffer_id);
-    global_state.DeleteBuffers(1,&element_buffer_id);
+    global_state.DeleteBuffers(1, &vertex_buffer_id);
+    global_state.DeleteBuffers(1, &element_buffer_id);
 
     return 0;
 }
