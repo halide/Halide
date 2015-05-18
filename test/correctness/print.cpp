@@ -146,6 +146,7 @@ int main(int argc, char **argv) {
                    x == 8, -std::numeric_limits<float>::min(),
                    x == 9, std::numeric_limits<float>::max(),
                    x == 10, -std::numeric_limits<float>::max(),
+                   x == 11, 1.0f - 1.0f / (1 << 22),
                    e);
 
         f(x) = print(e);

@@ -473,7 +473,7 @@ void CodeGen_X86::visit(const Div *op) {
     if (!int_imm) int_imm = op->b.as<IntImm>();
     int const_divisor = int_imm ? int_imm->value : 0;
     int shift_amount;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
     vector<Expr> matches;
     if (power_of_two && op->type.is_int()) {

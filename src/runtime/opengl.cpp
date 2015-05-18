@@ -117,6 +117,15 @@ WEAK const char *gl_error_name(int32_t err) {
   return result;
 }
 
+struct HalideMalloc {
+     __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
+        : user_context(user_context), ptr(halide_malloc(user_context, size)) {}
+     __attribute__((always_inline)) ~HalideMalloc() {
+        halide_free(user_context, ptr);
+    }
+    void * const user_context;
+    void * const ptr;
+};
 
 enum OpenGLProfile {
     OpenGL,
@@ -178,6 +187,7 @@ struct GlobalState {
     bool have_vertex_array_objects;
     bool have_texture_rg;
     bool have_texture_float;
+    bool have_texture_rgb8_rgba8;
 
     // Various objects shared by all filter kernels
     GLuint framebuffer_id;
@@ -246,13 +256,11 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
 #ifdef DEBUG_RUNTIME
 {
-    // Output the shader source with a larger statically sized printer
-    // TODO: The debug(..) printer should changed to handle dynamically sized
-    // output
-    Printer<BasicPrinter, 4*1024>(user_context)
-                        << ((type == GL_VERTEX_SHADER) ? "GL_VERTEX_SHADER" : "GL_FRAGMENT_SHADER")
-                        << " SOURCE:\n"
-                        << source << "\n";
+    debug(user_context) << ((type == GL_VERTEX_SHADER) ? "GL_VERTEX_SHADER" : "GL_FRAGMENT_SHADER")
+                        << " SOURCE:\n";
+    // debug() will go thru Printer<> which has a fixed, non-growing size.
+    // Just pass the source directly to halide_print instead, so it won't get clipped.
+    halide_print(user_context, source);
 }
 #endif
 
@@ -455,6 +463,7 @@ WEAK void GlobalState::init() {
     textures = NULL;
     have_vertex_array_objects = false;
     have_texture_rg = false;
+    have_texture_rgb8_rgba8 = false;
     // Initialize all GL function pointers to NULL
 #define GLFUNC(type, name) name = NULL;
     USED_GL_FUNCTIONS;
@@ -496,7 +505,7 @@ WEAK bool extension_supported(void *user_context, const char *name) {
 // Check for availability of various version- and extension-specific features
 // and hook up functions pointers as necessary
 WEAK void init_extensions(void *user_context) {
-    if (global_state.major_version >= 3) { // This is likely valied for both OpenGL and OpenGL ES
+    if (global_state.major_version >= 3) { // This is likely valid for both OpenGL and OpenGL ES
         load_gl_func(user_context, "glGenVertexArrays", (void**)&global_state.GenVertexArrays, false);
         load_gl_func(user_context, "glBindVertexArray", (void**)&global_state.BindVertexArray, false);
         load_gl_func(user_context, "glDeleteVertexArrays", (void**)&global_state.DeleteVertexArrays, false);
@@ -512,6 +521,11 @@ WEAK void init_extensions(void *user_context) {
          extension_supported(user_context, "GL_ARB_texture_rg")) ||
         (global_state.profile == OpenGLES &&
          extension_supported(user_context, "GL_EXT_texture_rg"));
+
+    global_state.have_texture_rgb8_rgba8 =
+        global_state.major_version >= 3 ||
+        (global_state.profile == OpenGLES &&
+         extension_supported(user_context, "GL_OES_rgb8_rgba8"));
 
     global_state.have_texture_float =
         (global_state.major_version >= 3) ||
@@ -583,15 +597,11 @@ WEAK int halide_opengl_init(void *user_context) {
     }
     init_extensions(user_context);
     debug(user_context)
-        << "Halide running on OpenGL "
-        << ((global_state.profile == OpenGL) ? "" : "ES ")
-        << major << "." << minor << "\n"
-        << "  vertex_array_objects: "
-        << (global_state.have_vertex_array_objects ? "yes\n" : "no\n")
-        << "  texture_rg: "
-        << (global_state.have_texture_rg ? "yes\n" : "no\n")
-        << "  texture_float: "
-        << (global_state.have_texture_float ? "yes\n" : "no\n");
+        << "Halide running on OpenGL " << ((global_state.profile == OpenGL) ? "" : "ES ") << major << "." << minor << "\n"
+        << "  vertex_array_objects: " << (global_state.have_vertex_array_objects ? "yes\n" : "no\n")
+        << "  texture_rg: " << (global_state.have_texture_rg ? "yes\n" : "no\n")
+        << "  have_texture_rgb8_rgba8: " << (global_state.have_texture_rgb8_rgba8 ? "yes\n" : "no\n")
+        << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n");
 
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);
@@ -693,13 +703,15 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
 
     const int channels = buf->extent[2];
 
-    // TODO: Support GL_LUMINANCE_ALPHA for two channel textures, since this is
-    // supported on both GLES 2.0 and later desktop GL versions. This will
-    // require GLSL codegen to change swizzling operations since the second
-    // value is stored in the alpha channel, not in the .g or .y channel of a
-    // vec4 read from a texture
-    if (channels == 2 && !global_state.have_texture_rg) {
-        error(user_context) << "OpenGL: Two channel textures are not supported for this version of OpenGL.";
+    // GL_LUMINANCE and GL_LUMINANCE_ALPHA aren't color-renderable in ES2, period,
+    // thus can't be read back via ReadPixels, thus are nearly useless to us.
+    // GL_RED and GL_RG are technically optional in ES2 (required in ES3),
+    // but as a practical matter, they are supported on pretty much every recent device
+    // (iOS: everything >= iPhone 4s; Android: everything >= 4.3 plus various older devices).
+    // This is definitely suboptimal; the only real alternative would be to implement
+    // these as GL_RGB or GL_RGBA, ignoring the extra channels.
+    if (channels <= 2 && !global_state.have_texture_rg) {
+        error(user_context) << "OpenGL: 1 and 2 channel textures are not supported for this version of OpenGL.";
         return false;
     }
 
@@ -708,17 +720,12 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
     switch(channels) {
     case 0:
     case 1:
-        // Component groups are converted to RGBA texels with the format: LLL1
-        *format = GL_LUMINANCE;
+        *format = GL_RED;
         break;
     case 2:
-        // Converted to: RG01
         *format = GL_RG;
-        // Converted to: LLLA
-        // *format = GL_LUMINANCE_ALPHA;
         break;
     case 3:
-        // Converted to RGB1
         *format = GL_RGB;
         break;
     case 4:
@@ -741,9 +748,8 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
         // precise data type, see ARB_texture_float.
         if (*type == GL_FLOAT) {
             switch (*format) {
-            case GL_LUMINANCE:
+            case GL_RED:
             case GL_RG:
-            case GL_LUMINANCE_ALPHA:
             case GL_RGB:
             case GL_RGBA:
                 *internal_format = GL_RGBA32F;
@@ -970,131 +976,6 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
     return 0;
 }
 
-// Called at the beginning of a code block generated by Halide. This function
-// is responsible for setting up the OpenGL environment and compiling the GLSL
-// code into a fragment shader.
-WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
-                                    const char *src, int size) {
-    if (int error = halide_opengl_init(user_context)) {
-        return error;
-    }
-
-    ModuleState **state = (ModuleState **)state_ptr;
-    ModuleState *module = *state;
-    if (!module) {
-        module = (ModuleState *)malloc(sizeof(ModuleState));
-        module->kernel = NULL;
-        module->next = state_list;
-        state_list = module;
-        *state = module;
-    }
-
-    KernelInfo *kernel = module->kernel;
-    if (!kernel) {
-        kernel = create_kernel(user_context, src, size);
-        if (!kernel) {
-            error(user_context) << "Invalid kernel: " << src;
-            return -1;
-        }
-        module->kernel = kernel;
-    }
-
-
-    if (kernel->program_id == 0) {
-
-        // Create the vertex shader the runtime will output boilerplate for the
-        // vertex shader based on a fixed program plus arguments obtained from
-        // the comment header passed in the fragment shader. Since there is a
-        // relatively small number of vertices (i.e. usually only four) per
-        // vertex expressions interpolated by varying attributes are evaluated
-        // by host code on the CPU and passed to the GPU as values in the
-        // vertex buffer.
-        enum { PrinterLength = 1024*4 };
-        Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
-
-        // Count the number of varying attributes, this is 2 for the spatial
-        // x and y coordinates, plus the number of scalar varying attribute
-        // expressions pulled out of the fragment shader.
-        int num_varying_float = 2;
-
-        for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
-            if (arg->kind == Argument::Varying)
-                ++num_varying_float;
-        }
-
-        int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
-
-        for (int i = 0; i != num_packed_varying_float; ++i) {
-            vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
-            vertex_src << "varying   vec4 _varyingf" << i << ";\n";
-        }
-
-        vertex_src << "uniform ivec2 output_min;\n"
-                   << "uniform ivec2 output_extent;\n"
-                   << "void main() {\n"
-
-                   // Host codegen always passes the spatial vertex coordinates
-                   // in the first two elements of the _varyingf0_attrib
-                   << "    vec2 position = vec2(_varyingf0_attrib[0], _varyingf0_attrib[1]);\n"
-                   << "    gl_Position = vec4(position, 0.0, 1.0);\n"
-                   << "    vec2 texcoord = 0.5 * position + 0.5;\n"
-                   << "    vec2 pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
-
-        // Copy through all of the varying attributes
-        for (int i = 0; i != num_packed_varying_float; ++i) {
-            vertex_src << "    _varyingf" << i << " = _varyingf" << i << "_attrib;\n";
-        }
-
-        vertex_src << "    _varyingf0.xy = pixcoord;\n";
-
-        vertex_src << "}\n";
-
-        // Check to see if there was sufficient storage for the vertex program.
-        // TODO: since Printer doesn't dynamically expand, this won't really work.
-        if (vertex_src.size() >= PrinterLength) {
-            error(user_context) << "Vertex shader source truncated";
-            return 1;
-        }
-
-        // Initialize vertex shader.
-        GLuint vertex_shader_id = make_shader(user_context,
-                                              GL_VERTEX_SHADER, vertex_src.buf, NULL);
-        if (vertex_shader_id == 0) {
-            halide_error(user_context, "Failed to create vertex shader");
-            return 1;
-        }
-
-        // Create the fragment shader
-        GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
-                                                kernel->source, NULL);
-        // Link GLSL program
-        GLuint program = global_state.CreateProgram();
-        global_state.AttachShader(program, vertex_shader_id);
-        global_state.AttachShader(program, fragment_shader_id);
-        global_state.LinkProgram(program);
-
-        // Release the individual shaders
-        global_state.DeleteShader(vertex_shader_id);
-        global_state.DeleteShader(fragment_shader_id);
-
-        GLint status;
-        global_state.GetProgramiv(program, GL_LINK_STATUS, &status);
-        if (!status) {
-            GLint log_len;
-            global_state.GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
-            char *log = (char*) malloc(log_len);
-            global_state.GetProgramInfoLog(program, log_len, NULL, log);
-            debug(user_context) << "Could not link GLSL program:\n"
-                                << log << "\n";
-            free(log);
-            global_state.DeleteProgram(program);
-            return -1;
-        }
-        kernel->program_id = program;
-    }
-    return 0;
-}
-
 // This method copies image data from the layout specified by the strides of the
 // buffer_t to the packed interleaved format needed by GL.
 template <class T>
@@ -1199,29 +1080,31 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
             << "Warning: In copy_to_device, host buffer is not interleaved. Doing slow interleave.\n";
 
         size_t size = width * height * channels * buf->elem_size;
-        void *tmp = halide_malloc(user_context, size);
+        HalideMalloc tmp(user_context, size);
+        if (!tmp.ptr) {
+            error(user_context) << "halide_malloc failed inside copy_to_device";
+            return -1;
+        }
 
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            halide_to_interleaved<uint8_t>(buf, (uint8_t*)tmp, width, height, channels);
+            halide_to_interleaved<uint8_t>(buf, (uint8_t*)tmp.ptr, width, height, channels);
             break;
         case GL_UNSIGNED_SHORT:
-            halide_to_interleaved<uint16_t>(buf, (uint16_t*)tmp, width, height, channels);
+            halide_to_interleaved<uint16_t>(buf, (uint16_t*)tmp.ptr, width, height, channels);
             break;
         case GL_FLOAT:
-            halide_to_interleaved<float>(buf, (float*)tmp, width, height, channels);
+            halide_to_interleaved<float>(buf, (float*)tmp.ptr, width, height, channels);
             break;
         }
 
         global_state.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         global_state.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
-                         format, type, tmp);
+                         format, type, tmp.ptr);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(2)")) {
             return 1;
         }
-
-        halide_free(user_context, tmp);
     }
 
     global_state.BindTexture(GL_TEXTURE_2D, 0);
@@ -1245,6 +1128,9 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
         global_state.BindFramebuffer(GL_FRAMEBUFFER, global_state.framebuffer_id);
         global_state.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                 GL_TEXTURE_2D, tex, 0);
+        if (global_state.CheckAndReportError(user_context, "get_pixels FramebufferTexture2D")) {
+            return 1;
+        }
     }
 
     // Check that framebuffer is set up correctly
@@ -1256,6 +1142,9 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
         return 1;
     }
     global_state.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, dest);
+    if (global_state.CheckAndReportError(user_context, "get_pixels ReadPixels")) {
+        return 1;
+    }
     global_state.BindFramebuffer(GL_FRAMEBUFFER, 0);
     return 0;
 }
@@ -1311,31 +1200,28 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
         size_t stride = width * buf->extent[2] * buf->elem_size;
         size_t size = height * stride;
-        uint8_t *tmp = (uint8_t*)halide_malloc(user_context, size);
-        if (!tmp) {
+        HalideMalloc tmp(user_context, size);
+        if (!tmp.ptr) {
             error(user_context) << "halide_malloc failed inside copy_to_host";
             return -1;
         }
 
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        if (int err = get_pixels(user_context, buf, format, type, tmp)) {
-            halide_free(user_context, tmp);
+        if (int err = get_pixels(user_context, buf, format, type, tmp.ptr)) {
             return err;
         }
 
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            interleaved_to_halide<uint8_t>(buf, (uint8_t*)tmp, width, height, channels);
+            interleaved_to_halide<uint8_t>(buf, (uint8_t*)tmp.ptr, width, height, channels);
             break;
         case GL_UNSIGNED_SHORT:
-            interleaved_to_halide<uint16_t>(buf, (uint16_t*)tmp, width, height, channels);
+            interleaved_to_halide<uint16_t>(buf, (uint16_t*)tmp.ptr, width, height, channels);
             break;
         case GL_FLOAT:
-            interleaved_to_halide<float>(buf, (float*)tmp, width, height, channels);
+            interleaved_to_halide<float>(buf, (float*)tmp.ptr, width, height, channels);
             break;
         }
-
-        halide_free(user_context, tmp);
     }
     if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_host")) {
         return 1;
@@ -1351,14 +1237,6 @@ using namespace Halide::Runtime::Internal::OpenGL;
 //  Create wrappers that satisfy old naming conventions
 
 extern "C" {
-
-class IndexSorter {
-public:
-    IndexSorter(float* values_) : values(values_) {  }
-
-    bool operator()(int a, int b) { return values[a] < values[b]; }
-    float* values;
-};
 
 WEAK int halide_opengl_run(void *user_context,
                            void *state_ptr,
@@ -1707,7 +1585,8 @@ WEAK int halide_opengl_run(void *user_context,
     // TODO(abestephensg): Sort coordinate dimensions when the linear solver is integrated
     // Sort the coordinates
 
-    // Construct an element buffer using the sorted vertex order
+    // Construct an element buffer using the sorted vertex order.
+    // Note that this is "width" and "height" of the vertices, not the output image.
     int width = num_coords_dim0;
     int height = num_coords_dim1;
 
@@ -1760,12 +1639,12 @@ WEAK int halide_opengl_run(void *user_context,
     // Setup the vertex and element buffers
     GLuint vertex_array_object = 0;
     if (global_state.have_vertex_array_objects) {
-        global_state.GenVertexArrays(1,&vertex_array_object);
+        global_state.GenVertexArrays(1, &vertex_array_object);
         global_state.BindVertexArray(vertex_array_object);
     }
 
     GLuint vertex_buffer_id;
-    global_state.GenBuffers(1,&vertex_buffer_id);
+    global_state.GenBuffers(1, &vertex_buffer_id);
     global_state.BindBuffer(GL_ARRAY_BUFFER, vertex_buffer_id);
     global_state.BufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_buffer_size, vertex_buffer, GL_STATIC_DRAW);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run vertex BufferData et al")) {
@@ -1773,7 +1652,7 @@ WEAK int halide_opengl_run(void *user_context,
     }
 
     GLuint element_buffer_id;
-    global_state.GenBuffers(1,&element_buffer_id);
+    global_state.GenBuffers(1, &element_buffer_id);
     global_state.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_id);
     global_state.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(float)*element_buffer_size, element_buffer, GL_STATIC_DRAW);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run element BufferData et al")) {
@@ -1843,11 +1722,11 @@ WEAK int halide_opengl_run(void *user_context,
 
     if (global_state.have_vertex_array_objects) {
         global_state.BindVertexArray(0);
-        global_state.DeleteVertexArrays(1,&vertex_array_object);
+        global_state.DeleteVertexArrays(1, &vertex_array_object);
     }
 
-    global_state.DeleteBuffers(1,&vertex_buffer_id);
-    global_state.DeleteBuffers(1,&element_buffer_id);
+    global_state.DeleteBuffers(1, &vertex_buffer_id);
+    global_state.DeleteBuffers(1, &element_buffer_id);
 
     return 0;
 }
@@ -1891,11 +1770,12 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     }
 
     if (kernel->program_id == 0) {
-        // Create the vertex shader the runtime will output boilerplate for the
+
+        // Create the vertex shader. The runtime will output boilerplate for the
         // vertex shader based on a fixed program plus arguments obtained from
-        // the comment header passed in the fragment shader. Since there is a
-        // relatively small number of vertices (i.e. usually only four) per
-        // vertex expressions interpolated by varying attributes are evaluated
+        // the comment header passed in the fragment shader. Since there are a
+        // relatively small number of vertices (i.e. usually only four), per-vertex
+        // expressions interpolated by varying attributes are evaluated
         // by host code on the CPU and passed to the GPU as values in the
         // vertex buffer.
         enum { PrinterLength = 1024*4 };

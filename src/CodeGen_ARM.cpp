@@ -519,7 +519,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             } else { // must be a shift
                 Expr constant = matches[1];
                 int shift_amount;
-                bool power_of_two = is_const_power_of_two(constant, &shift_amount);
+                bool power_of_two = is_const_power_of_two_integer(constant, &shift_amount);
                 if (power_of_two && shift_amount < matches[0].type().bits) {
                     if (pattern.type == Pattern::RightShift) {
                         shift_amount = -shift_amount;
@@ -610,7 +610,7 @@ void CodeGen_ARM::visit(const Mul *op) {
     vector<Expr> matches;
 
     int shift_amount = 0;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
     if (power_of_two) {
         for (size_t i = 0; i < left_shifts.size(); i++) {
             const Pattern &pattern = left_shifts[i];
@@ -659,7 +659,7 @@ void CodeGen_ARM::visit(const Div *op) {
 
     // Check if the divisor is a power of two
     int shift_amount;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
     vector<Expr> matches;
     if (power_of_two && op->type.is_int()) {

@@ -78,7 +78,9 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
+    #if LLVM_VERSION < 37
     options.UseSoftFloat = false;
+    #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
