@@ -899,10 +899,11 @@ private:
             std::swap(a, b);
         }
 
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Ramp *ramp_a = a.as<Ramp>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
@@ -965,6 +966,22 @@ private:
                 return;
             } else if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
                 expr = a;
+                return;
+            }
+       } else if (ramp_a && broadcast_b &&
+                  const_int(ramp_a->base, &ia) &&
+                  const_int(ramp_a->stride, &ib) &&
+                  const_int(broadcast_b->value, &ic)) {
+            // min(ramp(a, b, n), broadcast(c, n))
+            int ramp_start = ia;
+            int ramp_end = ia + ib * (ramp_a->width - 1);
+            if (ramp_start <= ic && ramp_end <= ic) {
+                // ramp dominates
+                expr = a;
+                return;
+            } if (ramp_start >= ic && ramp_end >= ic) {
+                // broadcast dominates
+                expr = b;
                 return;
             }
         }
@@ -1129,10 +1146,12 @@ private:
             std::swap(a, b);
         }
 
-        int ia = 0, ib = 0; //, ic = 0, id = 0;
+
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Ramp *ramp_a = a.as<Ramp>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
@@ -1191,8 +1210,23 @@ private:
                 expr = b;
                 return;
             }
+        } else if (ramp_a && broadcast_b &&
+                   const_int(ramp_a->base, &ia) &&
+                   const_int(ramp_a->stride, &ib) &&
+                   const_int(broadcast_b->value, &ic)) {
+            // max(ramp(a, b, n), broadcast(c, n))
+            int ramp_start = ia;
+            int ramp_end = ia + ib * (ramp_a->width - 1);
+            if (ramp_start >= ic && ramp_end >= ic) {
+                // ramp dominates
+                expr = a;
+                return;
+            } if (ramp_start <= ic && ramp_end <= ic) {
+                // broadcast dominates
+                expr = b;
+                return;
+            }
         }
-
 
         if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
             // max(x + 3, x - 2) -> x - 2
@@ -3066,6 +3100,22 @@ void simplify_test() {
     check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(8,4),  const_true(4),  bounds_info);
     check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(-4,4), const_false(4), bounds_info);
     check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(5,4),  const_true(4),  bounds_info);
+
+    // min and max on constant ramp v broadcast
+    check(max(Ramp::make(0, 1, 8), 0), Ramp::make(0, 1, 8));
+    check(min(Ramp::make(0, 1, 8), 7), Ramp::make(0, 1, 8));
+    check(max(Ramp::make(0, 1, 8), 7), Broadcast::make(7, 8));
+    check(min(Ramp::make(0, 1, 8), 0), Broadcast::make(0, 8));
+    check(min(Ramp::make(0, 1, 8), 4), min(Ramp::make(0, 1, 8), 4));
+
+    check(max(Ramp::make(7, -1, 8), 0), Ramp::make(7, -1, 8));
+    check(min(Ramp::make(7, -1, 8), 7), Ramp::make(7, -1, 8));
+    check(max(Ramp::make(7, -1, 8), 7), Broadcast::make(7, 8));
+    check(min(Ramp::make(7, -1, 8), 0), Broadcast::make(0, 8));
+    check(min(Ramp::make(7, -1, 8), 4), min(Ramp::make(7, -1, 8), 4));
+
+    check(max(0, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
+    check(min(7, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
 
     std::cout << "Simplify test passed" << std::endl;
 }
