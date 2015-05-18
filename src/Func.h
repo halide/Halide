@@ -488,6 +488,7 @@ public:
     EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
                                     const Target &target = get_target_from_environment());
     // @}
+
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
