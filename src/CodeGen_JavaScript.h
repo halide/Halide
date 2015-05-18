@@ -124,6 +124,9 @@ protected:
     void visit(const Evaluate *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
+
+    std::string fround_start_if_needed(const Type &t) const;
+    std::string fround_end_if_needed(const Type &t) const;
 };
 
 }

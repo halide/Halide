@@ -411,17 +411,14 @@ void CodeGen_JavaScript::print_stmt(Stmt s) {
     s.accept(this);
 }
 
-string CodeGen_JavaScript::print_assignment(Type t, const std::string &rhs) {
+string CodeGen_JavaScript::print_assignment(Type /* t */, const std::string &rhs) {
     // TODO: t is ignored and I expect casts will be required for value correctness.
     map<string, string>::iterator cached = cache.find(rhs);
 
     if (cached == cache.end()) {
-        const char *fround_start = (t.is_float() && t.bits == 32) ? "Math.fround(" : "";
-        const char *fround_end = (t.is_float() && t.bits == 32) ? ")" : "";
-
         id = unique_name('_');
         do_indent();
-        stream << "var " << id << " = " << fround_start << rhs << fround_end << ";\n";
+        stream << "var " << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -451,6 +448,14 @@ void CodeGen_JavaScript::visit(const Variable *op) {
     id = print_name(op->name);
 }
 
+std::string CodeGen_JavaScript::fround_start_if_needed(const Type &t) const {
+    return t.is_float() && t.bits == 32 ? "Math.fround(" : "";
+}
+
+std::string CodeGen_JavaScript::fround_end_if_needed(const Type &t) const {
+    return t.is_float() && t.bits == 32 ? ")" : "";
+}
+
 void CodeGen_JavaScript::visit(const Cast *op) {
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
@@ -466,11 +471,9 @@ void CodeGen_JavaScript::visit(const Cast *op) {
         value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, false, dst.bits);
     } else if (src.is_float() && dst.is_uint()) {
         value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, true, dst.bits);
-    } else if (src.is_int() && dst.is_float()) {
-    } else if (src.is_uint() && dst.is_float()) {
     } else {
-        internal_assert(src.is_float() && dst.is_float());
-        // fround happens in print assignment always at the moment.
+        internal_assert(dst.is_float());
+        value = fround_start_if_needed(op->type) + value + fround_end_if_needed(op->type);
     }
   
     print_assignment(op->type, value);
@@ -488,10 +491,11 @@ Expr conditionally_extract_lane(Expr e, int lane) {
 void CodeGen_JavaScript::visit_binop(Type t, Expr a, Expr b, const char * op) {
     ostringstream rhs;
     const char *lead_char = (t.width != 1) ? "[" : "";
+
     for (int lane = 0; lane < t.width; lane++) {
         string sa = print_expr(conditionally_extract_lane(a, lane));
         string sb = print_expr(conditionally_extract_lane(b, lane));
-        rhs << lead_char << sa << " " << op << " " << sb;
+        rhs << lead_char << fround_start_if_needed(t) << sa << " " << op << " " << sb << fround_end_if_needed(t);
         lead_char = ", ";
     }
     if (t.width > 1) {
@@ -523,12 +527,13 @@ void CodeGen_JavaScript::visit(const Div *op) {
         } else {
             string a = print_expr(conditionally_extract_lane(op->a, lane));
             string b = print_expr(conditionally_extract_lane(op->b, lane));
-            rhs << lead_char;
+            rhs << lead_char << fround_start_if_needed(op->type);
             if (!op->type.is_float()) {
                 rhs << "Math.floor(" << a << " / " << b << ")";
             } else {
                 rhs << a << " / " << b;
             }
+            rhs << fround_end_if_needed(op->type);
         }
         lead_char = ", ";
     }
@@ -545,7 +550,9 @@ void CodeGen_JavaScript::visit(const Mod *op) {
         int bits;
 
         if (is_const_power_of_two(conditionally_extract_lane(op->b, lane), &bits)) {
-            rhs << lead_char << print_expr(conditionally_extract_lane(op->a, lane)) << " & " << ((1 << bits) - 1);
+          rhs << lead_char << fround_start_if_needed(op->type)
+              << print_expr(conditionally_extract_lane(op->a, lane)) << " & " << ((1 << bits) - 1)
+              << fround_end_if_needed(op->type);
         } else {
             string var_name(unique_name('_'));
             string a = print_expr(conditionally_extract_lane(op->a, lane));
@@ -560,7 +567,7 @@ void CodeGen_JavaScript::visit(const Mod *op) {
             } else {
                 stream << "var " << var_name << " = " << a << " - " << b << " * Math.floor(" << a << " / " << b << "); ";
             }
-            rhs << lead_char << var_name;
+            rhs << lead_char << fround_start_if_needed(op->type) << var_name << fround_end_if_needed(op->type);
         }
         lead_char = ", ";
     }
@@ -571,11 +578,19 @@ void CodeGen_JavaScript::visit(const Mod *op) {
 }
 
 void CodeGen_JavaScript::visit(const Max *op) {
-    print_expr(Call::make(op->type, "Math.max", vec(op->a, op->b), Call::Extern));
+    std::string expr_id = print_expr(Call::make(op->type, "Math.max", vec(op->a, op->b), Call::Extern));
+    std::string wrap_start = fround_start_if_needed(op->type);
+    if (!wrap_start.empty()) {
+        print_assignment(op->type, wrap_start + expr_id + fround_end_if_needed(op->type));
+    }
 }
 
 void CodeGen_JavaScript::visit(const Min *op) {
-    print_expr(Call::make(op->type, "Math.min", vec(op->a, op->b), Call::Extern));
+    std::string expr_id = print_expr(Call::make(op->type, "Math.min", vec(op->a, op->b), Call::Extern));
+    std::string wrap_start = fround_start_if_needed(op->type);
+    if (!wrap_start.empty()) {
+        print_assignment(op->type, wrap_start + expr_id + fround_end_if_needed(op->type));
+    }
 }
 
 void CodeGen_JavaScript::visit(const EQ *op) {
