@@ -22,10 +22,16 @@ using std::map;
 
 namespace {
 const string buffer_t_definition =
+    "#ifndef HALIDE_ATTRIBUTE_ALIGN\n"
+    "  #ifdef _MSC_VER\n"
+    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))\n"
+    "  #else\n"
+    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))\n"
+    "  #endif\n"
+    "#endif\n"
     "#ifndef BUFFER_T_DEFINED\n"
     "#define BUFFER_T_DEFINED\n"
     "#include <stdint.h>\n"
-    "#pragma pack(push, 1)\n"
     "typedef struct buffer_t {\n"
     "    uint64_t dev;\n"
     "    uint8_t* host;\n"
@@ -33,11 +39,10 @@ const string buffer_t_definition =
     "    int32_t stride[4];\n"
     "    int32_t min[4];\n"
     "    int32_t elem_size;\n"
-    "    bool host_dirty;\n"
-    "    bool dev_dirty;\n"
-    "    uint8_t padding[2];\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];\n"
     "} buffer_t;\n"
-    "#pragma pack(pop)\n"
     "#endif\n";
 
 const string headers =
@@ -152,6 +157,18 @@ const string globals =
     " u.as_uint = bits;\n"
     " return u.as_float;\n"
     "}\n"
+    "inline int64_t make_int64(int32_t hi, int32_t lo) {\n"
+    "    return (((int64_t)hi) << 32) | (uint32_t)lo;\n"
+    "}\n"
+    "inline double make_float64(int32_t i0, int32_t i1) {\n"
+    "    union {\n"
+    "        int32_t as_int32[2];\n"
+    "        double as_double;\n"
+    "    } u;\n"
+    "    u.as_int32[0] = i0;\n"
+    "    u.as_int32[1] = i1;\n"
+    "    return u.as_double;\n"
+    "}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
@@ -198,6 +215,10 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
 
     // Throw in a definition of a buffer_t
     stream << buffer_t_definition;
+
+    // halide_filter_metadata_t just gets a forward declaration
+    // (include HalideRuntime.h for the full goodness)
+    stream << "struct halide_filter_metadata_t;\n";
 
     if (!is_header) {
         stream << globals;
@@ -310,7 +331,11 @@ class ExternCallPrototypes : public IRGraphVisitor {
                     if (i > 0) {
                         stream << ", ";
                     }
-                    stream << type_to_c_type(op->args[i].type());
+                    if (op->args[i].as<StringImm>()) {
+                        stream << "const char *";
+                    } else {
+                        stream << type_to_c_type(op->args[i].type());
+                    }
                 }
                 stream << ");\n";
                 emitted.insert(op->name);
@@ -433,6 +458,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
         stream << "int " << f.name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+
+        // And also the metadata.
+       stream << "extern const halide_filter_metadata_t " << f.name << "_metadata;\n";
     }
 }
 
@@ -490,6 +518,8 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
            << buf_name
            << "->host);\n";
     allocations.push(buffer_name, t);
+    do_indent();
+    stream << "(void)" << name << ";\n";
 
     do_indent();
     stream << "const bool "
@@ -537,6 +567,8 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
            << "_elem_size = "
            << buf_name
            << "->elem_size;\n";
+    do_indent();
+    stream << "(void)" << name << "_elem_size;\n";
 }
 
 void CodeGen_C::pop_buffer(const std::string &buffer_name) {
@@ -1122,12 +1154,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     open_scope();
     string id_msg = print_expr(op->message);
     do_indent();
-    stream << "halide_error("
-           << (have_user_context ? "__user_context_, " : "NULL, ")
-           << id_msg
-           << ");\n";
-    do_indent();
-    stream << "return -1;\n";
+    stream << "return " << id_msg << ";\n";
     close_scope("");
 }
 
@@ -1352,6 +1379,7 @@ void CodeGen_C::test() {
     string correct_source =
         headers +
         buffer_t_definition +
+        "struct halide_filter_metadata_t;\n" +
         globals +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
@@ -1362,6 +1390,7 @@ void CodeGen_C::test() {
         "\n\n"
         "int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
+        " (void)_buf;\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
         " (void)_buf_host_and_dev_are_null;\n"
         " const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
@@ -1389,6 +1418,7 @@ void CodeGen_C::test() {
         " const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
         " (void)_buf_stride_3;\n"
         " const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
+        " (void)_buf_elem_size;\n"
         " {\n"
         "  int64_t _0 = 43;\n"
         "  int64_t _1 = _0 * _beta;\n"

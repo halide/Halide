@@ -143,6 +143,43 @@ int main(int argc, char **argv) {
 
     }
 
+   {
+        custom_malloc_size = 0;
+        Func f, g;
+
+        g(x, y) = x * y;
+        f(x, y) = g(x, y);
+
+        Var yo, yi;
+        f.bound(y, 0, (f.output_buffer().height()/8)*8).split(y, yo, yi, 8);
+        g.compute_at(f, yo).store_root();
+
+        // The split logic shouldn't interfere with the ability to
+        // fold f down to an 8-scanline allocation, but it's only
+        // correct to fold if we know the output height is a multiple
+        // of the split factor.
+
+        f.set_custom_allocator(my_malloc, my_free);
+
+        Image<int> im = f.realize(1000, 1000);
+
+        if (custom_malloc_size == 0 || custom_malloc_size > 1000*8*sizeof(int)) {
+            printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)(1000*8*sizeof(int)));
+            return -1;
+        }
+
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int correct = x*y;
+                if (im(x, y) != correct) {
+                    printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
+                    return -1;
+                }
+            }
+        }
+
+    }
+
     printf("Success!\n");
     return 0;
 }

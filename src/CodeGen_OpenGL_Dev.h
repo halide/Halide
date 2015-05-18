@@ -5,13 +5,12 @@
  * Defines the code-generator for producing GLSL kernel code
  */
 
+#include <sstream>
+#include <map>
+
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "Target.h"
-
-#include <sstream>
-#include <map>
-#include <string>
 
 namespace Halide {
 namespace Internal {
@@ -52,11 +51,10 @@ private:
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_C {
 public:
-    CodeGen_GLSL(std::ostream &s);
+    CodeGen_GLSL(std::ostream &s, const Target &target);
     void add_kernel(Stmt stmt,
                     std::string name,
-                    const std::vector<GPU_Argument> &args,
-                    const Target &target);
+                    const std::vector<GPU_Argument> &args);
 
     EXPORT static void test();
 
@@ -93,6 +91,7 @@ private:
     std::string get_vector_suffix(Expr e);
 
     std::map<std::string, std::string> builtin;
+    const Target target;
 };
 
 }}

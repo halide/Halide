@@ -9,11 +9,11 @@ namespace Halide { namespace Runtime { namespace Internal {
 struct ScopedMutexLock {
     halide_mutex *mutex;
 
-    ScopedMutexLock(halide_mutex *mutex) : mutex(mutex) {
+    ScopedMutexLock(halide_mutex *mutex) __attribute__((always_inline)) : mutex(mutex) {
         halide_mutex_lock(mutex);
     }
 
-    ~ScopedMutexLock() {
+    ~ScopedMutexLock() __attribute__((always_inline)) {
         halide_mutex_unlock(mutex);
     }
 };

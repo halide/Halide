@@ -5,7 +5,7 @@
  * Defines a base class for passes over the IR that modify it
  */
 
-#include "IR.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {

@@ -2,8 +2,8 @@
 #define HALIDE_INLINE_REDUCTIONS_H
 
 #include "IR.h"
-#include "Tuple.h"
 #include "RDom.h"
+#include "Tuple.h"
 
 /** \file
  * Defines some inline reductions: sum, product, minimum, maximum.

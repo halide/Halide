@@ -10,13 +10,14 @@
 
 #include "Debug.h"
 #include "Error.h"
-#include "IRVisitor.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Util.h"
 
 namespace Halide {
 namespace Internal {
+
+class IRVisitor;
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
  * For). We use it for rtti (without having to compile with rtti). */
@@ -79,18 +80,14 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    void accept(IRVisitor *v) const {
-        v->visit((const T *)this);
-    }
+    EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType *type_info() const {return &_type_info;}
     static EXPORT IRNodeType _type_info;
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    void accept(IRVisitor *v) const {
-        v->visit((const T *)this);
-    }
+    EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType *type_info() const {return &_type_info;}
     static EXPORT IRNodeType _type_info;
 };
@@ -220,57 +217,26 @@ struct ExprCompare {
 
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */
-#if __cplusplus > 199711L // C++11 strongly typed enum
 enum class DeviceAPI {
     Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
     Host,
     Default_GPU,
     CUDA,
     OpenCL,
-    GLSL
+    GLSL,
+    Renderscript
 };
-#else
-struct DeviceAPI {
-    enum Values {
-        Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
-        Host,
-        Default_GPU,
-        CUDA,
-        OpenCL,
-        GLSL
-    };
-    int val;
-    DeviceAPI() : val(Parent) { }
-    DeviceAPI(int val) : val(val) { }
-    operator int() const { return val; }
-};
-#endif
 
 namespace Internal {
 
 /** An enum describing a type of loop traversal. Used in schedules,
  * and in the For loop IR node. */
-#if __cplusplus > 199711L // C++11 strongly typed enum
 enum class ForType {
     Serial,
     Parallel,
     Vectorized,
     Unrolled
 };
-#else
-struct ForType {
-    enum Values {
-        Serial,
-        Parallel,
-        Vectorized,
-        Unrolled
-    };
-    int val;
-    ForType() : val(Serial) { }
-    ForType(int val) : val(val) { }
-    operator int() const { return val; }
-};
-#endif
 
 
 /** A reference-counted handle to a statement node. */

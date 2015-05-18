@@ -143,8 +143,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             // If the function is not pure in the given dimension, give up
             bool pure = true;
-            for (size_t i = 0; i < func.updates().size(); i++) {
-                const Variable *var = func.updates()[i].args[dim_idx].as<Variable>();
+            for (const UpdateDefinition &i : func.updates()) {
+                const Variable *var = i.args[dim_idx].as<Variable>();
                 if (!var) {
                     pure = false;
                 } else if (var->name != dim) {
@@ -172,7 +172,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 can_slide_down = true;
             }
 
-
             if (!can_slide_up && !can_slide_down) {
                 debug(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
@@ -193,6 +192,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, max_required) + 1;
             Expr prev_min_minus_one = substitute(loop_var, loop_var_expr - 1, min_required) - 1;
+
+            // If there's no overlap between adjacent iterations, we shouldn't slide.
+            if (is_one(simplify(min_required >= prev_max_plus_one)) ||
+                is_one(simplify(max_required <= prev_min_minus_one))) {
+                debug(3) << "Not sliding " << func.name()
+                         << " over dimension " << dim
+                         << " along loop variable " << loop_var
+                         << " there's no overlap in the region computed across iterations\n"
+                         << "Min is " << min_required << "\n"
+                         << "Max is " << max_required << "\n";
+                return;
+            }
 
             Expr new_min, new_max;
             if (can_slide_up) {

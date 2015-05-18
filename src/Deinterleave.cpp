@@ -383,7 +383,7 @@ Expr extract_lane(Expr e, int lane) {
     Scope<int> lets;
     Deinterleaver d(lets);
     d.starting_lane = lane;
-    d.lane_stride = 0;
+    d.lane_stride = e.type().width;
     d.new_width = 1;
     e = d.mutate(e);
     return simplify(e);
@@ -422,7 +422,7 @@ class Interleaver : public IRMutator {
             Expr ba = extract_even_lanes(b, vector_lets);
             Expr bb = extract_odd_lanes(b, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              vec(aa, ab, ba, bb), Call::Intrinsic);
+                              vec(aa, ba, ab, bb), Call::Intrinsic);
         } else {
             // Give up and don't do anything clever for >4
             return e;

@@ -80,9 +80,6 @@
  * methods provided in Target.h)
  */
 
-// Generator requires C++11
-#if __cplusplus > 199711L || _MSC_VER >= 1800
-
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -111,6 +108,7 @@ EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 class GeneratorParamBase {
 public:
     EXPORT explicit GeneratorParamBase(const std::string &name);
+    EXPORT explicit GeneratorParamBase(const GeneratorParamBase &that);
     EXPORT virtual ~GeneratorParamBase();
     virtual void from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
@@ -409,10 +407,6 @@ public:
         return filter_arguments;
     }
 
-    // This is a bit of a stopgap: we need info that isn't in Argument,
-    // but there's probably a better way than surfacing Internal::Parameter.
-    EXPORT std::vector<Internal::Parameter> get_filter_parameters();
-
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
     int natural_vector_size(Halide::Type t) const {
@@ -444,7 +438,6 @@ private:
     // through these in a predictable order; do not change to unordered_map (etc)
     // without considering that.
     std::vector<Argument> filter_arguments;
-    std::map<std::string, Internal::Parameter *> filter_params;
     std::map<std::string, Internal::GeneratorParamBase *> generator_params;
     bool params_built;
 
@@ -479,7 +472,7 @@ public:
                                                         const GeneratorParamValues &params);
 
 private:
-    using GeneratorFactoryMap = std::map<const std::string, std::unique_ptr<GeneratorFactory> >;
+    using GeneratorFactoryMap = std::map<const std::string, std::unique_ptr<GeneratorFactory>>;
 
     GeneratorFactoryMap factories;
     std::mutex mutex;
@@ -537,7 +530,5 @@ public:
 };
 
 }  // namespace Halide
-
-#endif  // __cplusplus > 199711L
 
 #endif  // HALIDE_GENERATOR_H_

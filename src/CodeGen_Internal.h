@@ -8,10 +8,10 @@
  * front-end-facing interface to CodeGen).
  */
 
+#include "IR.h"
 #include "IRVisitor.h"
 #include "LLVM_Headers.h"
 #include "Scope.h"
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -88,16 +88,16 @@ public:
     llvm::StructType *build_type(llvm::LLVMContext *context);
 
     /** Emit code that builds a struct containing all the externally
-     * referenced state. Requires you to pass it a struct to fill in,
+     * referenced state. Requires you to pass it a type and struct to fill in,
      * a scope to retrieve the llvm values from and a builder to place
      * the packing code. */
-    void pack_struct(llvm::Value *dst, const Scope<llvm::Value *> &src, llvm::IRBuilder<> *builder);
+    void pack_struct(llvm::Type *type, llvm::Value *dst, const Scope<llvm::Value *> &src, llvm::IRBuilder<> *builder);
 
     /** Emit code that unpacks a struct containing all the externally
      * referenced state into a symbol table. Requires you to pass it a
-     * state struct value, a scope to fill, and a builder to place the
+     * state struct type and value, a scope to fill, and a builder to place the
      * unpacking code. */
-    void unpack_struct(Scope<llvm::Value *> &dst, llvm::Value *src, llvm::IRBuilder<> *builder);
+    void unpack_struct(Scope<llvm::Value *> &dst, llvm::Type *type, llvm::Value *src, llvm::IRBuilder<> *builder);
 
 };
 

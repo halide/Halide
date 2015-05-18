@@ -5,10 +5,10 @@
  * a JIT compiled halide pipeline
  */
 
+#include <map>
+
 #include "IntrusivePtr.h"
 #include "runtime/HalideRuntime.h"
-
-#include <map>
 
 namespace llvm {
 class Module;
@@ -85,7 +85,7 @@ struct JITModule {
     EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
 
-    /** Check if this JIT module has a definition.. */
+    /** Check if this JIT module has a definition. */
     EXPORT bool defined() const;
 };
 

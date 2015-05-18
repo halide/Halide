@@ -1,12 +1,6 @@
 #ifndef HALIDE_IR_PRINTER_H
 #define HALIDE_IR_PRINTER_H
 
-#include <ostream>
-
-#include "Module.h"
-
-namespace Halide {
-
 /** \file
  * This header file defines operators that let you dump a Halide
  * expression, statement, or type directly into an output stream
@@ -19,6 +13,13 @@ namespace Halide {
  *
  * These operators are implemented using \ref Halide::Internal::IRPrinter
  */
+
+#include <ostream>
+
+#include "Module.h"
+#include "IRVisitor.h"
+
+namespace Halide {
 
 /** Emit an expression on an output stream (such as std::cout) in a
  * human-readable form */

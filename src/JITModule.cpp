@@ -1,9 +1,7 @@
 #include <string>
 #include <stdint.h>
-
-#if __cplusplus > 199711L || _MSC_VER >= 1800
 #include <mutex>
-#endif
+#include <set>
 
 #include "JITModule.h"
 #include "LLVM_Headers.h"
@@ -25,10 +23,10 @@ static bool have_symbol(const char *s) {
 }
 #endif
 
-using std::string;
-
 namespace Halide {
 namespace Internal {
+
+using std::string;
 
 namespace {
 
@@ -233,8 +231,6 @@ void load_opengl() {
 
 }
 
-using std::string;
-
 using namespace llvm;
 
 class JITModuleContents {
@@ -418,13 +414,11 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     // Add exported symbols for all dependencies.
     std::set<std::string> provided_symbols;
-    for (size_t i = 0; i < dependencies.size(); i++) {
-        const std::map<std::string, Symbol> &dep_exports(dependencies[i].exports());
-        std::map<std::string, Symbol>::const_iterator iter;
-        for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
-            const std::string &name(iter->first);
-            const Symbol &s(iter->second);
-            if (provided_symbols.find(iter->first) == provided_symbols.end()) {
+    for (const JITModule &dep : dependencies) {
+        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
+            const std::string &name = i.first;
+            const Symbol &s = i.second;
+            if (provided_symbols.find(i.first) == provided_symbols.end()) {
                 llvm::Type *llvm_type = copy_llvm_type_to_module(m, s.llvm_type);
                 if (llvm_type->isFunctionTy()) {
                     m->getOrInsertFunction(name, cast<FunctionType>(llvm_type));
@@ -501,12 +495,10 @@ const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
 }
 
 void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *module) {
-    for (size_t i = 0; i < deps.size(); i++) {
-        const std::map<std::string, Symbol> &dep_exports(deps[i].exports());
-        std::map<std::string, Symbol>::const_iterator iter;
-        for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
-            const std::string &name(iter->first);
-            const Symbol &s(iter->second);
+    for (const JITModule &dep : deps) {
+        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
+            const std::string &name = i.first;
+            const Symbol &s = i.second;
             GlobalValue *gv;
             llvm::Type *llvm_type = copy_llvm_type_to_module(module, s.llvm_type);
             if (llvm_type->isFunctionTy()) {
@@ -664,9 +656,7 @@ void adjust_module_ref_count(void *arg, int32_t count) {
     }
 }
 
-#if __cplusplus > 199711L || _MSC_VER >= 1800
 std::mutex shared_runtimes_mutex;
-#endif
 
 // The Halide runtime is broken up into pieces so that state can be
 // shared across JIT compilations that do not use the same target
@@ -804,9 +794,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * JITSharedRuntime::release_all is called, the global state is rest
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
-    #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
-    #endif
 
     std::vector<JITModule> result;
 
@@ -848,9 +836,7 @@ void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
 }
 
 void JITSharedRuntime::release_all() {
-    #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
-    #endif
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
@@ -866,9 +852,7 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 }
 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
-    #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
-    #endif
 
     if (size != default_cache_size && shared_runtimes(MainShared).defined()) {
         default_cache_size = size;

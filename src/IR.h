@@ -13,7 +13,6 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Function.h"
-#include "IRVisitor.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
 #include "Type.h"
@@ -216,15 +215,14 @@ struct LetStmt : public StmtNode<LetStmt> {
     EXPORT static Stmt make(std::string name, Expr value, Stmt body);
 };
 
-/** If the 'condition' is false, then bail out calling halide_error. */
+/** If the 'condition' is false, then evaluate and return the message,
+ * which should be a call to an error function. */
 struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     Expr message;
 
-    EXPORT static Stmt make(Expr condition, const char *message);
     EXPORT static Stmt make(Expr condition, Expr message);
-    EXPORT static Stmt make(Expr condition, const std::vector<Expr> &message);
 };
 
 /** This node is a helpful annotation to do with permissions. The
@@ -391,11 +389,15 @@ struct Call : public ExprNode<Call> {
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
+        image_load,
+        image_store,
         make_struct,
         stringify,
         memoize_expr,
         copy_memory,
-        likely;
+        likely,
+        make_int64,
+        make_float64;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

@@ -79,6 +79,7 @@ set(RUNTIME_CPP
   android_opengl_context
   cache
   cuda
+  destructors
   device_interface
   fake_thread_pool
   gcd_thread_pool
@@ -87,26 +88,32 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  matlab
+  metadata
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
   opencl
   opengl
   osx_clock
+  osx_get_symbol
   osx_host_cpu_count
   osx_opengl_context
   posix_allocator
   posix_clock
   posix_error_handler
+  posix_get_symbol
   posix_io
   posix_math
   posix_print
   posix_thread_pool
+  renderscript
   ssp
   to_string
   tracing
   windows_clock
   windows_cuda
+  windows_get_symbol
   windows_io
   windows_opencl
   windows_thread_pool
@@ -121,6 +128,7 @@ set (RUNTIME_LL
   pnacl_math
   posix_math
   ptx_dev
+  renderscript_dev
   win32_math
   x86
   x86_avx
@@ -159,7 +167,7 @@ foreach (i ${RUNTIME_CPP} )
       IF (ARCHS EQUAL 32)
         IF (${i} MATCHES "windows_.*")
           # win32 uses the stdcall calling convention, which is x86-specific
-          set(TARGET "i386-unknown-nacl-unknown")
+          set(TARGET "i386-unknown-unknown-unknown")
         ELSE()
           set(TARGET "le32-unknown-nacl-unknown")
         ENDIF()
@@ -178,11 +186,11 @@ foreach (i ${RUNTIME_CPP} )
 
     add_custom_command(OUTPUT "${LL_D}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                        COMMENT "${SOURCE} -> ${LL_D}")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
 
     add_custom_command(OUTPUT "${BC_D}"
@@ -236,6 +244,8 @@ add_dependencies(InitialModules
   bitcode2cpp)
 
 set(HEADER_FILES
+  AddImageChecks.h
+  AddParameterChecks.h
   AllocationBoundsInference.h
   AutomaticScheduling.h
   Argument.h
@@ -256,6 +266,7 @@ set(HEADER_FILES
   CodeGen_PNaCl.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
+  CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
   Debug.h
   DebugToFile.h
@@ -272,7 +283,6 @@ set(HEADER_FILES
   Func.h
   Function.h
   Generator.h
-  HumanReadableStmt.h
   IR.h
   IREquality.h
   IRMatch.h
@@ -282,6 +292,7 @@ set(HEADER_FILES
   IRVisitor.h
   Image.h
   InjectHostDevBufferCopies.h
+  InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
   Inline.h
   InlineReductions.h
@@ -295,6 +306,7 @@ set(HEADER_FILES
   Lerp.h
   Lower.h
   MainPage.h
+  MatlabWrapper.h
   Memoization.h
   Module.h
   ModulusRemainder.h
@@ -309,11 +321,13 @@ set(HEADER_FILES
   Qualify.h
   RDom.h
   Random.h
+  RealizationOrder.h
   Reduction.h
   RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
   Schedule.h
+  ScheduleFunctions.h
   Scope.h
   Simplify.h
   SkipStages.h
@@ -348,11 +362,27 @@ file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
-add_library(Halide ${HALIDE_LIBRARY_TYPE}
+IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
+  set(BITWRITER_FILES
+    BitWriter_3_2.35/BitcodeWriter.cpp
+    BitWriter_3_2.35/BitcodeWriterPass.cpp
+    BitWriter_3_2.35/ValueEnumerator.cpp
+  )
+ELSE()
+  set(BITWRITER_FILES
+    BitWriter_3_2/BitcodeWriter.cpp
+    BitWriter_3_2/BitcodeWriterPass.cpp
+    BitWriter_3_2/ValueEnumerator.cpp
+  )
+ENDIF()
 
+add_library(Halide ${HALIDE_LIBRARY_TYPE}
+  AddImageChecks.cpp
+  AddParameterChecks.cpp
   AllocationBoundsInference.cpp
   AutomaticScheduling.cpp
   BlockFlattening.cpp
@@ -373,6 +403,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_PNaCl.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
+  CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
   Debug.cpp
   Debug.cpp
@@ -389,7 +420,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Function.cpp
   FuseGPUThreadLoops.cpp
   Generator.cpp
-  HumanReadableStmt.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -399,6 +429,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRVisitor.cpp
   Image.cpp
   InjectHostDevBufferCopies.cpp
+  InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp
   InlineReductions.cpp
@@ -409,6 +440,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
   Lower.cpp
+  MatlabWrapper.cpp
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp
@@ -419,15 +451,18 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
+  PrintLoopNest.cpp
   Profiling.cpp
   Qualify.cpp
   RDom.cpp
   Random.cpp
+  RealizationOrder.cpp
   Reduction.cpp
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
   Schedule.cpp
+  ScheduleFunctions.cpp
   Simplify.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -444,8 +479,10 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UniquifyVariableNames.cpp
   UnrollLoops.cpp
   Util.cpp
+  Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
 )

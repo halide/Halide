@@ -1,6 +1,4 @@
 #include "LLVM_Runtime_Linker.h"
-
-#include <memory>
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -81,6 +79,7 @@ DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
+DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
@@ -113,6 +112,12 @@ DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
+DECLARE_CPP_INITMOD(metadata)
+DECLARE_CPP_INITMOD(matlab)
+DECLARE_CPP_INITMOD(posix_get_symbol)
+DECLARE_CPP_INITMOD(osx_get_symbol)
+DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(renderscript)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -130,6 +135,7 @@ DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(renderscript_dev)
 #ifdef WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
@@ -204,10 +210,11 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // prevent llvm from stripping them during initial module
     // assembly. This means they can be stripped later.
 
-    // The symbols that we actually might want to override as a user
-    // must remain weak. This is handled automatically by assuming any
-    // symbol starting with "halide_" that is weak will be retained. There
-    // are a few compiler generated symbols for which this convention is not
+    // The symbols that we might want to call as a user even if not
+    // used in the Halide-generated code must remain weak. This is
+    // handled automatically by assuming any symbol starting with
+    // "halide_" that is weak will be retained. There are a few
+    // compiler generated symbols for which this convention is not
     // followed and these are in this array.
     string retain[] = {"__stack_chk_guard",
                        "__stack_chk_fail",
@@ -218,15 +225,12 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // Enumerate the global variables.
     for (llvm::Module::global_iterator iter = module->global_begin(); iter != module->global_end(); iter++) {
         if (llvm::GlobalValue *gv = llvm::dyn_cast<llvm::GlobalValue>(iter)) {
-            if (Internal::starts_with(gv->getName(), "halide_")) {
-                internal_assert(gv->hasExternalLinkage() || gv->isWeakForLinker() || gv->isDeclaration()) <<
-                    " for global variable " << (std::string)gv->getName() << "\n";
-                llvm::GlobalValue::LinkageTypes t = gv->getLinkage();
-                if (t == llvm::GlobalValue::WeakAnyLinkage) {
-                    gv->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-                } else if (t == llvm::GlobalValue::WeakODRLinkage) {
-                    gv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-                }
+            // No variables are part of the public interface (even the ones labelled halide_)
+            llvm::GlobalValue::LinkageTypes t = gv->getLinkage();
+            if (t == llvm::GlobalValue::WeakAnyLinkage) {
+                gv->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+                gv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
     }
@@ -243,9 +247,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         }
 
         bool is_halide_extern_c_sym = Internal::starts_with(f->getName(), "halide_");
-        internal_assert(!is_halide_extern_c_sym || f->isWeakForLinker() || f->isDeclaration()) <<
-            " for function " << (std::string)f->getName() << "\n";
-        can_strip = can_strip && !(is_halide_extern_c_sym && f->mayBeOverridden());
+        internal_assert(!is_halide_extern_c_sym || f->isWeakForLinker() || f->isDeclaration())
+            << " for function " << (std::string)f->getName() << "\n";
+        can_strip = can_strip && !is_halide_extern_c_sym;
 
         if (can_strip) {
             llvm::GlobalValue::LinkageTypes t = f->getLinkage();
@@ -392,19 +396,23 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Android) {
                 modules.push_back(get_initmod_android_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
@@ -422,6 +430,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             // The first module for inline only case has to be C/C++ compiled otherwise the
             // datalayout is not properly setup.
             modules.push_back(get_initmod_posix_math(c, bits_64, debug));
+
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows && t.bits == 32) {
                 modules.push_back(get_initmod_win32_math_ll(c));
@@ -430,6 +439,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 modules.push_back(get_initmod_posix_math_ll(c));
             }
+            modules.push_back(get_initmod_destructors(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITInlined) {
@@ -443,6 +453,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
+            modules.push_back(get_initmod_metadata(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
@@ -503,7 +514,13 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
+        } else if (t.has_feature(Target::Renderscript)) {
+            modules.push_back(get_initmod_renderscript(c, bits_64, debug));
         }
+    }
+
+    if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
+        modules.push_back(get_initmod_matlab(c, bits_64, debug));
     }
 
     link_modules(modules);
@@ -574,6 +591,12 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     }
 
     return modules[0];
+}
+#endif
+
+#ifdef WITH_RENDERSCRIPT
+llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c) {
+    return get_initmod_renderscript_dev_ll(c);
 }
 #endif
 

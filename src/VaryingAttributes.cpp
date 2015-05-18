@@ -8,9 +8,6 @@
 #include "CSE.h"
 #include "Simplify.h"
 
-// TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-// #include "LinearSolve.h"
-
 namespace Halide {
 namespace Internal {
 
@@ -273,8 +270,6 @@ protected:
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
 
-    // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-
     // Once this is done, Min and Max should call visit_binary_linear and the code
     // in setup_mesh will handle piecewise linear behavior introduced by these
     // expressions
@@ -471,16 +466,16 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
 
     std::vector<std::string> remove_list;
 
-    for (std::map<std::string, Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
-        const std::string &name = i->first;
+    for (const std::pair<std::string, Expr> &i : varying) {
+        const std::string &name = i.first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
             remove_list.push_back(name);
         }
     }
 
-    for (std::vector<std::string>::iterator name = remove_list.begin(); name != remove_list.end(); ++name) {
-        varying.erase(*name);
+    for (const std::string &i : remove_list) {
+        varying.erase(i);
     }
 }
 
@@ -1071,7 +1066,7 @@ public:
 
     // Expressions for the spatial values of each coordinate in the GPU scheduled
     // loop dimensions.
-    typedef std::map<std::string, std::vector<Expr> > DimsType;
+    typedef std::map<std::string, std::vector<Expr>> DimsType;
     DimsType dims;
 
     // The channel of each varying attribute in the interleaved vertex buffer
@@ -1147,8 +1142,8 @@ public:
             attribute_order["__vertex_y"] = 1;
 
             int idx = 2;
-            for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-                attribute_order[v->first] = idx++;
+            for (const std::pair<std::string, Expr> &v : varyings) {
+                attribute_order[v.first] = idx++;
             }
 
             // Construct a list of expressions giving to coordinate locations along
@@ -1160,17 +1155,13 @@ public:
             Expr loop0_max = Add::make(loop0->min, loop0->extent);
             Expr loop1_max = Add::make(loop1->min, loop1->extent);
 
-            std::vector<std::vector<Expr> > coords(2);
+            std::vector<std::vector<Expr>> coords(2);
 
             coords[0].push_back(loop0->min);
             coords[0].push_back(loop0_max);
 
             coords[1].push_back(loop1->min);
             coords[1].push_back(loop1_max);
-
-            // TODO:(abstephensg) Need to integrate with the
-            // specialize_branched_loops branch linear solver functionality to
-            // handle piecewise linear expressions.
 
             // Count the two spatial x and y coordinates plus the number of
             // varying attribute expressions found

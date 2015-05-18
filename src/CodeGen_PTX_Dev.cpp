@@ -296,15 +296,19 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.NoInfsFPMath = false;
     Options.NoNaNsFPMath = false;
     Options.HonorSignDependentRoundingFPMathOption = false;
+    #if LLVM_VERSION < 37
     Options.UseSoftFloat = false;
+    #endif
     /* if (FloatABIForCalls != FloatABI::Default) */
         /* Options.FloatABIType = FloatABIForCalls; */
     Options.NoZerosInBSS = false;
     #if LLVM_VERSION < 33
     Options.JITExceptionHandling = false;
     #endif
+    #if LLVM_VERSION < 37
     Options.JITEmitDebugInfo = false;
     Options.JITEmitDebugInfoToDisk = false;
+    #endif
     Options.GuaranteedTailCallOpt = false;
     Options.StackAlignmentOverride = 0;
     // Options.DisableJumpTables = false;
@@ -324,8 +328,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Set up passes
     #if LLVM_VERSION < 37
+    std::string outstr;
     PassManager PM;
     #else
+    llvm::SmallString<8> outstr;
+    raw_svector_ostream ostream(outstr);
+    ostream.SetUnbuffered();
     legacy::PassManager PM;
     #endif
 
@@ -401,9 +409,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #endif
 
     // Output string stream
-    std::string outstr;
+    #if LLVM_VERSION < 37
     raw_string_ostream outs(outstr);
     formatted_raw_ostream ostream(outs);
+    #endif
 
     // Ask the target to add backend passes as necessary.
     bool fail = Target.addPassesToEmitFile(PM, ostream,
@@ -422,9 +431,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    string str = outs.str();
-    debug(1) << "PTX kernel:\n" << str.c_str() << "\n";
-    vector<char> buffer(str.begin(), str.end());
+    debug(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
+    vector<char> buffer(outstr.begin(), outstr.end());
     buffer.push_back(0);
     return buffer;
 #else // WITH_PTX

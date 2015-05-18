@@ -1,4 +1,5 @@
 #include "CodeGen_GPU_Dev.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {

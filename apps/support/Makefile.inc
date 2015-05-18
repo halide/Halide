@@ -2,7 +2,7 @@ CXX ?= g++
 GXX ?= g++
 
 CFLAGS += -I../../include/ -I../support/
-CXXFLAGS += -I../../include/ -I../support/
+CXXFLAGS += -std=c++11 -I../../include/ -I../support/
 
 ifdef BUILD_PREFIX
 LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
@@ -12,12 +12,7 @@ endif
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
-LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
-ifneq ($(LLVM_34_OR_OLDER), )
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
-else
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
-endif
 
 LLVM_CONFIG ?= llvm-config
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
