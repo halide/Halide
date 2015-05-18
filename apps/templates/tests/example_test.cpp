@@ -9,18 +9,19 @@
 #include "example.h"
 #include "example_glsl.h"
 
-const int N = 256;
-const int C = 4;
-const float compiletime_factor = 1.0f;
+const int kWidth = 1024;
+const int kHeight = 1024;
+const int kIter = 10;
+const int kSeed = 0;
 
-static int check(const buffer_t &buf, float runtime_factor) {
+template<typename T>
+static int check(const Image<T> &input, const Image<T> &output) {
     int errors = 0;
-    for (int x = 0; x < buf.extent[0]; x++) {
-        for (int y = 0; y < buf.extent[1]; y++) {
-            for (int c = 0; c < buf.extent[2]; c++) {
-                float value = (x > y ? x : y) * c * compiletime_factor * runtime_factor;
-                uint8_t expected = (uint8_t)(int(value) % 255);
-                uint8_t actual   = buf.host[x*buf.stride[0] + y*buf.stride[1] + c*buf.stride[2]];
+    for (int x = 0; x < input.extent(0); x++) {
+        for (int y = 0; y < input.extent(1); y++) {
+            for (int c = 0; c < input.extent(2); c++) {
+                T expected = input(input.extent(0) - x - 1, y, c);
+                T actual = output(x, y, c);
                 if (expected != actual) {
                   errors++;
                 }
@@ -30,87 +31,83 @@ static int check(const buffer_t &buf, float runtime_factor) {
     return errors;
 }
 
+static int run_test(void *uc, int channels, bool use_glsl, bool use_interleaved) {
+  std::string name = "Example";
+  name += use_glsl ? "_GLSL" : "_CPU";
+  name += use_interleaved ? "_Chunky" : "_Planar";
+  halide_printf(uc, "\n---------------------------\n%s\n", name.c_str());
+  Image<uint8_t> input(kWidth, kHeight, channels, 0, use_interleaved);
+  Image<uint8_t> output(kWidth, kHeight, channels, 0, use_interleaved);
+  (void) halide_smooth_buffer_host<uint8_t>(uc, kSeed, input);
+  if (use_glsl) {
+    // Call once to ensure OpenGL is inited (we want to time the
+    // cost of copy-to-device alone)
+    halide_copy_to_device(uc, input, halide_opengl_device_interface());
+    // Mark as dirty so the next call won't be a no-op
+    input.set_host_dirty();
+    {
+      ScopedTimer timer(uc, name + " halide_copy_to_device input");
+      halide_copy_to_device(uc, input, halide_opengl_device_interface());
+    }
+    {
+      ScopedTimer timer(uc, name + " halide_copy_to_device output");
+      halide_copy_to_device(uc, output, halide_opengl_device_interface());
+    }
+    // Call once to compile shader, warm up, etc.
+    (void) example_glsl(input, output);
+    {
+      ScopedTimer timer(uc, name, kIter);
+      for (int i = 0; i < kIter; ++i) {
+        (void) example_glsl(input, output);
+      }
+    }
+    {
+      ScopedTimer timer(uc, name + " halide_copy_to_host");
+      halide_copy_to_host(uc, output);
+    }
+  } else {
+    // Call once to warm up cache
+    (void) example(input, output);
+    {
+      ScopedTimer timer(uc, name, kIter);
+      for (int i = 0; i < kIter; ++i) {
+        (void) example(input, output);
+      }
+    }
+  }
+  int errors = check<uint8_t>(input, output);
+  if (errors) {
+    halide_errorf(uc, "Test %s had %d errors!\n\n", name.c_str(), errors);
+  } else {
+    halide_printf(uc, "Test %s had no errors.\n\n", name.c_str());
+  }
+  return errors;
+}
+
 extern "C"
 bool example_test() {
+  void *uc = NULL;
 
-  halide_print(NULL, "Running filter example. This should produce two blue and "
-               "green patterns.\n");
-
-  float runtime_factor = 2.0f;
-
-  std::vector<uint8_t> host(N*N*C);
-
-  buffer_t buf = {0};
-  buf.host = host.data();
-  buf.extent[0] = N;
-  buf.extent[1] = N;
-  buf.extent[2] = C;
-  buf.stride[0] = 1;
-  buf.stride[1] = N;
-  buf.stride[2] = N*N;
-  buf.elem_size = sizeof(uint8_t);
-
-  // ------ CPU target
-
-  halide_print(NULL, "CPU target\n");
-
-  {
-    ScopedTimer timer(NULL, "CPU example");
-    // Normally you'd check the result, but in this case we'll just rely
-    // on halide_error() dumping an error message to our console.
-    (void) example(runtime_factor, &buf);
-  }
-
-  int errors = check(buf, runtime_factor);
-  if (errors > 0) {
-    halide_errorf(NULL, "CPU Target had %d errors!", errors);
-  }
-
-  halide_buffer_display(&buf);
-
-  // ------ GLSL target
-
-  runtime_factor *= 2;
-  halide_print(NULL,"GLSL target\n");
-
-  {
-    ScopedTimer timer(NULL, "halide_copy_to_device");
-    halide_copy_to_device(NULL, &buf, halide_opengl_device_interface());
-  }
-
-  {
-    ScopedTimer timer(NULL, "GLSL example");
-    (void) example_glsl(runtime_factor, &buf);
-  }
-
-  if (!buf.dev) {
-      halide_error(NULL, "Expected dev output here");
-  }
-  {
-    ScopedTimer timer(NULL, "halide_copy_to_host");
-    halide_copy_to_host(NULL, &buf);
-  }
-
-  errors = check(buf, runtime_factor);
-  if (errors > 0) {
-    halide_errorf(NULL, "GPU Target had %d errors!", errors);
-  }
-
-  halide_buffer_display(&buf);
+  int errors = 0;
+  errors += run_test(uc, 4, false, false);
+  errors += run_test(uc, 4, false, true);
+  // GLSL+Planar is a silly combination; the conversion overhead is high.
+  errors += run_test(uc, 4, true, false);
+  errors += run_test(uc, 4, true, true);
 
   // -------- Other stuff
 
-  halide_print(NULL, "Here is a random image.\n");
+  halide_print(uc, "Here is a random image.\n");
 
   Image<uint8_t> randomness(300, 400, 3);
-  (void) halide_randomize_buffer_host<uint8_t>(NULL, 0, 0, 255, randomness);
+  (void) halide_randomize_buffer_host<uint8_t>(uc, 0, 0, 255, randomness);
   halide_buffer_display(randomness);
 
 
-  halide_print(NULL, "Here is a smooth image.\n");
+  halide_print(uc, "Here is a smooth image.\n");
 
   Image<uint8_t> smoothness(300, 400, 3);
-  (void) halide_smooth_buffer_host<uint8_t>(NULL, 0, smoothness);
+  (void) halide_smooth_buffer_host<uint8_t>(uc, 0, smoothness);
   halide_buffer_display(smoothness);
 
   return errors > 0;
