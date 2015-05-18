@@ -77,28 +77,14 @@ public:
         Func f("f"), g("g");
 
         f(x, y) = max(x, y);
-
-        // Produce a float expression for the filter
-        Expr value = f(x, y) * c * compiletime_factor * runtime_factor;
-
-        // Float to integer conversion for unrepresentable values is undefined
-        // in C++, e.g. if value is 256, it cannot be represented by a uint8_t.
-        if (Type(output_type).is_uint() && Type(output_type).bits != 32) {
-          Expr int_value = cast<unsigned int>(value);
-          value = int_value % Type(output_type).max();
-        }
-
-        // Cast to the output type
-        g(x, y, c) = cast(output_type, value);
+        g(x, y, c) = cast(output_type, f(x, y) * c * compiletime_factor * runtime_factor);
 
         g.bound(c, 0, channels).reorder(c, x, y).unroll(c);
 
         // Note that we can use the Generator method natural_vector_size()
         // here; this produces the width of the SIMD vector being targeted
         // divided by the width of the data type.
-        if (get_target().arch != Target::PNaCl) {
-           g.vectorize(x, natural_vector_size(output_type));
-        }
+        g.vectorize(x, natural_vector_size(output_type));
 
         return g;
     }

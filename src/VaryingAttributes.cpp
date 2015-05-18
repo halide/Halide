@@ -8,9 +8,6 @@
 #include "CSE.h"
 #include "Simplify.h"
 
-// TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-// #include "LinearSolve.h"
-
 namespace Halide {
 namespace Internal {
 
@@ -272,8 +269,6 @@ protected:
 
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
-
-    // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
 
     // Once this is done, Min and Max should call visit_binary_linear and the code
     // in setup_mesh will handle piecewise linear behavior introduced by these
@@ -1167,10 +1162,6 @@ public:
 
             coords[1].push_back(loop1->min);
             coords[1].push_back(loop1_max);
-
-            // TODO:(abstephensg) Need to integrate with the
-            // specialize_branched_loops branch linear solver functionality to
-            // handle piecewise linear expressions.
 
             // Count the two spatial x and y coordinates plus the number of
             // varying attribute expressions found
