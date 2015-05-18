@@ -103,10 +103,15 @@ bool example_test() {
   halide_print(NULL, "Here is a random image.\n");
 
   Image<uint8_t> randomness(300, 400, 3);
-  if (!halide_randomize_buffer_host<uint8_t>(0, 0, 255, randomness)) {
-    halide_error(NULL, "halide_randomize_buffer_host failed!");
-  }
+  (void) halide_randomize_buffer_host<uint8_t>(NULL, 0, 0, 255, randomness);
   halide_buffer_display(randomness);
+
+
+  halide_print(NULL, "Here is a smooth image.\n");
+
+  Image<uint8_t> smoothness(300, 400, 3);
+  (void) halide_smooth_buffer_host<uint8_t>(NULL, 0, smoothness);
+  halide_buffer_display(smoothness);
 
   return errors > 0;
 }
