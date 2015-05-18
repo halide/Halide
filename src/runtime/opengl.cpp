@@ -178,6 +178,7 @@ struct GlobalState {
     bool have_vertex_array_objects;
     bool have_texture_rg;
     bool have_texture_float;
+    bool have_texture_rgb8_rgba8;
 
     // Various objects shared by all filter kernels
     GLuint framebuffer_id;
@@ -453,6 +454,7 @@ WEAK void GlobalState::init() {
     textures = NULL;
     have_vertex_array_objects = false;
     have_texture_rg = false;
+    have_texture_rgb8_rgba8 = false;
     // Initialize all GL function pointers to NULL
 #define GLFUNC(type, name) name = NULL;
     USED_GL_FUNCTIONS;
@@ -510,6 +512,11 @@ WEAK void init_extensions(void *user_context) {
          extension_supported(user_context, "GL_ARB_texture_rg")) ||
         (global_state.profile == OpenGLES &&
          extension_supported(user_context, "GL_EXT_texture_rg"));
+
+    global_state.have_texture_rgb8_rgba8 =
+        global_state.major_version >= 3 ||
+        (global_state.profile == OpenGLES &&
+         extension_supported(user_context, "GL_OES_rgb8_rgba8"));
 
     global_state.have_texture_float =
         (global_state.major_version >= 3) ||
@@ -581,15 +588,11 @@ WEAK int halide_opengl_init(void *user_context) {
     }
     init_extensions(user_context);
     debug(user_context)
-        << "Halide running on OpenGL "
-        << ((global_state.profile == OpenGL) ? "" : "ES ")
-        << major << "." << minor << "\n"
-        << "  vertex_array_objects: "
-        << (global_state.have_vertex_array_objects ? "yes\n" : "no\n")
-        << "  texture_rg: "
-        << (global_state.have_texture_rg ? "yes\n" : "no\n")
-        << "  texture_float: "
-        << (global_state.have_texture_float ? "yes\n" : "no\n");
+        << "Halide running on OpenGL " << ((global_state.profile == OpenGL) ? "" : "ES ") << major << "." << minor << "\n"
+        << "  vertex_array_objects: " << (global_state.have_vertex_array_objects ? "yes\n" : "no\n")
+        << "  texture_rg: " << (global_state.have_texture_rg ? "yes\n" : "no\n")
+        << "  have_texture_rgb8_rgba8: " << (global_state.have_texture_rgb8_rgba8 ? "yes\n" : "no\n")
+        << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n");
 
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);
@@ -1114,6 +1117,9 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
         global_state.BindFramebuffer(GL_FRAMEBUFFER, global_state.framebuffer_id);
         global_state.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                 GL_TEXTURE_2D, tex, 0);
+        if (global_state.CheckAndReportError(user_context, "get_pixels FramebufferTexture2D")) {
+            return 1;
+        }
     }
 
     // Check that framebuffer is set up correctly
@@ -1125,6 +1131,9 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
         return 1;
     }
     global_state.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, dest);
+    if (global_state.CheckAndReportError(user_context, "get_pixels ReadPixels")) {
+        return 1;
+    }
     global_state.BindFramebuffer(GL_FRAMEBUFFER, 0);
     return 0;
 }
