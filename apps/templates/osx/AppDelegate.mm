@@ -146,13 +146,12 @@ int halide_buffer_display(const buffer_t* buffer)
   // TODO: This code should handle channel types larger than one byte.
   void* data_ptr = buffer->host;
 
-  size_t width            = buffer->extent[0];
-  size_t height           = buffer->extent[1];
-  size_t channels         = buffer->extent[2];
+  size_t width            = std::max(1, buffer->extent[0]);
+  size_t height           = std::max(1, buffer->extent[1]);
+  size_t channels         = std::max(1, buffer->extent[2]);
   size_t bitsPerComponent = buffer->elem_size*8;
 
   // For planar data, there is one channel across the row
-  size_t src_bytesPerRow      = width*buffer->elem_size;
   size_t dst_bytesPerRow      = width*channels*buffer->elem_size;
 
   size_t totalBytes = width*height*channels*buffer->elem_size;
@@ -164,10 +163,10 @@ int halide_buffer_display(const buffer_t* buffer)
   unsigned char* dst_buffer = (unsigned char*)malloc(totalBytes);
 
   // Interleave the data
-  for (size_t c=0;c!=buffer->extent[2];++c) {
-    for (size_t y=0;y!=buffer->extent[1];++y) {
-      for (size_t x=0;x!=buffer->extent[0];++x) {
-        size_t src = x + y*src_bytesPerRow + c * (height*src_bytesPerRow);
+  for (size_t c=0;c!=channels;++c) {
+    for (size_t y=0;y!=height;++y) {
+      for (size_t x=0;x!=width;++x) {
+        size_t src = x*buffer->stride[0] + y*buffer->stride[1] + c*buffer->stride[2];
         size_t dst = c + x*channels + y*dst_bytesPerRow;
         dst_buffer[dst] = src_buffer[src];
       }
@@ -175,7 +174,7 @@ int halide_buffer_display(const buffer_t* buffer)
   }
 
   CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, dst_buffer, totalBytes, NULL);
-  CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+  CGColorSpaceRef colorSpace = channels > 1 ? CGColorSpaceCreateDeviceRGB() : CGColorSpaceCreateDeviceGray();
 
   CGImageRef cgImage = CGImageCreate(width,
                                      height,
