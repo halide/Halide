@@ -4,6 +4,7 @@
 #include <stdarg.h>
 
 #include <random>
+#include <string>
 #include <vector>
 
 #include "HalideRuntime.h"
@@ -86,18 +87,25 @@ class SimpleTimer {
 
 class ScopedTimer {
  public:
-  ScopedTimer(void *user_context, const char *msg)
-      : user_context_(user_context), timer_(user_context), msg_(msg) {
+  ScopedTimer(void *user_context, const std::string &msg, const int iters = 1)
+      : user_context_(user_context), timer_(user_context), msg_(msg), iters_(iters) {
     timer_.start();
   }
   ~ScopedTimer() {
     timer_.stop();
-    halide_printf(user_context_, "%s: %f usec", msg_, timer_.net_usec());
+    double usec = timer_.net_usec();
+    if (iters_ > 1) {
+      usec /= iters_;
+      halide_printf(user_context_, "%s: avg %f usec/iter", msg_.c_str(), usec);
+    } else {
+      halide_printf(user_context_, "%s: %f usec", msg_.c_str(), usec);
+    }
   }
  private:
   void *user_context_;
   SimpleTimer timer_;
-  const char *msg_;
+  std::string msg_;
+  int iters_;
 };
 
 
