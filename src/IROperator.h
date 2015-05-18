@@ -30,8 +30,9 @@ EXPORT const int *as_const_int(Expr e);
 EXPORT const float *as_const_float(Expr e);
 
 /** Is the expression a constant integer power of two. Also returns
- * log base two of the expression if it is. */
-EXPORT bool is_const_power_of_two(Expr e, int *bits);
+ * log base two of the expression if it is. Only returns true for
+ * integer types. */
+EXPORT bool is_const_power_of_two_integer(Expr e, int *bits);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */

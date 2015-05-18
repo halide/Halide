@@ -1289,7 +1289,7 @@ void CodeGen_LLVM::visit(const Mod *op) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (op->type.is_uint()) {
         int bits;
-        if (is_const_power_of_two(op->b, &bits)) {
+        if (is_const_power_of_two_integer(op->b, &bits)) {
             Expr one = make_one(op->b.type());
             value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
         } else {
@@ -1297,7 +1297,7 @@ void CodeGen_LLVM::visit(const Mod *op) {
         }
     } else {
         int bits;
-        if (is_const_power_of_two(op->b, &bits)) {
+        if (is_const_power_of_two_integer(op->b, &bits)) {
             Expr one = make_one(op->b.type());
             value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
         } else {

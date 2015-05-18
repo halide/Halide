@@ -89,12 +89,14 @@ const float * as_const_float(Expr e) {
     return f ? &(f->value) : NULL;
 }
 
-bool is_const_power_of_two(Expr e, int *bits) {
+bool is_const_power_of_two_integer(Expr e, int *bits) {
+  if (!(e.type().is_int() || e.type().is_uint())) return false;
+
     const Broadcast *b = e.as<Broadcast>();
-    if (b) return is_const_power_of_two(b->value, bits);
+    if (b) return is_const_power_of_two_integer(b->value, bits);
 
     const Cast *c = e.as<Cast>();
-    if (c) return is_const_power_of_two(c->value, bits);
+    if (c) return is_const_power_of_two_integer(c->value, bits);
 
     const IntImm *int_imm = e.as<IntImm>();
     if (int_imm && ((int_imm->value & (int_imm->value - 1)) == 0)) {
