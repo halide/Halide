@@ -117,6 +117,15 @@ WEAK const char *gl_error_name(int32_t err) {
   return result;
 }
 
+struct HalideMalloc {
+     __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
+        : user_context(user_context), ptr(halide_malloc(user_context, size)) {}
+     __attribute__((always_inline)) ~HalideMalloc() {
+        halide_free(user_context, ptr);
+    }
+    void * const user_context;
+    void * const ptr;
+};
 
 enum OpenGLProfile {
     OpenGL,
@@ -1071,29 +1080,31 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
             << "Warning: In copy_to_device, host buffer is not interleaved. Doing slow interleave.\n";
 
         size_t size = width * height * channels * buf->elem_size;
-        void *tmp = halide_malloc(user_context, size);
+        HalideMalloc tmp(user_context, size);
+        if (!tmp.ptr) {
+            error(user_context) << "halide_malloc failed inside copy_to_device";
+            return -1;
+        }
 
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            halide_to_interleaved<uint8_t>(buf, (uint8_t*)tmp, width, height, channels);
+            halide_to_interleaved<uint8_t>(buf, (uint8_t*)tmp.ptr, width, height, channels);
             break;
         case GL_UNSIGNED_SHORT:
-            halide_to_interleaved<uint16_t>(buf, (uint16_t*)tmp, width, height, channels);
+            halide_to_interleaved<uint16_t>(buf, (uint16_t*)tmp.ptr, width, height, channels);
             break;
         case GL_FLOAT:
-            halide_to_interleaved<float>(buf, (float*)tmp, width, height, channels);
+            halide_to_interleaved<float>(buf, (float*)tmp.ptr, width, height, channels);
             break;
         }
 
         global_state.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         global_state.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
-                         format, type, tmp);
+                         format, type, tmp.ptr);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(2)")) {
             return 1;
         }
-
-        halide_free(user_context, tmp);
     }
 
     global_state.BindTexture(GL_TEXTURE_2D, 0);
@@ -1189,31 +1200,28 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
         size_t stride = width * buf->extent[2] * buf->elem_size;
         size_t size = height * stride;
-        uint8_t *tmp = (uint8_t*)halide_malloc(user_context, size);
-        if (!tmp) {
+        HalideMalloc tmp(user_context, size);
+        if (!tmp.ptr) {
             error(user_context) << "halide_malloc failed inside copy_to_host";
             return -1;
         }
 
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        if (int err = get_pixels(user_context, buf, format, type, tmp)) {
-            halide_free(user_context, tmp);
+        if (int err = get_pixels(user_context, buf, format, type, tmp.ptr)) {
             return err;
         }
 
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            interleaved_to_halide<uint8_t>(buf, (uint8_t*)tmp, width, height, channels);
+            interleaved_to_halide<uint8_t>(buf, (uint8_t*)tmp.ptr, width, height, channels);
             break;
         case GL_UNSIGNED_SHORT:
-            interleaved_to_halide<uint16_t>(buf, (uint16_t*)tmp, width, height, channels);
+            interleaved_to_halide<uint16_t>(buf, (uint16_t*)tmp.ptr, width, height, channels);
             break;
         case GL_FLOAT:
-            interleaved_to_halide<float>(buf, (float*)tmp, width, height, channels);
+            interleaved_to_halide<float>(buf, (float*)tmp.ptr, width, height, channels);
             break;
         }
-
-        halide_free(user_context, tmp);
     }
     if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_host")) {
         return 1;
