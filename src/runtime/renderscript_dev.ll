@@ -5,6 +5,8 @@
 
 declare <4 x i8> @_Z21rsGetElementAt_uchar413rs_allocationjj([1 x i32], i32, i32)
 declare zeroext i8 @_Z20rsGetElementAt_uchar13rs_allocationjjj([1 x i32], i32, i32, i32)
+declare <4 x float> @_Z21rsGetElementAt_float413rs_allocationjj([1 x i32], i32, i32)
+declare float @_Z20rsGetElementAt_float13rs_allocationjjj([1 x i32], i32, i32, i32)
 
 
 ; Function Attrs: nounwind readnone
@@ -15,6 +17,8 @@ declare float @_Z3dotDv3_fS_(<3 x float>, <3 x float>) #1
 
 declare void @_Z21rsSetElementAt_uchar413rs_allocationDv4_hjj([1 x i32], <4 x i8>, i32, i32)
 declare void @_Z20rsSetElementAt_uchar13rs_allocationhjjj([1 x i32], i8 zeroext, i32, i32, i32)
+declare void @_Z21rsSetElementAt_float413rs_allocationDv4_fjj([1 x i32], <4 x float>, i32, i32)
+declare void @_Z20rsSetElementAt_float13rs_allocationfjjj([1 x i32], float, i32, i32, i32)
 
 ; Function Attrs: nounwind
 ;define void @.rs.dtor() #0 {
