@@ -164,13 +164,13 @@ class KeyInfo {
 
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
-                                    vec(Load::make(UInt(8), key_name, index, Buffer(), Parameter())),
-                                    Call::Intrinsic);
+                               {Load::make(UInt(8), key_name, index, Buffer(), Parameter())},
+                               Call::Intrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
 
         return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
-                                         vec(dest, src, copy_size), Call::Intrinsic));
+                                         {dest, src, copy_size}, Call::Intrinsic));
     }
 
 public:
@@ -263,7 +263,7 @@ public:
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
                                   Call::Intrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -286,7 +286,7 @@ public:
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
                                   Call::Intrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -379,7 +379,9 @@ private:
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
-            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), const_true(), generate_key);
+            Stmt cache_key_alloc =
+                Allocate::make(cache_key_name, UInt(8), {key_info.key_size()},
+                               const_true(), generate_key);
 
             stmt = cache_key_alloc;
         } else {

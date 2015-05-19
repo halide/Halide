@@ -2074,7 +2074,7 @@ private:
             } else if (arg.same_as(op->args[0])) {
                 expr = op;
             } else {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             }
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
@@ -2133,7 +2133,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 expr = logf(*f);
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
                 expr = op;
             }
@@ -2143,7 +2143,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 expr = expf(*f);
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
                 expr = op;
             }
@@ -2168,7 +2168,7 @@ private:
                 // discard the outer function. For example, floor(ceil(x)) == ceil(x).
                 expr = call;
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
                 expr = op;
             }
@@ -3087,11 +3087,11 @@ void simplify_test() {
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     // Check that constant args to a stringify get combined
-    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, string(" "), 4), Call::Intrinsic),
+    check(Call::make(Handle(), Call::stringify, {3, string(" "), 4}, Call::Intrinsic),
           string("3 4"));
 
-    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, x, 4, string(", "), 3.4f), Call::Intrinsic),
-          Call::make(Handle(), Call::stringify, vec<Expr>(string("3"), x, string("4, 3.400000")), Call::Intrinsic));
+    check(Call::make(Handle(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
+          Call::make(Handle(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;

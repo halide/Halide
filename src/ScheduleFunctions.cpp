@@ -409,7 +409,7 @@ Stmt build_produce(Function f) {
                     top_left.push_back(Variable::make(Int(32), var + ".min"));
                 }
                 Expr host_ptr = Call::make(f, top_left, j);
-                host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
+                host_ptr = Call::make(Handle(), Call::address_of, {host_ptr}, Call::Intrinsic);
 
                 buffer_args[0] = host_ptr;
                 buffer_args[1] = f.output_types()[j].bytes();
@@ -439,7 +439,7 @@ Stmt build_produce(Function f) {
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
         Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
-                                vec<Expr>(extern_name, result), Call::Extern);
+                                {extern_name, result}, Call::Extern);
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
         check = LetStmt::make(result_name, e, check);
 
@@ -543,7 +543,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr max_var = Variable::make(Int(32), max_name);
             Expr check = (min_val <= min_var) && (max_val >= max_var);
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
-                                        vec<Expr>(b.var, func.name(), min_val, max_val, min_var, max_var),
+                                        {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
 
             // bounds inference has already respected these values for us

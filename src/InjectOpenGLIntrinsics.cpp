@@ -86,7 +86,7 @@ private:
             // be widened to the size of the Halide function color dimension
             // during vectorization.
             expr = Call::make(call->type, Call::shuffle_vector,
-                              vec(load_call, c_coordinate), Call::Intrinsic);
+                              {load_call, c_coordinate}, Call::Intrinsic);
         } else if (call->name == Call::image_store) {
             user_assert(call->args.size() == 6)
                 << "GLSL stores require three coordinates.\n";

@@ -84,9 +84,7 @@ int main(int argc, char **argv) {
     {
         call_count = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f;
         f() = count_calls(0, 0);
@@ -105,9 +103,7 @@ int main(int argc, char **argv) {
         call_count = 0;
         Param<int32_t> coord;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f, g;
         Var x, y;
@@ -144,9 +140,7 @@ int main(int argc, char **argv) {
     {
         call_count = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -169,14 +163,10 @@ int main(int argc, char **argv) {
 
     {
         Func count_calls_23;
-        count_calls_23.define_extern("count_calls_with_arg",
-                                     Internal::vec(ExternFuncArgument(cast<uint8_t>(23))),
-                                     UInt(8), 2);
+        count_calls_23.define_extern("count_calls_with_arg", {cast<uint8_t>(23)}, UInt(8), 2);
 
         Func count_calls_42;
-        count_calls_42.define_extern("count_calls_with_arg",
-                                     Internal::vec(ExternFuncArgument(cast<uint8_t>(42))),
-                                     UInt(8), 2);
+        count_calls_42.define_extern("count_calls_with_arg", {cast<uint8_t>(42)}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -202,14 +192,10 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls_val1;
-        count_calls_val1.define_extern("count_calls_with_arg",
-                                       Internal::vec(ExternFuncArgument(Expr(val1))),
-                                       UInt(8), 2);
+        count_calls_val1.define_extern("count_calls_with_arg", {val1}, UInt(8), 2);
 
         Func count_calls_val2;
-        count_calls_val2.define_extern("count_calls_with_arg",
-                                       Internal::vec(ExternFuncArgument(Expr(val2))),
-                                       UInt(8), 2);
+        count_calls_val2.define_extern("count_calls_with_arg", {val2}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -254,9 +240,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -282,9 +266,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(memoize_tag(cast<uint8_t>(val)))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {memoize_tag(cast<uint8_t>(val))}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -312,9 +294,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
         Func f, g, h;
         Var x;
 
@@ -345,9 +325,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -390,9 +368,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -427,9 +403,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -486,9 +460,7 @@ int main(int argc, char **argv) {
         Param<float> val;
 
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg_parallel",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 3);
+        count_calls.define_extern("count_calls_with_arg_parallel", {cast<uint8_t>(val)}, UInt(8), 3);
 
         Func f;
         Var x, y;
