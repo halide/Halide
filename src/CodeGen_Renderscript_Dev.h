@@ -83,6 +83,8 @@ private:
     // Metadata records keep track of all Renderscript kernels.
     llvm::NamedMDNode *rs_export_foreach_name;
     llvm::NamedMDNode *rs_export_foreach;
+
+    std::map<std::string, llvm::GlobalVariable*> rs_global_vars;
 };
 }
 }
