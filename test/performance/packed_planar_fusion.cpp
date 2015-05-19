@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "clock.h"
 #include <memory>
+#include <algorithm>
 
 using namespace Halide;
 
