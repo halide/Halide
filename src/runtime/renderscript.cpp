@@ -837,29 +837,45 @@ WEAK int halide_renderscript_device_malloc(void *user_context, buffer_t *buf) {
 
     void *typeID = NULL;
     //
+    //  Support two element types:
+    //  - single unsigned 8-bit;
+    //  - 32-bit float;
+    //
     //  Support two types of buffers:
-    //  - 2-dimension interleaved, where every element is 4-byte wide(RGBA).
+    //  - 2-dimension interleaved, where every element is 4-element wide(RGBA).
     //    Assumption is that Halide schedule for this buffer is vectorized along that 3-rd dimension(c).
     //  - 3-dimension one-byte element.
     //    Assumption is that there is no vectorization in Halide schedule for this data type.
     //
+    RsDataType datatype;
+    switch(buf->elem_size) {
+        case 1:
+            datatype = RS_TYPE_UNSIGNED_8;
+            break;
+        case 4:
+            datatype = RS_TYPE_FLOAT_32;
+            break;
+        default:
+            error(user_context) << "RS: Unsupported element type of size " << buf->elem_size << "\n";
+    }
+
     if (is_interleaved_rgba_buffer_t(buf)) {
         //
-        // 4-byte type:
+        // 4-channel type:
         //
         void *elementID_RGBA_8888 = Context::dispatch->ElementCreate(
-            ctx.mContext, RS_TYPE_UNSIGNED_8, RS_KIND_PIXEL_RGBA, true,
-            4 /*size*/);  // 4 for uchar4
+            ctx.mContext, datatype, RS_KIND_PIXEL_RGBA, true,
+            4 /* vecSize */);
         typeID = Context::dispatch->TypeCreate(
             ctx.mContext, elementID_RGBA_8888, buf->extent[0], buf->extent[1],
             0, false
             /*mDimMipmaps*/,
             false /*mDimFaces*/, 0);
     } else {
-        void *elementID_RGB_8 = Context::dispatch->ElementCreate(
-            ctx.mContext, RS_TYPE_UNSIGNED_8, RS_KIND_PIXEL_A, true,
-            1 /*size*/);
-        typeID = Context::dispatch->TypeCreate(ctx.mContext, elementID_RGB_8,
+        void *elementID_A = Context::dispatch->ElementCreate(
+            ctx.mContext, datatype, RS_KIND_PIXEL_A, true,
+            1 /* vecSize */);
+        typeID = Context::dispatch->TypeCreate(ctx.mContext, elementID_A,
                                                buf->extent[0], buf->extent[1],
                                                buf->extent[2], false
                                                /*mDimMipmaps*/,
@@ -915,14 +931,14 @@ WEAK int halide_renderscript_copy_to_device(void *user_context, buffer_t *buf) {
             0 /*yoff*/, 0 /*mSelectedLOD*/, RS_ALLOCATION_CUBEMAP_FACE_POSITIVE_X,
             buf->extent[0] /*w*/, buf->extent[1] /*h*/, buf->host,
             buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->elem_size,
-            buf->extent[0] * buf->extent[2]);
+            buf->extent[0] * buf->extent[2] * buf->elem_size); /* hosts' stride */
     } else {
         Context::dispatch->Allocation3DData(
             ctx.mContext, (void *)halide_get_device_handle(buf->dev), 0 /*xoff*/,
             0 /*yoff*/, 0 /*zoff*/, 0 /*mSelectedLOD*/, buf->extent[0] /* w */,
             buf->extent[1] /*h*/, buf->extent[2] /*d*/, buf->host,
             buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->elem_size,
-            buf->extent[0] * buf->elem_size);
+            buf->extent[0] * buf->elem_size); /* hosts' stride */
     }
 
     debug(user_context) << "RS: copied to device buf->dev="
@@ -979,7 +995,7 @@ WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
             0 /*yoff*/, 0 /*mSelectedLOD*/, RS_ALLOCATION_CUBEMAP_FACE_POSITIVE_X,
             buf->extent[0] /*w*/, buf->extent[1] /*h*/, buf->host,
             buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->elem_size /* byte size */,
-            buf->extent[0] * buf->extent[2] /* stride */);
+            buf->extent[0] * buf->extent[2] * buf->elem_size /* hosts' stride */);
     } else {
         debug(user_context) << "staring Allocation3DRead("
             << (void*)Context::dispatch->Allocation3DRead
@@ -998,7 +1014,7 @@ WEAK int halide_renderscript_copy_to_host(void *user_context, buffer_t *buf) {
             0 /*yoff*/, 0 /*zoff*/, 0 /*mSelectedLOD*/, buf->extent[0] /* w */,
             buf->extent[1] /*h*/, buf->extent[2] /*d*/, buf->host,
             buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->elem_size /* byte size */,
-            buf->extent[0] * buf->elem_size /* target buffer one line stride */);
+            buf->extent[0] * buf->elem_size /* hosts' stride */);
 
         debug(user_context) << "Allocation3DRead done\n";
     }
