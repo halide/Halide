@@ -159,7 +159,7 @@ private:
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, vec(first_elem), Call::Intrinsic);
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
             args[1] = realize->types[idx].bytes();
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];

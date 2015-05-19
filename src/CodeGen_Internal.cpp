@@ -179,8 +179,8 @@ void Closure::unpack_struct(Scope<Value *> &dst,
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            load->setMetadata("tbaa", MDNode::get(context,
-                                                  vec<LLVMMDNodeArgumentType>(MDString::get(context, nm[i]))));
+            LLVMMDNodeArgumentType md_args[] = {MDString::get(context, nm[i])};
+            load->setMetadata("tbaa", MDNode::get(context, md_args));
         }
         dst.push(nm[i], load);
         load->setName(nm[i]);
