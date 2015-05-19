@@ -643,13 +643,8 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
-    #if LLVM_VERSION >= 37
     Instruction *cleanup =
-        builder->CreateCall(call_destructor, {get_user_context(), destructor_fn, stack_slot});
-    #else
-    Instruction *cleanup =
-        builder->CreateCall3(call_destructor, get_user_context(), destructor_fn, stack_slot);
-    #endif
+        builder->CreateCall(call_destructor, vec<Value *>(get_user_context(), destructor_fn, stack_slot));
 
     // Switch back to the original location
     builder->restoreIP(here);
@@ -2368,11 +2363,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             llvm::Function *fn = Intrinsic::getDeclaration(module,
                 Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
-            #if LLVM_VERSION >= 37
-            CallInst *call = builder->CreateCall(fn, {});
-            #else
-            CallInst *call = builder->CreateCall(fn);
-            #endif
+            CallInst *call = builder->CreateCall(fn, vector<llvm::Value *>());
             value = call;
         } else if (op->name == Call::lerp) {
             internal_assert(op->args.size() == 3);
