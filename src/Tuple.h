@@ -39,8 +39,10 @@ public:
     /** Construct a Tuple from some Exprs. */
     //@{
     template<typename ...Args>
-    Tuple(Expr a, Expr b, Args... args) : exprs{a, b} {
-        Internal::collect_args(exprs, args...);
+    Tuple(Expr a, Expr b, Args... args) {
+		exprs.push_back(a);
+		exprs.push_back(b);
+		Internal::collect_args(exprs, args...);
     }
     //@}
 
