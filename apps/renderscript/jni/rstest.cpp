@@ -370,8 +370,14 @@ int main(int argc, char **argv) {
 extern "C" {
 JNIEXPORT void JNICALL Java_com_example_hellohaliderenderscript_HalideRenderscriptActivity_runTest(JNIEnv *env, jobject obj, jstring jCacheDir) {
     const char *pchCacheDir = env->GetStringUTFChars(jCacheDir, 0);
+    LOGI("\nvvvv vvvv vvvv");
+    LOGI("\nTesting uint8...\n");
     (new Tester<uint8_t>())->runTest(pchCacheDir);
+    LOGI("---- ---- ----");
+    LOGI("\nTesting float...\n");
     (new Tester<float>())->runTest(pchCacheDir);
+    LOGI("^^^^ ^^^^ ^^^^\n");
+
     env->ReleaseStringUTFChars(jCacheDir, pchCacheDir);
 }
 }
