@@ -2110,7 +2110,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             // Check if an appropriate vector abs for this type exists in the initial module
             Type t = op->args[0].type();
-            string name = (t.is_float() ? "abs_f" : "abs_i") + int_to_string(t.bits);
+            string name = (t.is_float() ? "abs_f" : "abs_i") + std::to_string(t.bits);
             llvm::Function * builtin_abs =
                 find_vector_runtime_function(name, op->type.width).first;
 
@@ -2145,9 +2145,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                 codegen(abs(a - b));
                 return;
             } else if (t.is_int()) {
-                name = "absd_i" + int_to_string(t.bits);
+                name = "absd_i" + std::to_string(t.bits);
             } else {
-                name = "absd_u" + int_to_string(t.bits);
+                name = "absd_u" + std::to_string(t.bits);
             }
 
             llvm::Function *builtin_absd =
@@ -3295,7 +3295,7 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
 
     for (size_t i = 0; i < sizes_to_try.size(); i++) {
         int w = sizes_to_try[i];
-        llvm::Function *vec_fn = module->getFunction(name + "x" + int_to_string(w));
+        llvm::Function *vec_fn = module->getFunction(name + "x" + std::to_string(w));
         if (vec_fn) {
             return std::make_pair(vec_fn, w);
         }

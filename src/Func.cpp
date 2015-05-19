@@ -1199,7 +1199,7 @@ Stage Func::update(int idx) {
       name() << "\".\n";
     invalidate_cache();
     return Stage(func.update_schedule(idx),
-                 name() + ".update(" + int_to_string(idx) + ")");
+                 name() + ".update(" + std::to_string(idx) + ")");
 }
 
 void Func::invalidate_cache() {
@@ -1447,7 +1447,7 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
 
     size_t update_stage = func.updates().size() - 1;
     return Stage(func.update_schedule(update_stage),
-                 func.name() + ".update(" + int_to_string(update_stage) + ")");
+                 func.name() + ".update(" + std::to_string(update_stage) + ")");
 }
 
 Stage FuncRefExpr::operator=(const FuncRefExpr &e) {
@@ -2368,7 +2368,7 @@ void *Func::compile_jit(const Target &target_arg) {
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
         if (func.outputs() > 1) {
-            buffer_name = buffer_name + '.' + int_to_string(i);
+            buffer_name = buffer_name + '.' + std::to_string(i);
         }
         Type t = func.output_types()[i];
         Argument me(buffer_name, Argument::OutputBuffer, t, dimensions());
