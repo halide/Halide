@@ -894,9 +894,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
         }
 
         // Create empty texture here and fill it with glTexSubImage2D later.
-        GLint internal_format = 0;
-        GLint format = 0;
-        GLint type = GL_UNSIGNED_BYTE;
+        GLint internal_format, format, type;
         if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
             error(user_context) << "Invalid texture format";
             global_state.DeleteTextures(1, &tex);
@@ -909,8 +907,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
             return 1;
         }
 
-        global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format,
-                      width, height, 0, format, type, NULL);
+        global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, format, type, NULL);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc TexImage2D")) {
             global_state.DeleteTextures(1, &tex);
             return 1;
@@ -987,7 +984,8 @@ template<typename T> __attribute__((always_inline)) T std_min(T a, T b) { return
 template<typename T> __attribute__((always_inline)) T std_max(T a, T b) { return (a > b) ? a : b; }
 
 // This method copies image data from the layout specified by the strides of the
-// buffer_t to the packed interleaved format needed by GL.
+// buffer_t to the packed interleaved format needed by GL. It is assumed that
+// src and dst have the same number of channels.
 template <class T>
  __attribute__((always_inline))
  void halide_to_interleaved(const buffer_t *src_buf, T *dst) {
@@ -1012,19 +1010,23 @@ template <class T>
 }
 
 // This method copies image data from the packed interleaved format needed by GL
-// to the arbitrary strided layout specified by the buffer_t.
+// to the arbitrary strided layout specified by the buffer_t. If src has fewer
+// channels than dst, the excess in dst will be left untouched; if src has
+// more channels than dst, the excess will be ignored.
 template <class T>
 __attribute__((always_inline))
-void interleaved_to_halide(const T *src, buffer_t *dst_buf) {
+void interleaved_to_halide(void *user_context, const T *src, int src_channels, buffer_t *dst_buf) {
     T *dst = reinterpret_cast<T*>(dst_buf->host);
     int width = std_max<int>(1, dst_buf->extent[0]);
     int height = std_max<int>(1, dst_buf->extent[1]);
-    int channels = std_max<int>(1, dst_buf->extent[2]);
+    int dst_channels = std_max<int>(1, dst_buf->extent[2]);
+    int channels = std_min<int>(src_channels, dst_channels);
     int x_stride = dst_buf->stride[0];
     int y_stride = dst_buf->stride[1];
     int c_stride = dst_buf->stride[2];
+    int src_skip = std_max(0, src_channels - dst_channels);
     for (int y = 0; y < height; y++) {
-        int srcidx = y * width * channels;
+        int srcidx = y * width * src_channels;
         for (int x = 0; x < width; x++) {
             int dstidx = y * y_stride + x * x_stride;
             for (int c = 0; c < channels; c++) {
@@ -1032,6 +1034,7 @@ void interleaved_to_halide(const T *src, buffer_t *dst_buf) {
                 srcidx += 1;
                 dstidx += c_stride;
             }
+            srcidx += src_skip;
         }
     }
 }
@@ -1067,6 +1070,11 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device BindTexture")) {
         return 1;
     }
+    struct BindTextureCleanup {
+        ~BindTextureCleanup() {
+            global_state.BindTexture(GL_TEXTURE_2D, 0);
+        }
+    } bind_texture_cleanup;
 
     GLint internal_format, format, type;
     if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
@@ -1074,15 +1082,16 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         return 1;
     }
 
-    GLint width, height, channels;
-    if (!get_texture_dimensions(user_context, buf, &width, &height, &channels)) {
+    GLint width, height, buffer_channels;
+    if (!get_texture_dimensions(user_context, buf, &width, &height, &buffer_channels)) {
         error(user_context) << "Invalid texture dimensions";
         return 1;
     }
 
     // To use TexSubImage2D directly, the colors must be stored interleaved
     // and rows must be stored consecutively.
-    bool is_interleaved = (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
+    // (Single-channel buffers are "interleaved" for our purposes here.)
+    bool is_interleaved = (buffer_channels == 1) || (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
     bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
     if (is_interleaved && is_packed) {
         global_state.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -1099,9 +1108,8 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         debug(user_context)
             << "Warning: In copy_to_device, host buffer is not interleaved. Doing slow interleave.\n";
 
-        // GL interleaved format is always tightly packed.
-        size_t interleaved_size = width * height * channels * buf->elem_size;
-        HalideMalloc tmp(user_context, interleaved_size);
+        size_t texture_size = width * height * buffer_channels * buf->elem_size;
+        HalideMalloc tmp(user_context, texture_size);
         if (!tmp.ptr) {
             error(user_context) << "halide_malloc failed inside copy_to_device";
             return -1;
@@ -1126,11 +1134,6 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         }
     }
 
-    global_state.BindTexture(GL_TEXTURE_2D, 0);
-    if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device BindTexture")) {
-        return 1;
-    }
-
     return 0;
 }
 
@@ -1153,11 +1156,12 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         return 1;
     }
 
-    GLint width, height, channels;
-    if (!get_texture_dimensions(user_context, buf, &width, &height, &channels)) {
+    GLint width, height, buffer_channels;
+    if (!get_texture_dimensions(user_context, buf, &width, &height, &buffer_channels)) {
         error(user_context) << "Invalid texture dimensions";
         return 1;
     }
+    GLint texture_channels = buffer_channels;
 
     // Ensure that Framebuffer is cleaned up regardless of subsequent return point
     struct FramebufferCleanup {
@@ -1191,26 +1195,58 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         return 1;
     }
 
+    // The only format/type pairs guaranteed to be readable in GLES2 are GL_RGBA+GL_UNSIGNED_BYTE,
+    // plus one other implementation-dependent pair specified here. Spoiler alert:
+    // some ES2 implementations return that very same pair here (i.e., they don't support
+    // any other formats); in that case, we need to read as RGBA and manually convert to
+    // what we need (usually GL_RGB).
+    // NOTE: this requires the currently-bound Framebuffer is correct.
+    // TODO: short and float will require even more effort on top of this.
+    if (global_state.profile == OpenGLES && format == GL_RGB) {
+        GLint extra_format, extra_type;
+        global_state.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &extra_type);
+        if (type != GL_UNSIGNED_BYTE && type != extra_type) {
+            error(user_context) << "ReadPixels does not support our type; we don't handle this yet.\n";
+            return 1;
+        }
+        global_state.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &extra_format);
+        if (format != GL_RGBA && format != extra_format) {
+            debug(user_context) << "ReadPixels does not support our format; falling back to GL_RGBA\n";
+            format = GL_RGBA;
+            texture_channels = 4;
+        }
+    }
+
     // To download the texture directly, the colors must be stored interleaved
     // and rows must be stored consecutively.
-    bool is_interleaved = (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
+    // (Single-channel buffers are "interleaved" for our purposes here.)
+    bool is_interleaved = (buffer_channels == 1) || (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
     bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
-    if (is_interleaved && is_packed) {
+    if (is_interleaved && is_packed && texture_channels == buffer_channels) {
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
         uint8_t *host_ptr = buf->host + buf->elem_size *
             (buf->min[0] * buf->stride[0] +
              buf->min[1] * buf->stride[1] +
              buf->min[2] * buf->stride[2] +
              buf->min[3] * buf->stride[3]);
+#ifdef DEBUG_RUNTIME
+        int64_t t1 = halide_current_time_ns(user_context);
+#endif
         global_state.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, host_ptr);
+#ifdef DEBUG_RUNTIME
+        int64_t t2 = halide_current_time_ns(user_context);
+#endif
         if (global_state.CheckAndReportError(user_context, "copy_to_host ReadPixels (1)")) {
             return 1;
         }
+#ifdef DEBUG_RUNTIME
+        debug(user_context)<<"ReadPixels(1) time: "<<(t2-t1)/1e3<<"usec\n";
+#endif
     } else {
         debug(user_context)
-            << "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n";
+            << "Warning: In copy_to_host, host buffer is not interleaved, or not a native format. Doing slow deinterleave.\n";
 
-        size_t texture_size = width * height * channels * buf->elem_size;
+        size_t texture_size = width * height * texture_channels * buf->elem_size;
         HalideMalloc tmp(user_context, texture_size);
         if (!tmp.ptr) {
             error(user_context) << "halide_malloc failed inside copy_to_host";
@@ -1218,22 +1254,39 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         }
 
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
+#ifdef DEBUG_RUNTIME
+        int64_t t1 = halide_current_time_ns(user_context);
+#endif
         global_state.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, tmp.ptr);
+#ifdef DEBUG_RUNTIME
+        int64_t t2 = halide_current_time_ns(user_context);
+        debug(user_context)<<"ReadPixels(2) time: "<<(t2-t1)/1e3<<"usec\n";
+#endif
         if (global_state.CheckAndReportError(user_context, "copy_to_host ReadPixels (2)")) {
             return 1;
         }
 
+        // Premature optimization warning: interleaved_to_halide() could definitely
+        // be optimized, but ReadPixels() typically takes ~2-10x as long (especially on
+        // mobile devices), so the returns will be modest.
+#ifdef DEBUG_RUNTIME
+        int64_t t3 = halide_current_time_ns(user_context);
+#endif
         switch (type) {
         case GL_UNSIGNED_BYTE:
-            interleaved_to_halide<uint8_t>((uint8_t*)tmp.ptr, buf);
+            interleaved_to_halide<uint8_t>(user_context, (uint8_t*)tmp.ptr, texture_channels, buf);
             break;
         case GL_UNSIGNED_SHORT:
-            interleaved_to_halide<uint16_t>((uint16_t*)tmp.ptr, buf);
+            interleaved_to_halide<uint16_t>(user_context, (uint16_t*)tmp.ptr, texture_channels, buf);
             break;
         case GL_FLOAT:
-            interleaved_to_halide<float>((float*)tmp.ptr, buf);
+            interleaved_to_halide<float>(user_context, (float*)tmp.ptr, texture_channels, buf);
             break;
         }
+#ifdef DEBUG_RUNTIME
+        int64_t t4 = halide_current_time_ns(user_context);
+        debug(user_context)<<"deinterleave time: "<<(t4-t3)/1e3<<"usec\n";
+#endif
     }
 
     return 0;
