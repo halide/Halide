@@ -1103,7 +1103,9 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
         num_args++;
     }
 
-    debug(user_context) << "RS: halide_renderscript_run starting now with " << module
+    int slot = atoi(entry_name);
+    debug(user_context) << "RS: halide_renderscript_run starting script at slot " << slot
+                        << " now with " << module
                         << " script "
                         << " input: "
                         << ((void *)halide_get_device_handle(input_arg))
@@ -1113,7 +1115,7 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
 
     Context::dispatch->ScriptForEach(
         ctx.mContext, module,
-        1,  // slot
+        slot,  // slot corresponding to entry point
         (void *)halide_get_device_handle(input_arg),  // in_id
         (void *)halide_get_device_handle(output_arg),  // out_id
         NULL,  // usr

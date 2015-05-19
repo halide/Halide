@@ -191,7 +191,6 @@ void runTest(const char* cacheDir) {
 
     if (sdk_version() >= 23) { // 3-dim image support was not added until 23
         buffer_t bt_input = make_planar_image(width, height, channels, input_image);
-        const int channels_stride = 1;  // chunky image
         for (int i = 0; i < std::min(bt_input.extent[0], width); i++) {
             for (int j = 0; j < std::min(bt_input.extent[1], height); j++) {
                 for (int k = 0; k < bt_input.extent[2]; k++) {
