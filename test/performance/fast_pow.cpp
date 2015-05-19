@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 #include "clock.h"
+#include <algorithm>
 
 using namespace Halide;
 
