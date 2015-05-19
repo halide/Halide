@@ -308,15 +308,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
-        #if LLVM_VERSION >= 37
-        Value *result = builder->CreateCall(init, {user_context,
-                                            module_state,
-                                            kernel_src_ptr, kernel_size});
-        #else
-        Value *result = builder->CreateCall4(init, user_context,
-                                             module_state,
-                                             kernel_src_ptr, kernel_size);
-        #endif
+        vector<Value *> init_kernels_args = {user_context, module_state, kernel_src_ptr, kernel_size};
+        Value *result = builder->CreateCall(init, init_kernels_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
         CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
     }
