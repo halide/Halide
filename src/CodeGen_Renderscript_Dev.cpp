@@ -140,23 +140,11 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
                 vec<LLVMMDNodeArgumentType>(MDString::get(*context, arg_name),
                                             MDString::get(*context, std::to_string(rs_argument_type)))));
 
-            Halide::Type type = args[i].type;
             debug(2) << "args[" << i << "] = {"
                      << "name=" << args[i].name
                      << " is_buffer=" << args[i].is_buffer
-                     << " dimensions=" << args[i].dimensions << " type.code="
-                     << (type.code == Halide::Type::TypeCode::Int
-                             ? "Int"
-                             : type.code == Halide::Type::TypeCode::UInt
-                                   ? "UInt"
-                                   : type.code == Halide::Type::TypeCode::Float
-                                         ? "Float"
-                                         : type.code ==
-                                                   Halide::Type::TypeCode::Handle
-                                               ? "Handle"
-                                               : "???") << ";bits=" << type.bits
-                     << ";width=" << type.width << " llvm_type=";
-            debug(2) << "\n";
+                     << " dimensions=" << (+args[i].dimensions)
+                     << " type=" << args[i].type << "}\n";
         }
     }
 
