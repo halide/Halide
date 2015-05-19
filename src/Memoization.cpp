@@ -273,7 +273,7 @@ public:
             buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
@@ -296,7 +296,7 @@ public:
             buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
@@ -364,7 +364,7 @@ private:
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(f.output_types()[0].bytes());
-            std::string max_stage_num = int_to_string(f.updates().size());
+            std::string max_stage_num = std::to_string(f.updates().size());
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
                 Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");

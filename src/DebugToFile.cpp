@@ -107,7 +107,7 @@ Stmt debug_to_file(Stmt s, string output, const map<string, Function> &env) {
     Function out = env.find(output)->second;
     std::vector<Range> output_bounds;
     for (int i = 0; i < out.dimensions(); i++) {
-        string dim = int_to_string(i);
+        string dim = std::to_string(i);
         Expr min    = Variable::make(Int(32), output + ".min." + dim);
         Expr extent = Variable::make(Int(32), output + ".extent." + dim);
         output_bounds.push_back(Range(min, extent));

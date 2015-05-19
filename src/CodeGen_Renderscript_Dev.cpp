@@ -594,7 +594,7 @@ int CodeGen_Renderscript_Dev::native_vector_bits() const {
 
 string CodeGen_Renderscript_Dev::get_current_kernel_name() {
     // Renderscript function to launch RS kernel needs number(slot index) as a kernel identifier.
-    return int_to_string(rs_export_foreach_name->getNumOperands() - 1);
+    return std::to_string(rs_export_foreach_name->getNumOperands() - 1);
 }
 
 void CodeGen_Renderscript_Dev::dump() { module->dump(); }
