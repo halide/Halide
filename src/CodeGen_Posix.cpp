@@ -42,7 +42,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     if (!is_one(no_overflow)) {
         create_assertion(codegen(no_overflow),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                                    vec<Expr>(name, total_size, max_size), Call::Extern));
+                                    {name, total_size, max_size}, Call::Extern));
     }
 
     total_size = simplify(cast<int32_t>(total_size));

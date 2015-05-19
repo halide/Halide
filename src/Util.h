@@ -46,6 +46,7 @@ namespace Internal {
 /** Build small vectors of up to 10 elements. If we used C++11 and
  * had vector initializers, this would not be necessary, but we
  * don't want to rely on C++11 support. */
+#if 0
 //@{
 template<typename T>
 std::vector<T> vec(T a) {
@@ -161,6 +162,7 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g, T h, T i, T j) {
     v[9] = j;
     return v;
 }
+#endif
 // @}
 
 /** Convert an integer to a string. */
@@ -197,7 +199,7 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 
 /** Replace all matches of the second string in the first string with the last string */
 EXPORT std::string replace_all(std::string &str, const std::string &find, const std::string &replace);
-    
+
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
 

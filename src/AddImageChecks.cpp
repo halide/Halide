@@ -186,9 +186,9 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
                 Expr query_buf = Variable::make(Handle(), param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                          vec<Expr>(query_buf, j), Call::Intrinsic);
+                                          {query_buf, j}, Call::Intrinsic);
                     Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                          vec<Expr>(query_buf, j), Call::Intrinsic);
+                                          {query_buf, j}, Call::Intrinsic);
                     query_box.push_back(Interval(min, max));
                 }
                 merge_boxes(touched, query_box);
@@ -213,8 +213,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             std::ostringstream type_name;
             type_name << type;
             Expr error = Call::make(Int(32), "halide_error_bad_elem_size",
-                                    vec<Expr>(error_name, type_name.str(),
-                                              elem_size, correct_size),
+                                    {error_name, type_name.str(), elem_size, correct_size},
                                     Call::Extern);
             asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error));
         }
@@ -268,9 +267,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
             Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
-                                        vec<Expr>(error_name, j,
-                                                  min_required_var, max_required,
-                                                  actual_min, actual_max),
+                                        {error_name, j, min_required_var, max_required, actual_min, actual_max},
                                         Call::Extern);
 
             asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
@@ -302,7 +299,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             Expr max_size = cast<int64_t>(0x7fffffff);
             Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                                                    vec<Expr>(name, actual_size, max_size), Call::Extern);
+                                                    {name, actual_size, max_size}, Call::Extern);
             Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);
             dims_no_overflow_asserts.push_back(check);
 
@@ -316,7 +313,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
                     Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
-                                            vec<Expr>(name, this_dim_var, max_size), Call::Extern);
+                                            {name, this_dim_var, max_size}, Call::Extern);
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
                     dims_no_overflow_asserts.push_back(check);
                 }
@@ -325,7 +322,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
-        vector<Expr> args = vec(buffer_name_expr, Expr(type.bits/8));
+        vector<Expr> args = {buffer_name_expr, Expr(type.bits/8)};
         for (int i = 0; i < dimensions; i++) {
             string dim = int_to_string(i);
             args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
@@ -432,9 +429,8 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             Expr max_required = min_required + extent_required - 1;
             Expr check = (min_proposed <= min_required) && (max_proposed >= max_required);
             Expr error = Call::make(Int(32), "halide_error_constraints_make_required_region_smaller",
-                                    vec<Expr>(error_name, i,
-                                              min_proposed, max_proposed,
-                                              min_required, max_required), Call::Extern);
+                                    {error_name, i, min_proposed, max_proposed, min_required, max_required},
+                                    Call::Extern);
             asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error));
 
             // stride_required is just a suggestion. It's ok if the
@@ -462,7 +458,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             lets_constrained.push_back(make_pair(var_str + ".constrained", constraints[i].second));
 
             Expr error = Call::make(Int(32), "halide_error_constraint_violated",
-                                    vec<Expr>(var_str, var, constrained_var_str, constrained_var),
+                                    {var_str, var, constrained_var_str, constrained_var},
                                     Call::Extern);
 
             // Check the var passed in equals the constrained version (when not in inference mode)

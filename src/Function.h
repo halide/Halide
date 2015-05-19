@@ -32,6 +32,8 @@ struct ExternFuncArgument {
     ExternFuncArgument(Buffer b): arg_type(BufferArg), buffer(b) {}
 
     ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
+    ExternFuncArgument(int e): arg_type(ExprArg), expr(e) {}
+    ExternFuncArgument(float e): arg_type(ExprArg), expr(e) {}
 
     ExternFuncArgument(Internal::Parameter p) : arg_type(ImageParamArg), image_param(p) {
         // Scalar params come in via the Expr constructor.
