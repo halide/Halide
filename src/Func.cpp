@@ -1283,7 +1283,7 @@ vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const 
 }
 
 Stage FuncRefVar::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefVar::operator=(const Tuple &e) {
@@ -1434,7 +1434,7 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
 }
 
 Stage FuncRefExpr::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefExpr::operator=(const Tuple &e) {
@@ -1487,25 +1487,25 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
 }
 
 Stage FuncRefExpr::operator+=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) + e;
 }
 
 Stage FuncRefExpr::operator*=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) * e;
 }
 
 Stage FuncRefExpr::operator-=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) - e;
 }
 
 Stage FuncRefExpr::operator/=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) / e;
 }
@@ -2034,7 +2034,7 @@ void Func::clear_custom_lowering_passes() {
 }
 
 void Func::realize(Buffer b, const Target &target) {
-    realize(Realization(vec<Buffer>(b)), target);
+    realize(Realization({b}), target);
 }
 
 namespace Internal {
@@ -2190,7 +2190,7 @@ void Func::realize(Realization dst, const Target &target) {
 }
 
 void Func::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization(vec<Buffer>(dst)));
+    infer_input_bounds(Realization({dst}));
 }
 
 void Func::infer_input_bounds(Realization dst) {
