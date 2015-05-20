@@ -522,8 +522,10 @@ void CodeGen_JavaScript::visit(const Div *op) {
     for (int lane = 0; lane < op->type.width; lane++) {
         int bits;
 
-        if (is_const_power_of_two(conditionally_extract_lane(op->b, lane), &bits)) {
-            rhs << lead_char << print_expr(conditionally_extract_lane(op->a, lane)) << " >> " << bits;
+        if (is_const_power_of_two_integer(conditionally_extract_lane(op->b, lane), &bits)) {
+            // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
+            string shift_op = op->type.is_uint() ? ">>>" : ">>";
+            rhs << lead_char << print_expr(conditionally_extract_lane(op->a, lane)) << shift_op << bits;
         } else {
             string a = print_expr(conditionally_extract_lane(op->a, lane));
             string b = print_expr(conditionally_extract_lane(op->b, lane));
@@ -549,7 +551,7 @@ void CodeGen_JavaScript::visit(const Mod *op) {
     for (int lane = 0; lane < op->type.width; lane++) {
         int bits;
 
-        if (is_const_power_of_two(conditionally_extract_lane(op->b, lane), &bits)) {
+        if (is_const_power_of_two_integer(conditionally_extract_lane(op->b, lane), &bits)) {
           rhs << lead_char << fround_start_if_needed(op->type)
               << print_expr(conditionally_extract_lane(op->a, lane)) << " & " << ((1 << bits) - 1)
               << fround_end_if_needed(op->type);
@@ -834,7 +836,9 @@ void CodeGen_JavaScript::visit(const Call *op) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << a0 << " >> " << a1;
+            // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
+            const char *shift_op = op->type.is_uint() ? " >>> " : " >> ";
+            rhs << a0 << shift_op << a1;
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
             (void)dims; // In case internal_assert is ifdef'd to do nothing
@@ -912,7 +916,16 @@ void CodeGen_JavaScript::visit(const Call *op) {
                 rhs << print_expr(op->args[4]);
             }
         } else if (op->name == Call::lerp) {
-            Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+            // JavaScript doesn't support 64-bit ints, which are used for 32-bit interger lerps.
+            // Handle this by converting to double instead, which will be as efficient in JS unless
+            // SIMD.js or asm.js are being used.
+            Expr e;
+            if (!op->type.is_float() && op->type.bits >= 32) {
+                e = Cast::make(op->type, round(lower_lerp(Cast::make(Float(64), op->args[0]),
+                                                          Cast::make(Float(64), op->args[1]), op->args[2])));
+            } else {
+                e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+            }
             rhs << print_expr(e);
         } else if (op->name == Call::popcount) {
             Expr e = cast<uint32_t>(op->args[0]);
