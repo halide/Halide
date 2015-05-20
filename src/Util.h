@@ -43,9 +43,6 @@
 namespace Halide {
 namespace Internal {
 
-/** Convert an integer to a string. */
-EXPORT std::string int_to_string(int x);
-
 /** An aggressive form of reinterpret cast used for correct type-punning. */
 template<typename DstType, typename SrcType>
 DstType reinterpret_bits(const SrcType &src) {

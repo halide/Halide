@@ -366,7 +366,7 @@ std::string Target::to_string() const {
   };
   internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
   string result = string(arch_names[arch])
-      + "-" + Internal::int_to_string(bits)
+      + "-" + std::to_string(bits)
       + "-" + string(os_names[os]);
   for (size_t i = 0; i < FeatureEnd; ++i) {
       if (has_feature(static_cast<Feature>(i))) {

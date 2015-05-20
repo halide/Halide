@@ -319,7 +319,7 @@ class NormalizeVarNames : public IRMutator {
     }
 
     void visit(const Let *let) {
-        string new_name = "t" + int_to_string(counter++);
+        string new_name = "t" + std::to_string(counter++);
         new_names[let->name] = new_name;
         Expr value = mutate(let->value);
         Expr body = mutate(let->body);
@@ -345,7 +345,7 @@ void check(Expr in, Expr correct) {
 Expr ssa_block(vector<Expr> exprs) {
     Expr e = exprs.back();
     for (size_t i = exprs.size() - 1; i > 0; i--) {
-        string name = "t" + int_to_string(i-1);
+        string name = "t" + std::to_string(i-1);
         e = Let::make(name, exprs[i-1], e);
     }
     return e;
@@ -357,8 +357,8 @@ void cse_test() {
     Expr x = Variable::make(Int(32), "x");
     Expr t[32], tf[32];
     for (int i = 0; i < 32; i++) {
-        t[i] = Variable::make(Int(32), "t" + int_to_string(i));
-        tf[i] = Variable::make(Float(32), "t" + int_to_string(i));
+        t[i] = Variable::make(Int(32), "t" + std::to_string(i));
+        tf[i] = Variable::make(Float(32), "t" + std::to_string(i));
     }
     Expr e, correct;
 
