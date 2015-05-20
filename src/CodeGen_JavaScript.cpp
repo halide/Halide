@@ -192,7 +192,7 @@ string CodeGen_JavaScript::make_js_int_cast(string value, bool src_unsigned, int
 
         result = print_assignment(Int(32), value + " & " + mask);
         string shift_op = dst_unsigned ? ">>>" : ">>";
-        string shift_amount = int_to_string(32 - dst_bits);
+        string shift_amount = std::to_string(32 - dst_bits);
         result = print_assignment(Int(32), "(" + result + " << " + shift_amount + ") " + shift_op + " " + shift_amount);
     }
     return result;
@@ -580,7 +580,7 @@ void CodeGen_JavaScript::visit(const Mod *op) {
 }
 
 void CodeGen_JavaScript::visit(const Max *op) {
-    std::string expr_id = print_expr(Call::make(op->type, "Math.max", vec(op->a, op->b), Call::Extern));
+  std::string expr_id = print_expr(Call::make(op->type, "Math.max", {op->a, op->b}, Call::Extern));
     std::string wrap_start = fround_start_if_needed(op->type);
     if (!wrap_start.empty()) {
         print_assignment(op->type, wrap_start + expr_id + fround_end_if_needed(op->type));
@@ -588,7 +588,7 @@ void CodeGen_JavaScript::visit(const Max *op) {
 }
 
 void CodeGen_JavaScript::visit(const Min *op) {
-    std::string expr_id = print_expr(Call::make(op->type, "Math.min", vec(op->a, op->b), Call::Extern));
+  std::string expr_id = print_expr(Call::make(op->type, "Math.min", {op->a, op->b}, Call::Extern));
     std::string wrap_start = fround_start_if_needed(op->type);
     if (!wrap_start.empty()) {
         print_assignment(op->type, wrap_start + expr_id + fround_end_if_needed(op->type));

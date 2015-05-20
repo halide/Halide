@@ -109,11 +109,15 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function.
-    MDNode *mdNode = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(value_as_metadata_type(function),
-                                                                       MDString::get(*context, "kernel"),
-                                                                       value_as_metadata_type(ConstantInt::get(i32, 1))));
+    LLVMMDNodeArgumentType md_args[] = {
+        value_as_metadata_type(function),
+        MDString::get(*context, "kernel"),
+        value_as_metadata_type(ConstantInt::get(i32, 1))
+    };
 
-    module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(mdNode);
+    MDNode *md_node = MDNode::get(*context, md_args);
+
+    module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(md_node);
 
 
     // Now verify the function is ok
@@ -230,8 +234,8 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.features_any_of(vec(Target::CUDACapability32,
-                                   Target::CUDACapability50))) {
+    if (target.features_any_of({Target::CUDACapability32,
+                                Target::CUDACapability50})) {
         // Need ptx isa 4.0. llvm < 3.5 doesn't support it.
         #if LLVM_VERSION < 35
         user_error << "This version of Halide was linked against llvm 3.4 or earlier, "

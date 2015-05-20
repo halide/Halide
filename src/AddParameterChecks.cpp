@@ -122,7 +122,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         }
 
         Expr error = Call::make(Int(32), error_call_name,
-                                vec<Expr>(p.param_name, p.value, p.limit_value),
+                                {p.param_name, p.value, p.limit_value},
                                 Call::Extern);
 
         s = Block::make(AssertStmt::make(p.condition, error), s);
@@ -135,4 +135,3 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 
 }
 }
-

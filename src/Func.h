@@ -865,7 +865,7 @@ public:
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
                               int dimensionality) {
-        define_extern(function_name, params, Internal::vec<Type>(t), dimensionality);
+        define_extern(function_name, params, std::vector<Type>{t}, dimensionality);
     }
 
     EXPORT void define_extern(const std::string &function_name,

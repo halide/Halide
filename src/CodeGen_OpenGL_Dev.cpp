@@ -330,11 +330,11 @@ void CodeGen_GLSL::visit(const Select *op) {
 }
 
 void CodeGen_GLSL::visit(const Max *op) {
-    print_expr(call_builtin(op->type, "max", vec(op->a, op->b)));
+    print_expr(call_builtin(op->type, "max", {op->a, op->b}));
 }
 
 void CodeGen_GLSL::visit(const Min *op) {
-    print_expr(call_builtin(op->type, "min", vec(op->a, op->b)));
+    print_expr(call_builtin(op->type, "min", {op->a, op->b}));
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
@@ -344,14 +344,14 @@ void CodeGen_GLSL::visit(const Div *op) {
         // the correct behavior using floating point arithmetic.
         Type float_type = Float(32, op->type.width);
         Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
-        print_expr(call_builtin(op->type, "floor_f32", vec(val)));
+        print_expr(call_builtin(op->type, "floor_f32", {val}));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
 }
 
 void CodeGen_GLSL::visit(const Mod *op) {
-    print_expr(call_builtin(op->type, "mod", vec(op->a, op->b)));
+    print_expr(call_builtin(op->type, "mod", {op->a, op->b}));
 }
 
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
@@ -524,7 +524,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             }
 
             Type result_type = Float(32, op->type.width);
-            Expr e = call_builtin(result_type, "mix", vec(zero_val, one_val, weight));
+            Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
 
             if (!op->type.is_float()) {
                 // Mirror rounding implementation of Halide's integer lerp.
@@ -832,7 +832,7 @@ void CodeGen_GLSL::test() {
     check(sin(3.0f), "float $ = sin(3.0);\n");
 
     // Sin with vector arg
-    check(Call::make(Float(32, 4), "sin_f32", vec(Broadcast::make(1.f, 4)), Internal::Call::Extern),
+    check(Call::make(Float(32, 4), "sin_f32", {Broadcast::make(1.f, 4)}, Internal::Call::Extern),
           "vec4 $ = vec4(1.0);\n"
           "vec4 $ = sin($);\n");
 
@@ -874,7 +874,7 @@ void CodeGen_GLSL::test() {
 
     // Test codegen for texture loads
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
-                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0)),
+                            {string("buf"), 0, 0, 0},
                             Call::Intrinsic);
     check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
 

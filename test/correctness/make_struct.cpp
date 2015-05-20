@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     Expr c = cast<int16_t>(1234);
     Expr d = std::string("Test global string\n");
 
-    Expr s = Call::make(Handle(), Call::make_struct, vec<Expr>(a, b, c, d), Call::Intrinsic);
+    Expr s = Call::make(Handle(), Call::make_struct, {a, b, c, d}, Call::Intrinsic);
 
     Func g;
     g() = check_struct(s);
