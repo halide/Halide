@@ -2041,7 +2041,7 @@ void Func::clear_custom_lowering_passes() {
 
 void Func::realize(Buffer b, const Target &target,
                    const std::map<std::string, JITExtern> &externs) {
-  realize(Realization({b}), target, externs);
+    realize(Realization({b}), target, externs);
 }
 
 namespace Internal {
@@ -2199,7 +2199,7 @@ void Func::realize(Realization dst, const Target &target,
 
 void Func::infer_input_bounds(Buffer dst,
                               const std::map<std::string, JITExtern> &externs) {
-  infer_input_bounds({dst}, externs);
+    infer_input_bounds(Realization({dst}), externs);
 }
 
 void Func::infer_input_bounds(Realization dst,
