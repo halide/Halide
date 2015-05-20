@@ -599,7 +599,7 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
 
 bool JITModule::compiled() const {
     // TODO: Track down all uses and make sure changing this to not include "module != NULL" doesn't break anything.
-  return jit_module.defined() && jit_module.ptr->module != NULL;
+  return jit_module.ptr->module != NULL;
 }
 
 namespace {
