@@ -471,6 +471,23 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 -include $(INITIAL_MODULES:.o=.d)
 
 # -m64 isn't respected unless we also use a 64-bit target
+$(BUILD_DIR)/initmod.hexagon_%_64.ll: src/runtime/hexagon_%.cpp $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target "hexagon-unknown--elf" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/hexagon_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
+
+$(BUILD_DIR)/initmod.hexagon_%_32.ll: src/runtime/hexagon_%.cpp $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target "hexagon-unknown--elf" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/hexagon_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
+
+$(BUILD_DIR)/initmod.hexagon_%_64_debug.ll: src/runtime/hexagon_%.cpp $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m64 -target "hexagon-unknown--elf" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/hexagon_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64_debug.d
+
+$(BUILD_DIR)/initmod.hexagon_%_32_debug.ll: src/runtime/hexagon_%.cpp $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -ffreestanding -fno-blocks -fno-exceptions -m32 -target "hexagon-unknown--elf" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/hexagon_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
+
+
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
