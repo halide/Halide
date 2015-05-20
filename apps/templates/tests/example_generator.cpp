@@ -2,46 +2,55 @@
 
 namespace {
 
-// Note the inheritance using the Curiously Recurring Template Pattern
 class Example : public Halide::Generator<Example> {
 public:
-    GeneratorParam<Halide::Type> output_type{ "output_type", UInt(8) };
+    GeneratorParam<Halide::Type> type{ "type", UInt(8) };
     GeneratorParam<int> channels{ "channels", 4 };
-    GeneratorParam<float> compiletime_factor{ "compiletime_factor", 1, 0, 100 };
 
-    Param<float> runtime_factor{ "runtime_factor", 1.0 };
+    ImageParam input{ UInt(8), 3, "input" };
 
-    // The build() method of a generator defines the actual pipeline
-    // and returns the output Func.
     Func build() override {
-        Func f("f"), g("g");
-        Var x, y, c;
+        input = ImageParam(type, input.dimensions(), input.name());
 
-        f(x, y) = max(x, y);
+        Var x("x"), y("y"), c("c");
 
-        // Produce a float expression for the filter
-        Expr value = f(x, y) * c * compiletime_factor * runtime_factor;
+        Func output("output");
+        output(x, y, c) = input(input.width() - x - 1, y, c);
 
-        // Float to integer conversion for unrepresentable values is undefined
-        // in C++, e.g. if value is 256, it cannot be represented by a uint8_t.
-        if (Type(output_type).is_uint() && Type(output_type).bits != 32) {
-          Expr int_value = cast<unsigned int>(value);
-          value = int_value % Type(output_type).max();
-        }
-
-        // Cast to the output type
-        g(x, y, c) = cast(output_type, value);
-
-        g.bound(c, 0, channels).reorder(c, x, y).unroll(c);
+        output
+            .bound(c, 0, channels)
+            .reorder(c, x, y)
+            .unroll(c);
 
         if (get_target().has_feature(Target::OpenGL)) {
-          g.glsl(x, y, c);
+            input.set_bounds(2, 0, channels);
+            output.glsl(x, y, c);
         } else {
             if (get_target().arch != Target::PNaCl) {
-               g.vectorize(x, natural_vector_size(output_type));
+                Expr input_planar = input.stride(0) == 1;
+                Expr input_chunky = input.stride(2) == 1;
+                Expr output_planar = output.output_buffer().stride(0) == 1;
+                Expr output_chunky = output.output_buffer().stride(2) == 1;
+                Expr stride_specializations[] = {
+                  input_planar && output_planar,
+                  input_planar,
+                  output_planar,
+                  input_chunky && output_chunky
+                };
+                for (Expr condition : stride_specializations) {
+                  output
+                      .specialize(condition)
+                      .vectorize(x, natural_vector_size<float>())
+                      .parallel(y);
+                }
             }
         }
-        return g;
+
+        // Remove the constraint that prevents interleaved buffers
+        input.set_stride(0, Expr());
+        output.output_buffer().set_stride(0, Expr());
+
+        return output;
     }
 };
 

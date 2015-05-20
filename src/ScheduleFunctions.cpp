@@ -355,7 +355,7 @@ Stmt build_produce(Function f) {
                 for (int k = 0; k < input.outputs(); k++) {
                     string buf_name = input.name();
                     if (input.outputs() > 1) {
-                        buf_name += "." + int_to_string(k);
+                        buf_name += "." + std::to_string(k);
                     }
                     buf_name += ".buffer";
                     Expr buffer = Variable::make(Handle(), buf_name);
@@ -385,7 +385,7 @@ Stmt build_produce(Function f) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
                 if (f.outputs() > 1) {
-                    buf_name += "." + int_to_string(j);
+                    buf_name += "." + std::to_string(j);
                 }
                 buf_name += ".buffer";
                 Expr buffer = Variable::make(Handle(), buf_name);
@@ -409,7 +409,7 @@ Stmt build_produce(Function f) {
                     top_left.push_back(Variable::make(Int(32), var + ".min"));
                 }
                 Expr host_ptr = Call::make(f, top_left, j);
-                host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
+                host_ptr = Call::make(Handle(), Call::address_of, {host_ptr}, Call::Intrinsic);
 
                 buffer_args[0] = host_ptr;
                 buffer_args[1] = f.output_types()[j].bytes();
@@ -417,7 +417,7 @@ Stmt build_produce(Function f) {
                     string var = stage_name + f.args()[k];
                     Expr min = Variable::make(Int(32), var + ".min");
                     Expr max = Variable::make(Int(32), var + ".max");
-                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + int_to_string(k));
+                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k));
                     buffer_args.push_back(min);
                     buffer_args.push_back(max - min + 1);
                     buffer_args.push_back(stride);
@@ -426,7 +426,7 @@ Stmt build_produce(Function f) {
                 Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
                                                   buffer_args, Call::Intrinsic);
 
-                string buf_name = f.name() + "." + int_to_string(j) + ".tmp_buffer";
+                string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(Handle(), buf_name));
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
@@ -439,7 +439,7 @@ Stmt build_produce(Function f) {
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
         Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
-                                vec<Expr>(extern_name, result), Call::Extern);
+                                {extern_name, result}, Call::Extern);
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
         check = LetStmt::make(result_name, e, check);
 
@@ -476,7 +476,7 @@ vector<Stmt> build_update(Function f) {
     for (size_t i = 0; i < f.updates().size(); i++) {
         UpdateDefinition r = f.updates()[i];
 
-        string prefix = f.name() + ".s" + int_to_string(i+1) + ".";
+        string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
         vector<Expr> site(r.args.size());
         vector<Expr> values(r.values.size());
@@ -536,14 +536,14 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Bound b = s.bounds()[i];
             Expr max_val = (b.extent + b.min) - 1;
             Expr min_val = b.min;
-            string prefix = func.name() + ".s" + int_to_string(stage) + "." + b.var;
+            string prefix = func.name() + ".s" + std::to_string(stage) + "." + b.var;
             string min_name = prefix + ".min_unbounded";
             string max_name = prefix + ".max_unbounded";
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
             Expr check = (min_val <= min_var) && (max_val >= max_var);
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
-                                        vec<Expr>(b.var, func.name(), min_val, max_val, min_var, max_var),
+                                        {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
 
             // bounds inference has already respected these values for us

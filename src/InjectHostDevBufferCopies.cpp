@@ -176,7 +176,7 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api) {
         Expr buf = Variable::make(Handle(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
-        Expr call = Call::make(Int(32), "halide_device_malloc", vec(buf, device_interface), Call::Extern);
+        Expr call = Call::make(Int(32), "halide_device_malloc", {buf, device_interface}, Call::Extern);
         string call_result_name = unique_name("device_malloc_result");
         Expr call_result_var = Variable::make(Int(32), call_result_name);
         return LetStmt::make(call_result_name, call,
@@ -311,13 +311,13 @@ class InjectBufferCopies : public IRMutator {
             if (host_wrote) {
                 debug(4) << "Setting host dirty for " << i.first << "\n";
                 // If we just invalidated the dev pointer, we need to set the host dirty bit.
-                Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, vec(buffer, t), Call::Intrinsic);
+                Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, {buffer, t}, Call::Intrinsic);
                 s = Block::make(s, Evaluate::make(set_host_dirty));
             }
 
             if (device_wrote) {
                 // If we just invalidated the host pointer, we need to set the dev dirty bit.
-                Expr set_dev_dirty = Call::make(Int(32), Call::set_dev_dirty, vec(buffer, t), Call::Intrinsic);
+                Expr set_dev_dirty = Call::make(Int(32), Call::set_dev_dirty, {buffer, t}, Call::Intrinsic);
                 s = Block::make(s, Evaluate::make(set_dev_dirty));
             }
 
@@ -381,7 +381,7 @@ class InjectBufferCopies : public IRMutator {
                 expr = op;
             } else {
                 Expr new_load = Load::make(l->type, l->name, new_index, Buffer(), Parameter());
-                expr = Call::make(op->type, op->name, vec(new_load), Call::Intrinsic);
+                expr = Call::make(op->type, op->name, {new_load}, Call::Intrinsic);
             }
         } else if (op->name == Call::image_load && op->call_type == Call::Intrinsic) {
             // counts as a device read

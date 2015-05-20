@@ -1199,7 +1199,7 @@ Stage Func::update(int idx) {
       name() << "\".\n";
     invalidate_cache();
     return Stage(func.update_schedule(idx),
-                 name() + ".update(" + int_to_string(idx) + ")");
+                 name() + ".update(" + std::to_string(idx) + ")");
 }
 
 void Func::invalidate_cache() {
@@ -1283,7 +1283,7 @@ vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const 
 }
 
 Stage FuncRefVar::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefVar::operator=(const Tuple &e) {
@@ -1434,7 +1434,7 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
 }
 
 Stage FuncRefExpr::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefExpr::operator=(const Tuple &e) {
@@ -1447,7 +1447,7 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
 
     size_t update_stage = func.updates().size() - 1;
     return Stage(func.update_schedule(update_stage),
-                 func.name() + ".update(" + int_to_string(update_stage) + ")");
+                 func.name() + ".update(" + std::to_string(update_stage) + ")");
 }
 
 Stage FuncRefExpr::operator=(const FuncRefExpr &e) {
@@ -1487,25 +1487,25 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
 }
 
 Stage FuncRefExpr::operator+=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) + e;
 }
 
 Stage FuncRefExpr::operator*=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) * e;
 }
 
 Stage FuncRefExpr::operator-=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) - e;
 }
 
 Stage FuncRefExpr::operator/=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) / e;
 }
@@ -2041,7 +2041,7 @@ void Func::clear_custom_lowering_passes() {
 
 void Func::realize(Buffer b, const Target &target,
                    const std::map<std::string, JITExtern> &externs) {
-  realize(Realization(vec<Buffer>(b)), target, externs);
+  realize(Realization({b}), target, externs);
 }
 
 namespace Internal {
@@ -2199,7 +2199,7 @@ void Func::realize(Realization dst, const Target &target,
 
 void Func::infer_input_bounds(Buffer dst,
                               const std::map<std::string, JITExtern> &externs) {
-  infer_input_bounds(Realization(vec<Buffer>(dst)), externs);
+  infer_input_bounds({dst}, externs);
 }
 
 void Func::infer_input_bounds(Realization dst,
@@ -2421,7 +2421,7 @@ void *Func::compile_jit(const Target &target_arg,
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
         if (func.outputs() > 1) {
-            buffer_name = buffer_name + '.' + int_to_string(i);
+            buffer_name = buffer_name + '.' + std::to_string(i);
         }
         Type t = func.output_types()[i];
         Argument me(buffer_name, Argument::OutputBuffer, t, dimensions());

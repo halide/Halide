@@ -519,7 +519,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             } else { // must be a shift
                 Expr constant = matches[1];
                 int shift_amount;
-                bool power_of_two = is_const_power_of_two(constant, &shift_amount);
+                bool power_of_two = is_const_power_of_two_integer(constant, &shift_amount);
                 if (power_of_two && shift_amount < matches[0].type().bits) {
                     if (pattern.type == Pattern::RightShift) {
                         shift_amount = -shift_amount;
@@ -531,7 +531,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                     value = call_intrin(llvm_type_of(t),
                                         pattern.intrin_width,
                                         pattern.intrin,
-                                        vec(codegen(matches[0]), shift));
+                                        {codegen(matches[0]), shift});
                     return;
                 }
             }
@@ -610,7 +610,7 @@ void CodeGen_ARM::visit(const Mul *op) {
     vector<Expr> matches;
 
     int shift_amount = 0;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
     if (power_of_two) {
         for (size_t i = 0; i < left_shifts.size(); i++) {
             const Pattern &pattern = left_shifts[i];
@@ -621,7 +621,7 @@ void CodeGen_ARM::visit(const Mul *op) {
                 Value *shift = ConstantInt::get(t_arg, shift_amount);
                 value = call_intrin(t_result,
                                     pattern.intrin_width, pattern.intrin,
-                                    vec(codegen(matches[0]), shift));
+                                    {codegen(matches[0]), shift});
                 return;
             }
         }
@@ -659,7 +659,7 @@ void CodeGen_ARM::visit(const Div *op) {
 
     // Check if the divisor is a power of two
     int shift_amount;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
     vector<Expr> matches;
     if (power_of_two && op->type.is_int()) {
@@ -707,13 +707,13 @@ void CodeGen_ARM::visit(const Div *op) {
         #if LLVM_VERSION < 35
         if (op->type.bits == 32 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
-            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", vec<Value *>(wide_val, shift_amount));
+            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", {wide_val, shift_amount});
         } else if (op->type.bits == 16 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
-            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", vec<Value *>(wide_val, shift_amount));
+            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", {wide_val, shift_amount});
         } else if (op->type.bits == 8 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
-            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", vec<Value *>(wide_val, shift_amount));
+            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", {wide_val, shift_amount});
         } else
         #endif
         {
@@ -762,13 +762,13 @@ void CodeGen_ARM::visit(const Div *op) {
         #if LLVM_VERSION < 35
         if (op->type.bits == 32 && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
-            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", vec<Value *>(val, shift_amount));
+            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", {val, shift_amount});
         } else if (op->type.bits == 16 && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
-            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", vec<Value *>(val, shift_amount));
+            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", {val, shift_amount});
         } else if (op->type == UInt(8, 8) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
-            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", vec<Value *>(val, shift_amount));
+            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", {val, shift_amount});
         } else
         #endif
         {
@@ -785,11 +785,11 @@ void CodeGen_ARM::visit(const Div *op) {
         // Average with original numerator
         if (method == 2) {
             if (op->type.bits == 32) {
-                val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", vec(val, num));
+                val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", {val, num});
             } else if (op->type.bits == 16) {
-                val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", vec(val, num));
+                val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", {val, num});
             } else if (op->type.bits == 8) {
-                val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", vec(val, num));
+                val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", {val, num});
             } else {
                 // num > val, so the following works without widening:
                 // val += (num - val)/2
@@ -869,7 +869,7 @@ void CodeGen_ARM::visit(const Min *op) {
         Constant *zero = ConstantInt::get(i32, 0);
         Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
         Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
-        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", vec(a_wide, b_wide));
+        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
         value = builder->CreateExtractElement(wide_result, zero);
         return;
     }
@@ -903,7 +903,7 @@ void CodeGen_ARM::visit(const Min *op) {
         }
 
         if (match) {
-            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, vec(op->a, op->b));
+            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, {op->a, op->b});
             return;
         }
     }
@@ -924,7 +924,7 @@ void CodeGen_ARM::visit(const Max *op) {
         Constant *zero = ConstantInt::get(i32, 0);
         Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
         Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
-        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", vec(a_wide, b_wide));
+        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
         value = builder->CreateExtractElement(wide_result, zero);
         return;
     }
@@ -958,7 +958,7 @@ void CodeGen_ARM::visit(const Max *op) {
         }
 
         if (match) {
-            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, vec(op->a, op->b));
+            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, {op->a, op->b});
             return;
         }
     }
@@ -1100,7 +1100,8 @@ void CodeGen_ARM::visit(const Store *op) {
             Value *stride = codegen(ramp->stride * op->value.type().bytes());
             Value *val = codegen(op->value);
             debug(4) << "Creating call to " << builtin.str() << "\n";
-            Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
+            Value *store_args[] = {base, stride, val};
+            Instruction *store = builder->CreateCall(fn, store_args);
             (void)store;
             add_tbaa_metadata(store, op->name, op->index);
             return;
@@ -1204,10 +1205,11 @@ void CodeGen_ARM::visit(const Load *op) {
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_width);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
             ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-            CallInst *call = builder->CreateCall(fn, vec(ptr, align));
+            Value *args[] = {ptr, align};
+            CallInst *call = builder->CreateCall(fn, args);
             add_tbaa_metadata(call, op->name, slice_ramp);
 
-            Value *elt = builder->CreateExtractValue(call, vec((unsigned int)offset));
+            Value *elt = builder->CreateExtractValue(call, {(unsigned int)offset});
             results.push_back(elt);
         }
 
@@ -1229,7 +1231,8 @@ void CodeGen_ARM::visit(const Load *op) {
             Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             Value *stride = codegen(ramp->stride * op->type.bytes());
             debug(4) << "Creating call to " << builtin.str() << "\n";
-            Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
+            Value *args[] = {base, stride};
+            Instruction *load = builder->CreateCall(fn, args, builtin.str());
             add_tbaa_metadata(load, op->name, op->index);
             value = load;
             return;
@@ -1268,7 +1271,7 @@ void CodeGen_ARM::visit(const Call *op) {
 
                 if (na.defined() && nb.defined()) {
                     Expr absd = Call::make(UInt(narrow.bits, narrow.width), Call::absd,
-                                           vec(na, nb), Call::Intrinsic);
+                                           {na, nb}, Call::Intrinsic);
 
                     absd = Cast::make(op->type, absd);
                     codegen(absd);

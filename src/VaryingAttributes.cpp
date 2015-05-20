@@ -8,9 +8,6 @@
 #include "CSE.h"
 #include "Simplify.h"
 
-// TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-// #include "LinearSolve.h"
-
 namespace Halide {
 namespace Internal {
 
@@ -40,7 +37,7 @@ protected:
         // attribute. These tagged variables will be pulled out of the fragment
         // shader during a subsequent pass
         Expr intrinsic = Call::make(e.type(), Call::glsl_varying,
-                                    vec(Expr(name + ".varying"), e),
+                                    {name + ".varying", e},
                                     Call::Intrinsic);
         ++total_found;
 
@@ -93,8 +90,8 @@ protected:
         if ((value_order == 1) && (total_found < max_expressions)) {
             // Wrap the let value with a varying tag
             mutated_value = Call::make(mutated_value.type(), Call::glsl_varying,
-                              vec<Expr>(op->name + ".varying", mutated_value),
-                              Call::Intrinsic);
+                                       {op->name + ".varying", mutated_value},
+                                       Call::Intrinsic);
             ++total_found;
         }
 
@@ -272,8 +269,6 @@ protected:
 
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
-
-    // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
 
     // Once this is done, Min and Max should call visit_binary_linear and the code
     // in setup_mesh will handle piecewise linear behavior introduced by these
@@ -1030,8 +1025,8 @@ public:
                 // The GPU will take texture coordinates at pixel centers during
                 // interpolation, we offset the Halide integer grid by 0.5 so that
                 // these coordinates line up on integer coordinate values.
-                mutated_body = CastVariablesToFloatAndOffset(vec(for_loops[0]->name,
-                                                                 for_loops[1]->name)).mutate(mutated_body);
+                CastVariablesToFloatAndOffset cast_and_offset({for_loops[0]->name, for_loops[1]->name});
+                mutated_body = cast_and_offset.mutate(mutated_body);
 
                 // Store the coordinates into the vertex buffer in interleaved
                 // order
@@ -1106,14 +1101,14 @@ public:
 Expr dont_simplify(Expr v_) {
     return Internal::Call::make(v_.type(),
                                 Internal::Call::return_second,
-                                Internal::vec<Expr>(0, v_),
+                                {0, v_},
                                 Internal::Call::Intrinsic);
 }
 
 Stmt used_in_codegen(Type type_, const std::string &v_) {
     return Evaluate::make(Internal::Call::make(Int(32),
                                                Internal::Call::return_second,
-                                               Internal::vec<Expr>(Variable::make(type_, v_), 0),
+                                               {Variable::make(type_, v_), 0},
                                                Internal::Call::Intrinsic));
 }
 
@@ -1167,10 +1162,6 @@ public:
 
             coords[1].push_back(loop1->min);
             coords[1].push_back(loop1_max);
-
-            // TODO:(abstephensg) Need to integrate with the
-            // specialize_branched_loops branch linear solver functionality to
-            // handle piecewise linear expressions.
 
             // Count the two spatial x and y coordinates plus the number of
             // varying attribute expressions found
@@ -1230,7 +1221,7 @@ public:
             stmt = LetStmt::make("glsl.num_coords_dim0", dont_simplify(IntImm::make(coords[0].size())),
                    LetStmt::make("glsl.num_coords_dim1", dont_simplify(IntImm::make(coords[1].size())),
                    LetStmt::make("glsl.num_padded_attributes", dont_simplify(IntImm::make(num_padded_attributes)),
-                   Allocate::make(vs.vertex_buffer_name, Float(32), vec(Expr(vertex_buffer_size)), const_true(),
+                                 Allocate::make(vs.vertex_buffer_name, Float(32), {vertex_buffer_size}, const_true(),
                    Block::make(vertex_setup,
                    Block::make(loop_stmt,
                    Block::make(used_in_codegen(Int(32),"glsl.num_coords_dim0"),

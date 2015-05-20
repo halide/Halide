@@ -30,9 +30,6 @@ void blur(std::string suffix, ImageParam input8, const int channels) {
          result.output_buffer().stride(2) == 1);
     Expr planar = result.output_buffer().stride(0) == 1;
 
-    /*result.output_buffer().min(2) == 0 &&
-      result.output_buffer().extent(2) == channels); */
-
     if (suffix == "_rs") {
         result.shader(x, y, c, DeviceAPI::Renderscript);
         result.specialize(interleaved).vectorize(c);
@@ -101,17 +98,10 @@ void copy(std::string suffix, ImageParam input8, const int channels) {
 int main(int argc, char **argv) {
     const int channels = 4;
 
-    ImageParam input_planar(UInt(8), 3, "input");
-    input_planar.set_stride(0, 1).set_bounds(2, 0, channels);
-    blur(argc > 1 ? argv[1] : "", input_planar, channels);
-    copy(argc > 1 ? argv[1] : "", input_planar, channels);
-
-    ImageParam input_interleaved(UInt(8), 3, "input");
-    input_interleaved.set_stride(0, channels)
-        .set_stride(2, 1)
-        .set_bounds(2, 0, channels);
-    blur(argc > 1 ? argv[1] : "", input_interleaved, channels);
-    copy(argc > 1 ? argv[1] : "", input_interleaved, channels);
+    ImageParam input(UInt(8), 3, "input");
+    input.set_stride(0, Expr());
+    blur(argc > 1 ? argv[1] : "", input, channels);
+    copy(argc > 1 ? argv[1] : "", input, channels);
 
     std::cout << "Done!" << std::endl;
 }

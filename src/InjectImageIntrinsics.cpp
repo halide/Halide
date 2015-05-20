@@ -57,7 +57,7 @@ private:
 
         string name = call->name;
         if (call->call_type == Call::Halide && call->func.outputs() > 1) {
-            name = name + '.' + int_to_string(call->value_index);
+            name = name + '.' + std::to_string(call->value_index);
         }
 
         vector<Expr> padded_call_args = call->args;
@@ -81,7 +81,7 @@ private:
             // If 'i' is greater or equal to the number of args in the original
             // node, it must be a padded dimension we added above.
             if (i < call->args.size()) {
-                string d = int_to_string(i);
+                string d = std::to_string(i);
                 string min_name = name + ".min." + d;
                 string min_name_constrained = min_name + ".constrained";
                 if (scope.contains(min_name_constrained)) {

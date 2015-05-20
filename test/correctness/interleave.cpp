@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
         buff3.raw_buffer()->stride[0] = 3;
         buff3.raw_buffer()->stride[1] = 1;
 
-        Realization r3(Internal::vec(buff3));
+        Realization r3({buff3});
         interleaved.realize(r3);
 
         check_interleave_count(interleaved, 2);
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
         buff4.raw_buffer()->stride[0] = 4;
         buff4.raw_buffer()->stride[1] = 1;
 
-        Realization r4(Internal::vec(buff4));
+        Realization r4({buff4});
         output4.realize(r4);
 
         Image<float> result4 = r4[0];
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
         buff5.raw_buffer()->stride[0] = 5;
         buff5.raw_buffer()->stride[1] = 1;
 
-        Realization r5(Internal::vec(buff5));
+        Realization r5({buff5});
         output5.realize(r5);
 
         Image<float> result5 = r5[0];
