@@ -237,7 +237,7 @@ string javascript_type_array_name_fragment(Type type) {
 string CodeGen_JavaScript::print_reinterpret(Type type, Expr e) {
     if (e.type() == type) {
         return print_expr(e);
-    } else if ((type.is_int() || type.is_int()) && (e.type().is_int() || e.type().is_int())) {
+    } else if ((type.is_int() || type.is_uint()) && (e.type().is_int() || e.type().is_uint())) {
         return make_js_int_cast(print_expr(e), e.type().is_uint(), e.type().bits, type.is_uint(), type.bits);
     } else {
         int32_t bytes_needed = (std::max(type.bits, e.type().bits) + 7) / 8;
@@ -513,7 +513,23 @@ void CodeGen_JavaScript::visit(const Sub *op) {
 }
 
 void CodeGen_JavaScript::visit(const Mul *op) {
-    visit_binop(op->type, op->a, op->b, "*");
+    if (op->type.is_float()) {
+        visit_binop(op->type, op->a, op->b, "*");
+    } else {
+        ostringstream rhs;
+        const char *lead_char = (op->type.width != 1) ? "[" : "";
+
+        for (int lane = 0; lane < op->type.width; lane++) {
+            string sa = print_expr(conditionally_extract_lane(op->a, lane));
+            string sb = print_expr(conditionally_extract_lane(op->b, lane));
+            rhs << lead_char << "Math.imul(" << sa << ", " << sb << ")";
+            lead_char = ", ";
+        }
+        if (op->type.width > 1) {
+            rhs << "]";
+        }
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 void CodeGen_JavaScript::visit(const Div *op) {
