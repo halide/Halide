@@ -39,7 +39,7 @@ void blur_float(std::string suffix, ImageParam input8, const int channels) {
             .unroll(c)
             .split(y, y, yi, 32)
             .parallel(y)
-            .vectorize(x, 2);
+            .vectorize(x, 4);
         result.specialize(interleaved);
         result.specialize(planar);
         // blur_x is compute at result, so it's included in result's
@@ -48,7 +48,7 @@ void blur_float(std::string suffix, ImageParam input8, const int channels) {
             .compute_at(result, yi)
             .reorder(c, x, y)
             .unroll(c)
-            .vectorize(x, 2);
+            .vectorize(x, 4);
     }
 
     std::vector<Argument> args;
@@ -81,7 +81,7 @@ void copy_float(std::string suffix, ImageParam input8, const int channels) {
         result.reorder(c, x, y)
             .parallel(y)
             .unroll(c)
-            .vectorize(x, 2)
+            .vectorize(x, 4)
             .specialize(interleaved);
     }
     // non-specialized version is planar
