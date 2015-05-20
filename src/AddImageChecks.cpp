@@ -77,7 +77,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
         output_buffer.param = f.output_buffers()[i];
         output_buffer.dimensions = f.dimensions();
         if (f.values().size() > 1) {
-            bufs[f.name() + '.' + int_to_string(i)] = output_buffer;
+            bufs[f.name() + '.' + std::to_string(i)] = output_buffer;
         } else {
             bufs[f.name()] = output_buffer;
         }
@@ -112,7 +112,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
         const string &name = buf.first;
 
         for (int i = 0; i < 4; i++) {
-            string dim = int_to_string(i);
+            string dim = std::to_string(i);
 
             Expr min_required = Variable::make(Int(32), name + ".min." + dim + ".required");
             replace_with_required[name + ".min." + dim] = min_required;
@@ -227,7 +227,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
 
 
         for (int j = 0; j < dimensions; j++) {
-            string dim = int_to_string(j);
+            string dim = std::to_string(j);
             string actual_min_name = name + ".min." + dim;
             string actual_extent_name = name + ".extent." + dim;
             string actual_stride_name = name + ".stride." + dim;
@@ -282,7 +282,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
             if (j == 0) {
                 stride_required = 1;
             } else {
-                string last_dim = int_to_string(j-1);
+                string last_dim = std::to_string(j-1);
                 stride_required = (Variable::make(Int(32), name + ".stride." + last_dim + ".required") *
                                    Variable::make(Int(32), name + ".extent." + last_dim + ".required"));
             }
@@ -308,7 +308,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
                 if (j == 0) {
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
                 } else {
-                    Expr last_dim = Variable::make(Int(64), name + ".total_extent." + int_to_string(j-1));
+                    Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j-1));
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
@@ -324,7 +324,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
         Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
         vector<Expr> args = {buffer_name_expr, Expr(type.bits/8)};
         for (int i = 0; i < dimensions; i++) {
-            string dim = int_to_string(i);
+            string dim = std::to_string(i);
             args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
             args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
             args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
@@ -337,7 +337,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
         // Build the constraints tests and proposed sizes.
         vector<pair<string, Expr>> constraints;
         for (int i = 0; i < dimensions; i++) {
-            string dim = int_to_string(i);
+            string dim = std::to_string(i);
             string min_name = name + ".min." + dim;
             string stride_name = name + ".stride." + dim;
             string extent_name = name + ".extent." + dim;
