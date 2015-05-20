@@ -392,7 +392,8 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(mcpu);
-    engine_builder.setMAttrs(vec<string>(mattrs));
+    std::vector<string> mattrs_array = {mattrs};
+    engine_builder.setMAttrs(mattrs_array);
     ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";

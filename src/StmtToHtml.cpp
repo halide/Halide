@@ -227,12 +227,12 @@ private:
 
     void visit(const Min *op) {
         stream << open_span("Min");
-        print_list(symbol("min") + "(", vec(op->a, op->b), ")");
+        print_list(symbol("min") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
     void visit(const Max *op) {
         stream << open_span("Max");
-        print_list(symbol("max") + "(", vec(op->a, op->b), ")");
+        print_list(symbol("max") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
     void visit(const Not *op) {
@@ -243,7 +243,7 @@ private:
     }
     void visit(const Select *op) {
         stream << open_span("Select");
-        print_list(symbol("select") + "(", vec(op->condition, op->true_value, op->false_value), ")");
+        print_list(symbol("select") + "(", {op->condition, op->true_value, op->false_value}, ")");
         stream << close_span();
     }
     void visit(const Load *op) {
@@ -257,7 +257,7 @@ private:
     }
     void visit(const Ramp *op) {
         stream << open_span("Ramp");
-        print_list(symbol("ramp") + "(", vec(op->base, op->stride, Expr(op->width)), ")");
+        print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->width)}, ")");
         stream << close_span();
     }
     void visit(const Broadcast *op) {
@@ -387,7 +387,7 @@ private:
         }
         stream << " (";
         stream << close_span();
-        print_list(vec(Variable::make(Int(32), op->name), op->min, op->extent));
+        print_list({Variable::make(Int(32), op->name), op->min, op->extent});
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
@@ -471,7 +471,7 @@ private:
         stream << var(op->name);
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            print_list("[", vec(op->bounds[i].min, op->bounds[i].extent), "]");
+            print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
             if (i < op->bounds.size() - 1) stream << ", ";
         }
         stream << matched(")");

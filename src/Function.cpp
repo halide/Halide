@@ -309,7 +309,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     for (size_t i = 0; i < values.size(); i++) {
         string buffer_name = name();
         if (values.size() > 1) {
-            buffer_name += '.' + int_to_string((int)i);
+            buffer_name += '.' + std::to_string((int)i);
         }
         Parameter output(values[i].type(), true, args.size(), buffer_name);
         contents.ptr->output_buffers.push_back(output);
@@ -527,7 +527,7 @@ void Function::define_extern(const std::string &function_name,
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
         if (types.size() > 1) {
-            buffer_name += '.' + int_to_string((int)i);
+            buffer_name += '.' + std::to_string((int)i);
         }
         Parameter output(types[i], true, dimensionality, buffer_name);
         contents.ptr->output_buffers.push_back(output);

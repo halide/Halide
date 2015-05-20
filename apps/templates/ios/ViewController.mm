@@ -139,14 +139,13 @@ int halide_buffer_display(const buffer_t* buffer)
   // TODO: This code should handle channel types larger than one byte.
   void *data_ptr = buffer->host;
 
-  size_t width = buffer->extent[0];
-  size_t height = buffer->extent[1];
-  size_t channels = buffer->extent[2];
+  size_t width            = std::max(1, buffer->extent[0]);
+  size_t height           = std::max(1, buffer->extent[1]);
+  size_t channels         = std::max(1, buffer->extent[2]);
   size_t bitsPerComponent = buffer->elem_size * 8;
 
   size_t totalBytes = width * height * channels * buffer->elem_size;
 
-  size_t src_bytesPerRow = width * buffer->elem_size;
   size_t dst_bytesPerRow = width * channels * buffer->elem_size;
 
   unsigned char *dst_buffer = NULL;
@@ -160,10 +159,10 @@ int halide_buffer_display(const buffer_t* buffer)
     dst_buffer = (unsigned char *)malloc(totalBytes);
 
     // Interleave the data
-    for (size_t c = 0; c != buffer->extent[2]; ++c) {
-      for (size_t y = 0; y != buffer->extent[1]; ++y) {
-          for (size_t x = 0; x != buffer->extent[0]; ++x) {
-              size_t src = x + y * src_bytesPerRow + c * (height * src_bytesPerRow);
+    for (size_t c=0;c!=channels;++c) {
+      for (size_t y=0;y!=height;++y) {
+        for (size_t x=0;x!=width;++x) {
+          size_t src = x*buffer->stride[0] + y*buffer->stride[1] + c*buffer->stride[2];
               size_t dst = c + x * channels + y * dst_bytesPerRow;
               dst_buffer[dst] = src_buffer[src];
           }
@@ -174,7 +173,7 @@ int halide_buffer_display(const buffer_t* buffer)
   }
 
   CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, dst_buffer, totalBytes, NULL);
-  CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+  CGColorSpaceRef colorSpace = channels > 1 ? CGColorSpaceCreateDeviceRGB() : CGColorSpaceCreateDeviceGray();
 
   CGImageRef cgImage = CGImageCreate(width,
                                      height,
@@ -227,34 +226,23 @@ int halide_buffer_print(const buffer_t* buffer)
   [output addObject:[NSString stringWithFormat:@"min = [ %d %d %d %d ]<br>",
       buffer->min[0],buffer->min[1],buffer->min[2],buffer->min[3]]];
   [output addObject:@"host = [<br>"];
-  int col = 0;
-  int off0 = 0;
-  for (int i0 = 0; i0 < std::max(1, buffer->extent[0]); ++i0) {
-      int off1 = off0;
+  for (int i3 = 0; i3 < std::max(1, buffer->extent[3]); ++i3) {
+      [output addObject:[NSString stringWithFormat:@"---- Z=%d ---- <br>", i3]];
       for (int i1 = 0; i1 < std::max(1, buffer->extent[1]); ++i1) {
-          int off2 = off1;
-          for (int i2 = 0; i2 < std::max(1, buffer->extent[2]); ++i2) {
-              int off3 = off2;
-              for (int i3 = 0; i3 < std::max(1, buffer->extent[3]); ++i3) {
+          for (int i0 = 0; i0 < std::max(1, buffer->extent[0]); ++i0) {
+              for (int i2 = 0; i2 < std::max(1, buffer->extent[2]); ++i2) {
+                  int offset = i0*buffer->stride[0] + i1*buffer->stride[1] + i2*buffer->stride[2] + i3*buffer->stride[3];
                   switch (buffer->elem_size) {
-                      case 1: [output addObject:[NSString stringWithFormat:@"%02x ",((uint8_t*)buffer->host)[off3]]]; break;
-                      case 2: [output addObject:[NSString stringWithFormat:@"%04x ",((uint16_t*)buffer->host)[off3]]]; break;
+                      case 1: [output addObject:[NSString stringWithFormat:@" %02x",((uint8_t*)buffer->host)[offset]]]; break;
+                      case 2: [output addObject:[NSString stringWithFormat:@" %02x",((uint16_t*)buffer->host)[offset]]]; break;
                       // TODO: add a way to distinguish between int32 and float.
-                      case 4: [output addObject:[NSString stringWithFormat:@"%f ",((float*)buffer->host)[off3]]]; break;
+                      case 4: [output addObject:[NSString stringWithFormat:@" %f",((float*)buffer->host)[offset]]]; break;
                   }
-                  col += 1;
-                  // TODO: breaking arbitrarily at 64 columns is arbitrary. Do something smarter.
-                  if (col >= 64) {
-                      [output addObject:@"<br>"];
-                      col = 0;
-                  }
-                  off3 += buffer->stride[3];
               }
-              off2 += buffer->stride[2];
+              [output addObject:@","];
           }
-          off1 += buffer->stride[1];
+          [output addObject:@"<br>"];
       }
-      off0 += buffer->stride[0];
   }
   [output addObject:@"<br>]<br>"];
 

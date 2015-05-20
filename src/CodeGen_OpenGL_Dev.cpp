@@ -20,6 +20,14 @@ using std::map;
 
 namespace {
 
+bool is_opengl_es(const Target &target) {
+    // TODO: we need a better way to switch between the different OpenGL
+    // versions (desktop GL, GLES2, GLES3, ...), probably by making it part of
+    // Target.
+    return (target.os == Target::Android ||
+            target.os == Target::IOS ||
+            target.os == Target::NaCl);
+}
 
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
@@ -79,7 +87,7 @@ Expr call_builtin(const Type &result_type, const std::string &func,
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
     : target(target) {
     debug(1) << "Creating GLSL codegen\n";
-    glc = new CodeGen_GLSL(src_stream);
+    glc = new CodeGen_GLSL(src_stream, target);
 }
 
 CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
@@ -89,7 +97,7 @@ CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
 void CodeGen_OpenGL_Dev::add_kernel(Stmt s, const string &name,
                                     const vector<GPU_Argument> &args) {
     cur_kernel_name = name;
-    glc->add_kernel(s, name, args, target);
+    glc->add_kernel(s, name, args);
 }
 
 void CodeGen_OpenGL_Dev::init_module() {
@@ -122,7 +130,7 @@ std::string CodeGen_OpenGL_Dev::print_gpu_name(const std::string &name) {
 // CodeGen_GLSL
 //
 
-CodeGen_GLSL::CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {
+CodeGen_GLSL::CodeGen_GLSL(std::ostream &s, const Target &target) : CodeGen_C(s), target(target) {
     builtin["sin_f32"] = "sin";
     builtin["sqrt_f32"] = "sqrt";
     builtin["cos_f32"] = "cos";
@@ -322,11 +330,11 @@ void CodeGen_GLSL::visit(const Select *op) {
 }
 
 void CodeGen_GLSL::visit(const Max *op) {
-    print_expr(call_builtin(op->type, "max", vec(op->a, op->b)));
+    print_expr(call_builtin(op->type, "max", {op->a, op->b}));
 }
 
 void CodeGen_GLSL::visit(const Min *op) {
-    print_expr(call_builtin(op->type, "min", vec(op->a, op->b)));
+    print_expr(call_builtin(op->type, "min", {op->a, op->b}));
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
@@ -336,14 +344,14 @@ void CodeGen_GLSL::visit(const Div *op) {
         // the correct behavior using floating point arithmetic.
         Type float_type = Float(32, op->type.width);
         Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
-        print_expr(call_builtin(op->type, "floor_f32", vec(val)));
+        print_expr(call_builtin(op->type, "floor_f32", {val}));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
 }
 
 void CodeGen_GLSL::visit(const Mod *op) {
-    print_expr(call_builtin(op->type, "mod", vec(op->a, op->b)));
+    print_expr(call_builtin(op->type, "mod", {op->a, op->b}));
 }
 
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
@@ -466,23 +474,35 @@ void CodeGen_GLSL::visit(const Call *op) {
                 rhs << expr << "." << swizzle;
 
             } else {
-
                 // Otherwise, create a result type variable and copy each channel to
                 // it individually.
-                string v = unique_name('_');
-                do_indent();
-                stream << print_type(op->type) << " " << v << ";\n";
 
-                for (int i = 0; i != shuffle_width; ++i) {
+                // Check to see if the result is a scalar, i.e. we are
+                // extracting a single channel from a vector
+                if (op->type.is_scalar()) {
+                    internal_assert(shuffle_width == 1) << "Invalid shuffle width for scalar result";
+
+                    // In this case, no vector suffix is necessary on the LHS
+                    rhs << expr << get_vector_suffix(op->args[1]);
+
+                } else {
+
+                    string v = unique_name('_');
                     do_indent();
-                    stream << v << get_vector_suffix(i) << " = "
-                    << expr << get_vector_suffix(op->args[1 + i]) << ";\n";
+                    stream << print_type(op->type) << " " << v << ";\n";
+
+                    // Otherwise, output a vector suffix for the assignment.
+                    for (int i = 0; i != shuffle_width; ++i) {
+                        do_indent();
+                        stream << v << get_vector_suffix(i) << " = "
+                               << expr << get_vector_suffix(op->args[1 + i])
+                               << ";\n";
+                    }
+
+                    id = v;
+                    return;
                 }
-
-                id = v;
-                return;
             }
-
         } else if (op->name == Call::lerp) {
             // Implement lerp using GLSL's mix() function, which always uses
             // floating point arithmetic.
@@ -504,7 +524,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             }
 
             Type result_type = Float(32, op->type.width);
-            Expr e = call_builtin(result_type, "mix", vec(zero_val, one_val, weight));
+            Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
 
             if (!op->type.is_float()) {
                 // Mirror rounding implementation of Halide's integer lerp.
@@ -568,8 +588,7 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
 }
 
 void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
-                              const vector<GPU_Argument> &args,
-                              const Target &target) {
+                              const vector<GPU_Argument> &args) {
 
     // This function produces fragment shader source for the halide statement.
     // The corresponding vertex shader will be generated by the halide opengl
@@ -639,16 +658,9 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
 
     stream << header.str();
 
-    // TODO: we need a better way to switch between the different OpenGL
-    // versions (desktop GL, GLES2, GLES3, ...), probably by making it part of
-    // Target.
-    bool opengl_es = (target.os == Target::Android ||
-                      target.os == Target::IOS ||
-                      target.os == Target::NaCl);
-
     // Specify default float precision when compiling for OpenGL ES.
     // TODO: emit correct #version
-    if (opengl_es) {
+    if (is_opengl_es(target)) {
         stream << "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
                << "precision highp float;\n"
                << "#endif\n";
@@ -731,7 +743,7 @@ string normalize_temporaries(const string &s) {
 
 void check(Expr e, const string &result) {
     ostringstream source;
-    CodeGen_GLSL cg(source);
+    CodeGen_GLSL cg(source, Target());
     if (e.as<FloatImm>() || e.as<IntImm>()) {
         // Hack: CodeGen_C doesn't treat immediates like other expressions, so
         // wrap them to obtain useful output.
@@ -820,7 +832,7 @@ void CodeGen_GLSL::test() {
     check(sin(3.0f), "float $ = sin(3.0);\n");
 
     // Sin with vector arg
-    check(Call::make(Float(32, 4), "sin_f32", vec(Broadcast::make(1.f, 4)), Internal::Call::Extern),
+    check(Call::make(Float(32, 4), "sin_f32", {Broadcast::make(1.f, 4)}, Internal::Call::Extern),
           "vec4 $ = vec4(1.0);\n"
           "vec4 $ = sin($);\n");
 
@@ -862,7 +874,7 @@ void CodeGen_GLSL::test() {
 
     // Test codegen for texture loads
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
-                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0)),
+                            {string("buf"), 0, 0, 0},
                             Call::Intrinsic);
     check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
 
