@@ -141,10 +141,18 @@ struct JITModule {
      * a Halide Func compilation at all. */
     EXPORT void *main_function() const;
 
-    /** TODO: docs */
+    /** Returns the Symbol structure for the routine documented in
+     * main_function. Returning a Symbol allows access to the LLVM
+     * type as well as the address. The address and type will be NULL
+     * if the module has not been compiled. */
     EXPORT Symbol entrypoint_symbol() const;
 
-    /** TODO: docs */
+    /** Returns the Symbol structure for the argv wrapper routine
+     * corresponding to the entrypoint. The argv wrapper is callable
+     * via an array of void * pointers to the arguments for the
+     * call. Returning a Symbol allows access to the LLVM type as well
+     * as the address. The address and type will be NULL if the module
+     * has not been compiled. */
     EXPORT Symbol argv_entrypoint_symbol() const;
 
     /** A slightly more type-safe wrapper around the raw halide
@@ -157,14 +165,22 @@ struct JITModule {
     EXPORT argv_wrapper argv_function() const;
     // @}
 
-    /** TODO: docs */
+    /** Add another JITModule to the dependency chain. Dependencies
+     * are searched to resolve symbols not found in the current
+     * compilation unit while JITting. */
     EXPORT void add_dependency(JITModule &dep);
-    /** TODO: docs */
+    /** Registers a single Symbol as available to modules which depend
+     * on this one. The Symbol structure provides both the address and
+     * the LLVM type for the function, which allows type safe linkage of
+     * extenal routines. */
     EXPORT void add_symbol_for_export(const std::string &name, const Symbol &extern_symbol);
-    /** TODO: docs */
+    /** Registers a single JITExtern as available to modules which
+     * depend on this one. The JITExtern must be of the C function
+     * variety and not a Func. This routine converts the Halide type
+     * info into an LLVM type, which allows type safe linkage of
+     * extenal routines. */
     EXPORT void add_extern_for_export(const std::string &name, const JITExtern &jit_extern);
 
-    // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */
     EXPORT void compile_module(llvm::Module *mod, const std::string &function_name, const Target &target,
