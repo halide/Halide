@@ -38,29 +38,16 @@ public:
 
     /** Construct a Tuple from some Exprs. */
     //@{
-    Tuple(Expr a, Expr b) :
-        exprs(Internal::vec<Expr>(a, b)) {
-    }
-
-    Tuple(Expr a, Expr b, Expr c) :
-        exprs(Internal::vec<Expr>(a, b, c)) {
-    }
-
-    Tuple(Expr a, Expr b, Expr c, Expr d) :
-        exprs(Internal::vec<Expr>(a, b, c, d)) {
-    }
-
-    Tuple(Expr a, Expr b, Expr c, Expr d, Expr e) :
-        exprs(Internal::vec<Expr>(a, b, c, d, e)) {
-    }
-
-    Tuple(Expr a, Expr b, Expr c, Expr d, Expr e, Expr f) :
-        exprs(Internal::vec<Expr>(a, b, c, d, e, f)) {
+    template<typename ...Args>
+    Tuple(Expr a, Expr b, Args... args) {
+                exprs.push_back(a);
+                exprs.push_back(b);
+                Internal::collect_args(exprs, args...);
     }
     //@}
 
     /** Construct a Tuple from a vector of Exprs */
-    explicit Tuple(const std::vector<Expr> &e) : exprs(e) {
+    explicit NO_INLINE Tuple(const std::vector<Expr> &e) : exprs(e) {
         user_assert(e.size() > 0) << "Tuples must have at least one element\n";
     }
 
@@ -105,20 +92,10 @@ public:
 
     /** Construct a Realization from some Buffers. */
     //@{
-    Realization(Buffer a, Buffer b) :
-        buffers(Internal::vec<Buffer>(a, b)) {}
-
-    Realization(Buffer a, Buffer b, Buffer c) :
-        buffers(Internal::vec<Buffer>(a, b, c)) {}
-
-    Realization(Buffer a, Buffer b, Buffer c, Buffer d) :
-        buffers(Internal::vec<Buffer>(a, b, c, d)) {}
-
-    Realization(Buffer a, Buffer b, Buffer c, Buffer d, Buffer e) :
-        buffers(Internal::vec<Buffer>(a, b, c, d, e)) {}
-
-    Realization(Buffer a, Buffer b, Buffer c, Buffer d, Buffer e, Buffer f) :
-        buffers(Internal::vec<Buffer>(a, b, c, d, e, f)) {}
+    template<typename ...Args>
+    Realization(Buffer a, Buffer b, Args... args) : buffers({a, b}) {
+        Internal::collect_args(buffers, args...);
+    }
     //@}
 
     /** Construct a Realization from a vector of Buffers */

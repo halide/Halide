@@ -6,8 +6,6 @@ namespace Halide {
 using std::string;
 using std::vector;
 
-using Internal::vec;
-
 namespace {
 
 llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
@@ -549,8 +547,8 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
     if (target.has_feature(Target::CUDACapability35)) {
         module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.features_any_of(vec(Target::CUDACapability32,
-                                          Target::CUDACapability50))) {
+    } else if (target.features_any_of({Target::CUDACapability32,
+                                       Target::CUDACapability50})) {
         // For some reason sm_32 and sm_50 use libdevice 20
         module = get_initmod_ptx_compute_20_ll(c);
     } else if (target.has_feature(Target::CUDACapability30)) {

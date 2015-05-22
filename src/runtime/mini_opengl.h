@@ -110,6 +110,8 @@ typedef void (*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const GLvoid
 #define GL_COMPILE_STATUS 0x8B81
 #define GL_LINK_STATUS 0x8B82
 #define GL_INFO_LOG_LENGTH 0x8B84
+#define GL_IMPLEMENTATION_COLOR_READ_FORMAT 0x8B9B
+#define GL_IMPLEMENTATION_COLOR_READ_TYPE 0x8B9A
 
 typedef void (*PFNGLATTACHSHADERPROC) (GLuint program, GLuint shader);
 typedef void (*PFNGLCOMPILESHADERPROC) (GLuint shader);

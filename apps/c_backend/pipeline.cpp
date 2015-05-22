@@ -12,9 +12,7 @@ int main(int argc, char **argv) {
 
     f(x, y) = (input(clamp(x+2, 0, input.width()-1), clamp(y-2, 0, input.height()-1)) * 17)/13;
 
-    h.define_extern("an_extern_stage",
-                    Internal::vec<ExternFuncArgument>(f),
-                    Int(16), 0);
+    h.define_extern("an_extern_stage", {f}, Int(16), 0);
 
     g(x, y) = f(y, x) + f(x, y) + cast<uint16_t>(an_extern_func(x, y)) + h();
 

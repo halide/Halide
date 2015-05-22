@@ -27,6 +27,7 @@ class MDNode;
 class NamedMDNode;
 class DataLayout;
 class BasicBlock;
+class GlobalVariable;
 }
 
 #include <map>

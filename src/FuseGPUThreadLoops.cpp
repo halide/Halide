@@ -379,7 +379,7 @@ public:
         allocations.push_back(sentinel);
 
         Expr total_size = Variable::make(Int(32), allocations.back().name + ".shared_offset");
-        s = Allocate::make(shared_mem_name, UInt(8), vec(total_size), const_true(), s);
+        s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
 
         // Define an offset for each allocation. The offsets are in
         // elements, not bytes, so that the stores and loads can use

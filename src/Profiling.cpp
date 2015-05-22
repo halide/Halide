@@ -89,7 +89,7 @@ public:
             do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
                 Cast::make(UInt(64), kIters * kUnroll), do_timings);
             s = Block::make(s, do_timings);
-            s = Allocate::make(kIgnoreBuf, UInt(32), vec(Expr(1)), const_true(), s);
+            s = Allocate::make(kIgnoreBuf, UInt(32), {1}, const_true(), s);
 
             // Tack on code to print the counters.
             for (const std::pair<std::string, int> &i : indices) {
@@ -106,7 +106,7 @@ public:
                 Store::make(kBufName, Cast::make(UInt(64), 0), i));
             s = Block::make(init, s);
 
-            s = Allocate::make(kBufName, UInt(64), vec(Expr((int)indices.size())), const_true(), s);
+            s = Allocate::make(kBufName, UInt(64), {(int)indices.size()}, const_true(), s);
         } else {
             s = mutate(s);
         }

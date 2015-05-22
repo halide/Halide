@@ -107,7 +107,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
-            string prefix = func.name() + ".s" + int_to_string(func.updates().size()) + ".";
+            string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func.args()[i];
@@ -229,7 +229,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             for (size_t i = 0; i < func.updates().size(); i++) {
-                string n = func.name() + ".s" + int_to_string(i) + "." + dim;
+                string n = func.name() + ".s" + std::to_string(i) + "." + dim;
                 replacements[n + ".min"] = Variable::make(Int(32), prefix + dim + ".min");
                 replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");
             }

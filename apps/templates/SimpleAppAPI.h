@@ -4,6 +4,7 @@
 #include <stdarg.h>
 
 #include <random>
+#include <string>
 #include <vector>
 
 #include "HalideRuntime.h"
@@ -86,18 +87,25 @@ class SimpleTimer {
 
 class ScopedTimer {
  public:
-  ScopedTimer(void *user_context, const char *msg)
-      : user_context_(user_context), timer_(user_context), msg_(msg) {
+  ScopedTimer(void *user_context, const std::string &msg, const int iters = 1)
+      : user_context_(user_context), timer_(user_context), msg_(msg), iters_(iters) {
     timer_.start();
   }
   ~ScopedTimer() {
     timer_.stop();
-    halide_printf(user_context_, "%s: %f usec", msg_, timer_.net_usec());
+    double usec = timer_.net_usec();
+    if (iters_ > 1) {
+      usec /= iters_;
+      halide_printf(user_context_, "%s: avg %f usec/iter", msg_.c_str(), usec);
+    } else {
+      halide_printf(user_context_, "%s: %f usec", msg_.c_str(), usec);
+    }
   }
  private:
   void *user_context_;
   SimpleTimer timer_;
-  const char *msg_;
+  std::string msg_;
+  int iters_;
 };
 
 
@@ -105,14 +113,16 @@ class ScopedTimer {
 // in the given range. Not very rigorous, but convenient for simple testing
 // or profiling.
 // If the buffer's elem_size doesn't match the size, or if host is null,
-// return false.
+// call halide_error() and return false.
 template<typename T>
-bool halide_randomize_buffer_host(int seed, T min, T max, buffer_t* buf) {
+bool halide_randomize_buffer_host(void *user_context, int seed, T min, T max, buffer_t* buf) {
     if (sizeof(T) != buf->elem_size) {
+        halide_error(user_context, "Wrong elem_size");
         return false;
     }
     if (!buf->host) {
-      return false;
+        halide_error(user_context, "host is null");
+        return false;
     }
     std::mt19937 rnd(seed);
     T *p0 = reinterpret_cast<T*>(buf->host);
@@ -135,5 +145,66 @@ bool halide_randomize_buffer_host(int seed, T min, T max, buffer_t* buf) {
     buf->host_dirty = true;
     return true;
 }
+
+template<typename T>
+T halide_smooth_buffer_host_max() {
+  return std::numeric_limits<T>::max();
+}
+
+template<>
+float halide_smooth_buffer_host_max() {
+  return 1.0f;
+}
+
+template<>
+double halide_smooth_buffer_host_max() {
+  return 1.0;
+}
+
+// Fill the buffer's host storage field with a smoothly varying set of data
+// suitable for the buffer's dimensions and type. Not very rigorous, but
+// convenient for simple testing or profiling.
+// If the buffer's elem_size doesn't match the size, or if host is null,
+// call halide_error() and return false.
+template<typename T>
+bool halide_smooth_buffer_host(void *user_context, int seed, buffer_t* buf) {
+    if (sizeof(T) != buf->elem_size) {
+        halide_error(user_context, "Wrong elem_size");
+        return false;
+    }
+    if (!buf->host) {
+        halide_error(user_context, "host is null");
+        return false;
+    }
+    const T kMax = halide_smooth_buffer_host_max<T>();
+    T *p0 = reinterpret_cast<T*>(buf->host);
+    for (int i0 = 0; i0 < std::max(1, buf->extent[0]); ++i0) {
+        T *p1 = p0;
+        for (int i1 = 0; i1 < std::max(1, buf->extent[1]); ++i1) {
+            T *p2 = p1;
+            for (int i2 = 0; i2 < std::max(1, buf->extent[2]); ++i2) {
+                T v;
+                switch (i2) {
+                  case 0: v = i0 * kMax / std::max(1, buf->extent[0]); break;
+                  case 1: v = i1 * kMax / std::max(1, buf->extent[1]); break;
+                  case 2: v = (atan2(i1, i0) + seed) * kMax / 3.1415926535f; break;
+                  default: v = kMax; break;
+                }
+                // If there are > 3 dimensions, just replicate identical data across them
+                T *p3 = p2;
+                for (int i3 = 0; i3 < std::max(1, buf->extent[3]); ++i3) {
+                    *p3 = v;
+                    p3 += buf->stride[3];
+                }
+                p2 += buf->stride[2];
+            }
+            p1 += buf->stride[1];
+        }
+        p0 += buf->stride[0];
+    }
+    buf->host_dirty = true;
+    return true;
+};
+
 
 #endif  // _H_SimpleAppAPI
