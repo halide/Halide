@@ -142,7 +142,7 @@ public:
 
             for (const pair<pair<string, int>, Box> &i : bounds) {
                 string func_name = i.first.first;
-                string stage_name = func_name + ".s" + int_to_string(i.first.second);
+                string stage_name = func_name + ".s" + std::to_string(i.first.second);
                 if (stage_name == producing_stage ||
                     inner_productions.count(func_name)) {
                     merge_boxes(b, i.second);
@@ -169,7 +169,7 @@ public:
 
                 if (stage < func.updates().size()) {
                     size_t stages = func.updates().size();
-                    string last_stage = func.name() + ".s" + int_to_string(stages) + ".";
+                    string last_stage = func.name() + ".s" + std::to_string(stages) + ".";
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
                             const string &dim = func.args()[i];
@@ -214,14 +214,14 @@ public:
                     Expr inner_query = Variable::make(Handle(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    vec<Expr>(outer_query, i), Call::Intrinsic);
+                                                    {outer_query, i}, Call::Intrinsic);
                         Expr outer_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    vec<Expr>(outer_query, i), Call::Intrinsic);
+                                                    {outer_query, i}, Call::Intrinsic);
 
                         Expr inner_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    vec<Expr>(inner_query, i), Call::Intrinsic);
+                                                    {inner_query, i}, Call::Intrinsic);
                         Expr inner_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    vec<Expr>(inner_query, i), Call::Intrinsic);
+                                                    {inner_query, i}, Call::Intrinsic);
                         Expr inner_extent = inner_max - inner_min + 1;
 
                         // Push 'inner' inside of 'outer'
@@ -245,7 +245,7 @@ public:
 
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
-                string prefix = name + ".s" + int_to_string(stage) + ".";
+                string prefix = name + ".s" + std::to_string(stage) + ".";
                 for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
                     const Bound &bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
@@ -264,7 +264,7 @@ public:
             }
 
             for (size_t d = 0; d < b.size(); d++) {
-                string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
+                string arg = name + ".s" + std::to_string(stage) + "." + func.args()[d];
 
                 if (b[d].min.same_as(b[d].max)) {
                     s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
@@ -278,7 +278,7 @@ public:
                 const UpdateDefinition &r = func.updates()[stage - 1];
                 if (r.domain.defined()) {
                     for (ReductionVariable i : r.domain.domain()) {
-                        string arg = name + ".s" + int_to_string(stage) + "." + i.var;
+                        string arg = name + ".s" + std::to_string(stage) + "." + i.var;
                         s = LetStmt::make(arg + ".min", i.min, s);
                         s = LetStmt::make(arg + ".max", i.extent + i.min - 1, s);
                     }
@@ -310,9 +310,9 @@ public:
                 } else if (args[j].is_func()) {
                     Function input(args[j].func);
                     for (int k = 0; k < input.outputs(); k++) {
-                        string name = input.name() + ".o" + int_to_string(k) + ".bounds_query." + func.name();
+                        string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
                         Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                              vec<Expr>(null_handle, input.output_types()[k].bytes()),
+                                              {null_handle, input.output_types()[k].bytes()},
                                               Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(Handle(), name));
@@ -326,7 +326,7 @@ public:
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
-                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, vec<Expr>(in_buf), Call::Intrinsic);
+                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
                     lets.push_back(make_pair(query_name, query_buf));
                     Expr buf = Variable::make(Handle(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
@@ -343,7 +343,7 @@ public:
                 output_buffer_t_args[1] = func.output_types()[j].bytes();
                 for (size_t k = 0; k < func.args().size(); k++) {
                     const string &arg = func.args()[k];
-                    string prefix = func.name() + ".s" + int_to_string(stage) + "." + arg;
+                    string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
                     output_buffer_t_args.push_back(min);
@@ -354,7 +354,7 @@ public:
                 Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
                                                   output_buffer_t_args, Call::Intrinsic);
 
-                string buf_name = func.name() + ".o" + int_to_string(j) + ".bounds_query";
+                string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
                 bounds_inference_args.push_back(Variable::make(Handle(), buf_name));
 
                 lets.push_back(make_pair(buf_name, output_buffer_t));
@@ -367,7 +367,7 @@ public:
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
             Expr error = Call::make(Int(32), "halide_error_bounds_inference_call_failed",
-                                    vec<Expr>(extern_name, result), Call::Extern);
+                                    {extern_name, result}, Call::Extern);
             Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
             check = LetStmt::make(result_name, e, check);
@@ -387,7 +387,7 @@ public:
         void populate_scope(Scope<Interval> &result) {
 
             for (size_t d = 0; d < func.args().size(); d++) {
-                string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
+                string arg = name + ".s" + std::to_string(stage) + "." + func.args()[d];
                 result.push(func.args()[d],
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
@@ -398,7 +398,7 @@ public:
                     const vector<ReductionVariable> &dom = r.domain.domain();
                     for (size_t i = 0; i < dom.size(); i++) {
                         const ReductionVariable &rvar = dom[i];
-                        string arg = name + ".s" + int_to_string(stage) + "." + rvar.var;
+                        string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
                         result.push(rvar.var, Interval(Variable::make(Int(32), arg + ".min"),
                                                        Variable::make(Int(32), arg + ".max")));
                     }
@@ -454,7 +454,7 @@ public:
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
-                s.stage_prefix = s.name + ".s" + int_to_string(s.stage) + ".";
+                s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
             }
@@ -514,15 +514,15 @@ public:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {
                         Function f(args[j].func);
-                        string stage_name = f.name() + ".s" + int_to_string(f.updates().size());
+                        string stage_name = f.name() + ".s" + std::to_string(f.updates().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(Handle(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  vec<Expr>(buf, d), Call::Intrinsic);
+                                                  {buf, d}, Call::Intrinsic);
                             Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  vec<Expr>(buf, d), Call::Intrinsic);
+                                                  {buf, d}, Call::Intrinsic);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);
@@ -577,8 +577,8 @@ public:
                 buffer_name += ".0";
             }
             for (int d = 0; d < output.dimensions(); d++) {
-                Expr min = Variable::make(Int(32), buffer_name + ".min." + int_to_string(d));
-                Expr extent = Variable::make(Int(32), buffer_name + ".extent." + int_to_string(d));
+                Expr min = Variable::make(Int(32), buffer_name + ".min." + std::to_string(d));
+                Expr extent = Variable::make(Int(32), buffer_name + ".extent." + std::to_string(d));
 
                 // Respect any output min and extent constraints
                 Expr min_constraint = output.output_buffers()[0].min_constraint(d);
@@ -649,7 +649,7 @@ public:
             if (starts_with(op->name, stages[i].stage_prefix)) {
                 producing = i;
                 f = stages[i].func;
-                stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage);
+                stage_name = stages[i].name + ".s" + std::to_string(stages[i].stage);
                 break;
             }
         }

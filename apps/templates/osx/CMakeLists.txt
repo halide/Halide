@@ -26,9 +26,9 @@ halide_add_osx_app(TARGET test_osx
 halide_add_osx_generator_to_app(TARGET test_osx
   GENERATOR_TARGET example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example
+  GENERATED_FUNCTION example4
   GENERATOR_SOURCES ../tests/example_generator.cpp
-  GENERATOR_ARGS -e html target=host
+  GENERATOR_ARGS target=host channels=4
   )
 
 # Pass the same generator target name with a different GENERATED_FUNCTION and
@@ -38,7 +38,53 @@ halide_add_osx_generator_to_app(TARGET test_osx
 halide_add_osx_generator_to_app(TARGET test_osx
   GENERATOR_TARGET example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example_glsl
+  GENERATED_FUNCTION example4_glsl
   GENERATOR_SOURCES ../tests/example_generator.cpp
-  GENERATOR_ARGS -e html target=host-opengl
+  GENERATOR_ARGS target=host-opengl channels=4
+  )
+
+# Stamp out a few more with different GeneratorParams.
+halide_add_osx_generator_to_app(TARGET test_osx
+  GENERATOR_TARGET example
+  GENERATOR_NAME example
+  GENERATED_FUNCTION example3
+  GENERATOR_SOURCES ../tests/example_generator.cpp
+  GENERATOR_ARGS target=host channels=3
+  )
+halide_add_osx_generator_to_app(TARGET test_osx
+  GENERATOR_TARGET example
+  GENERATOR_NAME example
+  GENERATED_FUNCTION example3_glsl
+  GENERATOR_SOURCES ../tests/example_generator.cpp
+  GENERATOR_ARGS target=host-opengl channels=3
+  )
+
+halide_add_osx_generator_to_app(TARGET test_osx
+  GENERATOR_TARGET example
+  GENERATOR_NAME example
+  GENERATED_FUNCTION example2
+  GENERATOR_SOURCES ../tests/example_generator.cpp
+  GENERATOR_ARGS target=host channels=2
+  )
+halide_add_osx_generator_to_app(TARGET test_osx
+  GENERATOR_TARGET example
+  GENERATOR_NAME example
+  GENERATED_FUNCTION example2_glsl
+  GENERATOR_SOURCES ../tests/example_generator.cpp
+  GENERATOR_ARGS target=host-opengl channels=2
+  )
+
+halide_add_osx_generator_to_app(TARGET test_osx
+  GENERATOR_TARGET example
+  GENERATOR_NAME example
+  GENERATED_FUNCTION example1
+  GENERATOR_SOURCES ../tests/example_generator.cpp
+  GENERATOR_ARGS target=host channels=1
+  )
+halide_add_osx_generator_to_app(TARGET test_osx
+  GENERATOR_TARGET example
+  GENERATOR_NAME example
+  GENERATED_FUNCTION example1_glsl
+  GENERATOR_SOURCES ../tests/example_generator.cpp
+  GENERATOR_ARGS target=host-opengl channels=1
   )

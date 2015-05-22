@@ -519,7 +519,7 @@ class VectorizeLoops : public IRMutator {
                 // Hide all the vectors in scope with a scalar version
                 // in the appropriate lane.
                 for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
-                    string name = iter.name() + ".lane." + int_to_string(i);
+                    string name = iter.name() + ".lane." + std::to_string(i);
                     Expr lane = extract_lane(iter.value(), i);
                     new_stmt = substitute(iter.name(), Variable::make(lane.type(), name), new_stmt);
                     new_stmt = LetStmt::make(name, lane, new_stmt);
@@ -567,7 +567,7 @@ class VectorizeLoops : public IRMutator {
                 // Hide all the vector let values in scope with a scalar version
                 // in the appropriate lane.
                 for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
-                    string name = iter.name() + ".lane." + int_to_string(i);
+                    string name = iter.name() + ".lane." + std::to_string(i);
                     Expr lane = extract_lane(iter.value(), i);
                     new_expr = substitute(iter.name(), Variable::make(lane.type(), name), new_expr);
                     new_expr = Let::make(name, lane, new_expr);
@@ -596,7 +596,7 @@ class VectorizeLoops : public IRMutator {
                                        scalarized(false), scalar_lane(0) {
 
             std::ostringstream oss;
-            widening_suffix = ".x" + int_to_string(replacement.type().width);
+            widening_suffix = ".x" + std::to_string(replacement.type().width);
         }
     };
 

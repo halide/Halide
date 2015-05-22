@@ -1171,7 +1171,7 @@ Stage Func::update(int idx) {
       name() << "\".\n";
     invalidate_cache();
     return Stage(func.update_schedule(idx),
-                 name() + ".update(" + int_to_string(idx) + ")");
+                 name() + ".update(" + std::to_string(idx) + ")");
 }
 
 Func::operator Stage() const {
@@ -1250,7 +1250,7 @@ vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const 
 }
 
 Stage FuncRefVar::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefVar::operator=(const Tuple &e) {
@@ -1401,7 +1401,7 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
 }
 
 Stage FuncRefExpr::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefExpr::operator=(const Tuple &e) {
@@ -1414,7 +1414,7 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
 
     size_t update_stage = func.updates().size() - 1;
     return Stage(func.update_schedule(update_stage),
-                 func.name() + ".update(" + int_to_string(update_stage) + ")");
+                 func.name() + ".update(" + std::to_string(update_stage) + ")");
 }
 
 Stage FuncRefExpr::operator=(const FuncRefExpr &e) {
@@ -1454,25 +1454,25 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
 }
 
 Stage FuncRefExpr::operator+=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) + e;
 }
 
 Stage FuncRefExpr::operator*=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) * e;
 }
 
 Stage FuncRefExpr::operator-=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) - e;
 }
 
 Stage FuncRefExpr::operator/=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) / e;
 }

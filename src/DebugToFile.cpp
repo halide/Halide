@@ -86,7 +86,7 @@ class DebugToFile : public IRMutator {
             Expr call_result_var = Variable::make(Int(32), call_result_name);
             Stmt body = AssertStmt::make(call_result_var == 0,
                                          Call::make(Int(32), "halide_error_debug_to_file_failed",
-                                                    vec<Expr>(f.name(), f.debug_file(), call_result_var),
+                                                    {f.name(), f.debug_file(), call_result_var},
                                                     Call::Extern));
             body = LetStmt::make(call_result_name, call, body);
             body = Block::make(mutate(op->body), body);
@@ -107,7 +107,7 @@ Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Fu
     for (Function out : outputs) {
         std::vector<Range> output_bounds;
         for (int i = 0; i < out.dimensions(); i++) {
-            string dim = int_to_string(i);
+            string dim = std::to_string(i);
             Expr min    = Variable::make(Int(32), out.name() + ".min." + dim);
             Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
             output_bounds.push_back(Range(min, extent));

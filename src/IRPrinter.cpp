@@ -101,10 +101,10 @@ void IRPrinter::test() {
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
     Stmt pipeline = ProducerConsumer::make("buf", for_loop, Stmt(), for_loop2);
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
-                                                         vec<Expr>(string("y"), y, 3), Call::Extern));
+                                                         {string("y"), y, 3}, Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), const_true(), let_stmt);
+    Stmt allocate = Allocate::make("buf", f32, {1023}, const_true(), let_stmt);
 
     ostringstream source;
     source << allocate;
