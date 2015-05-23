@@ -1025,7 +1025,8 @@ public:
                 // The GPU will take texture coordinates at pixel centers during
                 // interpolation, we offset the Halide integer grid by 0.5 so that
                 // these coordinates line up on integer coordinate values.
-                CastVariablesToFloatAndOffset cast_and_offset({for_loops[0]->name, for_loops[1]->name});
+                std::vector<std::string> names = {for_loops[0]->name, for_loops[1]->name};
+                CastVariablesToFloatAndOffset cast_and_offset(names);
                 mutated_body = cast_and_offset.mutate(mutated_body);
 
                 // Store the coordinates into the vertex buffer in interleaved
