@@ -16,6 +16,7 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "AutomaticScheduling.h"
 #include "Module.h"
 
 namespace Halide {
@@ -404,6 +405,11 @@ class Func {
 
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
+
+    /** Whether or not function schedules should be reset before
+     * performing any automatic scheduling. */
+    bool auto_schedule_reset;
+
 
     /** Pointers to current values of the automatically inferred
      * arguments (buffers and scalars) used to realize this
@@ -893,6 +899,11 @@ public:
         return (*this)(collected_args);
     }
     // @}
+
+    /** Apply an automatic schedule to the pipeline with this function
+        as the output. */
+    EXPORT Func &auto_schedule(AutoScheduleStrategy strategy,
+                               const Target &target = get_target_from_environment());
 
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to

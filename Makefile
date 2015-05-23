@@ -210,6 +210,7 @@ SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AllocationBoundsInference.cpp \
+  AutomaticScheduling.cpp \
   BlockFlattening.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -323,6 +324,7 @@ HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
   AllocationBoundsInference.h \
+  AutomaticScheduling.h \
   Argument.h \
   BlockFlattening.h \
   BoundaryConditions.h \

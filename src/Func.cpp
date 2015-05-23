@@ -58,22 +58,26 @@ vector<Argument> add_user_context_arg(vector<Argument> args, const Target& targe
 
 Func::Func(const string &name) : func(unique_name(name)),
                                  random_seed(0),
+                                 auto_schedule_reset(true),
                                  jit_user_context(make_user_context()) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                random_seed(0),
+               auto_schedule_reset(true),
                jit_user_context(make_user_context()) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      random_seed(0),
+                     auto_schedule_reset(true),
                      jit_user_context(make_user_context()) {
     (*this)(_) = e;
 }
 
 Func::Func(Function f) : func(f),
                          random_seed(0),
+                         auto_schedule_reset(true),
                          jit_user_context(make_user_context()) {
 }
 
@@ -857,6 +861,16 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     parallel(tx);
     parallel(ty);
     parallel(tz);
+    return *this;
+}
+
+Func &Func::auto_schedule(AutoScheduleStrategy strategy, const Target &target) {
+    invalidate_cache();
+    apply_automatic_schedule(*this, strategy, auto_schedule_reset, target);
+    // Only reset schedules on the first call to auto_schedule.
+    if (auto_schedule_reset) {
+        auto_schedule_reset = false;
+    }
     return *this;
 }
 
