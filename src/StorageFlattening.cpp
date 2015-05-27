@@ -54,7 +54,7 @@ private:
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
-            string dim = int_to_string(i);
+            string dim = std::to_string(i);
             string stride_name = name + ".stride." + dim;
             string min_name = name + ".min." + dim;
             string stride_name_constrained = stride_name + ".constrained";
@@ -132,14 +132,14 @@ private:
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
             string buffer_name = realize->name;
             if (realize->types.size() > 1) {
-                buffer_name = buffer_name + '.' + int_to_string(idx);
+                buffer_name = buffer_name + '.' + std::to_string(idx);
             }
 
             // Make the names for the mins, extents, and strides
             int dims = realize->bounds.size();
             vector<string> min_name(dims), extent_name(dims), stride_name(dims);
             for (int i = 0; i < dims; i++) {
-                string d = int_to_string(i);
+                string d = std::to_string(i);
                 min_name[i] = buffer_name + ".min." + d;
                 stride_name[i] = buffer_name + ".stride." + d;
                 extent_name[i] = buffer_name + ".extent." + d;
@@ -159,7 +159,7 @@ private:
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, vec(first_elem), Call::Intrinsic);
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
             args[1] = realize->types[idx].bytes();
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];
@@ -216,7 +216,7 @@ private:
 
             values[i].value = value;
             if (values.size() > 1) {
-                values[i].name = provide->name + "." + int_to_string(i);
+                values[i].name = provide->name + "." + std::to_string(i);
             } else {
                 values[i].name = provide->name;
             }
@@ -323,7 +323,7 @@ private:
             string name = call->name;
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
-                name = name + '.' + int_to_string(call->value_index);
+                name = name + '.' + std::to_string(call->value_index);
             }
 
             // Promote the type to be a multiple of 8 bits
