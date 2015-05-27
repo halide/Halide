@@ -64,7 +64,7 @@ private:
                 } else {
                     Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
                 }
-                expr = Call::make(Handle(), Call::address_of, vec(inner), Call::Intrinsic);
+                expr = Call::make(Handle(), Call::address_of, {inner}, Call::Intrinsic);
                 return;
             }
         }
@@ -238,7 +238,7 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
     Parameter output_buf = output.output_buffers()[0];
     internal_assert(output_buf.is_buffer());
     for (int i = 0; i < output.dimensions(); i++) {
-        string d = int_to_string(i);
+        string d = std::to_string(i);
         Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
         Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
         output_region.push_back(Range(min, extent));

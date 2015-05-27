@@ -585,12 +585,12 @@ Expr print(const std::vector<Expr> &args) {
     // Call halide_print.
     Expr print_call =
         Internal::Call::make(Int(32), "halide_print",
-                             Internal::vec<Expr>(combined_string), Internal::Call::Extern);
+                             {combined_string}, Internal::Call::Extern);
 
     // Return the first argument.
     Expr result =
         Internal::Call::make(args[0].type(), Internal::Call::return_second,
-                             Internal::vec<Expr>(print_call, args[0]), Internal::Call::Intrinsic);
+                             {print_call, args[0]}, Internal::Call::Intrinsic);
     return result;
 }
 
@@ -598,7 +598,7 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
     Expr p = print(args);
     return Internal::Call::make(p.type(),
                                 Internal::Call::if_then_else,
-                                Internal::vec<Expr>(condition, p, args[0]),
+                                {condition, p, args[0]},
                                 Internal::Call::Intrinsic);
 }
 

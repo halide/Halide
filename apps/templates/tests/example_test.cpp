@@ -6,12 +6,18 @@
 #include "SimpleAppAPI.h"
 #include "static_image.h"
 
-#include "example.h"
-#include "example_glsl.h"
+#include "example4.h"
+#include "example4_glsl.h"
+#include "example3.h"
+#include "example3_glsl.h"
+#include "example2.h"
+#include "example2_glsl.h"
+#include "example1.h"
+#include "example1_glsl.h"
 
 const int kWidth = 1024;
 const int kHeight = 1024;
-const int kIter = 10;
+const int kIter = 1;
 const int kSeed = 0;
 
 template<typename T>
@@ -31,15 +37,28 @@ static int check(const Image<T> &input, const Image<T> &output) {
     return errors;
 }
 
-static int run_test(void *uc, int channels, bool use_glsl, bool use_interleaved) {
-  std::string name = "Example";
-  name += use_glsl ? "_GLSL" : "_CPU";
-  name += use_interleaved ? "_Chunky" : "_Planar";
+enum Implementation { kCPU = 0, kGLSL = 1 };
+enum Layout { kChunky, kPlanar };
+
+typedef int (*ExampleFunc)(buffer_t* in, buffer_t* out);
+
+static const ExampleFunc exampleFuncs[4][2] = {
+  { example1, example1_glsl },
+  { example2, example2_glsl },
+  { example3, example3_glsl },
+  { example4, example4_glsl },
+};
+
+static int run_test(void *uc, int channels, Implementation imp, Layout layout) {
+  std::string name = "Example_";
+  name += std::to_string(channels);
+  name += (imp == kGLSL) ? "_GLSL" : "_CPU";
+  name += (layout == kChunky) ? "_Chunky" : "_Planar";
   halide_printf(uc, "\n---------------------------\n%s\n", name.c_str());
-  Image<uint8_t> input(kWidth, kHeight, channels, 0, use_interleaved);
-  Image<uint8_t> output(kWidth, kHeight, channels, 0, use_interleaved);
+  Image<uint8_t> input(kWidth, kHeight, channels, 0, (layout == kChunky));
+  Image<uint8_t> output(kWidth, kHeight, channels, 0, (layout == kChunky));
   (void) halide_smooth_buffer_host<uint8_t>(uc, kSeed, input);
-  if (use_glsl) {
+  if (imp == kGLSL) {
     // Call once to ensure OpenGL is inited (we want to time the
     // cost of copy-to-device alone)
     halide_copy_to_device(uc, input, halide_opengl_device_interface());
@@ -53,28 +72,24 @@ static int run_test(void *uc, int channels, bool use_glsl, bool use_interleaved)
       ScopedTimer timer(uc, name + " halide_copy_to_device output");
       halide_copy_to_device(uc, output, halide_opengl_device_interface());
     }
-    // Call once to compile shader, warm up, etc.
-    (void) example_glsl(input, output);
-    {
-      ScopedTimer timer(uc, name, kIter);
-      for (int i = 0; i < kIter; ++i) {
-        (void) example_glsl(input, output);
-      }
-    }
-    {
-      ScopedTimer timer(uc, name + " halide_copy_to_host");
-      halide_copy_to_host(uc, output);
-    }
-  } else {
-    // Call once to warm up cache
-    (void) example(input, output);
-    {
-      ScopedTimer timer(uc, name, kIter);
-      for (int i = 0; i < kIter; ++i) {
-        (void) example(input, output);
-      }
+  }
+  // Call once to compile shader, warm up, etc.
+  ExampleFunc example = exampleFuncs[channels-1][imp];
+  (void) example(input, output);
+  {
+    ScopedTimer timer(uc, name, kIter);
+    for (int i = 0; i < kIter; ++i) {
+      (void) example(input, output);
     }
   }
+  if (imp == kGLSL) {
+    ScopedTimer timer(uc, name + " halide_copy_to_host");
+    halide_copy_to_host(uc, output);
+  }
+  // halide_buffer_display(input);
+  // halide_buffer_print(input);
+  // halide_buffer_display(output);
+  // halide_buffer_print(output);
   int errors = check<uint8_t>(input, output);
   if (errors) {
     halide_errorf(uc, "Test %s had %d errors!\n\n", name.c_str(), errors);
@@ -89,11 +104,14 @@ bool example_test() {
   void *uc = NULL;
 
   int errors = 0;
-  errors += run_test(uc, 4, false, false);
-  errors += run_test(uc, 4, false, true);
-  // GLSL+Planar is a silly combination; the conversion overhead is high.
-  errors += run_test(uc, 4, true, false);
-  errors += run_test(uc, 4, true, true);
+  for (int channels = 1; channels <= 4; channels++) {
+    errors += run_test(uc, channels, kCPU, kChunky);
+    errors += run_test(uc, channels, kCPU, kPlanar);
+    errors += run_test(uc, channels, kGLSL, kChunky);
+    // GLSL+Planar is a silly combination; the conversion overhead is high.
+    // But let's run it anyway, since it should work.
+    errors += run_test(uc, channels, kGLSL, kPlanar);
+  }
 
   // -------- Other stuff
 

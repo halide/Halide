@@ -85,7 +85,7 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
             case 1: rvar_uniquifier = "y"; break;
             case 2: rvar_uniquifier = "z"; break;
             case 3: rvar_uniquifier = "w"; break;
-            default: rvar_uniquifier = int_to_string(i); break;
+            default: rvar_uniquifier = std::to_string(i); break;
         }
         ReductionVariable rv;
         rv.var = name + "." + rvar_uniquifier + "$r";
