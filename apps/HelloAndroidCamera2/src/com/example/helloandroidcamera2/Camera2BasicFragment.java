@@ -179,6 +179,10 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
                 if (image == null) {
                     return;
                 }
+                // It really shouldn't be necessary to configure the surface on every frame, but
+                // it's unclear what the full set of places to do it is.
+                JNIUtils.configureSurface(mSurface,
+                        mImageReader.getWidth(), mImageReader.getHeight());
                 if (mUseEdgeDetector) {
                     Log.d(TAG, "using edge detecctor");
                     JNIUtils.edgeDetect(image, mSurface);
