@@ -316,6 +316,7 @@ set(HEADER_FILES
   Param.h
   Parameter.h
   PartitionLoops.h
+  Pipeline.h
   Profiling.h
   Qualify.h
   RDom.h
@@ -449,6 +450,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
+  Pipeline.cpp
   PrintLoopNest.cpp
   Profiling.cpp
   Qualify.cpp

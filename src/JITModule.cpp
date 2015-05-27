@@ -826,7 +826,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
 
 // TODO: Either remove user_context argument figure out how to make
 // caller provided user context work with JIT. (At present, this
-// cacscaded handler calls cannot work with the right context as
+// cascaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
 // calls another callback wich is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,

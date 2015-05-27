@@ -4,7 +4,7 @@ namespace {
 
 class CleanupOnError : public Halide::Generator<CleanupOnError> {
 public:
-    Func build() override {
+    Func build() {
         Var x;
 
         // This allocation is going to succeed

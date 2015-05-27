@@ -332,12 +332,12 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
-Stmt Pipeline::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
-    internal_assert(produce.defined()) << "Pipeline of undefined\n";
+Stmt ProducerConsumer::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
+    internal_assert(produce.defined()) << "ProducerConsumer of undefined\n";
     // update is allowed to be null
-    internal_assert(consume.defined()) << "Pipeline of undefined\n";
+    internal_assert(consume.defined()) << "ProducerConsumer of undefined\n";
 
-    Pipeline *node = new Pipeline;
+    ProducerConsumer *node = new ProducerConsumer;
     node->name = name;
     node->produce = produce;
     node->update = update;
@@ -538,7 +538,7 @@ template<> void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Cal
 template<> void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
 template<> void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
 template<> void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
-template<> void StmtNode<Pipeline>::accept(IRVisitor *v) const { v->visit((const Pipeline *)this); }
+template<> void StmtNode<ProducerConsumer>::accept(IRVisitor *v) const { v->visit((const ProducerConsumer *)this); }
 template<> void StmtNode<For>::accept(IRVisitor *v) const { v->visit((const For *)this); }
 template<> void StmtNode<Store>::accept(IRVisitor *v) const { v->visit((const Store *)this); }
 template<> void StmtNode<Provide>::accept(IRVisitor *v) const { v->visit((const Provide *)this); }
@@ -578,7 +578,7 @@ template<> IRNodeType ExprNode<Call>::_type_info = {};
 template<> IRNodeType ExprNode<Let>::_type_info = {};
 template<> IRNodeType StmtNode<LetStmt>::_type_info = {};
 template<> IRNodeType StmtNode<AssertStmt>::_type_info = {};
-template<> IRNodeType StmtNode<Pipeline>::_type_info = {};
+template<> IRNodeType StmtNode<ProducerConsumer>::_type_info = {};
 template<> IRNodeType StmtNode<For>::_type_info = {};
 template<> IRNodeType StmtNode<Store>::_type_info = {};
 template<> IRNodeType StmtNode<Provide>::_type_info = {};
