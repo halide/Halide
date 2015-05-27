@@ -38,7 +38,7 @@ class InjectThreadBarriers : public IRMutator {
         in_threads = old_in_threads;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (!in_threads) {
             Stmt produce = mutate(op->produce);
             if (!is_no_op(produce)) {
@@ -55,7 +55,7 @@ class InjectThreadBarriers : public IRMutator {
 
             Stmt consume = mutate(op->consume);
 
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         } else {
             IRMutator::visit(op);
         }
@@ -169,7 +169,7 @@ class NormalizeDimensionality : public IRMutator {
         return s;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         Stmt produce = wrap(op->produce);
         Stmt update;
         if (op->update.defined()) {
@@ -182,7 +182,7 @@ class NormalizeDimensionality : public IRMutator {
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 

@@ -51,7 +51,7 @@ public:
     EXPORT virtual void visit(const Let *);
     EXPORT virtual void visit(const LetStmt *);
     EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const Pipeline *);
+    EXPORT virtual void visit(const ProducerConsumer *);
     EXPORT virtual void visit(const For *);
     EXPORT virtual void visit(const Store *);
     EXPORT virtual void visit(const Provide *);
@@ -114,7 +114,7 @@ public:
     EXPORT virtual void visit(const Let *);
     EXPORT virtual void visit(const LetStmt *);
     EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const Pipeline *);
+    EXPORT virtual void visit(const ProducerConsumer *);
     EXPORT virtual void visit(const For *);
     EXPORT virtual void visit(const Store *);
     EXPORT virtual void visit(const Provide *);

@@ -152,7 +152,7 @@ void IRVisitor::visit(const AssertStmt *op) {
     op->message.accept(this);
 }
 
-void IRVisitor::visit(const Pipeline *op) {
+void IRVisitor::visit(const ProducerConsumer *op) {
     op->produce.accept(this);
     if (op->update.defined()) op->update.accept(this);
     op->consume.accept(this);
@@ -372,7 +372,7 @@ void IRGraphVisitor::visit(const AssertStmt *op) {
     include(op->message);
 }
 
-void IRGraphVisitor::visit(const Pipeline *op) {
+void IRGraphVisitor::visit(const ProducerConsumer *op) {
     include(op->produce);
     if (op->update.defined()) include(op->update);
     include(op->consume);

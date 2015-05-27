@@ -21,7 +21,6 @@ int main(int argc, const char **argv) {
     CodeGen_C::test();
     ir_equality_test();
     bounds_test();
-    Func::test();
     expr_match_test();
     deinterleave_vector_test();
     modulus_remainder_test();

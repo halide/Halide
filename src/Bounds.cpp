@@ -760,7 +760,7 @@ private:
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const Pipeline *) {
+    void visit(const ProducerConsumer *) {
         internal_error << "Bounds of statement\n";
     }
 

@@ -33,6 +33,7 @@ int main(int argc, char **argv) {
 
     blur_y.compile_jit();
     blur_y.infer_input_bounds(AUTOTUNE_N);
+    assert(in_img.get().defined());
     blur_y.realize(AUTOTUNE_N);
 
     printf("Success!\n");
