@@ -10,18 +10,24 @@ $(HALIDE_LIB): $(TOP)
 test_%: test_%.cpp
 	g++ -std=c++11 -I ../../include/ $< -L ../../bin/ -lHalide -o $@ -g
 
-generated_blur_rs.o generated_blur_rs.h generated_copy_rs.o generated_copy_rs.h: test_blur_copy $(HALIDE_LIB)
+generated_blur_rs_float.o generated_blur_rs_float.h generated_copy_rs_float.o generated_copy_rs_float.h \
+generated_blur_rs_uint8.o generated_blur_rs_uint8.h generated_copy_rs_uint8.o generated_copy_rs_uint8.h: test_blur_copy $(HALIDE_LIB)
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-renderscript ./$< "_rs"
 
-generated_blur_arm.o generated_blur_arm.h generated_copy_arm.o generated_copy_arm.h: test_blur_copy $(HALIDE_LIB)
+generated_blur_arm_float.o generated_blur_arm_float.h generated_copy_arm_float.o generated_copy_arm_float.h \
+generated_blur_arm_uint8.o generated_blur_arm_uint8.h generated_copy_arm_uint8.o generated_copy_arm_uint8.h: test_blur_copy $(HALIDE_LIB)
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s ./$< "_arm"
 
 libs/armeabi-v7a/rstest: $(HALIDE_LIB) \
                          jni/rstest.cpp \
-                         generated_copy_rs.o generated_copy_rs.h \
-                         generated_copy_arm.o generated_copy_arm.h \
-                         generated_blur_rs.o generated_blur_rs.h \
-                         generated_blur_arm.o generated_blur_arm.h
+                         generated_copy_rs_float.o generated_copy_rs_float.h \
+                         generated_copy_arm_float.o generated_copy_arm_float.h \
+                         generated_blur_rs_float.o generated_blur_rs_float.h \
+                         generated_blur_arm_float.o generated_blur_arm_float.h \
+                         generated_copy_rs_uint8.o generated_copy_rs_uint8.h \
+                         generated_copy_arm_uint8.o generated_copy_arm_uint8.h \
+                         generated_blur_rs_uint8.o generated_blur_rs_uint8.h \
+                         generated_blur_arm_uint8.o generated_blur_arm_uint8.h
 	ndk-build
 
 deploy: libs/armeabi-v7a/rstest

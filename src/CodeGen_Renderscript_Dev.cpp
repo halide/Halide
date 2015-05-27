@@ -357,27 +357,55 @@ void CodeGen_Renderscript_Dev::visit(const Free *f) {
     debug(2) << "RS: Free on device\n";
 }
 
-llvm::Function *CodeGen_Renderscript_Dev::fetch_GetElement_func(int width) {
+llvm::Function *CodeGen_Renderscript_Dev::fetch_GetElement_func(Type type) {
     // Following symbols correspond to public Android API functions.
     // The symbols will be resolved once the code compiles on the target
     // Android device.
-    std::string func_name = width == 1
-                                ? "_Z20rsGetElementAt_uchar13rs_allocationjjj"
-                                : "_Z21rsGetElementAt_uchar413rs_allocationjj";
+    std::string func_name;
+    debug(2) << "fetch_GetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
+    switch (type.code) {
+        case Type::TypeCode::UInt:
+            switch (type.width) {
+                case 1: func_name = "_Z20rsGetElementAt_uchar13rs_allocationjjj"; break;
+                case 4: func_name = "_Z21rsGetElementAt_uchar413rs_allocationjj"; break;
+            }
+            break;
+        case Type::TypeCode::Float:
+            switch (type.width) {
+                case 1: func_name = "_Z20rsGetElementAt_float13rs_allocationjjj"; break;
+                case 4: func_name = "_Z21rsGetElementAt_float413rs_allocationjj"; break;
+            }
+        default: break;
+    }
+    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";
     llvm::Function *func = module->getFunction(func_name);
-    internal_assert(func) << "Cant' find " << func_name << "function";
+    internal_assert(func) << "Cant' find " << func_name << "function\n";
     return func;
 }
 
-llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(int width) {
+llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(Type type) {
     // Following symbols correspond to public Android API functions.
     // The symbols will be resolved once the code compiles on the target
     // Android device.
-    std::string func_name =
-        width == 1 ? "_Z20rsSetElementAt_uchar13rs_allocationhjjj"
-                   : "_Z21rsSetElementAt_uchar413rs_allocationDv4_hjj";
+    std::string func_name;
+    debug(2) << "fetch_SetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
+    switch (type.code) {
+        case Type::TypeCode::UInt:
+            switch (type.width) {
+                case 1: func_name = "_Z20rsSetElementAt_uchar13rs_allocationhjjj"; break;
+                case 4: func_name = "_Z21rsSetElementAt_uchar413rs_allocationDv4_hjj"; break;
+            }
+            break;
+        case Type::TypeCode::Float:
+            switch (type.width) {
+                case 1: func_name = "_Z20rsSetElementAt_float13rs_allocationfjjj"; break;
+                case 4: func_name = "_Z21rsSetElementAt_float413rs_allocationDv4_fjj"; break;
+            }
+        default: break;
+    }
+    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";
     llvm::Function *func = module->getFunction(func_name);
-    internal_assert(func) << "Cant' find " << func_name << "function";
+    internal_assert(func) << "Cant' find " << func_name << "function\n";
     return func;
 }
 
@@ -444,8 +472,8 @@ void CodeGen_Renderscript_Dev::visit(const Call *op) {
             }
 
             llvm::Function *func = op->name == Call::image_load
-                                       ? fetch_GetElement_func(op->type.width)
-                                       : fetch_SetElement_func(op->type.width);
+                                       ? fetch_GetElement_func(op->type)
+                                       : fetch_SetElement_func(op->type);
             value = builder->CreateCall(func, args);
             return;
         }
