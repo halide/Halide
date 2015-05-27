@@ -231,6 +231,7 @@ private:
         bool is_output = false;
         for (Function f : outputs) {
             is_output |= f.name() == provide->name;
+            if (is_output) break;
         }
 
         Stmt result;

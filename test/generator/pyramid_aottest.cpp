@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    vector<Image<float> > levels(10);
+    vector<Image<float>> levels(10);
 
     for (int l = 0; l < 10; l++) {
         levels[l] = Image<float>(1024 >> l, 1024 >> l);
