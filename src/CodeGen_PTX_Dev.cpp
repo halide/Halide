@@ -293,7 +293,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     TargetOptions Options;
     Options.LessPreciseFPMADOption = true;
     Options.PrintMachineCode = false;
-    Options.NoFramePointerElim = false;
     //Options.NoExcessFPPrecision = false;
     Options.AllowFPOpFusion = FPOpFusion::Fast;
     Options.UnsafeFPMath = true;
@@ -301,6 +300,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.NoNaNsFPMath = false;
     Options.HonorSignDependentRoundingFPMathOption = false;
     #if LLVM_VERSION < 37
+    Options.NoFramePointerElim = false;
     Options.UseSoftFloat = false;
     #endif
     /* if (FloatABIForCalls != FloatABI::Default) */
