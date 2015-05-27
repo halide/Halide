@@ -19,9 +19,9 @@
 
 namespace Halide {
 
-class Argument;
+struct Argument;
 class Func;
-class PipelineContents;
+struct PipelineContents;
 
 namespace Internal {
 class IRMutator;
