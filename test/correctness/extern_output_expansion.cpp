@@ -51,13 +51,6 @@ extern "C" DLLEXPORT int extern_stage(buffer_t *in, buffer_t *out) {
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::JavaScript)) {
-        // TODO: Add JavaScript extern support.
-        printf("Skipping extern_output_expansion test for JavaScript as it uses a C extern function.\n");
-        return 0;
-    }
-
     Func f, g, h;
     Var x;
     f(x) = x*x;

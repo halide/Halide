@@ -100,6 +100,11 @@ int my_trace(void *user_context, const halide_trace_event *ev) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping tracing test for JavaScript as it depends on vectorization and JavaScript currently scalarizes vector operations resulting in individual trace calls per lane.\n");
+        return 0;
+    }
 
     Func f("f"), g("g");
     Var x;

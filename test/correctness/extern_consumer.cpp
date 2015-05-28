@@ -62,13 +62,6 @@ bool check_result() {
 }
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::JavaScript)) {
-        // TODO: Add JavaScript extern support.
-        printf("Skipping extern_consumer test for JavaScript as it uses a C extern function.\n");
-        return 0;
-    }
-
     // Define a pipeline that dumps some squares to a file using an
     // external consumer stage.
     Func source;

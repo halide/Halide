@@ -52,13 +52,6 @@ void check(ImageParam im, int x, int w, int y, int h) {
 }
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::JavaScript)) {
-        // TODO: Add JavaScript extern support.
-        printf("Skipping extern_bounds_inferrence test for JavaScript as it uses a C extern function.\n");
-        return 0;
-    }
-
     Var x, y;
 
     const int W = 30, H = 20;
