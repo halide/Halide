@@ -6,7 +6,7 @@ class EdgeDetect : public Halide::Generator<EdgeDetect> {
 public:
     ImageParam input{ UInt(8), 2, "input" };
 
-    Func build() override {
+    Func build() {
         Var x, y;
 
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
