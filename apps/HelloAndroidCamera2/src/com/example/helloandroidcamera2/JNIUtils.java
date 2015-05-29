@@ -16,16 +16,6 @@ public class JNIUtils {
     }
 
     /**
-     * Configures all buffers in {@link Surface} to the desired width and
-     * height. Note that this only configures the geometry of the buffers, which
-     * does <b>not</b> have to match that of the underlying window. The hardware
-     * scaler will automatically scale the buffer to the window.
-     */
-    public static void configureSurface(Surface surface, int width, int height) {
-        configureSurfaceNative(surface, width, height);
-    }
-
-    /**
      * Use native code to copy the contents of src to dst. src must have format
      * YUV_420_888, dst must be YV12 and have been configured with
      * {@code configureSurface()}.
