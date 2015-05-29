@@ -8,26 +8,32 @@ public:
 
     Func build() {
         Var x, y;
-
+        
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
 
+        // Upcast to 16-bit
+        Func in16;
+        in16(x, y) = cast<int16_t>(clamped(x, y));
+        
         // Gradients in x and y.
-        Func gx("gx");
-        Func gy("gy");
-        gx(x, y) = (clamped(x + 1, y) - clamped(x - 1, y)) / 2;
-        gy(x, y) = (clamped(x, y + 1) - clamped(x, y - 1)) / 2;
+        Func gx;
+        Func gy;
+        gx(x, y) = (in16(x + 1, y) - in16(x - 1, y)) / 2;
+        gy(x, y) = (in16(x, y + 1) - in16(x, y - 1)) / 2;
 
-        Func result("result");
+        // Gradient magnitude.
+        Func grad_mag;
+        grad_mag(x, y) = (gx(x, y) * gx(x, y) + gy(x, y) * gy(x, y));
 
-        result(x, y) = gx(x, y) * gx(x, y) + gy(x, y) * gy(x, y) + 128;
-
-        // CPU schedule:
-        //   Parallelize over scan lines, 4 scanlines per task.
-        //   Independently, vectorize in x.
+        // Draw the result
+        Func result;
+        result(x, y) = cast<uint8_t>(clamp(grad_mag(x, y), 0, 255));
+        
         result
-            .parallel(y, 4)
-            .vectorize(x, natural_vector_size(UInt(8)));
-
+            .compute_root()
+            .vectorize(x, 8)
+            .parallel(y, 8);
+        
         return result;
     }
 };
