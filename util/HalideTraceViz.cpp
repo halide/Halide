@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <string.h>
 
+#include "inconsolata.h"
+
 using std::map;
 using std::vector;
 using std::string;
@@ -125,6 +127,12 @@ private:
     }
 };
 
+// A struct specifying a text label that will appear on the screen at some point.
+struct Label {
+    const char *text;
+    int x, y;
+};
+
 // A struct specifying how a single Func will get visualized.
 struct FuncDrawInfo {
     int zoom;
@@ -135,6 +143,8 @@ struct FuncDrawInfo {
     int y_stride[4];
     int color_dim;
     float min, max;
+    vector<Label> labels;
+    int first_draw_time;
 
     FuncDrawInfo() {
         memset(this, 0, sizeof(FuncDrawInfo));
@@ -154,11 +164,51 @@ struct FuncDrawInfo {
                 name,
                 min, max,
                 color_dim,
-                dims, zoom, cost, x, y,
+                dims,
+                zoom, cost, x, y,
                 x_stride[0], x_stride[1], x_stride[2], x_stride[3],
                 y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
     }
 };
+
+// Composite a single pixel of b over a single pixel of a, writing the result into dst
+void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
+    uint8_t alpha = b[3];
+    dst[0] = (alpha * b[0] + (256 - alpha) * a[0]) >> 8;
+    dst[1] = (alpha * b[1] + (256 - alpha) * a[1]) >> 8;
+    dst[2] = (alpha * b[2] + (256 - alpha) * a[2]) >> 8;
+    dst[3] = 0xff;
+}
+
+#define FONT_W 12
+#define FONT_H 32
+void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
+    // The font array contains 96 characters of FONT_W * FONT_H letters.
+    assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
+
+    // Drop any alpha component of color
+    color &= 0xffffff;
+
+    for (int c = 0; ; c++) {
+        int chr = text[c];
+        if (chr == 0) return;
+
+        // We only handle a subset of ascii
+        if (chr < 32 || chr > 127) chr = 32;
+        chr -= 32;
+
+        uint8_t *font_ptr = inconsolata_raw + chr * (FONT_W * FONT_H);
+        for (int fy = 0; fy < FONT_H; fy++) {
+            for (int fx = 0; fx < FONT_W; fx++) {
+                int px = x + FONT_W*c + fx;
+                int py = y - FONT_H + fy + 1;
+                if (px < 0 || px >= dst_width ||
+                    py < 0 || py >= dst_height) continue;
+                dst[py * dst_width + px] = (font_ptr[fy * FONT_W + fx] << 24) | color;
+            }
+        }
+    }
+}
 
 void usage() {
     fprintf(stderr,
@@ -183,6 +233,8 @@ void usage() {
             "\n"
             " -t timestep: How many Halide computations should be covered by each\n"
             "    frame. Defaults to 10000.\n"
+            " -l func label x y: When func is first touched, the label appears at\n"
+            "    the given coordinates.\n"
             "\n"
             " For each Func you want to visualize, also specify:\n"
             " -f func_name min_value max_value color_dim zoom cost x y strides\n"
@@ -212,7 +264,9 @@ void usage() {
             "    specifies that the Func has three dimensions where the\n"
             "    first one maps to screen-space x coordinates, the second\n"
             "    one maps to screen-space y coordinates, and the third one\n"
-            "    does not affect screen-space coordinates.\n");
+            "    does not affect screen-space coordinates.\n"
+        );
+
 }
 
 int main(int argc, char **argv) {
@@ -236,12 +290,12 @@ int main(int argc, char **argv) {
             frame_width = atoi(argv[++i]);
             frame_height = atoi(argv[++i]);
         } else if (next == "-f") {
-            if (i + 3 >= argc) {
+            if (i + 8 >= argc) {
                 usage();
                 return -1;
             }
             char *func = argv[++i];
-            FuncDrawInfo fdi;
+            FuncDrawInfo &fdi = draw_info[func];
             fdi.min = atof(argv[++i]);
             fdi.max = atof(argv[++i]);
             fdi.color_dim = atoi(argv[++i]);
@@ -256,7 +310,20 @@ int main(int argc, char **argv) {
             }
             fdi.dims = d;
             fdi.dump(func);
-            draw_info[func] = fdi;
+
+        } else if (next == "-l") {
+            if (i + 4 >= argc) {
+                usage();
+                return -1;
+            }
+            char *func = argv[++i];
+            char *text = argv[++i];
+            int x = atoi(argv[++i]);
+            int y = atoi(argv[++i]);
+            Label l = {text, x, y};
+            fprintf(stderr, "Adding label %s to func %s\n",
+                    text, func);
+            draw_info[func].labels.push_back(l);
         } else if (next == "-t") {
             if (i + 1 >= argc) {
                 usage();
@@ -281,13 +348,16 @@ int main(int argc, char **argv) {
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
 
-    // There are two layers - image data, and an animation on top of
-    // it. These layers get composited.
+    // There are three layers - image data, an animation on top of
+    // it, and text labels. These layers get composited.
     uint32_t *image = new uint32_t[frame_width * frame_height];
     memset(image, 0, 4 * frame_width * frame_height);
 
     uint32_t *anim = new uint32_t[frame_width * frame_height];
     memset(anim, 0, 4 * frame_width * frame_height);
+
+    uint32_t *text = new uint32_t[frame_width * frame_height];
+    memset(text, 0, 4 * frame_width * frame_height);
 
     uint32_t *blend = new uint32_t[frame_width * frame_height];
     memset(blend, 0, 4 * frame_width * frame_height);
@@ -304,17 +374,14 @@ int main(int argc, char **argv) {
         }
 
         if (halide_clock >= video_clock) {
-            // Composite anim over image
+            // Composite text over anim over image
             for (int i = 0; i < frame_width * frame_height; i++) {
-                uint8_t *anim_px = (uint8_t *)(anim + i);
+                uint8_t *anim_px  = (uint8_t *)(anim + i);
                 uint8_t *image_px = (uint8_t *)(image + i);
-
-                uint8_t alpha = anim_px[3];
-                uint8_t r = (alpha * anim_px[0] + (256 - alpha) * image_px[0]) >> 8;
-                uint8_t g = (alpha * anim_px[1] + (256 - alpha) * image_px[1]) >> 8;
-                uint8_t b = (alpha * anim_px[2] + (256 - alpha) * image_px[2]) >> 8;
-
-                blend[i] = 0xff000000 | (b << 16) | (g << 8) | r;
+                uint8_t *text_px  = (uint8_t *)(text + i);
+                uint8_t *blend_px = (uint8_t *)(blend + i);
+                composite(image_px, anim_px, blend_px);
+                composite(blend_px, text_px, blend_px);
             }
 
             // Dump the frame
@@ -349,12 +416,27 @@ int main(int argc, char **argv) {
         }
 
         // Draw the event
-        const FuncDrawInfo &di = draw_info[p.name];
+        FuncDrawInfo &di = draw_info[p.name];
+
+        if (di.first_draw_time == 0) {
+            di.first_draw_time = halide_clock;
+        }
 
         switch (p.event) {
         case 0: // load
         case 1: // store
         {
+            int frames_since_first_draw = (halide_clock - di.first_draw_time) / timestep;
+            if (frames_since_first_draw <= 10) {
+                uint32_t color = frames_since_first_draw * 26;
+                if (color > 255) color = 255;
+                color *= 0x10101;
+                for (size_t i = 0; i < di.labels.size(); i++) {
+                    const Label &label = di.labels[i];
+                    draw_text(label.text, label.x, label.y, color, text, frame_width, frame_height);
+                }
+            }
+
             if (p.event == 1) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
