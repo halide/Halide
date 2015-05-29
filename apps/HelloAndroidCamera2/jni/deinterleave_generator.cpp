@@ -6,7 +6,7 @@ class Deinterleave : public Halide::Generator<Deinterleave> {
 public:
     ImageParam uvInterleaved{ UInt(8), 2, "uvInterleaved" };
 
-    Func build() override {
+    Func build() {
         Var x, y;
 
         Func result("result");
