@@ -694,8 +694,8 @@ Realization Pipeline::realize(int x_size, int y_size,
     return realize({x_size, y_size}, target);
 }
 
-Realization realize(int x_size,
-                    const Target &target) {
+Realization Pipeline::realize(int x_size,
+                              const Target &target) {
     return realize({x_size}, target);
 }
 
