@@ -9,7 +9,7 @@ public:
     Param<int> width{ "width" };
     Param<int> height{ "height" };
 
-    Func build() override {
+    Func build() {
         // We pass in parameters to tell us where the boundary
         // condition kicks in. This is decoupled from the size of the
         // input tile.

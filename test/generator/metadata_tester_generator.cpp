@@ -24,7 +24,7 @@ public:
     Param<double> f64{ "f64", 64.25f, -6400.25f, 6400.25f };
     Param<void *> h{ "h", NULL };
 
-    Func build() override {
+    Func build() {
         input = ImageParam(input_type, input.dimensions(), input.name());
 
         Var x, y, c;

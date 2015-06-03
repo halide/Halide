@@ -84,8 +84,6 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
             // resolution of the ImageReader instead and use the hardware scaler to interpolate).
             // (If you don't set it here, funny things happen when if you sleep the device).
             holder.setFormat(ImageFormat.YV12);
-            JNIUtils.configureSurface(holder.getSurface(),
-                    mImageReader.getWidth(), mImageReader.getHeight());
             mSurface = holder.getSurface();
             openCamera();
         }
@@ -180,10 +178,10 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
                     return;
                 }
                 if (mUseEdgeDetector) {
-                    Log.d(TAG, "using edge detecctor");
+                    //Log.d(TAG, "using edge detector");
                     JNIUtils.edgeDetect(image, mSurface);
                 } else {
-                    Log.d(TAG, "blitting");
+                    //Log.d(TAG, "blitting");
                     JNIUtils.blit(image, mSurface);
                 }
                 image.close();

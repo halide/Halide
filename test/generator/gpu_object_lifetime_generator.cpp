@@ -4,7 +4,7 @@ namespace {
 
 class GpuObjectLifetime : public Halide::Generator<GpuObjectLifetime> {
 public:
-    Func build() override {
+    Func build() {
         Var x;
 
         Func f;

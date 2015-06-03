@@ -594,11 +594,13 @@ bool function_is_used_in_stmt(Function f, Stmt s) {
 class InjectRealization : public IRMutator {
 public:
     const Function &func;
-    bool found_store_level, found_compute_level;
-    bool inject_asserts;
+    bool is_output, found_store_level, found_compute_level, inject_asserts;
 
-    InjectRealization(const Function &f, bool asserts) :
-        func(f), found_store_level(false), found_compute_level(false), inject_asserts(asserts) {}
+    InjectRealization(const Function &f, bool o, bool asserts) :
+        func(f), is_output(o),
+        found_store_level(false), found_compute_level(false),
+        inject_asserts(asserts) {}
+
 private:
 
     string producing;
@@ -606,20 +608,22 @@ private:
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func);
 
-        return Pipeline::make(func.name(), realization.first, realization.second, s);
+        return ProducerConsumer::make(func.name(), realization.first, realization.second, s);
     }
 
     Stmt build_realize(Stmt s) {
-        Region bounds;
-        string name = func.name();
-        for (int i = 0; i < func.dimensions(); i++) {
-            string arg = func.args()[i];
-            Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-            Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
-            bounds.push_back(Range(min, extent));
-        }
+        if (!is_output) {
+            Region bounds;
+            string name = func.name();
+            for (int i = 0; i < func.dimensions(); i++) {
+                string arg = func.args()[i];
+                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
+                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                bounds.push_back(Range(min, extent));
+            }
 
-        s = Realize::make(name, func.output_types(), bounds, const_true(), s);
+            s = Realize::make(name, func.output_types(), bounds, const_true(), s);
+        }
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
@@ -632,7 +636,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         string old = producing;
         producing = op->name;
         Stmt produce = mutate(op->produce);
@@ -648,7 +652,7 @@ private:
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 
@@ -683,7 +687,7 @@ private:
 
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
-            if (function_is_used_in_stmt(func, body)) {
+            if (function_is_used_in_stmt(func, body) || is_output) {
                 body = build_pipeline(body);
             }
             found_compute_level = true;
@@ -694,7 +698,7 @@ private:
             internal_assert(found_compute_level)
                 << "The compute loop level was not found within the store loop level!\n";
 
-            if (function_is_used_in_stmt(func, body)) {
+            if (function_is_used_in_stmt(func, body) || is_output) {
                 body = build_realize(body);
             }
 
@@ -733,21 +737,6 @@ private:
         }
     }
 };
-
-// Create the loop nest for the output function
-Stmt create_initial_loop_nest(Function f, bool inject_asserts) {
-    // Generate initial loop nest
-    pair<Stmt, Stmt> r = build_production(f);
-    Stmt s = r.first;
-    // This must be in a pipeline so that bounds inference understands the update step
-    s = Pipeline::make(f.name(), r.first, r.second, Evaluate::make(0));
-    if (inject_asserts) {
-        return inject_explicit_bounds(s, f);
-    } else {
-        return s;
-    }
-}
-
 
 
 class ComputeLegalSchedules : public IRVisitor {
@@ -884,19 +873,21 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
-    // Inlining is always allowed
-    if (store_at.is_inline() && compute_at.is_inline()) {
-        return;
-    }
 
+    // Outputs must be compute_root and store_root. They're really
+    // store_in_user_code, but store_root is close enough.
     if (is_output) {
-        if ((store_at.is_inline() || store_at.is_root()) &&
-            (compute_at.is_inline() || compute_at.is_root())) {
+        if (store_at.is_root() && compute_at.is_root()) {
             return;
         } else {
             user_error << "Function " << f.name() << " is the output, so must"
                        << " be scheduled compute_root (which is the default).\n";
         }
+    }
+
+    // Inlining is always allowed
+    if (store_at.is_inline() && compute_at.is_inline()) {
+        return;
     }
 
     // Otherwise inspect the uses to see what's ok.
@@ -1012,24 +1003,23 @@ public:
     }
 };
 
-Stmt schedule_functions(Function output,
+Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
                         bool inject_asserts) {
 
-    Stmt s = create_initial_loop_nest(output, inject_asserts);
-
-    // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
-    s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, s);
+    Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
-        validate_schedule(f, s, i == order.size());
+        bool is_output = false;
+        for (Function o : outputs) {
+            is_output |= o.same_as(f);
+        }
 
-        // We don't actually want to schedule the output function here.
-        if (i == order.size()) continue;
+        validate_schedule(f, s, is_output);
 
         if (f.has_pure_definition() &&
             !f.has_update_definition() &&
@@ -1038,7 +1028,7 @@ Stmt schedule_functions(Function output,
             s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
-            InjectRealization injector(f, inject_asserts);
+            InjectRealization injector(f, is_output, inject_asserts);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }

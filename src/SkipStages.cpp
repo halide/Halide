@@ -100,7 +100,7 @@ private:
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         in_pipeline.push(op->name, 0);
         if (op->name != buffer) {
             op->produce.accept(this);
@@ -213,7 +213,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         // If the predicate at this stage depends on something
         // vectorized we should bail out.
         if (op->name == buffer) {
@@ -222,11 +222,11 @@ private:
                 Expr predicate_var = Variable::make(Bool(), buffer + ".needed");
                 Stmt produce = IfThenElse::make(predicate_var, op->produce);
                 Stmt update = IfThenElse::make(predicate_var, op->update);
-                stmt = Pipeline::make(op->name, produce, update, op->consume);
+                stmt = ProducerConsumer::make(op->name, produce, update, op->consume);
                 stmt = LetStmt::make(buffer + ".needed", predicate, stmt);
             } else {
                 Stmt produce = IfThenElse::make(predicate, op->produce);
-                stmt = Pipeline::make(op->name, produce, Stmt(), op->consume);
+                stmt = ProducerConsumer::make(op->name, produce, Stmt(), op->consume);
             }
 
         } else {
@@ -375,7 +375,7 @@ class MightBeSkippable : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (op->name == func) {
             bool old_result = result;
             result = true;
