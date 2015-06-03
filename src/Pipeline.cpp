@@ -649,9 +649,6 @@ void Pipeline::set_custom_print(void (*cust_print)(void *, const char *)) {
 
 void Pipeline::set_jit_externs(const NamedJITExterns &externs) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    // TODO: Is it worth testing to see if the externs being set are exactly the same as
-    // the ones already in place to avoid invalidating the cache or should it be the callers
-    // responsibility to not do that?
     contents.ptr->jit_externs = externs;
     invalidate_cache();
 }
