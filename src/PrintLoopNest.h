@@ -7,6 +7,7 @@
  */
 
 #include <string>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -14,9 +15,9 @@ namespace Internal {
 class Function;
 
 /** Emit some simple pseudocode that shows the structure of the loop
- * nest specified by this function's schedule, and the schedules of
- * the functions it calls. */
-std::string print_loop_nest(const Function &f);
+ * nest specified by this pipeline's schedule, and the schedules of
+ * the functions it uses. */
+std::string print_loop_nest(const std::vector<Function> &outputs);
 
 }
 }

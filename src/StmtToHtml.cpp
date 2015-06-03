@@ -333,7 +333,7 @@ private:
         print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         scope.push(op->name, unique_id());
         stream << open_div("Produce");
         int produce_id = unique_id();

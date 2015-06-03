@@ -679,7 +679,7 @@ protected:
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
     virtual void visit(const AssertStmt *);
-    virtual void visit(const Pipeline *);
+    virtual void visit(const ProducerConsumer *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
     virtual void visit(const Provide *);
@@ -824,7 +824,7 @@ void IRFilter::visit(const AssertStmt *op) {
     mutate_operator(this, op, op->condition, op->message, &stmt);
 }
 
-void IRFilter::visit(const Pipeline *op) {
+void IRFilter::visit(const ProducerConsumer *op) {
     mutate_operator(this, op, op->produce, op->update, op->consume, &stmt);
 }
 
@@ -1025,7 +1025,8 @@ public:
                 // The GPU will take texture coordinates at pixel centers during
                 // interpolation, we offset the Halide integer grid by 0.5 so that
                 // these coordinates line up on integer coordinate values.
-                CastVariablesToFloatAndOffset cast_and_offset({for_loops[0]->name, for_loops[1]->name});
+                std::vector<std::string> names = {for_loops[0]->name, for_loops[1]->name};
+                CastVariablesToFloatAndOffset cast_and_offset(names);
                 mutated_body = cast_and_offset.mutate(mutated_body);
 
                 // Store the coordinates into the vertex buffer in interleaved

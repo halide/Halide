@@ -56,6 +56,7 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha) {
 }
 
 class IirBlur : public Generator<IirBlur> {
+public:
     // This is the input image: a 3D (color) image with 32 bit float
     // pixels.
     ImageParam input{Float(32), 3, "input"};
@@ -63,7 +64,7 @@ class IirBlur : public Generator<IirBlur> {
     // filter.
     Param<float> alpha{"alpha"};
 
-    Func build() override {
+    Func build() {
         Expr width = input.width();
         Expr height = input.height();
 

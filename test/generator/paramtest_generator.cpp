@@ -14,7 +14,7 @@ public:
     Param<float> float_arg{ "float_arg", 1.0f, 0.0f, 100.0f };
     Param<int32_t> int_arg{ "int_arg", 1 };
 
-    Func build() override {
+    Func build() {
         input = ImageParam(input_type, input.dimensions(), input.name());
 
         Var x, y, c;

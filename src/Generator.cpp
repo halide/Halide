@@ -271,7 +271,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const EmitOptions &options) {
     build_params();
 
-    Func func = build();
+    Pipeline pipeline = build_pipeline();
 
     std::vector<Halide::Argument> inputs = get_filter_arguments();
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
@@ -295,29 +295,33 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
             // and passed to LLVM, for both the pnacl and ordinary archs
             output_files.bitcode_name = base_path + ".bc";
         }
-        func.compile_to(output_files, inputs, function_name, target);
+        pipeline.compile_to(output_files, inputs, function_name, target);
     }
     if (options.emit_h) {
-        func.compile_to_header(base_path + ".h", inputs, function_name, target);
+        pipeline.compile_to_header(base_path + ".h", inputs, function_name, target);
     }
     if (options.emit_cpp) {
-        func.compile_to_c(base_path + ".cpp", inputs, function_name, target);
+        pipeline.compile_to_c(base_path + ".cpp", inputs, function_name, target);
     }
     if (options.emit_stmt) {
-        func.compile_to_lowered_stmt(base_path + ".stmt", inputs, Halide::Text, target);
+        pipeline.compile_to_lowered_stmt(base_path + ".stmt", inputs, Halide::Text, target);
     }
     if (options.emit_stmt_html) {
-        func.compile_to_lowered_stmt(base_path + ".html", inputs, Halide::HTML, target);
+        pipeline.compile_to_lowered_stmt(base_path + ".html", inputs, Halide::HTML, target);
     }
 }
 
 Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
                                 std::string function_name){
-    Func f = build();
+    Pipeline p = build_pipeline();
+    user_assert(p.outputs().size() == 1) \
+        << "Can only call_extern Pipelines with a single output Func\n";
+    Func f = p.outputs()[0];
     Func f_extern;
     if (function_name.empty()) {
         function_name = generator_name();
-        user_assert(!function_name.empty()) << "call_extern: generator_name is empty";
+        user_assert(!function_name.empty())
+            << "call_extern: generator_name is empty\n";
     }
     f_extern.define_extern(function_name, function_arguments, f.output_types(), f.dimensions());
     return f_extern;

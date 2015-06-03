@@ -58,27 +58,35 @@ using std::map;
 using std::pair;
 using std::make_pair;
 
-Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(const vector<Function> &outputs, const Target &t, const vector<IRMutator *> &custom_passes) {
+
     // Compute an environment
-    map<string, Function> env = find_transitive_calls(f);
+    map<string, Function> env;
+    for (Function f : outputs) {
+        map<string, Function> more_funcs = find_transitive_calls(f);
+        env.insert(more_funcs.begin(), more_funcs.end());
+    }
 
     // Compute a realization order
-    vector<string> order = realization_order(f, env);
+    vector<string> order = realization_order(outputs, env);
+
+    // A name to indentify the pipeline for profiling and memoization
+    string pipeline_name = outputs[0].name();
 
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(f, order, env, !t.has_feature(Target::NoAsserts));
+    Stmt s = schedule_functions(outputs, order, env, !t.has_feature(Target::NoAsserts));
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     debug(1) << "Injecting memoization...\n";
-    s = inject_memoization(s, env, f.name());
+    s = inject_memoization(s, env, pipeline_name);
     debug(2) << "Lowering after injecting memoization:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s, env, f);
+    s = inject_tracing(s, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Injecting profiling...\n";
-    s = inject_profiling(s, f.name());
+    s = inject_profiling(s, pipeline_name);
     debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
@@ -93,14 +101,14 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, f, t, order, env, func_bounds);
+    s = add_image_checks(s, outputs, t, order, env, func_bounds);
     debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, order, env, func_bounds);
+    s = bounds_inference(s, outputs, order, env, func_bounds);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
@@ -127,7 +135,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
-    s = debug_to_file(s, order.back(), env);
+    s = debug_to_file(s, outputs, env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
@@ -145,7 +153,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     }
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, order.back(), env);
+    s = storage_flattening(s, outputs, env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {

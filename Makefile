@@ -275,6 +275,7 @@ SOURCE_FILES = \
   Param.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
+  Pipeline.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
   Qualify.cpp \
@@ -394,6 +395,7 @@ HEADER_FILES = \
   Parameter.h \
   Param.h \
   PartitionLoops.h \
+  Pipeline.h \
   Profiling.h \
   Qualify.h \
   Random.h \
