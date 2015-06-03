@@ -76,6 +76,10 @@ struct PipelineContents {
     /** The inferred arguments. */
     vector<InferredArgument> inferred_args;
 
+    /** List of C funtions and Funcs to satisfy HalideExtern* and
+     * define_extern calls. */
+    NamedJITExterns jit_externs;
+
     PipelineContents() :
         module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, Handle(), 0);
@@ -566,7 +570,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // If we're re-jitting for the same target, we can just keep the
     // old jit module.
     if (contents.ptr->jit_target == target &&
-        contents.ptr->jit_module.defined()) {
+        contents.ptr->jit_module.compiled()) {
         debug(2) << "Reusing old jit module compiled for :\n" << contents.ptr->jit_target.to_string() << "\n";
         return contents.ptr->jit_module.main_function();
     }
@@ -595,8 +599,10 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // Make sure we're not embedding any images
     internal_assert(module.buffers.empty());
 
+    std::map<std::string, JITExtern> lowered_externs = contents.ptr->jit_externs;
     // Compile to jit module
-    JITModule jit_module(module, module.functions.back());
+    JITModule jit_module(module, module.functions.back(),
+                         make_externs_jit_module(target_arg, lowered_externs));
 
     if (debug::debug_level >= 3) {
         compile_module_to_native(module, name + ".bc", name + ".s");
@@ -639,6 +645,20 @@ void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event
 void Pipeline::set_custom_print(void (*cust_print)(void *, const char *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents.ptr->jit_handlers.custom_print = cust_print;
+}
+
+void Pipeline::set_jit_externs(const NamedJITExterns &externs) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    // TODO: Is it worth testing to see if the externs being set are exactly the same as
+    // the ones already in place to avoid invalidating the cache or should it be the callers
+    // responsibility to not do that?
+    contents.ptr->jit_externs = externs;
+    invalidate_cache();
+}
+
+const NamedJITExterns &Pipeline::get_jit_externs() {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    return contents.ptr->jit_externs;
 }
 
 void Pipeline::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
@@ -883,6 +903,48 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     return arg_values;
 }
 
+std::vector<JITModule>
+Pipeline::make_externs_jit_module(const Target &target,
+                                  NamedJITExterns &externs_in_out) {
+    std::vector<JITModule> result;
+
+    // Externs that are Funcs get their own JITModule. All standalone functions are
+    // held in a single JITModule at the end of the list (if there are any).
+    JITModule free_standing_jit_externs;
+    for (NamedJITExterns::iterator iter = externs_in_out.begin();
+         iter != externs_in_out.end();
+         iter++) {
+        JITExtern &jit_extern(iter->second);
+        if (iter->second.pipeline.defined()) {
+            PipelineContents &pipeline_contents(*jit_extern.pipeline.contents.ptr);
+
+            // Ensure that the pipeline is compiled.
+            jit_extern.pipeline.compile_jit(target);
+            
+            free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
+            free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
+            iter->second.c_function = pipeline_contents.jit_module.entrypoint_symbol().address;
+            iter->second.signature.is_void_return = false;
+            iter->second.signature.ret_type = Int(32);
+            for (const InferredArgument &arg : pipeline_contents.inferred_args) {
+                 ScalarOrBufferT arg_type_info;
+                 arg_type_info.is_buffer = arg.arg.is_buffer();
+                 if (!arg_type_info.is_buffer) {
+                     arg_type_info.scalar_type = arg.arg.type;
+                 }
+                 iter->second.signature.arg_types.push_back(arg_type_info);
+            }
+            iter->second.pipeline = Pipeline();
+        } else {
+            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern.signature, jit_extern.c_function);
+        }
+    }
+    if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
+        result.push_back(free_standing_jit_externs);
+    }
+    return result;
+}
+
 void Pipeline::realize(Realization dst, const Target &t) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
@@ -892,7 +954,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
     // If target is unspecified...
     if (target.os == Target::OSUnknown) {
         // If we've already jit-compiled for a specific target, use that.
-        if (contents.ptr->jit_module.defined()) {
+        if (contents.ptr->jit_module.compiled()) {
             target = contents.ptr->jit_target;
         } else {
             // Otherwise get the target from the environment
@@ -1052,6 +1114,14 @@ void Pipeline::invalidate_cache() {
     if (defined()) {
         contents.ptr->invalidate_cache();
     }
+}
+
+JITExtern::JITExtern(Pipeline pipeline)
+    : pipeline(pipeline), c_function(NULL) {
+}
+
+JITExtern::JITExtern(Func func)
+    : pipeline(func), c_function(NULL) {
 }
 
 }  // namespace Halide
