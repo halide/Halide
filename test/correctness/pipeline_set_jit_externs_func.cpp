@@ -27,7 +27,9 @@ int main(int argc, char **argv) {
     Func f;
     f.define_extern("extern_func", args, Float(32), 2);
 
-    Image<float> imf = f.realize(32, 32, get_jit_target_from_environment(), { { "extern_func", monitor }});
+    Pipeline p(f);
+    p.set_jit_externs({ { "extern_func", monitor } });
+    Image<float> imf = p.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
@@ -42,7 +44,7 @@ int main(int argc, char **argv) {
     }
 
     if (call_counter != 32*32) {
-        printf("In extern_func_passed_to_realize, my_func was called %d times instead of %d\n", call_counter, 32*32);
+        printf("In pipeline_set_jit_externs_func, my_func was called %d times instead of %d\n", call_counter, 32*32);
         return -1;
     }
 
