@@ -31,7 +31,7 @@ struct ScalarOrBufferT {
 };
 
 struct ExternSignature {
-    bool is_void_return; // could use ret_type.bits == 0...
+    bool is_void_return;
     Type ret_type;
     std::vector<ScalarOrBufferT> arg_types;
 
@@ -114,7 +114,7 @@ struct JITModule {
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
     EXPORT void add_extern_for_export(const std::string &name,
-				      const ExternSignature &signature, void *address);
+                                      const ExternSignature &signature, void *address);
 
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */
