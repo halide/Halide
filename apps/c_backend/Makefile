@@ -16,7 +16,7 @@ pipeline_native.o: pipeline
 	./pipeline
 
 run: run.cpp pipeline_native.h pipeline_c.c
-	$(CXX) $(CXXFLAGS) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run
+	$(CXX) $(CXXFLAGS) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -ldl -o run
 
 test: run
 	./run
