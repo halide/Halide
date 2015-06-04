@@ -41,7 +41,7 @@ WEAK void load_opencl(void *user_context) {
     for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
         lib = halide_load_library(lib_names[i]);
         if (lib) {
-            debug(user_context) << "Loaded OpenCL library: " << lib_names[i];
+            debug(user_context) << "    Loaded OpenCL library: " << lib_names[i] << "\n";
             break;
         }
     }
