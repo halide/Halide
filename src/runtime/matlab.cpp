@@ -433,6 +433,17 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
     }
 
     result = pipeline(args);
+
+    // Copy any GPU resident output buffers back to the CPU before returning.
+    for (int i = 0; i < nrhs; i++) {
+        const halide_filter_argument_t *arg_metadata = &metadata->arguments[i];
+
+        if (arg_metadata->kind == halide_argument_kind_output_buffer) {
+            buffer_t *buf = (buffer_t *)args[i];
+            halide_copy_to_host(user_context, buf);
+        }
+    }
+
     return result;
 }
 
