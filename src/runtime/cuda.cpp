@@ -8,7 +8,7 @@
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
 
-// Define the function poiners for the CUDA API.
+// Define the function pointers for the CUDA API.
 #define CUDA_FN(ret, fn, args) WEAK ret (CUDAAPI *fn)args;
 #define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret (CUDAAPI *fn)args;
 #define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret (CUDAAPI *fn)args;

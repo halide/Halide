@@ -89,10 +89,9 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
 
 // Search the current process for a symbol with the given name.
 WEAK void *halide_get_symbol(const char *name);
-// Platform specific implementations of dlopen/dlsym/dlclose.
+// Platform specific implementations of dlopen/dlsym.
 WEAK void *halide_load_library(const char *name);
 WEAK void *halide_get_library_symbol(void *lib, const char *name);
-WEAK void halide_free_library(void *lib);
 
 #ifdef DEBUG_RUNTIME
 WEAK int halide_start_clock(void *user_context);
