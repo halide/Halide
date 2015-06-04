@@ -7,6 +7,7 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::vector;
+using std::pair;
 
 using namespace llvm;
 
@@ -93,11 +94,11 @@ Closure::Closure(Stmt s, const string &loop_variable, llvm::StructType *buffer_t
 
 vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
     vector<llvm::Type *> res;
-    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
-        res.push_back(llvm_type_of(context, iter->second));
+    for (const pair<string, Type> &i : vars) {
+        res.push_back(llvm_type_of(context, i.second));
     }
-    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        res.push_back(llvm_type_of(context, iter->second.type)->getPointerTo());
+    for (const pair<string, BufferRef> &i : buffers) {
+        res.push_back(llvm_type_of(context, i.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
     return res;
@@ -105,14 +106,14 @@ vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
 
 vector<string> Closure::names() {
     vector<string> res;
-    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
-        debug(2) << "vars:  " << iter->first << "\n";
-        res.push_back(iter->first);
+    for (const pair<string, Type> &i : vars) {
+        debug(2) << "vars:  " << i.first << "\n";
+        res.push_back(i.first);
     }
-    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        debug(2) << "buffers: " << iter->first << "\n";
-        res.push_back(iter->first + ".host");
-        res.push_back(iter->first + ".buffer");
+    for (const pair<string, BufferRef> &i : buffers) {
+        debug(2) << "buffers: " << i.first << "\n";
+        res.push_back(i.first + ".host");
+        res.push_back(i.first + ".buffer");
     }
     return res;
 }
@@ -178,8 +179,8 @@ void Closure::unpack_struct(Scope<Value *> &dst,
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            load->setMetadata("tbaa", MDNode::get(context,
-                                                  vec<LLVMMDNodeArgumentType>(MDString::get(context, nm[i]))));
+            LLVMMDNodeArgumentType md_args[] = {MDString::get(context, nm[i])};
+            load->setMetadata("tbaa", MDNode::get(context, md_args));
         }
         dst.push(nm[i], load);
         load->setName(nm[i]);
@@ -269,9 +270,11 @@ bool function_takes_user_context(const std::string &name) {
         "halide_cuda_run",
         "halide_opencl_run",
         "halide_opengl_run",
+        "halide_renderscript_run",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
+        "halide_renderscript_initialize_kernels",
         "halide_get_gpu_device",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /

@@ -6,8 +6,6 @@ namespace Halide {
 using std::string;
 using std::vector;
 
-using Internal::vec;
-
 namespace {
 
 llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
@@ -117,6 +115,7 @@ DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(posix_get_symbol)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(renderscript)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -134,6 +133,7 @@ DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(renderscript_dev)
 #ifdef WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
@@ -512,6 +512,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
+        } else if (t.has_feature(Target::Renderscript)) {
+            modules.push_back(get_initmod_renderscript(c, bits_64, debug));
         }
     }
 
@@ -545,8 +547,8 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
     if (target.has_feature(Target::CUDACapability35)) {
         module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.features_any_of(vec(Target::CUDACapability32,
-                                          Target::CUDACapability50))) {
+    } else if (target.features_any_of({Target::CUDACapability32,
+                                       Target::CUDACapability50})) {
         // For some reason sm_32 and sm_50 use libdevice 20
         module = get_initmod_ptx_compute_20_ll(c);
     } else if (target.has_feature(Target::CUDACapability30)) {
@@ -587,6 +589,12 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     }
 
     return modules[0];
+}
+#endif
+
+#ifdef WITH_RENDERSCRIPT
+llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c) {
+    return get_initmod_renderscript_dev_ll(c);
 }
 #endif
 

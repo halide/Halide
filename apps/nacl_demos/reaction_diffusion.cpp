@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 
         // The initial state is a quantity of two chemicals present at each pixel
         initial(x, y, c) = random_float();
-        initial.compile_to_file("reaction_diffusion_init");
+        initial.compile_to_file("reaction_diffusion_init", {});
     }
 
     // Then the function that updates the state. Also depends on user input.
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 
         clamped.store_at(new_state, y).compute_at(new_state, yi);
 
-        new_state.compile_to_file("reaction_diffusion_update", state, mouse_x, mouse_y);
+        new_state.compile_to_file("reaction_diffusion_update", {state, mouse_x, mouse_y});
     }
 
     // Now the function that converts the state into an argb image.
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 
-        render.compile_to_file("reaction_diffusion_render", state);
+        render.compile_to_file("reaction_diffusion_render", {state});
     }
 
     return 0;

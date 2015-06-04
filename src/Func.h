@@ -17,6 +17,7 @@
 #include "Target.h"
 #include "Tuple.h"
 #include "Module.h"
+#include "Pipeline.h"
 
 namespace Halide {
 
@@ -47,7 +48,7 @@ class Stage {
     std::string stage_name;
 public:
     Stage(Internal::Schedule s, const std::string &n) :
-        schedule(s), stage_name(n) {s.touched();}
+        schedule(s), stage_name(n) {s.touched() = true;}
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
@@ -317,51 +318,10 @@ public:
     EXPORT Internal::Function function() const {return func;}
 };
 
-/**
- * Used to determine if the output printed to file should be as a normal string
- * or as an HTML file which can be opened in a browerser and manipulated via JS and CSS.*/
-enum StmtOutputFormat {
-     Text,
-     HTML
-};
-
-namespace {
-// Helper for deleting custom lowering passes. In the header so that
-// it goes in user code on windows, where you can have multiple heaps.
-template<typename T>
-void delete_lowering_pass(T *pass) {
-    delete pass;
-}
-}
-
 namespace Internal {
 struct ErrorBuffer;
 class IRMutator;
 }
-
-
-struct Outputs {
-    std::string object_name;
-    std::string assembly_name;
-    std::string bitcode_name;
-
-    Outputs object(const std::string &object_name) {
-        Outputs updated = *this;
-        updated.object_name = object_name;
-        return updated;
-    }
-    Outputs assembly(const std::string &assembly_name) {
-        Outputs updated = *this;
-        updated.assembly_name = assembly_name;
-        return updated;
-    }
-    Outputs bitcode(const std::string &bitcode_name) {
-        Outputs updated = *this;
-        updated.bitcode_name = bitcode_name;
-        return updated;
-    }
-};
-
 
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
@@ -382,62 +342,19 @@ class Func {
     int add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
-    /** The lowered imperative form of this function and the target
-     * this was lowered for. Cached here so that recompilation doesn't
-     * necessarily require re-lowering */
-    // @{
-    Internal::Stmt lowered;
-    Target lowered_target;
-    // @}
+    /** The imaging pipeline that outputs this Func alone. */
+    Pipeline pipeline_;
 
-    /** Lower the func if it hasn't been already. */
-    void lower(const Target &t);
-
-    /** A JIT-compiled version of this function that we save so that
-     * we don't have to rejit every time we want to evaluated it. */
-    Internal::JITModule compiled_module;
-
-    /** Invalidate the cached lowered stmt and compiled module. */
-    void invalidate_cache();
-
-    Halide::Internal::JITHandlers jit_handlers;
-
-    /** The random seed to use for realizations of this function. */
-    uint32_t random_seed;
-
-    /** Pointers to current values of the automatically inferred
-     * arguments (buffers and scalars) used to realize this
-     * function. Only relevant when jitting. We can hold these things
-     * with raw pointers instead of reference-counted handles, because
-     * func indirectly holds onto them with reference-counted handles
-     * via its value Expr. */
-    std::vector<const void *> arg_values;
-
-    /** Some of the arg_values need to be rebound on every call if the
-     * image params change. The pointers for the scalar params will
-     * still be valid though. */
-    std::vector<std::pair<int, Internal::Parameter> > image_param_args;
-
-    /** The user context that's used when jitting. This is not settable
-     * by user code, but is reserved for internal use.
-     * Note that this is an Internal::Parameter (rather than a Param<void*>)
-     * so that we can exclude it from the ObjectInstanceRegistry. */
-    Internal::Parameter jit_user_context;
-
-    struct CustomLoweringPass {
-        Internal::IRMutator *pass;
-        void (*deleter)(Internal::IRMutator *);
-    };
-
-    /** A set of custom passes to use when lowering this Func. */
-    std::vector<CustomLoweringPass> custom_lowering_passes;
+    /** Get the imaging pipeline that outputs this Func alone,
+     * creating it (and freezing the Func) if necessary. */
+    Pipeline pipeline();
 
     // Helper function for recursive reordering support
     EXPORT Func &reorder_storage(const std::vector<Var> &dims, size_t start);
 
-public:
+    EXPORT void invalidate_cache();
 
-    EXPORT static void test();
+public:
 
     /** Declare a new undefined function with the given name */
     EXPORT explicit Func(const std::string &name);
@@ -445,9 +362,6 @@ public:
     /** Declare a new undefined function with an
      * automatically-generated unique name */
     EXPORT Func();
-
-    /** Destructor */
-    EXPORT ~Func();
 
     /** Declare a new function with an automatically-generated unique
      * name, and define it to return the given expression (which may
@@ -491,15 +405,15 @@ public:
      *
      */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size = 0,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -508,11 +422,11 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. */
     // @{
-    EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment());
-    EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
+    EXPORT void realize(Realization dst, const Target &target = Target());
+    EXPORT void realize(Buffer dst, const Target &target = Target());
 
     template<typename T>
-    NO_INLINE void realize(Image<T> dst, const Target &target = get_jit_target_from_environment()) {
+    NO_INLINE void realize(Image<T> dst, const Target &target = Target()) {
         // Images are expected to exist on-host.
         realize(Buffer(dst), target);
         dst.copy_to_host();
@@ -574,6 +488,7 @@ public:
     EXPORT void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
                                     const Target &target = get_target_from_environment());
     // @}
+
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -591,99 +506,17 @@ public:
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
 
-    /** Write out an internal representation of lowered code as above
-     * but simplified using the provided realization bounds and other
-     * concrete parameter values. Can emit html or plain text. */
-    // @{
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Realization dst,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Realization dst,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Buffer dst,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &target = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   Buffer dst,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &target = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size, int w_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size, int w_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size, int z_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size, int y_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size,
-                                                   const std::map<std::string, Expr> &additional_replacements,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
-                                                   int x_size,
-                                                   StmtOutputFormat fmt = Text,
-                                                   const Target &t = get_target_from_environment());
-    // @}
+    /** Write out the loop nests specified by the schedule for this
+     * Function. Helpful for understanding what a schedule is
+     * doing. */
+    EXPORT void print_loop_nest();
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.
      */
-    // @{
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
-// TODO: Add C++11 varargs template, which is trickier due to final optional argument.
-    EXPORT void compile_to_file(const std::string &filename_prefix,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
-                                const Target &target = get_target_from_environment());
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
-                                const Target &target = get_target_from_environment());
-
-    // @}
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
@@ -694,12 +527,10 @@ public:
      * Deduces target files based on filenames specified in
      * output_files struct.
      */
-    //@{
     EXPORT void compile_to(const Outputs &output_files,
-                           std::vector<Argument> args,
+                           const std::vector<Argument> &args,
                            const std::string &fn_name,
                            const Target &target = get_target_from_environment());
-    // @}
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -807,6 +638,10 @@ public:
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
+    /** Get a struct containing the currently set custom functions
+     * used by JIT. */
+    EXPORT const Internal::JITHandlers &jit_handlers();
+
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
      * the lowered Stmt, instrument it with extra code, or otherwise
@@ -832,6 +667,9 @@ public:
 
     /** Remove all previously-set custom lowering passes */
     EXPORT void clear_custom_lowering_passes();
+
+    /** Get the custom lowering passes. */
+    EXPORT const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
@@ -914,7 +752,7 @@ public:
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
                               int dimensionality) {
-        define_extern(function_name, params, Internal::vec<Type>(t), dimensionality);
+        define_extern(function_name, params, std::vector<Type>{t}, dimensionality);
     }
 
     EXPORT void define_extern(const std::string &function_name,
@@ -1351,10 +1189,14 @@ public:
     }
     // @}
 
-    /** Schedule for execution using GLSL. Conceptually, this is similar to
-     * parallelization over 'x' and 'y' (since GLSL shaders compute individual
-     * output pixels in parallel) and vectorization over 'c' (since GLSL
-     * implicitly vectorizes the color channel). */
+    /** Schedule for execution using coordinate-based hardware api.
+     * GLSL and Renderscript are examples of those. Conceptually, this is
+     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
+     * individual output pixels in parallel) and vectorization over 'c'
+     * (since GLSL/RS implicitly vectorizes the color channel). */
+    EXPORT Func &shader(Var x, Var y, Var c, DeviceAPI device_api);
+
+    /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
     /** Specify how the storage for the function is laid out. These

@@ -24,8 +24,10 @@ class AllocaInst;
 class Constant;
 class Triple;
 class MDNode;
+class NamedMDNode;
 class DataLayout;
 class BasicBlock;
+class GlobalVariable;
 }
 
 #include <map>
@@ -106,7 +108,7 @@ protected:
     llvm::Module *module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
+    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     //@}
@@ -302,7 +304,7 @@ protected:
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
     virtual void visit(const AssertStmt *);
-    virtual void visit(const Pipeline *);
+    virtual void visit(const ProducerConsumer *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
     virtual void visit(const Block *);

@@ -72,13 +72,15 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
 
     options = llvm::TargetOptions();
     options.LessPreciseFPMADOption = true;
-    options.NoFramePointerElim = false;
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
+    #if LLVM_VERSION < 37
+    options.NoFramePointerElim = false;
     options.UseSoftFloat = false;
+    #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;

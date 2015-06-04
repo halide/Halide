@@ -345,7 +345,8 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(mcpu);
-    engine_builder.setMAttrs(vec<string>(mattrs));
+    std::vector<string> mattrs_array = {mattrs};
+    engine_builder.setMAttrs(mattrs_array);
     ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
@@ -369,13 +370,11 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     // Add exported symbols for all dependencies.
     std::set<std::string> provided_symbols;
-    for (size_t i = 0; i < dependencies.size(); i++) {
-        const std::map<std::string, Symbol> &dep_exports(dependencies[i].exports());
-        std::map<std::string, Symbol>::const_iterator iter;
-        for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
-            const std::string &name(iter->first);
-            const Symbol &s(iter->second);
-            if (provided_symbols.find(iter->first) == provided_symbols.end()) {
+    for (const JITModule &dep : dependencies) {
+        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
+            const std::string &name = i.first;
+            const Symbol &s = i.second;
+            if (provided_symbols.find(i.first) == provided_symbols.end()) {
                 llvm::Type *llvm_type = copy_llvm_type_to_module(m, s.llvm_type);
                 if (llvm_type->isFunctionTy()) {
                     m->getOrInsertFunction(name, cast<FunctionType>(llvm_type));
@@ -452,12 +451,10 @@ const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
 }
 
 void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *module) {
-    for (size_t i = 0; i < deps.size(); i++) {
-        const std::map<std::string, Symbol> &dep_exports(deps[i].exports());
-        std::map<std::string, Symbol>::const_iterator iter;
-        for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
-            const std::string &name(iter->first);
-            const Symbol &s(iter->second);
+    for (const JITModule &dep : deps) {
+        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
+            const std::string &name = i.first;
+            const Symbol &s = i.second;
             GlobalValue *gv;
             llvm::Type *llvm_type = copy_llvm_type_to_module(module, s.llvm_type);
             if (llvm_type->isFunctionTy()) {
@@ -782,7 +779,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
 
 // TODO: Either remove user_context argument figure out how to make
 // caller provided user context work with JIT. (At present, this
-// cacscaded handler calls cannot work with the right context as
+// cascaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
 // calls another callback wich is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
