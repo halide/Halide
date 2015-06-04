@@ -92,8 +92,6 @@ struct Outputs {
 
 struct JITExtern;
 
-typedef std::map<std::string, JITExtern> NamedJITExterns;
-
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
 class Pipeline {
@@ -103,7 +101,7 @@ class Pipeline {
     std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
-                                                                    NamedJITExterns &externs_in_out);
+                                                                    std::map<std::string, JITExtern> &externs_in_out);
 
 public:
     /** Make an undefined Pipeline object. */
@@ -311,14 +309,14 @@ public:
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
     /** Install a set of external C functions or Funcs to satisfy
-     * dependecies introduced by HalideExtern and define_extern
+     * dependencies introduced by HalideExtern and define_extern
      * mechanisms. These will be used by calls to realize,
      * infer_bounds, and compile_jit. */
-    EXPORT void set_jit_externs(const NamedJITExterns &externs);
+    EXPORT void set_jit_externs(const std::map<std::string, JITExtern> &externs);
 
     /** Return the map of previously installed externs. Is an empty
      * map unless set otherwise. */
-    EXPORT const NamedJITExterns &get_jit_externs();
+    EXPORT const std::map<std::string, JITExtern> &get_jit_externs();
 
     /** Get a struct containing the currently set custom functions
      * used by JIT. */

@@ -78,7 +78,7 @@ struct PipelineContents {
 
     /** List of C funtions and Funcs to satisfy HalideExtern* and
      * define_extern calls. */
-    NamedJITExterns jit_externs;
+    std::map<std::string, JITExtern> jit_externs;
 
     PipelineContents() :
         module("", Target()) {
@@ -647,13 +647,13 @@ void Pipeline::set_custom_print(void (*cust_print)(void *, const char *)) {
     contents.ptr->jit_handlers.custom_print = cust_print;
 }
 
-void Pipeline::set_jit_externs(const NamedJITExterns &externs) {
+void Pipeline::set_jit_externs(const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents.ptr->jit_externs = externs;
     invalidate_cache();
 }
 
-const NamedJITExterns &Pipeline::get_jit_externs() {
+const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
     user_assert(defined()) << "Pipeline is undefined\n";
     return contents.ptr->jit_externs;
 }
@@ -902,13 +902,13 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
 
 std::vector<JITModule>
 Pipeline::make_externs_jit_module(const Target &target,
-                                  NamedJITExterns &externs_in_out) {
+                                  std::map<std::string, JITExtern> &externs_in_out) {
     std::vector<JITModule> result;
 
     // Externs that are Funcs get their own JITModule. All standalone functions are
     // held in a single JITModule at the end of the list (if there are any).
     JITModule free_standing_jit_externs;
-    for (NamedJITExterns::iterator iter = externs_in_out.begin();
+    for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
          iter != externs_in_out.end();
          iter++) {
         JITExtern &jit_extern(iter->second);
