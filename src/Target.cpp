@@ -12,8 +12,6 @@ namespace Halide {
 using std::string;
 using std::vector;
 
-using Internal::vec;
-
 namespace {
 #ifndef __arm__
 
@@ -259,9 +257,9 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "sse41") {
             set_feature(Target::SSE41);
         } else if (tok == "avx") {
-            set_features(vec(Target::SSE41, Target::AVX));
+            set_features({Target::SSE41, Target::AVX});
         } else if (tok == "avx2") {
-            set_features(vec(Target::SSE41, Target::AVX, Target::AVX2));
+            set_features({Target::SSE41, Target::AVX, Target::AVX2});
         } else if (tok == "armv7s") {
             set_feature(Target::ARMv7s);
         } else if (tok == "no_neon") {
@@ -271,19 +269,21 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "ptx") {
             user_error << "The 'ptx' target feature flag is deprecated, use 'cuda' instead\n";
         } else if (tok == "cuda_capability_30") {
-            set_features(vec(Target::CUDA, Target::CUDACapability30));
+            set_features({Target::CUDA, Target::CUDACapability30});
         } else if (tok == "cuda_capability_32") {
-            set_features(vec(Target::CUDA, Target::CUDACapability32));
+            set_features({Target::CUDA, Target::CUDACapability32});
         } else if (tok == "cuda_capability_35") {
-            set_features(vec(Target::CUDA, Target::CUDACapability35));
+            set_features({Target::CUDA, Target::CUDACapability35});
         } else if (tok == "cuda_capability_50") {
-            set_features(vec(Target::CUDA, Target::CUDACapability50));
+            set_features({Target::CUDA, Target::CUDACapability50});
         } else if (tok == "opencl") {
             set_feature(Target::OpenCL);
         } else if (tok == "debug" || tok == "gpu_debug") {
             set_feature(Target::Debug);
         } else if (tok == "opengl") {
             set_feature(Target::OpenGL);
+        } else if (tok == "renderscript") {
+            set_feature(Target::Renderscript);
         } else if (tok == "user_context") {
             set_feature(Target::UserContext);
         } else if (tok == "register_metadata") {
@@ -295,11 +295,11 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "cl_doubles") {
             set_feature(Target::CLDoubles);
         } else if (tok == "fma") {
-            set_features(vec(Target::FMA, Target::SSE41, Target::AVX));
+            set_features({Target::FMA, Target::SSE41, Target::AVX});
         } else if (tok == "fma4") {
-            set_features(vec(Target::FMA4, Target::SSE41, Target::AVX));
+            set_features({Target::FMA4, Target::SSE41, Target::AVX});
         } else if (tok == "f16c") {
-            set_features(vec(Target::F16C, Target::SSE41, Target::AVX));
+            set_features({Target::F16C, Target::SSE41, Target::AVX});
         } else if (tok == "matlab") {
             set_feature(Target::Matlab);
         } else {
@@ -359,14 +359,14 @@ std::string Target::to_string() const {
       "armv7s", "no_neon",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
-      "opengl",
+      "opengl", "rs",
       "user_context",
       "register_metadata",
       "matlab"
   };
   internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
   string result = string(arch_names[arch])
-      + "-" + Internal::int_to_string(bits)
+      + "-" + std::to_string(bits)
       + "-" + string(os_names[os]);
   for (size_t i = 0; i < FeatureEnd; ++i) {
       if (has_feature(static_cast<Feature>(i))) {

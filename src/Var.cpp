@@ -13,7 +13,7 @@ Var::Var() : _name(Internal::make_entity_name(this, "Halide::Var", 'v')) {
 }
 
 Var Var::implicit(int n) {
-    return Var("_" + Internal::int_to_string(n));
+    return Var("_" + std::to_string(n));
 }
 
 bool Var::is_implicit(const std::string &name) {

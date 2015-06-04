@@ -89,12 +89,14 @@ const float * as_const_float(Expr e) {
     return f ? &(f->value) : NULL;
 }
 
-bool is_const_power_of_two(Expr e, int *bits) {
+bool is_const_power_of_two_integer(Expr e, int *bits) {
+  if (!(e.type().is_int() || e.type().is_uint())) return false;
+
     const Broadcast *b = e.as<Broadcast>();
-    if (b) return is_const_power_of_two(b->value, bits);
+    if (b) return is_const_power_of_two_integer(b->value, bits);
 
     const Cast *c = e.as<Cast>();
-    if (c) return is_const_power_of_two(c->value, bits);
+    if (c) return is_const_power_of_two_integer(c->value, bits);
 
     const IntImm *int_imm = e.as<IntImm>();
     if (int_imm && ((int_imm->value & (int_imm->value - 1)) == 0)) {
@@ -583,12 +585,12 @@ Expr print(const std::vector<Expr> &args) {
     // Call halide_print.
     Expr print_call =
         Internal::Call::make(Int(32), "halide_print",
-                             Internal::vec<Expr>(combined_string), Internal::Call::Extern);
+                             {combined_string}, Internal::Call::Extern);
 
     // Return the first argument.
     Expr result =
         Internal::Call::make(args[0].type(), Internal::Call::return_second,
-                             Internal::vec<Expr>(print_call, args[0]), Internal::Call::Intrinsic);
+                             {print_call, args[0]}, Internal::Call::Intrinsic);
     return result;
 }
 
@@ -596,7 +598,7 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
     Expr p = print(args);
     return Internal::Call::make(p.type(),
                                 Internal::Call::if_then_else,
-                                Internal::vec<Expr>(condition, p, args[0]),
+                                {condition, p, args[0]},
                                 Internal::Call::Intrinsic);
 }
 

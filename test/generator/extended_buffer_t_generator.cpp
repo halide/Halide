@@ -27,7 +27,7 @@ class ExtendedBufferT : public Generator<ExtendedBufferT> {
 public:
     FancyImageParam input{ Float(32), 2, "input" };
 
-    Func build() override {
+    Func build() {
         Var x, y;
         Func output;
         output(x, y) = input(x, y) + input.extra_field();

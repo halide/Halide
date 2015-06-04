@@ -54,7 +54,7 @@ private:
     // Don't enter any inner constructs for which it's not safe to pull out stores.
     void visit(const For *op) {stmt = op;}
     void visit(const IfThenElse *op) {stmt = op;}
-    void visit(const Pipeline *op) {stmt = op;}
+    void visit(const ProducerConsumer *op) {stmt = op;}
     void visit(const Allocate *op) {stmt = op;}
     void visit(const Realize *op) {stmt = op;}
 
@@ -407,13 +407,13 @@ class Interleaver : public IRMutator {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              vec(a, b), Call::Intrinsic);
+                              {a, b}, Call::Intrinsic);
         } else if (num_lanes == 3) {
             Expr a = extract_mod3_lanes(e, 0, vector_lets);
             Expr b = extract_mod3_lanes(e, 1, vector_lets);
             Expr c = extract_mod3_lanes(e, 2, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              vec(a, b, c), Call::Intrinsic);
+                              {a, b, c}, Call::Intrinsic);
         } else if (num_lanes == 4) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
@@ -422,7 +422,7 @@ class Interleaver : public IRMutator {
             Expr ba = extract_even_lanes(b, vector_lets);
             Expr bb = extract_odd_lanes(b, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              vec(aa, ba, ab, bb), Call::Intrinsic);
+                              {aa, ba, ab, bb}, Call::Intrinsic);
         } else {
             // Give up and don't do anything clever for >4
             return e;

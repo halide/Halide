@@ -57,7 +57,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (op->name == func) {
             // Can't proceed into the pipeline for this func
             stmt = op;

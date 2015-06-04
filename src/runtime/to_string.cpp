@@ -179,6 +179,13 @@ WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scienti
                 (fractional_part & 1)) {
                 fractional_part--;
             }
+
+            // If we rounded the fractional part up to the scale
+            // factor, we'd better reattribute it to the integer part.
+            if (fractional_part == scale) {
+                fractional_part = 0;
+                integer_part++;
+            }
         }
 
         // The number is now:

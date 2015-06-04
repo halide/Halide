@@ -232,7 +232,7 @@ struct AssertStmt : public StmtNode<AssertStmt> {
  * often undefined. (check update.defined() to find out). None of this
  * is actually enforced, the node is purely for informative
  * purposes to help out our analysis during lowering. */
-struct Pipeline : public StmtNode<Pipeline> {
+struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     std::string name;
     Stmt produce, update, consume;
 

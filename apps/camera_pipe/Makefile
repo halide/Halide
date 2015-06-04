@@ -25,7 +25,13 @@ process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(PNGFLAGS)
 
 out.png: process
-	./process ../images/bayer_raw.png 3700 2.0 50 out.png
+	./process ../images/bayer_raw.png 3700 2.0 50 5 out.png
+
+../../bin/HalideTraceViz:
+	$(MAKE) -C ../../ bin/HalideTraceViz
+
+camera_pipe.avi: camera_pipe.cpp viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
+	bash viz.sh
 
 clean:
 	rm -f out.png process curved.o camera_pipe fcam/*.o

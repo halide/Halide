@@ -76,7 +76,7 @@ If you want to build it yourself, first check it out from subversion:
 Then build it like so:
 
     % cd llvm3.5
-    % ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
+    % ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx,aarch64,mips
     % make -j8
 
 (Users of OSX 10.8+ may need to explicitly specify GCC vs Clang,
@@ -92,7 +92,7 @@ If you wish to use cmake to build llvm, the build procedure is:
     % cd llvm3.5
     % mkdir build
     % cd build
-    % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+    % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AARCH64;MIPS" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
     % make -j8
 
 then to point Halide to it:
@@ -126,7 +126,7 @@ version of Halide cross-compiles 32-bit code just fine.
 
 To get a 32-bit llvm, configure and compile it like so:
 
-    % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
+    % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx,aarch64,mips --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
     % CC="gcc -m32" CXX="g++ -m32" make
 
 To generate a 32-bit Halide, compile it like so:
@@ -175,7 +175,7 @@ To enable all Halide targets, build it like so:
 
     % mkdir build
     % cd build
-    % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_TERMINFO=OFF -DCMAKE_BUILD_TYPE=Release ..
+    % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AARCH64;MIPS" -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_TERMINFO=OFF -DCMAKE_BUILD_TYPE=Release ..
     % make -j8
 
 It will possibly be helpful to get the entire dev tree for

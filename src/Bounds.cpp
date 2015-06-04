@@ -666,14 +666,14 @@ private:
             min = make_zero(op->type);
             if (min_a.defined() && max_a.defined()) {
                 if (equal(min_a, max_a)) {
-                    min = max = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
+                    min = max = Call::make(op->type, Call::abs, {max_a}, Call::Intrinsic);
                 } else {
                     min = make_zero(op->type);
                     if (op->args[0].type().is_int() && op->args[0].type().bits == 32) {
                         max = Max::make(Cast::make(op->type, -min_a), Cast::make(op->type, max_a));
                     } else {
-                        min_a = Call::make(op->type, Call::abs, vec(min_a), Call::Intrinsic);
-                        max_a = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
+                        min_a = Call::make(op->type, Call::abs, {min_a}, Call::Intrinsic);
+                        max_a = Call::make(op->type, Call::abs, {max_a}, Call::Intrinsic);
                         max = Max::make(min_a, max_a);
                     }
                 }
@@ -710,9 +710,9 @@ private:
             // For monotonic, pure, single-argument functions, we can
             // make two calls for the min and the max.
             Expr min_a = min, max_a = max;
-            min = Call::make(op->type, op->name, vec<Expr>(min_a), op->call_type,
+            min = Call::make(op->type, op->name, {min_a}, op->call_type,
                              op->func, op->value_index, op->image, op->param);
-            max = Call::make(op->type, op->name, vec<Expr>(max_a), op->call_type,
+            max = Call::make(op->type, op->name, {max_a}, op->call_type,
                              op->func, op->value_index, op->image, op->param);
 
         } else if (op->call_type == Call::Intrinsic &&
@@ -760,7 +760,7 @@ private:
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const Pipeline *) {
+    void visit(const ProducerConsumer *) {
         internal_error << "Bounds of statement\n";
     }
 
@@ -1108,9 +1108,8 @@ private:
             op->body.accept(this);
             scope.pop(op->name);
 
-            for (map<string, Box>::iterator iter = boxes.begin();
-                 iter != boxes.end(); ++iter) {
-                Box &box = iter->second;
+            for (pair<const string, Box> &i : boxes) {
+                Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     if (box[i].min.defined()) {
                         box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
@@ -1154,17 +1153,15 @@ private:
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
-            for (map<string, Box>::iterator iter = then_boxes.begin();
-                 iter != then_boxes.end(); ++iter) {
-                else_boxes[iter->first];
+            for (pair<const string, Box> &i : then_boxes) {
+                else_boxes[i.first];
             }
 
             // Merge
-            for (map<string, Box>::iterator iter = else_boxes.begin();
-                 iter != else_boxes.end(); ++iter) {
-                Box &else_box = iter->second;
-                Box &then_box = then_boxes[iter->first];
-                Box &orig_box = boxes[iter->first];
+            for (pair<const string, Box> &i : else_boxes) {
+                Box &else_box = i.second;
+                Box &then_box = then_boxes[i.first];
+                Box &orig_box = boxes[i.first];
 
                 // debug(0) << " Merging boxes for " << iter->first << "\n";
 
@@ -1401,17 +1398,16 @@ void bounds_test() {
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           cast<uint16_t>(0), cast<uint16_t>(255*2));
 
-    vector<Expr> input_site_1 = vec(2*x);
-    vector<Expr> input_site_2 = vec(2*x+1);
-    vector<Expr> output_site = vec(x+1);
+    vector<Expr> input_site_1 = {2*x};
+    vector<Expr> input_site_2 = {2*x+1};
+    vector<Expr> output_site = {x+1};
 
-    Buffer in(Int(32), vec(10), NULL, "input");
+    Buffer in(Int(32), {10}, NULL, "input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
                           Provide::make("output",
-                                        vec(Add::make(
-                                                Call::make(in, input_site_1),
-                                                Call::make(in, input_site_2))),
+                                        {Add::make(Call::make(in, input_site_1),
+                                                   Call::make(in, input_site_2))},
                                         output_site));
 
     map<string, Box> r;
@@ -1425,7 +1421,7 @@ void bounds_test() {
     internal_assert(equal(simplify(r["output"][0].min), 4));
     internal_assert(equal(simplify(r["output"][0].max), 13));
 
-    Box r2 = vec(Interval(Expr(5), Expr(19)));
+    Box r2({Interval(Expr(5), Expr(19))});
     merge_boxes(r2, r["output"]);
     internal_assert(equal(simplify(r2[0].min), 4));
     internal_assert(equal(simplify(r2[0].max), 19));

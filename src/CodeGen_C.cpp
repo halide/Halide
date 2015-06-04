@@ -648,12 +648,12 @@ void CodeGen_C::visit(const Mul *op) {
 
 void CodeGen_C::visit(const Div *op) {
     int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
+    if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b), Call::Extern));
+        print_expr(Call::make(op->type, "sdiv", {op->a, op->b}, Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -661,23 +661,23 @@ void CodeGen_C::visit(const Div *op) {
 
 void CodeGen_C::visit(const Mod *op) {
     int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
+    if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "smod", vec(op->a, op->b), Call::Extern));
+        print_expr(Call::make(op->type, "smod", {op->a, op->b}, Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
 }
 
 void CodeGen_C::visit(const Max *op) {
-    print_expr(Call::make(op->type, "max", vec(op->a, op->b), Call::Extern));
+    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
 }
 
 void CodeGen_C::visit(const Min *op) {
-    print_expr(Call::make(op->type, "min", vec(op->a, op->b), Call::Extern));
+    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
 }
 
 void CodeGen_C::visit(const EQ *op) {
@@ -1158,7 +1158,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     close_scope("");
 }
 
-void CodeGen_C::visit(const Pipeline *op) {
+void CodeGen_C::visit(const ProducerConsumer *op) {
 
     do_indent();
     stream << "// produce " << op->name << '\n';
@@ -1362,9 +1362,9 @@ void CodeGen_C::test() {
     Stmt s = Store::make("buf", e, x);
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
-    s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), const_true(), s);
+    s = Allocate::make("tmp.stack", Int(32), {127}, const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
-    s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), s);
+    s = Allocate::make("tmp.heap", Int(32), {43, beta}, const_true(), s);
 
     Module m("", get_host_target());
     m.append(LoweredFunc("test1", args, s, LoweredFunc::External));

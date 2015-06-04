@@ -253,27 +253,28 @@ void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
 CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                            llvm::LLVMContext &context) {
     // The awkward mapping from targets to code generators
-    if (target.features_any_of(vec(Target::CUDA,
-                                   Target::OpenCL,
-                                   Target::OpenGL))) {
+    if (target.features_any_of({Target::CUDA,
+                                Target::OpenCL,
+                                Target::OpenGL,
+                                Target::Renderscript})) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_X86> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
         }
 #endif
 #if defined(WITH_ARM) || defined(WITH_AARCH64)
         if (target.arch == Target::ARM) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM>>(target, context);
         }
 #endif
 #ifdef WITH_MIPS
         if (target.arch == Target::MIPS) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS>>(target, context);
         }
 #endif
 #ifdef WITH_NATIVE_CLIENT
         if (target.arch == Target::PNaCl) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl> >(target, context);
+            return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl>>(target, context);
         }
 #endif
 
@@ -464,7 +465,8 @@ llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std:
     llvm::Type *i8 = llvm::Type::getInt8Ty(m->getContext());
     llvm::Type *i32 = llvm::Type::getInt32Ty(m->getContext());
 
-    llvm::FunctionType *func_t = llvm::FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
+    llvm::Type *args_t[] = {i8->getPointerTo()->getPointerTo()};
+    llvm::FunctionType *func_t = llvm::FunctionType::get(i32, args_t, false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, m);
     llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", wrapper);
     llvm::IRBuilder<> builder(m->getContext());
@@ -642,8 +644,8 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
-    Instruction *cleanup =
-        builder->CreateCall3(call_destructor, get_user_context(), destructor_fn, stack_slot);
+    Value *args[] = {get_user_context(), destructor_fn, stack_slot};
+    Instruction *cleanup = builder->CreateCall(call_destructor, args);
 
     // Switch back to the original location
     builder->restoreIP(here);
@@ -697,11 +699,11 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
 
     // Finally, dump it in the symbol table
-    Constant *zero = ConstantInt::get(i32, 0);
+    Constant *zero[] = {ConstantInt::get(i32, 0)};
 #if LLVM_VERSION >= 37
-    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, vec(zero));
+    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, zero);
 #else
-    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
+    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, zero);
 #endif
     sym_push(buf.name(), global_ptr);
     sym_push(buf.name() + ".buffer", global_ptr);
@@ -759,12 +761,12 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
             GlobalValue::PrivateLinkage,
             constant);
 
-    Constant *zero = ConstantInt::get(i32, 0);
+    Constant *zero[] = {ConstantInt::get(i32, 0)};
     return ConstantExpr::getBitCast(
 #if LLVM_VERSION >= 37
-        ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, vec(zero)),
+        ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
 #else
-        ConstantExpr::getInBoundsGetElementPtr(storage, vec(zero)),
+        ConstantExpr::getInBoundsGetElementPtr(storage, zero),
 #endif
         scalar_value_t_type->getPointerTo());
 }
@@ -797,13 +799,14 @@ llvm::Constant *CodeGen_LLVM::embed_metadata(const std::string &metadata_name,
         GlobalValue::PrivateLinkage,
         ConstantArray::get(arguments_array, arguments_array_entries));
 
+    Value *zeros[] = {zero, zero};
     Constant *metadata_fields[] = {
         /* version */ zero,
         /* num_arguments */ ConstantInt::get(i32, num_args),
 #if LLVM_VERSION >= 37
-        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, vec(zero, zero)),
+        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
 #else
-        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, vec(zero, zero)),
+        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, zeros),
 #endif
         /* target */ create_string_constant(target.to_string()),
         /* name */ create_string_constant(function_name)
@@ -844,7 +847,8 @@ void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Constant *me
     llvm::Function *ctor = llvm::Function::Create(func_t, llvm::GlobalValue::PrivateLinkage, name + ".register_metadata", module);
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", ctor);
     builder->SetInsertPoint(block);
-    llvm::CallInst *call = builder->CreateCall(register_metadata, vec<llvm::Value *>(list_node));
+    llvm::Value *call_args[] = {list_node};
+    llvm::CallInst *call = builder->CreateCall(register_metadata, call_args);
     call->setDoesNotThrow();
     builder->CreateRet(call);
     llvm::verifyFunction(*ctor);
@@ -956,7 +960,7 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     // Make sure the buffer object itself is not null
     create_assertion(builder->CreateIsNotNull(buffer),
                      Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                vec<Expr>(name), Call::Extern));
+                                {name}, Call::Extern));
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -1086,7 +1090,7 @@ Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 2);
     llvm::Value *idx = ConstantInt::get(i32, i);
-    vector<llvm::Value *> args = vec(zero, field, idx);
+    vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
 #if LLVM_VERSION >= 37
         buffer_t_type,
@@ -1100,7 +1104,7 @@ Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 3);
     llvm::Value *idx = ConstantInt::get(i32, i);
-    vector<llvm::Value *> args = vec(zero, field, idx);
+    vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
 #if LLVM_VERSION >= 37
         buffer_t_type,
@@ -1114,7 +1118,7 @@ Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
-    vector<llvm::Value *> args = vec(zero, field, idx);
+    vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
 #if LLVM_VERSION >= 37
         buffer_t_type,
@@ -1288,7 +1292,7 @@ void CodeGen_LLVM::visit(const Mod *op) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (op->type.is_uint()) {
         int bits;
-        if (is_const_power_of_two(op->b, &bits)) {
+        if (is_const_power_of_two_integer(op->b, &bits)) {
             Expr one = make_one(op->b.type());
             value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
         } else {
@@ -1296,7 +1300,7 @@ void CodeGen_LLVM::visit(const Mod *op) {
         }
     } else {
         int bits;
-        if (is_const_power_of_two(op->b, &bits)) {
+        if (is_const_power_of_two_integer(op->b, &bits)) {
             Expr one = make_one(op->b.type());
             value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
         } else {
@@ -1585,8 +1589,11 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
     // Add type-based-alias-analysis metadata to the pointer, so that
     // loads and stores to different buffers can get reordered.
-    MDNode *tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, "Halide buffer")));
-    tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, buffer), tbaa));
+    LLVMMDNodeArgumentType root_buffer_type[] = {MDString::get(*context, "Halide buffer")};
+    MDNode *tbaa = MDNode::get(*context, root_buffer_type);
+
+    LLVMMDNodeArgumentType this_buffer_type[] = {MDString::get(*context, buffer), tbaa};
+    tbaa = MDNode::get(*context, this_buffer_type);
 
     // We also add metadata for constant indices to allow loads and
     // stores to the same buffer to get reordered.
@@ -1596,7 +1603,8 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
-            tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, level.str()), tbaa));
+            LLVMMDNodeArgumentType this_level_type[] = {MDString::get(*context, level.str()), tbaa};
+            tbaa = MDNode::get(*context, this_level_type);
         }
     }
 
@@ -2026,7 +2034,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             Value *char_ptr = codegen(Expr(filename));
             Value *data_ptr = symbol_table.get(func->name + ".host");
             data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
-            vector<Value *> args = vec(user_context, char_ptr, data_ptr);
+            vector<Value *> args = {user_context, char_ptr, data_ptr};
             for (size_t i = 3; i < 9; i++) {
                 debug(4) << op->args[i];
                 args.push_back(codegen(op->args[i]));
@@ -2102,7 +2110,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             // Check if an appropriate vector abs for this type exists in the initial module
             Type t = op->args[0].type();
-            string name = (t.is_float() ? "abs_f" : "abs_i") + int_to_string(t.bits);
+            string name = (t.is_float() ? "abs_f" : "abs_i") + std::to_string(t.bits);
             llvm::Function * builtin_abs =
                 find_vector_runtime_function(name, op->type.width).first;
 
@@ -2137,9 +2145,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                 codegen(abs(a - b));
                 return;
             } else if (t.is_int()) {
-                name = "absd_i" + int_to_string(t.bits);
+                name = "absd_i" + std::to_string(t.bits);
             } else {
-                name = "absd_u" + int_to_string(t.bits);
+                name = "absd_u" + std::to_string(t.bits);
             }
 
             llvm::Function *builtin_absd =
@@ -2362,7 +2370,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             llvm::Function *fn = Intrinsic::getDeclaration(module,
                 Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
-            CallInst *call = builder->CreateCall(fn);
+            CallInst *call = builder->CreateCall(fn, vector<llvm::Value *>());
             value = call;
         } else if (op->name == Call::lerp) {
             internal_assert(op->args.size() == 3);
@@ -2764,10 +2772,11 @@ Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, co
     global->setAlignment(32);
 
     Constant *zero = ConstantInt::get(i32, 0);
+    Constant *zeros[] = {zero, zero};
 #if LLVM_VERSION >= 37
-    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, vec(zero, zero));
+    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
 #else
-    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero, zero));
+    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, zeros);
 #endif
     return ptr;
 }
@@ -2817,7 +2826,7 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *erro
     builder->SetInsertPoint(assert_succeeds_bb);
 }
 
-void CodeGen_LLVM::visit(const Pipeline *op) {
+void CodeGen_LLVM::visit(const ProducerConsumer *op) {
     BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
     builder->CreateBr(produce);
     builder->SetInsertPoint(produce);
@@ -2896,7 +2905,8 @@ void CodeGen_LLVM::visit(const For *op) {
 
         // Make a new function that does one iteration of the body of the loop
         llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
-        FunctionType *func_t = FunctionType::get(i32, vec(voidPointerType, i32, voidPointerType), false);
+        llvm::Type *args_t[] = {voidPointerType, i32, voidPointerType};
+        FunctionType *func_t = FunctionType::get(i32, args_t, false);
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par for " + function->getName() + "_" + op->name, module);
@@ -2951,7 +2961,7 @@ void CodeGen_LLVM::visit(const For *op) {
         do_par_for->setDoesNotAlias(5);
         //do_par_for->setDoesNotCapture(5);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-        vector<Value *> args = vec<Value *>(user_context, function, min, extent, ptr);
+        Value *args[] = {user_context, function, min, extent, ptr};
         debug(4) << "Creating call to do_par_for\n";
         Value *result = builder->CreateCall(do_par_for, args);
 
@@ -3285,7 +3295,7 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
 
     for (size_t i = 0; i < sizes_to_try.size(); i++) {
         int w = sizes_to_try[i];
-        llvm::Function *vec_fn = module->getFunction(name + "x" + int_to_string(w));
+        llvm::Function *vec_fn = module->getFunction(name + "x" + std::to_string(w));
         if (vec_fn) {
             return std::make_pair(vec_fn, w);
         }

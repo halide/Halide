@@ -2,7 +2,7 @@
 set -e
 android update project -p . --target android-17
 cd jni
-c++ -std=c++11 halide.cpp -L ../../../bin -lHalide -I ../../../include -ldl -lpthread -lz
+c++ halide.cpp -g -Wall -std=c++11 -L ../../../bin -lHalide -I ../../../include -ldl -lpthread -lz
 
 # 64-bit MIPS (mips-64-android,mips64) currently does not build since
 # llvm will not compile for the R6 version of the ISA without Nan2008

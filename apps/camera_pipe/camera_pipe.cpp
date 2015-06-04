@@ -8,6 +8,13 @@ int schedule;
 Var x, y, tx("tx"), ty("ty"), c("c");
 Func processed("processed");
 
+// Average two positive values rounding up
+Expr avg(Expr a, Expr b) {
+    Type wider = a.type();
+    wider.bits *= 2;
+    return cast(a.type(), (cast(wider, a) + b + 1)/2);
+}
+
 Func hot_pixel_suppression(Func input) {
     Expr a = max(max(input(x-2, y), input(x+2, y)),
                  max(input(x, y-2), input(x, y+2)));
@@ -64,16 +71,16 @@ Func demosaic(Func deinterleaved) {
     // Try interpolating vertically and horizontally. Also compute
     // differences vertically and horizontally. Use interpolation in
     // whichever direction had the smallest difference.
-    Expr gv_r  =    (g_gb(x, y-1) + g_gb(x, y))/2;
+    Expr gv_r  = avg(g_gb(x, y-1), g_gb(x, y));
     Expr gvd_r = absd(g_gb(x, y-1), g_gb(x, y));
-    Expr gh_r  =    (g_gr(x+1, y) + g_gr(x, y))/2;
+    Expr gh_r  = avg(g_gr(x+1, y), g_gr(x, y));
     Expr ghd_r = absd(g_gr(x+1, y), g_gr(x, y));
 
     g_r(x, y)  = select(ghd_r < gvd_r, gh_r, gv_r);
 
-    Expr gv_b  =    (g_gr(x, y+1) + g_gr(x, y))/2;
+    Expr gv_b  = avg(g_gr(x, y+1), g_gr(x, y));
     Expr gvd_b = absd(g_gr(x, y+1), g_gr(x, y));
-    Expr gh_b  =    (g_gb(x-1, y) + g_gb(x, y))/2;
+    Expr gh_b  = avg(g_gb(x-1, y), g_gb(x, y));
     Expr ghd_b = absd(g_gb(x-1, y), g_gb(x, y));
 
     g_b(x, y)  = select(ghd_b < gvd_b, gh_b, gv_b);
@@ -83,18 +90,18 @@ Func demosaic(Func deinterleaved) {
     // interpolated it in the same way (i.e. add the second derivative
     // of the green channel at the same place).
     Expr correction;
-    correction = g_gr(x, y) - (g_r(x, y) + g_r(x-1, y))/2;
-    r_gr(x, y) = correction + (r_r(x-1, y) + r_r(x, y))/2;
+    correction = g_gr(x, y) - avg(g_r(x, y), g_r(x-1, y));
+    r_gr(x, y) = correction + avg(r_r(x-1, y), r_r(x, y));
 
     // Do the same for other reds and blues at green sites
-    correction = g_gr(x, y) - (g_b(x, y) + g_b(x, y-1))/2;
-    b_gr(x, y) = correction + (b_b(x, y) + b_b(x, y-1))/2;
+    correction = g_gr(x, y) - avg(g_b(x, y), g_b(x, y-1));
+    b_gr(x, y) = correction + avg(b_b(x, y), b_b(x, y-1));
 
-    correction = g_gb(x, y) - (g_r(x, y) + g_r(x, y+1))/2;
-    r_gb(x, y) = correction + (r_r(x, y) + r_r(x, y+1))/2;
+    correction = g_gb(x, y) - avg(g_r(x, y), g_r(x, y+1));
+    r_gb(x, y) = correction + avg(r_r(x, y), r_r(x, y+1));
 
-    correction = g_gb(x, y) - (g_b(x, y) + g_b(x+1, y))/2;
-    b_gb(x, y) = correction + (b_b(x, y) + b_b(x+1, y))/2;
+    correction = g_gb(x, y) - avg(g_b(x, y), g_b(x+1, y));
+    b_gb(x, y) = correction + avg(b_b(x, y), b_b(x+1, y));
 
     // Now interpolate diagonally to get red at blue and blue at
     // red. Hold onto your hats; this gets really fancy. We do the
@@ -105,24 +112,24 @@ Func demosaic(Func deinterleaved) {
     // sites - we correct our interpolations using the second
     // derivative of green at the same sites.
 
-    correction = g_b(x, y)  - (g_r(x, y) + g_r(x-1, y+1))/2;
-    Expr rp_b  = correction + (r_r(x, y) + r_r(x-1, y+1))/2;
+    correction = g_b(x, y)  - avg(g_r(x, y), g_r(x-1, y+1));
+    Expr rp_b  = correction + avg(r_r(x, y), r_r(x-1, y+1));
     Expr rpd_b = absd(r_r(x, y), r_r(x-1, y+1));
 
-    correction = g_b(x, y)  - (g_r(x-1, y) + g_r(x, y+1))/2;
-    Expr rn_b  = correction + (r_r(x-1, y) + r_r(x, y+1))/2;
+    correction = g_b(x, y)  - avg(g_r(x-1, y), g_r(x, y+1));
+    Expr rn_b  = correction + avg(r_r(x-1, y), r_r(x, y+1));
     Expr rnd_b = absd(r_r(x-1, y), r_r(x, y+1));
 
     r_b(x, y)  = select(rpd_b < rnd_b, rp_b, rn_b);
 
 
     // Same thing for blue at red
-    correction = g_r(x, y)  - (g_b(x, y) + g_b(x+1, y-1))/2;
-    Expr bp_r  = correction + (b_b(x, y) + b_b(x+1, y-1))/2;
+    correction = g_r(x, y)  - avg(g_b(x, y), g_b(x+1, y-1));
+    Expr bp_r  = correction + avg(b_b(x, y), b_b(x+1, y-1));
     Expr bpd_r = absd(b_b(x, y), b_b(x+1, y-1));
 
-    correction = g_r(x, y)  - (g_b(x+1, y) + g_b(x, y-1))/2;
-    Expr bn_r  = correction + (b_b(x+1, y) + b_b(x, y-1))/2;
+    correction = g_r(x, y)  - avg(g_b(x+1, y), g_b(x, y-1));
+    Expr bn_r  = correction + avg(b_b(x+1, y), b_b(x, y-1));
     Expr bnd_r = absd(b_b(x+1, y), b_b(x, y-1));
 
     b_r(x, y)  =  select(bpd_r < bnd_r, bp_r, bn_r);
@@ -135,10 +142,10 @@ Func demosaic(Func deinterleaved) {
     Func b = interleave_y(interleave_x(b_gr, b_r),
                           interleave_x(b_b, b_gb));
 
-
     Func output;
     output(x, y, c) = select(c == 0, r(x, y),
-                             select(c == 1, g(x, y), b(x, y)));
+                             c == 1, g(x, y),
+                                     b(x, y));
 
 
     /* THE SCHEDULE */
@@ -154,9 +161,10 @@ Func demosaic(Func deinterleaved) {
         r_b.compute_at(processed, tx).vectorize(x, 8);
         b_r.compute_at(processed, tx).vectorize(x, 8);
         // These interleave in y, so unrolling them in y helps
-        r.compute_at(processed, tx).vectorize(x, 8).unroll(y, 2);
-        g.compute_at(processed, tx).vectorize(x, 8).unroll(y, 2);
-        b.compute_at(processed, tx).vectorize(x, 8).unroll(y, 2);
+        output.compute_at(processed, tx)
+            .vectorize(x, 8)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
     } else if (schedule == 1) {
         // optimized for X86
         // Don't vectorize, because sse is bad at 16-bit interleaving
@@ -169,9 +177,9 @@ Func demosaic(Func deinterleaved) {
         r_b.compute_at(processed, tx);
         b_r.compute_at(processed, tx);
         // These interleave in x and y, so unrolling them helps
-        r.compute_at(processed, tx).unroll(x, 2).unroll(y, 2);
-        g.compute_at(processed, tx).unroll(x, 2).unroll(y, 2);
-        b.compute_at(processed, tx).unroll(x, 2).unroll(y, 2);
+        output.compute_at(processed, tx).unroll(x, 2).unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+
     } else {
         // Basic naive schedule
         g_r.compute_root();
@@ -182,9 +190,7 @@ Func demosaic(Func deinterleaved) {
         b_gb.compute_root();
         r_b.compute_root();
         b_r.compute_root();
-        r.compute_root();
-        g.compute_root();
-        b.compute_root();
+        output.compute_root();
     }
     return output;
 }
@@ -221,7 +227,7 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
 
 Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast) {
     // copied from FCam
-    Func curve("curved");
+    Func curve("curve");
 
     Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
     Expr g = pow(xf, 1.0f/gamma);
@@ -263,7 +269,6 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
-        processed.bound(tx, 0, 2560-32).bound(ty, 0, 1920); // Statically promise the output dimensions
         processed.parallel(ty);
     } else if (schedule == 1) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
@@ -285,7 +290,7 @@ Func process(Func raw, Type result_type,
 int main(int argc, char **argv) {
     // The camera pipe is specialized on the 2592x1968 images that
     // come in, so we'll just use an image instead of a uniform image.
-    Image<int16_t> input(2592, 1968);
+    ImageParam input(UInt(16), 2);
     ImageParam matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000");
     Param<float> color_temp("color_temp"); //, 3200.0f);
     Param<float> gamma("gamma"); //, 1.8f);
@@ -309,14 +314,19 @@ int main(int argc, char **argv) {
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
+    // We can generate slightly better code if we know the output is a whole number of tiles.
+    Expr out_width = processed.output_buffer().width();
+    Expr out_height = processed.output_buffer().height();
+    processed
+        .bound(tx, 0, (out_width/32)*32)
+        .bound(ty, 0, (out_height/32)*32);
+
     //string s = processed.serialize();
     //printf("%s\n", s.c_str());
 
-    // In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
-    Argument args[] = {color_temp, gamma, contrast, Buffer(input), matrix_3200, matrix_7000};
-    processed.compile_to_file("curved", std::vector<Argument>(args, args+6));
-    processed.compile_to_assembly("curved.s", std::vector<Argument>(args, args+6));
+    std::vector<Argument> args = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
+    processed.compile_to_file("curved", args);
+    processed.compile_to_assembly("curved.s", args);
 
     return 0;
 }
-
