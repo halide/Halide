@@ -8,7 +8,7 @@
 
 extern "C" {
 
-WIN32API void *LoadLibrary(const char *);
+WIN32API void *LoadLibraryA(const char *);
 WIN32API void *GetProcAddress(void *, const char *);
 
 WEAK void *halide_get_symbol(const char *name) {
@@ -16,7 +16,7 @@ WEAK void *halide_get_symbol(const char *name) {
 }
 
 WEAK void *halide_load_library(const char *name) {
-    return LoadLibrary(name);
+    return LoadLibraryA(name);
 }
 
 WEAK void *halide_get_library_symbol(void *lib, const char *name) {
