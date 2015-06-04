@@ -7,14 +7,13 @@ void *dlsym(void *, const char *);
 int dlclose(void *);
 
 #define RTLD_LAZY 0x1
-#define RTLD_LOCAL 0x4
 
 WEAK void *halide_get_symbol(const char *name) {
     return dlsym(NULL, name);
 }
 
 WEAK void *halide_load_library(const char *name) {
-    return dlopen(name, RTLD_LAZY | RTLD_LOCAL);
+    return dlopen(name, RTLD_LAZY);
 }
 
 WEAK void *halide_get_library_symbol(void *lib, const char *name) {
