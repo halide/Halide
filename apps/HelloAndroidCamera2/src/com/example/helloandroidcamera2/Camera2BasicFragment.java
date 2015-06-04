@@ -24,6 +24,7 @@ import android.app.Fragment;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.ImageFormat;
+import android.graphics.PixelFormat;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -78,34 +79,17 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
             = new SurfaceHolder.Callback() {
 
         @Override
-        public void surfaceCreated(SurfaceHolder holder) {
-            // The surface is ready. Make its buffers use the YV12 format and use the NDK to
-            // reconfigure its buffers to be of a different size than on screen (i.e., use the
-            // resolution of the ImageReader instead and use the hardware scaler to interpolate).
-            // (If you don't set it here, funny things happen when if you sleep the device).
-            holder.setFormat(ImageFormat.YV12);
+        public void surfaceCreated(SurfaceHolder holder) {}
+
+        @Override
+        public void surfaceChanged(SurfaceHolder holder, int format, int width,
+                int height) {
             mSurface = holder.getSurface();
             openCamera();
         }
 
         @Override
-        public void surfaceChanged(SurfaceHolder holder, int format, int width,
-                int height) {
-            // Deliberately left empty. Everything is initialized in surfaceCreated().
-            // If you decide to allow device rotation and to decouple the Surface
-            // lifecycle from the Activity/Fragment UI lifecycle, then proper handling
-            // of the YV12+JNI Surface configuration is much more complicated. You
-            // will need to handle the logic in all three callbacks.
-        }
-
-        @Override
-        public void surfaceDestroyed(SurfaceHolder holder) {
-            // Deliberately left empty. Everything is initialized in surfaceCreated().
-            // If you decide to allow device rotation and to decouple the Surface
-            // lifecycle from the Activity/Fragment UI lifecycle, then proper handling
-            // of the YV12+JNI Surface configuration is much more complicated. You
-            // will need to handle the logic in all three callbacks.
-        }
+        public void surfaceDestroyed(SurfaceHolder holder) {}
 
     };
 
@@ -237,13 +221,10 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
 
     @Override
     public void onViewCreated(final View view, Bundle savedInstanceState) {
+        Log.d(TAG, "onViewCreated");
         mSurfaceView = (AutoFitSurfaceView) view.findViewById(R.id.surface_view);
         mSurfaceView.setAspectRatio(DESIRED_IMAGE_READER_SIZE.getWidth(),
                 DESIRED_IMAGE_READER_SIZE.getHeight());
-        // This must be called here, before the initial buffer creation.
-        // Putting this inside surfaceCreated() is insufficient.
-        mSurfaceView.getHolder().setFormat(ImageFormat.YV12);
-
         view.findViewById(R.id.toggle).setOnClickListener(this);
     }
 
@@ -255,8 +236,10 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
         setupCameraOutputs();
         // Make the SurfaceView VISIBLE so that on resume, surfaceCreated() is called,
         // and on pause, surfaceDestroyed() is called.
-        mSurfaceView.setVisibility(View.VISIBLE);
+        mSurfaceView.getHolder().setFormat(ImageFormat.YV12);
+        mSurfaceView.getHolder().setFixedSize(mImageReader.getWidth(), mImageReader.getHeight());
         mSurfaceView.getHolder().addCallback(mSurfaceCallback);
+        mSurfaceView.setVisibility(View.VISIBLE);
     }
 
     @Override

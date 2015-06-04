@@ -40,6 +40,24 @@ bool checkBufferSizesMatch(int srcWidth, int srcHeight,
     return (srcWidth == buf->width && srcHeight == buf->height);
 }
 
+extern "C" {
+JNIEXPORT void JNICALL Java_com_example_helloandroidcamera2_JNIUtils_configureSurfaceNative(
+    JNIEnv *env, jobject obj, jobject surface, int width, int height) {
+#if 1
+    LOGD("[configureSurfaceNative] desired width = %d, height = %d", width,
+         height);
+
+    // Acquires a reference.
+    ANativeWindow *win = ANativeWindow_fromSurface(env, surface);
+
+    LOGD("[configureSurfaceNative] Resetting buffer format.");
+    ANativeWindow_setBuffersGeometry(win, width, height, 0);
+
+    ANativeWindow_release(win);
+#endif
+}
+}
+
 // The source buffers must be YUV_420_888:
 //   chroma_width = luma_width / 2
 //   chroma_height = luma_height / 2
@@ -96,7 +114,6 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
     }
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, dstSurface);
-    ANativeWindow_acquire(win);
 
     ANativeWindow_Buffer buf;
     if (int err = ANativeWindow_lock(win, &buf, NULL)) {
@@ -105,7 +122,8 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
         return false;
     }
 
-    ANativeWindow_setBuffersGeometry(win, srcWidth, srcHeight, 0 /*format unchanged*/);
+    LOGD("[blit] buf.width = %d, buf.height = %d, buf.format = %x (YV12 = %x)",
+        buf.width, buf.height, buf.format, IMAGE_FORMAT_YV12);
 
     if (buf.format != IMAGE_FORMAT_YV12) {
         LOGE("ANativeWindow buffer locked but its format was not YV12.");
@@ -243,7 +261,6 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_edgeDetect(
     }
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, dstSurface);
-    ANativeWindow_acquire(win);
 
     ANativeWindow_Buffer buf;
     if (int err = ANativeWindow_lock(win, &buf, NULL)) {
@@ -251,8 +268,6 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_edgeDetect(
         ANativeWindow_release(win);
         return false;
     }
-
-    ANativeWindow_setBuffersGeometry(win, srcWidth, srcHeight, 0 /*format unchanged*/);
 
     uint8_t *dstLumaPtr = reinterpret_cast<uint8_t *>(buf.bits);
     if (dstLumaPtr == NULL) {
