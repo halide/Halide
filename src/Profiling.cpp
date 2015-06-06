@@ -75,7 +75,7 @@ public:
             // the total, so this should *not* be included in "kToplevel".
             Expr j = Variable::make(Int(32), "j");
 
-            const int kIters = 1000000;
+            const int kIters = 100000;
             const int kUnroll = 4;
             Stmt ticker_block = Stmt();
             for (int i = 0; i < kUnroll; i++) {

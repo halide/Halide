@@ -8,7 +8,7 @@ fi
 cd jni
 # Compile the program that when executed, creates an architecture-specific .so.
 # GenGen.cpp is a stub main().
-c++ -g -Wall -std=c++11 edge_detect_generator.cpp deinterleave_generator.cpp ../../../tools/GenGen.cpp -L ../../../bin -lHalide -I ../../../include -ldl -lpthread -lz -fno-rtti
+c++ -g -Wall -std=c++11 edge_detect_generator.cpp deinterleave_generator.cpp ../../../tools/GenGen.cpp -L ../../../bin -L ../../../build/lib -lHalide -I ../../../include -I ../../../build/include -ldl -lpthread -lz -fno-rtti
 
 # 64-bit MIPS (mips-64-android,mips64) currently does not build since
 # llvm will not compile for the R6 version of the ISA without Nan2008

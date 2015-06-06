@@ -165,14 +165,14 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
                 uint8_t *srcChromaURow =
                         srcChromaUPtr + y * srcChromaRowStrideBytes;
                 uint8_t *dstChromaURow =
-                        dstChromaUPtr + y * srcChromaRowStrideBytes;
+                        dstChromaUPtr + y * dstChromaRowStrideBytes;
                 memcpy(dstChromaURow, srcChromaURow, srcChromaRowStrideBytes);
             }
             for (int y = 0; y < srcHeight; y++) {
                 uint8_t *srcChromaVRow =
                         srcChromaVPtr + y * srcChromaRowStrideBytes;
                 uint8_t *dstChromaVRow =
-                        dstChromaVPtr + y * srcChromaRowStrideBytes;
+                        dstChromaVPtr + y * dstChromaRowStrideBytes;
                 memcpy(dstChromaVRow, srcChromaVRow, srcChromaRowStrideBytes);
             }
         }
@@ -202,7 +202,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
         dstBuf0.extent[2] = 0;
         dstBuf0.extent[3] = 0;
         dstBuf0.stride[0] = 1;
-        dstBuf0.stride[1] = srcChromaWidth;
+        dstBuf0.stride[1] = dstChromaRowStrideBytes;  // Halide stride in pixels but pixel size is 1 byte.
         dstBuf0.min[0] = 0;
         dstBuf0.min[1] = 0;
         dstBuf0.elem_size = 1;
@@ -213,7 +213,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
         dstBuf1.extent[2] = 0;
         dstBuf1.extent[3] = 0;
         dstBuf1.stride[0] = 1;
-        dstBuf1.stride[1] = srcChromaWidth;
+        dstBuf1.stride[1] = dstChromaRowStrideBytes;  // Halide stride in pixels but pixel size is 1 byte.
         dstBuf1.min[0] = 0;
         dstBuf1.min[1] = 0;
         dstBuf1.elem_size = 1;
