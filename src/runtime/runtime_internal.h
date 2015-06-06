@@ -91,6 +91,7 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
 WEAK void *halide_get_symbol(const char *name);
 // Platform specific implementations of dlopen/dlsym.
 WEAK void *halide_load_library(const char *name);
+// If lib is NULL, this call should be equivalent to halide_get_symbol(name).
 WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
 #ifdef DEBUG_RUNTIME
