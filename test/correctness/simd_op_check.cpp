@@ -32,7 +32,7 @@ void check(const char *op, int vector_width, Expr e) {
         if (strncmp(op, filter, strlen(filter)) != 0) return;
     }
 
-    printf("%s %d\n", op, vector_width);
+    // printf("%s %d\n", op, vector_width);
 
     std::string name = std::string("test_") + op + Internal::unique_name('_');
     for (size_t i = 0; i < name.size(); i++) {
@@ -43,16 +43,16 @@ void check(const char *op, int vector_width, Expr e) {
     f.vectorize(x, vector_width);
 
     vector<Argument> arg_types;
-    arg_types.push_back(Argument("in_f32", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_f64", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i8", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u8", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i16", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u16", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i32", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u32", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i64", Argument::Buffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u64", Argument::Buffer, Int(1), 1));
+    arg_types.push_back(Argument("in_f32", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_f64", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i8", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u8", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i16", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u16", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i32", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u32", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i64", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u64", Argument::InputBuffer, Int(1), 1));
 
     char *module = new char[1024];
     snprintf(module, 1024, "test_%s_%s", op, f.name().c_str());
@@ -761,13 +761,9 @@ void check_neon_all() {
         check("vhadd.s32", 2*w, i32((i64(i32_1) + i64(i32_2))/2));
         check("vhadd.u32", 2*w, u32((u64(u32_1) + u64(u32_2))/2));
 
-        // This is common enough that we also allow a version that ignores overflow issues
-        check("vhadd.s8", 8*w, (i8_1 + i8_2)/i8(2));
-        check("vhadd.u8", 8*w, (u8_1 + u8_2)/2);
-        check("vhadd.s16", 4*w, (i16_1 + i16_2)/2);
-        check("vhadd.u16", 4*w, (u16_1 + u16_2)/2);
+        // Halide doesn't define overflow behavior for i32 so we
+        // can use vhadd instruction. We can't use it for unsigned u8,i16,u16,u32.
         check("vhadd.s32", 2*w, (i32_1 + i32_2)/2);
-        check("vhadd.u32", 2*w, (u32_1 + u32_2)/2);
 
         // VHSUB    I       -       Halving Subtract
         check("vhsub.s8", 8*w, i8((i16(i8_1) - i16(i8_2))/2));
@@ -1328,8 +1324,7 @@ int main(int argc, char **argv) {
     else filter = NULL;
 
     target = get_target_from_environment();
-    target.set_feature(Target::NoAsserts);
-    target.set_feature(Target::NoBoundsQuery);
+    target.set_features({Target::NoAsserts, Target::NoBoundsQuery, Target::JIT});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);

@@ -67,23 +67,23 @@ Expr sat_w_h(Expr A) {
 }
 
 Expr bitwiseOr(Expr A, Expr B) {
-  return Internal::Call::make(A.type(), Internal::Call::bitwise_or, vec(A, B),
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_or, {A, B},
                               Internal::Call::Intrinsic);
 }
 Expr bitwiseAnd(Expr A, Expr B) {
-  return Internal::Call::make(A.type(), Internal::Call::bitwise_and, vec(A, B),
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_and, {A, B},
                               Internal::Call::Intrinsic);
 }
 Expr bitwiseXor(Expr A, Expr B) {
-  return Internal::Call::make(A.type(), Internal::Call::bitwise_xor, vec(A, B),
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_xor, {A, B},
                               Internal::Call::Intrinsic);
 }
 Expr bitwiseNot(Expr A) {
-  return Internal::Call::make(A.type(), Internal::Call::bitwise_not, vec(A),
+  return Internal::Call::make(A.type(), Internal::Call::bitwise_not, {A},
                               Internal::Call::Intrinsic);
 }
 Expr shiftLeft(Expr A, Expr B) {
-  return Internal::Call::make(A.type(), Internal::Call::shift_left, vec(A, B),
+  return Internal::Call::make(A.type(), Internal::Call::shift_left, {A, B},
                               Internal::Call::Intrinsic);
 }
 Expr u8_(Expr E) {

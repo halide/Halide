@@ -1,12 +1,6 @@
 #ifndef HALIDE_IR_PRINTER_H
 #define HALIDE_IR_PRINTER_H
 
-#include <ostream>
-
-#include "IR.h"
-
-namespace Halide {
-
 /** \file
  * This header file defines operators that let you dump a Halide
  * expression, statement, or type directly into an output stream
@@ -20,6 +14,13 @@ namespace Halide {
  * These operators are implemented using \ref Halide::Internal::IRPrinter
  */
 
+#include <ostream>
+
+#include "Module.h"
+#include "IRVisitor.h"
+
+namespace Halide {
+
 /** Emit an expression on an output stream (such as std::cout) in a
  * human-readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
@@ -27,6 +28,10 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
 /** Emit a halide type on an output stream (such as std::cout) in a
  * human-readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
+
+/** Emit a halide Module on an output stream (such as std::cout) in a
+ * human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
 
 /** Emit a halide device api type in a human readable form */
 std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
@@ -99,7 +104,7 @@ protected:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const Pipeline *);
+    void visit(const ProducerConsumer *);
     void visit(const For *);
     void visit(const Store *);
     void visit(const Provide *);
@@ -109,7 +114,6 @@ protected:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-
 };
 }
 }

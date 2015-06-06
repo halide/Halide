@@ -24,6 +24,7 @@ public:
 
     /** Create a PTX device code generator. */
     CodeGen_PTX_Dev(Target host);
+    ~CodeGen_PTX_Dev();
 
     void add_kernel(Stmt stmt,
                     const std::string &name,
@@ -49,6 +50,7 @@ protected:
     /* override */ virtual void init_module();
 
     /* override */ virtual llvm::Triple get_target_triple() const;
+    /* override */ virtual llvm::DataLayout get_data_layout() const;
 
     /** We hold onto the basic block at the start of the device
      * function in order to inject allocas */

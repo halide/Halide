@@ -32,7 +32,11 @@ protected:
 
     /** A struct describing heap or stack allocations. */
     struct Allocation {
+        /** The memory */
         llvm::Value *ptr;
+
+        /** Cleanup code for this allocation. */
+        llvm::Instruction *destructor;
 
         /** How many bytes this allocation is, or 0 if not
          * constant. */
@@ -46,9 +50,6 @@ protected:
     /** The allocations currently in scope. The stack gets pushed when
      * we enter a new function. */
     Scope<Allocation> allocations;
-
-    /** Free all heap allocations in scope. */
-    void prepare_for_early_exit();
 
 private:
 
@@ -80,11 +81,6 @@ private:
                                  const std::vector<Expr> &extents,
                                  Expr condition);
 
-    /** Free the memory backing an allocation and pop it from the
-     * symbol table and the allocations map. For heap allocations it
-     * calls halide_free in the runtime, for stack allocations it
-     * marks the block as free so it can be reused. */
-    void free_allocation(const std::string &name);
 };
 
 }}

@@ -95,7 +95,7 @@ build_pnacl/%.objects: %.generate
 	@touch build_pnacl/$*.objects
 
 %.generate: %.cpp
-	$(CXX) $< -o $@ -I ../../include -L ../../bin -lHalide -lpthread -ldl -lz
+	$(CXX) $< -o $@ -I ../../include -L ../../bin -lHalide -lpthread -ldl -lz -std=c++11
 
 clean:
 	rm -f *.generate *.o *.nexe *.pexe *.bc *.ll *.s *.zip $(DEMOS:%=%.h) build_32/* build_64/* build_arm/* build_pnacl/*

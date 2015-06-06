@@ -1,5 +1,4 @@
 #include "JITModule.h"
-#include "StmtCompiler.h"
 #include "Target.h"
 
 #include "runtime/HalideRuntime.h"
@@ -13,9 +12,10 @@ using namespace Halide::Internal;
 namespace {
 
 template <typename fn_type>
-bool lookup_runtime_routine(const char *name, const Target &target, fn_type &result) {
-    StmtCompiler stmt_compiler(target.with_feature(Target::JIT));
-    std::vector<JITModule> runtime(JITSharedRuntime::get(stmt_compiler.get_codegen(), target));
+bool lookup_runtime_routine(const char *name, const Target &target,
+                            fn_type &result) {
+    std::vector<JITModule> runtime(
+        JITSharedRuntime::get(NULL, target.with_feature(Target::JIT)));
 
     for (size_t i = 0; i < runtime.size(); i++) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
@@ -103,7 +103,11 @@ int halide_device_free(void *user_context, struct buffer_t *buf) {
     if (lookup_runtime_routine("halide_device_free", target, fn)) {
         return (*fn)(user_context, buf);
     }
-    return -1;
+    if (buf->dev != 0) {
+        return -1;
+    } else {
+        return 0;
+    }
 }
 
 const struct halide_device_interface *halide_cuda_device_interface() {
@@ -131,6 +135,16 @@ const struct halide_device_interface *halide_opengl_device_interface() {
     target.set_feature(Target::OpenGL);
     struct halide_device_interface *(*fn)();
     if (lookup_runtime_routine("halide_opengl_device_interface", target, fn)) {
+        return (*fn)();
+    }
+    return NULL;
+}
+
+const struct halide_device_interface *halide_renderscript_device_interface() {
+    Target target(get_host_target());
+    target.set_feature(Target::Renderscript);
+    struct halide_device_interface *(*fn)();
+    if (lookup_runtime_routine("halide_renderscript_device_interface", target, fn)) {
         return (*fn)();
     }
     return NULL;

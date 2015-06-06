@@ -8,6 +8,7 @@
 #include "IREquality.h"
 #include "ExprUsesVar.h"
 #include "Substitute.h"
+#include "CodeGen_GPU_Dev.h"
 
 namespace Halide {
 namespace Internal {
@@ -120,6 +121,8 @@ private:
     Scope<int> free_vars;
     Scope<int> inner_loop_vars;
 
+    bool tight;
+
     struct Replacement {
         Expr old_expr, new_expr;
     };
@@ -127,7 +130,7 @@ private:
 
     // A set of let statements for common subexpressions inside the
     // min_vals and max_vals.
-    vector<pair<string, Expr> > containing_lets;
+    vector<pair<string, Expr>> containing_lets;
 
     bool likely;
 
@@ -226,6 +229,11 @@ private:
         if (const Broadcast *b = cond.as<Broadcast>()) {
             return simplify_to_false(b->value);
         } else if (const And *a = cond.as<And>()) {
+            // If we need an And to be false to make the
+            // simplification, then we take the union of the
+            // constraints even though taking either one of them would
+            // be sufficient. This makes the bound no longer tight.
+            tight = false;
             return make_and(simplify_to_false(a->a), simplify_to_false(a->b));
         } else if (const Or *o = cond.as<Or>()) {
             return make_or(simplify_to_false(o->a), simplify_to_false(o->b));
@@ -256,6 +264,11 @@ private:
         } else if (const And *a = cond.as<And>()) {
             return make_and(simplify_to_true(a->a), simplify_to_true(a->b));
         } else if (const Or *o = cond.as<Or>()) {
+            // If we need an Or to be true to make the
+            // simplification, then we take the union of the
+            // constraints even though taking either one of them would
+            // be sufficient. This makes the bound no longer tight.
+            tight = false;
             return make_or(simplify_to_true(o->a), simplify_to_true(o->b));
         } else if (const Not *n = cond.as<Not>()) {
             return make_not(simplify_to_false(n->a));
@@ -267,11 +280,14 @@ private:
             }
         }
 
-        // Convert vector conditions to scalar conditions
+        // Convert vector conditions to scalar conditions. In general
+        // these are conservative, so they make the bound no longer
+        // tight.
         if (cond.type().is_vector()) {
             if (const LT *lt = cond.as<LT>()) {
                 Expr a = max_lane(lt->a), b = min_lane(lt->b);
                 if (a.defined() && b.defined()) {
+                    tight = false;
                     cond = a < b;
                 } else {
                     return cond;
@@ -279,6 +295,7 @@ private:
             } else if (const LE *le = cond.as<LE>()) {
                 Expr a = max_lane(le->a), b = min_lane(le->b);
                 if (a.defined() && b.defined()) {
+                    tight = false;
                     cond = a <= b;
                 } else {
                     return cond;
@@ -286,6 +303,7 @@ private:
             } else if (const GE *ge = cond.as<GE>()) {
                 Expr a = min_lane(ge->a), b = max_lane(ge->b);
                 if (a.defined() && b.defined()) {
+                    tight = false;
                     cond = a >= b;
                 } else {
                     return cond;
@@ -293,6 +311,7 @@ private:
             } else if (const GT *gt = cond.as<GT>()) {
                 Expr a = min_lane(gt->a), b = max_lane(gt->b);
                 if (a.defined() && b.defined()) {
+                    tight = false;
                     cond = a > b;
                 } else {
                     return cond;
@@ -322,7 +341,7 @@ private:
         }
 
         // Peel off lets.
-        vector<pair<string, Expr> > new_lets;
+        vector<pair<string, Expr>> new_lets;
         while (const Let *let = solved.as<Let>()) {
             new_lets.push_back(make_pair(let->name, let->value) );
             solved = let->body;
@@ -405,15 +424,16 @@ private:
             size_t old_num_min_vals = min_vals.size();
             size_t old_num_max_vals = max_vals.size();
 
+            tight = true;
             if (is_one(simplify_to_true(condition))) {
                 expr = a;
 
-                if (!found_simplification_in_children && condition.type().is_scalar()) {
-                    // If there were no inner mutations and we found a
-                    // new min_val, then we have a simplification that
-                    // we can apply to the prologue. Vector conditions
-                    // don't produce tight bounds though, so they're
-                    // not suitable for this.
+                // If there were no inner mutations and we found a new
+                // min_val, then we have a simplification that we can
+                // apply to the prologue and/or epilogue. Not all
+                // simplifications of the condition produce tight
+                // bounds though (e.g. ors, vector conditions).
+                if (!found_simplification_in_children && tight) {
                     Replacement r = {op, op_b};
                     if (min_vals.size() > old_num_min_vals) {
                         prologue_replacements.push_back(r);
@@ -477,14 +497,12 @@ private:
         if (a_likely && !b_likely) {
             // Figure out bounds on the loop var which makes the condition true.
             debug(3) << "Attempting to make this condition true: " << condition << "\n";
+            tight = true;
             Expr new_condition = simplify_to_true(condition);
             debug(3) << "Attempted to make this condition true: " << condition << " Got: " << new_condition << "\n";
             if (is_one(new_condition)) {
                 // We succeeded!
-                if (!found_simplification_in_children && condition.type().is_scalar()) {
-                    // Vector conditions are not tight bounds, so we
-                    // can't simplify the prologue and epilogue using
-                    // them.
+                if (!found_simplification_in_children && tight) {
                     Replacement r = {op->condition, const_false()};
                     if (min_vals.size() > old_num_min_vals) {
                         prologue_replacements.push_back(r);
@@ -500,10 +518,11 @@ private:
             }
         } else if (b_likely && !a_likely) {
             debug(3) << "Attempting to make this condition false: " << condition << "\n";
+            tight = true;
             Expr new_condition = simplify_to_false(condition);
             debug(3) << "Attempted to make this condition false: " << condition << " Got: " << new_condition << "\n";
             if (is_zero(new_condition)) {
-                if (!found_simplification_in_children && condition.type().is_scalar()) {
+                if (!found_simplification_in_children && tight) {
                     Replacement r = {op->condition, const_true()};
                     if (min_vals.size() > old_num_min_vals) {
                         prologue_replacements.push_back(r);
@@ -605,6 +624,14 @@ class PartitionLoops : public IRMutator {
             return;
         }
 
+        // We can't inject logic at the loop over gpu blocks, or in
+        // between gpu thread loops.
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            stmt = For::make(op->name, op->min, op->extent,
+                             op->for_type, op->device_api, body);
+            return;
+        }
+
         FindSteadyState f(op->name);
         Stmt simpler_body = f.mutate(body);
         // Ask for the start and end of the steady state.
@@ -619,7 +646,7 @@ class PartitionLoops : public IRMutator {
             bool make_epilogue = max_steady.defined();
 
             // Accrue a stack of let statements defining the steady state start and end.
-            vector<pair<string, Expr> > lets;
+            vector<pair<string, Expr>> lets;
 
             if (make_prologue) {
                 // Clamp the prologue end to within the existing loop bounds,

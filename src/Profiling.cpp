@@ -59,7 +59,7 @@ public:
             // Note that this is tacked on to the front of the block, since it must come
             // before the calls to halide_current_time_ns.
             Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", vector<Expr>(), Call::Extern);
-            Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
+            Stmt begin_clock = Evaluate::make(begin_clock_call);
             s = Block::make(begin_clock, s);
 
             // Do a little calibration: make a loop that does a large number of calls to add_ticks
@@ -75,7 +75,7 @@ public:
             // the total, so this should *not* be included in "kToplevel".
             Expr j = Variable::make(Int(32), "j");
 
-            const int kIters = 1000000;
+            const int kIters = 100000;
             const int kUnroll = 4;
             Stmt ticker_block = Stmt();
             for (int i = 0; i < kUnroll; i++) {
@@ -89,13 +89,13 @@ public:
             do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
                 Cast::make(UInt(64), kIters * kUnroll), do_timings);
             s = Block::make(s, do_timings);
-            s = Allocate::make(kIgnoreBuf, UInt(32), vec(Expr(1)), const_true(), s);
+            s = Allocate::make(kIgnoreBuf, UInt(32), {1}, const_true(), s);
 
             // Tack on code to print the counters.
-            for (map<string, int>::const_iterator it = indices.begin(); it != indices.end(); ++it) {
-                int idx = it->second;
+            for (const std::pair<std::string, int> &i : indices) {
+                int idx = i.second;
                 Expr val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
-                Expr print_val = print(it->first, val);
+                Expr print_val = print(i.first, val);
                 Stmt print_stmt = Evaluate::make(print_val);
                 s = Block::make(s, print_stmt);
             }
@@ -106,7 +106,7 @@ public:
                 Store::make(kBufName, Cast::make(UInt(64), 0), i));
             s = Block::make(init, s);
 
-            s = Allocate::make(kBufName, UInt(64), vec(Expr((int)indices.size())), const_true(), s);
+            s = Allocate::make(kBufName, UInt(64), {(int)indices.size()}, const_true(), s);
         } else {
             s = mutate(s);
         }
@@ -206,7 +206,7 @@ private:
         return s;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (level >= 1) {
             Stmt produce, update, consume;
             {
@@ -226,7 +226,7 @@ private:
             update = update.defined() ? add_count_and_ticks("update", op->name, update) : Stmt();
             consume = add_count_and_ticks("consume", op->name, consume);
 
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         } else {
             IRMutator::visit(op);
         }

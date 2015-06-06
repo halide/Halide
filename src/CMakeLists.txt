@@ -79,6 +79,7 @@ set(RUNTIME_CPP
   android_opengl_context
   cache
   cuda
+  destructors
   device_interface
   fake_thread_pool
   gcd_thread_pool
@@ -87,6 +88,8 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  matlab
+  metadata
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
@@ -94,20 +97,24 @@ set(RUNTIME_CPP
   opencl
   opengl
   osx_clock
+  osx_get_symbol
   osx_host_cpu_count
   osx_opengl_context
   posix_allocator
   posix_clock
   posix_error_handler
+  posix_get_symbol
   posix_io
   posix_math
   posix_print
   posix_thread_pool
+  renderscript
   ssp
   to_string
   tracing
   windows_clock
   windows_cuda
+  windows_get_symbol
   windows_io
   windows_opencl
   windows_thread_pool
@@ -122,6 +129,7 @@ set (RUNTIME_LL
   pnacl_math
   posix_math
   ptx_dev
+  renderscript_dev
   win32_math
   x86
   x86_avx
@@ -150,11 +158,24 @@ set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    # -m64 isn't respected unless we also use a 64-bit target.
-    IF (ARCHS EQUAL 32)
-      set(TARGET "i386-unknown-unknown-unknown")
+    IF (LLVM_VERSION LESS 36)
+      IF (ARCHS EQUAL 32)
+        set(TARGET "i386-unknown-unknown-unknown")
+      ELSE()
+        set(TARGET "x86_64-unknown-unknown-unknown")
+      ENDIF()
     ELSE()
-      set(TARGET "x86_64-unknown-unknown-unknown")
+      IF (ARCHS EQUAL 32)
+        IF (${i} MATCHES "windows_.*")
+          # win32 uses the stdcall calling convention, which is x86-specific
+          set(TARGET "i386-unknown-unknown-unknown")
+        ELSE()
+          set(TARGET "le32-unknown-nacl-unknown")
+        ENDIF()
+      ELSE()
+        # generic 64-bit code
+        set(TARGET "le64-unknown-unknown-unknown")
+      ENDIF()
     ENDIF()
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
     set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
@@ -166,11 +187,11 @@ foreach (i ${RUNTIME_CPP} )
 
     add_custom_command(OUTPUT "${LL_D}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                        COMMENT "${SOURCE} -> ${LL_D}")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
 
     add_custom_command(OUTPUT "${BC_D}"
@@ -224,101 +245,110 @@ add_dependencies(InitialModules
   bitcode2cpp)
 
 set(HEADER_FILES
-  Util.h
-  Type.h
+  AddImageChecks.h
+  AddParameterChecks.h
+  AllocationBoundsInference.h
   Argument.h
+  BlockFlattening.h
+  BoundaryConditions.h
   Bounds.h
   BoundsInference.h
   Buffer.h
+  CSE.h
+  CodeGen_ARM.h
   CodeGen_C.h
-  CodeGen_LLVM.h
-  CodeGen_X86.h
+  CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
-  CodeGen_PTX_Dev.h
+  CodeGen_LLVM.h
+  CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
   CodeGen_OpenGL_Dev.h
-  CodeGen_GPU_Dev.h
   CodeGen_PNaCl.h
+  CodeGen_PTX_Dev.h
+  CodeGen_Posix.h
+  CodeGen_Renderscript_Dev.h
+  CodeGen_X86.h
+  Debug.h
+  DebugToFile.h
   Deinterleave.h
   Derivative.h
-  OneToOne.h
-  Extern.h
+  DeviceInterface.h
+  EarlyFree.h
+  Error.h
   Expr.h
+  ExprUsesVar.h
+  Extern.h
+  FastIntegerDivide.h
   FindCalls.h
   Func.h
   Function.h
-  Image.h
-  InlineReductions.h
-  IntegerDivisionTable.h
-  Introspection.h
-  IntrusivePtr.h
-  IREquality.h
+  Generator.h
   IR.h
+  IREquality.h
   IRMatch.h
   IRMutator.h
   IROperator.h
   IRPrinter.h
   IRVisitor.h
-  InjectOpenGLIntrinsics.h
+  Image.h
   InjectHostDevBufferCopies.h
+  InjectImageIntrinsics.h
+  InjectOpenGLIntrinsics.h
+  Inline.h
+  InlineReductions.h
+  IntegerDivisionTable.h
+  Introspection.h
+  IntrusivePtr.h
   JITModule.h
+  LLVM_Output.h
+  LLVM_Runtime_Linker.h
   Lambda.h
-  Debug.h
+  Lerp.h
   Lower.h
   MainPage.h
+  MatlabWrapper.h
+  Memoization.h
+  Module.h
   ModulusRemainder.h
-  Parameter.h
+  ObjectInstanceRegistry.h
+  OneToOne.h
+  Output.h
+  ParallelRVar.h
   Param.h
+  Parameter.h
   PartitionLoops.h
+  Pipeline.h
+  Profiling.h
+  Qualify.h
   RDom.h
+  Random.h
+  RealizationOrder.h
   Reduction.h
+  RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
+  RemoveUndef.h
   Schedule.h
+  ScheduleFunctions.h
   Scope.h
   Simplify.h
+  SkipStages.h
   SlidingWindow.h
   Solve.h
-  StmtCompiler.h
+  StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
   Substitute.h
-  Profiling.h
+  Target.h
   Tracing.h
+  Tuple.h
+  Type.h
+  UnifyDuplicateLets.h
+  UniquifyVariableNames.h
   UnrollLoops.h
+  Util.h
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
-  CodeGen_Posix.h
-  CodeGen_ARM.h
-  DebugToFile.h
-  EarlyFree.h
-  UniquifyVariableNames.h
-  CSE.h
-  Tuple.h
-  Lerp.h
-  Target.h
-  SkipStages.h
-  RemoveUndef.h
-  FastIntegerDivide.h
-  AllocationBoundsInference.h
-  Error.h
-  Inline.h
-  Qualify.h
-  ExprUsesVar.h
-  Random.h
-  ParallelRVar.h
-  BoundaryConditions.h
-  UnifyDuplicateLets.h
-  HumanReadableStmt.h
-  StmtToHtml.h
-  Memoization.h
-  CodeGen_MIPS.h
-  Generator.h
-  ObjectInstanceRegistry.h
-  BlockFlattening.h
-  RemoveDeadAllocations.h
-  LLVM_Runtime_Linker.h
-  DeviceInterface.h
   runtime/HalideRuntime.h
 )
 
@@ -333,100 +363,127 @@ file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
+IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
+  set(BITWRITER_FILES
+    BitWriter_3_2.35/BitcodeWriter.cpp
+    BitWriter_3_2.35/BitcodeWriterPass.cpp
+    BitWriter_3_2.35/ValueEnumerator.cpp
+  )
+ELSE()
+  set(BITWRITER_FILES
+    BitWriter_3_2/BitcodeWriter.cpp
+    BitWriter_3_2/BitcodeWriterPass.cpp
+    BitWriter_3_2/ValueEnumerator.cpp
+  )
+ENDIF()
+
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
-  CodeGen_LLVM.cpp
-  CodeGen_Internal.cpp
-  CodeGen_X86.cpp
+  AddImageChecks.cpp
+  AddParameterChecks.cpp
+  AllocationBoundsInference.cpp
+  BlockFlattening.cpp
+  BoundaryConditions.cpp
+  Bounds.cpp
+  BoundsInference.cpp
+  Buffer.cpp
+  CSE.cpp
+  CodeGen_ARM.cpp
+  CodeGen_C.cpp
+  CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
-  CodeGen_PTX_Dev.cpp
+  CodeGen_Internal.cpp
+  CodeGen_LLVM.cpp
+  CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
-  CodeGen_GPU_Dev.cpp
-  CodeGen_Posix.cpp
   CodeGen_PNaCl.cpp
-  CodeGen_ARM.cpp
-  IR.cpp
-  IRMutator.cpp
-  IRPrinter.cpp
-  IRVisitor.cpp
-  CodeGen_C.cpp
-  Substitute.cpp
-  ModulusRemainder.cpp
-  Bounds.cpp
+  CodeGen_PTX_Dev.cpp
+  CodeGen_Posix.cpp
+  CodeGen_Renderscript_Dev.cpp
+  CodeGen_X86.cpp
+  Debug.cpp
+  Debug.cpp
+  DebugToFile.cpp
+  Deinterleave.cpp
   Derivative.cpp
-  OneToOne.cpp
+  DeviceInterface.cpp
+  EarlyFree.cpp
+  Error.cpp
+  ExprUsesVar.cpp
+  FastIntegerDivide.cpp
   FindCalls.cpp
   Func.cpp
-  Simplify.cpp
-  IREquality.cpp
-  Util.cpp
   Function.cpp
+  FuseGPUThreadLoops.cpp
+  Generator.cpp
+  IR.cpp
+  IREquality.cpp
+  IRMatch.cpp
+  IRMutator.cpp
   IROperator.cpp
+  IRPrinter.cpp
+  IRVisitor.cpp
+  Image.cpp
+  InjectHostDevBufferCopies.cpp
+  InjectImageIntrinsics.cpp
+  InjectOpenGLIntrinsics.cpp
+  Inline.cpp
+  InlineReductions.cpp
+  IntegerDivisionTable.cpp
+  Introspection.cpp
+  JITModule.cpp
+  LLVM_Output.cpp
+  LLVM_Runtime_Linker.cpp
+  Lerp.cpp
   Lower.cpp
-  Debug.cpp
+  MatlabWrapper.cpp
+  Memoization.cpp
+  Module.cpp
+  ModulusRemainder.cpp
+  ObjectInstanceRegistry.cpp
+  OneToOne.cpp
+  Output.cpp
+  ParallelRVar.cpp
+  Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
-  Reduction.cpp
-  Random.cpp
-  RDom.cpp
-  Solve.cpp
+  Pipeline.cpp
+  PrintLoopNest.cpp
   Profiling.cpp
-  Tracing.cpp
-  StorageFlattening.cpp
-  VectorizeLoops.cpp
-  UnrollLoops.cpp
-  BoundsInference.cpp
-  IRMatch.cpp
-  StmtCompiler.cpp
-  IntegerDivisionTable.cpp
-  SlidingWindow.cpp
-  StorageFolding.cpp
-  InlineReductions.cpp
-  RemoveTrivialForLoops.cpp
-  Deinterleave.cpp
-  DebugToFile.cpp
-  Type.cpp
-  JITModule.cpp
-  EarlyFree.cpp
-  UniquifyVariableNames.cpp
-  CSE.cpp
-  Tuple.cpp
-  Lerp.cpp
-  Target.cpp
-  SkipStages.cpp
-  RemoveUndef.cpp
-  FastIntegerDivide.cpp
-  AllocationBoundsInference.cpp
-  Inline.cpp
   Qualify.cpp
-  UnifyDuplicateLets.cpp
-  VaryingAttributes.cpp
-  ExprUsesVar.cpp
-  Introspection.cpp
-  Buffer.cpp
-  Param.cpp
-  Error.cpp
-  Image.cpp
-  Debug.cpp
-  InjectOpenGLIntrinsics.cpp
-  InjectHostDevBufferCopies.cpp
-  Schedule.cpp
-  FuseGPUThreadLoops.cpp
-  ParallelRVar.cpp
-  BoundaryConditions.cpp
-  HumanReadableStmt.cpp
-  StmtToHtml.cpp
-  Memoization.cpp
-  CodeGen_MIPS.cpp
-  Generator.cpp
-  ObjectInstanceRegistry.cpp
-  BlockFlattening.cpp
+  RDom.cpp
+  Random.cpp
+  RealizationOrder.cpp
+  Reduction.cpp
   RemoveDeadAllocations.cpp
-  LLVM_Runtime_Linker.cpp
-  DeviceInterface.cpp
+  RemoveTrivialForLoops.cpp
+  RemoveUndef.cpp
+  Schedule.cpp
+  ScheduleFunctions.cpp
+  Simplify.cpp
+  SkipStages.cpp
+  SlidingWindow.cpp
+  Solve.cpp
+  StmtToHtml.cpp
+  StorageFlattening.cpp
+  StorageFolding.cpp
+  Substitute.cpp
+  Target.cpp
+  Tracing.cpp
+  Tuple.cpp
+  Type.cpp
+  UnifyDuplicateLets.cpp
+  UniquifyVariableNames.cpp
+  UnrollLoops.cpp
+  Util.cpp
+  Var.cpp
+  VaryingAttributes.cpp
+  VectorizeLoops.cpp
+  ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
 )

@@ -5,10 +5,10 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <bitset>
-#include <limits>
 #include <stdint.h>
+#include <bitset>
 #include <string>
+
 #include "Error.h"
 #include "Type.h"
 #include "Util.h"
@@ -58,8 +58,15 @@ struct Target {
 
         OpenGL,  ///< Enable the OpenGL runtime.
 
+        Renderscript, ///< Enable the Renderscript runtime.
+
         UserContext,  ///< Generated code takes a user_context pointer as first argument
         HVX, /// Enable HVX (hexagon) intrinsics
+
+        RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
+
+        Matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!

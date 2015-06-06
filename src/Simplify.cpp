@@ -465,6 +465,9 @@ private:
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
 
+        const Max *max_a = a.as<Max>();
+        const Max *max_b = b.as<Max>();
+
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
@@ -587,6 +590,24 @@ private:
         } else if (min_a && add_a_b && no_overflow(op->type) && equal(b, add_a_b->b)) {
             // min(c, b + a) - a -> min(b, c-a)
             expr = mutate(min(add_a_b->a, min_a->a - b));
+        } else if (min_a && min_b && equal(min_a->a, min_b->b) && equal(min_a->b, min_b->a)) {
+            // min(a, b) - min(b, a) -> 0
+            expr = make_zero(op->type);
+        } else if (max_a && max_b && equal(max_a->a, max_b->b) && equal(max_a->b, max_b->a)) {
+            // max(a, b) - max(b, a) -> 0
+            expr = make_zero(op->type);
+        } else if (min_a && min_b && is_zero(simplify((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
+            // min(a, b) - min(c, d) where a-b == c-d -> b - d
+            expr = mutate(min_a->b - min_b->b);
+        } else if (max_a && max_b && is_zero(simplify((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
+            // max(a, b) - max(c, d) where a-b == c-d -> b - d
+            expr = mutate(max_a->b - max_b->b);
+        } else if (min_a && min_b && is_zero(simplify((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
+            // min(a, b) - min(c, d) where a-b == d-c -> b - c
+            expr = mutate(min_a->b - min_b->a);
+        } else if (max_a && max_b && is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
+            // max(a, b) - max(c, d) where a-b == d-c -> b - c
+            expr = mutate(max_a->b - max_b->a);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -878,10 +899,11 @@ private:
             std::swap(a, b);
         }
 
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Ramp *ramp_a = a.as<Ramp>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
@@ -897,6 +919,8 @@ private:
         const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
+        const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
 
         min_a_a = max_a ? max_a->a.as<Min>() : min_a_a;
 
@@ -942,6 +966,22 @@ private:
                 return;
             } else if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
                 expr = a;
+                return;
+            }
+       } else if (ramp_a && broadcast_b &&
+                  const_int(ramp_a->base, &ia) &&
+                  const_int(ramp_a->stride, &ib) &&
+                  const_int(broadcast_b->value, &ic)) {
+            // min(ramp(a, b, n), broadcast(c, n))
+            int ramp_start = ia;
+            int ramp_end = ia + ib * (ramp_a->width - 1);
+            if (ramp_start <= ic && ramp_end <= ic) {
+                // ramp dominates
+                expr = a;
+                return;
+            } if (ramp_start >= ic && ramp_end >= ic) {
+                // broadcast dominates
+                expr = b;
                 return;
             }
         }
@@ -1083,6 +1123,14 @@ private:
             } else {
                 expr = mutate(max(mul_a->a, ib/ia) * ia);
             }
+        } else if (call_a && call_a->name == Call::likely && call_a->call_type == Call::Intrinsic &&
+                   equal(call_a->args[0], b)) {
+            // min(likely(b), b) -> likely(b)
+            expr = a;
+        } else if (call_b && call_b->name == Call::likely && call_b->call_type == Call::Intrinsic &&
+                   equal(call_b->args[0], a)) {
+            // min(a, likely(a)) -> likely(a)
+            expr = b;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1098,10 +1146,12 @@ private:
             std::swap(a, b);
         }
 
-        int ia = 0, ib = 0; //, ic = 0, id = 0;
+
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Ramp *ramp_a = a.as<Ramp>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
@@ -1117,6 +1167,8 @@ private:
         const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : NULL;
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
+        const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
 
         if (equal(a, b)) {
             expr = a;
@@ -1158,8 +1210,23 @@ private:
                 expr = b;
                 return;
             }
+        } else if (ramp_a && broadcast_b &&
+                   const_int(ramp_a->base, &ia) &&
+                   const_int(ramp_a->stride, &ib) &&
+                   const_int(broadcast_b->value, &ic)) {
+            // max(ramp(a, b, n), broadcast(c, n))
+            int ramp_start = ia;
+            int ramp_end = ia + ib * (ramp_a->width - 1);
+            if (ramp_start >= ic && ramp_end >= ic) {
+                // ramp dominates
+                expr = a;
+                return;
+            } if (ramp_start <= ic && ramp_end <= ic) {
+                // broadcast dominates
+                expr = b;
+                return;
+            }
         }
-
 
         if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
             // max(x + 3, x - 2) -> x - 2
@@ -1283,6 +1350,14 @@ private:
             } else {
                 expr = mutate(min(mul_a->a, ib/ia) * ia);
             }
+        } else if (call_a && call_a->name == Call::likely && call_a->call_type == Call::Intrinsic &&
+                   equal(call_a->args[0], b)) {
+            // max(likely(b), b) -> likely(b)
+            expr = a;
+        } else if (call_b && call_b->name == Call::likely && call_b->call_type == Call::Intrinsic &&
+                   equal(call_b->args[0], a)) {
+            // max(a, likely(a)) -> likely(a)
+            expr = b;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1729,6 +1804,9 @@ private:
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
 
+        const Call *ct = true_value.as<Call>();
+        const Call *cf = false_value.as<Call>();
+
         if (is_zero(condition)) {
             expr = false_value;
         } else if (is_one(condition)) {
@@ -1744,6 +1822,14 @@ private:
         } else if (const LE *le = condition.as<LE>()) {
             // Normalize select(a <= b, c, d) to select(b < a, d, c)
             expr = mutate(Select::make(le->b < le->a, false_value, true_value));
+        } else if (ct && ct->name == Call::likely && ct->call_type == Call::Intrinsic &&
+                   equal(ct->args[0], false_value)) {
+            // select(cond, likely(a), a) -> likely(a)
+            expr = true_value;
+        } else if (cf && cf->name == Call::likely && cf->call_type == Call::Intrinsic &&
+                   equal(cf->args[0], true_value)) {
+            // select(cond, a, likely(a)) -> likely(a)
+            expr = false_value;
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
@@ -1953,7 +2039,7 @@ private:
 
             if (const_castint(b, &ib) &&
                 ((ib < b.type().imax()) && (ib < std::numeric_limits<int>::max()) &&
-                 is_const_power_of_two(ib + 1, &bits))) {
+                 is_const_power_of_two_integer(ib + 1, &bits))) {
                   expr = Mod::make(a, ib + 1);
             } else  if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
@@ -1981,7 +2067,6 @@ private:
             } else {
                 expr = abs(a);
             }
-#if __cplusplus > 199711L // C++11 comes with a portable isnan
         } else if (op->call_type == Call::Extern &&
                    op->name == "is_nan_f32") {
             Expr arg = mutate(op->args[0]);
@@ -1991,9 +2076,8 @@ private:
             } else if (arg.same_as(op->args[0])) {
                 expr = op;
             } else {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             }
-#endif
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
             // Eagerly concat constant arguments to a stringify.
@@ -2051,7 +2135,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 expr = logf(*f);
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
                 expr = op;
             }
@@ -2061,7 +2145,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 expr = expf(*f);
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
                 expr = op;
             }
@@ -2074,9 +2158,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 if (op->name == "floor_f32") expr = std::floor(*f);
                 else if (op->name == "ceil_f32") expr = std::ceil(*f);
-#if __cplusplus > 199711L
                 else if (op->name == "round_f32") expr = std::nearbyint(*f);
-#endif
                 else if (op->name == "trunc_f32") {
                     expr = (*f < 0 ? std::ceil(*f) : std::floor(*f));
                 }
@@ -2088,7 +2170,7 @@ private:
                 // discard the outer function. For example, floor(ceil(x)) == ceil(x).
                 expr = call;
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
                 expr = op;
             }
@@ -2274,6 +2356,8 @@ private:
         if (a && is_zero(a->condition)) {
             user_error << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                        << stmt << "\n";
+        } else if (a && is_one(a->condition)) {
+            stmt = Evaluate::make(0);
         }
     }
 
@@ -2797,6 +2881,9 @@ void simplify_test() {
     check(min(x + y, y + z), min(x, z) + y);
     check(min(y + x, y + z), min(x, z) + y);
 
+    check(min(x, y) - min(y, x), 0);
+    check(max(x, y) - max(y, x), 0);
+
     check(min(123 - x, 1 - x), 1 - x);
     check(max(123 - x, 1 - x), 123 - x);
 
@@ -2818,10 +2905,8 @@ void simplify_test() {
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);
-#if __cplusplus > 199711L
     check(round(0.6f), 1.0f);
     check(round(-0.5f), 0.0f);
-#endif
     check(trunc(-1.6f), -1.0f);
     check(floor(round(x)), round(x));
     check(ceil(ceil(x)), ceil(x));
@@ -2908,6 +2993,18 @@ void simplify_test() {
     check((x/8)*8 < x - 9, f);
     check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
 
+    check(min(x, likely(x)), likely(x));
+    check(min(likely(x), x), likely(x));
+    check(max(x, likely(x)), likely(x));
+    check(max(likely(x), x), likely(x));
+    check(select(x > y, likely(x), x), likely(x));
+    check(select(x > y, x, likely(x)), likely(x));
+
+    check(min(x + 1, y) - min(x, y - 1), 1);
+    check(max(x + 1, y) - max(x, y - 1), 1);
+    check(min(x + 1, y) - min(y - 1, x), 1);
+    check(max(x + 1, y) - max(y - 1, x), 1);
+
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
                            Evaluate::make(z + x + y),
@@ -2992,11 +3089,11 @@ void simplify_test() {
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     // Check that constant args to a stringify get combined
-    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, string(" "), 4), Call::Intrinsic),
+    check(Call::make(Handle(), Call::stringify, {3, string(" "), 4}, Call::Intrinsic),
           string("3 4"));
 
-    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, x, 4, string(", "), 3.4f), Call::Intrinsic),
-          Call::make(Handle(), Call::stringify, vec<Expr>(string("3"), x, string("4, 3.400000")), Call::Intrinsic));
+    check(Call::make(Handle(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
+          Call::make(Handle(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
@@ -3005,6 +3102,22 @@ void simplify_test() {
     check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(8,4),  const_true(4),  bounds_info);
     check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(-4,4), const_false(4), bounds_info);
     check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(5,4),  const_true(4),  bounds_info);
+
+    // min and max on constant ramp v broadcast
+    check(max(Ramp::make(0, 1, 8), 0), Ramp::make(0, 1, 8));
+    check(min(Ramp::make(0, 1, 8), 7), Ramp::make(0, 1, 8));
+    check(max(Ramp::make(0, 1, 8), 7), Broadcast::make(7, 8));
+    check(min(Ramp::make(0, 1, 8), 0), Broadcast::make(0, 8));
+    check(min(Ramp::make(0, 1, 8), 4), min(Ramp::make(0, 1, 8), 4));
+
+    check(max(Ramp::make(7, -1, 8), 0), Ramp::make(7, -1, 8));
+    check(min(Ramp::make(7, -1, 8), 7), Ramp::make(7, -1, 8));
+    check(max(Ramp::make(7, -1, 8), 7), Broadcast::make(7, 8));
+    check(min(Ramp::make(7, -1, 8), 0), Broadcast::make(0, 8));
+    check(min(Ramp::make(7, -1, 8), 4), min(Ramp::make(7, -1, 8), 4));
+
+    check(max(0, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
+    check(min(7, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
 
     std::cout << "Simplify test passed" << std::endl;
 }

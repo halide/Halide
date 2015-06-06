@@ -6,8 +6,6 @@
  */
 
 #include "Expr.h"
-#include <string>
-#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -200,6 +198,9 @@ public:
     bool &allow_race_conditions();
     // @}
 
+    /** Pass an IRVisitor through to all Exprs referenced in the
+     * Schedule. */
+    void accept(IRVisitor *) const;
 };
 
 }

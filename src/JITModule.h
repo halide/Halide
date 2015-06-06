@@ -5,10 +5,10 @@
  * a JIT compiled halide pipeline
  */
 
+#include <map>
+
 #include "IntrusivePtr.h"
 #include "runtime/HalideRuntime.h"
-
-#include <map>
 
 namespace llvm {
 class Module;
@@ -18,11 +18,12 @@ class Type;
 namespace Halide {
 
 struct Target;
+class Module;
 
 namespace Internal {
 
 class JITModuleContents;
-class CodeGen_LLVM;
+struct LoweredFunc;
 
 struct JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
@@ -34,7 +35,8 @@ struct JITModule {
         Symbol(void *address, llvm::Type *llvm_type) : address(address), llvm_type(llvm_type) {}
     };
 
-    JITModule() {}
+    EXPORT JITModule();
+    EXPORT JITModule(const Module &m, const LoweredFunc &fn);
     EXPORT JITModule(const std::map<std::string, Symbol> &exports);
 
     /** The exports map of a JITModule contains all symbols which are
@@ -69,13 +71,12 @@ struct JITModule {
 
     // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will
-        be available via the Exports method. */
-    EXPORT void compile_module(CodeGen_LLVM *cg,
-                               llvm::Module *mod, const std::string &function_name,
-                               const std::vector<JITModule> &dependencies,
-                               const std::vector<std::string> &requested_exports);
+        be available via the exports method. */
+    EXPORT void compile_module(llvm::Module *mod, const std::string &function_name, const Target &target,
+                               const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
+                               const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
-    /** Make extern declarations fo rall exports of a set of JITModules in another llvm::Module */
+    /** Make extern declarations for all exports of a set of JITModules in another llvm::Module */
     EXPORT static void make_externs(const std::vector<JITModule> &deps, llvm::Module *mod);
 
     /** Encapsulate device (GPU) and buffer interactions. */
@@ -83,6 +84,9 @@ struct JITModule {
     EXPORT int copy_to_host(struct buffer_t *buf) const;
     EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
+
+    /** Check if this JIT module has a definition. */
+    EXPORT bool defined() const;
 };
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
@@ -108,8 +112,8 @@ struct JITUserContext {
 
 class JITSharedRuntime {
 public:
-    // Note only the first CodeGen_LLVM passed in here is used. The same shared runtime is used for all JIT.
-    EXPORT static std::vector<JITModule> get(CodeGen_LLVM *cg, const Target &target);
+    // Note only the first llvm::Module passed in here is used. The same shared runtime is used for all JIT.
+    EXPORT static std::vector<JITModule> get(llvm::Module *m, const Target &target, bool create = true);
     EXPORT static void init_jit_user_context(JITUserContext &jit_user_context, void *user_context, const JITHandlers &handlers);
     EXPORT static JITHandlers set_default_handlers(const JITHandlers &handlers);
 

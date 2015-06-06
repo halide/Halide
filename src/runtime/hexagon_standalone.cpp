@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include <stdio.h>
 #ifdef __cplusplus
 extern "C" {
   WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
@@ -45,7 +44,6 @@ extern "C" {
   }
 
   WEAK void *halide_malloc(void *user_context, size_t x) {
-    fprintf (stderr, "requesting %u bytes\n", x);
     return custom_malloc(user_context, x);
   }
 

@@ -164,7 +164,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
 
         size_t memory = 0;
         err = cuDeviceTotalMem(&memory, dev);
-        debug(user_context) << "      total memory: " << (memory >> 20) << " MB\n";
+        debug(user_context) << "      total memory: " << (int)(memory >> 20) << " MB\n";
 
         if (err != CUDA_SUCCESS) {
             error(user_context) << "CUDA: cuDeviceTotalMem failed: "
@@ -437,7 +437,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, buffer_t *buf) {
     halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
 
-    debug(user_context) << "    allocating buffer of " << size << " bytes, "
+    debug(user_context) << "    allocating buffer of " << (uint64_t)size << " bytes, "
                         << "extents: "
                         << buf->extent[0] << "x"
                         << buf->extent[1] << "x"
@@ -455,7 +455,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, buffer_t *buf) {
     #endif
 
     CUdeviceptr p;
-    debug(user_context) << "    cuMemAlloc " << size << " -> ";
+    debug(user_context) << "    cuMemAlloc " << (uint64_t)size << " -> ";
     CUresult err = cuMemAlloc(&p, size);
     if (err != CUDA_SUCCESS) {
         debug(user_context) << get_error_name(err) << "\n";
@@ -665,8 +665,8 @@ WEAK int halide_cuda_run(void *user_context,
 
     size_t num_args = 0;
     while (arg_sizes[num_args] != 0) {
-        debug(user_context) << "    halide_cuda_run " << num_args
-                            << " " << arg_sizes[num_args]
+        debug(user_context) << "    halide_cuda_run " << (int)num_args
+                            << " " << (int)arg_sizes[num_args]
                             << " [" << (*((void **)args[num_args])) << " ...] "
                             << arg_is_buffer[num_args] << "\n";
         num_args++;
@@ -681,7 +681,7 @@ WEAK int halide_cuda_run(void *user_context,
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
             dev_handles[i] = halide_get_device_handle(*(uint64_t *)args[i]);
             translated_args[i] = &(dev_handles[i]);
-            debug(user_context) << "    halide_cuda_run translated arg" << i
+            debug(user_context) << "    halide_cuda_run translated arg" << (int)i
                                 << " [" << (*((void **)translated_args[i])) << " ...]\n";
         } else {
             translated_args[i] = args[i];

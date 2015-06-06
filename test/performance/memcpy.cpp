@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     // dst.parallel(xo); speeds up halide's memcpy considerably, but doesn't seem sporting
     dst.vectorize(x, 16);
 
-    dst.compile_to_assembly("memcpy.s", Internal::vec<Argument>(src), "memcpy");
+    dst.compile_to_assembly("memcpy.s", {src}, "memcpy");
     dst.compile_jit();
 
     const int32_t buffer_size = 12345678;

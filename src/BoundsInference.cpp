@@ -112,7 +112,7 @@ public:
 
     struct Stage {
         Function func;
-        int stage; // 0 is the pure definition, 1 is the first update
+        size_t stage; // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
@@ -124,7 +124,7 @@ public:
             if (stage == 0) {
                 exprs = func.values();
             } else {
-                const UpdateDefinition &r = func.updates()[stage-1];
+                const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
             }
@@ -140,13 +140,12 @@ public:
             // Merge all the relevant boxes.
             Box b;
 
-            for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
-                 iter != bounds.end(); ++iter) {
-                string func_name = iter->first.first;
-                string stage_name = func_name + ".s" + int_to_string(iter->first.second);
+            for (const pair<pair<string, int>, Box> &i : bounds) {
+                string func_name = i.first.first;
+                string stage_name = func_name + ".s" + std::to_string(i.first.second);
                 if (stage_name == producing_stage ||
                     inner_productions.count(func_name)) {
-                    merge_boxes(b, iter->second);
+                    merge_boxes(b, i.second);
                 }
             }
 
@@ -159,19 +158,18 @@ public:
                 // figure out what those dimensions are, and just have all
                 // stages but the last use the bounds for the last stage.
                 vector<bool> always_pure_dims(func.args().size(), true);
-                const std::vector<UpdateDefinition> &updates = func.updates();
-                for (size_t i = 0; i < updates.size(); i++) {
+                for (UpdateDefinition i : func.updates()) {
                     for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        const Variable *v = updates[i].args[j].as<Variable>();
+                        const Variable *v = i.args[j].as<Variable>();
                         if (!v || v->name != func.args()[j]) {
                             always_pure_dims[j] = false;
                         }
                     }
                 }
 
-                if (stage < (int)func.updates().size()) {
+                if (stage < func.updates().size()) {
                     size_t stages = func.updates().size();
-                    string last_stage = func.name() + ".s" + int_to_string(stages) + ".";
+                    string last_stage = func.name() + ".s" + std::to_string(stages) + ".";
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
                             const string &dim = func.args()[i];
@@ -216,14 +214,14 @@ public:
                     Expr inner_query = Variable::make(Handle(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    vec<Expr>(outer_query, i), Call::Intrinsic);
+                                                    {outer_query, i}, Call::Intrinsic);
                         Expr outer_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    vec<Expr>(outer_query, i), Call::Intrinsic);
+                                                    {outer_query, i}, Call::Intrinsic);
 
                         Expr inner_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    vec<Expr>(inner_query, i), Call::Intrinsic);
+                                                    {inner_query, i}, Call::Intrinsic);
                         Expr inner_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    vec<Expr>(inner_query, i), Call::Intrinsic);
+                                                    {inner_query, i}, Call::Intrinsic);
                         Expr inner_extent = inner_max - inner_min + 1;
 
                         // Push 'inner' inside of 'outer'
@@ -247,7 +245,7 @@ public:
 
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
-                string prefix = name + ".s" + int_to_string(stage) + ".";
+                string prefix = name + ".s" + std::to_string(stage) + ".";
                 for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
                     const Bound &bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
@@ -266,7 +264,7 @@ public:
             }
 
             for (size_t d = 0; d < b.size(); d++) {
-                string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
+                string arg = name + ".s" + std::to_string(stage) + "." + func.args()[d];
 
                 if (b[d].min.same_as(b[d].max)) {
                     s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
@@ -277,13 +275,12 @@ public:
             }
 
             if (stage > 0) {
-                const UpdateDefinition &r = func.updates()[stage-1];
+                const UpdateDefinition &r = func.updates()[stage - 1];
                 if (r.domain.defined()) {
-                    const vector<ReductionVariable> &dom = r.domain.domain();
-                    for (size_t i = 0; i < dom.size(); i++) {
-                        string arg = name + ".s" + int_to_string(stage) + "." + dom[i].var;
-                        s = LetStmt::make(arg + ".min", dom[i].min, s);
-                        s = LetStmt::make(arg + ".max", dom[i].extent + dom[i].min - 1, s);
+                    for (ReductionVariable i : r.domain.domain()) {
+                        string arg = name + ".s" + std::to_string(stage) + "." + i.var;
+                        s = LetStmt::make(arg + ".min", i.min, s);
+                        s = LetStmt::make(arg + ".max", i.extent + i.min - 1, s);
                     }
                 }
             }
@@ -298,7 +295,7 @@ public:
 
             vector<Expr> bounds_inference_args;
 
-            vector<pair<string, Expr> > lets;
+            vector<pair<string, Expr>> lets;
 
             // Iterate through all of the input args to the extern
             // function building a suitable argument list for the
@@ -313,9 +310,9 @@ public:
                 } else if (args[j].is_func()) {
                     Function input(args[j].func);
                     for (int k = 0; k < input.outputs(); k++) {
-                        string name = input.name() + ".o" + int_to_string(k) + ".bounds_query." + func.name();
+                        string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
                         Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                              vec<Expr>(null_handle, input.output_types()[k].bytes()),
+                                              {null_handle, input.output_types()[k].bytes()},
                                               Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(Handle(), name));
@@ -329,7 +326,7 @@ public:
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
-                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, vec<Expr>(in_buf), Call::Intrinsic);
+                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
                     lets.push_back(make_pair(query_name, query_buf));
                     Expr buf = Variable::make(Handle(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
@@ -346,7 +343,7 @@ public:
                 output_buffer_t_args[1] = func.output_types()[j].bytes();
                 for (size_t k = 0; k < func.args().size(); k++) {
                     const string &arg = func.args()[k];
-                    string prefix = func.name() + ".s" + int_to_string(stage) + "." + arg;
+                    string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
                     output_buffer_t_args.push_back(min);
@@ -357,7 +354,7 @@ public:
                 Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
                                                   output_buffer_t_args, Call::Intrinsic);
 
-                string buf_name = func.name() + ".o" + int_to_string(j) + ".bounds_query";
+                string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
                 bounds_inference_args.push_back(Variable::make(Handle(), buf_name));
 
                 lets.push_back(make_pair(buf_name, output_buffer_t));
@@ -369,9 +366,9 @@ public:
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
-            vector<Expr> error_message = vec<Expr>("Bounds inference call to external func " + extern_name +
-                                                   " returned non-zero value:", result);
-            Stmt check = AssertStmt::make(EQ::make(result, 0), error_message);
+            Expr error = Call::make(Int(32), "halide_error_bounds_inference_call_failed",
+                                    {extern_name, result}, Call::Extern);
+            Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
             check = LetStmt::make(result_name, e, check);
 
@@ -390,18 +387,18 @@ public:
         void populate_scope(Scope<Interval> &result) {
 
             for (size_t d = 0; d < func.args().size(); d++) {
-                string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
+                string arg = name + ".s" + std::to_string(stage) + "." + func.args()[d];
                 result.push(func.args()[d],
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                const UpdateDefinition &r = func.updates()[stage-1];
+                const UpdateDefinition &r = func.updates()[stage - 1];
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &dom = r.domain.domain();
                     for (size_t i = 0; i < dom.size(); i++) {
                         const ReductionVariable &rvar = dom[i];
-                        string arg = name + ".s" + int_to_string(stage) + "." + rvar.var;
+                        string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
                         result.push(rvar.var, Interval(Variable::make(Int(32), arg + ".min"),
                                                        Variable::make(Int(32), arg + ".max")));
                     }
@@ -420,10 +417,10 @@ public:
     vector<Stage> stages;
 
     BoundsInference(const vector<Function> &f,
+                    const vector<Function> &outputs,
                     const FuncValueBounds &fb) :
         funcs(f), func_bounds(fb) {
         internal_assert(!f.empty());
-        Function output_function = f[f.size()-1];
 
         // Compute the intrinsic relationships between the stages of
         // the functions.
@@ -457,7 +454,7 @@ public:
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
-                s.stage_prefix = s.name + ".s" + int_to_string(s.stage) + ".";
+                s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
             }
@@ -465,7 +462,7 @@ public:
         }
 
         // Do any pure inlining (TODO: This is currently slow)
-        for (size_t i = f.size()-1; i > 0; i--) {
+        for (size_t i = f.size(); i > 0; i--) {
             Function func = f[i-1];
             if (inlined[i-1]) {
                 for (size_t j = 0; j < stages.size(); j++) {
@@ -480,8 +477,7 @@ public:
         // Remove the inlined stages
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (stages[i].func.same_as(output_function) ||
-                !stages[i].func.schedule().compute_level().is_inline() ||
+            if (!stages[i].func.schedule().compute_level().is_inline() ||
                 !stages[i].func.is_pure()) {
                 new_stages.push_back(stages[i]);
             }
@@ -518,15 +514,15 @@ public:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {
                         Function f(args[j].func);
-                        string stage_name = f.name() + ".s" + int_to_string(f.updates().size());
+                        string stage_name = f.name() + ".s" + std::to_string(f.updates().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(Handle(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  vec<Expr>(buf, d), Call::Intrinsic);
+                                                  {buf, d}, Call::Intrinsic);
                             Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  vec<Expr>(buf, d), Call::Intrinsic);
+                                                  {buf, d}, Call::Intrinsic);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);
@@ -537,9 +533,8 @@ public:
                 const vector<Expr> &exprs = consumer.exprs;
                 for (size_t j = 0; j < exprs.size(); j++) {
                     map<string, Box> new_boxes = boxes_required(exprs[j], scope, func_bounds);
-                    for (map<string, Box>::iterator iter = new_boxes.begin();
-                         iter != new_boxes.end(); ++iter) {
-                        merge_boxes(boxes[iter->first], iter->second);
+                    for (const pair<string, Box> &i : new_boxes) {
+                        merge_boxes(boxes[i.first], i.second);
                     }
                 }
             }
@@ -573,35 +568,36 @@ public:
             }
         }
 
-        // The region required of the last function is expanded to include output size
-        Function output = stages[stages.size()-1].func;
-        Box output_box;
-        string buffer_name = output.name();
-        if (output.outputs() > 1) {
-            // Use the output size of the first output buffer
-            buffer_name += ".0";
-        }
-        for (int d = 0; d < output.dimensions(); d++) {
-            Expr min = Variable::make(Int(32), buffer_name + ".min." + int_to_string(d));
-            Expr extent = Variable::make(Int(32), buffer_name + ".extent." + int_to_string(d));
-
-            // Respect any output min and extent constraints
-            Expr min_constraint = output.output_buffers()[0].min_constraint(d);
-            Expr extent_constraint = output.output_buffers()[0].extent_constraint(d);
-
-            if (min_constraint.defined()) {
-                min = min_constraint;
+        // The region required of the each output is expanded to include the size of the output buffer.
+        for (Function output : outputs) {
+            Box output_box;
+            string buffer_name = output.name();
+            if (output.outputs() > 1) {
+                // Use the output size of the first output buffer
+                buffer_name += ".0";
             }
-            if (extent_constraint.defined()) {
-                extent = extent_constraint;
-            }
+            for (int d = 0; d < output.dimensions(); d++) {
+                Expr min = Variable::make(Int(32), buffer_name + ".min." + std::to_string(d));
+                Expr extent = Variable::make(Int(32), buffer_name + ".extent." + std::to_string(d));
 
-            output_box.push_back(Interval(min, (min + extent) - 1));
-        }
-        for (size_t i = 0; i < stages.size(); i++) {
-            Stage &s = stages[i];
-            if (!s.func.same_as(output)) continue;
-            s.bounds[make_pair(s.name, s.stage)] = output_box;
+                // Respect any output min and extent constraints
+                Expr min_constraint = output.output_buffers()[0].min_constraint(d);
+                Expr extent_constraint = output.output_buffers()[0].extent_constraint(d);
+
+                if (min_constraint.defined()) {
+                    min = min_constraint;
+                }
+                if (extent_constraint.defined()) {
+                    extent = extent_constraint;
+                }
+
+                output_box.push_back(Interval(min, (min + extent) - 1));
+            }
+            for (size_t i = 0; i < stages.size(); i++) {
+                Stage &s = stages[i];
+                if (!s.func.same_as(output)) continue;
+                s.bounds[make_pair(s.name, s.stage)] = output_box;
+            }
         }
 
         // Dump out the region required of each stage for debugging.
@@ -632,7 +628,7 @@ public:
         // Walk inside of any let statements that don't depend on
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
-        vector<pair<string, Expr> > lets;
+        vector<pair<string, Expr>> lets;
         while (const LetStmt *let = body.as<LetStmt>()) {
             if (depends_on_bounds_inference(let->value)) {
                 break;
@@ -653,7 +649,7 @@ public:
             if (starts_with(op->name, stages[i].stage_prefix)) {
                 producing = i;
                 f = stages[i].func;
-                stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage);
+                stage_name = stages[i].name + ".s" + std::to_string(stages[i].stage);
                 break;
             }
         }
@@ -730,11 +726,10 @@ public:
             // And the current bounds on its reduction variables.
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
-                const UpdateDefinition &r = s.func.updates()[s.stage-1];
+                const UpdateDefinition &r = s.func.updates()[s.stage - 1];
                 if (r.domain.defined()) {
-                    const vector<ReductionVariable> &d = r.domain.domain();
-                    for (size_t i = 0; i < d.size(); i++) {
-                        string var = s.stage_prefix + d[i].var;
+                    for (ReductionVariable d : r.domain.domain()) {
+                        string var = s.stage_prefix + d.var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {
                             body = LetStmt::make(var + ".min", in.min, body);
@@ -766,7 +761,7 @@ public:
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 
-    void visit(const Pipeline *p) {
+    void visit(const ProducerConsumer *p) {
         in_pipeline.insert(p->name);
         IRMutator::visit(p);
         in_pipeline.erase(p->name);
@@ -777,7 +772,9 @@ public:
 
 
 
-Stmt bounds_inference(Stmt s, const vector<string> &order,
+Stmt bounds_inference(Stmt s,
+                      const vector<Function> &outputs,
+                      const vector<string> &order,
                       const map<string, Function> &env,
                       const FuncValueBounds &func_bounds) {
 
@@ -788,7 +785,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order,
 
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
-    s = BoundsInference(funcs, func_bounds).mutate(s);
+    s = BoundsInference(funcs, outputs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }
 

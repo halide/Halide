@@ -201,9 +201,9 @@ void test_interleave(bool fast) {
     src.set(src_image);
 
     if( fast ) {
-        dst.compile_to_lowered_stmt("rgb_interleave_fast.stmt");
+        dst.compile_to_lowered_stmt("rgb_interleave_fast.stmt", dst.infer_arguments());
     } else {
-        dst.compile_to_lowered_stmt("rgb_interleave_slow.stmt");
+        dst.compile_to_lowered_stmt("rgb_interleave_slow.stmt", dst.infer_arguments());
     }
     dst.compile_jit();
 

@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "Debug.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -27,26 +28,25 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // Compute size from list of extents checking for 32-bit signed overflow.
     // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
     // does not work with NaCl at the moment.
-    Value *overflow = NULL;
-    int bytes_per_item = type.width * type.bytes();
-    Value *llvm_size_wide = ConstantInt::get(i64, bytes_per_item);
+
+    Expr no_overflow = const_true(1);
+    Expr total_size = cast<int64_t>(type.width * type.bytes());
+    Expr max_size = cast<int64_t>(0x7fffffff);
     for (size_t i = 0; i < extents.size(); i++) {
-        llvm_size_wide = builder->CreateMul(llvm_size_wide, codegen(Cast::make(Int(64), extents[i])));
-        if (overflow == NULL) {
-            overflow = llvm_size_wide;
-        } else {
-            overflow = builder->CreateOr(overflow, llvm_size_wide);
-        }
-    }
-    Value *llvm_size = builder->CreateTrunc(llvm_size_wide, i32);
-
-    if (overflow != NULL) {
-        Constant *zero = ConstantInt::get(i64, 0);
-        create_assertion(builder->CreateICmpEQ(builder->CreateLShr(overflow, 31), zero),
-                         std::string("32-bit signed overflow computing size of allocation ") + name);
+        total_size *= extents[i];
+        no_overflow = no_overflow && (total_size <= max_size);
     }
 
-    return llvm_size;
+    // For constant-sized allocations this check should simplify away.
+    no_overflow = simplify(no_overflow);
+    if (!is_one(no_overflow)) {
+        create_assertion(codegen(no_overflow),
+                         Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+                                    {name, total_size, max_size}, Call::Extern));
+    }
+
+    total_size = simplify(cast<int32_t>(total_size));
+    return codegen(total_size);
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
@@ -84,6 +84,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = stack_bytes;
     allocation.ptr = NULL;
+    allocation.destructor = NULL;
+
     if (stack_bytes != 0) {
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
@@ -112,7 +114,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
-            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, name);
+            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, false, name);
             allocation.stack_bytes = stack_bytes;
         }
     } else {
@@ -141,8 +143,15 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         Value *zero_size = builder->CreateIsNull(llvm_size);
         check = builder->CreateOr(check, zero_size);
 
-        create_assertion(check, "Out of memory (malloc returned NULL)");
+        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+                                           std::vector<Expr>(), Call::Extern));
+
+        // Register a destructor for it.
+        llvm::Function *free_fn = module->getFunction("halide_free");
+        internal_assert(free_fn) << "Could not find halide_free in module.\n";
+        allocation.destructor = register_destructor(free_fn, allocation.ptr);
     }
+
 
     // Push the allocation base pointer onto the symbol table
     debug(3) << "Pushing allocation called " << name << ".host onto the symbol table\n";
@@ -152,28 +161,22 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
-void CodeGen_Posix::free_allocation(const std::string &name) {
+void CodeGen_Posix::visit(const Free *stmt) {
+    const std::string &name = stmt->name;
     Allocation alloc = allocations.get(name);
-
-    internal_assert(alloc.ptr);
-
-    CallInst *call_inst = dyn_cast<CallInst>(alloc.ptr);
-    llvm::Function *allocated_in = call_inst ? call_inst->getParent()->getParent() : NULL;
-    llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
     if (alloc.stack_bytes) {
         // Remember this allocation so it can be re-used by a later allocation.
         free_stack_allocs.push_back(alloc);
-    } else if (allocated_in == current_func) { // Skip over allocations from outside this function.
-        // Call free
-        llvm::Function *free_fn = module->getFunction("halide_free");
-        internal_assert(free_fn) << "Could not find halide_free in module.\n";
-        debug(4) << "Creating call to halide_free\n";
-        Value *args[2] = { get_user_context(), alloc.ptr };
-        builder->CreateCall(free_fn, args);
+    } else {
+        internal_assert(alloc.destructor);
+
+        // Trigger the destructor
+        builder->Insert(alloc.destructor->clone());
     }
 
     allocations.pop(name);
+    sym_pop(name + ".host");
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
@@ -192,40 +195,6 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     // Should have been freed
     internal_assert(!sym_exists(alloc->name + ".host"));
     internal_assert(!allocations.contains(alloc->name));
-}
-
-void CodeGen_Posix::visit(const Free *stmt) {
-    free_allocation(stmt->name);
-    sym_pop(stmt->name + ".host");
-}
-
-void CodeGen_Posix::prepare_for_early_exit() {
-    // We've jumped to a code path that will be called just before
-    // bailing out. Free everything outstanding.
-    vector<string> names;
-    for (Scope<Allocation>::iterator iter = allocations.begin();
-         iter != allocations.end(); ++iter) {
-        names.push_back(iter.name());
-    }
-
-    for (size_t i = 0; i < names.size(); i++) {
-        std::vector<Allocation> stash;
-        while (allocations.contains(names[i])) {
-            // The value in the symbol table is not necessarily the
-            // one in the allocation - it may have been forwarded
-            // inside a parallel for loop
-            stash.push_back(allocations.get(names[i]));
-            free_allocation(names[i]);
-        }
-
-        // Restore all the allocations before we jump back to the main
-        // code path.
-        for (size_t j = stash.size(); j > 0; j--) {
-            allocations.push(names[i], stash[j-1]);
-        }
-    }
-
-    free_stack_allocs.clear();
 }
 
 }}

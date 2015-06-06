@@ -6,7 +6,6 @@
  */
 
 #include "CodeGen_Posix.h"
-#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,23 +17,12 @@ public:
      * enabled using the appropriate flags in the target struct. */
     CodeGen_PNaCl(Target);
 
-    /** The PNaCl backend overrides compile_to_native to
-     * compile_to_bitcode instead. It does *not* run the pnacl
-     * sandboxing passes, because these must be run after linking
-     * (They change linkage qualifiers on everything, marking
-     * everything as internal, including weak symbols that Halide
-     * relies on being weak). The final linking stage (e.g. using
-     * pnacl-clang++) handles the sandboxing. */
-    void compile_to_native(const std::string &filename, bool /*assembly*/) {
-        // TODO: Emit .ll when assembly is true
-        compile_to_bitcode(filename);
-    }
-
 protected:
 
     using CodeGen_Posix::visit;
 
-    /* override */ virtual llvm::Triple get_target_triple() const;
+    llvm::Triple get_target_triple() const;
+    llvm::DataLayout get_data_layout() const;
 
     std::string mcpu() const;
     std::string mattrs() const;

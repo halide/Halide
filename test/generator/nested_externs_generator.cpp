@@ -15,7 +15,7 @@ public:
     ImageParam input_a{ Float(32), 3, "a" };
     ImageParam input_b{ Float(32), 3, "b" };
 
-    Func build() override {
+    Func build() {
         Func result("combine");
         Var x, y, c;
 
@@ -35,7 +35,7 @@ class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
     Param<float> value {"value", 1.0f};
 
-    Func build() override {
+    Func build() {
         // We can make an extern call to any (registered) Generator
         // by using call_extern_by_name() with the generator_name we're calling,
         // and a vector of ExternFuncArguments. We can (optionally) also
@@ -75,7 +75,7 @@ public:
 
     Param<float> value {"value", 1.0f};
 
-    Func build() override {
+    Func build() {
         Func f("leaf");
         Var x, y, c;
         f(x, y, c) = value;
@@ -91,7 +91,7 @@ class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
     Param<float> value {"value", 1.0f};
 
-    Func build() override {
+    Func build() {
         Func extern_stage_1 = NestedExternsInner().call_extern({value});
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],
                                         extern_stage_1.args()[0],
