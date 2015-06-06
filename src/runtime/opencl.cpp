@@ -15,9 +15,44 @@ namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
 #define CL_FN(ret, fn, args) WEAK ret (CL_API_CALL *fn) args;
 #include "cl_functions.h"
 
+// The default implementation of halide_opencl_get_symbol attempts to load
+// the OpenCL runtime shared library/DLL, and then get the symbol from it.
+WEAK void *lib_opencl = NULL;
+
+extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *name) {
+    // Only try to load the library if the library isn't already
+    // loaded, or we can't load the symbol from the process already.
+    void *symbol = halide_get_library_symbol(lib_opencl, name);
+    if (symbol == NULL) {
+        const char *lib_names[] = {
+#ifdef WINDOWS
+            "opencl.dll",
+#else
+            "libOpenCL.so",
+            "/System/Library/Frameworks/OpenCL.framework/OpenCL",
+#endif
+        };
+        for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+            lib_opencl = halide_load_library(lib_names[i]);
+            if (lib_opencl) {
+                debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
+                break;
+            }
+        }
+    }
+
+    symbol = halide_get_library_symbol(lib_opencl, name);
+    if (symbol == NULL) {
+        error(user_context) << "Failed to load OpenCL symbol '" << name << "'\n";
+        return NULL;
+    }
+
+    return symbol;
+}
+
 template <typename T>
-INLINE T get_cl_symbol(void *user_context, void *lib, const char *name) {
-    T s = (T)halide_get_library_symbol(lib, name);
+INLINE T get_cl_symbol(void *user_context, const char *name) {
+    T s = (T)halide_opencl_get_symbol(user_context, name);
     if (!s) {
         error(user_context) << "OpenCL API not found: " << name << "\n";
         return NULL;
@@ -26,31 +61,11 @@ INLINE T get_cl_symbol(void *user_context, void *lib, const char *name) {
 }
 
 // Load an OpenCL shared object/dll, and get the function pointers for the OpenCL API from it.
-WEAK void load_opencl(void *user_context) {
+WEAK void load_libopencl(void *user_context) {
+    debug(user_context) << "    load_libopencl (user_context: " << user_context << ")\n";
     halide_assert(user_context, clCreateContext == NULL);
 
-    const char *lib_names[] = {
-#ifdef WINDOWS
-        "opencl.dll",
-#else
-        "libOpenCL.so",
-        "/System/Library/Frameworks/OpenCL.framework/OpenCL",
-#endif
-    };
-    void *lib = NULL;
-    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
-        lib = halide_load_library(lib_names[i]);
-        if (lib) {
-            debug(user_context) << "    Loaded OpenCL library: " << lib_names[i] << "\n";
-            break;
-        }
-    }
-    if (!lib) {
-        error(user_context) << "OpenCL runtime library not found\n";
-        return;
-    }
-
-    #define CL_FN(ret, fn, args) fn = get_cl_symbol<ret (CL_API_CALL *)args>(user_context, lib, #fn);
+    #define CL_FN(ret, fn, args) fn = get_cl_symbol<ret (CL_API_CALL *)args>(user_context, #fn);
     #include "cl_functions.h"
 }
 
@@ -177,7 +192,7 @@ public:
                                     cmd_queue(NULL),
                                     error(CL_SUCCESS) {
         if (clCreateContext == NULL) {
-            load_opencl(user_context);
+            load_libopencl(user_context);
         }
 
 #ifdef DEBUG_RUNTIME
