@@ -501,7 +501,7 @@ void CodeGen_JavaScript::visit_binop(Type t, Expr a, Expr b, const char * op) {
     if (t.width > 1) {
         rhs << "]";
     }
-    print_assignment(t, rhs.str());
+    string id_var = print_assignment(t, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Add *op) {
@@ -893,7 +893,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
             int int_args = (int)(op->args.size()) - 5;
             internal_assert(int_args >= 0);
 
-            Type type = op->args[4].type();
+            Type type = op->type;
 
             ostringstream value_stream;
             const char *lead_char = "[";
@@ -1116,16 +1116,18 @@ void CodeGen_JavaScript::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);
             // TODO: Should this use Math.abs?
-            rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
+            rhs << "(" << arg << " >= 0 ? " << arg << " : " <<
+                fround_start_if_needed(op->type) << "-" << arg << fround_end_if_needed(op->type) << ")";
         } else if (op->name == Call::absd) {
             internal_assert(op->args.size() == 2);
             string temp = unique_name('_');
             string arg_a = print_expr(op->args[0]);
             string arg_b = print_expr(op->args[1]);
             do_indent();
-            stream << "var " << temp << " = " << arg_a << " - " << arg_b << ";\n";
+            stream << "var " << temp << " = " <<
+                fround_start_if_needed(op->type) << arg_a << " - " << arg_b << fround_end_if_needed(op->type) << ";\n";
             // TODO: Should this use Math.abs?
-            rhs << "(" << temp << " > 0 ? " << temp << " : -" << temp << ")";
+            rhs << "(" << temp << " >= 0 ? " << temp << " : -" << temp << ")";
         } else if (op->name == Call::memoize_expr) {
             internal_assert(op->args.size() >= 1);
             string arg = print_expr(op->args[0]);
@@ -1208,7 +1210,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
         auto js_math_value = js_math_values.find(op->name);
 
         if (js_math_value != js_math_values.end()) {
-            rhs << js_math_value->second;;
+            rhs << fround_start_if_needed(op->type) << js_math_value->second << fround_end_if_needed(op->type);
         } else {
             // Map math functions to JS names.
             string js_name = op->name;
@@ -1228,7 +1230,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
                 for (size_t i = 0; i < op->args.size(); i++) {
                     args[i] = print_expr(conditionally_extract_lane(op->args[i], lane));
                 }
-                rhs << lead_char << js_name << "(";
+                rhs << lead_char << fround_start_if_needed(op->type) << js_name << "(";
 
                 if (function_takes_user_context(op->name)) {
                     rhs << (have_user_context ? "__user_context, " : "null, ");
@@ -1238,7 +1240,7 @@ void CodeGen_JavaScript::visit(const Call *op) {
                     if (i > 0) rhs << ", ";
                     rhs << args[i];
                 }
-                rhs << ")";
+                rhs << ")" << fround_end_if_needed(op->type);
             }
         }
         if (op->type.width != 1) {

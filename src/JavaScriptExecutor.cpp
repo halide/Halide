@@ -778,6 +778,14 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
 
 #if WITH_JAVASCRIPT_SPIDERMONKEY
 
+// If SpiderMonkey was compiled in debug mode, DEBUG must be defined before including
+// its headers or else there will be link errors. E.g.:
+//     Undefined symbols for architecture x86_64:
+//     "JSAutoCompartment::JSAutoCompartment(JSContext*, JSObject*)", referenced from:
+//     (...<something in JavaScripExecutor.cpp>...)
+// This is due to SpiderMonkey changing the prototypes of APIs based on whether DEBUG
+// is defined or not.
+#define DEBUG
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "js/Conversions.h"
@@ -823,18 +831,13 @@ void dump_object(const char *label, JSContext *context, HandleObject obj) {
 
 // The class of the global object.
 static JSClass global_class = {
-  "global",
-  JSCLASS_GLOBAL_FLAGS,
-  JS_PropertyStub,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL, NULL, NULL, NULL,
-  JS_GlobalObjectTraceHook,
-  { }
+    "global",
+    JSCLASS_GLOBAL_FLAGS,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    JS_GlobalObjectTraceHook,
+    { }
 };
 
 // The error reporter callback.
@@ -1020,17 +1023,12 @@ bool elem_size_setter(JSContext *cx, unsigned argc, JS::Value *vp) {
 }
 
 static JSClass buffer_t_class = {
-  "buffer_t",
-  JSCLASS_HAS_PRIVATE,
-  JS_PropertyStub,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL, NULL, NULL, NULL,
-  NULL,
+    "buffer_t",
+    JSCLASS_HAS_PRIVATE,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL,
   { }
 };
 
@@ -1041,7 +1039,27 @@ Value make_buffer_t(JSContext *context, struct buffer_t *buf, ExternalArrayType 
 
     //    debug(0) << "Making host buffer for type " << (int)element_type << " on " << buf << " object is " << &*buffer << " of length " << buffer_total_size(buf) * buf->elem_size << "\n";
     if (buf->host != NULL) {
-        RootedObject host_buffer(context, JS_NewArrayBufferWithContents(context, buffer_total_size(buf) * buf->elem_size, buf->host));
+        // SpiderMonkey insists on being able to steal the low bit of
+        // a pointr in all circumstances apparently and there is an
+        // assert that fires if the contents pointer of an array is
+        // odd. Of course this means one cannot make a data backed
+        // array directly on an oddly aligned byte pointer. If
+        // necessary, presumably one makes an aligned ArrayBuffer then
+        // a view on that to adjust the offset. (The docs say the
+        // pointer passed in must be valid to pass to free, hence I
+        // guess they can claim stealing the bit is legal. The API
+        // docs for both SpiderMonkey and V8 make Halide's bare
+        // minimum of documentation look like a thing of beauty...)
+        //
+        // Anyway, Halide passes "1" as a pointer for input buffers
+        // that are not used when infer_bounds is called. This hack
+        // fixes that up.
+        uint8_t *host_ptr = buf->host;
+        if (host_ptr == (uint8_t *)1) {
+            host_ptr = (uint8_t *)2;
+        }
+
+        RootedObject host_buffer(context, JS_NewArrayBufferWithContents(context, buffer_total_size(buf) * buf->elem_size, host_ptr));
         RootedObject host_array(context, make_array_of_type(context, host_buffer, element_type));
         JS_DefineProperty(context, buffer, "host", host_array, JSPROP_READONLY | JSPROP_ENUMERATE);
     } else {
@@ -1062,8 +1080,8 @@ Value make_buffer_t(JSContext *context, struct buffer_t *buf, ExternalArrayType 
     RootedObject extent_array(context, JS_NewInt32ArrayWithBuffer(context, extent_buffer, 0, -1));
     JS_DefineProperty(context, buffer, "extent", extent_array, JSPROP_READONLY | JSPROP_ENUMERATE);
 
-    JS_DefineProperty(context, buffer, "dev", 0, JSPROP_ENUMERATE, dev_getter, dev_setter);
-    JS_DefineProperty(context, buffer, "elem_size", 0, JSPROP_ENUMERATE, elem_size_getter, elem_size_setter);
+    JS_DefineProperty(context, buffer, "dev", JS::UndefinedHandleValue, JSPROP_ENUMERATE | JSPROP_SHARED, dev_getter, dev_setter);
+    JS_DefineProperty(context, buffer, "elem_size", JS::UndefinedHandleValue, JSPROP_ENUMERATE | JSPROP_SHARED, elem_size_getter, elem_size_setter);
 
     result.setObject(*buffer);
     return result;
@@ -1085,23 +1103,17 @@ bool disconnect_array_buffer(JSContext *context, HandleValue buffer, const char 
             }
         }
     }
-    debug(0) << "Buffer steal failed.\n";
     return false;
 }
 
 static JSClass handle_class = {
-  "buffer_T",
-  JSCLASS_HAS_PRIVATE,
-  JS_PropertyStub,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL, NULL, NULL, NULL,
-  NULL,
-  { }
+    "handle_class",
+    JSCLASS_HAS_PRIVATE,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL,
+    { }
 };
 
 Value wrap_scalar(JSContext *context, const Type &t, const void *val_ptr) {
@@ -1347,8 +1359,6 @@ void copy_out_int32_array(JSContext *context, HandleObject buffer_obj, const cha
 }
 
 void js_buffer_t_to_struct(JSContext *context, HandleValue val, struct buffer_t *slot) {
-  debug(0) << "js_buffer_t_to_struct entered.\n";
-
     RootedObject buffer_obj(context, &val.toObject());
     
     dump_object("js_buffer_t_to_struct object", context, buffer_obj);
@@ -1373,11 +1383,9 @@ void js_buffer_t_to_struct(JSContext *context, HandleValue val, struct buffer_t 
     JS_GetProperty(context, buffer_obj, "elem_size", &temp);
     slot->elem_size = temp.toInt32();
     JS_GetProperty(context, buffer_obj, "host_dirty", &temp);
-    slot->host_dirty = temp.toBoolean();
+    slot->host_dirty = JS::ToBoolean(temp);
     JS_GetProperty(context, buffer_obj, "dev_dirty", &temp);
-    slot->dev_dirty = temp.toBoolean();
-
-  debug(0) << "js_buffer_t_to_struct exit.\n";
+    slot->dev_dirty = JS::ToBoolean(temp);
 }
 
 template <typename T>
@@ -1388,7 +1396,6 @@ void val_to_slot(HandleValue val, uint64_t *slot) {
 
 void js_value_to_uint64_slot(const Halide::Type &type, HandleValue val, uint64_t *slot) {
     if (type.is_handle()) {
-      debug(0) << "Handle value for argument.\n";
         *(void **)slot = get_user_context(val);
     } else if (type.is_float()) {
         if (type.bits == 32) {
@@ -1453,7 +1460,6 @@ void copy_in_int32_array(JSContext *context, MutableHandleObject buffer_obj, con
 }
 
 void buffer_t_struct_to_js(JSContext *context, const buffer_t *slot, HandleValue val) {
-  debug(0) << "buffer_t_struct_to_js entered.\n";
     RootedObject buffer_obj(context, &val.toObject());
     
     dump_object("buffer_t_struct_to_js object", context, buffer_obj);
@@ -1463,7 +1469,6 @@ void buffer_t_struct_to_js(JSContext *context, const buffer_t *slot, HandleValue
     if (get_array_buffer_from_typed_array_field(context, buffer_obj, "host", &array_buffer)) {
         return;
     }
-  debug(0) << "buffer_t_struct_to_js copying out buffer...\n";
 
     copy_in_int32_array(context, &buffer_obj, "min", slot->min, sizeof(slot->min) / sizeof(slot->min[0]));
     copy_in_int32_array(context, &buffer_obj, "extent", slot->extent, sizeof(slot->extent) / sizeof(slot->extent[0]));
@@ -1476,8 +1481,6 @@ void buffer_t_struct_to_js(JSContext *context, const buffer_t *slot, HandleValue
     JS_SetProperty(context, buffer_obj, "host_dirty", temp);
     temp.setBoolean(slot->dev_dirty);
     JS_SetProperty(context, buffer_obj, "dev_dirty", temp);
-
-  debug(0) << "buffer_t_struct_to_js exited.\n";
 }
 
 template <typename T, typename S>
@@ -1531,7 +1534,6 @@ struct CallbackInfo {
 };
 
 bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
-  debug(0) << "In extern_wrapper with " << argc << " args.\n";
     JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
     RootedObject callee(context, &args.callee());
     
@@ -1565,11 +1567,9 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     size_t scalar_arg_index = 0;
     for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
-          debug(0) << "Handling buffer arg\n";
             js_buffer_t_to_struct(context, args[args_index++], &buffer_t_args[buffer_t_arg_index]);
             trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
         } else {
-          debug(0) << "Handling arg of type " << scalar_or_buffer_t.scalar_type << "\n";
             js_value_to_uint64_slot(scalar_or_buffer_t.scalar_type, args[args_index++], &scalar_args[scalar_arg_index]);
             trampoline_args.push_back(&scalar_args[scalar_arg_index++]);
         }
@@ -1579,9 +1579,7 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     if (!jit_extern->is_void_return) {
         trampoline_args.push_back(&ret_val);
     }
-    debug(0) << "Calling extern_wrapper trampoline.\n";
     (*callback_info->trampoline)(&trampoline_args[0]);
-    debug(0) << "Returning from extern_wrapper trampoline.\n";
 
     args_index = 0;
     buffer_t_arg_index = 0;
@@ -1597,7 +1595,6 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
         uint64_slot_to_return_value(jit_extern->ret_type, &ret_val, args.rval());
     }
 
-    debug(0) << "Leaving extern_wrapper.\n";
     return true;
 }
 
@@ -1704,9 +1701,11 @@ int run_javascript_spidermonkey(const std::string &source, const std::string &fn
             return -1;
         }
 
+        JS_FireOnNewGlobalObject(context, global);
+
         RootedValue script_result(context);
         CompileOptions options(context);
-        bool succeeded = JS::Evaluate(context, global, options, source.data(), source.size(), &script_result);
+        bool succeeded = JS::Evaluate(context, options, source.data(), source.size(), &script_result);
         if (!succeeded) {
             debug(0) << "JavaScript script evaulation failed(SpiderMonkey).\n";
             JS_DestroyContext(context);
