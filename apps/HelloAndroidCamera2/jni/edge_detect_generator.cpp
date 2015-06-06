@@ -14,12 +14,12 @@ public:
         // Gradients in x and y.
         Func gx("gx");
         Func gy("gy");
-        gx(x, y) = (clamped(x + 1, y) - clamped(x - 1, y)) / 2;
-        gy(x, y) = (clamped(x, y + 1) - clamped(x, y - 1)) / 2;
+        gx(x, y) = cast<uint16_t>(clamped(x + 1, y)) - clamped(x - 1, y);
+        gy(x, y) = cast<uint16_t>(clamped(x, y + 1)) - clamped(x, y - 1);
 
         Func result("result");
 
-        result(x, y) = gx(x, y) * gx(x, y) + gy(x, y) * gy(x, y) + 128;
+        result(x, y) = cast<uint8_t>(min(255, gx(x, y) * gx(x, y) + gy(x, y) * gy(x, y)));
 
         // CPU schedule:
         //   Parallelize over scan lines, 4 scanlines per task.
