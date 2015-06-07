@@ -42,13 +42,7 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
         }
     }
 
-    symbol = halide_get_library_symbol(lib_cuda, name);
-    if (symbol == NULL) {
-        error(user_context) << "Failed to load CUDA symbol '" << name << "'\n";
-        return NULL;
-    }
-
-    return symbol;
+    return halide_get_library_symbol(lib_cuda, name);
 }
 
 template <typename T>
