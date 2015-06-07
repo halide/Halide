@@ -1,0 +1,11 @@
+Problems with current bindings:
+
+P1) SWIG cannot parse C++15, and it will always lag
+P2) Python code is not compiled/tested together with C++ codebase
+P3) Albeit SWIG is there to help "automagic" current code base has explicit code for every class of interest
+P4) Current python bindings do not work at all
+
+The boost python approach helps because:
+a) P1 is solved out of the box, since no C++ parsing is involved
+b) P2 is mitigated since python bindings are also in C++. Any missmatch with generate a compilation error.
+c) P3 and P4 are expected to be handled by having less spagethi and aiming for tighter integration with rest of code-base (point b)
