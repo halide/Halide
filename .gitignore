@@ -122,6 +122,7 @@ bin/*
 build-ios/*
 build-osx/*
 cmake_build/*
+*/build/*
 tmp/*
 doc/*
 include/*
@@ -161,6 +162,8 @@ src/test_*.s
 *.dSYM
 .*.swp
 Doxyfile
+
+.idea
 
 # jrk editor settings
 .tm_properties
