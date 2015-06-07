@@ -128,7 +128,7 @@ void defineExpr()
             .def(p::init<int>()) // Make an expression representing a const 32-bit int (i.e. an IntImm)
             .def(p::init<float>()) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
             .def(p::init<double>()) /* Make an expression representing a const 32-bit float, given a
-                                                                                                                             * double. Also emits a warning due to truncation. */
+                                                                                                                                             * double. Also emits a warning due to truncation. */
             .def(p::init<std::string>()) // Make an expression representing a const string (i.e. a StringImm)
             .def(p::init<const h::Internal::BaseExprNode *>()) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
             .def("type", &Expr::type); // Get the type of this expression node
@@ -161,6 +161,29 @@ void func_compile_jit(h::Func &that)
     that.compile_jit();
     return;
 }
+
+void func_parallel0(h::Func &that, h::VarOrRVar var)
+{
+    that.parallel(var);
+}
+
+
+void func_parallel1(h::Func &that, h::VarOrRVar var, int factor)
+{
+    that.parallel(var, factor);
+}
+
+
+void func_vectorize0(h::Func &that, h::VarOrRVar var)
+{
+    that.vectorize(var);
+}
+
+void func_vectorize1(h::Func &that, h::VarOrRVar var, int factor)
+{
+    that.vectorize(var, factor);
+}
+
 
 void defineFunc()
 {
@@ -294,21 +317,29 @@ void defineFunc()
                                                                 dimension covers the product of the extents of the inner and
                                                                 outer dimensions given.
                                                                 """
+*/
 
-                                                                &Func::parallel(self, var):
-                                                                """
-                                                                Mark a dimension (Var instance) to be traversed in parallel.
-                                                                """
+    func_class.def("parallel",
+                   &func_parallel0,
+                   p::arg("var"),
+                   "Mark a dimension (Var instance) to be traversed in parallel.")
+            .def("parallel",
+                 &func_parallel1,
+                 p::args("var", "factor"));
 
-                                                                &Func::vectorize(self, var, factor):
-                                                                """
-                                                                Split a dimension (Var instance) by the given int factor, then vectorize the
-                                                                inner dimension. This is how you vectorize a loop of unknown
-                                                                size. The variable to be vectorized should be the innermost
-                                                                one. After this call, var refers to the outer dimension of the
-                                                                split.
-                                                                """
+    func_class.def("vectorize",
+                   &func_vectorize1,
+                   p::args("var", "factor"),
+                   "Split a dimension (Var instance) by the given int factor, then vectorize the "
+                   "inner dimension. This is how you vectorize a loop of unknown "
+                   "size. The variable to be vectorized should be the innermost "
+                   "one. After this call, var refers to the outer dimension of the "
+                   "split.")
+            .def("vectorize",
+                 &func_vectorize0,
+                 p::arg("var"));
 
+    /*
                                                                 &Func::unroll(self, var, factor=None):
                                                                 """
                                                                 Split a dimension (Var instance) by the given int factor, then unroll the inner
@@ -520,6 +551,31 @@ void defineFunc()
     return;
 }
 
+
+void defineTypes()
+{
+
+    p::class_<h::Type>("Type", p::no_init);
+
+    p::def("Int", h::Int,
+           (p::arg("bits"), p::arg("width")=1),
+           "Constructing an signed integer type");
+
+    p::def("UInt", h::UInt,
+           (p::arg("bits"), p::arg("width")=1),
+           "Constructing an unsigned integer type");
+
+    p::def("Float", h::Float,
+           (p::arg("bits"), p::arg("width")=1),
+           "Constructing a floating-point type");
+
+    p::def("Bool", h::Bool,
+           (p::arg("width")=1),
+           "Construct a boolean type");
+
+    return;
+}
+
 BOOST_PYTHON_MODULE(halide)
 {
     using namespace boost::python;
@@ -528,4 +584,5 @@ BOOST_PYTHON_MODULE(halide)
     defineVar();
     defineExpr();
     defineFunc();
+    defineTypes();
 }
