@@ -134,6 +134,7 @@ msvc/*/x64/*
 *~
 *.o
 *.a
+*.so
 *.dot
 .DS_Store
 *.log
