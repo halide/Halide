@@ -11,6 +11,10 @@
 
 #include "../../src/Func.h"
 
+#include "../../src/Type.h"
+
+#include "../../src/Param.h"
+
 #include <string>
 
 namespace h = Halide;
@@ -128,7 +132,7 @@ void defineExpr()
             .def(p::init<int>()) // Make an expression representing a const 32-bit int (i.e. an IntImm)
             .def(p::init<float>()) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
             .def(p::init<double>()) /* Make an expression representing a const 32-bit float, given a
-                                                                                                                                             * double. Also emits a warning due to truncation. */
+                                                                                                                                                                             * double. Also emits a warning due to truncation. */
             .def(p::init<std::string>()) // Make an expression representing a const string (i.e. a StringImm)
             .def(p::init<const h::Internal::BaseExprNode *>()) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
             .def("type", &Expr::type); // Get the type of this expression node
@@ -576,6 +580,32 @@ void defineTypes()
     return;
 }
 
+
+void defineParam()
+{
+    using h::ImageParam;
+
+    p::class_<ImageParam>("ImageParam",
+                          "An Image parameter to a halide pipeline. E.g., the input image. \n"
+                          "Constructor:: \n"
+                          "  ImageParam(Type t, int dims, name="") \n"
+                          "The image can be indexed via I[x], I[y,x], etc, which gives a Halide Expr. Supports most of \n"
+                          "the methods of Image.",
+                          p::init<h::Type, int, std::string>(p::args("t", "dims", "name"))
+                          )
+            .def(p::init<h::Type, int>(p::args("t", "dims")))
+            .def("name",
+                 &ImageParam::name,
+                 boost::python::return_value_policy<boost::python:: copy_const_reference>(),
+                 "Get name of ImageParam.")
+            .def("set", &ImageParam::set, p::arg("b"),
+                 "Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.")
+            .def("get", &ImageParam::get,
+                 "Get the Buffer that is bound. Only relevant for jitting.");
+    return;
+}
+
+
 BOOST_PYTHON_MODULE(halide)
 {
     using namespace boost::python;
@@ -585,4 +615,5 @@ BOOST_PYTHON_MODULE(halide)
     defineExpr();
     defineFunc();
     defineTypes();
+    defineParam();
 }
