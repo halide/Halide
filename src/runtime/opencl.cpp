@@ -41,13 +41,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
         }
     }
 
-    symbol = halide_get_library_symbol(lib_opencl, name);
-    if (symbol == NULL) {
-        error(user_context) << "Failed to load OpenCL symbol '" << name << "'\n";
-        return NULL;
-    }
-
-    return symbol;
+    return halide_get_library_symbol(lib_opencl, name);
 }
 
 template <typename T>
