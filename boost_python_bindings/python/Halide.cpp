@@ -6,6 +6,10 @@
 #include "Param.h"
 #include "Type.h"
 #include "IROperator.h"
+#include "Argument.h"
+
+#include <stdexcept>
+#include <vector>
 
 char const* greet()
 {
@@ -37,11 +41,21 @@ blur_x = Func('blur_x')
         I.show(maxval)
 */
 
+const int a=6;
+
+
+// Exceptions
+//void translateAssertException(const AssertException& e) {
+//    PyErr_SetString(PyExc_AssertionError, e.what());
+//}
+
 
 BOOST_PYTHON_MODULE(halide)
 {
     using namespace boost::python;
     def("greet", greet);
+
+    //register_exception_translator<AssertException>(&translateAssertException);
 
     defineVar();
     defineExpr();
@@ -49,4 +63,5 @@ BOOST_PYTHON_MODULE(halide)
     defineType();
     defineParam();
     defineOperators();
+    defineArgument();
 }
