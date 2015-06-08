@@ -1,12 +1,11 @@
 #ifndef HALIDE_CODEGEN_HEXAGON_H
 #define HALIDE_CODEGEN_HEXAGON_H
-/* A lot of code here has been taken from CodeGen_ARM.h */
 /** \file
  * Defines the code-generator for producing ARM machine code
  */
 
 #include "CodeGen_Posix.h"
-#include "Target.h"
+//#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,6 +19,8 @@ public:
     CodeGen_Hexagon(Target);
 
     llvm::Triple get_target_triple() const;
+    llvm::DataLayout get_data_layout() const;
+
 #if 0
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
@@ -35,14 +36,6 @@ public:
 
 protected:
 
-
-    /* /\** Generate a call to a neon intrinsic *\/ */
-    /* // @{ */
-    /* llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>); */
-    /* llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>); */
-    /* llvm::Instruction *call_void_intrin(const std::string &name, std::vector<Expr>); */
-    /* llvm::Instruction *call_void_intrin(const std::string &name, std::vector<llvm::Value *>); */
-    /* // @} */
 
     using CodeGen_Posix::visit;
 

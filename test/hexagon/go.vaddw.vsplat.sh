@@ -1,7 +1,7 @@
 #!/bin/bash -x
 HALIDE_TOP=`pwd`/../..
 rm -rf gradient.s Hexagon_vsplat_vaddw
-g++ Hexagon_vsplat_vaddw.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o Hexagon_vsplat_vaddw -O0
+g++ Hexagon_vsplat_vaddw.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o Hexagon_vsplat_vaddw -O0 -std=c++11
 
 if [ $? == 0 ]
 then

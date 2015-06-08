@@ -360,6 +360,14 @@ llvm::Triple CodeGen_Hexagon::get_target_triple() const {
     return triple;
 }
 
+
+llvm::DataLayout CodeGen_Hexagon::get_data_layout() const {
+    // FIXME: what should this be?
+    return llvm::DataLayout(
+       "e-p:32:32:32-i64:64:64-i32:32:32-i16:16:16-i1:32:32-f64:64:64-f32:32:32-v64:64:64-v32:32:32-a:0-n16:32");
+}
+
+
 string CodeGen_Hexagon::mcpu() const {
   return "hexagonv60";
 }

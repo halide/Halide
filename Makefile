@@ -14,6 +14,7 @@ CXX ?= g++
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
+
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
@@ -34,6 +35,7 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -f
 GENGEN_DEPS ?=$(BIN_DIR)/libHalide.so include/Halide.h tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # All WITH_* flags are either empty or not-empty. They do not behave
@@ -121,7 +123,7 @@ LLVM_STATIC_LIBS =
 LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
 endif
 
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --libs --ldflags --system-libs)
 
 UNAME = $(shell uname)
 
@@ -435,7 +437,7 @@ HEADER_FILES = \
   VectorizeLoops.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
-#OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
+OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
 RUNTIME_CPP_COMPONENTS = \

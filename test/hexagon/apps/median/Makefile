@@ -2,10 +2,11 @@
 HALIDE_TOP = `pwd`/../../../..
 CURR_DIR = `pwd`
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
-
+CXXFLAGS="--std=c++11"
+CLANG=hexagon-clang++
 
 median.o median.h: median.cpp
-	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon
+	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out
 
 

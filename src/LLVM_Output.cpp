@@ -7,7 +7,6 @@
 #include <fstream>
 
 namespace Halide {
-using namespace llvm;
 
 llvm::raw_fd_ostream *new_raw_fd_ostream(const std::string &filename) {
     std::string error_string;
@@ -224,12 +223,13 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
 
-    formatted_raw_ostream new_out(*out);
-
     // Ask the target to add backend passes as necessary.
-    //target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
-    target_machine->addPassesToEmitFile(pass_manager, new_out, file_type);
-
+#ifndef NEW_PASS_MGR
+    llvm::formatted_raw_ostream nout(*out);
+    target_machine->addPassesToEmitFile(pass_manager, nout, file_type);
+#else
+    target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
+#endif
     pass_manager.run(*module);
 
     delete target_machine;
