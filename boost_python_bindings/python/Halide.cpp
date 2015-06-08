@@ -134,7 +134,7 @@ void defineExpr()
             .def(p::init<int>()) // Make an expression representing a const 32-bit int (i.e. an IntImm)
             .def(p::init<float>()) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
             .def(p::init<double>()) /* Make an expression representing a const 32-bit float, given a
-                                                                                                                                                                                                                     * double. Also emits a warning due to truncation. */
+                                                                                                                                                                                                                                             * double. Also emits a warning due to truncation. */
             .def(p::init<std::string>()) // Make an expression representing a const string (i.e. a StringImm)
             .def(p::init<const h::Internal::BaseExprNode *>()) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
             .def("type", &Expr::type); // Get the type of this expression node
@@ -509,13 +509,15 @@ void defineFunc()
                                                                 Compute this function as needed for each unique value of the
                                                                 given var (can be a Var or an RVar) for the given calling function f.
                                                                 """
+*/
 
-                                                                &Func::compute_root(self):
-                                                                """
-                                                                Compute all of this function once ahead of time.
-                                                                """
+/*    func_class.def("compute_root",
+                   &Func::compute_root,
+                   "Compute all of this function once ahead of time.");*/
 
-                                                                &Func::store_at(self, f, var):
+
+
+    /*                                                                &Func::store_at(self, f, var):
                                                                 """
                                                                 Allocate storage for this function within f's loop over
                                                                 var (can be a Var or an RVar). Scheduling storage is optional, and can be used to
@@ -523,35 +525,30 @@ void defineFunc()
                                                                 level at which computation occurs to trade off between locality
                                                                 and redundant work.
                                                                 """
+*/
+/*
+    func_class.def("store_root",
+                   &Func::store_root,
+                   "Equivalent to Func.store_at, but schedules storage outside the outermost loop.");
 
-                                                                &Func::store_root(self):
-                                                                """
-                                                                Equivalent to Func.store_at, but schedules storage outside the outermost loop.
-                                                                """
+    func_class.def("compute_inline",
+                   &Func::compute_inline,
+                   "Aggressively inline all uses of this function. This is the "
+                   "default schedule, so you're unlikely to need to call this. For "
+                   "a reduction, that means it gets computed as close to the "
+                   "innermost loop as possible.");
+*/
 
-                                                                &Func::compute_inline(self):
-                                                                """
-                                                                Aggressively inline all uses of this function. This is the
-                                                                default schedule, so you're unlikely to need to call this. For
-                                                                a reduction, that means it gets computed as close to the
-                                                                innermost loop as possible.
-                                                                """
+    func_class.def("update",
+                   &Func::update,
+                   "Get a handle on the update step of a reduction for the "
+                   "purposes of scheduling it. Only the pure dimensions of the "
+                   "update step can be meaningfully manipulated (see RDom).");
 
-                                                                &Func::update(self):
-                                                                """
-                                                                Get a handle on the update step of a reduction for the
-                                                                purposes of scheduling it. Only the pure dimensions of the
-                                                                update step can be meaningfully manipulated (see RDom).
-                                                                """
-
-                                                                &Func::function(self):
-                                                                """
-                                                                Get a handle on the internal halide function that this Func
-                                                                represents. Useful if you want to do introspection on Halide
-                                                                functions.
-                                                                """
-                    */
-    ;
+    func_class.def("function",
+                   &Func::function,
+                   "Get a handle on the internal halide function that this Func represents. "
+                   "Useful if you want to do introspection on Halide functions.");
 
 
     return;
