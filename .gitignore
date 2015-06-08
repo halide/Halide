@@ -163,6 +163,7 @@ src/test_*.s
 .*.swp
 Doxyfile
 
+*.txt.user
 .idea
 
 # jrk editor settings

@@ -79,7 +79,15 @@ h::Func &func_store_at1(h::Func &that, h::Func f, h::RVar var)
     return that.store_at(f, var);
 }
 
+h::Func &func_compute_at0(h::Func &that, h::Func f, h::Var var)
+{
+    return that.compute_at(f, var);
+}
 
+h::Func &func_compute_at1(h::Func &that, h::Func f, h::RVar var)
+{
+    return that.compute_at(f, var);
+}
 
 
 /// Define all gpu related methods
@@ -220,15 +228,16 @@ void defineFunc()
             .def(p::init<std::string>())
             .def(p::init<h::Expr>());
     //.def("set", &Func::set, "Typically one uses f[x, y] = expr to assign to a function. However f.set(expr) can be used also.")
-    /*
+
     func_class.def("allow_race_conditions",
                    &Func::allow_race_conditions,
+                   p::return_internal_reference<1>(),
                    "Specify that race conditions are permitted for this Func, "
                    "which enables parallelizing over RVars even when Halide cannot "
                    "prove that it is safe to do so. Use this with great caution, "
                    "and only if you can prove to yourself that this is safe, as it "
                    "may result in a non-deterministic routine that returns "
-                   "different values at different times or on different machines.");*/
+                   "different values at different times or on different machines.");
 
     func_class.def("realize",
                    &func_realize1,
@@ -242,7 +251,6 @@ void defineFunc()
                      p::args("sizes", "target")));
 
 
-
     func_class.def("compile_to_bitcode",
                    &func_compile_to_bitcode0,
                    (p::arg("filename"), p::arg("args"), p::arg("fn_name")="", p::arg("target")=h::get_target_from_environment()),
@@ -251,31 +259,19 @@ void defineFunc()
                    "signature, and C function name (which defaults to the same name "
                    "as this halide function.");
 
+    func_class.def("compile_to_c",
+                   &Func::compile_to_c,
+                   (p::arg("filename"), p::arg("args"), p::arg("fn_name")="", p::arg("target")=h::get_target_from_environment()),
+                   "Statically compile this function to C source code. This is "
+                   "useful for providing fallback code paths that will compile on "
+                   "many platforms. Vectorization will fail, and parallelization "
+                   "will produce serial code.");
 
-    /*
-                                                            &Func::compile_to_c(self, filename, list_of_Argument, fn_name=""):
-                                                            """
-                                                            Statically compile this function to C source code. This is
-                                                            useful for providing fallback code paths that will compile on
-                                                            many platforms. Vectorization will fail, and parallelization
-                                                            will produce serial code.
-                                                            """
-
-                                                            &Func::compile_to_file(self, filename_prefix, list_of_Argument, target):
-                                                            """
-                                                            Various signatures::
-
-                                                            compile_to_file(filename_prefix, list_of_Argument)
-                                                            compile_to_file(filename_prefix)
-                                                            compile_to_file(filename_prefix, Argument a)
-                                                            compile_to_file(filename_prefix, Argument a, Argument b)
-
-                                                            Compile to object file and header pair, with the given
-                                                            arguments. Also names the C function to match the first
-                                                            argument.
-                                                            """
-*/
-
+    func_class.def("compile_to_file",
+                   &Func::compile_to_file,
+                   (p::arg("filename_prefix"), p::arg("args"), p::arg("target")=h::get_target_from_environment()),
+                   "Compile to object file and header pair, with the given arguments. "
+                   "Also names the C function to match the first argument.");
 
     func_class.def("compile_jit",
                    &func_compile_jit,
@@ -415,13 +411,18 @@ void defineFunc()
                                                                 Scheduling calls that control how the storage for the function
                                                                 is laid out. Right now you can only reorder the dimensions.
                                                                 """
-
-                                                                &Func::compute_at(self, f, var):
-                                                                """
-                                                                Compute this function as needed for each unique value of the
-                                                                given var (can be a Var or an RVar) for the given calling function f.
-                                                                """
 */
+
+    func_class.def("compute_at",
+                   &func_compute_at0,
+                   p::args("f", "var"),
+                   p::return_internal_reference<1>(),
+                   "Compute this function as needed for each unique value of the "
+                   "given var (can be a Var or an RVar) for the given calling function f.")
+            .def("compute_at",
+                 &func_compute_at1,
+                 p::args("f", "var"),
+                 p::return_internal_reference<1>());
 
     func_class.def("compute_root",
                    &Func::compute_root,
