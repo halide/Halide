@@ -3,6 +3,7 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+#include <boost/python/suite/indexing/detail/indexing_suite_detail.hpp>
 
 #include "../../src/Argument.h"
 
@@ -19,10 +20,47 @@ h::Argument::Kind argument_kind(h::Argument &that)
     return that.kind;
 }
 
-bool operator ==(const h::Argument &a, const h::Argument &b)
+
+bool operator==(const Halide::Argument &a, const Halide::Argument &b)
 {
     return a.name == b.name;
 }
+
+class Argument0: public h::Argument
+{
+public:
+
+    Argument0() : h::Argument() {}
+    Argument0(const std::string &_name,
+              Kind _kind, const h::Type &_type, uint8_t _dimensions,
+              h::Expr _def = h::Expr(),
+              h::Expr _min = h::Expr(),
+              h::Expr _max = h::Expr()) : Halide::Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {}
+
+    Argument0(h::Argument &b):
+        Halide::Argument(b.name, b.kind, b.type, b.dimensions, b.def, b.min, b.max) {}
+
+    bool operator ==(const Argument0 &b)
+    {
+        return this->name == b.name;
+    }
+};
+
+
+// based on http://boost.2283326.n4.nabble.com/A-vector-of-objects-with-private-operators-td2698705.html
+template <class T>
+class no_compare_indexing_suite :
+        public boost::python::vector_indexing_suite<T, false,
+        no_compare_indexing_suite<T> >
+{
+public:
+    static bool contains(T &container, typename T::value_type const &key)
+    {
+        PyErr_SetString(PyExc_NotImplementedError,
+                        "containment checking not supported on this container");
+        throw boost::python::error_already_set();
+    }
+};
 
 
 void defineArgument()
@@ -48,10 +86,10 @@ void defineArgument()
 
     argument_class
             .def_readonly("name", &Argument::name, "The name of the argument.");
-            //.property("name", &Argument::name, "The name of the argument.")
-            //.def("name",
-            //     &argument_name, // getter instead of property to be consistent with other parts of the API
-            //     "The name of the argument.");
+    //.property("name", &Argument::name, "The name of the argument.")
+    //.def("name",
+    //     &argument_name, // getter instead of property to be consistent with other parts of the API
+    //     "The name of the argument.");
 
     p::enum_<Argument::Kind>("ArgumentKind")
             .value("InputScalar", Argument::Kind::InputScalar)
@@ -107,9 +145,15 @@ void defineArgument()
             .def("is_input", &Argument::is_input)
             .def("is_output", &Argument::is_output);
 
-    /*
-            p::class_< std::vector<h::Argument> >("ArgumentsVector")
-                    .def( p::vector_indexing_suite< std::vector<h::Argument> >() );
-        */
+
+    //    p::class_< std::vector<h::Argument> >("ArgumentsVector")
+    //            .def( p::vector_indexing_suite< std::vector<h::Argument> >() );
+
+    //p::class_< std::vector<Argument0> >("ArgumentsVector")
+    //        .def( p::vector_indexing_suite< std::vector<Argument0> >() );
+
+    p::class_< std::vector<h::Argument> >("ArgumentsVector")
+                .def( no_compare_indexing_suite< std::vector<h::Argument> >() );
+
     return;
 }
