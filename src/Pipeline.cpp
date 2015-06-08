@@ -994,6 +994,12 @@ Pipeline::make_externs_jit_module(const Target &target,
                                   std::map<std::string, JITExtern> &externs_in_out) {
     std::vector<JITModule> result;
 
+    // Turn off JavaScript when compiling dependent Funcs so they are compiled to native.
+    Target no_js_target = target;
+    no_js_target.set_feature(Target::JavaScript, false);
+    no_js_target.set_feature(Target::JavaScript_V8, false);
+    no_js_target.set_feature(Target::JavaScript_SpiderMonkey, false);
+
     // Externs that are Funcs get their own JITModule. All standalone functions are
     // held in a single JITModule at the end of the list (if there are any).
     JITModule free_standing_jit_externs;
@@ -1005,19 +1011,26 @@ Pipeline::make_externs_jit_module(const Target &target,
             PipelineContents &pipeline_contents(*jit_extern.pipeline.contents.ptr);
 
             // Ensure that the pipeline is compiled.
-            jit_extern.pipeline.compile_jit(target);
+            jit_extern.pipeline.compile_jit(no_js_target);
             
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
             iter->second.c_function = pipeline_contents.jit_module.entrypoint_symbol().address;
             iter->second.signature.is_void_return = false;
             iter->second.signature.ret_type = Int(32);
+            // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
                  ScalarOrBufferT arg_type_info;
                  arg_type_info.is_buffer = arg.arg.is_buffer();
                  if (!arg_type_info.is_buffer) {
                      arg_type_info.scalar_type = arg.arg.type;
                  }
+                 iter->second.signature.arg_types.push_back(arg_type_info);
+            }
+            // Add the outputs of the pipeline
+            for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
+                 ScalarOrBufferT arg_type_info;
+                 arg_type_info.is_buffer = true;
                  iter->second.signature.arg_types.push_back(arg_type_info);
             }
             iter->second.pipeline = Pipeline();
@@ -1077,7 +1090,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    debug(0) << "Realizing Pipeline for " << target.to_string() << "\n";
+    debug(2) << "Realizing Pipeline for " << target.to_string() << "\n";
 
     // If target is unspecified...
     if (target.os == Target::OSUnknown) {

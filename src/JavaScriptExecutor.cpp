@@ -136,35 +136,27 @@ Local<ObjectTemplate> make_buffer_t_template(Isolate* isolate, ExternalArrayType
     AccessorGetterCallback host_getter = NULL;
     switch (element_type) {
     case kExternalInt8Array:
-      debug(0) << "Making Int8Array.\n";
         host_getter = get_host_array<Int8Array>;
         break;
     case kExternalUint8Array:
-      debug(0) << "Making Uint8Array.\n";
         host_getter = get_host_array<Uint8Array>;
         break;
     case kExternalInt16Array:
-      debug(0) << "Making Int16Array.\n";
         host_getter = get_host_array<Int16Array>;
         break;
     case kExternalUint16Array:
-      debug(0) << "Making Uint16Array.\n";
         host_getter = get_host_array<Uint16Array>;
         break;
     case kExternalInt32Array:
-      debug(0) << "Making Int32Array.\n";
         host_getter = get_host_array<Int32Array>;
         break;
     case kExternalUint32Array:
-      debug(0) << "Making Uint32Array.\n";
         host_getter = get_host_array<Uint32Array>;
         break;
     case kExternalFloat32Array:
-      debug(0) << "Making Float32Array.\n";
         host_getter = get_host_array<Float32Array>;
         break;
     case kExternalFloat64Array:
-      debug(0) << "Making Float64Array.\n";
         host_getter = get_host_array<Float64Array>;
         break;
     default:
@@ -203,7 +195,6 @@ Local<ObjectTemplate> make_buffer_t_template(Isolate* isolate, ExternalArrayType
 }
 
 Local<Object> make_buffer_t(Isolate *isolate, struct buffer_t *buf, ExternalArrayType element_type) {
-    debug(0) << "Making buffer_t on " << buf << " which has elem_size " << buf->elem_size << "\n";
     Local<ObjectTemplate> object_template = make_buffer_t_template(isolate, element_type);
     Local<Object> wrapper = object_template->NewInstance();
     Local<External> buf_wrap(External::New(isolate, buf));
@@ -658,7 +649,6 @@ void add_extern_callbacks(Isolate *isolate, Local<Context> &context,
         Local<ObjectTemplate> extern_callback_template = ObjectTemplate::New(isolate);
         extern_callback_template->SetInternalFieldCount(3);
 
-        debug(0) << "Making callback for " << jit_extern.first << " c_function is " << jit_extern.second.c_function << "\n";
         Local<Object> wrapper_data = extern_callback_template->NewInstance();
         Local<External> jit_externs_wrap(External::New(isolate, (void *)&externs));
         Local<External> trampoline_wrap(External::New(isolate,
