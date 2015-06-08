@@ -90,6 +90,8 @@ struct Outputs {
     }
 };
 
+struct JITExtern;
+
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
 class Pipeline {
@@ -97,6 +99,9 @@ class Pipeline {
 
     std::vector<Buffer> validate_arguments(const std::vector<Argument> &args);
     std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
+
+    static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
+                                                                    std::map<std::string, JITExtern> &externs_in_out);
 
 public:
     /** Make an undefined Pipeline object. */
@@ -303,6 +308,16 @@ public:
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
+    /** Install a set of external C functions or Funcs to satisfy
+     * dependencies introduced by HalideExtern and define_extern
+     * mechanisms. These will be used by calls to realize,
+     * infer_bounds, and compile_jit. */
+    EXPORT void set_jit_externs(const std::map<std::string, JITExtern> &externs);
+
+    /** Return the map of previously installed externs. Is an empty
+     * map unless set otherwise. */
+    EXPORT const std::map<std::string, JITExtern> &get_jit_externs();
+
     /** Get a struct containing the currently set custom functions
      * used by JIT. */
     EXPORT const Internal::JITHandlers &jit_handlers();
@@ -338,15 +353,15 @@ public:
     EXPORT const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     EXPORT Realization realize(int x_size = 0,
-                               const Target &target = get_jit_target_from_environment());
+                               const Target &target = Target());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -355,11 +370,11 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. */
     // @{
-    EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment());
-    EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
+    EXPORT void realize(Realization dst, const Target &target = Target());
+    EXPORT void realize(Buffer dst, const Target &target = Target());
 
     template<typename T>
-    NO_INLINE void realize(Image<T> dst, const Target &target = get_jit_target_from_environment()) {
+    NO_INLINE void realize(Image<T> dst, const Target &target = Target()) {
         // Images are expected to exist on-host.
         realize(Buffer(dst), target);
         dst.copy_to_host();
@@ -395,6 +410,77 @@ public:
      * been rescheduled. */
     EXPORT void invalidate_cache();
 
+};
+
+namespace {
+
+template <typename T>
+bool voidable_halide_type(Type &t) {
+    t = type_of<T>();
+    return false;
+}
+
+template<>
+inline bool voidable_halide_type<void>(Type &t) {
+    return true;
+}        
+
+template <typename T>
+bool scalar_arg_type_or_buffer(Type &t) {
+    t = type_of<T>();
+    return false;
+}
+
+template <>
+inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
+    return true;
+}
+
+template <typename T>
+ScalarOrBufferT arg_type_info() {
+    ScalarOrBufferT result;
+    result.is_buffer = scalar_arg_type_or_buffer<T>(result.scalar_type);
+    return result;
+}
+
+template <typename A1, typename... Args>
+struct make_argument_list {
+    static void add_args(std::vector<ScalarOrBufferT> &arg_types) {
+       arg_types.push_back(arg_type_info<A1>());
+       make_argument_list<Args...>::add_args(arg_types);
+    }
+};
+
+template <>
+struct make_argument_list<void> {
+    static void add_args(std::vector<ScalarOrBufferT> &) { }
+};
+
+
+template <typename... Args>
+void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
+    make_argument_list<Args..., void>::add_args(arg_types);
+}
+
+}
+
+struct JITExtern {
+    // assert pipeline.defined() == (c_function == NULL) -- strictly one or the other
+    // which should be enforced by the constructors.
+    Pipeline pipeline;
+
+    void *c_function;
+    ExternSignature signature;
+
+    EXPORT JITExtern(Pipeline pipeline);
+    EXPORT JITExtern(Func func);
+
+    template <typename RT, typename... Args>
+    JITExtern(RT (*f)(Args... args)) {
+        c_function = (void *)f;
+        signature.is_void_return = voidable_halide_type<RT>(signature.ret_type);
+        init_arg_types<Args...>(signature.arg_types);
+    }
 };
 
 }
