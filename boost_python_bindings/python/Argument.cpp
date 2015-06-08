@@ -21,32 +21,6 @@ h::Argument::Kind argument_kind(h::Argument &that)
 }
 
 
-bool operator==(const Halide::Argument &a, const Halide::Argument &b)
-{
-    return a.name == b.name;
-}
-
-class Argument0: public h::Argument
-{
-public:
-
-    Argument0() : h::Argument() {}
-    Argument0(const std::string &_name,
-              Kind _kind, const h::Type &_type, uint8_t _dimensions,
-              h::Expr _def = h::Expr(),
-              h::Expr _min = h::Expr(),
-              h::Expr _max = h::Expr()) : Halide::Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {}
-
-    Argument0(h::Argument &b):
-        Halide::Argument(b.name, b.kind, b.type, b.dimensions, b.def, b.min, b.max) {}
-
-    bool operator ==(const Argument0 &b)
-    {
-        return this->name == b.name;
-    }
-};
-
-
 // based on http://boost.2283326.n4.nabble.com/A-vector-of-objects-with-private-operators-td2698705.html
 template <class T>
 class no_compare_indexing_suite :
@@ -144,13 +118,6 @@ void defineArgument()
             .def("is_scalar", &Argument::is_scalar)
             .def("is_input", &Argument::is_input)
             .def("is_output", &Argument::is_output);
-
-
-    //    p::class_< std::vector<h::Argument> >("ArgumentsVector")
-    //            .def( p::vector_indexing_suite< std::vector<h::Argument> >() );
-
-    //p::class_< std::vector<Argument0> >("ArgumentsVector")
-    //        .def( p::vector_indexing_suite< std::vector<Argument0> >() );
 
     p::class_< std::vector<h::Argument> >("ArgumentsVector")
                 .def( no_compare_indexing_suite< std::vector<h::Argument> >() );
