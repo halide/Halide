@@ -47,10 +47,11 @@ void defineArgument()
     argument_class.def(p::init<std::string, Argument::Kind, h::Type, uint8_t, h::Expr, h::Expr, h::Expr>(init_keywords));
 
     argument_class
+            .def_readonly("name", &Argument::name, "The name of the argument.");
             //.property("name", &Argument::name, "The name of the argument.")
-            .def("name",
-                 &argument_name, // getter instead of property to be consistent with other parts of the API
-                 "The name of the argument.");
+            //.def("name",
+            //     &argument_name, // getter instead of property to be consistent with other parts of the API
+            //     "The name of the argument.");
 
     p::enum_<Argument::Kind>("ArgumentKind")
             .value("InputScalar", Argument::Kind::InputScalar)
