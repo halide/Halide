@@ -582,9 +582,10 @@ void defineTypes()
     return;
 }
 
-/*
+
 void defineParam()
 {
+    // Might create linking problems, if Param.cpp is not included in the python library
     using h::ImageParam;
 
     p::class_<ImageParam>("ImageParam",
@@ -606,7 +607,7 @@ void defineParam()
                  "Get the Buffer that is bound. Only relevant for jitting.");
     return;
 }
-*/
+
 
 h::Expr reinterpret0(h::Type t, h::Expr e)
 {
@@ -1084,6 +1085,6 @@ BOOST_PYTHON_MODULE(halide)
     defineExpr();
     defineFunc();
     defineTypes();
-    //defineParam(); // <<< linking problem
+    defineParam();
     defineOperators();
 }

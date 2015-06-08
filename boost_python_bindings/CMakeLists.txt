@@ -45,7 +45,9 @@ if(FALSE AND UNIX )
 	set_property(SOURCE util.cpp PROPERTY COMPILE_FLAGS -w )
 endif()
 
-file(GLOB SrcCpp python/*.cpp)
+file(GLOB SrcCpp
+python/*.cpp
+../src/Param.cpp)
 
 add_library(halide SHARED ${SrcCpp})
 target_link_libraries(halide
