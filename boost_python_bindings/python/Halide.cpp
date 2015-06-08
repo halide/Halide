@@ -134,7 +134,7 @@ void defineExpr()
             .def(p::init<int>()) // Make an expression representing a const 32-bit int (i.e. an IntImm)
             .def(p::init<float>()) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
             .def(p::init<double>()) /* Make an expression representing a const 32-bit float, given a
-                                                                                                                                                                                                                                             * double. Also emits a warning due to truncation. */
+                                                                                                                                                                                                                                                                             * double. Also emits a warning due to truncation. */
             .def(p::init<std::string>()) // Make an expression representing a const string (i.e. a StringImm)
             .def(p::init<const h::Internal::BaseExprNode *>()) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
             .def("type", &Expr::type); // Get the type of this expression node
@@ -188,6 +188,16 @@ void func_vectorize0(h::Func &that, h::VarOrRVar var)
 void func_vectorize1(h::Func &that, h::VarOrRVar var, int factor)
 {
     that.vectorize(var, factor);
+}
+
+h::Func &func_store_at0(h::Func &that, h::Func f, h::Var var)
+{
+    return that.store_at(f, var);
+}
+
+h::Func &func_store_at1(h::Func &that, h::Func f, h::RVar var)
+{
+    return that.store_at(f, var);
 }
 
 
@@ -386,12 +396,18 @@ void defineFunc()
                                                                 Reorder the dimensions (Var arguments) to have the given nesting
                                                                 order, from innermost loop order to outermost.
                                                                 """
+*/
 
-                                                                &Func::rename(self, old_name, new_name):
-                                                                """
-                                                                Rename a dimension. Equivalent to split with a inner size of one.
-                                                                """
 
+    func_class.def("rename",
+                   &Func::rename,
+                   p::args("old_name", "new_name"),
+                   p::return_internal_reference<1>(),
+                   "Rename a dimension. Equivalent to split with a inner size of one.");
+
+
+
+    /*
                                                                 &Func::gpu_threads(self, *args):
                                                                 """
                                                                 Tell Halide that the following dimensions correspond to cuda
@@ -511,33 +527,38 @@ void defineFunc()
                                                                 """
 */
 
-/*    func_class.def("compute_root",
+    func_class.def("compute_root",
                    &Func::compute_root,
-                   "Compute all of this function once ahead of time.");*/
+                   p::return_internal_reference<1>(),
+                   "Compute all of this function once ahead of time.");
 
 
+    func_class.def("store_at",
+                   &func_store_at0,
+                   p::args("f", "var"),
+                   p::return_internal_reference<1>(),
+                   "Allocate storage for this function within f's loop over "
+                   "var (can be a Var or an RVar). Scheduling storage is optional, and can be used to "
+                   "separate the loop level at which storage occurs from the loop "
+                   "level at which computation occurs to trade off between locality "
+                   "and redundant work.")
+            .def("store_at",
+                 &func_store_at1,
+                 p::args("f", "var"),
+                 p::return_internal_reference<1>());
 
-    /*                                                                &Func::store_at(self, f, var):
-                                                                """
-                                                                Allocate storage for this function within f's loop over
-                                                                var (can be a Var or an RVar). Scheduling storage is optional, and can be used to
-                                                                separate the loop level at which storage occurs from the loop
-                                                                level at which computation occurs to trade off between locality
-                                                                and redundant work.
-                                                                """
-*/
-/*
     func_class.def("store_root",
                    &Func::store_root,
+                   p::return_internal_reference<1>(),
                    "Equivalent to Func.store_at, but schedules storage outside the outermost loop.");
 
     func_class.def("compute_inline",
                    &Func::compute_inline,
+                   p::return_internal_reference<1>(),
                    "Aggressively inline all uses of this function. This is the "
                    "default schedule, so you're unlikely to need to call this. For "
                    "a reduction, that means it gets computed as close to the "
                    "innermost loop as possible.");
-*/
 
     func_class.def("update",
                    &Func::update,
