@@ -47,6 +47,32 @@ void func_compile_to_bitcode0(h::Func &that, const std::string &filename,
 }
 
 
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_bitcode0_overloads, func_compile_to_bitcode0, 3, 5)
+
+
+void func_compile_to_c0(h::Func &that, const std::string &filename,
+                              const std::vector<h::Argument> &args,
+                              const std::string fn_name = "",
+                              const h::Target &target = h::get_target_from_environment())
+{
+    that.compile_to_c(filename, args, fn_name, target);
+    return;
+}
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_c0_overloads, func_compile_to_c0, 3, 5)
+
+
+void func_compile_to_file0(h::Func &that, const std::string &filename_prefix,
+                              const std::vector<h::Argument> &args,
+                              const h::Target &target = h::get_target_from_environment())
+{
+    that.compile_to_file(filename_prefix, args, target);
+    return;
+}
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_file0_overloads, func_compile_to_file0, 3, 4)
+
+
 void func_parallel0(h::Func &that, h::VarOrRVar var)
 {
     that.parallel(var);
@@ -253,25 +279,28 @@ void defineFunc()
 
     func_class.def("compile_to_bitcode",
                    &func_compile_to_bitcode0,
-                   (p::arg("filename"), p::arg("args"), p::arg("fn_name")="", p::arg("target")=h::get_target_from_environment()),
+                   func_compile_to_bitcode0_overloads(
+                       p::args("filename", "args", "fn_name", "target"),
                    "Statically compile this function to llvm bitcode, with the "
                    "given filename (which should probably end in .bc), type "
                    "signature, and C function name (which defaults to the same name "
-                   "as this halide function.");
+                   "as this halide function."));
 
     func_class.def("compile_to_c",
-                   &Func::compile_to_c,
-                   (p::arg("filename"), p::arg("args"), p::arg("fn_name")="", p::arg("target")=h::get_target_from_environment()),
+                   &func_compile_to_c0,
+                   func_compile_to_c0_overloads(
+                       p::args("filename", "args", "fn_name", "target"),
                    "Statically compile this function to C source code. This is "
                    "useful for providing fallback code paths that will compile on "
                    "many platforms. Vectorization will fail, and parallelization "
-                   "will produce serial code.");
+                   "will produce serial code."));
 
     func_class.def("compile_to_file",
-                   &Func::compile_to_file,
-                   (p::arg("filename_prefix"), p::arg("args"), p::arg("target")=h::get_target_from_environment()),
+                   &func_compile_to_file0,
+                   func_compile_to_file0_overloads(
+                   p::args("filename_prefix", "args", "target"),
                    "Compile to object file and header pair, with the given arguments. "
-                   "Also names the C function to match the first argument.");
+                   "Also names the C function to match the first argument."));
 
     func_class.def("compile_jit",
                    &func_compile_jit,
@@ -281,7 +310,6 @@ void defineFunc()
                    "wish to avoid including the time taken to compile a pipeline, "
                    "then you can call this ahead of time. Returns the raw function "
                    "pointer to the compiled pipeline.");
-
 
     func_class.def("debug_to_file",
                    &Func::debug_to_file,
