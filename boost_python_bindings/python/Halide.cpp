@@ -7,6 +7,9 @@
 #include "Type.h"
 #include "IROperator.h"
 #include "Argument.h"
+#include "BoundaryConditions.h"
+#include "Image.h"
+#include "Buffer.h"
 
 #include <stdexcept>
 #include <vector>
@@ -20,7 +23,7 @@ char const* greet()
 input = ImageParam(UInt(16), 2, 'input')
         x, y = Var('x'), Var('y')
 
-blur_x = Func('blur_x')
+        blur_x = Func('blur_x')
         blur_y = Func('blur_y')
 
         blur_x[x,y] = (input[x,y]+input[x+1,y]+input[x+2,y])/3
@@ -41,21 +44,11 @@ blur_x = Func('blur_x')
         I.show(maxval)
 */
 
-const int a=6;
-
-
-// Exceptions
-//void translateAssertException(const AssertException& e) {
-//    PyErr_SetString(PyExc_AssertionError, e.what());
-//}
-
 
 BOOST_PYTHON_MODULE(halide)
 {
     using namespace boost::python;
     def("greet", greet);
-
-    //register_exception_translator<AssertException>(&translateAssertException);
 
     defineVar();
     defineExpr();
@@ -64,4 +57,8 @@ BOOST_PYTHON_MODULE(halide)
     defineParam();
     defineOperators();
     defineArgument();
+    defineBoundaryConditions();
+    defineImage();
+    defineBuffer();
+
 }
