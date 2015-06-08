@@ -162,7 +162,12 @@ const string preamble =
     "";
 }
 
-CodeGen_JavaScript::CodeGen_JavaScript(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
+CodeGen_JavaScript::CodeGen_JavaScript(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {
+    stream << preamble;
+}
+
+CodeGen_JavaScript::~CodeGen_JavaScript() {
+}
 
 string CodeGen_JavaScript::make_js_int_cast(string value, bool src_unsigned, int src_bits, bool dst_unsigned, int dst_bits) {
     // TODO: Do we us print_assignment to cache constants?
@@ -276,84 +281,90 @@ string CodeGen_JavaScript::print_name(const string &name) {
     return oss.str();
 }
 
-void CodeGen_JavaScript::compile(Stmt s, string name,
-                                 const vector<Argument> &args,
-                                 const vector<Buffer> &images_to_embed) {
-    stream << preamble;
-
-    // Embed the constant images
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
-        Buffer buffer = images_to_embed[i];
-        string name = print_name(buffer.name());
-        buffer_t b = *(buffer.raw_buffer());
-
-        // Figure out the offset of the last pixel.
-        size_t num_elems = 1;
-        for (int d = 0; b.extent[d]; d++) {
-            num_elems += b.stride[d] * (b.extent[d] - 1);
-        }
-
-        // Emit the data
-        stream << "var " << name << "_data = new Uint8Array([";
-        for (size_t i = 0; i < num_elems * b.elem_size; i++) {
-            if (i > 0) stream << ", ";
-            stream << (int)(b.host[i]);
-        }
-        stream << "]);\n";
-
-        // Emit the buffer_t
-        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
-        user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
-        stream << "var " << name << "_buffer = {"
-               << "dev: 0, " // dev
-               << "host: " << name << "_data[0], " // host
-               << "extent: [" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "], "
-               << "stride: [" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "], "
-               << "min: [" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "], "
-               << "elem_size: " << b.elem_size << ", "
-               << "host_dirty: 0, " // host_dirty
-               << "dev_dirty: 0};\n"; //dev_dirty
-
-        // TODO: Is this necessary?
-        // Make a global pointer to it
-        stream << "var " << name << " = " << name << "_buffer;\n";
-
+void CodeGen_JavaScript::compile(const Module &input) {
+    for (size_t i = 0; i < input.buffers.size(); i++) {
+        compile(input.buffers[i]);
     }
+    for (size_t i = 0; i < input.functions.size(); i++) {
+        compile(input.functions[i]);
+    }
+}
 
+void CodeGen_JavaScript::compile(const LoweredFunc &f) {
+  debug(0) << "Compile called on lowered func " << f.name << "\n";
     have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
-        have_user_context |= (args[i].name == "__user_context");
+    for (size_t i = 0; i < f.args.size(); i++) {
+        have_user_context |= (f.args[i].name == "__user_context");
     }
 
     // Emit the function prototype
-    stream << "function " << name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-      if (args[i].is_buffer()) {
-            stream << print_name(args[i].name)
+    stream << "function " << f.name << "(";
+    for (size_t i = 0; i < f.args.size(); i++) {
+        if (f.args[i].is_buffer()) {
+            stream << print_name(f.args[i].name)
                    << "_buffer";
         } else {
-            stream << print_name(args[i].name);
+            stream << print_name(f.args[i].name);
         }
 
-        if (i < args.size()-1) stream << ", ";
+        if (i < f.args.size() - 1) stream << ", ";
     }
 
     stream << ") {\n";
 
     // Unpack the buffer_t's
-    for (size_t i = 0; i < args.size(); i++) {
-      if (args[i].is_buffer()) {
-            unpack_buffer(args[i].type, args[i].name);
+    for (size_t i = 0; i < f.args.size(); i++) {
+        if (f.args[i].is_buffer()) {
+            unpack_buffer(f.args[i].type, f.args[i].name);
         }
     }
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
+#if 0
+    for (size_t i = 0; i < f.images_to_embed.size(); i++) {
         unpack_buffer(images_to_embed[i].type(), images_to_embed[i].name());
     }
+#endif
+
     // Emit the body
-    print(s);
+    print(f.body);
 
     stream << "return 0;\n"
            << "}\n";
+}
+
+void CodeGen_JavaScript::compile(const Buffer &buffer) {
+    string name = print_name(buffer.name());
+    buffer_t b = *(buffer.raw_buffer());
+
+    // Figure out the offset of the last pixel.
+    size_t num_elems = 1;
+    for (int d = 0; b.extent[d]; d++) {
+        num_elems += b.stride[d] * (b.extent[d] - 1);
+    }
+
+    // Emit the data
+    stream << "var " << name << "_data = new Uint8Array([";
+    for (size_t i = 0; i < num_elems * b.elem_size; i++) {
+        if (i > 0) stream << ", ";
+        stream << (int)(b.host[i]);
+    }
+    stream << "]);\n";
+
+    // Emit the buffer_t
+    user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
+    user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
+    stream << "var " << name << "_buffer = {"
+           << "dev: 0, " // dev
+           << "host: " << name << "_data[0], " // host
+           << "extent: [" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "], "
+           << "stride: [" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "], "
+           << "min: [" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "], "
+           << "elem_size: " << b.elem_size << ", "
+           << "host_dirty: 0, " // host_dirty
+           << "dev_dirty: 0};\n"; //dev_dirty
+
+    // TODO: Is this necessary?
+    // Make a global pointer to it
+    stream << "var " << name << " = " << name << "_buffer;\n";
 }
 
 void CodeGen_JavaScript::unpack_buffer(Type t, const std::string &buffer_name) {
@@ -1400,7 +1411,7 @@ void CodeGen_JavaScript::visit(const AssertStmt *op) {
     close_scope("");
 }
 
-void CodeGen_JavaScript::visit(const Pipeline *op) {
+void CodeGen_JavaScript::visit(const ProducerConsumer *op) {
     do_indent();
     stream << "// produce " << op->name << '\n';
     print_stmt(op->produce);

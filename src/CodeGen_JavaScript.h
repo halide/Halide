@@ -12,6 +12,7 @@
 #include <map>
 
 #include "IRPrinter.h"
+#include "Module.h"
 #include "Scope.h"
 
 namespace Halide {
@@ -30,16 +31,21 @@ public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
     CodeGen_JavaScript(std::ostream &);
+    ~CodeGen_JavaScript();
 
     /** Emit source code equivalent to the given statement, wrapped in
      * a function with the given type signature */
-    void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
-                 const std::vector<Buffer> &images_to_embed);
+    void compile(const Module &module);
 
     static void test();
 
 protected:
+    /** Emit a declaration. */
+    // @{
+    virtual void compile(const LoweredFunc &func);
+    virtual void compile(const Buffer &buffer);
+    // @}
+
     /** An ID for the most recently generated ssa variable */
     std::string id;
 
@@ -114,7 +120,7 @@ protected:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const Pipeline *);
+    void visit(const ProducerConsumer *);
     void visit(const For *);
     void visit(const Provide *);
     void visit(const Allocate *);

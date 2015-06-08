@@ -2851,7 +2851,7 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *erro
     builder->SetInsertPoint(assert_succeeds_bb);
 }
 
-void CodeGen_LLVM::visit(const Pipeline *op) {
+void CodeGen_LLVM::visit(const ProducerConsumer *op) {
     BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
     builder->CreateBr(produce);
     builder->SetInsertPoint(produce);

@@ -10,7 +10,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Debug.h"
 #include "LLVM_Output.h"
-
+#include "Pipeline.h"
 
 namespace Halide {
 namespace Internal {
@@ -507,7 +507,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg, const std
     codegen->init_for_codegen();
     std::vector<std::string> requested_exports;
     for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
-        Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second);
+        Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second.signature, extern_entry.second.c_function);
         codegen->add_argv_wrapper(cast<llvm::FunctionType>(sym.llvm_type),
                                   extern_entry.first + suffix, extern_entry.first,
                                   CodeGen_LLVM::FirstArgPointsToResult);
@@ -582,10 +582,10 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module.ptr->exports[name] = extern_symbol;
 }
 
-JITModule::Symbol JITModule::add_extern_for_export(const std::string &name, const JITExtern &jit_extern) {
-    internal_assert(jit_extern.func == NULL && jit_extern.c_function != NULL) << "add_extern_for_export does not support taking a Func based JITExtern.\n";
+JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
+                                                   const ExternSignature &signature, void *address) {
     Symbol symbol;
-    symbol.address = jit_extern.c_function;
+    symbol.address = address;
 
     // Struct types are uniqued on the context, but the lookup API is only available
     // on the Module, not the Context.
@@ -597,14 +597,14 @@ JITModule::Symbol JITModule::add_extern_for_export(const std::string &name, cons
     llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
 
     llvm::Type *ret_type;
-    if (jit_extern.is_void_return) {
+    if (signature.is_void_return) {
         ret_type = llvm::Type::getVoidTy(jit_module.ptr->context);
     } else {
-        ret_type = llvm_type_of(&jit_module.ptr->context, jit_extern.ret_type);
+        ret_type = llvm_type_of(&jit_module.ptr->context, signature.ret_type);
     }
 
     std::vector<llvm::Type *> llvm_arg_types;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern.arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {
@@ -916,7 +916,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
 
 // TODO: Either remove user_context argument figure out how to make
 // caller provided user context work with JIT. (At present, this
-// cacscaded handler calls cannot work with the right context as
+// cascaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
 // calls another callback wich is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,

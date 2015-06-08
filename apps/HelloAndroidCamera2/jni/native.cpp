@@ -11,7 +11,6 @@
 #include "deinterleave.h"
 #include "edge_detect.h"
 #include "HalideRuntime.h"
-#include "HalideRuntimeOpenCL.h"
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "halide_native", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "halide_native", __VA_ARGS__)
@@ -28,20 +27,12 @@
 extern "C" int halide_host_cpu_count();
 extern "C" int64_t halide_current_time_ns();
 
-extern "C" {
-JNIEXPORT void JNICALL Java_com_example_helloandroidcamera2_JNIUtils_configureSurfaceNative(
-    JNIEnv *env, jobject obj, jobject surface, int width, int height) {
-    LOGD("[configureSurfaceNative] desired width = %d, height = %d", width,
-         height);
-
-    ANativeWindow *win = ANativeWindow_fromSurface(env, surface);
-    ANativeWindow_acquire(win);
-
-    LOGD("[configureSurfaceNative] Resetting buffer format.");
-    ANativeWindow_setBuffersGeometry(win, width, height, 0 /*format unchanged*/);
-
-    ANativeWindow_release(win);
-}
+// Override halide's print to use logd and also print the time.
+extern "C" void halide_print(void *, const char *msg) {
+    static int64_t t0 = halide_current_time_ns();
+    int64_t t1 = halide_current_time_ns();
+    LOGD("%d: %s\n", (int)(t1 - t0)/1000000, msg);
+    t0 = t1;
 }
 
 bool checkBufferSizesMatch(int srcWidth, int srcHeight,
@@ -114,6 +105,8 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
         return false;
     }
 
+    ANativeWindow_setBuffersGeometry(win, srcWidth, srcHeight, 0 /*format unchanged*/);
+
     if (buf.format != IMAGE_FORMAT_YV12) {
         LOGE("ANativeWindow buffer locked but its format was not YV12.");
         ANativeWindow_unlockAndPost(win);
@@ -172,14 +165,14 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
                 uint8_t *srcChromaURow =
                         srcChromaUPtr + y * srcChromaRowStrideBytes;
                 uint8_t *dstChromaURow =
-                        dstChromaUPtr + y * srcChromaRowStrideBytes;
+                        dstChromaUPtr + y * dstChromaRowStrideBytes;
                 memcpy(dstChromaURow, srcChromaURow, srcChromaRowStrideBytes);
             }
             for (int y = 0; y < srcHeight; y++) {
                 uint8_t *srcChromaVRow =
                         srcChromaVPtr + y * srcChromaRowStrideBytes;
                 uint8_t *dstChromaVRow =
-                        dstChromaVPtr + y * srcChromaRowStrideBytes;
+                        dstChromaVPtr + y * dstChromaRowStrideBytes;
                 memcpy(dstChromaVRow, srcChromaVRow, srcChromaRowStrideBytes);
             }
         }
@@ -209,7 +202,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
         dstBuf0.extent[2] = 0;
         dstBuf0.extent[3] = 0;
         dstBuf0.stride[0] = 1;
-        dstBuf0.stride[1] = srcChromaWidth;
+        dstBuf0.stride[1] = dstChromaRowStrideBytes;  // Halide stride in pixels but pixel size is 1 byte.
         dstBuf0.min[0] = 0;
         dstBuf0.min[1] = 0;
         dstBuf0.elem_size = 1;
@@ -220,7 +213,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_blit(
         dstBuf1.extent[2] = 0;
         dstBuf1.extent[3] = 0;
         dstBuf1.stride[0] = 1;
-        dstBuf1.stride[1] = srcChromaWidth;
+        dstBuf1.stride[1] = dstChromaRowStrideBytes;  // Halide stride in pixels but pixel size is 1 byte.
         dstBuf1.min[0] = 0;
         dstBuf1.min[1] = 0;
         dstBuf1.elem_size = 1;
@@ -259,6 +252,8 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_edgeDetect(
         return false;
     }
 
+    ANativeWindow_setBuffersGeometry(win, srcWidth, srcHeight, 0 /*format unchanged*/);
+
     uint8_t *dstLumaPtr = reinterpret_cast<uint8_t *>(buf.bits);
     if (dstLumaPtr == NULL) {
         ANativeWindow_unlockAndPost(win);
@@ -292,6 +287,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_JNIUtils_edgeDetect(
     // It doesn't matter now, but useful for GPU backends.
     static buffer_t srcBuf = { 0 };
     static buffer_t dstBuf = { 0 };
+    static buffer_t dstChromaBuf = { 0 };
 
     srcBuf.host = srcLumaPtr;
     srcBuf.host_dirty = true;

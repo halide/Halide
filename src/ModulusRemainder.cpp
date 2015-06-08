@@ -48,7 +48,7 @@ public:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const Pipeline *);
+    void visit(const ProducerConsumer *);
     void visit(const For *);
     void visit(const Store *);
     void visit(const Provide *);
@@ -369,7 +369,7 @@ void ComputeModulusRemainder::visit(const AssertStmt *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
-void ComputeModulusRemainder::visit(const Pipeline *) {
+void ComputeModulusRemainder::visit(const ProducerConsumer *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 

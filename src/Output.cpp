@@ -1,4 +1,5 @@
 #include "CodeGen_C.h"
+#include "CodeGen_JavaScript.h"
 #include "StmtToHtml.h"
 #include "Output.h"
 #include "LLVM_Headers.h"
@@ -104,6 +105,14 @@ void compile_module_to_c(const Module &module,
               std::string c_filename) {
     compile_module_to_c_header(module, h_filename);
     compile_module_to_c_source(module, c_filename);
+}
+
+void compile_module_to_javascript_source(const Module &module, std::string filename) {
+    if (filename.empty()) filename = module.name() + ".c";
+
+    std::ofstream file(filename.c_str());
+    Internal::CodeGen_JavaScript cg(file);
+    cg.compile(module);
 }
 
 }  // namespace Halide

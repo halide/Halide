@@ -8,7 +8,7 @@ public:
     Param<int> f_explicit_bound {"f_explicit_bound", 1, 0, 64};
 
 
-    Func build() override {
+    Func build() {
         Func f;
         Var x, y;
 

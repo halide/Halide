@@ -14,25 +14,12 @@
 		3D6C4DC7198051DB002AD41E /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DC6198051DB002AD41E /* main.m */; };
 		3D6C4DCB198051DB002AD41E /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DCA198051DB002AD41E /* AppDelegate.m */; };
 		3D6C4DCD198051DB002AD41E /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3D6C4DCC198051DB002AD41E /* Images.xcassets */; };
-		3D6C4DD4198051DB002AD41E /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DD3198051DB002AD41E /* XCTest.framework */; };
-		3D6C4DD5198051DB002AD41E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBA198051DB002AD41E /* Foundation.framework */; };
-		3D6C4DD6198051DB002AD41E /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBE198051DB002AD41E /* UIKit.framework */; };
 		3D6C4DEB19805225002AD41E /* HalideView.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DEA19805225002AD41E /* HalideView.m */; };
 		3D6C4DF219805335002AD41E /* reaction_diffusion_2_init.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DEF19805335002AD41E /* reaction_diffusion_2_init.o */; };
 		3D6C4DF319805335002AD41E /* reaction_diffusion_2_render.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DF019805335002AD41E /* reaction_diffusion_2_render.o */; };
 		3D6C4DF419805335002AD41E /* reaction_diffusion_2_update.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DF119805335002AD41E /* reaction_diffusion_2_update.o */; };
 		3D6C4DF619805438002AD41E /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DF519805438002AD41E /* QuartzCore.framework */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXContainerItemProxy section */
-		3D6C4DD7198051DB002AD41E /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 3D6C4DAF198051DB002AD41E /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 3D6C4DB6198051DB002AD41E;
-			remoteInfo = HelloiOS;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		3D6C4DB7198051DB002AD41E /* HelloiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HelloiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -46,7 +33,6 @@
 		3D6C4DC9198051DB002AD41E /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		3D6C4DCA198051DB002AD41E /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		3D6C4DCC198051DB002AD41E /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
-		3D6C4DD2198051DB002AD41E /* HelloiOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HelloiOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D6C4DD3198051DB002AD41E /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
 		3D6C4DE919805225002AD41E /* HalideView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HalideView.h; sourceTree = "<group>"; };
 		3D6C4DEA19805225002AD41E /* HalideView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HalideView.m; sourceTree = "<group>"; };
@@ -72,16 +58,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3D6C4DCF198051DB002AD41E /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				3D6C4DD4198051DB002AD41E /* XCTest.framework in Frameworks */,
-				3D6C4DD6198051DB002AD41E /* UIKit.framework in Frameworks */,
-				3D6C4DD5198051DB002AD41E /* Foundation.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -98,7 +74,6 @@
 			isa = PBXGroup;
 			children = (
 				3D6C4DB7198051DB002AD41E /* HelloiOS.app */,
-				3D6C4DD2198051DB002AD41E /* HelloiOSTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -164,24 +139,6 @@
 			productReference = 3D6C4DB7198051DB002AD41E /* HelloiOS.app */;
 			productType = "com.apple.product-type.application";
 		};
-		3D6C4DD1198051DB002AD41E /* HelloiOSTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 3D6C4DE6198051DB002AD41E /* Build configuration list for PBXNativeTarget "HelloiOSTests" */;
-			buildPhases = (
-				3D6C4DCE198051DB002AD41E /* Sources */,
-				3D6C4DCF198051DB002AD41E /* Frameworks */,
-				3D6C4DD0198051DB002AD41E /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				3D6C4DD8198051DB002AD41E /* PBXTargetDependency */,
-			);
-			name = HelloiOSTests;
-			productName = HelloiOSTests;
-			productReference = 3D6C4DD2198051DB002AD41E /* HelloiOSTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -190,11 +147,6 @@
 			attributes = {
 				LastUpgradeCheck = 0510;
 				ORGANIZATIONNAME = "Andrew Adams";
-				TargetAttributes = {
-					3D6C4DD1198051DB002AD41E = {
-						TestTargetID = 3D6C4DB6198051DB002AD41E;
-					};
-				};
 			};
 			buildConfigurationList = 3D6C4DB2198051DB002AD41E /* Build configuration list for PBXProject "HelloiOS" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -209,7 +161,6 @@
 			projectRoot = "";
 			targets = (
 				3D6C4DB6198051DB002AD41E /* HelloiOS */,
-				3D6C4DD1198051DB002AD41E /* HelloiOSTests */,
 			);
 		};
 /* End PBXProject section */
@@ -221,13 +172,6 @@
 			files = (
 				3D6C4DC5198051DB002AD41E /* InfoPlist.strings in Resources */,
 				3D6C4DCD198051DB002AD41E /* Images.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		3D6C4DD0198051DB002AD41E /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -245,7 +189,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n# xcode puts all sorts of junk in the environment which prevents building a binary for osx (instead of ios). sudo'ing to yourself gives a fresh environment.\n\nsudo -u ${USER} c++ reaction_diffusion_2.cpp -I ${SRCROOT}/../../include -arch x86_64 -L ${SRCROOT}/../../bin -lHalide -o reaction_diffusion_2_generator\n\nHL_TARGET=arm-64-ios DYLD_LIBRARY_PATH=${SRCROOT}/../../bin ./reaction_diffusion_2_generator";
+			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n# xcode puts all sorts of junk in the environment which prevents building a binary for osx (instead of ios). sudo'ing to yourself gives a fresh environment.\n\nsudo -u ${USER} c++ reaction_diffusion_2.cpp -std=c++11 -I ${SRCROOT}/../../include -I ${SRCROOT}/../../build/include -arch x86_64 -L ${SRCROOT}/../../bin -L ${SRCROOT}/../../build/lib -lHalide -o reaction_diffusion_2_generator\n\nHL_TARGET=arm-64-ios DYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib ./reaction_diffusion_2_generator";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -260,22 +204,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3D6C4DCE198051DB002AD41E /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		3D6C4DD8198051DB002AD41E /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 3D6C4DB6198051DB002AD41E /* HelloiOS */;
-			targetProxy = 3D6C4DD7198051DB002AD41E /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		3D6C4DC3198051DB002AD41E /* InfoPlist.strings */ = {
@@ -293,6 +222,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
@@ -332,6 +262,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
@@ -389,46 +320,6 @@
 			};
 			name = Release;
 		};
-		3D6C4DE7198051DB002AD41E /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(BUILT_PRODUCTS_DIR)/HelloiOS.app/HelloiOS";
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(SDKROOT)/Developer/Library/Frameworks",
-					"$(inherited)",
-					"$(DEVELOPER_FRAMEWORKS_DIR)",
-				);
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				INFOPLIST_FILE = "HelloiOSTests/HelloiOSTests-Info.plist";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				TEST_HOST = "$(BUNDLE_LOADER)";
-				WRAPPER_EXTENSION = xctest;
-			};
-			name = Debug;
-		};
-		3D6C4DE8198051DB002AD41E /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(BUILT_PRODUCTS_DIR)/HelloiOS.app/HelloiOS";
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(SDKROOT)/Developer/Library/Frameworks",
-					"$(inherited)",
-					"$(DEVELOPER_FRAMEWORKS_DIR)",
-				);
-				GCC_PRECOMPILE_PREFIX_HEADER = YES;
-				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";
-				INFOPLIST_FILE = "HelloiOSTests/HelloiOSTests-Info.plist";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				TEST_HOST = "$(BUNDLE_LOADER)";
-				WRAPPER_EXTENSION = xctest;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -446,14 +337,6 @@
 			buildConfigurations = (
 				3D6C4DE4198051DB002AD41E /* Debug */,
 				3D6C4DE5198051DB002AD41E /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-		};
-		3D6C4DE6198051DB002AD41E /* Build configuration list for PBXNativeTarget "HelloiOSTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				3D6C4DE7198051DB002AD41E /* Debug */,
-				3D6C4DE8198051DB002AD41E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 		};

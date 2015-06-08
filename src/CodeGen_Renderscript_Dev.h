@@ -75,8 +75,8 @@ protected:
      * parameter name. */
     std::string params_mapping(const std::string &name);
 
-    llvm::Function *fetch_GetElement_func(int width);
-    llvm::Function *fetch_SetElement_func(int width);
+    llvm::Function *fetch_GetElement_func(Type type);
+    llvm::Function *fetch_SetElement_func(Type type);
     std::vector<llvm::Value *> add_x_y_c_args(Expr name, Expr x, Expr y,
                                               Expr c);
 private:

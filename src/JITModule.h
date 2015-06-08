@@ -20,90 +20,21 @@ namespace Halide {
 
 struct Target;
 class Module;
+struct JITExtern;
 
-class Func;
-
+// TODO: Consider moving these two types elsewhere and seeing if they
+// can be combined with other types used for argument handling, or used
+// elsewhere.
 struct ScalarOrBufferT {
     bool is_buffer;
     Type scalar_type; // Only meaningful if is_buffer is false.
+    ScalarOrBufferT() : is_buffer(false) { }
 };
 
-namespace {
-
-template <typename T>
-bool voidable_halide_type(Type &t) {
-    t = type_of<T>();
-    return false;
-}
-
-template<>
-inline bool voidable_halide_type<void>(Type &t) {
-    return true;
-}        
-
-template <typename T>
-bool scalar_arg_type_or_buffer(Type &t) {
-    t = type_of<T>();
-    return false;
-}
-
-template <>
-inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
-    return true;
-}
-
-template <typename T>
-ScalarOrBufferT arg_type_info() {
-    ScalarOrBufferT result;
-    result.is_buffer = scalar_arg_type_or_buffer<T>(result.scalar_type);
-    return result;
-}
-
-template <typename A1, typename... Args>
-struct make_argument_list {
-    static void add_args(std::vector<ScalarOrBufferT> &arg_types) {
-        arg_types.push_back(arg_type_info<A1>());
-        make_argument_list<Args...>::add_args(arg_types);
-    }
-};
-
-template <>
-struct make_argument_list<void> {
-    static void add_args(std::vector<ScalarOrBufferT> &) { }
-};
-
-
-template <typename... Args>
-void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
-  make_argument_list<Args..., void>::add_args(arg_types);
-}
-
-}
-
-struct JITExtern {
-    // assert func.defined() == (c_function == NULL) -- strictly one or the other
-    Func *func;
-    std::map<std::string, JITExtern> func_externs;
-
-    void *c_function;
-    bool is_void_return; // could use ret_type.bits == 0...
+struct ExternSignature {
+    bool is_void_return;
     Type ret_type;
     std::vector<ScalarOrBufferT> arg_types;
-
-    JITExtern(Func &func,
-              const std::map<std::string, JITExtern> &func_externs = std::map<std::string, JITExtern>())
-        : func(&func), func_externs(func_externs), c_function(NULL) {
-    }
-
-    template <typename RT, typename... Args>
-    JITExtern(RT (*f)(Args... args)) : func(NULL) {
-        c_function = (void *)f;
-        is_void_return = voidable_halide_type<RT>(ret_type);
-        init_arg_types<Args...>(arg_types);
-    }
-
-    // Necessary for constructing a JITExtern dynamically.
-    JITExtern() : func(NULL), c_function(NULL) { }
 };
 
 namespace Internal {
@@ -155,10 +86,18 @@ struct JITModule {
      * a Halide Func compilation at all. */
     EXPORT void *main_function() const;
 
-    /** TODO: docs */
+    /** Returns the Symbol structure for the routine documented in
+     * main_function. Returning a Symbol allows access to the LLVM
+     * type as well as the address. The address and type will be NULL
+     * if the module has not been compiled. */
     EXPORT Symbol entrypoint_symbol() const;
 
-    /** TODO: docs */
+    /** Returns the Symbol structure for the argv wrapper routine
+     * corresponding to the entrypoint. The argv wrapper is callable
+     * via an array of void * pointers to the arguments for the
+     * call. Returning a Symbol allows access to the LLVM type as well
+     * as the address. The address and type will be NULL if the module
+     * has not been compiled. */
     EXPORT Symbol argv_entrypoint_symbol() const;
 
     /** A slightly more type-safe wrapper around the raw halide
@@ -171,14 +110,22 @@ struct JITModule {
     EXPORT argv_wrapper argv_function() const;
     // @}
 
-    /** TODO: docs */
+    /** Add another JITModule to the dependency chain. Dependencies
+     * are searched to resolve symbols not found in the current
+     * compilation unit while JITting. */
     EXPORT void add_dependency(JITModule &dep);
-    /** TODO: docs */
+    /** Registers a single Symbol as available to modules which depend
+     * on this one. The Symbol structure provides both the address and
+     * the LLVM type for the function, which allows type safe linkage of
+     * extenal routines. */
     EXPORT void add_symbol_for_export(const std::string &name, const Symbol &extern_symbol);
-    /** TODO: docs */
-    EXPORT Symbol add_extern_for_export(const std::string &name, const JITExtern &jit_extern);
+    /** Registers a single function as available to modules which
+     * depend on this one. This routine converts the ExternSignature
+     * info into an LLVM type, which allows type safe linkage of
+     * external routines. */
+    EXPORT Symbol add_extern_for_export(const std::string &name,
+                                        const ExternSignature &signature, void *address);
 
-    // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */
     EXPORT void compile_module(llvm::Module *mod, const std::string &function_name, const Target &target,

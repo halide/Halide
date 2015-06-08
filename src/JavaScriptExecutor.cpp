@@ -593,8 +593,8 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     size_t buffer_t_args_count = 0;
 
     std::vector<void *> trampoline_args;
-    internal_assert(iter->second.func == NULL);
-    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.arg_types) {
+    internal_assert(iter->second.pipeline.defined());
+    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             buffer_t_args_count++;
         } else {
@@ -608,7 +608,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     size_t args_index = 0;
     size_t buffer_t_arg_index = 0;
     size_t scalar_arg_index = 0;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             js_buffer_t_to_struct(args[args_index++], &buffer_t_args[buffer_t_arg_index]);
             trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
@@ -619,22 +619,22 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     }
 
     uint64_t ret_val;
-    if (!iter->second.is_void_return) {
+    if (!iter->second.signature.is_void_return) {
         trampoline_args.push_back(&ret_val);
     }
     (*trampoline)(&trampoline_args[0]);
 
     args_index = 0;
     buffer_t_arg_index = 0;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             buffer_t_struct_to_js(&buffer_t_args[buffer_t_arg_index], args[args_index++]);
         }
         // No need to retrieve scalar args as they are passed by value.
     }
     
-    if (!iter->second.is_void_return) {
-        uint64_slot_to_return_value(iter->second.ret_type, &ret_val, args.GetReturnValue());
+    if (!iter->second.signature.is_void_return) {
+        uint64_slot_to_return_value(iter->second.signature.ret_type, &ret_val, args.GetReturnValue());
     }
 }
 
@@ -1529,7 +1529,7 @@ void uint64_slot_to_return_value(const Halide::Type &type, const uint64_t *slot,
 }
 
 struct CallbackInfo {
-    JITExtern jit_extern;
+    ExternSignature extern_signature;
     void (*trampoline)(void **args);
 };
 
@@ -1542,7 +1542,7 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     RootedObject callback_info_holder(context, &callback_info_holder_val.toObject());
 
     CallbackInfo *callback_info = (CallbackInfo *)JS_GetPrivate(callback_info_holder);
-    JITExtern *jit_extern = &callback_info->jit_extern;
+    ExternSignature *extern_signature = &callback_info->extern_signature;
 
     // Each scalar args is stored in a 64-bit slot
     size_t scalar_args_count = 0;
@@ -1550,8 +1550,7 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     size_t buffer_t_args_count = 0;
 
     std::vector<void *> trampoline_args;
-    internal_assert(jit_extern->func == NULL);
-    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : extern_signature->arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             buffer_t_args_count++;
         } else {
@@ -1565,7 +1564,7 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     size_t args_index = 0;
     size_t buffer_t_arg_index = 0;
     size_t scalar_arg_index = 0;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : extern_signature->arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             js_buffer_t_to_struct(context, args[args_index++], &buffer_t_args[buffer_t_arg_index]);
             trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
@@ -1576,14 +1575,14 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
     }
 
     uint64_t ret_val;
-    if (!jit_extern->is_void_return) {
+    if (!extern_signature->is_void_return) {
         trampoline_args.push_back(&ret_val);
     }
     (*callback_info->trampoline)(&trampoline_args[0]);
 
     args_index = 0;
     buffer_t_arg_index = 0;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : jit_extern->arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : extern_signature->arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             buffer_t_struct_to_js(context, &buffer_t_args[buffer_t_arg_index++], args[args_index]);
         }
@@ -1591,8 +1590,8 @@ bool extern_wrapper(JSContext *context, unsigned argc, JS::Value *vp) {
         // No need to retrieve scalar args as they are passed by value.
     }
     
-    if (!jit_extern->is_void_return) {
-        uint64_slot_to_return_value(jit_extern->ret_type, &ret_val, args.rval());
+    if (!extern_signature->is_void_return) {
+        uint64_slot_to_return_value(extern_signature->ret_type, &ret_val, args.rval());
     }
 
     return true;
@@ -1621,7 +1620,7 @@ bool add_extern_callbacks(JSContext *context, HandleObject global,
         if (f == NULL) {
             return false;
         }
-        callback_storage[storage_index].jit_extern = jit_extern.second;
+        callback_storage[storage_index].extern_signature = jit_extern.second.signature;
         callback_storage[storage_index].trampoline =
             (void (*)(void **))trampolines.exports().find(jit_extern.first + "_js_trampoline")->second.address;
         RootedObject temp(context);

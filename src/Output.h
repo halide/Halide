@@ -47,6 +47,10 @@ EXPORT void compile_module_to_c(const Module &module,
                                 std::string c_filename = "");
 // @}
 
+/** Output the module to JavaScript source code. The default filename is
+ * the name of the module with the extension .js . */
+EXPORT void compile_module_to_javascript_source(const Module &module, std::string filename = "");
+
 /** Output the module to HTML. The default filename is the name of the
  * module with the extension .html. */
 EXPORT void compile_module_to_html(const Module &module, std::string filename = "");
