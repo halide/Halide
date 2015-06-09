@@ -10,6 +10,12 @@ extern "C" {
   WEAK void halide_mutex_cleanup(struct halide_mutex *mutex_arg) {}
   WEAK void halide_error(void *user_context, const char *s) {
   }
+  WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *
+),
+                             int min, int size, uint8_t *closure) {
+   return 666;
+  } 
+
   namespace Halide { namespace Runtime { namespace Internal {
         WEAK void *default_malloc(void *user_context, size_t x) {
           void *orig = malloc(x+40);
