@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -46,22 +46,22 @@ void my_free(void *ctx, void *ptr) {
 }
 
 // Custom lowering pass to count the number of IfThenElse statements found inside
-// pipelines.
+// ProducerConsumer nodes.
 int if_then_else_count = 0;
 class CountIfThenElse : public Internal::IRMutator {
-    int pipelines;
+    int producer_consumers;
 
 public:
-    CountIfThenElse() : pipelines(0) {}
+    CountIfThenElse() : producer_consumers(0) {}
 
-    void visit(const Internal::Pipeline *op) {
+    void visit(const Internal::ProducerConsumer *op) {
         // Only count ifs found inside a pipeline.
-        pipelines++;
+        producer_consumers++;
         IRMutator::visit(op);
-        pipelines--;
+        producer_consumers--;
     }
     void visit(const Internal::IfThenElse *op) {
-        if (pipelines > 0) {
+        if (producer_consumers > 0) {
             if_then_else_count++;
         }
         Internal::IRMutator::visit(op);

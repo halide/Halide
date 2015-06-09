@@ -8,14 +8,14 @@
 // Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03
+// g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_03
 
 // On os x:
-// g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -o lesson_03
+// g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -o lesson_03 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_03
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 // This time we'll just import the entire Halide namespace

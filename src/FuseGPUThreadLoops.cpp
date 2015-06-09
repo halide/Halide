@@ -38,7 +38,7 @@ class InjectThreadBarriers : public IRMutator {
         in_threads = old_in_threads;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (!in_threads) {
             Stmt produce = mutate(op->produce);
             if (!is_no_op(produce)) {
@@ -55,7 +55,7 @@ class InjectThreadBarriers : public IRMutator {
 
             Stmt consume = mutate(op->consume);
 
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         } else {
             IRMutator::visit(op);
         }
@@ -163,13 +163,13 @@ class NormalizeDimensionality : public IRMutator {
         }
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, For::Parallel, device_api, s);
+            s = For::make("." + name, 0, 1, ForType::Parallel, device_api, s);
             max_depth++;
         }
         return s;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         Stmt produce = wrap(op->produce);
         Stmt update;
         if (op->update.defined()) {
@@ -182,7 +182,7 @@ class NormalizeDimensionality : public IRMutator {
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 
@@ -379,7 +379,7 @@ public:
         allocations.push_back(sentinel);
 
         Expr total_size = Variable::make(Int(32), allocations.back().name + ".shared_offset");
-        s = Allocate::make(shared_mem_name, UInt(8), vec(total_size), const_true(), s);
+        s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
 
         // Define an offset for each allocation. The offsets are in
         // elements, not bytes, so that the stores and loads can use
@@ -419,7 +419,7 @@ class FuseGPUThreadLoops : public IRMutator {
             return;
         }
 
-        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name))) 
+        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "
             << "This schedule is malformed. There must be a GPU block "
@@ -466,12 +466,12 @@ class FuseGPUThreadLoops : public IRMutator {
 
             // Rewrap the whole thing in the loop over threads
             for (int i = 0; i < e.dimensions(); i++) {
-                body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, op->device_api, body);
+                body = For::make("." + thread_names[i], 0, e.extent(i), ForType::Parallel, op->device_api, body);
             }
 
             // There at least needs to be a loop over __thread_id_x as a marker for codegen
             if (e.dimensions() == 0) {
-                body = For::make(".__thread_id_x", 0, 1, For::Parallel, op->device_api, body);
+                body = For::make(".__thread_id_x", 0, 1, ForType::Parallel, op->device_api, body);
             }
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";

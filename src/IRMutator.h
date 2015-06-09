@@ -5,7 +5,7 @@
  * Defines a base class for passes over the IR that modify it
  */
 
-#include "IR.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -70,7 +70,7 @@ protected:
     EXPORT virtual void visit(const Let *);
     EXPORT virtual void visit(const LetStmt *);
     EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const Pipeline *);
+    EXPORT virtual void visit(const ProducerConsumer *);
     EXPORT virtual void visit(const For *);
     EXPORT virtual void visit(const Store *);
     EXPORT virtual void visit(const Provide *);

@@ -28,12 +28,12 @@ typedef struct {
 typedef long pthread_t;
 typedef struct {
     // 48 bytes is enough for a cond on 64-bit and 32-bit systems
-    unsigned char _private[48];
+    uint64_t _private[6];
 } pthread_cond_t;
 typedef long pthread_condattr_t;
 typedef struct {
     // 64 bytes is enough for a mutex on 64-bit and 32-bit systems
-    unsigned char _private[64];
+    uint64_t _private[8];
 } pthread_mutex_t;
 typedef long pthread_mutexattr_t;
 extern int pthread_create(pthread_t *thread, pthread_attr_t const * attr,

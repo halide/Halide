@@ -15,15 +15,15 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "StmtCompiler.h"
-#include "CodeGen_C.h"
 #include "Image.h"
 #include "Param.h"
+#include "PrintLoopNest.h"
 #include "Debug.h"
-#include "Target.h"
 #include "IREquality.h"
-#include "HumanReadableStmt.h"
-#include "StmtToHtml.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "Output.h"
+#include "LLVM_Output.h"
 
 namespace Halide {
 
@@ -37,49 +37,15 @@ using std::ofstream;
 
 using namespace Internal;
 
-namespace {
+Func::Func(const string &name) : func(unique_name(name)) {}
 
-Internal::Parameter make_user_context() {
-    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context",
-        /*is_explicit_name*/ true, /*register_instance*/ false);
-}
+Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')) {}
 
-vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {
-    for (size_t i = 0; i < args.size(); ++i) {
-        internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
-    }
-    if (target.has_feature(Target::UserContext)) {
-        args.insert(args.begin(), Argument("__user_context", false, Halide::Handle()));
-    }
-    return args;
-}
-
-}  // namespace
-
-Func::Func(const string &name) : func(unique_name(name)),
-                                 random_seed(0),
-                                 jit_user_context(make_user_context()) {
-}
-
-Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
-               random_seed(0),
-               jit_user_context(make_user_context()) {
-}
-
-Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
-                     random_seed(0),
-                     jit_user_context(make_user_context()) {
+Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {
     (*this)(_) = e;
 }
 
-Func::Func(Function f) : func(f),
-                         random_seed(0),
-                         jit_user_context(make_user_context()) {
-}
-
-Func::~Func() {
-    clear_custom_lowering_passes();
-}
+Func::Func(Function f) : func(f) {}
 
 const string &Func::name() const {
     return func.name();
@@ -120,7 +86,7 @@ const std::vector<Expr> &Func::update_args(int idx) const {
         << "Can't call Func::update_args() on Func \"" << name()
         << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     return func.updates()[idx].args;
 }
@@ -131,7 +97,7 @@ Expr Func::update_value(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     user_assert(func.updates()[idx].values.size() == 1)
         << "Can't call Func::update_value() on Func \"" << name() << "\", because it has multiple values.\n";
@@ -143,7 +109,7 @@ Tuple Func::update_values(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     return Tuple(func.updates()[idx].values);
 }
@@ -155,7 +121,7 @@ RDom Func::reduction_domain(int idx) const {
     user_assert(has_update_definition())
         << "Can't call Func::update_args() on Func \"" << name() << "\" as it has no update definition. "
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
-    user_assert(idx < (int)func.updates().size())
+    user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
     return func.updates()[idx].domain;
 }
@@ -171,7 +137,7 @@ bool Func::has_update_definition() const {
 
 /** How many update definitions are there? */
 int Func::num_update_definitions() const {
-    return (int)func.updates().size();
+    return static_cast<int>(func.updates().size());
 }
 
 /** Is this function external? */
@@ -208,89 +174,9 @@ int Func::dimensions() const {
     return func.dimensions();
 }
 
-FuncRefVar Func::operator()() const {
-    // Bulk up the vars using implicit vars
-    vector<Var> args;
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x) const {
-    // Bulk up the vars using implicit vars
-    vector<Var> args = vec(x);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y) const {
-    vector<Var> args = vec(x, y);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z) const{
-    vector<Var> args = vec(x, y, z);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) const {
-    vector<Var> args = vec(x, y, z, w);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u) const {
-    vector<Var> args = vec(x, y, z, w, u);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v) const {
-    vector<Var> args = vec(x, y, z, w, u, v);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
-}
-
 FuncRefVar Func::operator()(vector<Var> args) const {
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x) const {
-    vector<Expr> args = vec(x);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y) const {
-    vector<Expr> args = vec(x, y);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) const {
-    vector<Expr> args = vec(x, y, z);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) const {
-    vector<Expr> args = vec(x, y, z, w);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const {
-    vector<Expr> args = vec(x, y, z, w, u);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
-}
-
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const {
-    vector<Expr> args = vec(x, y, z, w, u, v);
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(vector<Expr> args) const {
@@ -329,7 +215,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && Var::is_implicit(var->name))
+        if (var && var->name == _.name())
             break;
         iter++;
     }
@@ -363,7 +249,7 @@ const std::string &Stage::name() const {
     return stage_name;
 }
 
-void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
+void Stage::set_dim_type(VarOrRVar var, ForType t) {
     bool found = false;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -373,7 +259,7 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
+            if (!dims[i].pure && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
                 user_assert(schedule.allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -388,8 +274,8 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
 
-        } else if (t == For::Vectorized) {
-            user_assert(dims[i].for_type != For::Vectorized)
+        } else if (t == ForType::Vectorized) {
+            user_assert(dims[i].for_type != ForType::Vectorized)
                 << "In schedule for " << stage_name
                 << ", can't vectorize across " << var.name()
                 << " because Func is already vectorized across " << dims[i].var << "\n";
@@ -660,22 +546,22 @@ Stage &Stage::allow_race_conditions() {
 }
 
 Stage &Stage::serial(VarOrRVar var) {
-    set_dim_type(var, For::Serial);
+    set_dim_type(var, ForType::Serial);
     return *this;
 }
 
 Stage &Stage::parallel(VarOrRVar var) {
-    set_dim_type(var, For::Parallel);
+    set_dim_type(var, ForType::Parallel);
     return *this;
 }
 
 Stage &Stage::vectorize(VarOrRVar var) {
-    set_dim_type(var, For::Vectorized);
+    set_dim_type(var, ForType::Vectorized);
     return *this;
 }
 
 Stage &Stage::unroll(VarOrRVar var) {
-    set_dim_type(var, For::Unrolled);
+    set_dim_type(var, ForType::Unrolled);
     return *this;
 }
 
@@ -755,7 +641,7 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size, con
         user_assert(found)
             << "In schedule for " << stage.name()
             << ", could not find var " << vars[i].name()
-            << " to reorder in the argumemt list.\n"
+            << " to reorder in the argument list.\n"
             << stage.dump_argument_list();
     }
 
@@ -789,60 +675,6 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size, con
 
 Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
     reorder_vars(schedule.dims(), &vars[0], vars.size(), *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y) {
-    VarOrRVar vars[] = {x, y};
-    reorder_vars(schedule.dims(), vars, 2, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
-    VarOrRVar vars[] = {x, y, z};
-    reorder_vars(schedule.dims(), vars, 3, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
-    VarOrRVar vars[] = {x, y, z, w};
-    reorder_vars(schedule.dims(), vars, 4, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
-    VarOrRVar vars[] = {x, y, z, w, t};
-    reorder_vars(schedule.dims(), vars, 5, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2};
-    reorder_vars(schedule.dims(), vars, 6, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3};
-    reorder_vars(schedule.dims(), vars, 7, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4};
-    reorder_vars(schedule.dims(), vars, 8, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5};
-    reorder_vars(schedule.dims(), vars, 9, *this);
-    return *this;
-}
-
-Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
-    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    reorder_vars(schedule.dims(), vars, 10, *this);
     return *this;
 }
 
@@ -994,6 +826,12 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
+void Func::invalidate_cache() {
+    if (pipeline_.defined()) {
+        pipeline_.invalidate_cache();
+    }
+}
+
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor) {
     invalidate_cache();
     Stage(func.schedule(), name()).split(old, outer, inner, factor);
@@ -1112,68 +950,6 @@ Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
-                    VarOrRVar t5) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
-    return *this;
-}
-
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
-                    VarOrRVar t5, VarOrRVar t6) {
-    invalidate_cache();
-    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
-    return *this;
-}
-
 Func &Func::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.schedule(), name()).gpu_threads(tx, device_api);
@@ -1252,7 +1028,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_si
     return *this;
 }
 
-Func &Func::glsl(Var x, Var y, Var c) {
+Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
 
     reorder(c, x, y);
@@ -1261,7 +1037,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule(), name()).gpu_blocks(x, y, DeviceAPI::GLSL);
+    Stage(func.schedule(), name()).gpu_blocks(x, y, device_api);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
@@ -1273,9 +1049,12 @@ Func &Func::glsl(Var x, Var y, Var c) {
         }
     }
     user_assert(constant_bounds)
-        << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    vectorize(c);
+        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
     return *this;
+}
+
+Func &Func::glsl(Var x, Var y, Var c) {
+    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
 }
 
 Func &Func::reorder_storage(Var x, Var y) {
@@ -1298,28 +1077,23 @@ Func &Func::reorder_storage(Var x, Var y) {
     return *this;
 }
 
-Func &Func::reorder_storage(Var x, Var y, Var z) {
-    reorder_storage(x, y);
-    reorder_storage(x, z);
-    reorder_storage(y, z);
+Func &Func::reorder_storage(const std::vector<Var> &dims, size_t start) {
+    // Reorder the first dimension with respect to all others, then
+    // recursively reorder all remaining dimensions.
+    for (size_t i = start + 1; i < dims.size(); i++) {
+        reorder_storage(dims[start], dims[i]);
+    }
+    if ((dims.size() - start) > 2) {
+        reorder_storage(dims, start + 1);
+    }
     return *this;
 }
 
-Func &Func::reorder_storage(Var x, Var y, Var z, Var w) {
-    reorder_storage(x, y);
-    reorder_storage(x, z);
-    reorder_storage(x, w);
-    reorder_storage(y, z, w);
-    return *this;
-}
+Func &Func::reorder_storage(const std::vector<Var> &dims) {
+    user_assert(dims.size() > 1) <<
+        "reorder_storage must have at least two dimensions in reorder list.\n";
 
-Func &Func::reorder_storage(Var x, Var y, Var z, Var w, Var t) {
-    reorder_storage(x, y);
-    reorder_storage(x, z);
-    reorder_storage(x, w);
-    reorder_storage(x, t);
-    reorder_storage(y, z, w, t);
-    return *this;
+    return reorder_storage(dims, 0);
 }
 
 Func &Func::compute_at(Func f, RVar var) {
@@ -1397,12 +1171,7 @@ Stage Func::update(int idx) {
       name() << "\".\n";
     invalidate_cache();
     return Stage(func.update_schedule(idx),
-                 name() + ".update(" + int_to_string(idx) + ")");
-}
-
-void Func::invalidate_cache() {
-    lowered = Stmt();
-    compiled_module = JITModule();
+                 name() + ".update(" + std::to_string(idx) + ")");
 }
 
 Func::operator Stage() const {
@@ -1481,7 +1250,7 @@ vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const 
 }
 
 Stage FuncRefVar::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefVar::operator=(const Tuple &e) {
@@ -1632,7 +1401,7 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
 }
 
 Stage FuncRefExpr::operator=(Expr e) {
-    return (*this) = Tuple(vec<Expr>(e));
+    return (*this) = Tuple({e});
 }
 
 Stage FuncRefExpr::operator=(const Tuple &e) {
@@ -1643,9 +1412,9 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_update(args, e.as_vector());
 
-    int update_stage = func.updates().size() - 1;
+    size_t update_stage = func.updates().size() - 1;
     return Stage(func.update_schedule(update_stage),
-                 func.name() + ".update(" + int_to_string(update_stage) + ")");
+                 func.name() + ".update(" + std::to_string(update_stage) + ")");
 }
 
 Stage FuncRefExpr::operator=(const FuncRefExpr &e) {
@@ -1685,25 +1454,25 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
 }
 
 Stage FuncRefExpr::operator+=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) + e;
 }
 
 Stage FuncRefExpr::operator*=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) * e;
 }
 
 Stage FuncRefExpr::operator-=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 0));
     return (*this) = Expr(*this) - e;
 }
 
 Stage FuncRefExpr::operator/=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars(vec(e));
+    vector<Expr> a = args_with_implicit_vars({e});
     define_base_case(func, a, cast(e.type(), 1));
     return (*this) = Expr(*this) / e;
 }
@@ -1801,935 +1570,147 @@ vector<OutputImageParam> Func::output_buffers() const {
     return bufs;
 }
 
-namespace {
-
-class InferArguments : public IRGraphVisitor {
-public:
-    vector<Argument> arg_types;
-    vector<const void *> arg_values;
-    vector<pair<int, Internal::Parameter> > image_param_args;
-    vector<pair<int, Buffer> > image_args;
-
-    InferArguments(const string &o, bool include_buffers = true)
-        : output(o), include_buffers(include_buffers) {
+Pipeline Func::pipeline() {
+    if (!pipeline_.defined()) {
+        pipeline_ = Pipeline(*this);
     }
-
-    void visit_function(const Function& func) {
-        if (func.has_pure_definition()) {
-            visit_exprs(func.values());
-        }
-        for (std::vector<UpdateDefinition>::const_iterator update = func.updates().begin();
-             update != func.updates().end();
-             ++update) {
-            visit_exprs(update->values);
-            visit_exprs(update->args);
-            if (update->domain.defined()) {
-                for (std::vector<ReductionVariable>::const_iterator rvar = update->domain.domain().begin();
-                     rvar != update->domain.domain().end();
-                     ++rvar) {
-                visit_expr(rvar->min);
-                visit_expr(rvar->extent);
-            }
-          }
-        }
-        if (func.has_extern_definition()) {
-            for (std::vector<ExternFuncArgument>::const_iterator extern_arg = func.extern_arguments().begin();
-                 extern_arg != func.extern_arguments().end();
-                 ++extern_arg) {
-            if (extern_arg->is_func()) {
-                visit_function(extern_arg->func);
-            } else if (extern_arg->is_expr()) {
-                visit_expr(extern_arg->expr);
-            } else if (extern_arg->is_buffer()) {
-                include_parameter(Parameter(extern_arg->buffer.type(), true,
-                                            extern_arg->buffer.dimensions(),
-                                            extern_arg->buffer.name()));
-            } else if (extern_arg->is_image_param()) {
-                include_parameter(extern_arg->image_param);
-            }
-          }
-        }
-        for (std::vector<Parameter>::const_iterator buf = func.output_buffers().begin();
-             buf != func.output_buffers().end();
-             ++buf) {
-            for (int i = 0; i < std::min(func.dimensions(), 4); i++) {
-                visit_expr(buf->min_constraint(i));
-                visit_expr(buf->stride_constraint(i));
-                visit_expr(buf->extent_constraint(i));
-            }
-        }
-    }
-
-private:
-    const string &output;
-    const bool include_buffers;
-
-    using IRGraphVisitor::visit;
-
-    bool already_have(const string &name) {
-        // Ignore dependencies on the output buffers
-        if (name == output || starts_with(name, output + ".")) {
-            return true;
-        }
-        for (size_t i = 0; i < arg_types.size(); i++) {
-            if (arg_types[i].name == name) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void visit_exprs(const std::vector<Expr>& v) {
-        for (std::vector<Expr>::const_iterator it = v.begin(); it != v.end(); ++it) {
-            visit_expr(*it);
-        }
-    }
-
-    void visit_expr(Expr e) {
-        if (!e.defined()) return;
-        e.accept(this);
-    }
-
-    void include_parameter(Internal::Parameter p) {
-        if (!p.defined()) return;
-        if (already_have(p.name())) return;
-        arg_types.push_back(Argument(p.name(), p.is_buffer(), p.type()));
-        if (p.is_buffer()) {
-            Buffer b = p.get_buffer();
-            int idx = (int)arg_values.size();
-            image_param_args.push_back(make_pair(idx, p));
-            if (b.defined()) {
-                arg_values.push_back(b.raw_buffer());
-            } else {
-                arg_values.push_back(NULL);
-            }
-        } else {
-            arg_values.push_back(p.get_scalar_address());
-        }
-    }
-
-    void include_buffer(Buffer b) {
-        if (!include_buffers) return;
-        if (!b.defined()) return;
-        if (already_have(b.name())) return;
-        image_args.push_back(make_pair((int)arg_types.size(), b));
-        arg_types.push_back(Argument(b.name(), true, b.type()));
-        arg_values.push_back(b.raw_buffer());
-    }
-
-    void visit(const Load *op) {
-        IRGraphVisitor::visit(op);
-        include_parameter(op->param);
-        include_buffer(op->image);
-    }
-
-    void visit(const Variable *op) {
-        IRGraphVisitor::visit(op);
-        include_parameter(op->param);
-        include_buffer(op->image);
-    }
-
-    void visit(const Call *op) {
-        IRGraphVisitor::visit(op);
-        visit_function(op->func);
-        include_buffer(op->image);
-        include_parameter(op->param);
-    }
-};
-
-/** Check that all the necessary arguments are in an args vector. Any
- * images in the source that aren't in the args vector are placed in
- * the images_to_embed list. */
-void validate_arguments(const string &output,
-                        const vector<Argument> &args,
-                        Stmt lowered,
-                        vector<Buffer> &images_to_embed) {
-    InferArguments infer_args(output);
-    lowered.accept(&infer_args);
-    const vector<Argument> &required_args = infer_args.arg_types;
-
-    for (size_t i = 0; i < required_args.size(); i++) {
-        const Argument &arg = required_args[i];
-
-        Buffer buf;
-        for (size_t j = 0; !buf.defined() && j < infer_args.image_args.size(); j++) {
-            if (infer_args.image_args[j].first == (int)i) {
-                buf = infer_args.image_args[j].second;
-                internal_assert(buf.defined());
-            }
-        }
-
-        bool found = false;
-        for (size_t j = 0; !found && j < args.size(); j++) {
-            if (args[j].name == arg.name) {
-                found = true;
-            }
-        }
-
-        if (buf.defined() && !found) {
-            // It's a raw Buffer used that isn't in the args
-            // list. Embed it in the output instead.
-            images_to_embed.push_back(buf);
-            Internal::debug(1) << "Embedding image " << buf.name() << "\n";
-        } else if (!found) {
-            std::ostringstream err;
-            err << "Generated code refers to ";
-            if (arg.is_buffer) err << "image ";
-            err << "parameter " << arg.name
-                << ", which was not found in the argument list.\n";
-
-            err << "\nArgument list specified: ";
-            for (size_t i = 0; i < args.size(); i++) {
-                err << args[i].name << " ";
-            }
-            err << "\n\nParameters referenced in generated code: ";
-            for (size_t i = 0; i < required_args.size(); i++) {
-                err << required_args[i].name << " ";
-            }
-            err << "\n\n";
-            user_error << err.str();
-        }
-    }
+    internal_assert(pipeline_.defined());
+    return pipeline_;
 }
 
-// Sort the Arguments with all buffers first (alphabetical by name),
-// followed by all non-buffers (alphabetical by name).
-struct ArgumentComparator {
-    bool operator()(const Argument& a, const Argument& b) {
-        if (a.is_buffer != b.is_buffer)
-            return a.is_buffer;
-        else
-            return a.name < b.name;
-    }
-};
+vector<Argument> Func::infer_arguments() const {
+    return Pipeline(*this).infer_arguments();
 }
 
-std::vector<Argument> Func::infer_arguments() const {
-    user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
-
-    InferArguments infer_args(name(), /*include_buffers*/ false);
-    infer_args.visit_function(func);
-
-    std::sort(infer_args.arg_types.begin(), infer_args.arg_types.end(), ArgumentComparator());
-
-    return infer_args.arg_types;
+Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
+    return pipeline().compile_to_module(args, fn_name, target);
 }
 
-void Func::lower(const Target &t) {
-    if (!lowered.defined() || t != lowered_target) {
-        vector<IRMutator *> custom_passes;
-        for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
-            custom_passes.push_back(custom_lowering_passes[i].pass);
-        }
-        lowered = Halide::Internal::lower(func, t, custom_passes);
-        lowered_target = t;
 
-        // Forbid new definitions of the func
-        func.freeze();
-    }
+void Func::compile_to(const Outputs &output_files,
+                      const vector<Argument> &args,
+                      const string &fn_name,
+                      const Target &target) {
+    pipeline().compile_to(output_files, args, fn_name, target);
 }
 
-void Func::compile_to(const Outputs &output_files, vector<Argument> args,
-                      const string &fn_name, const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-
-    if (!output_files.object_name.empty()) {
-        cg.compile_to_native(output_files.object_name, false);
-    }
-    if (!output_files.assembly_name.empty()) {
-        cg.compile_to_native(output_files.assembly_name, true);
-    }
-    if (!output_files.bitcode_name.empty()) {
-        cg.compile_to_bitcode(output_files.bitcode_name);
-    }
-}
-
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
                               const Target &target) {
-    compile_to(Outputs().bitcode(filename), args, fn_name, target);
+    pipeline().compile_to_bitcode(filename, args, fn_name, target);
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
-    compile_to_bitcode(filename, args, "", target);
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args,
+                              const Target &target) {
+    pipeline().compile_to_bitcode(filename, args, "", target);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args,
+void Func::compile_to_object(const string &filename, const vector<Argument> &args,
                              const string &fn_name, const Target &target) {
-    compile_to(Outputs().object(filename), args, fn_name, target);
+    pipeline().compile_to_object(filename, args, fn_name, target);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
-    compile_to_object(filename, args, "", target);
+void Func::compile_to_object(const string &filename, const vector<Argument> &args,
+                             const Target &target) {
+    pipeline().compile_to_object(filename, args, "", target);
 }
 
-void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    ofstream header(filename.c_str());
-    CodeGen_C cg(header);
-    cg.compile_header(fn_name.empty() ? name() : fn_name, args);
+void Func::compile_to_header(const string &filename, const vector<Argument> &args,
+                             const string &fn_name, const Target &target) {
+    pipeline().compile_to_header(filename, args, fn_name, target);
 }
 
-void Func::compile_to_c(const string &filename, vector<Argument> args,
+void Func::compile_to_c(const string &filename, const vector<Argument> &args,
                         const string &fn_name, const Target &target) {
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    ofstream src(filename.c_str());
-    CodeGen_C cg(src);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+    pipeline().compile_to_c(filename, args, fn_name, target);
 }
 
-void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
-    lower(target);
-    if (fmt == HTML) {
-        print_to_html(filename, lowered);
-    } else {
-        ofstream stmt_output(filename.c_str());
-        stmt_output << lowered;
-    }
+void Func::compile_to_lowered_stmt(const string &filename,
+                                   const vector<Argument> &args,
+                                   StmtOutputFormat fmt,
+                                   const Target &target) {
+    pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
 }
 
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Realization dst,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst[0], std::map<std::string, Expr>(), fmt, t);
+void Func::print_loop_nest() {
+    pipeline().print_loop_nest();
 }
 
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Realization dst,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst[0], std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Buffer dst,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    return compile_to_simplified_lowered_stmt(filename, dst, std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              Buffer dst,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-
-    lower(t);
-
-    Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
-
-    if (fmt == HTML) {
-        print_to_html(filename, s);
-    } else {
-        ofstream stmt_output(filename.c_str());
-        stmt_output << s;
-    }
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size, int w_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    // Make a dummy host pointer to avoid a pointless allocation.
-    uint8_t dummy_data = 0;
-    Buffer output_buf(output_types()[0], x_size, y_size, z_size, w_size, &dummy_data);
-
-    compile_to_simplified_lowered_stmt(filename, output_buf, additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size, int w_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, w_size,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0, additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size, int z_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0,
-                                       additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size, int y_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size,
-                                              const std::map<std::string, Expr> &additional_replacements,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0,
-                                       additional_replacements, fmt, t);
-}
-
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
-                                              int x_size,
-                                              StmtOutputFormat fmt,
-                                              const Target &t) {
-    compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0,
-                                       std::map<std::string, Expr>(), fmt, t);
-}
-
-void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
+void Func::compile_to_file(const string &filename_prefix,
+                           const vector<Argument> &args,
                            const Target &target) {
-    compile_to_header(filename_prefix + ".h", args, filename_prefix, target);
-    compile_to_object(filename_prefix + ".o", args, filename_prefix, target);
+    pipeline().compile_to_file(filename_prefix, args, target);
 }
 
-void Func::compile_to_file(const string &filename_prefix, const Target &target) {
-    compile_to_file(filename_prefix, vector<Argument>(), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d), target);
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
-                           const Target &target) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e), target);
-}
-
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
-    compile_to(Outputs().assembly(filename), args, fn_name, target);
+    pipeline().compile_to_assembly(filename, args, fn_name, target);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
-    compile_to_assembly(filename, args, "", target);
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
+    pipeline().compile_to_assembly(filename, args, "", target);
 }
+
+// JIT-related code
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    jit_handlers.custom_error = handler;
+    pipeline().set_error_handler(handler);
 }
 
 void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                 void (*cust_free)(void *, void *)) {
-    jit_handlers.custom_malloc = cust_malloc;
-    jit_handlers.custom_free = cust_free;
+    pipeline().set_custom_allocator(cust_malloc, cust_free);
 }
 
 void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    jit_handlers.custom_do_par_for = cust_do_par_for;
+    pipeline().set_custom_do_par_for(cust_do_par_for);
 }
 
 void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    jit_handlers.custom_do_task = cust_do_task;
+    pipeline().set_custom_do_task(cust_do_task);
 }
 
 void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
-    jit_handlers.custom_trace = trace_fn;
+    pipeline().set_custom_trace(trace_fn);
 }
 
 void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    jit_handlers.custom_print = cust_print;
+    pipeline().set_custom_print(cust_print);
 }
 
 void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
-    invalidate_cache();
-    CustomLoweringPass p = {pass, deleter};
-    custom_lowering_passes.push_back(p);
+    pipeline().add_custom_lowering_pass(pass, deleter);
 }
 
 void Func::clear_custom_lowering_passes() {
-    invalidate_cache();
-    for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
-        if (custom_lowering_passes[i].deleter) {
-            custom_lowering_passes[i].deleter(custom_lowering_passes[i].pass);
-        }
-    }
-    custom_lowering_passes.clear();
+    pipeline().clear_custom_lowering_passes();
+}
+
+const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
+    return pipeline().custom_lowering_passes();
+}
+
+const Internal::JITHandlers &Func::jit_handlers() {
+    return pipeline().jit_handlers();
 }
 
 void Func::realize(Buffer b, const Target &target) {
-    realize(Realization(vec<Buffer>(b)), target);
+    pipeline().realize(b, target);
 }
 
-namespace Internal {
-
-struct ErrorBuffer {
-    enum { MaxBufSize = 4096 };
-    char buf[MaxBufSize];
-    int end;
-
-    ErrorBuffer() {
-        end = 0;
-    }
-
-    void concat(const char *message) {
-        size_t len = strlen(message);
-
-        if (len && message[len-1] != '\n') {
-            // Claim some extra space for a newline.
-            len++;
-        }
-
-        // Atomically claim some space in the buffer
-#ifdef _MSC_VER
-        int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
-#else
-        int old_end = __sync_fetch_and_add(&end, len);
-#endif
-
-        if (old_end + len >= MaxBufSize - 1) {
-            // Out of space
-            return;
-        }
-
-        for (size_t i = 0; i < len - 1; i++) {
-            buf[old_end + i] = message[i];
-        }
-        if (buf[old_end + len - 2] != '\n') {
-            buf[old_end + len - 1] = '\n';
-        }
-    }
-
-    std::string str() const {
-        return std::string(buf, end);
-    }
-
-    static void handler(void *ctx, const char *message) {
-        if (ctx) {
-            JITUserContext *ctx1 = (JITUserContext *)ctx;
-            ErrorBuffer *buf = (ErrorBuffer *)ctx1->user_context;
-            buf->concat(message);
-        }
-    }
-};
-
-struct JITFuncCallContext {
-    ErrorBuffer error_buffer;
-    JITUserContext jit_context;
-    Internal::Parameter &user_context_param;
-
-    JITFuncCallContext(const JITHandlers &handlers, Internal::Parameter &user_context_param)
-        : user_context_param(user_context_param) {
-        void *user_context = NULL;
-        JITHandlers local_handlers = handlers;
-        if (local_handlers.custom_error == NULL) {
-            local_handlers.custom_error = Internal::ErrorBuffer::handler;
-            user_context = &error_buffer;
-        }
-        JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
-        user_context_param.set_scalar(&jit_context);
-    }
-
-    void report_if_error(int exit_status) {
-        if (exit_status) {
-            std::string output = error_buffer.str();
-            if (!output.empty()) {
-                // Only report the errors if no custom error handler was installed
-                halide_runtime_error << error_buffer.str();
-                error_buffer.end = 0;
-            }
-        }
-    }
-
-    void finalize(int exit_status) {
-        report_if_error(exit_status);
-        user_context_param.set_scalar((void *)NULL); // Don't leave param hanging with pointer to stack.
-    }
-};
-
-}  // namespace Internal
-
 void Func::realize(Realization dst, const Target &target) {
-    if (!compiled_module.jit_wrapper_function()) {
-        compile_jit(target);
-    }
-
-    internal_assert(compiled_module.jit_wrapper_function());
-
-    // Check the type and dimensionality of the buffer
-    for (size_t i = 0; i < dst.size(); i++) {
-        user_assert(dst[i].dimensions() == dimensions())
-            << "Can't realize Func \"" << name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" is " << dst[i].dimensions() << "-dimensional"
-            << ", but Func \"" << name()
-            << "\" is " << dimensions() << "-dimensional.\n";
-        user_assert(dst[i].type() == func.output_types()[i])
-            << "Can't realize Func \"" << name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" has type " << dst[i].type()
-            << ", but Func \"" << name()
-            << "\" has type " << func.output_types()[i] << ".\n";
-    }
-
-    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
-
-    // Update the address of the buffers we're realizing into
-    for (size_t i = 0; i < dst.size(); i++) {
-        arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
-    }
-
-    // Update the addresses of the image param args
-    Internal::debug(3) << image_param_args.size() << " image param args to set\n";
-    for (size_t i = 0; i < image_param_args.size(); i++) {
-        Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
-        Buffer b = image_param_args[i].second.get_buffer();
-        user_assert(b.defined())
-            << "ImageParam \"" << image_param_args[i].second.name()
-            << "\" is not bound to a buffer.\n";
-        buffer_t *buf = b.raw_buffer();
-        arg_values[image_param_args[i].first] = buf;
-        user_assert(buf->host || buf->dev)
-            << "ImageParam \"" << image_param_args[i].second.name()
-            << "\" is bound to Buffer " << b.name()
-            << " which has NULL host and dev pointers\n";
-    }
-
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void * const *)arg_values[i] << ")\n";
-        internal_assert(arg_values[i])
-            << "An argument to a jitted function is null\n";
-    }
-
-    // Always add a custom error handler to capture any error messages.
-    // (If there is a user-set error handler, it will be called as well.)
-
-    Internal::debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
-    Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
-
-    // TODO: Remove after Buffer is sorted out.
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
-    }
-
-    jit_context.finalize(exit_status);
+    pipeline().realize(dst, target);
 }
 
 void Func::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization(vec<Buffer>(dst)));
+    pipeline().infer_input_bounds(dst);
 }
 
 void Func::infer_input_bounds(Realization dst) {
-    if (!compiled_module.jit_wrapper_function()) {
-        compile_jit();
-    }
-
-    internal_assert(compiled_module.jit_wrapper_function());
-
-    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
-
-    // Check the type and dimensionality of the buffer
-    for (size_t i = 0; i < dst.size(); i++) {
-        user_assert(dst[i].dimensions() == dimensions())
-            << "Can't infer input bounds for Func \"" << name()
-            << "\" using output Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" is " << dst[i].dimensions() << "-dimensional"
-            << ", but Func \"" << name()
-            << "\" is " << dimensions() << "-dimensional.\n";
-        user_assert(dst[i].type() == func.output_types()[i])
-            << "Can't infer input bounds for Func \"" << name()
-            << "\" using output Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" has type " << dst[i].type()
-            << ", but Func \"" << name()
-            << "\" has type " << func.output_types()[i] << ".\n";
-    }
-
-    // Update the address of the buffers we're realizing into
-    for (size_t i = 0; i < dst.size(); i++) {
-        arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
-    }
-
-    // Update the addresses of the image param args
-    Internal::debug(3) << image_param_args.size() << " image param args to set\n";
-    vector<buffer_t> dummy_buffers;
-    // We're going to be taking addresses of elements as we push_back,
-    // so reserve enough space to avoid reallocation.
-    dummy_buffers.reserve(image_param_args.size());
-    for (size_t i = 0; i < image_param_args.size(); i++) {
-        Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
-        Buffer b = image_param_args[i].second.get_buffer();
-        if (b.defined()) {
-            arg_values[image_param_args[i].first] = b.raw_buffer();
-        } else {
-            Internal::debug(1) << "Going to infer input size for param " << image_param_args[i].second.name() << "\n";
-            buffer_t buf;
-            memset(&buf, 0, sizeof(buffer_t));
-            dummy_buffers.push_back(buf);
-            arg_values[image_param_args[i].first] = &dummy_buffers[dummy_buffers.size()-1];
-        }
-    }
-
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void * const *)arg_values[i] << ")\n";
-        internal_assert(arg_values[i]) << "An argument to a jitted function is null.\n";
-    }
-
-    // Figure out which buffers to watch for changes
-    vector<const buffer_t *> tracked_buffers;
-    for (size_t i = 0; i < dummy_buffers.size(); i++) {
-        tracked_buffers.push_back(&dummy_buffers[i]);
-    }
-    for (size_t i = 0; i < dst.size(); i++) {
-        if (dst[i].host_ptr() == NULL) {
-            tracked_buffers.push_back(dst[i].raw_buffer());
-        }
-    }
-    vector<buffer_t> old_buffer(tracked_buffers.size());
-
-    const int max_iters = 16;
-    int iter = 0;
-
-    for (iter = 0; iter < max_iters; iter++) {
-        // Make a copy of the buffers we expect to be mutated
-        for (size_t j = 0; j < tracked_buffers.size(); j++) {
-            old_buffer[j] = *tracked_buffers[j];
-        }
-        Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
-
-        jit_context.report_if_error(exit_status);
-
-        Internal::debug(2) << "Back from jitted function\n";
-        bool changed = false;
-
-        // Check if there were any changed
-        for (size_t j = 0; j < tracked_buffers.size(); j++) {
-            if (memcmp(&old_buffer[j], tracked_buffers[j], sizeof(buffer_t))) {
-                changed = true;
-            }
-        }
-        if (!changed) {
-            break;
-        }
-    }
-
-    jit_context.finalize(0);
-
-    user_assert(iter < max_iters)
-        << "Inferring input bounds on Func \"" << name() << "\""
-        << " didn't converge after " << max_iters
-        << " iterations. There may be unsatisfiable constraints\n";
-
-    // Now allocate the resulting buffers
-    size_t j = 0;
-    for (size_t i = 0; i < image_param_args.size(); i++) {
-        Buffer b = image_param_args[i].second.get_buffer();
-        if (!b.defined()) {
-            buffer_t buf = dummy_buffers[j];
-
-            Internal::debug(1) << "Inferred bounds for " << image_param_args[i].second.name() << ": ("
-                               << buf.min[0] << ","
-                               << buf.min[1] << ","
-                               << buf.min[2] << ","
-                               << buf.min[3] << ")..("
-                               << buf.min[0] + buf.extent[0] << ","
-                               << buf.min[1] + buf.extent[1] << ","
-                               << buf.min[2] + buf.extent[2] << ","
-                               << buf.min[3] + buf.extent[3] << ")\n";
-
-            // Figure out how much memory to allocate for this buffer
-            size_t min_idx = 0, max_idx = 0;
-            for (int d = 0; d < 4; d++) {
-                if (buf.stride[d] > 0) {
-                    min_idx += buf.min[d] * buf.stride[d];
-                    max_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-                } else {
-                    max_idx += buf.min[d] * buf.stride[d];
-                    min_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-                }
-            }
-            size_t total_size = (max_idx - min_idx);
-            while (total_size & 0x1f) total_size++;
-
-            // Allocate enough memory with the right dimensionality.
-            Buffer buffer(image_param_args[i].second.type(), total_size,
-                          buf.extent[1] > 0 ? 1 : 0,
-                          buf.extent[2] > 0 ? 1 : 0,
-                          buf.extent[3] > 0 ? 1 : 0);
-
-            // Rewrite the buffer fields to match the ones returned
-            for (int d = 0; d < 4; d++) {
-                buffer.raw_buffer()->min[d] = buf.min[d];
-                buffer.raw_buffer()->stride[d] = buf.stride[d];
-                buffer.raw_buffer()->extent[d] = buf.extent[d];
-            }
-            j++;
-            image_param_args[i].second.set_buffer(buffer);
-        }
-    }
-
-    // TODO: Remove after Buffer is sorted out.
-    for (size_t i = 0; i < dst.size(); i++) {
-        dst[i].set_source_module(compiled_module);
-    }
+    pipeline().infer_input_bounds(dst);
 }
 
-void *Func::compile_jit(const Target &target_arg) {
-    user_assert(defined()) << "Can't jit-compile undefined Func.\n";
-
-    Target target(target_arg);
-    target.set_feature(Target::JIT);
-    target.set_feature(Target::UserContext);
-
-    lower(target);
-
-    // Infer arguments
-    InferArguments infer_args(name());
-    lowered.accept(&infer_args);
-
-    // For jitting, we always add jit_user_context,
-    // regardless of whether Target::UserContext is set.
-    Expr uc_expr = Internal::Variable::make(type_of<void*>(), jit_user_context.name(), jit_user_context);
-    uc_expr.accept(&infer_args);
-
-    arg_values = infer_args.arg_values;
-
-
-    for (int i = 0; i < func.outputs(); i++) {
-        string buffer_name = name();
-        if (func.outputs() > 1) {
-            buffer_name = buffer_name + '.' + int_to_string(i);
-        }
-        Type t = func.output_types()[i];
-        Argument me(buffer_name, true, t);
-        infer_args.arg_types.push_back(me);
-        arg_values.push_back(NULL); // A spot to put the address of this output buffer
-    }
-    image_param_args = infer_args.image_param_args;
-
-    Internal::debug(2) << "Inferred argument list:\n";
-    for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
-        Internal::debug(2) << infer_args.arg_types[i].name << ", "
-                           << infer_args.arg_types[i].type << ", "
-                           << infer_args.arg_types[i].is_buffer << "\n";
-    }
-
-    StmtCompiler cg(target);
-
-    // Sanitise the name of the generated function
-    string n = name();
-    for (size_t i = 0; i < n.size(); i++) {
-        if (!isalnum(n[i])) {
-            n[i] = '_';
-        }
-    }
-
-    cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
-
-    if (debug::debug_level >= 3) {
-        cg.compile_to_native(name() + ".s", true);
-        cg.compile_to_bitcode(name() + ".bc");
-        ofstream stmt_debug((name() + ".stmt").c_str());
-        stmt_debug << lowered;
-    }
-
-    compiled_module = cg.compile_to_function_pointers();
-
-    return compiled_module.main_function();
-}
-
-void Func::test() {
-
-    Image<int> input(7, 5);
-    for (int y = 0; y < 5; y++) {
-        for (int x = 0; x < 5; x++) {
-            input(x, y) = x*y + 10/(y+3);
-        }
-    }
-
-    Func f, g;
-    Var x, y;
-    f(x, y) = input(x+1, y) + input(x+1, y)*3 + 1;
-    g(x, y) = f(x-1, y) + 2*f(x+1, y);
-
-    f.compute_root();
-
-    Image<int> result = g.realize(5, 5);
-
-    for (int y = 0; y < 5; y++) {
-        for (int x = 0; x < 5; x++) {
-            int correct = (4*input(x, y)+1) + 2*(4*input(x+2, y)+1);
-            if (result(x, y) != correct) {
-                std::cerr << "Func test failed: f(" << x << ", " << y << ") = "
-                          << result(x, y) << " instead of " << correct << "\n";
-                return;
-            }
-        }
-    }
-
-    std::cout << "Func test passed\n";
-
+void *Func::compile_jit(const Target &target) {
+    return pipeline().compile_jit(target);
 }
 
 EXPORT Var _("_");

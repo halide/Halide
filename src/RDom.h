@@ -9,6 +9,8 @@
 #include "IR.h"
 #include "Param.h"
 
+#include <vector>
+
 namespace Halide {
 
 /** A reduction variable represents a single dimension of a reduction
@@ -181,34 +183,32 @@ class RDom {
 
     void init_vars(std::string name);
 
+    EXPORT void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
+
+    template <typename... Args>
+    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args... args) {
+        ranges.push_back(std::make_pair(min, extent));
+        initialize_from_ranges(ranges, args...);
+    }
+
 public:
     /** Construct an undefined reduction domain. */
     EXPORT RDom() {}
 
-    /** Construct a one-dimensional reduction domain with the given name. If the name
+    /** Construct a multi-dimensional reduction domain with the given name. If the name
      * is left blank, a unique one is auto-generated. */
-    EXPORT RDom(Expr min, Expr extent, std::string name = "");
-
-    /** Construct a two-dimensional reduction domain with the given name. If the name
-     * is left blank, a unique one is auto-generated. */
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, std::string name = "");
-
-    /** Construct a multi-dimensional reduction domain with the given
-     * name. If the name is left blank, a unique one is
-     * auto-generated. */
     // @{
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, Expr min5, Expr extent5, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, std::string name = "");
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-                Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, Expr min7, Expr extent7,
-                std::string name = "");
+    NO_INLINE RDom(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "") {
+        initialize_from_ranges(ranges, name);
+    }
+
+    template <typename... Args>
+    NO_INLINE RDom(Expr min, Expr extent, Args... args) {
+        // This should really just be a delegating constructor, but I couldn't make
+        // that work with variadic template unpacking in visual studio 2013
+        std::vector<std::pair<Expr, Expr>> ranges;
+        initialize_from_ranges(ranges, min, extent, args...);
+    }
     // @}
 
     /** Construct a reduction domain that iterates over all points in

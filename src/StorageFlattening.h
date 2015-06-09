@@ -9,8 +9,6 @@
 #include <map>
 
 #include "IR.h"
-#include "Target.h"
-#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,7 +16,8 @@ namespace Internal {
 /** Take a statement with multi-dimensional Realize, Provide, and Call
  * nodes, and turn it into a statement with single-dimensional
  * Allocate, Store, and Load nodes respectively. */
-Stmt storage_flattening(Stmt s, const std::string &output,
+Stmt storage_flattening(Stmt s,
+                        const std::vector<Function> &outputs,
                         const std::map<std::string, Function> &env);
 
 }

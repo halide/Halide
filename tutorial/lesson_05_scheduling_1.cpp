@@ -10,14 +10,14 @@
 // Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_05
 
 // On os x:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_05
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 using namespace Halide;
 
@@ -50,6 +50,19 @@ int main(int argc, char **argv) {
             }
         }
         printf("\n\n");
+
+        // Tracing is one useful way to understand what a schedule is
+        // doing. You can also ask Halide to print out pseudocode
+        // showing what loops Halide is generating:
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
+
+        // Because we're using the default ordering, it should print:
+        // compute gradient:
+        //   for y:
+        //     for x:
+        //       gradient(...) = ...
     }
 
     // Reorder variables.
@@ -78,7 +91,13 @@ int main(int argc, char **argv) {
                 printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        // If we print pseudo-code for this schedule, we'll see that
+        // the loop over y is now inside the loop over x.
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Split a variable into two.
@@ -114,7 +133,11 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
 
         // Note that the order of evaluation of pixels didn't actually
         // change! Splitting by itself does nothing, but it does open
@@ -145,6 +168,11 @@ int main(int argc, char **argv) {
             int x = fused % 4;
             printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
         }
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Evaluating in tiles.
@@ -186,7 +214,11 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Evaluating in vectors.
@@ -220,9 +252,6 @@ int main(int argc, char **argv) {
         // Note that in this case we reused the name 'x' as the new
         // outer variable. Later scheduling calls that refer to x
         // will refer to this new outer variable named x.
-        //
-        // Our snoop function isn't set-up to print out vectors, this
-        // is why we included one called snoopx4 above.
 
         // This time we'll evaluate over an 8x4 box, so that we have
         // more than one vector of work per scanline.
@@ -250,7 +279,11 @@ int main(int argc, char **argv) {
                        val[0], val[1], val[2], val[3]);
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Unrolling a loop.
@@ -292,8 +325,11 @@ int main(int argc, char **argv) {
                 }
             }
         }
+        printf("\n");
 
-
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Splitting by factors that don't divide the extent.
@@ -330,7 +366,11 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
 
         // If you read the output, you'll see that some coordinates
         // were evaluated more than once! That's generally OK, because
@@ -410,7 +450,11 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Putting it all together.
@@ -502,17 +546,23 @@ int main(int argc, char **argv) {
                 }
             }
         }
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient_fast.print_loop_nest();
+        printf("\n");
+
+        // Note that in the Halide version, the algorithm is specified
+        // once at the top, separately from the optimizations, and there
+        // aren't that many lines of code total. Compare this to the C
+        // version. There's more code (and it isn't even parallelized or
+        // vectorized properly). More annoyingly, the statement of the
+        // algorithm (the result is x plus y) is buried in multiple places
+        // within the mess. This C code is hard to write, hard to read,
+        // hard to debug, and hard to optimize further. This is why Halide
+        // exists.
     }
 
-    // Note that in the Halide version, the algorithm is specified
-    // once at the top, separately from the optimizations, and there
-    // aren't that many lines of code total. Compare this to the C
-    // version. There's more code (and it isn't even parallelized or
-    // vectorized properly). More annoyingly, the statement of the
-    // algorithm (the result is x plus y) is buried in multiple places
-    // within the mess. This C code is hard to write, hard to read,
-    // hard to debug, and hard to optimize further. This is why Halide
-    // exists.
 
     printf("Success!\n");
     return 0;

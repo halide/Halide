@@ -1,5 +1,4 @@
 #include "runtime_internal.h"
-#include "../buffer_t.h"
 #include "HalideRuntime.h"
 #include "scoped_mutex_lock.h"
 
@@ -71,7 +70,7 @@ WEAK size_t full_extent(const buffer_t &buf) {
 }
 
 WEAK void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
-    size_t buffer_size = full_extent(from);;
+    size_t buffer_size = full_extent(from);
     halide_assert(user_context, from.elem_size == to.elem_size);
     for (int i = 0; i < 4; i++) {
         halide_assert(user_context, from.extent[i] == to.extent[i]);

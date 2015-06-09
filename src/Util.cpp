@@ -47,18 +47,6 @@ string replace_all(string &str, const string &find, const string &replace) {
     return str;
 }
 
-/** Convert an integer to a string. */
-string int_to_string(int x) {
-    // Most calls to this function are during lowering, and correspond
-    // to the dimensions of some buffer. So this gets called with 0,
-    // 1, 2, and 3 a lot, and it's worth optimizing those cases.
-    static const string small_ints[] = {"0", "1", "2", "3", "4", "5", "6", "7"};
-    if (x < 8) return small_ints[x];
-    ostringstream ss;
-    ss << x;
-    return ss.str();
-}
-
 string unique_name(const string &name, bool user) {
     static map<string, int> known_names;
 
