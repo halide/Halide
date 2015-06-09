@@ -29,6 +29,9 @@ public:
         Func result;
         result(x, y) = cast<uint8_t>(clamp(grad_mag(x, y), 0, 255));
         
+        // CPU schedule:
+        //   Parallelize over scan lines, 4 scanlines per task.
+        //   Independently, vectorize in x.
         result
             .compute_root()
             .vectorize(x, 8)
