@@ -12,6 +12,8 @@
 
 #include "inconsolata.h"
 
+namespace {
+
 using std::map;
 using std::vector;
 using std::string;
@@ -269,7 +271,7 @@ void usage() {
 
 }
 
-int main(int argc, char **argv) {
+int run(int argc, char **argv) {
     assert(sizeof(Packet) == 4096);
 
     // State that determines how different funcs get drawn
@@ -531,3 +533,10 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
+}  // namespace
+
+int main(int argc, char **argv) {
+  run(argc, argv);
+}
+
