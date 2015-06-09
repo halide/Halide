@@ -923,6 +923,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             iter->second.c_function = pipeline_contents.jit_module.entrypoint_symbol().address;
             iter->second.signature.is_void_return = false;
             iter->second.signature.ret_type = Int(32);
+            // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
                  ScalarOrBufferT arg_type_info;
                  arg_type_info.is_buffer = arg.arg.is_buffer();
@@ -930,6 +931,12 @@ Pipeline::make_externs_jit_module(const Target &target,
                      arg_type_info.scalar_type = arg.arg.type;
                  }
                  iter->second.signature.arg_types.push_back(arg_type_info);
+            }
+            // Add the outputs of the pipeline
+            for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
+                ScalarOrBufferT arg_type_info;
+                arg_type_info.is_buffer = true;
+                iter->second.signature.arg_types.push_back(arg_type_info);
             }
             iter->second.pipeline = Pipeline();
         } else {
