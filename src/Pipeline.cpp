@@ -1029,9 +1029,9 @@ Pipeline::make_externs_jit_module(const Target &target,
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                 ScalarOrBufferT arg_type_info;
-                 arg_type_info.is_buffer = true;
-                 iter->second.signature.arg_types.push_back(arg_type_info);
+                ScalarOrBufferT arg_type_info;
+                arg_type_info.is_buffer = true;
+                iter->second.signature.arg_types.push_back(arg_type_info);
             }
             iter->second.pipeline = Pipeline();
         } else {
