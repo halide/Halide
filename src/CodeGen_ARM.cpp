@@ -327,21 +327,14 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
         left_shifts.push_back(Pattern("vshiftu.v4i32",  4, wild_u32x_*wild_u32x_, Pattern::LeftShift));
         left_shifts.push_back(Pattern("vshiftu.v2i64",  2, wild_u64x_*wild_u64x_, Pattern::LeftShift));
 
+        // Overflow for int32 is not defined by Halide, so for those we can take
+        // advantage of special add-and-halve instructions.
+        //
         // 64-bit averaging round-down
-        averagings.push_back(Pattern("vhadds.v8i8",  8, (wild_i8x8 + wild_i8x8)));
-        averagings.push_back(Pattern("vhaddu.v8i8",  8, (wild_u8x8 + wild_u8x8)));
-        averagings.push_back(Pattern("vhadds.v4i16", 4, (wild_i16x4 + wild_i16x4)));
-        averagings.push_back(Pattern("vhaddu.v4i16", 4, (wild_u16x4 + wild_u16x4)));
         averagings.push_back(Pattern("vhadds.v2i32", 2, (wild_i32x2 + wild_i32x2)));
-        averagings.push_back(Pattern("vhaddu.v2i32", 2, (wild_u32x2 + wild_u32x2)));
 
         // 128-bit
-        averagings.push_back(Pattern("vhadds.v16i8", 16, (wild_i8x_  + wild_i8x_)));
-        averagings.push_back(Pattern("vhaddu.v16i8", 16, (wild_u8x_  + wild_u8x_)));
-        averagings.push_back(Pattern("vhadds.v8i16",  8, (wild_i16x_ + wild_i16x_)));
-        averagings.push_back(Pattern("vhaddu.v8i16",  8, (wild_u16x_ + wild_u16x_)));
         averagings.push_back(Pattern("vhadds.v4i32",  4, (wild_i32x_ + wild_i32x_)));
-        averagings.push_back(Pattern("vhaddu.v4i32",  4, (wild_u32x_ + wild_u32x_)));
 
         // 64-bit halving subtract
         averagings.push_back(Pattern("vhsubs.v8i8",  8, (wild_i8x8  - wild_i8x8)));
@@ -370,6 +363,7 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
         negations.push_back(Pattern("vqneg.v4i32", 4,  -max(wild_i32x_, -(0x7fffffff))));
     }
 }
+
 
 llvm::Triple CodeGen_ARM::get_target_triple() const {
     llvm::Triple triple;
@@ -425,33 +419,21 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_ARM::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
 
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
-
-        JITModule::make_externs(shared_runtime, module);
+llvm::DataLayout CodeGen_ARM::get_data_layout() const {
+    if (target.bits == 32) {
+        if (target.os == Target::IOS) {
+            return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+        } else {
+            return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
+        }
+    } else { // 64-bit
+        if (target.os == Target::IOS) {
+            return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
+        } else {
+            return llvm::DataLayout("e-m:e-i64:64-i128:128-n32:64-S128");
+        }
     }
-
-    // Fix the target triple.
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen_Posix::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen_Posix::optimize_module();
 }
 
 namespace {
@@ -495,7 +477,7 @@ Expr try_narrow(Expr a, Type target) {
 
 void CodeGen_ARM::visit(const Cast *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -537,7 +519,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             } else { // must be a shift
                 Expr constant = matches[1];
                 int shift_amount;
-                bool power_of_two = is_const_power_of_two(constant, &shift_amount);
+                bool power_of_two = is_const_power_of_two_integer(constant, &shift_amount);
                 if (power_of_two && shift_amount < matches[0].type().bits) {
                     if (pattern.type == Pattern::RightShift) {
                         shift_amount = -shift_amount;
@@ -549,7 +531,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                     value = call_intrin(llvm_type_of(t),
                                         pattern.intrin_width,
                                         pattern.intrin,
-                                        vec(codegen(matches[0]), shift));
+                                        {codegen(matches[0]), shift});
                     return;
                 }
             }
@@ -597,7 +579,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
 void CodeGen_ARM::visit(const Mul *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -628,7 +610,7 @@ void CodeGen_ARM::visit(const Mul *op) {
     vector<Expr> matches;
 
     int shift_amount = 0;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
     if (power_of_two) {
         for (size_t i = 0; i < left_shifts.size(); i++) {
             const Pattern &pattern = left_shifts[i];
@@ -639,7 +621,7 @@ void CodeGen_ARM::visit(const Mul *op) {
                 Value *shift = ConstantInt::get(t_arg, shift_amount);
                 value = call_intrin(t_result,
                                     pattern.intrin_width, pattern.intrin,
-                                    vec(codegen(matches[0]), shift));
+                                    {codegen(matches[0]), shift});
                 return;
             }
         }
@@ -650,7 +632,7 @@ void CodeGen_ARM::visit(const Mul *op) {
 
 void CodeGen_ARM::visit(const Div *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -677,7 +659,7 @@ void CodeGen_ARM::visit(const Div *op) {
 
     // Check if the divisor is a power of two
     int shift_amount;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
     vector<Expr> matches;
     if (power_of_two && op->type.is_int()) {
@@ -725,13 +707,13 @@ void CodeGen_ARM::visit(const Div *op) {
         #if LLVM_VERSION < 35
         if (op->type.bits == 32 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
-            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", vec<Value *>(wide_val, shift_amount));
+            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", {wide_val, shift_amount});
         } else if (op->type.bits == 16 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
-            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", vec<Value *>(wide_val, shift_amount));
+            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", {wide_val, shift_amount});
         } else if (op->type.bits == 8 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
-            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", vec<Value *>(wide_val, shift_amount));
+            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", {wide_val, shift_amount});
         } else
         #endif
         {
@@ -780,13 +762,13 @@ void CodeGen_ARM::visit(const Div *op) {
         #if LLVM_VERSION < 35
         if (op->type.bits == 32 && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
-            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", vec<Value *>(val, shift_amount));
+            val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", {val, shift_amount});
         } else if (op->type.bits == 16 && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
-            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", vec<Value *>(val, shift_amount));
+            val = call_intrin(narrower, 4, "llvm.arm.neon.vshiftn.v4i16", {val, shift_amount});
         } else if (op->type == UInt(8, 8) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
-            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", vec<Value *>(val, shift_amount));
+            val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", {val, shift_amount});
         } else
         #endif
         {
@@ -803,11 +785,11 @@ void CodeGen_ARM::visit(const Div *op) {
         // Average with original numerator
         if (method == 2) {
             if (op->type.bits == 32) {
-                val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", vec(val, num));
+                val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", {val, num});
             } else if (op->type.bits == 16) {
-                val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", vec(val, num));
+                val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", {val, num});
             } else if (op->type.bits == 8) {
-                val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", vec(val, num));
+                val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", {val, num});
             } else {
                 // num > val, so the following works without widening:
                 // val += (num - val)/2
@@ -835,7 +817,7 @@ void CodeGen_ARM::visit(const Add *op) {
 
 void CodeGen_ARM::visit(const Sub *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -876,7 +858,7 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -887,7 +869,7 @@ void CodeGen_ARM::visit(const Min *op) {
         Constant *zero = ConstantInt::get(i32, 0);
         Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
         Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
-        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", vec(a_wide, b_wide));
+        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
         value = builder->CreateExtractElement(wide_result, zero);
         return;
     }
@@ -921,7 +903,7 @@ void CodeGen_ARM::visit(const Min *op) {
         }
 
         if (match) {
-            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, vec(op->a, op->b));
+            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, {op->a, op->b});
             return;
         }
     }
@@ -931,7 +913,7 @@ void CodeGen_ARM::visit(const Min *op) {
 
 void CodeGen_ARM::visit(const Max *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -942,7 +924,7 @@ void CodeGen_ARM::visit(const Max *op) {
         Constant *zero = ConstantInt::get(i32, 0);
         Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
         Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
-        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", vec(a_wide, b_wide));
+        Value *wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
         value = builder->CreateExtractElement(wide_result, zero);
         return;
     }
@@ -976,7 +958,7 @@ void CodeGen_ARM::visit(const Max *op) {
         }
 
         if (match) {
-            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, vec(op->a, op->b));
+            value = call_intrin(op->type, patterns[i].t.width, patterns[i].op, {op->a, op->b});
             return;
         }
     }
@@ -984,10 +966,9 @@ void CodeGen_ARM::visit(const Max *op) {
     CodeGen_Posix::visit(op);
 }
 
-
 void CodeGen_ARM::visit(const Store *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1003,7 +984,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
     // First dig through let expressions
     Expr rhs = op->value;
-    vector<pair<string, Expr> > lets;
+    vector<pair<string, Expr>> lets;
     while (const Let *let = rhs.as<Let>()) {
         rhs = let->body;
         lets.push_back(make_pair(let->name, let->value));
@@ -1073,7 +1054,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
         internal_assert(slices >= 1);
         for (int i = 0; i < t.width; i += intrin_type.width) {
-            Expr slice_base = simplify(ramp->base + i * ramp->stride);
+            Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.width);
             Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
             ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
@@ -1119,7 +1100,8 @@ void CodeGen_ARM::visit(const Store *op) {
             Value *stride = codegen(ramp->stride * op->value.type().bytes());
             Value *val = codegen(op->value);
             debug(4) << "Creating call to " << builtin.str() << "\n";
-            Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
+            Value *store_args[] = {base, stride, val};
+            Instruction *store = builder->CreateCall(fn, store_args);
             (void)store;
             add_tbaa_metadata(store, op->name, op->index);
             return;
@@ -1132,7 +1114,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
 void CodeGen_ARM::visit(const Load *op) {
     // AArch64 SIMD not yet supported
-    if (target.bits == 64) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1223,10 +1205,11 @@ void CodeGen_ARM::visit(const Load *op) {
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_width);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
             ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-            CallInst *call = builder->CreateCall(fn, vec(ptr, align));
+            Value *args[] = {ptr, align};
+            CallInst *call = builder->CreateCall(fn, args);
             add_tbaa_metadata(call, op->name, slice_ramp);
 
-            Value *elt = builder->CreateExtractValue(call, vec((unsigned int)offset));
+            Value *elt = builder->CreateExtractValue(call, {(unsigned int)offset});
             results.push_back(elt);
         }
 
@@ -1248,7 +1231,8 @@ void CodeGen_ARM::visit(const Load *op) {
             Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             Value *stride = codegen(ramp->stride * op->type.bytes());
             debug(4) << "Creating call to " << builtin.str() << "\n";
-            Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
+            Value *args[] = {base, stride};
+            Instruction *load = builder->CreateCall(fn, args, builtin.str());
             add_tbaa_metadata(load, op->name, op->index);
             value = load;
             return;
@@ -1264,6 +1248,7 @@ void CodeGen_ARM::visit(const Call *op) {
             // Android devices generally have read-cycle-counter
             // disabled in user mode; fall back to calling
             // halide_current_time_ns().
+            internal_assert(op->args.size() == 1);
             Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
             e.accept(this);
             return;
@@ -1286,7 +1271,7 @@ void CodeGen_ARM::visit(const Call *op) {
 
                 if (na.defined() && nb.defined()) {
                     Expr absd = Call::make(UInt(narrow.bits, narrow.width), Call::absd,
-                                           vec(na, nb), Call::Intrinsic);
+                                           {na, nb}, Call::Intrinsic);
 
                     absd = Cast::make(op->type, absd);
                     codegen(absd);
@@ -1317,7 +1302,13 @@ string CodeGen_ARM::mcpu() const {
 
 string CodeGen_ARM::mattrs() const {
     if (target.bits == 32) {
-        return "+neon";
+        if (target.has_feature(Target::ARMv7s)) {
+            return "+neon";
+        } if (!target.has_feature(Target::NoNEON)) {
+            return "+neon";
+        } else {
+            return "-neon";
+        }
     } else {
         return "";
     }

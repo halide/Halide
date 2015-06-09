@@ -3,7 +3,6 @@
 #include "CodeGen_X86.h"
 #include "JITModule.h"
 #include "IROperator.h"
-#include "buffer_t.h"
 #include "IRMatch.h"
 #include "Debug.h"
 #include "Util.h"
@@ -21,8 +20,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
-                                     jitEventListener(NULL) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
@@ -90,32 +88,26 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
 
-    init_module();
-
-    // Fix the target triple
-    module = get_initial_module_for_target(target, context);
-
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
-
-        JITModule::make_externs(shared_runtime, module);
+llvm::DataLayout CodeGen_X86::get_data_layout() const {
+    if (target.bits == 32) {
+        if (target.os == Target::OSX) {
+            return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+        } else if (target.os == Target::Windows) {
+            return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-S32");
+        } else {
+            // Linux/Android/NaCl
+            return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+        }
+    } else { // 64-bit
+        if (target.os == Target::NaCl) {
+            return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:128-n8:16:32:64-S128");
+        } else {
+            return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
+        }
     }
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
 }
+
 
 Expr _i64(Expr e) {
     return cast(Int(64, e.type().width), e);
@@ -214,10 +206,10 @@ bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
 
     Type narrow = t;
     narrow.bits = 16;
-    vector<Expr> args = vec(lossless_cast(narrow, ma->a),
-                            lossless_cast(narrow, ma->b),
-                            lossless_cast(narrow, mb->a),
-                            lossless_cast(narrow, mb->b));
+    vector<Expr> args = {lossless_cast(narrow, ma->a),
+                         lossless_cast(narrow, ma->b),
+                         lossless_cast(narrow, mb->a),
+                         lossless_cast(narrow, mb->b)};
     if (!args[0].defined() || !args[1].defined() ||
         !args[2].defined() || !args[3].defined()) {
         return false;
@@ -235,7 +227,7 @@ void CodeGen_X86::visit(const Add *op) {
     if (should_use_pmaddwd(op->a, op->b, matches)) {
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -251,7 +243,7 @@ void CodeGen_X86::visit(const Sub *op) {
         }
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -296,7 +288,7 @@ void CodeGen_X86::visit(const EQ *op) {
     int bits = t.width * t.bits;
     if (t.width == 1 || bits % 128 == 0) {
         // LLVM is fine for native vector widths or scalars
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     } else {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
@@ -466,8 +458,7 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-    CodeGen::visit(op);
-
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const Div *op) {
@@ -482,7 +473,7 @@ void CodeGen_X86::visit(const Div *op) {
     if (!int_imm) int_imm = op->b.as<IntImm>();
     int const_divisor = int_imm ? int_imm->value : 0;
     int shift_amount;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
     vector<Expr> matches;
     if (power_of_two && op->type.is_int()) {
@@ -526,7 +517,7 @@ void CodeGen_X86::visit(const Div *op) {
 
         // Widening multiply, keep high half, shift
         if (op->type.element_of() == Int(16) && op->type.is_vector()) {
-            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", vec(flipped, mult));
+            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", {flipped, mult});
             if (shift) {
                 Constant *shift_amount = ConstantInt::get(narrower, shift);
                 val = builder->CreateLShr(val, shift_amount);
@@ -577,7 +568,7 @@ void CodeGen_X86::visit(const Div *op) {
         Value *val = num;
 
         if (op->type.element_of() == UInt(16) && op->type.is_vector()) {
-            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", vec(val, mult));
+            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", {val, mult});
             if (shift && method == 1) {
                 Constant *shift_amount = ConstantInt::get(narrower, shift);
                 val = builder->CreateLShr(val, shift_amount);
@@ -620,82 +611,82 @@ void CodeGen_X86::visit(const Div *op) {
         value = val;
 
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Min *op) {
     if (!op->type.is_vector()) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
     bool use_sse_41 = target.has_feature(Target::SSE41);
     if (op->type.element_of() == UInt(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse2.pminu.b", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse2.pminu.b", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse41.pminsb", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse41.pminsb", {op->a, op->b});
     } else if (op->type.element_of() == Int(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmins.w", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmins.w", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse41.pminuw", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse41.pminuw", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminsd", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminsd", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {
         if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
             // This condition should possibly be > 4, rather than a
             // multiple of 8, but shuffling in undefs seems to work
             // poorly with avx.
-            value = call_intrin(op->type, 8, "min_f32x8", vec(op->a, op->b));
+            value = call_intrin(op->type, 8, "min_f32x8", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 4, "min_f32x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "min_f32x4", {op->a, op->b});
         }
     } else if (op->type.element_of() == Float(64)) {
         if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 4, "min_f64x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "min_f64x4", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 2, "min_f64x2", vec(op->a, op->b));
+            value = call_intrin(op->type, 2, "min_f64x2", {op->a, op->b});
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Max *op) {
     if (!op->type.is_vector()) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
     bool use_sse_41 = target.has_feature(Target::SSE41);
     if (op->type.element_of() == UInt(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse2.pmaxu.b", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse2.pmaxu.b", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse41.pmaxsb", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse41.pmaxsb", {op->a, op->b});
     } else if (op->type.element_of() == Int(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmaxs.w", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmaxs.w", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse41.pmaxuw", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse41.pmaxuw", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxsd", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxsd", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {
         if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 8, "max_f32x8", vec(op->a, op->b));
+            value = call_intrin(op->type, 8, "max_f32x8", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 4, "max_f32x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "max_f32x4", {op->a, op->b});
         }
     } else if (op->type.element_of() == Float(64)) {
         if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 4, "max_f64x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "max_f64x4", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 2, "max_f64x2", vec(op->a, op->b));
+            value = call_intrin(op->type, 2, "max_f64x2", {op->a, op->b});
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -737,23 +728,6 @@ int CodeGen_X86::native_vector_bits() const {
         return 256;
     } else {
         return 128;
-    }
-}
-
-void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *m)
-{
-    jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
-    if (jitEventListener) {
-        ee->RegisterJITEventListener(jitEventListener);
-    }
-}
-
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *)
-{
-    if (jitEventListener) {
-        ee->UnregisterJITEventListener(jitEventListener);
-        delete jitEventListener;
-        jitEventListener = NULL;
     }
 }
 

@@ -41,8 +41,7 @@ int main(int argc, char **argv) {
     Func upsampledx[levels];
     Var x("x"), y("y"), c("c");
 
-    Func clamped;
-    clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     // This triggers a bug in llvm 3.3 (3.2 and trunk are fine), so we
     // rewrite it in a way that doesn't trigger the bug. The rewritten
@@ -120,7 +119,6 @@ int main(int argc, char **argv) {
     {
         Var xi, yi;
         std::cout << "Flat schedule with parallelization + vectorization." << std::endl;
-        clamped.compute_root().parallel(y).bound(c, 0, 4).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
         for (int l = 1; l < levels-1; ++l) {
             if (l > 0) downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
             interpolated[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
@@ -157,7 +155,7 @@ int main(int argc, char **argv) {
         Var yo, yi, xo, xi;
         final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4);
         final.tile(x, y, xo, yo, xi, yi, input.width()/8, input.height()/8);
-        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, Device_Default_GPU).unroll(c);
+        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, DeviceAPI::Default_GPU).unroll(c);
 
         // Start from level 1 to save memory - level zero will be computed on demand
         for (int l = 1; l < levels; ++l) {
@@ -169,8 +167,8 @@ int main(int argc, char **argv) {
                 // Outer loop on CPU for the larger ones.
                 downsampled[l].tile(x, y, xo, yo, x, y, 256, 256);
             }
-            downsampled[l].gpu_tile(x, y, c, tile_size, tile_size, 4, Device_Default_GPU);
-            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, Device_Default_GPU);
+            downsampled[l].gpu_tile(x, y, c, tile_size, tile_size, 4, DeviceAPI::Default_GPU);
+            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, DeviceAPI::Default_GPU);
         }
         break;
     }

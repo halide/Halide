@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 #ifdef _MSC_VER
@@ -55,9 +55,7 @@ int main(int argc, char **argv) {
     Var x;
     f(x) = x*x;
 
-    g.define_extern("extern_stage",
-                    Internal::vec<ExternFuncArgument>(f),
-                    Int(32), 1);
+    g.define_extern("extern_stage", {f}, Int(32), 1);
 
     h(x) = g(x) * 2;
 

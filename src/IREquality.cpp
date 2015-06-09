@@ -1,4 +1,5 @@
 #include "IREquality.h"
+#include "IRVisitor.h"
 #include "IROperator.h"
 
 namespace Halide {
@@ -76,7 +77,7 @@ private:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const Pipeline *);
+    void visit(const ProducerConsumer *);
     void visit(const For *);
     void visit(const Store *);
     void visit(const Provide *);
@@ -86,7 +87,6 @@ private:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-
 };
 
 template<typename T>
@@ -339,8 +339,8 @@ void IRComparer::visit(const AssertStmt *op) {
     compare_expr(s->message, op->message);
 }
 
-void IRComparer::visit(const Pipeline *op) {
-    const Pipeline *s = stmt.as<Pipeline>();
+void IRComparer::visit(const ProducerConsumer *op) {
+    const ProducerConsumer *s = stmt.as<ProducerConsumer>();
 
     compare_names(s->name, op->name);
     compare_stmt(s->produce, op->produce);
@@ -505,7 +505,7 @@ void ir_equality_test() {
     check_not_equal(x, Variable::make(Int(32), "y"));
 
     // Something that will hang if IREquality has poor computational
-    // complexity.    
+    // complexity.
     Expr e1 = x, e2 = x;
     for (int i = 0; i < 100; i++) {
         e1 = e1*e1 + e1;

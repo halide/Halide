@@ -46,7 +46,7 @@ static void record_gpu_debug(const char *str) {
 }
 
 // Check that there are no live objects remaining, and we created at least one object.
-static int validate_gpu_object_lifetime(bool allow_globals, bool allow_none) {
+static int validate_gpu_object_lifetime(bool allow_globals, bool allow_none, int max_globals) {
     int total = 0;
     for (int i = 0; i < object_type_count; i++) {
         if (object_types[i].live_count != 0 &&
@@ -55,6 +55,12 @@ static int validate_gpu_object_lifetime(bool allow_globals, bool allow_none) {
                    object_types[i].live_count, object_types[i].created);
             return -1;
         }
+        if (object_types[i].is_global && object_types[i].total_created > max_globals) {
+            printf("Error! %d global objects created by %s, max is %d\n",
+                   object_types[i].total_created, object_types[i].created, max_globals);
+            return -1;
+        }
+
         total += object_types[i].total_created;
     }
     if (!allow_none && total == 0) {

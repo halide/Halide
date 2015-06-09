@@ -165,7 +165,9 @@ class VectorizeLoops : public IRMutator {
                     // let, we need to eliminate any use of the vectorized
                     // dimension variable inside the shuffled expression
                     Expr shuffled_expr = op->args[0];
-                    if (expr_uses_var(shuffled_expr,var)) {
+
+                    bool has_scalarized_expr = expr_uses_var(shuffled_expr,var);
+                    if (has_scalarized_expr) {
                         shuffled_expr = scalarize(op);
                     }
 
@@ -213,10 +215,18 @@ class VectorizeLoops : public IRMutator {
                                           op->func, op->value_index, op->image,
                                           op->param);
 
+                    } else if (has_scalarized_expr) {
+                        internal_assert(mutated_width == 1);
+                        // Otherwise, the channel expression is independent of
+                        // the dimension being vectorized, but the shuffled
+                        // expression is not. Scalarize the whole node including
+                        // the independent channel expression.
+                        expr = scalarize(op);
                     } else {
                         internal_assert(mutated_width == 1);
-                        // Otherwise this shuffle_vector is independent of the
-                        // dimension being vectorized.
+                        // Otherwise, both the shuffled expression and the
+                        // channel expressions of this shuffle_vector is
+                        // independent of the dimension being vectorized
                         expr = op;
                     }
 
@@ -284,7 +294,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 // Otherwise create a new Let containing the original value
-                // expression plus the widened expression 
+                // expression plus the widened expression
                 expr = Let::make(op->name, op->value, mutated_body);
 
                 if (was_vectorized) {
@@ -425,12 +435,12 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const For *op) {
-            For::ForType for_type = op->for_type;
-            if (for_type == For::Vectorized) {
+            ForType for_type = op->for_type;
+            if (for_type == ForType::Vectorized) {
                 std::cerr << "Warning: Encountered vector for loop over " << op->name
                           << " inside vector for loop over " << var << "."
                           << " Ignoring the vectorize directive for the inner for loop.\n";
-                for_type = For::Serial;
+                for_type = ForType::Serial;
             }
 
             Expr min = mutate(op->min);
@@ -509,7 +519,7 @@ class VectorizeLoops : public IRMutator {
                 // Hide all the vectors in scope with a scalar version
                 // in the appropriate lane.
                 for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
-                    string name = iter.name() + ".lane." + int_to_string(i);
+                    string name = iter.name() + ".lane." + std::to_string(i);
                     Expr lane = extract_lane(iter.value(), i);
                     new_stmt = substitute(iter.name(), Variable::make(lane.type(), name), new_stmt);
                     new_stmt = LetStmt::make(name, lane, new_stmt);
@@ -557,7 +567,7 @@ class VectorizeLoops : public IRMutator {
                 // Hide all the vector let values in scope with a scalar version
                 // in the appropriate lane.
                 for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
-                    string name = iter.name() + ".lane." + int_to_string(i);
+                    string name = iter.name() + ".lane." + std::to_string(i);
                     Expr lane = extract_lane(iter.value(), i);
                     new_expr = substitute(iter.name(), Variable::make(lane.type(), name), new_expr);
                     new_expr = Let::make(name, lane, new_expr);
@@ -577,7 +587,7 @@ class VectorizeLoops : public IRMutator {
 
             replacement = old_replacement;
             scalarized = false;
-            
+
             return result;
         }
 
@@ -586,14 +596,14 @@ class VectorizeLoops : public IRMutator {
                                        scalarized(false), scalar_lane(0) {
 
             std::ostringstream oss;
-            widening_suffix = ".x" + int_to_string(replacement.type().width);
+            widening_suffix = ".x" + std::to_string(replacement.type().width);
         }
     };
 
     using IRMutator::visit;
 
     void visit(const For *for_loop) {
-        if (for_loop->for_type == For::Vectorized) {
+        if (for_loop->for_type == ForType::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
                 user_error << "Loop over " << for_loop->name

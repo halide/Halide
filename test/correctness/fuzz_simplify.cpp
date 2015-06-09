@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <time.h>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
@@ -142,12 +142,14 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         break;
 
     case 6:
+    {
         // Get a random type that isn't T or int32 (int32 can overflow and we don't care about that).
         Type subT;
         do {
             subT = random_type(T.width);
         } while (subT == T || (subT.is_int() && subT.bits == 32));
         return Cast::make(T, random_expr(subT, depth, overflow_undef));
+    }
 
     default:
         make_bin_op_fn maker;
@@ -257,7 +259,7 @@ int main(int argc, char **argv) {
 
     int max_fuzz_vector_width = 4;
 
-    for (size_t i = 0; i < fuzz_type_count; i++) {
+    for (int i = 0; i < fuzz_type_count; i++) {
         Type T = fuzz_types[i];
         for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
             Type VT = T.vector_of(w);

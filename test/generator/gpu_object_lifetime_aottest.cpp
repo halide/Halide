@@ -1,12 +1,12 @@
 #include <math.h>
 #include <stdio.h>
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
 #include <assert.h>
 
 #if COMPILING_FOR_CUDA
-#include <HalideRuntimeCuda.h>
+#include "HalideRuntimeCuda.h"
 #elif COMPILING_FOR_OPENCL
-#include <HalideRuntimeOpenCL.h>
+#include "HalideRuntimeOpenCL.h"
 #endif
 
 #include "gpu_object_lifetime.h"
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 #endif
     }
 
-    int ret = validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */);
+    int ret = validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
     if (ret != 0) {
         return ret;
     }

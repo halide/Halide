@@ -1,6 +1,8 @@
 #include "IR.h"
+#include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -129,6 +131,33 @@ bool Parameter::is_buffer() const {
     return contents.ptr->is_buffer;
 }
 
+Expr Parameter::get_scalar_expr() const {
+    check_is_scalar();
+    const Type t = type();
+    if (t.is_bool()) {
+      return scalar_to_constant_expr<bool>(get_scalar<bool>());
+    } else if (t.is_float()) {
+      switch (t.bits) {
+        case 32: return scalar_to_constant_expr<float>(get_scalar<float>());
+        case 64: return scalar_to_constant_expr<double>(get_scalar<double>());
+      }
+    } else if (t.is_int()) {
+      switch (t.bits) {
+        case 8: return scalar_to_constant_expr<int8_t>(get_scalar<int8_t>());
+        case 16: return scalar_to_constant_expr<int16_t>(get_scalar<int16_t>());
+        case 32: return scalar_to_constant_expr<int32_t>(get_scalar<int32_t>());
+        case 64: return scalar_to_constant_expr<int64_t>(get_scalar<int64_t>());
+      }
+    } else if (t.is_uint()) {
+      switch (t.bits) {
+        case 8: return scalar_to_constant_expr<uint8_t>(get_scalar<uint8_t>());
+        case 16: return scalar_to_constant_expr<uint16_t>(get_scalar<uint16_t>());
+        case 32: return scalar_to_constant_expr<uint32_t>(get_scalar<uint32_t>());
+        case 64: return scalar_to_constant_expr<uint64_t>(get_scalar<uint64_t>());
+      }
+    }
+    return Expr();
+}
 
 Buffer Parameter::get_buffer() const {
     check_is_buffer();

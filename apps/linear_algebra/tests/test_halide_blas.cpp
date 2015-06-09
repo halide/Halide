@@ -14,102 +14,102 @@
         std::cout << "PASSED\n";                                        \
     }                                                                   \
 
-#define L1_VECTOR_TEST(method, code)                    \
-    bool test_##method(int N) {                         \
-        Scalar alpha = random_scalar();                  \
-        std::unique_ptr<Vector> ex(random_vector(N));    \
-        std::unique_ptr<Vector> ey(random_vector(N));    \
-        Vector ax(*ex), ay(*ey);                        \
-                                                        \
-        {                                               \
-            Scalar *x = &(ex->front());                 \
-            Scalar *y = &(ey->front());                 \
-            cblas_##code;                               \
-        }                                               \
-                                                        \
-        {                                               \
-            Scalar *x = &(ax.front());                  \
-            Scalar *y = &(ay.front());                  \
-            hblas_##code;                               \
-        }                                               \
-                                                        \
-        return compareVectors(N, *ey, ay);              \
+#define L1_VECTOR_TEST(method, code)            \
+    bool test_##method(int N) {                 \
+        Scalar alpha = random_scalar();         \
+        Vector ex(random_vector(N));            \
+        Vector ey(random_vector(N));            \
+        Vector ax(ex), ay(ey);                  \
+                                                \
+        {                                       \
+            Scalar *x = &(ex[0]);               \
+            Scalar *y = &(ey[0]);               \
+            cblas_##code;                       \
+        }                                       \
+                                                \
+        {                                       \
+            Scalar *x = &(ax[0]);               \
+            Scalar *y = &(ay[0]);               \
+            hblas_##code;                       \
+        }                                       \
+                                                \
+        return compareVectors(N, ey, ay);       \
     }
 
-#define L1_SCALAR_TEST(method, code)                    \
-    bool test_##method(int N) {                         \
-        Scalar alpha = random_scalar();                  \
-        std::unique_ptr<Vector> ex(random_vector(N));    \
-        std::unique_ptr<Vector> ey(random_vector(N));    \
-        Vector ax(*ex), ay(*ey);                        \
-        Scalar er, ar;                                  \
-                                                        \
-        {                                               \
-            Scalar *x = &(ex->front());                 \
-            Scalar *y = &(ey->front());                 \
-            er = cblas_##code;                          \
-        }                                               \
-                                                        \
-        {                                               \
-            Scalar *x = &(ax.front());                  \
-            Scalar *y = &(ay.front());                  \
-            ar = hblas_##code;                          \
-        }                                               \
-                                                        \
-        return compareScalars(er, ar);                  \
+#define L1_SCALAR_TEST(method, code)            \
+    bool test_##method(int N) {                 \
+        Scalar alpha = random_scalar();         \
+        Vector ex(random_vector(N));            \
+        Vector ey(random_vector(N));            \
+        Vector ax(ex), ay(ey);                  \
+        Scalar er, ar;                          \
+                                                \
+        {                                       \
+            Scalar *x = &(ex[0]);               \
+            Scalar *y = &(ey[0]);               \
+            er = cblas_##code;                  \
+        }                                       \
+                                                \
+        {                                       \
+            Scalar *x = &(ax[0]);               \
+            Scalar *y = &(ay[0]);               \
+            ar = hblas_##code;                  \
+        }                                       \
+                                                \
+        return compareScalars(er, ar);          \
     }
 
-#define L2_TEST(method, cblas_code, hblas_code)         \
-    bool test_##method(int N) {                         \
-        Scalar alpha = random_scalar();                  \
-        Scalar beta = random_scalar();                   \
-        std::unique_ptr<Vector> ex(random_vector(N));    \
-        std::unique_ptr<Vector> ey(random_vector(N));    \
-        std::unique_ptr<Matrix> eA(random_matrix(N));    \
-        Vector ax(*ex), ay(*ey);                        \
-        Matrix aA(*eA);                                 \
-                                                        \
-        {                                               \
-            Scalar *x = &(ex->front());                 \
-            Scalar *y = &(ey->front());                 \
-            Scalar *A = &(eA->front());                 \
-            cblas_code;                                 \
-        }                                               \
-                                                        \
-        {                                               \
-            Scalar *x = &(ax.front());                  \
-            Scalar *y = &(ay.front());                  \
-            Scalar *A = &(aA.front());                  \
-            hblas_code;                                 \
-        }                                               \
-                                                        \
-        return compareVectors(N, *ey, ay);              \
+#define L2_TEST(method, cblas_code, hblas_code) \
+    bool test_##method(int N) {                 \
+        Scalar alpha = random_scalar();         \
+        Scalar beta = random_scalar();          \
+        Vector ex(random_vector(N));            \
+        Vector ey(random_vector(N));            \
+        Matrix eA(random_matrix(N));            \
+        Vector ax(ex), ay(ey);                  \
+        Matrix aA(eA);                          \
+                                                \
+        {                                       \
+            Scalar *x = &(ex[0]);               \
+            Scalar *y = &(ey[0]);               \
+            Scalar *A = &(eA[0]);               \
+            cblas_code;                         \
+        }                                       \
+                                                \
+        {                                       \
+            Scalar *x = &(ax[0]);               \
+            Scalar *y = &(ay[0]);               \
+            Scalar *A = &(aA[0]);               \
+            hblas_code;                         \
+        }                                       \
+                                                \
+        return compareVectors(N, ey, ay);       \
     }
 
-#define L3_TEST(method, cblas_code, hblas_code)         \
-    bool test_##method(int N) {                         \
-        Scalar alpha = random_scalar();                  \
-        Scalar beta = random_scalar();                   \
-        std::unique_ptr<Matrix> eA(random_matrix(N));    \
-        std::unique_ptr<Matrix> eB(random_matrix(N));    \
-        std::unique_ptr<Matrix> eC(random_matrix(N));    \
-        Matrix aA(*eA), aB(*eB), aC(*eC);               \
-                                                        \
-        {                                               \
-            Scalar *A = &(eA->front());                 \
-            Scalar *B = &(eB->front());                 \
-            Scalar *C = &(eC->front());                 \
-            cblas_code;                                 \
-        }                                               \
-                                                        \
-        {                                               \
-            Scalar *A = &(aA.front());                  \
-            Scalar *B = &(aB.front());                  \
-            Scalar *C = &(aC.front());                  \
-            hblas_code;                                 \
-        }                                               \
-                                                        \
-        return compareMatrices(N, *eC, aC);             \
+#define L3_TEST(method, cblas_code, hblas_code) \
+    bool test_##method(int N) {                 \
+        Scalar alpha = random_scalar();         \
+        Scalar beta = random_scalar();          \
+        Matrix eA(random_matrix(N));            \
+        Matrix eB(random_matrix(N));            \
+        Matrix eC(random_matrix(N));            \
+        Matrix aA(eA), aB(eB), aC(eC);          \
+                                                \
+        {                                       \
+            Scalar *A = &(eA[0]);               \
+            Scalar *B = &(eB[0]);               \
+            Scalar *C = &(eC[0]);               \
+            cblas_code;                         \
+        }                                       \
+                                                \
+        {                                       \
+            Scalar *A = &(aA[0]);               \
+            Scalar *B = &(aB[0]);               \
+            Scalar *C = &(aC[0]);               \
+            hblas_code;                         \
+        }                                       \
+                                                \
+        return compareMatrices(N, eC, aC);      \
     }
 
 
@@ -129,20 +129,18 @@ struct BLASTestBase {
         return uniform_dist(rand_eng);
     }
 
-    Vector *random_vector(int N) {
-        Vector *buff = new Vector(N);
-        Vector &x = *buff;
+    Vector random_vector(int N) {
+        Vector buff(N);
         for (int i=0; i<N; ++i) {
-            x[i] = random_scalar();
+            buff[i] = random_scalar();
         }
         return buff;
     }
 
-    Matrix *random_matrix(int N) {
-        Matrix *buff = new Matrix(N * N);
-        Matrix &A = *buff;
+    Matrix random_matrix(int N) {
+        Matrix buff(N * N);
         for (int i=0; i<N*N; ++i) {
-            A[i] = random_scalar();
+            buff[i] = random_scalar();
         }
         return buff;
     }
@@ -165,7 +163,7 @@ struct BLASTestBase {
             }
 
             if (!equal) {
-                std::cout << "FAIL! expected = " << x << ", actual = " << y << "\n";
+                std::cerr << "FAIL! expected = " << x << ", actual = " << y << "\n";
             }
 
             return equal;
@@ -174,26 +172,28 @@ struct BLASTestBase {
 
     bool compareVectors(int N, const Vector &x, const Vector &y,
                         Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
+        bool equal = true;
         for (int i = 0; i < N; ++i) {
             if (!compareScalars(x[i], y[i], epsilon)) {
                 std::cerr << "Vectors differ at index: " << i << "\n";
-                return false;
+                equal = false;
+                break;
             }
         }
-
-        return true;
+        return equal;
     }
 
-    bool compareMatrices(int N, const Vector &x, const Vector &y,
+    bool compareMatrices(int N, const Matrix &A, const Matrix &B,
                          Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
+        bool equal = true;
         for (int i = 0; i < N*N; ++i) {
-            if (!compareScalars(x[i], y[i], epsilon)) {
+            if (!compareScalars(A[i], A[i], epsilon)) {
                 std::cerr << "Matrices differ at coords: (" << i%N << ", " << i/N << ")\n";
-                return false;
+                equal = false;
+                break;
             }
         }
-
-        return true;
+        return equal;
     }
 };
 
@@ -206,7 +206,11 @@ struct BLASFloatTests : public BLASTestBase<float> {
         RUN_TEST(sasum);
         RUN_TEST(sgemv_notrans);
         RUN_TEST(sgemv_trans);
+        RUN_TEST(sger);
         RUN_TEST(sgemm_notrans);
+        RUN_TEST(sgemm_transA);
+        RUN_TEST(sgemm_transB);
+        RUN_TEST(sgemm_transAB);
     }
 
     L1_VECTOR_TEST(scopy, scopy(N, x, 1, y, 1))
@@ -222,10 +226,22 @@ struct BLASFloatTests : public BLASTestBase<float> {
     L2_TEST(sgemv_trans,
             cblas_sgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
             hblas_sgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
+    L2_TEST(sger,
+            cblas_sger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
+            hblas_sger(HblasColMajor, N, N, alpha, x, 1, y, 1, A, N));
 
     L3_TEST(sgemm_notrans,
             cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
             hblas_sgemm(HblasColMajor, HblasNoTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(sgemm_transA,
+            cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_sgemm(HblasColMajor, HblasTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(sgemm_transB,
+            cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_sgemm(HblasColMajor, HblasNoTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(sgemm_transAB,
+            cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_sgemm(HblasColMajor, HblasTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
 };
 
 struct BLASDoubleTests : public BLASTestBase<double> {
@@ -237,7 +253,11 @@ struct BLASDoubleTests : public BLASTestBase<double> {
         RUN_TEST(dasum);
         RUN_TEST(dgemv_notrans);
         RUN_TEST(dgemv_trans);
+        RUN_TEST(dger);
         RUN_TEST(dgemm_notrans);
+        RUN_TEST(dgemm_transA);
+        RUN_TEST(dgemm_transB);
+        RUN_TEST(dgemm_transAB);
     }
 
     L1_VECTOR_TEST(dcopy, dcopy(N, x, 1, y, 1))
@@ -253,10 +273,22 @@ struct BLASDoubleTests : public BLASTestBase<double> {
     L2_TEST(dgemv_trans,
             cblas_dgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
             hblas_dgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
+    L2_TEST(dger,
+            cblas_dger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
+            hblas_dger(HblasColMajor, N, N, alpha, x, 1, y, 1, A, N));
 
     L3_TEST(dgemm_notrans,
             cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
             hblas_dgemm(HblasColMajor, HblasNoTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(dgemm_transA,
+            cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_dgemm(HblasColMajor, HblasTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(dgemm_transB,
+            cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_dgemm(HblasColMajor, HblasNoTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(dgemm_transAB,
+            cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_dgemm(HblasColMajor, HblasTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
 };
 
 int main(int argc, char *argv[]) {
@@ -272,7 +304,7 @@ int main(int argc, char *argv[]) {
             d.run_tests(size);
         }
     } else {
-        int size = 256;
+        int size = 277;
         std::cout << "Testing halide_blas with N = " << size << ":\n";
         s.run_tests(size);
         d.run_tests(size);

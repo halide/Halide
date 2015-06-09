@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #include <algorithm>
 #include <stdlib.h>
@@ -34,7 +34,9 @@ void test_function(Expr e, Image<T> &cpu_result, Image<T> &gpu_result) {
 
 template <typename T>
 bool test_exact(Expr r, Expr g, Expr b) {
-    Expr e = cast<T>(select(c == 0, r, c == 1, g, b));
+    Expr e = cast<T>(select(c == T(0), r,
+                            c == T(1), g,
+                            b));
     const int W = 256, H = 256;
     Image<T> cpu_result(W, H, 3);
     Image<T> gpu_result(W, H, 3);
@@ -88,35 +90,67 @@ bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
 }
 
 int main() {
-    bool ok = true;
 
-    ok = ok && test_exact<uint8_t>(0, 0, 0);
-    ok = ok && test_exact<uint8_t>(clamp(x + y, 0, 255), 0, 0);
+    int errors = 0;
 
-    ok = ok && test_exact<uint8_t>(
+    if (!test_exact<uint8_t>(0, 0, 0)) {
+        printf("Failed constant value test\n");
+        errors++;
+    }
+    if (!test_exact<uint8_t>(clamp(x + y, 0, 255), 0, 0)) {
+        printf("Failed clamp test\n");
+        errors++;
+    }
+
+    if (!test_exact<uint8_t>(
         max(x, y),
         cast<int>(min(cast<float>(x), cast<float>(y))),
-        clamp(x, 0, 10));
+        clamp(x, 0, 10))) {
+        printf("Failed min/max test\n");
+        errors++;
+    }
+
+    if (!test_exact<float>(trunc(x + 0.25f), trunc(-(x + 0.75f)), 0.0f)) {
+        printf("Failed trunc test\n");
+        errors++;
+    }
 
     // Trigonometric functions in GLSL are fast but not very accurate,
     // especially outside of 0..2pi.
+    // The GLSL ES 1.0 spec does not define the precision of these operations 
+    // so a wide error bound is used in this test.
     Expr r = (256 * x + y) / ceilf(65536.f / (2 * 3.1415926536f));
-    ok = test_approx<float>(sin(r), cos(r), 0, 5e-7);
+    if (!test_approx<float>(sin(r), cos(r), 0, 5e-2)) {
+        errors++;
+        printf("Failed trigonometric test\n");
+    }
 
-    ok = ok && test_exact<uint8_t>(
+    // TODO: the test must account for differences in default rounding behavior
+    // between the CPU and GPU for float <-> integer conversions. In this case
+    // the operation is performed in float in the GLSL shader, and then
+    // converted back to a normalized integer value.
+    if (!test_approx<uint8_t>(
         (x - 127) / 3 + 127,
         (x - 127) % 3 + 127,
-        0);
+        0,
+        1)) {
+        printf("Failed integer operation test\n");
+        errors++;
+    }
 
-    ok = ok && test_exact<uint8_t>(
+    if (!test_exact<uint8_t>(
         lerp(cast<uint8_t>(x), cast<uint8_t>(y), cast<uint8_t>(128)),
         lerp(cast<uint8_t>(x), cast<uint8_t>(y), 0.5f),
-        cast<uint8_t>(lerp(cast<float>(x), cast<float>(y), 0.2f)));
+        cast<uint8_t>(lerp(cast<float>(x), cast<float>(y), 0.2f)))) {
+        printf("Failed lerp test\n");
+        errors++;
+    }
 
-    if (ok) {
+    if (errors == 0) {
         printf("Success!\n");
         return 0;
     } else {
+        printf("FAILED %d tests\n",errors);
         return 1;
     }
 }

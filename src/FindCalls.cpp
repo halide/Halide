@@ -1,4 +1,5 @@
 #include "FindCalls.h"
+#include "IRVisitor.h"
 
 namespace Halide{
 namespace Internal {
@@ -6,6 +7,7 @@ namespace Internal {
 using std::map;
 using std::vector;
 using std::string;
+using std::pair;
 
 /* Find all the internal halide calls in an expr */
 class FindCalls : public IRVisitor {
@@ -46,33 +48,9 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
     }
 
     FindCalls calls;
-    for (size_t i = 0; i < f.values().size(); i++) {
-        f.values()[i].accept(&calls);
-    }
-
-    // Consider updates
-    for (size_t j = 0; j < f.updates().size(); j++) {
-        UpdateDefinition r = f.updates()[j];
-        for (size_t i = 0; i < r.values.size(); i++) {
-            r.values[i].accept(&calls);
-        }
-        for (size_t i = 0; i < r.args.size(); i++) {
-            r.args[i].accept(&calls);
-        }
-
-        ReductionDomain d = r.domain;
-        if (r.domain.defined()) {
-            for (size_t i = 0; i < d.domain().size(); i++) {
-                d.domain()[i].min.accept(&calls);
-                d.domain()[i].extent.accept(&calls);
-            }
-        }
-    }
-
-    // Consider extern calls
+    f.accept(&calls);
     if (f.has_extern_definition()) {
-        for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-            ExternFuncArgument arg = f.extern_arguments()[i];
+        for (ExternFuncArgument arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
                 calls.calls[g.name()] = g;
@@ -85,9 +63,8 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
     } else {
         env[f.name()] = f;
 
-        for (map<string, Function>::const_iterator iter = calls.calls.begin();
-             iter != calls.calls.end(); ++iter) {
-            populate_environment(iter->second, env);
+        for (pair<string, Function> i : calls.calls) {
+            populate_environment(i.second, env);
         }
     }
 }

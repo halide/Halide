@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -7,7 +7,7 @@ struct MultiDevicePipeline {
     Var x, y, c;
     Func stage[4];
     size_t current_stage;
-  
+
     MultiDevicePipeline(Func input) {
         current_stage = 0;
 
@@ -50,7 +50,7 @@ struct MultiDevicePipeline {
         }
         return true;
     }
-};       
+};
 
 int main(int argc, char **argv) {
     Var x, y, c;

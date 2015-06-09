@@ -5,6 +5,7 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_Renderscript_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -14,31 +15,13 @@
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 
-#ifdef _WIN32
-#define NOMINMAX
-#ifdef _WIN64
-#define GPU_LIB_CC
-#else
-#define GPU_LIB_CC __stdcall
-#endif
-#include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
-}
-#else
-#define GPU_LIB_CC
-#include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(NULL, s) != NULL;
-}
-#endif
-
 namespace Halide {
 namespace Internal {
 
 using std::vector;
 using std::string;
 using std::map;
+using std::pair;
 
 using namespace llvm;
 
@@ -120,7 +103,6 @@ private:
     }
 };
 
-
 class GPU_Host_Closure : public Halide::Internal::Closure {
 public:
     GPU_Host_Closure(Stmt s, const std::string &lv, bool skip_gpu_loops=false) : skip_gpu_loops(skip_gpu_loops) {
@@ -138,7 +120,9 @@ protected:
     void visit(const Call *op) {
         if (op->call_type == Call::Intrinsic &&
             (op->name == Call::glsl_texture_load ||
-             op->name == Call::glsl_texture_store)) {
+             op->name == Call::image_load ||
+             op->name == Call::glsl_texture_store ||
+             op->name == Call::image_store)) {
 
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
@@ -154,10 +138,13 @@ protected:
             string bufname = string_imm->value;
             BufferRef &ref = buffers[bufname];
             ref.type = op->type;
+            // TODO: do we need to set ref.dimensions?
 
-            if (op->name == Call::glsl_texture_load) {
+            if (op->name == Call::glsl_texture_load ||
+                op->name == Call::image_load) {
                 ref.read = true;
-            } else if (op->name == Call::glsl_texture_store) {
+            } else if (op->name == Call::glsl_texture_store ||
+                op->name == Call::image_store) {
                 ref.write = true;
             }
 
@@ -178,19 +165,19 @@ protected:
 
 vector<GPU_Argument> GPU_Host_Closure::arguments() {
     vector<GPU_Argument> res;
-    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
-        debug(2) << "var: " << iter->first << "\n";
-        res.push_back(GPU_Argument(iter->first, false, iter->second));
+    for (const pair<string, Type> &i : vars) {
+        debug(2) << "var: " << i.first << "\n";
+        res.push_back(GPU_Argument(i.first, false, i.second, 0));
     }
-    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        debug(2) << "buffer: " << iter->first << " " << iter->second.size;
-        if (iter->second.read) debug(2) << " (read)";
-        if (iter->second.write) debug(2) << " (write)";
+    for (const pair<string, BufferRef> &i : buffers) {
+        debug(2) << "buffer: " << i.first << " " << i.second.size;
+        if (i.second.read) debug(2) << " (read)";
+        if (i.second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        GPU_Argument arg(iter->first, true, iter->second.type, iter->second.size);
-        arg.read = iter->second.read;
-        arg.write = iter->second.write;
+        GPU_Argument arg(i.first, true, i.second.type, i.second.dimensions, i.second.size);
+        arg.read = i.second.read;
+        arg.write = i.second.write;
         res.push_back(arg);
     }
     return res;
@@ -205,224 +192,141 @@ void GPU_Host_Closure::visit(const For *loop) {
     Internal::Closure::visit(loop);
 }
 
-template<typename CodeGen_CPU>
-bool CodeGen_GPU_Host<CodeGen_CPU>::lib_cuda_linked = false;
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
-    CodeGen_CPU(target),
-    cgdev(make_devices(target)) {
-}
-
-template<typename CodeGen_CPU>
-std::map<DeviceAPI, CodeGen_GPU_Dev *> CodeGen_GPU_Host<CodeGen_CPU>::make_devices(Target t)
-{
-    std::map<DeviceAPI, CodeGen_GPU_Dev *> result;
-
-    // For the default GPU, OpenCL is preferred, CUDA next, and OpenGL
-    // last. The code is in reverse order to allow later tests to
-    // override earlier ones. If Metal is specified in the target, it
-    // will be used as the default. (TODO: verify this is a good bet.)
+CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
+    // For the default GPU, OpenCL is preferred, CUDA next, then
+    // Renderscript, and OpenGL last. The code is in reverse order to
+    // allow later tests to override earlier ones. If Metal is
+    // specified in the target, it will be used as the default. (TODO:
+    // verify this is a good bet.)
     DeviceAPI default_api = DeviceAPI::Default_GPU;
-    if (t.has_feature(Target::OpenGL)) {
+    if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
-        result[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(t);
+        cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
         default_api = DeviceAPI::GLSL;
     }
-    if (t.has_feature(Target::CUDA)) {
+    if (target.has_feature(Target::Renderscript)) {
+        debug(1) << "Constructing Renderscript device codegen\n";
+        cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
+        default_api = DeviceAPI::Renderscript;
+    }
+    if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
-        result[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(t);
+        cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
         default_api = DeviceAPI::CUDA;
     }
-    if (t.has_feature(Target::OpenCL)) {
+    if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        result[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(t);
+        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
         default_api = DeviceAPI::OpenCL;
     }
-    if (t.has_feature(Target::Metal)) {
+    if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
-        result[DeviceAPI::Metal] = new CodeGen_Metal_Dev(t);
+        cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
         default_api = DeviceAPI::Metal;
     }
 
-    if (result.empty()) {
-        internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
+    if (cgdev.empty()) {
+        internal_error << "Requested unknown GPU target: " << target.to_string() << "\n";
     } else {
-        result[DeviceAPI::Default_GPU] = result[default_api];
+        cgdev[DeviceAPI::Default_GPU] = cgdev[default_api];
     }
-    return result;
 }
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
-    std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
-    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        if (iter->first != DeviceAPI::Default_GPU) {
-            delete iter->second;
+    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+        if (i.first != DeviceAPI::Default_GPU) {
+            delete i.second;
         }
     }
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
-                                            const vector<Argument> &args,
-                                            const vector<Buffer> &images_to_embed) {
+void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
+    function_name = f.name;
 
-    init_module();
-
-    // also set up the child codegenerator - this is set up once per
-    // PTX_Host::compile, and reused across multiple PTX_Dev::compile
-    // invocations for different kernels.
-    std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
-    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        iter->second->init_module();
+    // Create a new module for all of the kernels we find in this function.
+    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+        i.second->init_module();
     }
 
-    module = get_initial_module_for_target(target, context);
+    // Call the base implementation to create the function.
+    CodeGen_CPU::compile_func(f);
 
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
+    // We need to insert code after the existing entry block, so that
+    // the destructor stack slots exist before we do the assertions
+    // involved in initializing gpu kernels.
 
-        JITModule::make_externs(shared_runtime, module);
-    }
-
-    // Fix the target triple
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = CodeGen_CPU::get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Unset constant flag for embedded image global variables
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
-        string name = images_to_embed[i].name();
-        GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
-        global->setConstant(false);
-    }
-
-
-    // Remember the entry block so we can branch to it upon init success.
+    // Split the entry block just before its end.
     BasicBlock *entry = &function->getEntryBlock();
+    llvm::Instruction *terminator = entry->getTerminator();
+    internal_assert(terminator);
+    BasicBlock *post_entry = entry->splitBasicBlock(terminator);
 
-    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        if (iter->first == DeviceAPI::Default_GPU) {
+    // Create some code that does the GPU initialization.
+    BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels",
+                                                     function, post_entry);
+
+    // The entry block should go to the init kernels block instead of
+    // the post entry block.
+    entry->getTerminator()->eraseFromParent();
+    builder->SetInsertPoint(entry);
+    builder->CreateBr(init_kernels_bb);
+
+    // Fill out the init kernels block
+    builder->SetInsertPoint(init_kernels_bb);
+
+    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+        if (i.first == DeviceAPI::Default_GPU) {
             continue;
         }
-        CodeGen_GPU_Dev *gpu_codegen = iter->second;
+
+        CodeGen_GPU_Dev *gpu_codegen = i.second;
         std::string api_unique_name = gpu_codegen->api_unique_name();
+
+        // If the module state for this API/function did not get created, there were
+        // no kernels using this API.
+        llvm::Value *module_state = get_module_state(api_unique_name, false);
+        if (!module_state) {
+            continue;
+        }
+
         debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
 
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
-        Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_" + api_unique_name + "_kernel_src");
+        Value *kernel_src_ptr =
+            CodeGen_CPU::create_constant_binary_blob(kernel_src,
+                                                     "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
-        // Insert a new block to run initialization at the beginning of the function.
-        BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels" + api_unique_name,
-                                                         function, entry);
-        builder->SetInsertPoint(init_kernels_bb);
+        if (f.args[0].name == "__user_context") {
+            // The user context is first argument of the function.
+            // We retrieve it here so it's available for subsequent calls of
+            // get_user_context().
+            sym_push("__user_context", function->arg_begin());
+        }
+
         Value *user_context = get_user_context();
+        debug(2) << "CodeGen_CPU_Host compile_func user_context:";
+        if (debug::debug_level >= 2) {
+            user_context->dump();
+        }
         Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
-        Value *result = builder->CreateCall4(init, user_context,
-                                             get_module_state(api_unique_name),
-                                             kernel_src_ptr, kernel_size);
+        vector<Value *> init_kernels_args = {user_context, module_state, kernel_src_ptr, kernel_size};
+        Value *result = builder->CreateCall(init, init_kernels_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-        CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + init_kernels_name);
-
-        // Upon success, jump to the previous entry.
-        builder->CreateBr(entry);
-        // Set the entry for the next init block to the init block just generated
-        entry = init_kernels_bb;
+        CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
     }
 
-    // Optimize the module
-    CodeGen::optimize_module();
-}
+    // the init kernels block should branch to the post-entry block
+    builder->CreateBr(post_entry);
 
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module) {
-
-    // Make sure extern cuda calls inside the module point to the
-    // right things. If cuda is already linked in we should be
-    // fine. If not we need to tell llvm to load it.
-    if (target.has_feature(Target::CUDA) && !lib_cuda_linked) {
-        // First check if libCuda has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("cuInit")) {
-            debug(1) << "This program was linked to cuda already\n";
-        } else {
-            debug(1) << "Looking for cuda shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
-            }
-            user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
-        }
-        lib_cuda_linked = true;
-    } else if (target.has_feature(Target::OpenCL)) {
-        // First check if libOpenCL has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("clCreateContext")) {
-            debug(1) << "This program was linked to OpenCL already\n";
-        } else {
-            debug(1) << "Looking for OpenCL shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
-            }
-            user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
-        }
-    } else if (target.has_feature(Target::Metal)) {
-      // TODO: figure this out.
-    } else if (target.has_feature(Target::OpenGL)) {
-        if (target.os == Target::Linux) {
-            if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-                user_assert(error.empty()) << "Could not find libGL.so\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-                user_assert(error.empty()) << "Could not find libX11.so\n";
-            }
-        } else if (target.os == Target::OSX) {
-            if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
-                user_assert(error.empty()) << "Could not find AGL.framework\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
-                user_assert(error.empty()) << "Could not find OpenGL.framework\n";
-            }
-        } else {
-            internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
-        }
-    }
+    function_name = "";
 }
 
 template<typename CodeGen_CPU>
@@ -452,7 +356,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
-        Value *null_float_ptr = ConstantPointerNull::get(CodeGen::f32->getPointerTo());
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32->getPointerTo());
         Value *zero_int32 = codegen(Expr(cast<int>(0)));
 
         Value *gpu_num_padded_attributes  = zero_int32;
@@ -478,8 +382,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // right type
             gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen::f32->getPointerTo());
-
+                                                           CodeGen_LLVM::f32->getPointerTo());
         }
 
         // compute a closure over the state passed into the kernel
@@ -520,8 +423,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         }
 
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
-        user_assert(gpu_codegen != NULL) << "Loop is scheduled on device " << device_api_to_string(loop->device_api) <<
-            " which does not appear in target " << target.to_string() << "\n";
+        user_assert(gpu_codegen != NULL)
+            << "Loop is scheduled on device " << loop->device_api
+            << " which does not appear in target " << target.to_string() << "\n";
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
 
         // get the actual name of the generated kernel for this loop
@@ -536,21 +440,28 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         int num_args = (int)closure_args.size();
 
         // NULL-terminated list
+        llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
         Value *gpu_args_arr =
-            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_args");
+            create_alloca_at_entry(
+                gpu_args_arr_type,
+                num_args+1, false,
+                kernel_name + "_args");
 
         // NULL-terminated list of size_t's
+        llvm::Type *gpu_arg_sizes_arr_type = ArrayType::get(target_size_t_type,
+                                                            num_args+1);
         Value *gpu_arg_sizes_arr =
-            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_arg_sizes");
+            create_alloca_at_entry(
+                gpu_arg_sizes_arr_type,
+                num_args+1, false,
+                kernel_name + "_arg_sizes");
 
+        llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8, num_args+1);
         Value *gpu_arg_is_buffer_arr =
-            create_alloca_at_entry(ArrayType::get(i8, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_arg_is_buffer");
+            create_alloca_at_entry(
+                gpu_arg_is_buffer_arr_type,
+                num_args+1, false,
+                kernel_name + "_arg_is_buffer");
 
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
@@ -581,29 +492,66 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // store a void * pointer to the argument into the gpu_args_arr
             Value *bits = builder->CreateBitCast(ptr, arg_t);
             builder->CreateStore(bits,
-                                 builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_args_arr_type,
+#endif
+                                    gpu_args_arr,
+                                    0,
+                                    i));
 
             // store the size of the argument
             int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
-                                 builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_arg_sizes_arr_type,
+#endif
+                                    gpu_arg_sizes_arr,
+                                    0,
+                                    i));
 
             builder->CreateStore(ConstantInt::get(i8, closure_args[i].is_buffer),
-                                 builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, i));
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_arg_is_buffer_arr_type,
+#endif
+                                    gpu_arg_is_buffer_arr,
+                                    0,
+                                    i));
         }
         // NULL-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
-                             builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_args_arr_type,
+#endif
+                                gpu_args_arr,
+                                0,
+                                num_args));
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
-                             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_arg_sizes_arr_type,
+#endif
+                                gpu_arg_sizes_arr,
+                                0,
+                                num_args));
         builder->CreateStore(ConstantInt::get(i8, 0),
-                             builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, num_args));
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_arg_is_buffer_arr_type,
+#endif
+                                gpu_arg_is_buffer_arr,
+                                0,
+                                num_args));
 
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
+        debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),
@@ -611,9 +559,30 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_blocks[0]), codegen(bounds.num_blocks[1]), codegen(bounds.num_blocks[2]),
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
-            builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref" + api_unique_name),
-            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref" + api_unique_name),
-            builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, 0, "gpu_arg_is_buffer_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_arg_sizes_arr_type,
+#endif
+                gpu_arg_sizes_arr,
+                0,
+                0,
+                "gpu_arg_sizes_ar_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_args_arr_type,
+#endif
+                gpu_args_arr,
+                0,
+                0,
+                "gpu_args_arr_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_arg_is_buffer_arr_type,
+#endif
+                gpu_arg_is_buffer_arr,
+                0,
+                0,
+                "gpu_arg_is_buffer_ref" + api_unique_name),
             gpu_num_padded_attributes,
             gpu_vertex_buffer,
             gpu_num_coords_dim0,
@@ -624,31 +593,76 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-        CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + run_fn_name);
+        CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
     } else {
         CodeGen_CPU::visit(loop);
     }
 }
 
 template<typename CodeGen_CPU>
-Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name) {
-    GlobalVariable *module_state = module->getGlobalVariable("module_state" + api_unique_name, true);
-    if (!module_state)
+Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name,
+                                                       bool create) {
+    std::string name = "module_state_" + function_name + "_" + api_unique_name;
+    GlobalVariable *module_state = module->getGlobalVariable(name, true);
+    if (!module_state && create)
     {
         // Create a global variable to hold the module state
         PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
         module_state = new GlobalVariable(*module, void_ptr_type,
                                           false, GlobalVariable::InternalLinkage,
                                           ConstantPointerNull::get(void_ptr_type),
-                                          "module_state" + api_unique_name);
+                                          name);
         debug(4) << "Created device module state global variable\n";
     }
 
     return module_state;
 }
 
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
+    CodeGen_CPU::visit(op);
+    if (op->name == "halide_device_malloc" || op->name == "halide_copy_to_device") {
+        // Register a destructor for this buffer if this is the first
+        // device_malloc or copy_to_device for it.
+        internal_assert(op->args.size() == 2);
+        const Variable *buf_var = op->args[0].as<Variable>();
+        internal_assert(buf_var);
+        const string &buf_name = buf_var->name;
+        // Put the destructor in the symbol table as
+        // func_name.buffer_gpu_destructor.
+        internal_assert(ends_with(buf_name, ".buffer"));
+        string destructor_name = buf_name + "_gpu_destructor";
 
-// Force template instantiation for x86 and arm.
+        // We may already have a destructor for this allocation, if
+        // this is one of many copy_to_device calls.
+        if (!sym_exists(destructor_name)) {
+            llvm::Value *buf = sym_get(buf_name);
+            // Register a destructor that frees the device allocation.
+            llvm::Instruction *destructor =
+                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf);
+            sym_push(destructor_name, destructor);
+        }
+    }
+}
+
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
+    CodeGen_CPU::visit(op);
+
+    // Also free gpu memory by triggering the destructor
+    string destructor_name = op->name + ".buffer_gpu_destructor";
+    if (sym_exists(destructor_name)) {
+        Value *d = sym_get(destructor_name);
+        Instruction *inst = llvm::dyn_cast<Instruction>(d);
+        internal_assert(inst);
+        builder->Insert(inst->clone());
+        sym_pop(destructor_name);
+    }
+}
+
+
+
+// Force template instantiation.
 #ifdef WITH_X86
 template class CodeGen_GPU_Host<CodeGen_X86>;
 #endif

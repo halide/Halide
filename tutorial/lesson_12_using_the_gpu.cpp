@@ -8,14 +8,14 @@
 // Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 using namespace Halide;
 
@@ -31,12 +31,12 @@ Var x, y, c, i;
 // We're going to want to schedule a pipeline in several ways, so we
 // define the pipeline in a class so that we can recreate it several
 // times with different schedules.
-class Pipeline {
+class MyPipeline {
 public:
     Func lut, padded, padded16, sharpen, curved;
     Image<uint8_t> input;
 
-    Pipeline(Image<uint8_t> in) : input(in) {
+    MyPipeline(Image<uint8_t> in) : input(in) {
         // For this lesson, we'll use a two-stage pipeline that sharpens
         // and then applies a look-up-table (LUT).
 
@@ -197,7 +197,7 @@ public:
     }
 
     void test_performance() {
-        // Test the performance of the scheduled Pipeline.
+        // Test the performance of the scheduled MyPipeline.
 
         // If we realize curved into a Halide::Image, that will
         // unfairly penalize GPU performance by including a GPU->CPU
@@ -268,14 +268,14 @@ int main(int argc, char **argv) {
     Image<uint8_t> reference_output(input.width(), input.height(), input.channels());
 
     printf("Testing performance on CPU:\n");
-    Pipeline p1(input);
+    MyPipeline p1(input);
     p1.schedule_for_cpu();
     p1.test_performance();
     p1.curved.realize(reference_output);
 
     if (have_opencl()) {
         printf("Testing performance on GPU:\n");
-        Pipeline p2(input);
+        MyPipeline p2(input);
         p2.schedule_for_gpu();
         p2.test_performance();
         p2.test_correctness(reference_output);

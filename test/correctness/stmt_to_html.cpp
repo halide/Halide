@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #ifndef _MSC_VER
 #include <unistd.h>
@@ -27,7 +27,7 @@ int main() {
 
 
     const char *result_file_1 = "stmt_to_html_dump_1.html";
-    gradient_fast.compile_to_simplified_lowered_stmt(result_file_1, 800, 600, Halide::HTML);
+    gradient_fast.compile_to_lowered_stmt(result_file_1, {}, Halide::HTML);
 
     #ifndef _MSC_VER
     assert(access(result_file_1, F_OK) == 0 && "Output file not created.");
@@ -36,7 +36,7 @@ int main() {
     // Also check using an image.
     const char *result_file_2 = "stmt_to_html_dump_2.html";
     Image<int> im(800, 600);
-    gradient_fast.compile_to_simplified_lowered_stmt(result_file_2, im, Halide::HTML);
+    gradient_fast.compile_to_lowered_stmt(result_file_2, {im}, Halide::HTML);
 
     #ifndef _MSC_VER
     assert(access(result_file_2, F_OK) == 0 && "Output file not created.");
@@ -46,7 +46,7 @@ int main() {
     const char *result_file_3 = "stmt_to_html_dump_3.html";
     Func tuple_func;
     tuple_func(x, y) = Tuple(x, y);
-    tuple_func.compile_to_simplified_lowered_stmt(result_file_3, 800, 600, Halide::HTML);
+    tuple_func.compile_to_lowered_stmt(result_file_3, {}, Halide::HTML);
 
     #ifndef _MSC_VER
     assert(access(result_file_2, F_OK) == 0 && "Output file not created.");

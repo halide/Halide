@@ -7,8 +7,8 @@
 #include <stdlib.h>
 
 #include "halide_generated.h"
-#include <HalideRuntime.h>
-#include <HalideRuntimeOpenCL.h>
+#include "HalideRuntime.h"
+#include "HalideRuntimeOpenCL.h"
 
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
@@ -31,7 +31,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
 
     const int w = j_w, h = j_h;
 
-    halide_start_clock();
+    halide_start_clock(NULL);
     halide_set_error_handler(handler);
 
     unsigned char *src = (unsigned char *)env->GetByteArrayElements(jSrc, NULL);
@@ -39,6 +39,9 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         LOGD("src is null\n");
         return;
     }
+
+    LOGD("[output window size] j_w = %d, j_h = %d", j_w, j_h);
+    LOGD("[src array length] jSrc.length = %d", env->GetArrayLength(jSrc));
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, surf);
     ANativeWindow_acquire(win);
@@ -65,7 +68,9 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
     uint8_t *dst = (uint8_t *)buf.bits;
 
     // If we're using opencl, use the gpu backend for it.
+#if COMPILING_FOR_OPENCL
     halide_opencl_set_device_type("gpu");
+#endif
 
     // Make these static so that we can reuse device allocations across frames.
     static buffer_t srcBuf = {0};

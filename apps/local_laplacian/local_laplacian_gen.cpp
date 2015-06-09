@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 using namespace Halide;
 
 Var x, y;
@@ -29,7 +29,9 @@ int main(int argc, char **argv) {
     /* THE ALGORITHM */
 
     // Number of pyramid levels
-    const int J = 8;
+    int J = 8;
+    if (argc > 1) J = atoi(argv[1]);
+    const int maxJ = 20;
 
     // number of intensity levels
     Param<int> levels;
@@ -46,20 +48,19 @@ int main(int argc, char **argv) {
     Expr fx = cast<float>(x) / 256.0f;
     remap(x) = alpha*fx*exp(-fx*fx/2.0f);
 
+    // Set a boundary condition
+    Func clamped = BoundaryConditions::repeat_edge(input);
+
     // Convert to floating point
     Func floating;
-    floating(x, y, c) = cast<float>(input(x, y, c)) / 65535.0f;
-
-    // Set a boundary condition
-    Func clamped;
-    clamped(x, y, c) = floating(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    floating(x, y, c) = clamped(x, y, c) / 65535.0f;
 
     // Get the luminance channel
     Func gray;
-    gray(x, y) = 0.299f * clamped(x, y, 0) + 0.587f * clamped(x, y, 1) + 0.114f * clamped(x, y, 2);
+    gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
     // Make the processed Gaussian pyramid.
-    Func gPyramid[J];
+    Func gPyramid[maxJ];
     // Do a lookup into a lut with 256 entires per intensity level
     Expr level = k * (1.0f / (levels - 1));
     Expr idx = gray(x, y)*cast<float>(levels-1)*256.0f;
@@ -70,21 +71,21 @@ int main(int argc, char **argv) {
     }
 
     // Get its laplacian pyramid
-    Func lPyramid[J];
+    Func lPyramid[maxJ];
     lPyramid[J-1](x, y, k) = gPyramid[J-1](x, y, k);
     for (int j = J-2; j >= 0; j--) {
         lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j+1])(x, y, k);
     }
 
     // Make the Gaussian pyramid of the input
-    Func inGPyramid[J];
+    Func inGPyramid[maxJ];
     inGPyramid[0](x, y) = gray(x, y);
     for (int j = 1; j < J; j++) {
         inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
     }
 
     // Make the laplacian pyramid of the output
-    Func outLPyramid[J];
+    Func outLPyramid[maxJ];
     for (int j = 0; j < J; j++) {
         // Split input pyramid value into integer and floating parts
         Expr level = inGPyramid[j](x, y) * cast<float>(levels-1);
@@ -95,7 +96,7 @@ int main(int argc, char **argv) {
     }
 
     // Make the Gaussian pyramid of the output
-    Func outGPyramid[J];
+    Func outGPyramid[maxJ];
     outGPyramid[J-1](x, y) = outLPyramid[J-1](x, y);
     for (int j = J-2; j >= 0; j--) {
         outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
@@ -104,7 +105,7 @@ int main(int argc, char **argv) {
     // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
     Func color;
     float eps = 0.01f;
-    color(x, y, c) = outGPyramid[0](x, y) * (clamped(x, y, c)+eps) / (gray(x, y)+eps);
+    color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c)+eps) / (gray(x, y)+eps);
 
     Func output("local_laplacian");
     // Convert back to 16-bit
@@ -118,36 +119,42 @@ int main(int argc, char **argv) {
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
         // gpu schedule
-        output.compute_root().gpu_tile(x, y, 16, 8, Device_Default_GPU);
+        output.compute_root().gpu_tile(x, y, 16, 8, DeviceAPI::Default_GPU);
         for (int j = 0; j < J; j++) {
             int blockw = 16, blockh = 8;
             if (j > 3) {
                 blockw = 2;
                 blockh = 2;
             }
-            if (j > 0) inGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, Device_Default_GPU);
-            if (j > 0) gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, blockw, blockh, Device_Default_GPU);
-            outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, Device_Default_GPU);
+            if (j > 0) {
+                inGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, DeviceAPI::Default_GPU);
+                gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, blockw, blockh, DeviceAPI::Default_GPU);
+            }
+            outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, DeviceAPI::Default_GPU);
         }
     } else {
         // cpu schedule
         Var yi;
-        output.parallel(y, 4).vectorize(x, 8);
-        gray.compute_root().parallel(y, 4).vectorize(x, 8);
+        output.parallel(y, 32).vectorize(x, 8);
+        gray.compute_root().parallel(y, 32).vectorize(x, 8);
         for (int j = 0; j < 4; j++) {
-            if (j > 0) inGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
-            if (j > 0) gPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
-            outGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
+            if (j > 0) {
+                inGPyramid[j]
+                    .compute_root().parallel(y, 32).vectorize(x, 8);
+                gPyramid[j]
+                    .compute_root().reorder_storage(x, k, y)
+                    .reorder(k, y).parallel(y, 8).vectorize(x, 8);
+            }
+            outGPyramid[j].compute_root().parallel(y, 32).vectorize(x, 8);
         }
         for (int j = 4; j < J; j++) {
-            inGPyramid[j].compute_root().parallel(y);
+            inGPyramid[j].compute_root();
             gPyramid[j].compute_root().parallel(k);
-            outGPyramid[j].compute_root().parallel(y);
+            outGPyramid[j].compute_root();
         }
     }
 
-    output.compile_to_file("local_laplacian", levels, alpha, beta, input, target);
+    output.compile_to_file("local_laplacian", {levels, alpha, beta, input}, target);
 
     return 0;
 }
-

@@ -43,6 +43,7 @@ typedef void GLvoid;
 #define GL_RGB 0x1907
 #define GL_RGBA 0x1908
 #define GL_LUMINANCE 0x1909
+#define GL_LUMINANCE_ALPHA 0x190A
 #define GL_VERSION 0x1F02
 #define GL_EXTENSIONS 0x1F03
 #define GL_NEAREST 0x2600
@@ -109,6 +110,8 @@ typedef void (*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const GLvoid
 #define GL_COMPILE_STATUS 0x8B81
 #define GL_LINK_STATUS 0x8B82
 #define GL_INFO_LOG_LENGTH 0x8B84
+#define GL_IMPLEMENTATION_COLOR_READ_FORMAT 0x8B9B
+#define GL_IMPLEMENTATION_COLOR_READ_TYPE 0x8B9A
 
 typedef void (*PFNGLATTACHSHADERPROC) (GLuint program, GLuint shader);
 typedef void (*PFNGLCOMPILESHADERPROC) (GLuint shader);

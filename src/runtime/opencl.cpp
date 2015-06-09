@@ -1,7 +1,6 @@
 #include "runtime_internal.h"
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
-#include "../buffer_t.h"
 #include "HalideRuntimeOpenCL.h"
 
 #include "mini_cl.h"
@@ -17,15 +16,9 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
 // An OpenCL context/queue/synchronization lock defined in
 // this module with weak linkage
-cl_context WEAK weak_cl_ctx = 0;
-cl_command_queue WEAK weak_cl_q = 0;
-volatile int WEAK weak_cl_lock = 0;
-
-// In the non-JIT case, the context is stored in the weak globals above.
-// JIT modules will call halide_opencl_set_context, changing the pointers below.
-cl_context WEAK *cl_ctx_ptr = NULL;
-cl_command_queue WEAK *cl_q_ptr = NULL;
-volatile int WEAK *cl_lock_ptr = NULL;
+cl_context WEAK context = 0;
+cl_command_queue WEAK command_queue = 0;
+volatile int WEAK thread_lock = 0;
 
 WEAK char platform_name[256];
 WEAK int platform_name_lock = 0;
@@ -93,12 +86,6 @@ WEAK const char *halide_opencl_get_device_type(void *user_context) {
     return device_type;
 }
 
-WEAK void halide_opencl_set_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
-    cl_ctx_ptr = ctx_ptr;
-    cl_q_ptr = q_ptr;
-    cl_lock_ptr = lock_ptr;
-}
-
 // The default implementation of halide_acquire_cl_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
@@ -114,34 +101,27 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     halide_assert(user_context, ctx != NULL);
     halide_assert(user_context, q != NULL);
 
-    // If the context pointers aren't hooked up, use our weak globals.
-    if (cl_ctx_ptr == NULL) {
-        cl_ctx_ptr = &weak_cl_ctx;
-        cl_q_ptr = &weak_cl_q;
-        cl_lock_ptr = &weak_cl_lock;
-    }
-
-    halide_assert(user_context, cl_lock_ptr != NULL);
-    while (__sync_lock_test_and_set(cl_lock_ptr, 1)) { }
+    halide_assert(user_context, &thread_lock != NULL);
+    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
     // If the context has not been initialized, initialize it now.
-    halide_assert(user_context, cl_ctx_ptr != NULL);
-    halide_assert(user_context, cl_q_ptr != NULL);
-    if (!(*cl_ctx_ptr) && create) {
-        cl_int error = create_opencl_context(user_context, cl_ctx_ptr, cl_q_ptr);
+    halide_assert(user_context, &context != NULL);
+    halide_assert(user_context, &command_queue != NULL);
+    if (!context && create) {
+        cl_int error = create_opencl_context(user_context, &context, &command_queue);
         if (error != CL_SUCCESS) {
-            __sync_lock_release(cl_lock_ptr);
+            __sync_lock_release(&thread_lock);
             return error;
         }
     }
 
-    *ctx = *cl_ctx_ptr;
-    *q = *cl_q_ptr;
+    *ctx = context;
+    *q = command_queue;
     return 0;
 }
 
 WEAK int halide_release_cl_context(void *user_context) {
-    __sync_lock_release(cl_lock_ptr);
+    __sync_lock_release(&thread_lock);
     return 0;
 }
 
@@ -202,8 +182,8 @@ WEAK bool validate_device_pointer(void *user_context, buffer_t* buf, size_t size
     }
 
     debug(user_context) << "CL: validate " << (void *)dev_ptr
-                        << ": asked for " << size
-                        << ", actual allocated " << real_size << "\n";
+                        << ": asked for " << (uint64_t)size
+                        << ", actual allocated " << (uint64_t)real_size << "\n";
 
     if (size) {
         halide_assert(user_context, real_size >= size && "Validating pointer with insufficient size");
@@ -229,7 +209,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     err = clGetPlatformIDs(max_platforms, platforms, &platform_count);
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clGetPlatformIDs failed: "
-                            << get_opencl_error_name(err);
+                            << get_opencl_error_name(err) << " " << err;
         return err;
     }
 
@@ -278,14 +258,14 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     // Get the types of devices requested.
     cl_device_type device_type = 0;
     const char * dev_type = halide_opencl_get_device_type(user_context);
-    if (dev_type != NULL) {
-        if (strstr("cpu", dev_type)) {
+    if (dev_type != NULL && *dev_type != '\0') {
+        if (strstr(dev_type, "cpu")) {
             device_type |= CL_DEVICE_TYPE_CPU;
         }
-        if (strstr("gpu", dev_type)) {
+        if (strstr(dev_type, "gpu")) {
             device_type |= CL_DEVICE_TYPE_GPU;
         }
-        if (strstr("acc", dev_type)) {
+        if (strstr(dev_type, "acc")) {
             device_type |= CL_DEVICE_TYPE_ACCELERATOR;
         }
     }
@@ -370,12 +350,12 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         << "      max mem alloc size: " << max_mem_alloc_size/(1024*1024) << " MB\n"
         << "      local mem size: " << local_mem_size << "\n"
         << "      max compute units: " << max_compute_units << "\n"
-        << "      max workgroup size: " << max_work_group_size << "\n"
+        << "      max workgroup size: " << (uint64_t)max_work_group_size << "\n"
         << "      max work item dimensions: " << max_work_item_dimensions << "\n"
-        << "      max work item sizes: " << max_work_item_sizes[0]
-        << "x" << max_work_item_sizes[1]
-        << "x" << max_work_item_sizes[2]
-        << "x" << max_work_item_sizes[3] << "\n";
+        << "      max work item sizes: " << (uint64_t)max_work_item_sizes[0]
+        << "x" << (uint64_t)max_work_item_sizes[1]
+        << "x" << (uint64_t)max_work_item_sizes[2]
+        << "x" << (uint64_t)max_work_item_sizes[3] << "\n";
     #endif
 
 
@@ -628,16 +608,16 @@ WEAK int halide_opencl_device_release(void *user_context) {
         }
 
         // Release the context itself, if we created it.
-        if (ctx == weak_cl_ctx) {
-            debug(user_context) << "    clReleaseCommandQueue " << weak_cl_q << "\n";
-            err = clReleaseCommandQueue(weak_cl_q);
+        if (ctx == context) {
+            debug(user_context) << "    clReleaseCommandQueue " << command_queue << "\n";
+            err = clReleaseCommandQueue(command_queue);
             halide_assert(user_context, err == CL_SUCCESS);
-            weak_cl_q = NULL;
+            command_queue = NULL;
 
-            debug(user_context) << "    clReleaseContext " << weak_cl_ctx << "\n";
-            err = clReleaseContext(weak_cl_ctx);
+            debug(user_context) << "    clReleaseContext " << context << "\n";
+            err = clReleaseContext(context);
             halide_assert(user_context, err == CL_SUCCESS);
-            weak_cl_ctx = NULL;
+            context = NULL;
         }
     }
 
@@ -666,7 +646,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
 
     debug(user_context)
-        << "    Allocating buffer of " << size << " bytes,"
+        << "    Allocating buffer of " << (int)size << " bytes,"
         << " extents: " << buf->extent[0] << "x" << buf->extent[1] << "x" << buf->extent[2] << "x" << buf->extent[3]
         << " strides: " << buf->stride[0] << "x" << buf->stride[1] << "x" << buf->stride[2] << "x" << buf->stride[3]
         << " (" << buf->elem_size << " bytes per element)\n";
@@ -676,7 +656,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     #endif
 
     cl_int err;
-    debug(user_context) << "    clCreateBuffer -> " << size << " ";
+    debug(user_context) << "    clCreateBuffer -> " << (int)size << " ";
     cl_mem dev_ptr = clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
     if (err != CL_SUCCESS || dev_ptr == 0) {
         debug(user_context) << get_opencl_error_name(err) << "\n";
@@ -745,7 +725,7 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
             debug(user_context)
                 << "    clEnqueueWriteBufferRect ((" << z << ", " << w << "), "
                 << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
-                << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+                << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
                 << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
             cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
@@ -835,7 +815,7 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
             debug(user_context)
                 << "    clEnqueueReadBufferRect ((" << z << ", " << w << "), "
                 << "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
-                << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+                << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
                 << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
             cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
@@ -948,7 +928,7 @@ WEAK int halide_opencl_run(void *user_context,
     int i = 0;
     while (arg_sizes[i] != 0) {
         debug(user_context) << "    clSetKernelArg " << i
-                            << " " << arg_sizes[i]
+                            << " " << (int)arg_sizes[i]
                             << " [" << (*((void **)args[i])) << " ...] "
                             << arg_is_buffer[i] << "\n";
         void *this_arg = args[i];
