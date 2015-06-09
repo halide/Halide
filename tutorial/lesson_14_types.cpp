@@ -65,21 +65,21 @@ int main(int argc, char **argv) {
         // representing a Var has type Int(32):
         Var x;
         assert(Expr(x).type() == Int(32));
-        
+
         // Most transcendental functions in Halide cast their inputs to a
         // Float(32) and return a Float(32):
         assert(sin(x).type() == Float(32));
         
         // You can cast an Expr from one Type to another using the cast operator:
-        assert(cast(UInt(8), x).type() == UInt(8));
-        
+        assert(cast(UInt(8), x).type() == UInt(8));       
+
         // This also comes in a template form that takes a C++ type.
-        assert(cast<uint8_t>(x).type() == UInt(8));
+        assert(cast<uint8_t>(x).type() == UInt(8));       
         
         // You can also query any defined Func for the types it produces.
         Func f1;
         f1(x) = cast<uint8_t>(x);
-        assert(f.output_types()[0] == UInt(8));
+        assert(f1.output_types()[0] == UInt(8));
         
         Func f2;        
         f2(x) = {x, sin(x)};
@@ -90,10 +90,10 @@ int main(int argc, char **argv) {
     
     // Type promotion rules.
     {
-        // When you combine Exprs of different types (e.g. using '+', '*',
-        // etc), Halide uses a system of type promotion rules. These
-        // differ to C's rules. To test these we'll make some Exprs of
-        // each type.
+        // When you combine Exprs of different types (e.g. using '+',
+        // '*', etc), Halide uses a system of type promotion
+        // rules. These differ to C's rules. To demonstrate these
+        // we'll make some Exprs of each type.
         Var x;
         Expr u8 = cast<uint8_t>(x);
         Expr u16 = cast<uint16_t>(x);
@@ -113,10 +113,10 @@ int main(int argc, char **argv) {
         
         // 2) If the types are the same, then no type conversions occur.
         for (Type t : valid_halide_types) {
-            // (It is not legal to cast or perform arithmetic on the Handle type)
+            // Skip the handle type.
             if (t.is_handle()) continue;
-            Expr e = cast(t, x) + cast(t, x);
-            assert(e.type() == t);
+            Expr e = cast(t, x);
+            assert((e + e).type() == e.type());
         }
         
         // 3) If one type is a float but the other is not, then the
@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
         // When a signed type is explicitly converted to a wider unsigned
         // type with the cast operator (the type promotion rules will
         // never do this automatically), it is first converted to the
-        // wider unsigned type (sign-extended), and then reinterpreted as
+        // wider signed type (sign-extended), and then reinterpreted as
         // an unsigned integer. I.e. casting the Int(8) value -1 to a
         // UInt(16) produces 65535, not 255.
         uint16_t result16 = evaluate<uint16_t>(cast<uint16_t>(cast<int8_t>(-1)));
@@ -218,12 +218,13 @@ Expr average(Expr a, Expr b) {
 
     // For floating point types:
     if (a.type().is_float()) {
-        // The '2' will be promoted to the floating point type.
+        // The '2' will be promoted to the floating point type due to
+        // rule 3 above.
         return (a + b)/2;
     }
 
     // For integer types, we must compute the intermediate value in a
-    // wider bit width to avoid overflow.
+    // wider type to avoid overflow.
     Type narrow = a.type();
     Type wider = narrow;
     wider.bits *= 2;
