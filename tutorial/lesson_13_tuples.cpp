@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     Func multi_valued;
     multi_valued(x, y) = Tuple(x + y, sin(x * y));
 
-    // Realizing a multi_valued Func returns a collection of
+    // Realizing a tuple-valued Func returns a collection of
     // Buffers. We call this a Realization. It's equivalent to a
     // std::vector of Buffer/Image objects:
     {
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     }
 
     // When compiling ahead-of-time, a Tuple-valued Func evaluates
-    // into multiple distinct output buffer_t objects. These appear in
+    // into multiple distinct output buffer_t structs. These appear in
     // order at the end of the function signature:
     // int multi_valued(...input buffers and params..., buffer_t *output_1, buffer_t *output_2);
     
@@ -132,8 +132,8 @@ int main(int argc, char **argv) {
 
     // Tuple reductions.
     {
-        // Tuples are particularly convenient in a reduction, as they
-        // allow the reduction to maintain complex state as it walks along
+        // Tuples are particularly useful in reductions, as they allow
+        // the reduction to maintain complex state as it walks along
         // its domain. The simplest example is an argmax.
         
         // First we create an Image to take the argmax over.
@@ -164,9 +164,10 @@ int main(int argc, char **argv) {
             float old_max = arg_max_1;
             int new_index = old_max > input(r) ? r : old_index;
             float new_max = std::max(input(r), old_max);
-            // All computation is done before any stores, so that all
-            // Tuple elements are updated atomically with respect to
-            // recursive calls to the same Func.
+            // In a tuple update definition, all loads and computation
+            // are done before any stores, so that all Tuple elements
+            // are updated atomically with respect to recursive calls
+            // to the same Func.
             arg_max_0 = new_index;
             arg_max_1 = new_max;
         }
@@ -182,28 +183,29 @@ int main(int argc, char **argv) {
         }
         
         // Halide provides argmax and argmin as built-in reductions
-        // similar to sum, product, maximum, and minimum. They return a
-        // Tuple consisting of the point in the reduction domain
-        // corresponding to that value, and the value itself. In the case
-        // of ties they return the first value found.
+        // similar to sum, product, maximum, and minimum. They return
+        // a Tuple consisting of the point in the reduction domain
+        // corresponding to that value, and the value itself. In the
+        // case of ties they return the first value found. We'll use
+        // one of these in the following section.
     }
 
     // Tuples for user-defined types.
     {
-        // Tuples can also be a way to represent compound objects such as
-        // complex numbers. Defining an object that can be converted to
-        // and from a Tuple is one way to extend Halide's type system with
-        // user-defined types.
+        // Tuples can also be a convenient way to represent compound
+        // objects such as complex numbers. Defining an object that
+        // can be converted to and from a Tuple is one way to extend
+        // Halide's type system with user-defined types.
         struct Complex {
             Expr real, imag;
             
             // Construct from a Tuple
             Complex(Tuple t) : real(t[0]), imag(t[1]) {}
 
-            // Construct from a pair of Exprs.
+            // Construct from a pair of Exprs
             Complex(Expr r, Expr i) : real(r), imag(i) {}
 
-            // Construct from a call to a Func by treating it as a Tuple.
+            // Construct from a call to a Func by treating it as a Tuple
             Complex(FuncRefExpr t) : Complex(Tuple(t)) {}
             Complex(FuncRefVar t) : Complex(Tuple(t)) {}
             
@@ -223,11 +225,13 @@ int main(int argc, char **argv) {
                         real * other.imag + imag * other.real};
             }
 
+            // Complex magnitude
             Expr magnitude() const {
                 return real * real + imag * imag;                
             }
             
-            // Other complex operators would go here.
+            // Other complex operators would go here. The above are
+            // sufficient for this example.
         };
         
         // Let's use the Complex struct to compute a Mandelbrot set.
@@ -250,17 +254,19 @@ int main(int argc, char **argv) {
         mandelbrot(x, y, r) = current*current + initial; 
 
         // We'll use another tuple reduction to compute the iteration
-        // number where the value first escaped a circle of radius 4.
+        // number where the value first escapes a circle of radius 4.
         // This can be expressed as an argmin of a boolean - we want
         // the index of the first time the given boolean expression is
-        // false (we consider false to be less than true).
+        // false (we consider false to be less than true).  The argmax
+        // would return the index of the first time the expression is
+        // true.
 
         Expr escape_condition = Complex(mandelbrot(x, y, r)).magnitude() < 16.0f;
         Tuple first_escape = argmin(escape_condition);
         
         // We only want the index, not the value, but argmin returns
-        // both, so we'll index the argmin expression using square
-        // brackets.
+        // both, so we'll index the argmin Tuple expression using
+        // square brackets to get the Expr representing the index.
         Func escape;
         escape(x, y) = first_escape[0];
 
