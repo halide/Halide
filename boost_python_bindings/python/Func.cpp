@@ -51,9 +51,9 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_bitcode0_overloads, func_compile
 
 
 void func_compile_to_c0(h::Func &that, const std::string &filename,
-                              const std::vector<h::Argument> &args,
-                              const std::string fn_name = "",
-                              const h::Target &target = h::get_target_from_environment())
+                        const std::vector<h::Argument> &args,
+                        const std::string fn_name = "",
+                        const h::Target &target = h::get_target_from_environment())
 {
     that.compile_to_c(filename, args, fn_name, target);
     return;
@@ -63,8 +63,8 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_c0_overloads, func_compile_to_c0
 
 
 void func_compile_to_file0(h::Func &that, const std::string &filename_prefix,
-                              const std::vector<h::Argument> &args,
-                              const h::Target &target = h::get_target_from_environment())
+                           const std::vector<h::Argument> &args,
+                           const h::Target &target = h::get_target_from_environment())
 {
     that.compile_to_file(filename_prefix, args, target);
     return;
@@ -235,6 +235,133 @@ void defineFuncGpuMethods(T &func_class)
 }
 
 
+void tuple_to_var_expr_vector(const p::tuple &args_passed,
+                              std::vector<h::Var> &var_args,
+                              std::vector<h::Expr> &expr_args)
+{
+    const size_t args_len = p::len(args_passed);
+    for(size_t i=0; i < args_len; i+=1)
+    {
+        p::object o = args_passed[i];
+        p::extract<h::Var &> var_extract(o);
+        p::extract<h::Expr &> expr_extract(o);
+
+        if(var_extract.check())
+        {
+            h::Var v = var_extract();
+            var_args.push_back(v);
+
+            expr_args.push_back(v); // is this really what we want ?
+        }
+
+        if(expr_extract.check())
+        {
+            h::Expr e = expr_extract();
+            expr_args.push_back(e);
+        }
+
+        if((var_extract.check() == false) and (expr_extract.check() == false))
+        {
+            for(size_t j=0; j < args_len; j+=1)
+            {
+                p::object o = args_passed[j];
+                const std::string o_str = p::extract<std::string>(p::str(o));
+                printf("Func args_passed[%lu] == %s\n", j, o_str.c_str());
+            }
+            throw std::invalid_argument("Func::operator() only handles a list of Var or a list of (convertible to) Expr.");
+        }
+    }
+
+    return;
+}
+
+p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
+{
+    std::vector<h::Var> var_args;
+    std::vector<h::Expr> expr_args;
+    const size_t args_len = p::len(args_passed);
+
+    tuple_to_var_expr_vector(args_passed, var_args, expr_args);
+
+
+    p::object return_object;
+
+    // We prioritize Args
+    if(var_args.size() == args_len)
+    {
+        p::reference_existing_object::apply<h::FuncRefVar &>::type converter;
+        h::FuncRefVar ret = that(var_args);
+        PyObject* obj = converter( ret );
+        return_object = p::object( p::handle<>( obj ) );
+    }
+    else
+    {   user_assert(expr_args.size() == args_len) << "Not all func_getitem_operator0 arguments where converted to Expr";
+        p::reference_existing_object::apply<h::FuncRefExpr &>::type converter;
+        h::FuncRefExpr ret = that(expr_args);
+        PyObject* obj = converter( ret );
+        return_object = p::object( p::handle<>( obj ) );
+    }
+
+    return return_object;
+}
+
+
+template <typename T>
+h::Stage func_setitem_operator0(h::Func &that, p::tuple args_passed, T right_hand)
+{
+    std::vector<h::Var> var_args;
+    std::vector<h::Expr> expr_args;
+    const size_t args_len = p::len(args_passed);
+
+    tuple_to_var_expr_vector(args_passed, var_args, expr_args);
+
+    // We prioritize Args
+    if(var_args.size() == args_len)
+    {
+        h::FuncRefVar ret = that(var_args);
+        h::Stage s = (ret = right_hand);
+        return s;
+    }
+    else
+    {   user_assert(expr_args.size() == args_len) << "Not all func_setitem_operator0 arguments where converted to Expr";
+
+        h::FuncRefExpr ret = that(expr_args);
+        h::Stage s = (ret = right_hand);
+        return s;
+    }
+}
+
+
+
+
+void defineFuncRef()
+{
+    using Halide::FuncRefVar;
+    using Halide::FuncRefExpr;
+
+    // only defined so that boost::python knows about these classes,
+    // not (yet) meant to be created or manipulated by the user
+    p::class_<FuncRefVar>("FuncRefVar", p::no_init);
+    p::class_<FuncRefExpr>("FuncRefExpr", p::no_init);
+
+
+    p::implicitly_convertible<FuncRefVar, h::Expr>();
+    p::implicitly_convertible<FuncRefExpr, h::Expr>();
+
+    return;
+}
+
+void defineStage()
+{
+    using Halide::Stage;
+
+    // only defined so that boost::python knows about these classes,
+    // not (yet) meant to be created or manipulated by the user
+    p::class_<Stage>("Stage", p::no_init);
+
+    return;
+}
+
 void defineFunc()
 {
     using Halide::Func;
@@ -281,26 +408,26 @@ void defineFunc()
                    &func_compile_to_bitcode0,
                    func_compile_to_bitcode0_overloads(
                        p::args("filename", "args", "fn_name", "target"),
-                   "Statically compile this function to llvm bitcode, with the "
-                   "given filename (which should probably end in .bc), type "
-                   "signature, and C function name (which defaults to the same name "
-                   "as this halide function."));
+                       "Statically compile this function to llvm bitcode, with the "
+                       "given filename (which should probably end in .bc), type "
+                       "signature, and C function name (which defaults to the same name "
+                       "as this halide function."));
 
     func_class.def("compile_to_c",
                    &func_compile_to_c0,
                    func_compile_to_c0_overloads(
                        p::args("filename", "args", "fn_name", "target"),
-                   "Statically compile this function to C source code. This is "
-                   "useful for providing fallback code paths that will compile on "
-                   "many platforms. Vectorization will fail, and parallelization "
-                   "will produce serial code."));
+                       "Statically compile this function to C source code. This is "
+                       "useful for providing fallback code paths that will compile on "
+                       "many platforms. Vectorization will fail, and parallelization "
+                       "will produce serial code."));
 
     func_class.def("compile_to_file",
                    &func_compile_to_file0,
                    func_compile_to_file0_overloads(
-                   p::args("filename_prefix", "args", "target"),
-                   "Compile to object file and header pair, with the given arguments. "
-                   "Also names the C function to match the first argument."));
+                       p::args("filename_prefix", "args", "target"),
+                       "Compile to object file and header pair, with the given arguments. "
+                       "Also names the C function to match the first argument."));
 
     func_class.def("compile_jit",
                    &func_compile_jit,
@@ -333,34 +460,54 @@ void defineFunc()
     func_class.def("dimensions", &Func::dimensions,
                    "The dimensionality (number of arguments) of this function. Zero if the function is not yet defined.");
 
+
+    func_class.def("__getitem__", &func_getitem_operator0,
+                   "If received a tuple of Vars\n\n"
+                   "Construct either the left-hand-side of a definition, or a call "
+                   "to a functions that happens to only contain vars as "
+                   "arguments. If the function has already been defined, and fewer "
+                   "arguments are given than the function has dimensions, then "
+                   "enough implicit vars are added to the end of the argument list "
+                   "to make up the difference (see \ref Var::implicit)\n\n"
+                   "If received a tuple of Expr\n\n"
+                   "Either calls to the function, or the left-hand-side of a "
+                   "update definition (see \ref RDom). If the function has "
+                   "already been defined, and fewer arguments are given than the "
+                   "function has dimensions, then enough implicit vars are added to "
+                   "the end of the argument list to make up the difference. (see \ref Var::implicit)");
+
+    func_class.def("__setitem__", &func_setitem_operator0<h::FuncRefVar>);
+    func_class.def("__setitem__", &func_setitem_operator0<h::FuncRefExpr>);
+    func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
+
     /*
-                                                                &Func::__getitem__(self, *args):
-                                                                """
-                                                                Either calls to the function, or the left-hand-side of a
-                                                                reduction definition (see \ref RDom). If the function has
-                                                                already been defined, and fewer arguments are given than the
-                                                                function has dimensions, then enough implicit vars are added to
-                                                                the end of the argument list to make up the difference.
-                                                                """
+                                                                        &Func::__getitem__(self, *args):
+                                                                        """
+                                                                        Either calls to the function, or the left-hand-side of a
+                                                                        reduction definition (see \ref RDom). If the function has
+                                                                        already been defined, and fewer arguments are given than the
+                                                                        function has dimensions, then enough implicit vars are added to
+                                                                        the end of the argument list to make up the difference.
+                                                                        """
 
-                                                                &Func::split(self, old, outer, inner, factor):
-                                                                """
-                                                                Split a dimension into inner and outer subdimensions with the
-                                                                given names, where the inner dimension iterates from 0 to
-                                                                factor-1. The inner and outer subdimensions can then be dealt
-                                                                with using the other scheduling calls. It's ok to reuse the old
-                                                                variable name as either the inner or outer variable.
+                                                                        &Func::split(self, old, outer, inner, factor):
+                                                                        """
+                                                                        Split a dimension into inner and outer subdimensions with the
+                                                                        given names, where the inner dimension iterates from 0 to
+                                                                        factor-1. The inner and outer subdimensions can then be dealt
+                                                                        with using the other scheduling calls. It's ok to reuse the old
+                                                                        variable name as either the inner or outer variable.
 
-                                                                The arguments are all Var instances.
-                                                                """
+                                                                        The arguments are all Var instances.
+                                                                        """
 
-                                                                &Func::fuse(self, inner, outer, fused):
-                                                                """
-                                                                Join two dimensions into a single fused dimension. The fused
-                                                                dimension covers the product of the extents of the inner and
-                                                                outer dimensions given.
-                                                                """
-*/
+                                                                        &Func::fuse(self, inner, outer, fused):
+                                                                        """
+                                                                        Join two dimensions into a single fused dimension. The fused
+                                                                        dimension covers the product of the extents of the inner and
+                                                                        outer dimensions given.
+                                                                        """
+        */
 
     func_class.def("parallel",
                    &func_parallel0,
@@ -496,9 +643,10 @@ void defineFunc()
                    "Get a handle on the internal halide function that this Func represents. "
                    "Useful if you want to do introspection on Halide functions.");
 
-
     defineFuncGpuMethods(func_class);
 
     p::implicitly_convertible<Func, h::Expr>();
+
+    defineFuncRef();
     return;
 }

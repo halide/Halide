@@ -41,6 +41,8 @@ def test_basics():
     print("ping 0.3")
     (input[x,y]+input[x+1,y]) / 2
     print("ping 0.4")
+    blur_x[x,y]
+    print("ping 0.4.1")
     blur_x[x,y] = input[x,y]
 
     print("ping 0.5")
