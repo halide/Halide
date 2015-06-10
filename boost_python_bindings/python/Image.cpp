@@ -5,40 +5,79 @@
 
 #include "../../src/Image.h"
 
+#include <vector>
 #include <string>
 
 namespace h = Halide;
 
 
 template<typename T>
-T image_call_operator0(h::Image<T> &that)
+h::Expr image_to_expr_operator0(h::Image<T> &that)
 {
     return that();
 }
 
 template<typename T>
-T image_call_operator1(h::Image<T> &that, int x)
+h::Expr image_to_expr_operator1(h::Image<T> &that, h::Expr x)
 {
     return that(x);
 }
 
 template<typename T>
-T image_call_operator2(h::Image<T> &that, int x, int y)
+h::Expr image_to_expr_operator2(h::Image<T> &that, h::Expr x, h::Expr y)
 {
     return that(x,y);
 }
 
 template<typename T>
-T image_call_operator3(h::Image<T> &that, int x, int y, int z)
+h::Expr image_to_expr_operator3(h::Image<T> &that, h::Expr x, h::Expr y, h::Expr z)
 {
     return that(x,y,z);
 }
 
 template<typename T>
-T image_call_operator4(h::Image<T> &that, int x, int y, int z, int w)
+h::Expr image_to_expr_operator4(h::Image<T> &that, h::Expr x, h::Expr y, h::Expr z, h::Expr w)
 {
     return that(x,y,z,w);
 }
+
+template<typename T>
+h::Expr image_to_expr_operator5(h::Image<T> &that, std::vector<h::Expr> args_passed)
+{
+    return that(args_passed);
+}
+
+template<typename T>
+h::Expr image_to_expr_operator6(h::Image<T> &that, std::vector<h::Var> args_passed)
+{
+    return that(args_passed);
+}
+
+
+template<typename T>
+T image_call_operator0(h::Image<T> &that, int x)
+{
+    return that(x);
+}
+
+template<typename T>
+T image_call_operator1(h::Image<T> &that, int x, int y)
+{
+    return that(x,y);
+}
+
+template<typename T>
+T image_call_operator2(h::Image<T> &that, int x, int y, int z)
+{
+    return that(x,y,z);
+}
+
+template<typename T>
+T image_call_operator3(h::Image<T> &that, int x, int y, int z, int w)
+{
+    return that(x,y,z,w);
+}
+
 
 
 template<typename T>
@@ -135,44 +174,49 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "is the bottom of the image. Returns zero for zero- or "
                  "one-dimensional images.")
 
-            // Access operators
+            // Access operators (to Expr, and to actual value)
+
+            // should these be __call__ "a(b)" or __getitem___ "a[b]" ?
+
+            .def("__call__", &image_to_expr_operator0<T>, p::args("self"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit)")
+            .def("__call__", &image_to_expr_operator1<T>, p::args("self", "x"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit)")
+            .def("__call__", &image_to_expr_operator2<T>, p::args("self", "x", "y"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit)")
+            .def("__call__", &image_to_expr_operator3<T>, p::args("self", "x", "y", "z"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit)")
+            .def("__call__", &image_to_expr_operator4<T>, p::args("self", "x", "y", "z", "w"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit)")
+            .def("__call__", &image_to_expr_operator5<T>, p::args("self", "args_passed"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit)")
+            .def("__call__", &image_to_expr_operator6<T>, p::args("self", "args_passed"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit)")
 
 
             // Note that for now we return copy values (not references like in the C++ API)
-            //.def("__call__", &image_call_operator0<T>)
-
-
-//            /** Construct an expression which loads from this image. The
-//             * location is extended with enough implicit variables to match
-//             * the dimensionality of the image (see \ref Var::implicit) */
-//            // @{
-//            EXPORT Expr operator()() const;
-//            EXPORT Expr operator()(Expr x) const;
-//            EXPORT Expr operator()(Expr x, Expr y) const;
-//            EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
-//            EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
-//            EXPORT Expr operator()(std::vector<Expr>) const;
-//            EXPORT Expr operator()(std::vector<Var>) const;
-//            // @}
-
-
-            .def("__call__", &image_call_operator1<T>, p::args("self", "x"),
-                 //p::return_internal_reference<1>(),
+            .def("__call__", &image_call_operator0<T>, p::args("self", "x"),
                  "Assuming this image is one-dimensional, get the value of the element at position x")
-
-            .def("__call__", &image_call_operator2<T>, p::args("self", "x", "y"),
+            .def("__call__", &image_call_operator1<T>, p::args("self", "x", "y"),
                  "Assuming this image is two-dimensional, get the value of the element at position (x, y)")
-
-            .def("__call__", &image_call_operator3<T>, p::args("self", "x", "y", "z"),
+            .def("__call__", &image_call_operator2<T>, p::args("self", "x", "y", "z"),
                  "Assuming this image is three-dimensional, get the value of the element at position (x, y, z)")
-
-            .def("__call__", &image_call_operator4<T>,
-                 //p::return_internal_reference<1>(),
-                 p::args("self", "x", "y", "z", "w"),
+            .def("__call__", &image_call_operator3<T>, p::args("self", "x", "y", "z", "w"),
                  "Assuming this image is four-dimensional, get the value of the element at position (x, y, z, w)")
-
-
-
 
             ;
 
@@ -217,16 +261,16 @@ void defineImage_impl(const std::string suffix, const h::Type type)
 void defineImage()
 {
 
-    //defineImage_impl<uint8_t>("_uint8", h::UInt(8));
-    //    defineImage_impl<uint16_t>("_uint16", h::UInt(16));
-    //    defineImage_impl<uint32_t>("_uint32", h::UInt(32));
+    defineImage_impl<uint8_t>("_uint8", h::UInt(8));
+    defineImage_impl<uint16_t>("_uint16", h::UInt(16));
+    defineImage_impl<uint32_t>("_uint32", h::UInt(32));
 
-    //    defineImage_impl<int8_t>("_int8", h::Int(8));
-    //    defineImage_impl<int16_t>("_int16", h::Int(16));
+    defineImage_impl<int8_t>("_int8", h::Int(8));
+    defineImage_impl<int16_t>("_int16", h::Int(16));
     defineImage_impl<int32_t>("_int32", h::Int(32));
 
-    //    defineImage_impl<float>("_float32", h::Float(32));
-    //    defineImage_impl<double>("_float64", h::Float(64));
+    defineImage_impl<float>("_float32", h::Float(32));
+    defineImage_impl<double>("_float64", h::Float(64));
 
 
     //    class Image(object):

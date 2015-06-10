@@ -3,6 +3,7 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 #include "add_operators.h"
+#include "no_compare_indexing_suite.h"
 
 #include "../../src/Expr.h"
 #include "../../src/IROperator.h"
@@ -45,6 +46,9 @@ void defineExpr()
             .def("type", &Expr::type); // Get the type of this expression node
 
     add_operators(expr_class);
+
+    p::class_< std::vector<Expr> >("ExprsVector")
+                .def( no_compare_indexing_suite< std::vector<Expr> >() );
 
     return;
 }
