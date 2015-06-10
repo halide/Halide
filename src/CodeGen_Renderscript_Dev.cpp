@@ -375,6 +375,7 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_GetElement_func(Type type) {
                 case 1: func_name = "_Z20rsGetElementAt_float13rs_allocationjjj"; break;
                 case 4: func_name = "_Z21rsGetElementAt_float413rs_allocationjj"; break;
             }
+            break;
         default: break;
     }
     internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";
@@ -401,6 +402,7 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(Type type) {
                 case 1: func_name = "_Z20rsSetElementAt_float13rs_allocationfjjj"; break;
                 case 4: func_name = "_Z21rsSetElementAt_float413rs_allocationDv4_fjj"; break;
             }
+            break;
         default: break;
     }
     internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";

@@ -83,7 +83,9 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
+    #if LLVM_VERSION < 37
     options.DisableTailCalls = false;
+    #endif
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
