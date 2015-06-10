@@ -47,6 +47,12 @@ void defineExpr()
 
     add_operators(expr_class);
 
+    p::implicitly_convertible<int, h::Expr>();
+    p::implicitly_convertible<float, h::Expr>();
+    p::implicitly_convertible<double, h::Expr>();
+    //p::implicitly_convertible<std::string, h::Expr>();
+
+
     p::class_< std::vector<Expr> >("ExprsVector")
                 .def( no_compare_indexing_suite< std::vector<Expr> >() );
 

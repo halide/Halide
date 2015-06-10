@@ -1,9 +1,23 @@
 #!/usr/bin/python3
 
 # to be called via nose, for example
-# nosetests-3.4 --nocapture -v path_to/tests/test_basics.py
+# nosetests-3.4 -v path_to/tests/test_basics.py
 
 from halide import *
+
+def test_types():
+
+    t0 = Int(32)
+    t1 = Int(16)
+
+    assert t0 != t1
+    assert t0.is_float() == False
+    assert t1.is_float() == False
+
+    print("Int(32) type:", Int(32))
+    print("Int(16) type:", Int(16))
+
+    return
 
 def test_basics():
 
@@ -13,9 +27,14 @@ def test_basics():
     blur_x = Func('blur_x')
     blur_y = Func('blur_y')
 
-    print("ping 0.0")
+    y = cast(Int(32), 1)
+    assert y.type() == Int(32)
+    print("y type:", y.type())
+
+    z = x + 1
     input[x,y]
-    print("ping 0.1")
+    input[0,0]
+    input[z,y]
     input[x+1,y]
     print("ping 0.2")
     (input[x,y]+input[x+1,y])
@@ -39,4 +58,5 @@ def test_basics():
 
 
 if __name__ == "__main__":
+    test_types()
     test_basics()

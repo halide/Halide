@@ -7,12 +7,44 @@
 #include "../../src/Expr.h"
 
 #include <string>
+#include <boost/format.hpp>
+
+namespace h = Halide;
+
+std::string type_repr(const h::Type &t)
+{
+    auto message_format = boost::format("<Halide::Type code '%s' with %i bits and width %i>");
+
+    std::string code_string = "unknown";
+    switch(t.code)
+    {
+    case h::Type::UInt:
+        code_string = "UInt";
+        break;
+
+    case h::Type::Int:
+        code_string = "Int";
+        break;
+
+    case h::Type::Float:
+        code_string = "Float";
+        break;
+
+    case h::Type::Handle:
+        code_string = "Handle";
+        break;
+
+    default:
+        code_string = "unknown";
+    }
+
+    return boost::str(message_format % code_string % t.bits % t.width);
+}
 
 void defineType()
 {
 
     using Halide::Type;
-    namespace h = Halide;
     namespace p = boost::python;
     using p::self;
 
@@ -53,6 +85,8 @@ void defineType()
                  "Return an integer which is the minimum value of this type")
             .def("min", &Type::min,
                  "Return an expression which is the minimum value of this type")
+            .def("__repr__", &type_repr,
+                 "Return a string containing a printable representation of a Type object.")
             ;
 
     p::def("Int", h::Int,

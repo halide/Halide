@@ -17,6 +17,10 @@ h::Expr reinterpret0(h::Type t, h::Expr e)
     return h::reinterpret(t, e);
 }
 
+h::Expr cast0(h::Type t, h::Expr e)
+{
+    return Halide::cast(t, e);
+}
 
 void defineOperators()
 {
@@ -471,9 +475,11 @@ void defineOperators()
            "Returns true if the argument is a Not a Number (NaN). "
            "Requires a floating point argument.  Vectorizes cleanly.");
 
-
     p::def("reinterpret", &reinterpret0, p::args("t, e"),
            "Reinterpret the bits of one value as another type.");
+
+    p::def("cast", &cast0, p::args("t, e"),
+           "Cast an expression to a new type.");
 
     return;
 }
