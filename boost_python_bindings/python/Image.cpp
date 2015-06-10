@@ -11,31 +11,31 @@ namespace h = Halide;
 
 
 template<typename T>
-T &image_call_operator0(h::Image<T> &that)
+T image_call_operator0(h::Image<T> &that)
 {
     return that();
 }
 
 template<typename T>
-T &image_call_operator1(h::Image<T> &that, int x)
+T image_call_operator1(h::Image<T> &that, int x)
 {
     return that(x);
 }
 
 template<typename T>
-T &image_call_operator2(h::Image<T> &that, int x, int y)
+T image_call_operator2(h::Image<T> &that, int x, int y)
 {
     return that(x,y);
 }
 
 template<typename T>
-T &image_call_operator3(h::Image<T> &that, int x, int y, int z)
+T image_call_operator3(h::Image<T> &that, int x, int y, int z)
 {
     return that(x,y,z);
 }
 
 template<typename T>
-T &image_call_operator4(h::Image<T> &that, int x, int y, int z, int w)
+T image_call_operator4(h::Image<T> &that, int x, int y, int z, int w)
 {
     return that(x,y,z,w);
 }
@@ -77,25 +77,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  p::return_value_policy< p::return_opaque_pointer >(), // not sure this will do what we want
                  "Get a pointer to the element at the min location.")
 
-            //            .def("__call__", &image_call_operator0<T>)
-
-            //            .def("__call__", &image_call_operator1<T>, p::args("self", "x"),
-            //                 "Assuming this image is one-dimensional, get the value of the element at position x")
-
-            //            .def("__call__", &image_call_operator2<T>, p::args("self", "x", "y"),
-            //                 "Assuming this image is two-dimensional, get the value of the element at position (x, y)")
-
-            //            .def("__call__", &image_call_operator3<T>, p::args("self", "x", "y", "z"),
-            //                 "Assuming this image is three-dimensional, get the value of the element at position (x, y, z)")
-
-            //            .def("__call__", &image_call_operator4<T>,
-            //                 p::return_internal_reference<1>(),
-            //                 p::args("self", "x", "y", "z", "w"),
-            //                 "Assuming this image is four-dimensional, get the value of the element at position (x, y, z, w)")
-
-
             // These are the ImageBase methods
-
             .def("copy_to_host", &Image<T>::copy_to_host,
                  "Manually copy-back data to the host, if it's on a device. This "
                  "is done for you if you construct an image from a buffer, but "
@@ -110,7 +92,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "this if you realize a gpu kernel into an existing image, or "
                  "modify the data via some other back-door.")
             .def_readonly("type", type,
-                         "Return Type instance for the data type of the image.")
+                          "Return Type instance for the data type of the image.")
             .def("channels", &Image<T>::channels,
                  "Get the extent of dimension 2, which by convention we use as"
                  "the number of color channels (often 3). Unlike extent(2), "
@@ -134,8 +116,8 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "buffer has fewer than two dimensions.")
             .def("left", &Image<T>::left,
                  "Get the minimum coordinate in dimension 0, which by convention "
-                                             "is the coordinate of the left edge of the image. Returns zero "
-                                             "for zero-dimensional images.")
+                 "is the coordinate of the left edge of the image. Returns zero "
+                 "for zero-dimensional images.")
             .def("right", &Image<T>::right,
                  "Get the maximum coordinate in dimension 0, which by convention "
                  "is the coordinate of the right edge of the image. Returns zero "
@@ -152,6 +134,45 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "Get the maximum coordinate in dimension 1, which by convention "
                  "is the bottom of the image. Returns zero for zero- or "
                  "one-dimensional images.")
+
+            // Access operators
+
+
+            // Note that for now we return copy values (not references like in the C++ API)
+            //.def("__call__", &image_call_operator0<T>)
+
+
+//            /** Construct an expression which loads from this image. The
+//             * location is extended with enough implicit variables to match
+//             * the dimensionality of the image (see \ref Var::implicit) */
+//            // @{
+//            EXPORT Expr operator()() const;
+//            EXPORT Expr operator()(Expr x) const;
+//            EXPORT Expr operator()(Expr x, Expr y) const;
+//            EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
+//            EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
+//            EXPORT Expr operator()(std::vector<Expr>) const;
+//            EXPORT Expr operator()(std::vector<Var>) const;
+//            // @}
+
+
+            .def("__call__", &image_call_operator1<T>, p::args("self", "x"),
+                 //p::return_internal_reference<1>(),
+                 "Assuming this image is one-dimensional, get the value of the element at position x")
+
+            .def("__call__", &image_call_operator2<T>, p::args("self", "x", "y"),
+                 "Assuming this image is two-dimensional, get the value of the element at position (x, y)")
+
+            .def("__call__", &image_call_operator3<T>, p::args("self", "x", "y", "z"),
+                 "Assuming this image is three-dimensional, get the value of the element at position (x, y, z)")
+
+            .def("__call__", &image_call_operator4<T>,
+                 //p::return_internal_reference<1>(),
+                 p::args("self", "x", "y", "z", "w"),
+                 "Assuming this image is four-dimensional, get the value of the element at position (x, y, z, w)")
+
+
+
 
             ;
 
@@ -186,9 +207,9 @@ void defineImage_impl(const std::string suffix, const h::Type type)
     //            return (*this)(_);
     //        }
 
-    p::implicitly_convertible<Image<T>, h::Buffer>();
-    p::implicitly_convertible<Image<T>, h::Argument>();
-    p::implicitly_convertible<Image<T>, h::Expr>();
+    //    p::implicitly_convertible<Image<T>, h::Buffer>();
+    //    p::implicitly_convertible<Image<T>, h::Argument>();
+    //    p::implicitly_convertible<Image<T>, h::Expr>();
 
     return;
 }
@@ -196,16 +217,16 @@ void defineImage_impl(const std::string suffix, const h::Type type)
 void defineImage()
 {
 
-    defineImage_impl<uint8_t>("_uint8", h::UInt(8));
-    defineImage_impl<uint16_t>("_uint16", h::UInt(16));
-    defineImage_impl<uint32_t>("_uint32", h::UInt(32));
+    //defineImage_impl<uint8_t>("_uint8", h::UInt(8));
+    //    defineImage_impl<uint16_t>("_uint16", h::UInt(16));
+    //    defineImage_impl<uint32_t>("_uint32", h::UInt(32));
 
-    defineImage_impl<int8_t>("_int8", h::Int(8));
-    defineImage_impl<int16_t>("_int16", h::Int(16));
+    //    defineImage_impl<int8_t>("_int8", h::Int(8));
+    //    defineImage_impl<int16_t>("_int16", h::Int(16));
     defineImage_impl<int32_t>("_int32", h::Int(32));
 
-    defineImage_impl<float>("_float32", h::Float(32));
-    defineImage_impl<double>("_float64", h::Float(64));
+    //    defineImage_impl<float>("_float32", h::Float(32));
+    //    defineImage_impl<double>("_float64", h::Float(64));
 
 
     //    class Image(object):
