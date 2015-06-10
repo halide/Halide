@@ -28,7 +28,7 @@ void defineParam()
             .def(p::init<h::Type, int>(p::args("t", "dims")))
             .def("name",
                  &ImageParam::name,
-                 boost::python::return_value_policy<boost::python:: copy_const_reference>(),
+                 p::return_value_policy<p::copy_const_reference>(),
                  "Get name of ImageParam.")
             .def("set", &ImageParam::set, p::arg("b"),
                  "Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.")

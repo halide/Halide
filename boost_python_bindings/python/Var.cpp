@@ -31,7 +31,7 @@ void defineVar()
             .def(p::init<>())
             //.add_property("name", &Var::name) // "Get the name of a Var.")
             .def("name", &Var::name,
-                 boost::python::return_value_policy<boost::python:: copy_const_reference>(),
+                 p::return_value_policy<p::copy_const_reference>(),
                  "Get the name of a Var.")
             .def("same_as", &Var::same_as, "Test if two Vars are the same.")
             //.def(self == p::other<Var>())

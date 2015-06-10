@@ -323,7 +323,7 @@ void defineFunc()
 
     func_class.def("name",
                    &Func::name,
-                   boost::python::return_value_policy<boost::python:: copy_const_reference>(),
+                   p::return_value_policy<p::copy_const_reference>(),
                    "The name of this function, either given during construction, or automatically generated.");
 
     func_class.def("value", &Func::value,
