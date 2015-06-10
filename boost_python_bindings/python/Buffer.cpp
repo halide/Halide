@@ -21,9 +21,9 @@ void defineBuffer()
 
     using Halide::Buffer;
     namespace h = Halide;
-
     namespace p = boost::python;
     using p::self;
+
 
     p::class_<buffer_t>("buffer_t",
                         " The raw representation of an image passed around by generated "
@@ -156,5 +156,6 @@ void defineBuffer()
                  "reference to this buffer dies.")
             ;
 
+    p::implicitly_convertible<Buffer, h::Argument>();
     return;
 }

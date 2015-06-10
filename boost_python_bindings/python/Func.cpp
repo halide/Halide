@@ -499,5 +499,6 @@ void defineFunc()
 
     defineFuncGpuMethods(func_class);
 
+    p::implicitly_convertible<Func, h::Expr>();
     return;
 }

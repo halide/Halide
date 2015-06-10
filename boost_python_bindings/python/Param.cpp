@@ -34,5 +34,8 @@ void defineParam()
                  "Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.")
             .def("get", &ImageParam::get,
                  "Get the Buffer that is bound. Only relevant for jitting.");
+
+    p::implicitly_convertible<ImageParam, h::Argument>();
+    p::implicitly_convertible<ImageParam, h::Expr>();
     return;
 }

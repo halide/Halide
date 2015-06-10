@@ -38,6 +38,8 @@ void defineVar()
             .def("implicit", &Var::implicit, "Construct implicit Var from int n.");
 
     add_operators(var_class);
+
+    p::implicitly_convertible<Var, h::Expr>();
     return;
 }
 
