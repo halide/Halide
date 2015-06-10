@@ -12,47 +12,11 @@
 namespace h = Halide;
 namespace p = boost::python;
 
-h::Expr imageparam_to_expr_operator0(h::ImageParam &that)
-{
-    return that();
-}
-
-h::Expr imageparam_to_expr_operator1(h::ImageParam &that, h::Expr x)
-{
-    return that(x);
-}
-
-h::Expr imageparam_to_expr_operator2(h::ImageParam &that, h::Expr x, h::Expr y)
-{
-    return that(x,y);
-}
-
-h::Expr imageparam_to_expr_operator3(h::ImageParam &that, h::Expr x, h::Expr y, h::Expr z)
-{
-    return that(x,y,z);
-}
-
-h::Expr imageparam_to_expr_operator4(h::ImageParam &that, h::Expr x, h::Expr y, h::Expr z, h::Expr w)
-{
-    return that(x,y,z,w);
-}
-
-
-h::Expr imageparam_to_expr_operator5(h::ImageParam &that, std::vector<h::Expr> args_passed)
-{
-    return that(args_passed);
-}
-
-h::Expr imageparam_to_expr_operator6(h::ImageParam &that, std::vector<h::Var> args_passed)
-{
-    return that(args_passed);
-}
-
-
-h::Expr imageparam_to_expr_operator00(h::ImageParam &that, p::tuple args_passed)
+h::Expr imageparam_to_expr_operator0(h::ImageParam &that, p::tuple args_passed)
 {
     std::vector<h::Expr> expr_args;
     // All ImageParam operator()(...) Expr and Var variants end up building a vector<Expr>
+    // all other variants are equivalent to this one
     const size_t args_len = p::len(args_passed);
     for(size_t i=0; i < args_len; i+=1)
     {
@@ -87,31 +51,12 @@ void defineParam()
             .def("set", &ImageParam::set, p::arg("b"),
                  "Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.")
             .def("get", &ImageParam::get,
-                 "Get the Buffer that is bound. Only relevant for jitting.");
-
-
-    const std::string imageparam_to_expr_doc = \
-            "Construct an expression which loads from this image. "
-            "The location is extended with enough implicit variables to match "
-            "the dimensionality of the image (see \ref Var::implicit)";
-
-    image_param_class
-            .def("__getitem__", &imageparam_to_expr_operator00, p::args("self", "tuple"),
-                 imageparam_to_expr_doc.c_str())
-            .def("__getitem__", &imageparam_to_expr_operator0, p::args("self"),
-                 imageparam_to_expr_doc.c_str())
-            .def("__getitem__", &imageparam_to_expr_operator1, p::args("self", "x"),
-                 imageparam_to_expr_doc.c_str())
-            .def("__getitem__", &imageparam_to_expr_operator2, p::args("self", "x", "y"),
-                 imageparam_to_expr_doc.c_str())
-            .def("__getitem__", &imageparam_to_expr_operator3, p::args("self", "x", "y", "z"),
-                 imageparam_to_expr_doc.c_str())
-            .def("__getitem__", &imageparam_to_expr_operator4, p::args("self", "x", "y", "z", "w"),
-                 imageparam_to_expr_doc.c_str())
-            .def("__getitem__", &imageparam_to_expr_operator5, p::args("self", "args_passed"),
-                 imageparam_to_expr_doc.c_str())
-            .def("__getitem__", &imageparam_to_expr_operator6, p::args("self", "args_passed"),
-                 imageparam_to_expr_doc.c_str())
+                 "Get the Buffer that is bound. Only relevant for jitting.")
+            .def("__getitem__", &imageparam_to_expr_operator0, p::args("self", "tuple"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \ref Var::implicit).\n\n"
+                 "Call with: [x], [x,y], [x,y,z], or [x,y,z,w]")
             ;
 
     p::implicitly_convertible<ImageParam, h::Argument>();
