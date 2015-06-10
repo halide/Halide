@@ -3,6 +3,7 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 #include "add_operators.h"
+#include "no_compare_indexing_suite.h"
 
 #include "../../src/Var.h"
 #include "../../src/IROperator.h"
@@ -40,6 +41,10 @@ void defineVar()
     add_operators(var_class);
 
     p::implicitly_convertible<Var, h::Expr>();
+
+    p::class_< std::vector<Var> >("VarsVector")
+            .def( no_compare_indexing_suite< std::vector<Var> >() );
+
     return;
 }
 
