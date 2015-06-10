@@ -10,6 +10,7 @@
 #include "BoundaryConditions.h"
 #include "Image.h"
 #include "Buffer.h"
+#include "Error.h"
 
 #include <stdexcept>
 #include <vector>
@@ -60,5 +61,7 @@ BOOST_PYTHON_MODULE(halide)
     defineBoundaryConditions();
     defineImage();
     defineBuffer();
+    defineError();
+
 
 }
