@@ -62,7 +62,7 @@ def test_basics():
 
     xi, yi = Var('xi'), Var('yi')
     print("ping 2")
-    #blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
+    blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
     blur_x.compute_at(blur_y, x).vectorize(x, 8)
 
 
