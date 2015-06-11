@@ -89,15 +89,102 @@ h::Func &func_parallel1(h::Func &that, h::VarOrRVar var, int factor)
 }
 
 
-void func_vectorize0(h::Func &that, h::VarOrRVar var)
+h::Func &func_vectorize0(h::Func &that, h::VarOrRVar var)
 {
-    that.vectorize(var);
+    return that.vectorize(var);
 }
 
-void func_vectorize1(h::Func &that, h::VarOrRVar var, int factor)
+h::Func &func_vectorize1(h::Func &that, h::VarOrRVar var, int factor)
 {
-    that.vectorize(var, factor);
+    return that.vectorize(var, factor);
 }
+
+
+h::Func &func_unroll0(h::Func &that, h::VarOrRVar var)
+{
+    return that.unroll(var);
+}
+
+h::Func &func_unroll1(h::Func &that, h::VarOrRVar var, int factor)
+{
+    return that.unroll(var, factor);
+}
+
+h::Func &func_tile0(h::Func &that, h::VarOrRVar x, h::VarOrRVar y,
+                    h::VarOrRVar xo, h::VarOrRVar yo,
+                    h::VarOrRVar xi, h::VarOrRVar yi,
+                    h::Expr xfactor, h::Expr yfactor)
+{
+    return that.tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
+}
+
+h::Func &func_tile1(h::Func &that, h::VarOrRVar x, h::VarOrRVar y,
+                    h::VarOrRVar xi, h::VarOrRVar yi,
+                    h::Expr xfactor, h::Expr yfactor)
+{
+    return that.tile(x, y, xi, yi, xfactor, yfactor);
+}
+
+
+h::Func &func_reoder0(h::Func &that, p::tuple args_passed)
+{
+    std::vector<h::VarOrRVar> var_or_rvar_args;
+
+    const size_t args_len = p::len(args_passed);
+    for(size_t i=0; i < args_len; i+=1)
+    {
+        p::object o = args_passed[i];
+        p::extract<h::VarOrRVar &> var_or_rvar_extract(o);
+
+        if(var_or_rvar_extract.check())
+        {
+            var_or_rvar_args.push_back(var_or_rvar_extract());
+        }
+        else
+        {
+            for(size_t j=0; j < args_len; j+=1)
+            {
+                p::object o = args_passed[j];
+                const std::string o_str = p::extract<std::string>(p::str(o));
+                printf("Func::reorder args_passed[%lu] == %s\n", j, o_str.c_str());
+            }
+            throw std::invalid_argument("Func::reorder() only handles a list of (convertible to) VarOrRVar.");
+        }
+    }
+
+    return that.reorder(var_or_rvar_args);
+}
+
+
+h::Func &func_reoder_storage0(h::Func &that, p::tuple args_passed)
+{
+    std::vector<h::Var> var_args;
+
+    const size_t args_len = p::len(args_passed);
+    for(size_t i=0; i < args_len; i+=1)
+    {
+        p::object o = args_passed[i];
+        p::extract<h::Var &> var_extract(o);
+
+        if(var_extract.check())
+        {
+            var_args.push_back(var_extract());
+        }
+        else
+        {
+            for(size_t j=0; j < args_len; j+=1)
+            {
+                p::object o = args_passed[j];
+                const std::string o_str = p::extract<std::string>(p::str(o));
+                printf("Func::reorder_storage args_passed[%lu] == %s\n", j, o_str.c_str());
+            }
+            throw std::invalid_argument("Func::reorder_storage() only handles a list of (convertible to) Var.");
+        }
+    }
+
+    return that.reorder_storage(var_args);
+}
+
 
 h::Func &func_store_at0(h::Func &that, h::Func f, h::Var var)
 {
@@ -482,76 +569,71 @@ void defineFunc()
             .def("parallel", &func_parallel1, p::args("self", "var", "factor"),
                  p::return_internal_reference<1>());
 
-    func_class.def("vectorize",
-                   &func_vectorize1,
-                   p::args("self", "var", "factor"),
+    func_class.def("vectorize", &func_vectorize1, p::args("self", "var", "factor"),
+                   p::return_internal_reference<1>(),
                    "Split a dimension (Var instance) by the given int factor, then vectorize the "
                    "inner dimension. This is how you vectorize a loop of unknown "
                    "size. The variable to be vectorized should be the innermost "
                    "one. After this call, var refers to the outer dimension of the "
                    "split.")
-            .def("vectorize",
-                 &func_vectorize0,
-                 p::args("self", "var"));
+            .def("vectorize", &func_vectorize0, p::args("self", "var"),
+                 p::return_internal_reference<1>());
 
-    /*
-                                                                &Func::unroll(self, var, factor=None):
-                                                                """
-                                                                Split a dimension (Var instance) by the given int factor, then unroll the inner
-                                                                dimension. This is how you unroll a loop of unknown size by
-                                                                some constant factor. After this call, var refers to the outer
-                                                                dimension of the split.
-                                                                """
+    func_class.def("unroll", &func_unroll1, p::args("self", "var", "factor"),
+                   p::return_internal_reference<1>(),
+                   "Split a dimension by the given factor, then unroll the inner "
+                   "dimension. This is how you unroll a loop of unknown size by "
+                   "some constant factor. After this call, var refers to the outer "
+                   "dimension of the split.")
+            .def("unroll", &func_unroll0, p::args("self", "var"),
+                 p::return_internal_reference<1>());
 
-                                                                &Func::bound(self, min_expr, extent_expr):
-                                                                """
-                                                                Statically declare that the range over which a function should
-                                                                be evaluated is given by the second and third arguments. This
-                                                                can let Halide perform some optimizations. E.g. if you know
-                                                                there are going to be 4 color channels, you can completely
-                                                                vectorize the color channel dimension without the overhead of
-                                                                splitting it up. If bounds inference decides that it requires
-                                                                more of this function than the bounds you have stated, a
-                                                                runtime error will occur when you try to run your pipeline.
-                                                                """
+    func_class.def("bound", &Func::bound,  p::args("self", "var", "min", "extent"),
+                   p::return_internal_reference<1>(),
+                   "Statically declare that the range over which a function should "
+                   "be evaluated is given by the second and third arguments. This "
+                   "can let Halide perform some optimizations. E.g. if you know "
+                   "there are going to be 4 color channels, you can completely "
+                   "vectorize the color channel dimension without the overhead of "
+                   "splitting it up. If bounds inference decides that it requires "
+                   "more of this function than the bounds you have stated, a "
+                   "runtime error will occur when you try to run your pipeline. ");
 
-                                                                &Func::tile(self, x, y, xo, yo, xi, yi, xfactor, yfactor):
-                                                                """
-                                                                Traverse in tiled order. Two signatures::
-
-                                                                tile(x, y, xi, yi, xfactor, yfactor)
-                                                                tile(x, y, xo, yo, xi, yi, xfactor, yfactor)
-
-                                                                Split two dimensions at once by the given factors, and then
-                                                                reorder the resulting dimensions to be xi, yi, xo, yo from
-                                                                innermost outwards. This gives a tiled traversal.
-
-                                                                The shorter form of tile reuses the old variable names as
-                                                                the new outer dimensions.
-                                                                """
-
-                                                                &Func::reorder(self, *args):
-                                                                """
-                                                                Reorder the dimensions (Var arguments) to have the given nesting
-                                                                order, from innermost loop order to outermost.
-                                                                """
-*/
+    func_class.def("tile", &func_tile0,  p::args("self", "x", "y", "xo", "yo", "xi", "yi", "xfactor", "yfactor"),
+                   p::return_internal_reference<1>(),
+                   "Split two dimensions at once by the given factors, and then "
+                   "reorder the resulting dimensions to be xi, yi, xo, yo from "
+                   "innermost outwards. This gives a tiled traversal.")
+            .def("tile", &func_tile1,  p::args("self", "x", "y", "xi", "yi", "xfactor", "yfactor"),
+                 p::return_internal_reference<1>(),
+                 "A shorter form of tile, which reuses the old variable names as the new outer dimensions");
 
 
-    func_class.def("rename",
-                   &Func::rename,
-                   p::args("self", "old_name", "new_name"),
+    func_class.def("reorder", &func_reoder0, p::args("self", "vars"),
+                   p::return_internal_reference<1>(),
+                   "Reorder variables to have the given nesting order, "
+                   "from innermost out");
+
+    func_class.def("rename", &Func::rename, p::args("self", "old_name", "new_name"),
                    p::return_internal_reference<1>(),
                    "Rename a dimension. Equivalent to split with a inner size of one.");
 
 
-    /*
-                                                                &Func::reorder_storage(self, *args):
-                                                                """
-                                                                Scheduling calls that control how the storage for the function
-                                                                is laid out. Right now you can only reorder the dimensions.
-                                                                """
-*/
+    func_class.def("reorder_storage", &func_reoder_storage0, p::args("self", "dims"),
+                   p::return_internal_reference<1>(),
+                   "Specify how the storage for the function is laid out. These "
+                   "calls let you specify the nesting order of the dimensions. For "
+                   "example, foo.reorder_storage(y, x) tells Halide to use "
+                   "column-major storage for any realizations of foo, without "
+                   "changing how you refer to foo in the code. You may want to do "
+                   "this if you intend to vectorize across y. When representing "
+                   "color images, foo.reorder_storage(c, x, y) specifies packed "
+                   "storage (red, green, and blue values adjacent in memory), and "
+                   "foo.reorder_storage(x, y, c) specifies planar storage (entire "
+                   "red, green, and blue images one after the other in memory).\n\n"
+                   "If you leave out some dimensions, those remain in the same "
+                   "positions in the nesting order while the specified variables "
+                   "are reordered around them.");
 
     func_class.def("compute_at", &func_compute_at0, p::args("self", "f", "var"),
                    p::return_internal_reference<1>(),
