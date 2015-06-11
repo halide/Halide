@@ -21,11 +21,11 @@ void defineVarOrRVar()
     p::class_<VarOrRVar>("VarOrRVar",
                          "A class that can represent Vars or RVars. "
                          "Used for reorder calls which can accept a mix of either.",
-                         p::init<std::string, bool>(p::args("n", "r")))
-            .def(p::init<h::Var>(p::arg("v")))
-            .def(p::init<h::RVar>(p::arg("r")))
-            .def(p::init<h::RDom>(p::arg("r")))
-            .def("name", &VarOrRVar::name, p::return_value_policy<p::copy_const_reference>())
+                         p::init<std::string, bool>(p::args("self", "n", "r")))
+            .def(p::init<h::Var>(p::args("self", "v")))
+            .def(p::init<h::RVar>(p::args("self", "r")))
+            .def(p::init<h::RDom>(p::args("self", "r")))
+            .def("name", &VarOrRVar::name, p::arg("self"), p::return_value_policy<p::copy_const_reference>())
             .def_readonly("var", &VarOrRVar::var)
             .def_readonly("rvar", &VarOrRVar::rvar)
             .def_readonly("is_rvar", &VarOrRVar::is_rvar)

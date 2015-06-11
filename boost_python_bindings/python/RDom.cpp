@@ -18,6 +18,7 @@ void defineRDom()
     namespace p = boost::python;
     using p::self;
 
+//p::arg("self"),
 
     //    p::class_<RVar>("RVar",
     //                          "An Image parameter to a halide pipeline. E.g., the input image. \n"

@@ -358,8 +358,7 @@ void defineFunc()
             .def(p::init<h::Expr>());
     //.def("set", &Func::set, "Typically one uses f[x, y] = expr to assign to a function. However f.set(expr) can be used also.")
 
-    func_class.def("allow_race_conditions",
-                   &Func::allow_race_conditions,
+    func_class.def("allow_race_conditions", &Func::allow_race_conditions,
                    p::return_internal_reference<1>(),
                    "Specify that race conditions are permitted for this Func, "
                    "which enables parallelizing over RVars even when Halide cannot "
@@ -368,31 +367,28 @@ void defineFunc()
                    "may result in a non-deterministic routine that returns "
                    "different values at different times or on different machines.");
 
-    func_class.def("realize",
-                   &func_realize1,
+    func_class.def("realize", &func_realize1,
                    func_realize1_overloads(
-                       p::args("x_size", "y_size", "z_size", "w_size", "target"),
+                       p::args("self", "x_size", "y_size", "z_size", "w_size", "target"),
                        "Evaluate this function over some rectangular domain and return"
                        "the resulting buffer. The buffer should probably be instantly"
                        "wrapped in an Image class.\n\n" \
                        "One can use f.realize(Buffer) to realize into an existing buffer."))
             .def("realize", &func_realize0, func_realize0_overloads(
-                     p::args("sizes", "target")));
+                     p::args("self", "sizes", "target")));
 
 
-    func_class.def("compile_to_bitcode",
-                   &func_compile_to_bitcode0,
+    func_class.def("compile_to_bitcode", &func_compile_to_bitcode0,
                    func_compile_to_bitcode0_overloads(
-                       p::args("filename", "args", "fn_name", "target"),
+                       p::args("self", "filename", "args", "fn_name", "target"),
                        "Statically compile this function to llvm bitcode, with the "
                        "given filename (which should probably end in .bc), type "
                        "signature, and C function name (which defaults to the same name "
                        "as this halide function."));
 
-    func_class.def("compile_to_c",
-                   &func_compile_to_c0,
+    func_class.def("compile_to_c", &func_compile_to_c0,
                    func_compile_to_c0_overloads(
-                       p::args("filename", "args", "fn_name", "target"),
+                       p::args("self", "filename", "args", "fn_name", "target"),
                        "Statically compile this function to C source code. This is "
                        "useful for providing fallback code paths that will compile on "
                        "many platforms. Vectorization will fail, and parallelization "
@@ -401,7 +397,7 @@ void defineFunc()
     func_class.def("compile_to_file",
                    &func_compile_to_file0,
                    func_compile_to_file0_overloads(
-                       p::args("filename_prefix", "args", "target"),
+                       p::args("self", "filename_prefix", "args", "target"),
                        "Compile to object file and header pair, with the given arguments. "
                        "Also names the C function to match the first argument."));
 
@@ -414,7 +410,7 @@ void defineFunc()
                    "then you can call this ahead of time. Returns the raw function "
                    "pointer to the compiled pipeline.");
 
-    func_class.def("debug_to_file", &Func::debug_to_file, p::arg("filename"),
+    func_class.def("debug_to_file", &Func::debug_to_file, p::args("self", "filename"),
                    "When this function is compiled, include code that dumps its values "
                    "to a file after it is realized, for the purpose of debugging. "
                    "The file covers the realized extent at the point in the schedule that "
@@ -441,56 +437,54 @@ void defineFunc()
                    "arguments. If the function has already been defined, and fewer "
                    "arguments are given than the function has dimensions, then "
                    "enough implicit vars are added to the end of the argument list "
-                   "to make up the difference (see \ref Var::implicit)\n\n"
+                   "to make up the difference (see \\ref Var::implicit)\n\n"
                    "If received a tuple of Expr\n\n"
                    "Either calls to the function, or the left-hand-side of a "
-                   "update definition (see \ref RDom). If the function has "
+                   "update definition (see \\ref RDom). If the function has "
                    "already been defined, and fewer arguments are given than the "
                    "function has dimensions, then enough implicit vars are added to "
-                   "the end of the argument list to make up the difference. (see \ref Var::implicit)");
+                   "the end of the argument list to make up the difference. (see \\ref Var::implicit)");
 
     func_class.def("__setitem__", &func_setitem_operator0<h::FuncRefVar>);
     func_class.def("__setitem__", &func_setitem_operator0<h::FuncRefExpr>);
     func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
 
     /*
-                                                                        &Func::__getitem__(self, *args):
-                                                                        """
-                                                                        Either calls to the function, or the left-hand-side of a
-                                                                        reduction definition (see \ref RDom). If the function has
-                                                                        already been defined, and fewer arguments are given than the
-                                                                        function has dimensions, then enough implicit vars are added to
-                                                                        the end of the argument list to make up the difference.
-                                                                        """
+    &Func::__getitem__(self, *args):
+    """
+    Either calls to the function, or the left-hand-side of a
+    reduction definition (see \\ref RDom). If the function has
+    already been defined, and fewer arguments are given than the
+    function has dimensions, then enough implicit vars are added to
+    the end of the argument list to make up the difference.
+    """
+*/
 
-                                                                        &Func::split(self, old, outer, inner, factor):
-                                                                        """
-                                                                        Split a dimension into inner and outer subdimensions with the
-                                                                        given names, where the inner dimension iterates from 0 to
-                                                                        factor-1. The inner and outer subdimensions can then be dealt
-                                                                        with using the other scheduling calls. It's ok to reuse the old
-                                                                        variable name as either the inner or outer variable.
+    func_class.def("split", &Func::split, p::args("self", "old", "outer", "inner", "factor"),
+                   p::return_internal_reference<1>(),
+                   "Split a dimension into inner and outer subdimensions with the "
+                   "given names, where the inner dimension iterates from 0 to "
+                   "factor-1. The inner and outer subdimensions can then be dealt "
+                   "with using the other scheduling calls. It's ok to reuse the old "
+                   "variable name as either the inner or outer variable.")
+            .def("fuse", &Func::fuse,  p::args("self", "inner", "outer",  "fused"),
+                 p::return_internal_reference<1>(),
+                 "Join two dimensions into a single fused dimenion. The fused "
+                 "dimension covers the product of the extents of the inner and "
+                 "outer dimensions given.")
+            .def("serial", &Func::serial, p::args("self","var"),
+                 p::return_internal_reference<1>(),
+                 "Mark a dimension to be traversed serially. This is the default.");
 
-                                                                        The arguments are all Var instances.
-                                                                        """
-
-                                                                        &Func::fuse(self, inner, outer, fused):
-                                                                        """
-                                                                        Join two dimensions into a single fused dimension. The fused
-                                                                        dimension covers the product of the extents of the inner and
-                                                                        outer dimensions given.
-                                                                        """
-        */
-
-    func_class.def("parallel", &func_parallel0, p::arg("var"),
+    func_class.def("parallel", &func_parallel0, p::args("self", "var"),
                    p::return_internal_reference<1>(),
                    "Mark a dimension (Var instance) to be traversed in parallel.")
-            .def("parallel", &func_parallel1, p::args("var", "factor"),
+            .def("parallel", &func_parallel1, p::args("self", "var", "factor"),
                  p::return_internal_reference<1>());
 
     func_class.def("vectorize",
                    &func_vectorize1,
-                   p::args("var", "factor"),
+                   p::args("self", "var", "factor"),
                    "Split a dimension (Var instance) by the given int factor, then vectorize the "
                    "inner dimension. This is how you vectorize a loop of unknown "
                    "size. The variable to be vectorized should be the innermost "
@@ -498,7 +492,7 @@ void defineFunc()
                    "split.")
             .def("vectorize",
                  &func_vectorize0,
-                 p::arg("var"));
+                 p::args("self", "var"));
 
     /*
                                                                 &Func::unroll(self, var, factor=None):
@@ -546,7 +540,7 @@ void defineFunc()
 
     func_class.def("rename",
                    &Func::rename,
-                   p::args("old_name", "new_name"),
+                   p::args("self", "old_name", "new_name"),
                    p::return_internal_reference<1>(),
                    "Rename a dimension. Equivalent to split with a inner size of one.");
 
@@ -559,58 +553,45 @@ void defineFunc()
                                                                 """
 */
 
-    func_class.def("compute_at",
-                   &func_compute_at0,
-                   p::args("f", "var"),
+    func_class.def("compute_at", &func_compute_at0, p::args("self", "f", "var"),
                    p::return_internal_reference<1>(),
                    "Compute this function as needed for each unique value of the "
                    "given var (can be a Var or an RVar) for the given calling function f.")
-            .def("compute_at",
-                 &func_compute_at1,
-                 p::args("f", "var"),
+            .def("compute_at", &func_compute_at1, p::args("self", "f", "var"),
                  p::return_internal_reference<1>());
 
-    func_class.def("compute_root",
-                   &Func::compute_root,
+    func_class.def("compute_root", &Func::compute_root, p::arg("self"),
                    p::return_internal_reference<1>(),
                    "Compute all of this function once ahead of time.");
 
 
-    func_class.def("store_at",
-                   &func_store_at0,
-                   p::args("f", "var"),
+    func_class.def("store_at", &func_store_at0, p::args("self", "f", "var"),
                    p::return_internal_reference<1>(),
                    "Allocate storage for this function within f's loop over "
                    "var (can be a Var or an RVar). Scheduling storage is optional, and can be used to "
                    "separate the loop level at which storage occurs from the loop "
                    "level at which computation occurs to trade off between locality "
                    "and redundant work.")
-            .def("store_at",
-                 &func_store_at1,
-                 p::args("f", "var"),
+            .def("store_at", &func_store_at1, p::args("self", "f", "var"),
                  p::return_internal_reference<1>());
 
-    func_class.def("store_root",
-                   &Func::store_root,
+    func_class.def("store_root", &Func::store_root, p::arg("self"),
                    p::return_internal_reference<1>(),
                    "Equivalent to Func.store_at, but schedules storage outside the outermost loop.");
 
-    func_class.def("compute_inline",
-                   &Func::compute_inline,
+    func_class.def("compute_inline", &Func::compute_inline, p::arg("self"),
                    p::return_internal_reference<1>(),
                    "Aggressively inline all uses of this function. This is the "
                    "default schedule, so you're unlikely to need to call this. For "
                    "a reduction, that means it gets computed as close to the "
                    "innermost loop as possible.");
 
-    func_class.def("update",
-                   &Func::update,
+    func_class.def("update", &Func::update, p::arg("self"),
                    "Get a handle on the update step of a reduction for the "
                    "purposes of scheduling it. Only the pure dimensions of the "
                    "update step can be meaningfully manipulated (see RDom).");
 
-    func_class.def("function",
-                   &Func::function,
+    func_class.def("function", &Func::function, p::arg("self"),
                    "Get a handle on the internal halide function that this Func represents. "
                    "Useful if you want to do introspection on Halide functions.");
 

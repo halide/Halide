@@ -99,77 +99,77 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                           p::init<>("Construct an undefined image handle"))
 
             .def(p::init<int, int, int, int,std::string>(
-                     (p::arg("x"), p::arg("y")=0, p::arg("z")=0, p::arg("w")=0, p::arg("name")=""),
+                     (p::arg("self"), p::arg("x"), p::arg("y")=0, p::arg("z")=0, p::arg("w")=0, p::arg("name")=""),
                      "Allocate an image with the given dimensions."))
 
-            .def(p::init<h::Buffer &>(p::arg("buf"),
+            .def(p::init<h::Buffer &>(p::args("self", "buf"),
                                       "Wrap a buffer in an Image object, so that we can directly "
                                       "access its pixels in a type-safe way."))
 
-            .def(p::init<h::Realization &>(p::arg("r"),
+            .def(p::init<h::Realization &>(p::args("self", "r"),
                                            "Wrap a single-element realization in an Image object."))
 
-            .def(p::init<buffer_t *>((p::arg("b"), p::arg("name")=""),
+            .def(p::init<buffer_t *, std::string>((p::arg("self"), p::arg("b"), p::arg("name")=""),
                                      "Wrap a buffer_t in an Image object, so that we can access its pixels."))
 
-            .def("data", &Image<T>::data,
+            .def("data", &Image<T>::data, p::arg("self"),
                  p::return_value_policy< p::return_opaque_pointer >(), // not sure this will do what we want
                  "Get a pointer to the element at the min location.")
 
             // These are the ImageBase methods
-            .def("copy_to_host", &Image<T>::copy_to_host,
+            .def("copy_to_host", &Image<T>::copy_to_host, p::arg("self"),
                  "Manually copy-back data to the host, if it's on a device. This "
                  "is done for you if you construct an image from a buffer, but "
                  "you might need to call this if you realize a gpu kernel into an "
                  "existing image")
-            .def("defined", &Image<T>::defined,
+            .def("defined", &Image<T>::defined, p::arg("self"),
                  "Check if this image handle points to actual data")
             .def("set_host_dirty", &Image<T>::set_host_dirty,
-                 p::args("dirty") = true,
+                 (p::arg("self"), p::arg("dirty") = true),
                  "Mark the buffer as dirty-on-host.  is done for you if you "
                  "construct an image from a buffer, but you might need to call "
                  "this if you realize a gpu kernel into an existing image, or "
                  "modify the data via some other back-door.")
             .def_readonly("type", type,
                           "Return Type instance for the data type of the image.")
-            .def("channels", &Image<T>::channels,
+            .def("channels", &Image<T>::channels, p::arg("self"),
                  "Get the extent of dimension 2, which by convention we use as"
                  "the number of color channels (often 3). Unlike extent(2), "
                  "returns one if the buffer has fewer than three dimensions.")
-            .def("dimensions", &Image<T>::dimensions,
+            .def("dimensions", &Image<T>::dimensions, p::arg("self"),
                  "Get the dimensionality of the data. Typically two for grayscale images, and three for color images.")
-            .def("stride", &Image<T>::stride, p::arg("dim"),
+            .def("stride", &Image<T>::stride, p::args("self", "dim"),
                  "Get the number of elements in the buffer between two adjacent "
                  "elements in the given dimension. For example, the stride in "
                  "dimension 0 is usually 1, and the stride in dimension 1 is "
                  "usually the extent of dimension 0. This is not necessarily true though.")
-            .def("extent", &Image<T>::extent, p::arg("dim"),
+            .def("extent", &Image<T>::extent, p::args("self", "dim"),
                  "Get the size of a dimension.")
-            .def("width", &Image<T>::width,
+            .def("width", &Image<T>::width, p::arg("self"),
                  "Get the extent of dimension 0, which by convention we use as "
                  "the width of the image. Unlike extent(0), returns one if the "
                  "buffer is zero-dimensional.")
-            .def("height", &Image<T>::height,
+            .def("height", &Image<T>::height, p::arg("self"),
                  "Get the extent of dimension 1, which by convention we use as "
                  "the height of the image. Unlike extent(1), returns one if the "
                  "buffer has fewer than two dimensions.")
-            .def("left", &Image<T>::left,
+            .def("left", &Image<T>::left, p::arg("self"),
                  "Get the minimum coordinate in dimension 0, which by convention "
                  "is the coordinate of the left edge of the image. Returns zero "
                  "for zero-dimensional images.")
-            .def("right", &Image<T>::right,
+            .def("right", &Image<T>::right, p::arg("self"),
                  "Get the maximum coordinate in dimension 0, which by convention "
                  "is the coordinate of the right edge of the image. Returns zero "
                  "for zero-dimensional images.")
-            .def("top", &Image<T>::top,
+            .def("top", &Image<T>::top, p::arg("self"),
                  "Get the minimum coordinate in dimension 1, which by convention "
                  "is the top of the image. Returns zero for zero- or "
                  "one-dimensional images.")
-            .def("bottom", &Image<T>::bottom,
+            .def("bottom", &Image<T>::bottom, p::arg("self"),
                  "Get the maximum coordinate in dimension 1, which by convention "
                  "is the bottom of the image. Returns zero for zero- or "
                  "one-dimensional images.")
-            .def("bottom", &Image<T>::bottom,
+            .def("bottom", &Image<T>::bottom, p::arg("self"),
                  "Get the maximum coordinate in dimension 1, which by convention "
                  "is the bottom of the image. Returns zero for zero- or "
                  "one-dimensional images.")
@@ -178,34 +178,34 @@ void defineImage_impl(const std::string suffix, const h::Type type)
 
             // should these be __call__ "a(b)" or __getitem___ "a[b]" ?
 
-            .def("__call__", &image_to_expr_operator0<T>, p::args("self"),
+            .def("__call__", &image_to_expr_operator0<T>, p::arg("self"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit)")
+                 "the dimensionality of the image (see \\ref Var::implicit)")
             .def("__call__", &image_to_expr_operator1<T>, p::args("self", "x"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit)")
+                 "the dimensionality of the image (see \\ref Var::implicit)")
             .def("__call__", &image_to_expr_operator2<T>, p::args("self", "x", "y"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit)")
+                 "the dimensionality of the image (see \\ref Var::implicit)")
             .def("__call__", &image_to_expr_operator3<T>, p::args("self", "x", "y", "z"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit)")
+                 "the dimensionality of the image (see \\ref Var::implicit)")
             .def("__call__", &image_to_expr_operator4<T>, p::args("self", "x", "y", "z", "w"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit)")
+                 "the dimensionality of the image (see \\ref Var::implicit)")
             .def("__call__", &image_to_expr_operator5<T>, p::args("self", "args_passed"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit)")
+                 "the dimensionality of the image (see \\ref Var::implicit)")
             .def("__call__", &image_to_expr_operator6<T>, p::args("self", "args_passed"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit)")
+                 "the dimensionality of the image (see \\ref Var::implicit)")
 
 
             // Note that for now we return copy values (not references like in the C++ API)
