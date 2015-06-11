@@ -13,5 +13,20 @@ c) P3 and P4 are expected to be handled by having less spagethi and aiming for t
 Compilation instructions
 ========================
 
-For a better python experience make sure Halide was compiled with WITH_EXCEPTIONS
+
+
+For python requirements see requirements.txt
+
+C++ requirements:
+ Halide compiled (assuming halide_git_clone_path/build).
+ For a better python experience make sure Halide was compiled with WITH_EXCEPTIONS
+ Boost.python (already available in most boost distributions)
+ Recommended: Boost.Numpy https://github.com/ndarray/Boost.NumPy
+ 
+Build using:
+  mkdir build
+  cd build
+  ccmake ..
+  make 
+
 
