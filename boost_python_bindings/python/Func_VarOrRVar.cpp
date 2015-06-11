@@ -9,14 +9,12 @@
 #include <vector>
 #include <string>
 
-namespace h = Halide;
-namespace p = boost::python;
-using p::self;
-
-
 void defineVarOrRVar()
 {
     using Halide::VarOrRVar;
+    namespace h = Halide;
+    namespace p = boost::python;
+    using p::self;
 
     p::class_<VarOrRVar>("VarOrRVar",
                          "A class that can represent Vars or RVars. "
