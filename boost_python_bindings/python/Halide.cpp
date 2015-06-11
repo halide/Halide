@@ -1,17 +1,19 @@
 #include <boost/python.hpp>
 
-#include "Var.h"
-#include "Expr.h"
-#include "Func.h"
-#include "Param.h"
-#include "Type.h"
-#include "IROperator.h"
 #include "Argument.h"
 #include "BoundaryConditions.h"
-#include "Image.h"
 #include "Buffer.h"
 #include "Error.h"
+#include "Expr.h"
+#include "Func.h"
+#include "Image.h"
+#include "IROperator.h"
+#include "Param.h"
+#include "RDom.h"
 #include "Target.h"
+#include "Tuple.h"
+#include "Type.h"
+#include "Var.h"
 
 #include <stdexcept>
 #include <vector>
@@ -27,17 +29,19 @@ BOOST_PYTHON_MODULE(halide)
     def("greet", greet);
 
     // we include all the pieces and bits from the Halide API
-    defineVar();
-    defineExpr();
-    defineFunc();
-    defineType();
-    defineParam();
-    defineOperators();
     defineArgument();
     defineBoundaryConditions();
-    defineImage();
     defineBuffer();
     defineError();
+    defineExpr();
+    defineFunc();
+    defineImage();
+    defineOperators();
+    defineParam();
+    defineRDom();
     defineTarget();
+    defineTuple();
+    defineType();
+    defineVar();
 
 }
