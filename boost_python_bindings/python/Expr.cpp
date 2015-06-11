@@ -36,14 +36,14 @@ void defineExpr()
                                       "Ternary:\n" \
                                       "  clamp(x, lo, hi)                  -- Clamp expression to [lo, hi]\n" \
                                       "  select(cond, if_true, if_false)   -- Return if_true if cond else if_false\n",
-                                      p::init<std::string>())
-            .def(p::init<int>()) // Make an expression representing a const 32-bit int (i.e. an IntImm)
-            .def(p::init<float>()) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
-            .def(p::init<double>()) /* Make an expression representing a const 32-bit float, given a
+                                      p::init<std::string>(p::arg("self")))
+            .def(p::init<int>(p::arg("self"))) // Make an expression representing a const 32-bit int (i.e. an IntImm)
+            .def(p::init<float>(p::arg("self"))) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
+            .def(p::init<double>(p::arg("self"))) /* Make an expression representing a const 32-bit float, given a
                                                                                                                                                                                                                                                                                      * double. Also emits a warning due to truncation. */
-            .def(p::init<std::string>()) // Make an expression representing a const string (i.e. a StringImm)
-            .def(p::init<const h::Internal::BaseExprNode *>()) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
-            .def("type", &Expr::type); // Get the type of this expression node
+            .def(p::init<std::string>(p::arg("self"))) // Make an expression representing a const string (i.e. a StringImm)
+            .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self"))) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
+            .def("type", &Expr::type, p::arg("self")); // Get the type of this expression node
 
     add_operators(expr_class);
 

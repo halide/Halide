@@ -42,20 +42,19 @@ void defineParam()
                                   "  ImageParam(Type t, int dims, name="") \n"
                                   "The image can be indexed via I[x], I[y,x], etc, which gives a Halide Expr. "
                                   "Supports most of the methods of Image.",
-                                  p::init<h::Type, int, std::string>(p::args("t", "dims", "name")))
-            .def(p::init<h::Type, int>(p::args("t", "dims")))
-            .def("name",
-                 &ImageParam::name,
+                                  p::init<h::Type, int, std::string>(p::args("self", "t", "dims", "name")))
+            .def(p::init<h::Type, int>(p::args("self", "t", "dims")))
+            .def("name", &ImageParam::name, p::arg("self"),
                  p::return_value_policy<p::copy_const_reference>(),
                  "Get name of ImageParam.")
-            .def("set", &ImageParam::set, p::arg("b"),
+            .def("set", &ImageParam::set, p::args("self", "b"),
                  "Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.")
-            .def("get", &ImageParam::get,
+            .def("get", &ImageParam::get, p::arg("self"),
                  "Get the Buffer that is bound. Only relevant for jitting.")
             .def("__getitem__", &imageparam_to_expr_operator0, p::args("self", "tuple"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \ref Var::implicit).\n\n"
+                 "the dimensionality of the image (see \\ref Var::implicit).\n\n"
                  "Call with: [x], [x,y], [x,y,z], or [x,y,z,w]")
             ;
 
