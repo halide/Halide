@@ -96,7 +96,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                           "the color channel. In general we store color images in "
                           "color-planes, as opposed to packed RGB, because this tends to "
                           "vectorize more cleanly.",
-                          p::init<>("Construct an undefined image handle"))
+                          p::init<>(p::arg("self"), "Construct an undefined image handle"))
 
             .def(p::init<int, int, int, int,std::string>(
                      (p::arg("self"), p::arg("x"), p::arg("y")=0, p::arg("z")=0, p::arg("w")=0, p::arg("name")=""),

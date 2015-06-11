@@ -28,15 +28,18 @@ void defineVar()
                                     "Constructors::\n" \
                                     "Var()      -- Construct Var with an automatically-generated unique name\n" \
                                     "Var(name)  -- Construct Var with the given string name.\n",
-                                    p::init<std::string>())
-            .def(p::init<>())
+                                    p::init<std::string>(p::args("self", "name")))
+            .def(p::init<>(p::arg("self")))
             //.add_property("name", &Var::name) // "Get the name of a Var.")
-            .def("name", &Var::name,
+            .def("name", &Var::name, p::arg("self"),
                  p::return_value_policy<p::copy_const_reference>(),
                  "Get the name of a Var.")
-            .def("same_as", &Var::same_as, "Test if two Vars are the same.")
+            .def("same_as", &Var::same_as, p::args("self", "other"), "Test if two Vars are the same.")
             //.def(self == p::other<Var>())
-            .def("implicit", &Var::implicit, "Construct implicit Var from int n.");
+
+            //.def("implicit", &Var::implicit, p::args("n"), "Construct implicit Var from int n.")
+            //.def("is_implicit", &Var::is_implicit, "Return whether a variable name is of the form for an implicit argument.")
+            ;
 
     add_operators(var_class);
     add_operators_with<decltype(var_class), h::Expr>(var_class);

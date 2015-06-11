@@ -353,9 +353,9 @@ void defineFunc()
                                       "                 name, and define it to return the given expression (which may\n" \
                                       "                 not contain free variables).\n" \
                                       "  Func(name)  -- Declare a new undefined function with the given name",
-                                      p::init<>())
-            .def(p::init<std::string>())
-            .def(p::init<h::Expr>());
+                                      p::init<>(p::arg("self")))
+            .def(p::init<std::string>(p::arg("self")))
+            .def(p::init<h::Expr>(p::arg("self")));
     //.def("set", &Func::set, "Typically one uses f[x, y] = expr to assign to a function. However f.set(expr) can be used also.")
 
     func_class.def("allow_race_conditions", &Func::allow_race_conditions,
