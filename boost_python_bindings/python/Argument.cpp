@@ -33,9 +33,9 @@ void defineArgument()
             p::class_<Argument>("Argument",
                                 "A struct representing an argument to a halide-generated function. "
                                 "Used for specifying the function signature of generated code.",
-                                p::init<>());
+                                p::init<>(p::arg("self")));
     auto init_keywords =
-            (p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions")=0,
+            (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions")=0,
              // using h::Expr initialization creates a run-time exception
              //(p::arg("default")=h::Expr()), (p::arg("min")=h::Expr()), (p::arg("max")=h::Expr())
              p::arg("default"), p::arg("min"), p::arg("max")
@@ -97,12 +97,12 @@ void defineArgument()
 
 
     argument_class
-            .def("is_buffer", &Argument::is_buffer,
+            .def("is_buffer", &Argument::is_buffer, p::arg("self"),
                  "An argument is either a primitive type (for parameters), or a buffer pointer. "
                  "If 'is_buffer' is true, then 'type' should be ignored.")
-            .def("is_scalar", &Argument::is_scalar)
-            .def("is_input", &Argument::is_input)
-            .def("is_output", &Argument::is_output);
+            .def("is_scalar", &Argument::is_scalar, p::arg("self"))
+            .def("is_input", &Argument::is_input, p::arg("self"))
+            .def("is_output", &Argument::is_output, p::arg("self"));
 
     p::class_< std::vector<h::Argument> >("ArgumentsVector")
                 .def( no_compare_indexing_suite< std::vector<h::Argument> >() );
