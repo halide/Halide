@@ -10,22 +10,22 @@ def get_blur(input):
     assert type(input) == ImageParam
     assert input.dimensions() == 2
 
-    x, y = Var('x'), Var('y')
+    x, y = Var("x"), Var("y")
 
     clamped_input = repeat_edge(input)
 
-    input_uint16 = Func('input_uint16')
+    input_uint16 = Func("input_uint16")
     input_uint16[x,y] = cast(UInt(16), clamped_input[x,y])
     ci = input_uint16
 
-    blur_x = Func('blur_x')
-    blur_y = Func('blur_y')
+    blur_x = Func("blur_x")
+    blur_y = Func("blur_y")
 
     blur_x[x,y] = (ci[x,y]+ci[x+1,y]+ci[x+2,y])/3
     blur_y[x,y] = cast(UInt(8), (blur_x[x,y]+blur_x[x,y+1]+blur_x[x,y+2])/3)
 
     # schedule
-    xi, yi = Var('xi'), Var('yi')
+    xi, yi = Var("xi"), Var("yi")
     blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
     blur_x.compute_at(blur_y, x).vectorize(x, 8)
 
@@ -75,11 +75,10 @@ def main():
           "Result saved at", output_path,
           "( input data copy at", input_path, ")")
 
-
     print("\nEnd of game. Have a nice day!")
     return
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
