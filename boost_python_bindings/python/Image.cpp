@@ -3,12 +3,22 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
+#define USE_BOOST_NUMPY
+
+#ifdef USE_BOOST_NUMPY
+#include <boost/numpy.hpp>
+#include <boost/cstdint.hpp>
+#endif
+
+
+
 #include "../../src/Image.h"
 
 #include <vector>
 #include <string>
 
 namespace h = Halide;
+namespace p = boost::python;
 
 
 template<typename T>
@@ -84,7 +94,6 @@ template<typename T>
 void defineImage_impl(const std::string suffix, const h::Type type)
 {
     using h::Image;
-    namespace p = boost::python;
     using p::self;
 
 
@@ -110,7 +119,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                                            "Wrap a single-element realization in an Image object."))
 
             .def(p::init<buffer_t *, std::string>((p::arg("self"), p::arg("b"), p::arg("name")=""),
-                                     "Wrap a buffer_t in an Image object, so that we can access its pixels."))
+                                                  "Wrap a buffer_t in an Image object, so that we can access its pixels."))
 
             .def("data", &Image<T>::data, p::arg("self"),
                  p::return_value_policy< p::return_opaque_pointer >(), // not sure this will do what we want
@@ -258,6 +267,122 @@ void defineImage_impl(const std::string suffix, const h::Type type)
     return;
 }
 
+
+#ifdef USE_BOOST_NUMPY
+p::object ndarray_to_image(const boost::numpy::ndarray &array, const std::string name="")
+{
+    namespace bn = boost::numpy;
+
+    size_t num_elements = 0;
+    for(size_t i = 0; i < array.get_nd(); i += 1)
+    {
+        if(i == 0)
+        {
+            num_elements = array.shape(i);
+        }
+        else
+        {
+            num_elements *= array.shape(i);
+        }
+    }
+
+    if(num_elements == 0)
+    {
+        throw std::invalid_argument("numpy_to_image recieved an empty array");
+    }
+
+    if(array.get_nd() > 4)
+    {
+        throw std::invalid_argument("numpy_to_image received array with more than 4 dimensions. "
+                                    "Halide only supports 4 or less dimensions");
+    }
+
+    h::Type t;
+
+    if(array.get_dtype() == bn::dtype::get_builtin<boost::uint8_t>())
+    {
+        t = h::UInt(8);
+    }
+    else if(array.get_dtype() == bn::dtype::get_builtin<boost::uint16_t>())
+    {
+        t = h::UInt(16);
+    }
+    else if(array.get_dtype() == bn::dtype::get_builtin<boost::uint32_t>())
+    {
+        t = h::UInt(32);
+    }
+    else if(array.get_dtype() == bn::dtype::get_builtin<boost::int8_t>())
+    {
+        t = h::Int(8);
+    }
+    else if(array.get_dtype() == bn::dtype::get_builtin<boost::int16_t>())
+    {
+        t = h::Int(16);
+    }
+    else if(array.get_dtype() == bn::dtype::get_builtin<boost::int32_t>())
+    {
+        t = h::Int(32);
+    }
+    else if(array.get_dtype() == bn::dtype::get_builtin<float>())
+    {
+        t = h::Float(32);
+    }
+    else if(array.get_dtype() == bn::dtype::get_builtin<double>())
+    {
+        t = h::Float(64);
+    }
+    else
+    {
+        const std::string type_repr = p::extract<std::string>(p::str(array.get_dtype()));
+        printf("numpy_to_image input array type: %s", type_repr.c_str());
+        throw std::invalid_argument("numpy_to_image received an array of type not managed in Halide.");
+    }
+
+
+    // buffer_t initialization based on BufferContents::BufferContents
+    buffer_t raw_buffer;
+    raw_buffer.dev = 0;
+    raw_buffer.host = reinterpret_cast<boost::uint8_t *>(array.get_data());
+    raw_buffer.elem_size = array.get_dtype().get_itemsize(); // in bytes
+    raw_buffer.host_dirty = false;
+    raw_buffer.dev_dirty = false;
+
+
+    for(int c=0; c < 4; c += 1)
+    {
+        if(c < array.get_nd())
+        {
+            raw_buffer.extent[c] = array.shape(c);
+            raw_buffer.stride[c] = array.strides(c);
+        }
+        else
+        {
+            raw_buffer.extent[c] = 0;
+            raw_buffer.stride[c] = 0;
+        }
+        raw_buffer.min[c] = 0;
+    }
+
+    const bool debug = true;
+    if(debug)
+    {
+        const std::string type_repr = p::extract<std::string>(p::str(array.get_dtype()));
+
+        printf("numpy_to_image array of type '%s'. "
+               "extent (%i, %i, %i, %i); stride (%i, %i, %i, %i)",
+               type_repr.c_str(),
+               raw_buffer.extent[0], raw_buffer.extent[1], raw_buffer.extent[2], raw_buffer.extent[3],
+                raw_buffer.stride[0], raw_buffer.stride[1], raw_buffer.stride[2], raw_buffer.stride[3]);
+    }
+
+    p::manage_new_object::apply<h::Buffer *>::type converter;
+    PyObject* obj = converter( new h::Buffer(t, &raw_buffer, name));
+    p::object return_object = p::object( p::handle<>( obj ) );
+
+    return return_object;
+}
+#endif
+
 void defineImage()
 {
 
@@ -272,6 +397,16 @@ void defineImage()
     defineImage_impl<float>("_float32", h::Float(32));
     defineImage_impl<double>("_float64", h::Float(64));
 
+
+#ifdef USE_BOOST_NUMPY
+
+    boost::numpy::initialize();
+
+    p::def("ndarray_to_image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
+           "Converts a numpy array into a Halide::Image."
+           "Will take into account the array size, dimensions, and type.");
+
+#endif
 
     //    class Image(object):
     //        """

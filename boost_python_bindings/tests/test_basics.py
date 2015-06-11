@@ -71,7 +71,23 @@ def test_basics():
 
     return
 
+def test_ndarray_to_image():
+
+    if "ndarray_to_image" not in globals():
+        print("Skipping test_ndarray_to_image")
+        return
+
+    import numpy
+
+    a = numpy.ones((200, 300), dtype=numpy.float32)
+    i = ndarray_to_image(a, "float32_test_image")
+
+    print("i", i.name(), i)
+
+
+    return
 
 if __name__ == "__main__":
     test_types()
     test_basics()
+    test_ndarray_to_image()

@@ -26,11 +26,17 @@ else()
 	endif()
 endif()
 
+option(USE_BOOST_NUMPY "Use Boost.Numpy dependency" ON)
+
+set(BoostNumpy_INCLUDE_DIRS "")
+set(BoostNumpy_LIBRARIES boost_numpy)
+
 add_definitions("-std=c++11")
 
 include_directories(
 ../build/include
 ${Boost_INCLUDE_DIRS}
+${BoostNumpy_INCLUDE_DIRS}
 ${PYTHON_INCLUDE_DIRS}
 ${NUMPY_INCLUDE_DIRS} )
 link_directories(
@@ -55,7 +61,10 @@ add_library(halide SHARED ${SrcCpp})
 target_link_libraries(halide
 Halide
 ${Boost_LIBRARIES}
-${PYTHON_LIBRARIES})
+${BoostNumpy_LIBRARIES}
+${PYTHON_LIBRARIES}
+
+)
 
 set_target_properties( halide PROPERTIES PREFIX "")
 if(APPLE)
