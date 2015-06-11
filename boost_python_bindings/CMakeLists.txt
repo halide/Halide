@@ -59,7 +59,7 @@ python/*.cpp
 
 add_library(halide SHARED ${SrcCpp})
 target_link_libraries(halide
-Halide
+Halide InitialModules
 ${Boost_LIBRARIES}
 ${BoostNumpy_LIBRARIES}
 ${PYTHON_LIBRARIES}

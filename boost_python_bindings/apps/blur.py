@@ -1,6 +1,10 @@
 
 from halide import *
 
+import numpy as np
+from scipy.misc import imread, imsave
+import os.path
+
 def get_blur(input):
 
     assert type(input) == ImageParam
@@ -27,17 +31,9 @@ def get_blur(input):
 
     return blur_y
 
-def main():
 
-    # define and compile the function
-    input = ImageParam(UInt(8), 2, "input_param")
-    blur = get_blur(input)
-    blur.compile_jit()
+def get_input_data():
 
-    # preparing input and output memory buffers (numpy ndarrays)
-    import numpy as np
-    from scipy.misc import imread, imsave
-    import os.path
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
@@ -46,11 +42,22 @@ def main():
 
     grey_data = np.mean(rgb_data, axis=2, dtype=float).astype(rgb_data.dtype)
     input_data = np.copy(grey_data, order="F")
+
+    return input_data
+
+def main():
+
+    # define and compile the function
+    input = ImageParam(UInt(8), 2, "input_param")
+    blur = get_blur(input)
+    blur.compile_jit()
+
+    # preparing input and output memory buffers (numpy ndarrays)
+    input_data = get_input_data()
     input_image = ndarray_to_image(input_data, "input_image")
     input.set(input_image)
 
-    output_data = np.empty(rgb_data.shape[:2],
-                              dtype=rgb_data.dtype, order="F")
+    output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
     output_image = ndarray_to_image(output_data, "output_image")
 
     print("input_image", input_image)
@@ -62,7 +69,7 @@ def main():
     # save results
     input_path = "blur_input.png"
     output_path = "blur_result.png"
-    imsave(input_path, grey_data)
+    imsave(input_path, input_data)
     imsave(output_path, output_data)
     print("\nblur realized on output image.",
           "Result saved at", output_path,
