@@ -1303,6 +1303,7 @@ Stage FuncRefVar::operator/=(Expr e) {
 }
 
 FuncRefVar::operator Expr() const {
+    //printf("func.name() == '%s'\n", func.name().c_str() );
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
     vector<Expr> expr_args(args.size());

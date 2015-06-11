@@ -25,11 +25,12 @@ def test_basics():
     x, y = Var('x'), Var('y')
 
     blur_x = Func('blur_x')
+    blur_xx = Func('blur_xx')
     blur_y = Func('blur_y')
 
-    y = cast(Int(32), 1)
-    assert y.type() == Int(32)
-    print("y type:", y.type())
+    yy = cast(Int(32), 1)
+    assert yy.type() == Int(32)
+    print("yy type:", yy.type())
 
     z = x + 1
     input[x,y]
@@ -37,13 +38,22 @@ def test_basics():
     input[z,y]
     input[x+1,y]
     print("ping 0.2")
-    (input[x,y]+input[x+1,y])
+    input[x,y]+input[x+1,y]
+
+    if False:
+        aa = blur_x[x,y]
+        bb = blur_x[x,y+1]
+        aa + bb
+        blur_x[x,y]+blur_x[x,y+1]
+
     print("ping 0.3")
     (input[x,y]+input[x+1,y]) / 2
     print("ping 0.4")
     blur_x[x,y]
     print("ping 0.4.1")
-    blur_x[x,y] = input[x,y]
+    blur_xx[x,y] = input[x,y]
+
+
 
     print("ping 0.5")
     blur_x[x,y] = (input[x,y]+input[x+1,y]+input[x+2,y])/3
@@ -52,9 +62,12 @@ def test_basics():
 
     xi, yi = Var('xi'), Var('yi')
     print("ping 2")
-    blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
+    #blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
     blur_x.compute_at(blur_y, x).vectorize(x, 8)
 
+
+    blur_y.compile_jit()
+    print("Compiled to jit")
 
     return
 

@@ -2,6 +2,7 @@
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
+#include "add_operators.h"
 
 #include "../../src/Func.h"
 
@@ -73,15 +74,15 @@ void func_compile_to_file0(h::Func &that, const std::string &filename_prefix,
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_file0_overloads, func_compile_to_file0, 3, 4)
 
 
-void func_parallel0(h::Func &that, h::VarOrRVar var)
+h::Func &func_parallel0(h::Func &that, h::VarOrRVar var)
 {
-    that.parallel(var);
+    return that.parallel(var);
 }
 
 
-void func_parallel1(h::Func &that, h::VarOrRVar var, int factor)
+h::Func &func_parallel1(h::Func &that, h::VarOrRVar var, int factor)
 {
-    that.parallel(var, factor);
+    return that.parallel(var, factor);
 }
 
 
@@ -286,18 +287,20 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
 
     p::object return_object;
 
-    // We prioritize Args
+    // We prioritize Args over Expr variant
     if(var_args.size() == args_len)
     {
-        p::reference_existing_object::apply<h::FuncRefVar &>::type converter;
         h::FuncRefVar ret = that(var_args);
+
+        p::copy_non_const_reference::apply<h::FuncRefVar &>::type converter;
         PyObject* obj = converter( ret );
         return_object = p::object( p::handle<>( obj ) );
     }
     else
     {   user_assert(expr_args.size() == args_len) << "Not all func_getitem_operator0 arguments where converted to Expr";
-        p::reference_existing_object::apply<h::FuncRefExpr &>::type converter;
         h::FuncRefExpr ret = that(expr_args);
+
+        p::copy_non_const_reference::apply<h::FuncRefExpr &>::type converter;
         PyObject* obj = converter( ret );
         return_object = p::object( p::handle<>( obj ) );
     }
@@ -331,22 +334,171 @@ h::Stage func_setitem_operator0(h::Func &that, p::tuple args_passed, T right_han
     }
 }
 
+template<typename A, typename B>
+auto add_func_refs(A &a, B &b) -> decltype(a + b)
+{
+    return a + b;
+}
+
+template<typename A, typename B>
+auto sub_func_refs(A &a, B &b) -> decltype(a - b)
+{
+    return a - b;
+}
+
+template<typename A, typename B>
+auto mul_func_refs(A &a, B &b) -> decltype(a * b)
+{
+    return a * b;
+}
+
+template<typename A, typename B>
+auto div_func_refs(A &a, B &b) -> decltype(a / b)
+{
+    return a / b;
+}
+
+template<typename A, typename B>
+auto mod_func_refs(A &a, B &b) -> decltype(a % b)
+{
+    return a % b;
+}
+
+template<typename A, typename B>
+auto and_func_refs(A &a, B &b) -> decltype(a & b)
+{
+    return a & b;
+}
+
+template<typename A, typename B>
+auto xor_func_refs(A &a, B &b) -> decltype(a ^ b)
+{
+    return a ^ b;
+}
+
+template<typename A, typename B>
+auto or_func_refs(A &a, B &b) -> decltype(a | b)
+{
+    return a | b;
+}
+
+template<typename A, typename B>
+auto gt_func_refs(A &a, B &b) -> decltype(a > b)
+{
+    return a > b;
+}
+
+template<typename A, typename B>
+auto ge_func_refs(A &a, B &b) -> decltype(a >= b)
+{
+    return a >= b;
+}
+
+template<typename A, typename B>
+auto lt_func_refs(A &a, B &b) -> decltype(a < b)
+{
+    return a < b;
+}
+
+template<typename A, typename B>
+auto le_func_refs(A &a, B &b) -> decltype(a <= b)
+{
+    return a <= b;
+}
+
+template<typename A, typename B>
+auto eq_func_refs(A &a, B &b) -> decltype(a == b)
+{
+    return a == b;
+}
+
+template<typename A, typename B>
+auto ne_func_refs(A &a, B &b) -> decltype(a != b)
+{
+    return a != b;
+}
 
 
+template<typename PythonClass, typename B>
+void add_func_ref_operators_with(PythonClass &class_a)
+{
+    typedef typename PythonClass::wrapped_type T;
+
+    class_a
+            .def("__add__", &add_func_refs<T, B>)
+            .def("__sub__", &sub_func_refs<T, B>)
+        #if PY_VERSION_HEX >= 0x03000000
+            .def("__truediv__", &div_func_refs<T, B>)
+        #else
+            .def("__div__", &div_func_refs<T, B>)
+        #endif
+            .def("__mod__", &mod_func_refs<T, B>)
+            .def("__and__", &and_func_refs<T, B>)
+            .def("__xor__", &xor_func_refs<T, B>)
+            .def("__or__", &or_func_refs<T, B>)
+            .def("__gt__", &gt_func_refs<T, B>)
+            .def("__ge__", &gt_func_refs<T, B>)
+            .def("__lt__", &lt_func_refs<T, B>)
+            .def("__le__", &le_func_refs<T, B>)
+            .def("__eq__", &eq_func_refs<T, B>)
+            .def("__ne__", &ne_func_refs<T, B>)
+            ;
+
+    //    BOOST_PYTHON_BINARY_OPERATOR(lshift, rlshift, <<)
+    //    BOOST_PYTHON_BINARY_OPERATOR(rshift, rrshift, >>)
+
+    return;
+}
 
 void defineFuncRef()
 {
     using Halide::FuncRefVar;
     using Halide::FuncRefExpr;
+    using p::self;
 
     // only defined so that boost::python knows about these classes,
     // not (yet) meant to be created or manipulated by the user
-    p::class_<FuncRefVar>("FuncRefVar", p::no_init);
-    p::class_<FuncRefExpr>("FuncRefExpr", p::no_init);
+    auto func_ref_var_class =
+            p::class_<FuncRefVar>("FuncRefVar", p::no_init)
+            ;
 
+    add_func_ref_operators_with<decltype(func_ref_var_class), FuncRefVar>(func_ref_var_class);
+    add_func_ref_operators_with<decltype(func_ref_var_class), FuncRefExpr>(func_ref_var_class);
+
+    auto func_ref_expr_class =
+            p::class_<FuncRefExpr>("FuncRefExpr", p::no_init)
+            ;
+
+    add_func_ref_operators_with<decltype(func_ref_expr_class), FuncRefVar>(func_ref_expr_class);
+    add_func_ref_operators_with<decltype(func_ref_expr_class), FuncRefExpr>(func_ref_expr_class);
 
     p::implicitly_convertible<FuncRefVar, h::Expr>();
     p::implicitly_convertible<FuncRefExpr, h::Expr>();
+
+    return;
+}
+
+void defineVarOrRVar()
+{
+    using Halide::VarOrRVar;
+
+    p::class_<VarOrRVar>("VarOrRVar",
+                         "A class that can represent Vars or RVars. "
+                         "Used for reorder calls which can accept a mix of either.",
+                         p::init<std::string, bool>(p::args("n", "r")))
+            .def(p::init<h::Var>(p::arg("v")))
+            .def(p::init<h::RVar>(p::arg("r")))
+            .def(p::init<h::RDom>(p::arg("r")))
+            .def("name", &VarOrRVar::name, p::return_value_policy<p::copy_const_reference>())
+            .def_readonly("var", &VarOrRVar::var)
+            .def_readonly("rvar", &VarOrRVar::rvar)
+            .def_readonly("is_rvar", &VarOrRVar::is_rvar)
+            ;
+
+
+    p::implicitly_convertible<h::Var, VarOrRVar>();
+    p::implicitly_convertible<h::RVar, VarOrRVar>();
+    p::implicitly_convertible<h::RDom, VarOrRVar>();
 
     return;
 }
@@ -438,9 +590,7 @@ void defineFunc()
                    "then you can call this ahead of time. Returns the raw function "
                    "pointer to the compiled pipeline.");
 
-    func_class.def("debug_to_file",
-                   &Func::debug_to_file,
-                   p::arg("filename"),
+    func_class.def("debug_to_file", &Func::debug_to_file, p::arg("filename"),
                    "When this function is compiled, include code that dumps its values "
                    "to a file after it is realized, for the purpose of debugging. "
                    "The file covers the realized extent at the point in the schedule that "
@@ -448,8 +598,7 @@ void defineFunc()
                    "If filename ends in \".tif\" or \".tiff\" (case insensitive) the file "
                    "is in TIFF format and can be read by standard tools.");
 
-    func_class.def("name",
-                   &Func::name,
+    func_class.def("name", &Func::name,
                    p::return_value_policy<p::copy_const_reference>(),
                    "The name of this function, either given during construction, or automatically generated.");
 
@@ -509,13 +658,11 @@ void defineFunc()
                                                                         """
         */
 
-    func_class.def("parallel",
-                   &func_parallel0,
-                   p::arg("var"),
+    func_class.def("parallel", &func_parallel0, p::arg("var"),
+                   p::return_internal_reference<1>(),
                    "Mark a dimension (Var instance) to be traversed in parallel.")
-            .def("parallel",
-                 &func_parallel1,
-                 p::args("var", "factor"));
+            .def("parallel", &func_parallel1, p::args("var", "factor"),
+                 p::return_internal_reference<1>());
 
     func_class.def("vectorize",
                    &func_vectorize1,
@@ -648,5 +795,8 @@ void defineFunc()
     p::implicitly_convertible<Func, h::Expr>();
 
     defineFuncRef();
+    defineStage();
+    defineVarOrRVar();
+
     return;
 }
