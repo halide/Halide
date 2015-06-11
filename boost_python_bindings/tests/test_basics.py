@@ -79,10 +79,13 @@ def test_ndarray_to_image():
 
     import numpy
 
-    a = numpy.ones((200, 300), dtype=numpy.float32)
-    i = ndarray_to_image(a, "float32_test_image")
+    a0 = numpy.ones((200, 300), dtype=numpy.float32)
+    i0 = ndarray_to_image(a0, "float32_test_image")
+    print("i0", i0)
 
-    print("i", i.name(), i)
+    a1 = numpy.ones((640, 480), dtype=numpy.uint8)
+    i1 = ndarray_to_image(a1, "uint8_test_image")
+    print("i1", i1)
 
 
     return
