@@ -128,6 +128,11 @@ std::string image_repr(h::Image<T> &image)
     return repr;
 }
 
+template<typename T>
+h::Buffer image_to_buffer(h::Image<T> &image)
+{
+    return image; // class operator Buffer()
+}
 
 template<typename T>
 void defineImage_impl(const std::string suffix, const h::Type type)
@@ -219,10 +224,6 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "Get the maximum coordinate in dimension 1, which by convention "
                  "is the bottom of the image. Returns zero for zero- or "
                  "one-dimensional images.")
-            .def("bottom", &Image<T>::bottom, p::arg("self"),
-                 "Get the maximum coordinate in dimension 1, which by convention "
-                 "is the bottom of the image. Returns zero for zero- or "
-                 "one-dimensional images.")
 
             // Access operators (to Expr, and to actual value)
 
@@ -268,6 +269,9 @@ void defineImage_impl(const std::string suffix, const h::Type type)
             .def("__call__", &image_call_operator3<T>, p::args("self", "x", "y", "z", "w"),
                  "Assuming this image is four-dimensional, get the value of the element at position (x, y, z, w)")
 
+
+            .def("buffer", &image_to_buffer<T>, p::args("self"),
+                 "Cast to Halide::buffer")
             ;
 
 
@@ -417,6 +421,8 @@ p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer
 
 
 #ifdef USE_BOOST_NUMPY
+
+/// Will create a Halide::Image object pointing to the array data
 p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name="")
 {
     size_t num_elements = 0;
@@ -443,7 +449,6 @@ p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name=
                                     "Halide only supports 4 or less dimensions");
     }
 
-
     // buffer_t initialization based on BufferContents::BufferContents
     buffer_t raw_buffer;
     raw_buffer.dev = 0;
@@ -469,6 +474,9 @@ p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name=
 
     return raw_buffer_to_image(array, raw_buffer, name);
 }
+
+
+
 #endif
 
 void defineImage()

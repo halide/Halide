@@ -35,6 +35,24 @@ h::Realization func_realize1(h::Func &that, int x_size=0, int y_size=0, int z_si
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize1_overloads, func_realize1, 1, 6)
 
 
+void func_realize2(h::Func &that, h::Realization dst, const h::Target &target = h::Target())
+{
+    that.realize(dst, target);
+    return;
+}
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize2_overloads, func_realize2, 2, 3)
+
+
+void func_realize3(h::Func &that, h::Buffer dst, const h::Target &target = h::Target())
+{
+    that.realize(dst, target);
+    return;
+}
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize3_overloads, func_realize3, 2, 3)
+
+
 void func_compile_jit(h::Func &that)
 {
     that.compile_jit();
@@ -462,7 +480,16 @@ void defineFunc()
                        "wrapped in an Image class.\n\n" \
                        "One can use f.realize(Buffer) to realize into an existing buffer."))
             .def("realize", &func_realize0, func_realize0_overloads(
-                     p::args("self", "sizes", "target")));
+                     p::args("self", "sizes", "target")))
+            .def("realize", &func_realize3, func_realize3_overloads(
+                     p::args("self", "dst", "target"),
+                     "Evaluate this function into an existing allocated buffer or "
+                     "buffers. If the buffer is also one of the arguments to the "
+                     "function, strange things may happen, as the pipeline isn't "
+                     "necessarily safe to run in-place. If you pass multiple buffers, "
+                     "they must have matching sizes."))
+            .def("realize", &func_realize2, func_realize2_overloads(
+                     p::args("self", "dst", "target")));
 
 
     func_class.def("compile_to_bitcode", &func_compile_to_bitcode0,

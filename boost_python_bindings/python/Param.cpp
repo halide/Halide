@@ -47,10 +47,37 @@ void defineParam()
             .def("name", &ImageParam::name, p::arg("self"),
                  p::return_value_policy<p::copy_const_reference>(),
                  "Get name of ImageParam.")
+
+            .def("dimensions", &ImageParam::dimensions, p::arg("self"),
+                 "Get the dimensionality of this image parameter")
+            .def("channels", &ImageParam::channels, p::arg("self"),
+                 "Get an expression giving the extent in dimension 2, "
+                 "which by convention is the channel-count of the image")
+
+            .def("width", &ImageParam::width, p::arg("self"),
+                 "Get an expression giving the extent in dimension 0, which by "
+                 "convention is the width of the image")
+            .def("height", &ImageParam::height, p::arg("self"),
+                 "Get an expression giving the extent in dimension 1, which by "
+                 "convention is the height of the image")
+
+            .def("left", &ImageParam::left, p::arg("self"),
+                 "Get an expression giving the minimum coordinate in dimension 0, which "
+                 "by convention is the coordinate of the left edge of the image")
+            .def("right", &ImageParam::right, p::arg("self"),
+                 "Get an expression giving the maximum coordinate in dimension 0, which "
+                 "by convention is the coordinate of the right edge of the image")
+            .def("top", &ImageParam::top, p::arg("self"),
+                 "Get an expression giving the minimum coordinate in dimension 1, which "
+                 "by convention is the top of the image")
+            .def("bottom", &ImageParam::bottom, p::arg("self"),
+                 "Get an expression giving the maximum coordinate in dimension 1, which "
+                 "by convention is the bottom of the image")
+
             .def("set", &ImageParam::set, p::args("self", "b"),
-                 "Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.")
+                 "Get the buffer bound to this ImageParam. Only relevant for jitting.")
             .def("get", &ImageParam::get, p::arg("self"),
-                 "Get the Buffer that is bound. Only relevant for jitting.")
+                 "Get the buffer bound to this ImageParam. Only relevant for jitting.")
             .def("__getitem__", &imageparam_to_expr_operator0, p::args("self", "tuple"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
