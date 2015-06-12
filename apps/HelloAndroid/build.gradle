@@ -33,8 +33,8 @@ sources {
 executables {
     halide_generator {
         binaries.all {
-            cppCompiler.args "-std=c++11", "-g", "-Wall", "-I", "${projectDir}/../../include"
-            linker.args "-lHalide", "-L", "${projectDir}/../../bin"
+            cppCompiler.args "-std=c++11", "-g", "-Wall", "-I", "${projectDir}/../../include", "-I", "${projectDir}/../../build/include"
+            linker.args "-lHalide", "-L", "${projectDir}/../../bin", "-L", "${projectDir}/../../build/lib"
         }
     }
 }
