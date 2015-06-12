@@ -8,7 +8,7 @@ LOCAL_SRC_FILES := native.cpp
 LOCAL_LDFLAGS   := -Ljni
 LOCAL_LDLIBS    := -lm -llog -landroid jni/halide_generated_$(TARGET_ARCH_ABI)/halide_generated.o # -lOpenCL -lllvm-a3xx
 LOCAL_STATIC_LIBRARIES := android_native_app_glue
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../include $(LOCAL_PATH)/halide_generated_$(TARGET_ARCH_ABI)/
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../../include $(LOCAL_PATH)/../../../build/include $(LOCAL_PATH)/halide_generated_$(TARGET_ARCH_ABI)/
 
 include $(BUILD_SHARED_LIBRARY)
 

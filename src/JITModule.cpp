@@ -3,6 +3,7 @@
 #include <mutex>
 #include <set>
 
+#include "CodeGen_Internal.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
@@ -239,9 +240,7 @@ public:
 
     // Just construct a module with symbols to import into other modules.
     JITModuleContents() : execution_engine(NULL),
-                          module(NULL),
-                          main_function(NULL),
-                          argv_function(NULL) {
+                          module(NULL) {
     }
 
     ~JITModuleContents() {
@@ -257,8 +256,8 @@ public:
     ExecutionEngine *execution_engine;
     llvm::Module *module;
     std::vector<JITModule> dependencies;
-    void *main_function;
-    int (*argv_function)(const void **);
+    JITModule::Symbol entrypoint;
+    JITModule::Symbol argv_entrypoint;
 
     std::string name;
 };
@@ -345,11 +344,14 @@ JITModule::JITModule() {
     jit_module = new JITModuleContents();
 }
 
-JITModule::JITModule(const Module &m, const LoweredFunc &fn) {
+JITModule::JITModule(const Module &m, const LoweredFunc &fn,
+                     const std::vector<JITModule> &dependencies) {
     jit_module = new JITModuleContents();
     llvm::Module *llvm_module = compile_module_to_llvm_module(m, jit_module.ptr->context);
+    std::vector<JITModule> deps_with_runtime = dependencies;
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module, m.target());
-    compile_module(llvm_module, fn.name, m.target(), shared_runtime);
+    deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
+    compile_module(llvm_module, fn.name, m.target(), deps_with_runtime);
 }
 
 void JITModule::compile_module(llvm::Module *m, const string &function_name, const Target &target,
@@ -438,14 +440,13 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     std::map<std::string, Symbol> exports;
 
-    void *main_fn = NULL;
-    int (*wrapper_fn)(const void **) = NULL;
+    Symbol entrypoint;
+    Symbol argv_entrypoint;
     if (!function_name.empty()) {
-        Symbol temp;
-        exports[function_name] = temp = compile_and_get_function(ee, m, function_name);
-        main_fn = temp.address;
-        exports[function_name + "_argv"] = temp = compile_and_get_function(ee, m, function_name + "_argv");
-        wrapper_fn = reinterpret_bits<int (*)(const void **)>(temp.address);
+        entrypoint = compile_and_get_function(ee, m, function_name);
+        exports[function_name] = entrypoint;
+        argv_entrypoint = compile_and_get_function(ee, m, function_name + "_argv");
+        exports[function_name + "_argv"] = argv_entrypoint;
     }
 
     for (size_t i = 0; i < requested_exports.size(); i++) {
@@ -485,13 +486,12 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     jit_module.ptr->execution_engine = ee;
     jit_module.ptr->module = m;
     jit_module.ptr->dependencies = dependencies;
-    jit_module.ptr->main_function = main_fn;
-    jit_module.ptr->argv_function = wrapper_fn;
+    jit_module.ptr->entrypoint = entrypoint;
+    jit_module.ptr->argv_entrypoint = argv_entrypoint;
     jit_module.ptr->name = function_name;
 }
 
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
-    internal_assert(defined()) << "JIT module is undefined\n";
     return jit_module.ptr->exports;
 }
 
@@ -513,31 +513,92 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
 }
 
 void *JITModule::main_function() const {
-    if (!defined()) {
-        return NULL;
-    }
-    return jit_module.ptr->main_function;
+    return jit_module.ptr->entrypoint.address;
+}
+
+JITModule::Symbol JITModule::entrypoint_symbol() const {
+    return jit_module.ptr->entrypoint;
 }
 
 int (*JITModule::argv_function() const)(const void **) {
-    if (!defined()) {
-        return NULL;
+    return (int (*)(const void **))jit_module.ptr->argv_entrypoint.address;
+}
+
+JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
+    return jit_module.ptr->argv_entrypoint;
+}
+
+static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set <const JITModuleContents *> &already_seen) {
+    if (start == target) {
+        return true;
     }
-    return (int (*)(const void **))jit_module.ptr->argv_function;
+    if (already_seen.count(start) != 0) {
+        return false;
+    }
+    already_seen.insert(start);
+    for (const JITModule &dep_holder : start->dependencies) {
+        const JITModuleContents *dep = dep_holder.jit_module.ptr;
+        if (module_already_in_graph(dep, target, already_seen)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void JITModule::add_dependency(JITModule &dep) {
+    std::set<const JITModuleContents *> already_seen;
+    internal_assert(!module_already_in_graph(dep.jit_module.ptr, jit_module.ptr, already_seen)) << "JITModule::add_dependency: creating circular dependency graph.\n";
+    jit_module.ptr->dependencies.push_back(dep);
+}
+
+void JITModule::add_symbol_for_export(const std::string &name, const Symbol &extern_symbol) {
+    jit_module.ptr->exports[name] = extern_symbol;
+}
+
+void JITModule::add_extern_for_export(const std::string &name, const ExternSignature &signature, void *address) {
+    Symbol symbol;
+    symbol.address = address;
+
+    // Struct types are uniqued on the context, but the lookup API is only available
+    // ont he Module, not hte Context.
+    llvm::Module dummy_module("ThisIsRidiculous", jit_module.ptr->context);
+    llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
+    if (buffer_t == NULL) {
+        buffer_t = llvm::StructType::create(jit_module.ptr->context, "struct.buffer_t");
+    }
+    llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
+
+    llvm::Type *ret_type;
+    if (signature.is_void_return) {
+        ret_type = llvm::Type::getVoidTy(jit_module.ptr->context);
+    } else {
+        ret_type = llvm_type_of(&jit_module.ptr->context, signature.ret_type);
+    }
+
+    std::vector<llvm::Type *> llvm_arg_types;
+    for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types) {
+        if (scalar_or_buffer_t.is_buffer) {
+            llvm_arg_types.push_back(buffer_t_star);
+        } else {
+            llvm_arg_types.push_back(llvm_type_of(&jit_module.ptr->context, scalar_or_buffer_t.scalar_type));
+        }
+    }
+
+    symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
+    jit_module.ptr->exports[name] = symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {
-    if (defined()) {
-        std::map<std::string, Symbol>::const_iterator f =
-            exports().find("halide_memoization_cache_set_size");
-        if (f != exports().end()) {
-            return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
-        }
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_memoization_cache_set_size");
+    if (f != exports().end()) {
+        return (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
     }
 }
 
-bool JITModule::defined() const {
-    return jit_module.defined() && jit_module.ptr->module != NULL;
+bool JITModule::compiled() const {
+    // TODO: Track down all uses and make sure changing this to not include "module != NULL" doesn't break anything.
+  return jit_module.ptr->module != NULL;
 }
 
 namespace {
@@ -692,8 +753,8 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                        RuntimeKind runtime_kind, const std::vector<JITModule> &deps,
                        bool create) {
     JITModule &runtime = shared_runtimes(runtime_kind);
-    if (!runtime.defined() && create) {
-        // If the module has not yet been defined, we need a module to clone the target options from.
+    if (!runtime.compiled() && create) {
+        // If the module has not yet been compiled, we need a module to clone the target options from.
         internal_assert(for_module != NULL);
 
         // Ensure that JIT feature is set on target as it must be in
@@ -800,24 +861,24 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     std::vector<JITModule> result;
 
     JITModule m = make_module(for_module, target, MainShared, result, create);
-    if (m.defined())
+    if (m.compiled())
         result.push_back(m);
 
     // Add all requested GPU modules, each only depending on the main shared runtime.
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
         JITModule m = make_module(for_module, target, OpenCL, result, create);
-        if (m.defined())
+        if (m.compiled())
             result.push_back(m);
     }
     if (target.has_feature(Target::CUDA)) {
         JITModule m = make_module(for_module, target, CUDA, result, create);
-        if (m.defined())
+        if (m.compiled())
             result.push_back(m);
     }
     if (target.has_feature(Target::OpenGL)) {
         JITModule m = make_module(for_module, target, OpenGL, result, create);
-        if (m.defined())
+        if (m.compiled())
             result.push_back(m);
     }
 
@@ -855,12 +916,11 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
 
-    if (size != default_cache_size && shared_runtimes(MainShared).defined()) {
+    if (size != default_cache_size) {
         default_cache_size = size;
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
 }
-
 
 }
 }
