@@ -96,6 +96,19 @@ void func_compile_to_file0(h::Func &that, const std::string &filename_prefix,
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_file0_overloads, func_compile_to_file0, 3, 4)
 
 
+void func_compile_to_lowered_stmt0(h::Func &that,
+                                   const std::string &filename,
+                                   const std::vector<h::Argument> &args,
+                                   h::StmtOutputFormat fmt = h::Text,
+                                   const h::Target &target = h::get_target_from_environment())
+{
+    that.compile_to_lowered_stmt(filename, args, fmt, target);
+    return;
+}
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_lowered_stmt0_overloads, func_compile_to_lowered_stmt0, 3, 5)
+
+
 h::Func &func_parallel0(h::Func &that, h::VarOrRVar var)
 {
     return that.parallel(var);
@@ -447,6 +460,12 @@ void defineFunc()
 {
     using Halide::Func;
 
+    p::enum_<h::StmtOutputFormat>("StmtOutputFormat")
+            .value("Text", h::StmtOutputFormat::Text)
+            .value("HTML", h::StmtOutputFormat::HTML)
+            .export_values()
+            ;
+
     auto func_class = p::class_<Func>("Func",
                                       "A halide function. This class represents one stage in a Halide" \
                                       "pipeline, and is the unit by which we schedule things. By default" \
@@ -515,8 +534,7 @@ void defineFunc()
                        "Compile to object file and header pair, with the given arguments. "
                        "Also names the C function to match the first argument."));
 
-    func_class.def("compile_jit",
-                   &func_compile_jit,
+    func_class.def("compile_jit", &func_compile_jit,
                    "Eagerly jit compile the function to machine code. This "
                    "normally happens on the first call to realize. If you're "
                    "running your halide pipeline inside time-sensitive code and "
@@ -531,6 +549,17 @@ void defineFunc()
                    "debug_to_file appears.\n"
                    "If filename ends in \".tif\" or \".tiff\" (case insensitive) the file "
                    "is in TIFF format and can be read by standard tools.");
+
+    func_class.def("compile_to_lowered_stmt", &func_compile_to_lowered_stmt0,
+                   func_compile_to_lowered_stmt0_overloads(
+                       p::args("self", "filename", "args", "fmt", "target"),
+                   "Write out an internal representation of lowered code. Useful "
+                   "for analyzing and debugging scheduling. Can emit html or plain text."));
+
+    func_class.def("print_loop_nest", &Func::print_loop_nest,
+                   "Write out the loop nests specified by the schedule for this "
+                   "Function. Helpful for understanding what a schedule is doing.");
+
 
     func_class.def("name", &Func::name,
                    p::return_value_policy<p::copy_const_reference>(),
@@ -702,7 +731,18 @@ void defineFunc()
 
     func_class.def("function", &Func::function, p::arg("self"),
                    "Get a handle on the internal halide function that this Func represents. "
-                   "Useful if you want to do introspection on Halide functions.");
+                   "Useful if you want to do introspection on Halide functions.")
+            .def("trace_loads", &Func::trace_loads, p::arg("self"),
+                 p::return_internal_reference<1>(),
+                 "Trace all loads from this Func by emitting calls to "
+                 "halide_trace. If the Func is inlined, this has no effect.")
+            .def("trace_stores", &Func::trace_stores, p::arg("self"),
+                 p::return_internal_reference<1>(),
+                 "Trace all stores to the buffer backing this Func by emitting "
+                 "calls to halide_trace. If the Func is inlined, this call has no effect.")
+            .def("trace_realizations", &Func::trace_realizations, p::arg("self"),
+                 p::return_internal_reference<1>(),
+                 "Trace all realizations of this Func by emitting calls to halide_trace.");
 
     defineFuncGpuMethods(func_class);
 
