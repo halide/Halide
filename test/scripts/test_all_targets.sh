@@ -102,14 +102,6 @@ for COMPILER in ${COMPILERS}; do
             LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
             CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
             LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-        elif [[ "$LLVM" == release-3.3 ]]; then
-            LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
-            CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
-            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
-        elif [[ "$LLVM" == release-3.4 ]]; then
-            LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
-            CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
-            LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
         elif [[ "$LLVM" == release-3.5 ]]; then
             LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
             CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
