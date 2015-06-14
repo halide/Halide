@@ -16,6 +16,10 @@ void defineTuple()
     using p::self;
 
 
+    auto tuple_class =
+            p::class_<Tuple>("Tuple", p::no_init)
+            ;
+
 
     return;
 }
