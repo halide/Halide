@@ -71,6 +71,64 @@ def test_basics():
 
     return
 
+
+def test_basics2():
+
+    input = ImageParam(Float(32), 3, 'input')
+    r_sigma = Param(Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
+    s_sigma = 8 # This is passed during code generation in the C++ version
+
+    x = Var('x')
+    y = Var('y')
+    z = Var('z')
+    c = Var('c')
+
+    # Add a boundary condition
+    clamped = Func('clamped')
+    clamped[x, y] = input[clamp(x, 0, input.width()-1),
+                          clamp(y, 0, input.height()-1),0]
+
+    if True:
+        print("s_sigma", s_sigma)
+        print("s_sigma/2", s_sigma/2)
+        print("s_sigma//2", s_sigma//2)
+        print()
+        print("x * s_sigma", x * s_sigma)
+        print("x * 8", x * 8)
+        print("x * 8 + 4", x * 8 + 4)
+        print("x * 8 * 4", x * 8  * 4)
+        print()
+        print("x", x)
+        print("(x * s_sigma).type()", )
+        print("(x * 8).type()", (x * 8).type())
+        print("(x * 8 + 4).type()", (x * 8 + 4).type())
+        print("(x * 8 * 4).type()", (x * 8 * 4).type())
+        print("(x * 8 / 4).type()", (x * 8 / 4).type())
+        print("((x * 8) * 4).type()", ((x * 8) * 4).type())
+        print("(x * (8 * 4)).type()", (x * (8 * 4)).type())
+
+
+    assert (x * 8).type() == Int(32)
+    assert (x * 8 * 4).type() == Int(32) # yes this did fail at some point
+    assert ((x * 8) / 4).type() == Int(32)
+    assert (x * (8 / 4)).type() == Float(32) # under python3 division rules
+    assert (x * (8 // 4)).type() == Int(32)
+    #assert (x * 8 // 4).type() == Int(32) # not yet implemented
+
+
+    # Construct the bilateral grid
+    r = RDom(0, s_sigma, 0, s_sigma, 'r')
+    val0 = clamped[x * s_sigma, y * s_sigma]
+    val00 = clamped[x * s_sigma * cast(Int(32), 1), y * s_sigma * cast(Int(32), 1)]
+    #val1 = clamped[x * s_sigma - s_sigma/2, y * s_sigma - s_sigma/2] # should fail
+    val22 = clamped[x * s_sigma - cast(Int(32), s_sigma//2),
+                    y * s_sigma - cast(Int(32), s_sigma//2)]
+    val2 = clamped[x * s_sigma - s_sigma//2, y * s_sigma - s_sigma//2]
+    val3 = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
+
+    return
+
+
 def test_ndarray_to_image():
 
     if "ndarray_to_image" not in globals():
@@ -93,4 +151,5 @@ def test_ndarray_to_image():
 if __name__ == "__main__":
     test_types()
     test_basics()
+    test_basics2()
     test_ndarray_to_image()
