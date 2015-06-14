@@ -5,6 +5,7 @@
 #include <boost/python.hpp>
 
 #include "../../src/Param.h"
+#include "Type.h"
 
 #include <vector>
 #include <string>
@@ -27,12 +28,9 @@ h::Expr imageparam_to_expr_operator0(h::ImageParam &that, p::tuple args_passed)
 }
 
 
-void defineParam()
+void defineImageParam()
 {
-    // Might create linking problems, if Param.cpp is not included in the python library
-
     using Halide::ImageParam;
-
     using p::self;
 
     auto image_param_class =
@@ -87,5 +85,449 @@ void defineParam()
 
     p::implicitly_convertible<ImageParam, h::Argument>();
     p::implicitly_convertible<ImageParam, h::Expr>();
+
+    return;
+}
+
+void defineOutputImageParam()
+{
+
+    //"A handle on the output buffer of a pipeline. Used to make static
+    // "promises about the output size and stride."
+    //class OutputImageParam {
+    //protected:
+    //    "A reference-counted handle on the internal parameter object"
+    //    Internal::Parameter param;
+
+    //    void add_implicit_args_if_placeholder(std::vector<Expr> &args,
+    //                                          Expr last_arg,
+    //                                          int total_args,
+    //                                          bool *placeholder_seen) const;
+    //public:
+
+    //    "Construct a NULL image parameter handle."
+    //    OutputImageParam() {}
+
+    //    "Virtual destructor. Does nothing."
+    //    EXPORT virtual ~OutputImageParam();
+
+    //    "Construct an OutputImageParam that wraps an Internal Parameter object."
+    //    EXPORT OutputImageParam(const Internal::Parameter &p);
+
+    //    "Get the name of this Param"
+    //    EXPORT const std::string &name() const;
+
+    //    "Get the type of the image data this Param refers to"
+    //    EXPORT Type type() const;
+
+    //    "Is this parameter handle non-NULL"
+    //    EXPORT bool defined();
+
+    //    "Get an expression representing the minimum coordinates of this image
+    //     "parameter in the given dimension."
+    //    EXPORT Expr min(int x) const;
+
+    //    "Get an expression representing the extent of this image
+    //     "parameter in the given dimension"
+    //    EXPORT Expr extent(int x) const;
+
+    //    "Get an expression representing the stride of this image in the
+    //     "given dimension"
+    //    EXPORT Expr stride(int x) const;
+
+    //    "Set the extent in a given dimension to equal the given
+    //     "expression. Images passed in that fail this check will generate
+    //     "a runtime error. Returns a reference to the ImageParam so that
+    //     "these calls may be chained.
+    //     *
+    //     "This may help the compiler generate better
+    //     "code. E.g:
+    //     \code
+    //     im.set_extent(0, 100);
+    //     \endcode
+    //     "tells the compiler that dimension zero must be of extent 100,
+    //     "which may result in simplification of boundary checks. The
+    //     "value can be an arbitrary expression:
+    //     \code
+    //     im.set_extent(0, im.extent(1));
+    //     \endcode
+    //     "declares that im is a square image (of unknown size), whereas:
+    //     \code
+    //     im.set_extent(0, (im.extent(0)/32)*32);
+    //     \endcode
+    //     "tells the compiler that the extent is a multiple of 32."
+    //    EXPORT OutputImageParam &set_extent(int dim, Expr extent);
+
+    //    "Set the min in a given dimension to equal the given
+    //     "expression. Setting the mins to zero may simplify some
+    //     "addressing math."
+    //    EXPORT OutputImageParam &set_min(int dim, Expr min);
+
+    //    "Set the stride in a given dimension to equal the given
+    //     "value. This is particularly helpful to set when
+    //     "vectorizing. Known strides for the vectorized dimension
+    //     "generate better code."
+    //    EXPORT OutputImageParam &set_stride(int dim, Expr stride);
+
+    //    "Set the min and extent in one call."
+    //    EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
+
+    //    "Get the dimensionality of this image parameter"
+    //    EXPORT int dimensions() const;
+
+    //    "Get an expression giving the minimum coordinate in dimension 0, which
+    //     "by convention is the coordinate of the left edge of the image"
+    //    EXPORT Expr left() const;
+
+    //    "Get an expression giving the maximum coordinate in dimension 0, which
+    //     "by convention is the coordinate of the right edge of the image"
+    //    EXPORT Expr right() const;
+
+    //    "Get an expression giving the minimum coordinate in dimension 1, which
+    //     "by convention is the top of the image"
+    //    EXPORT Expr top() const;
+
+    //    "Get an expression giving the maximum coordinate in dimension 1, which
+    //     "by convention is the bottom of the image"
+    //    EXPORT Expr bottom() const;
+
+    //    "Get an expression giving the extent in dimension 0, which by
+    //     "convention is the width of the image"
+    //    EXPORT Expr width() const;
+
+    //    "Get an expression giving the extent in dimension 1, which by
+    //     "convention is the height of the image"
+    //    EXPORT Expr height() const;
+
+    //    "Get an expression giving the extent in dimension 2, which by
+    //     "convention is the channel-count of the image"
+    //    EXPORT Expr channels() const;
+
+    //    "Get at the internal parameter object representing this ImageParam."
+    //    EXPORT Internal::Parameter parameter() const;
+
+    //    "Construct the appropriate argument matching this parameter,
+    //     "for the purpose of generating the right type signature when
+    //     "statically compiling halide pipelines."
+    //    EXPORT virtual operator Argument() const;
+
+    //    "Using a param as the argument to an external stage treats it
+    //     "as an Expr"
+    //    EXPORT operator ExternFuncArgument() const;
+    //};
+
+    return;
+}
+
+template<typename T>
+void defineParam_impl(const std::string suffix, const h::Type type)
+{
+    using Halide::Param;
+    using p::self;
+
+
+    auto param_class =
+            p::class_<Param<T>>(("Param"+ suffix).c_str(),
+                                "A scalar parameter to a halide pipeline. If you're jitting, this "
+                                "should be bound to an actual value of type T using the set method "
+                                "before you realize the function uses this. If you're statically "
+                                "compiling, this param should appear in the argument list.",
+                                p::init<>(
+                                    p::arg("self"),
+                                    "Construct a scalar parameter of type T with a unique auto-generated name"));
+    param_class
+            .def(p::init<std::string>(
+                     p::args("self", "name"), "Construct a scalar parameter of type T with the given name."))
+            .def(p::init<T>(
+                     p::args("self", "val"),
+                     "Construct a scalar parameter of type T an initial value of "
+                     "'val'. Only triggers for scalar types."))
+            .def(p::init<std::string, T>(
+                     p::args("self", "name", "val"),
+                     "Construct a scalar parameter of type T with the given name "
+                     "and an initial value of 'val'."))
+            .def(p::init<T, h::Expr, h::Expr>(
+                     p::args("self", "val", "min", "max"),
+                     "Construct a scalar parameter of type T with an initial value of 'val' "
+                     "and a given min and max."))
+            .def(p::init<std::string, T, h::Expr, h::Expr>(
+                     p::args("self", "name", "val", "min", "max"),
+                     "Construct a scalar parameter of type T with the given name "
+                     "and an initial value of 'val' and a given min and max."))
+
+            .def("name", &Param<T>::name, p::arg("self"),
+                 p::return_value_policy<p::copy_const_reference>(),
+                 "Get the name of this parameter")
+            .def("is_explicit_name", &Param<T>::is_explicit_name, p::arg("self"),
+                 "Return true iff the name was explicitly specified in the ctor (vs autogenerated).")
+
+            .def("get", &Param<T>::get, p::arg("self"),
+                 "Get the current value of this parameter. Only meaningful when jitting.")
+            .def("set", &Param<T>::set, p::args("self", "val"),
+                 "Set the current value of this parameter. Only meaningful when jitting")
+            //            .def("get_address", &Param<T>::get_address, p::arg("self"),
+            //                 "Get a pointer to the location that stores the current value of
+            //                 "this parameter. Only meaningful for jitting.")
+
+            .def("type", &Param<T>::type, p::arg("self"),
+                 "Get the halide type of T")
+
+            .def("set_range", &Param<T>::set_range, p::args("self", "min", "max"),
+                 "Get or set the possible range of this parameter. "
+                 "Use undefined Exprs to mean unbounded.")
+            .def("set_min_value", &Param<T>::set_min_value, p::args("self", "min"),
+                 "Get or set the possible range of this parameter. "
+                 "Use undefined Exprs to mean unbounded.")
+            .def("set_max_value", &Param<T>::set_max_value, p::args("self", "max"),
+                 "Get or set the possible range of this parameter. "
+                 "Use undefined Exprs to mean unbounded.")
+            .def("get_min_value", &Param<T>::get_min_value, p::arg("self"))
+            .def("get_max_value", &Param<T>::get_max_value, p::arg("self"))
+
+            //            "You can use this parameter as an expression in a halide
+            //            "function definition"
+            //            operator Expr() const
+
+            //            "Using a param as the argument to an external stage treats it
+            //            "as an Expr"
+            //            operator ExternFuncArgument() const
+
+            //            "Construct the appropriate argument matching this parameter,
+            //            "for the purpose of generating the right type signature when
+            //            "statically compiling halide pipelines."
+            //            operator Argument() const
+
+            ;
+
+    p::implicitly_convertible<Param<T>, h::Argument>();
+    //p::implicitly_convertible<Param<T>, h::ExternFuncArgument>();
+    p::implicitly_convertible<Param<T>, h::Expr>();
+
+    return;
+}
+
+
+template<typename T, typename ...Args>
+p::object create_param_object(Args ...args)
+{
+    typedef h::Param<T> ParamType;
+    typedef typename p::manage_new_object::apply<ParamType *>::type converter_t;
+    converter_t converter;
+    PyObject* obj = converter( new ParamType(args...) );
+    return p::object( p::handle<>( obj ) );
+}
+
+
+// C++ fun, variadic template recursive function !
+template<typename T=void, typename ...Types>
+p::object create_param0_impl(h::Type type, std::string name)
+{
+    if(h::type_of<T>() == type)
+    {
+        if(name != "")
+        {
+            return create_param_object<T>(name);
+        }
+        else
+        {
+            return create_param_object<T>();
+        }
+    }
+    else
+    {
+        return create_param0_impl<Types...>(type, name); // keep recursing
+    }
+}
+
+template<>
+p::object create_param0_impl<void>(h::Type type, std::string /*name*/)
+{ // end of recursion, did not find a matching type
+    printf("create_param0_impl<void> received %s\n", type_repr(type).c_str());
+    throw std::invalid_argument("ParamFactory::create_param0_impl received type not handled");
+    return p::object();
+}
+
+struct end_of_recursion_t {}; // dummy helper type
+
+template<>
+struct h::type_of_helper<end_of_recursion_t> {
+    operator h::Type() {
+        return h::Type(); // call default constructor
+    }
+};
+
+// C++ fun, variadic template recursive function !
+template<typename T=end_of_recursion_t, typename ...Types, typename ...Args>
+p::object create_param1_impl(h::Type type, std::string name, p::object val, Args... args)
+{
+
+    if(std::is_same<T, end_of_recursion_t>::value)
+    {
+        // end of recursion, did not find a matching type
+        printf("create_param1_impl<void> received %s\n", type_repr(type).c_str());
+        throw std::invalid_argument("ParamFactory::create_param1_impl received type not handled");
+        return p::object();
+    }
+
+    if(h::type_of<T>() == type)
+    {
+        p::extract<T> val_extract(val);
+
+        if(val_extract.check())
+        {
+            T true_val = val_extract();
+            if(name != "")
+            {
+                return create_param_object<T>(name, true_val, args...);
+            }
+            else
+            {
+                return create_param_object<T>(true_val, args...);
+            }
+        }
+        else
+        {
+            printf("create_param1_impl type == %s\n", type_repr(type).c_str());
+            const std::string val_str = p::extract<std::string>(p::str(val));
+            printf("create_param1_impl val == %s\n", val_str.c_str());
+            throw std::invalid_argument("ParamFactory::create_param1_impl called with"
+                                        "a value that could not be converted to the given type");
+        }
+    }
+    else
+    {
+        return create_param1_impl<Types..., Args...>(type, name, val, args...); // keep recursing
+    }
+}
+
+
+struct ParamFactory
+{
+    static p::object create_param0(h::Type type)
+    {
+        return create_param0_impl<
+                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+                boost::int8_t, boost::int16_t, boost::int32_t,
+                float, double>(type, "");
+    }
+
+    static p::object create_param1(h::Type type, std::string name)
+    {
+        return create_param0_impl<
+                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+                boost::int8_t, boost::int16_t, boost::int32_t,
+                float, double>(type, name);
+    }
+
+
+    static p::object create_param2(h::Type type, p::object val)
+    {
+        return create_param1_impl<
+                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+                boost::int8_t, boost::int16_t, boost::int32_t,
+                float, double>(type, "", val);
+    }
+
+
+    static p::object create_param3(h::Type type, std::string name, p::object val)
+    {
+        return create_param1_impl<
+                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+                boost::int8_t, boost::int16_t, boost::int32_t,
+                float, double>(type, name, val);
+    }
+
+    static p::object create_param3b(ParamFactory &self, h::Type type, std::string name, float val)
+    {
+        p::object val_o(val);
+        return create_param1_impl<
+                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+                boost::int8_t, boost::int16_t, boost::int32_t,
+                float, double>(type, name, val_o);
+    }
+
+    static p::object create_param3c(h::Type type, std::string name, float val)
+    {
+        p::object val_o(val);
+        return create_param1_impl<
+                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+                boost::int8_t, boost::int16_t, boost::int32_t,
+                float, double>(type, name, val_o);
+    }
+
+
+//    static p::object create_param4(h::Type type, p::object val, h::Expr min, h::Expr max)
+//    {
+//        return create_param1_impl<
+//                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+//                boost::int8_t, boost::int16_t, boost::int32_t,
+//                float, double>(type, "", val, min, max);
+//    }
+
+//    static p::object create_param5(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
+//    {
+//        return create_param1_impl<
+//                boost::uint8_t, boost::uint16_t, boost::uint32_t,
+//                boost::int8_t, boost::int16_t, boost::int32_t,
+//                float, double>(type, name, val, min, max);
+//    }
+
+};
+
+void defineParam()
+{
+    // Might create linking problems, if Param.cpp is not included in the python library
+
+    defineParam_impl<uint8_t>("_uint8", h::UInt(8));
+    defineParam_impl<uint16_t>("_uint16", h::UInt(16));
+    defineParam_impl<uint32_t>("_uint32", h::UInt(32));
+
+    defineParam_impl<int8_t>("_int8", h::Int(8));
+    defineParam_impl<int16_t>("_int16", h::Int(16));
+    defineParam_impl<int32_t>("_int32", h::Int(32));
+
+    defineParam_impl<float>("_float32", h::Float(32));
+    defineParam_impl<double>("_float64", h::Float(64));
+
+    typedef p::default_call_policies dcp;
+
+    p::class_<ParamFactory>("Param",
+                            p::no_init)
+            .def("__init__", p::make_constructor(&ParamFactory::create_param0, dcp(), p::args("type")),
+                 "Construct a scalar parameter of type T with a unique auto-generated name")
+            .def("__init__", &ParamFactory::create_param1, p::args("type", "name"),
+                 "Construct a scalar parameter of type T with the given name.")
+            .def("__init__", &ParamFactory::create_param2, p::args("type", "val"),
+                 "Construct a scalar parameter of type T an initial value of "
+                 "'val'. Only triggers for scalar types.")
+//            .def("__init__", p::make_constructor(&ParamFactory::create_param3,  dcp(), p::args("type", "name", "val")),
+//                 "Construct a scalar parameter of type T with the given name "
+//                 "and an initial value of 'val'.")
+
+            .def("__init__", ParamFactory::create_param3b, p::args("self", "type", "name", "val"),
+                 "Construct a scalar parameter of type T with the given name "
+                 "and an initial value of 'val'.")
+
+            .def("__init__", ParamFactory::create_param3c, p::args("type", "name", "val"),
+                 "Construct a scalar parameter of type T with the given name "
+                 "and an initial value of 'val'.")
+
+//            .def("__init__", &ParamFactory::create_param4, p::args("type", "val", "min", "max"),
+//                 "Construct a scalar parameter of type T with an initial value of 'val' "
+//                 "and a given min and max.")
+//            .def("__init__", &ParamFactory::create_param5, p::args("type", "name", "val", "min", "max"),
+//                 "Construct a scalar parameter of type T with the given name "
+//                 "and an initial value of 'val' and a given min and max.")
+            ;
+
+
+    p::def("user_context_value", &h::user_context_value,
+           "Returns an Expr corresponding to the user context passed to "
+           "the function (if any). It is rare that this function is necessary "
+           "(e.g. to pass the user context to an extern function written in C).");
+
+
+    defineImageParam();
+    defineOutputImageParam();
     return;
 }
