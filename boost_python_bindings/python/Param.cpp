@@ -357,10 +357,9 @@ struct h::type_of_helper<end_of_recursion_t> {
 };
 
 // C++ fun, variadic template recursive function !
-template<typename T=end_of_recursion_t, typename ...Types, typename ...Args>
-p::object create_param1_impl(h::Type type, std::string name, p::object val, Args... args)
+template<bool UseExprs, typename T=end_of_recursion_t, typename ...Types>
+p::object create_param1_impl(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
 {
-
     if(std::is_same<T, end_of_recursion_t>::value)
     {
         // end of recursion, did not find a matching type
@@ -376,13 +375,27 @@ p::object create_param1_impl(h::Type type, std::string name, p::object val, Args
         if(val_extract.check())
         {
             T true_val = val_extract();
-            if(name != "")
+            if(UseExprs == true)
             {
-                return create_param_object<T>(name, true_val, args...);
+                if(name != "")
+                {
+                    return create_param_object<T>(name, true_val, min, max);
+                }
+                else
+                {
+                    return create_param_object<T>(true_val, min, max);
+                }
             }
             else
-            {
-                return create_param_object<T>(true_val, args...);
+            { // UseExprs == false
+                if(name != "")
+                {
+                    return create_param_object<T>(name, true_val);
+                }
+                else
+                {
+                    return create_param_object<T>(true_val);
+                }
             }
         }
         else
@@ -390,13 +403,13 @@ p::object create_param1_impl(h::Type type, std::string name, p::object val, Args
             printf("create_param1_impl type == %s\n", type_repr(type).c_str());
             const std::string val_str = p::extract<std::string>(p::str(val));
             printf("create_param1_impl val == %s\n", val_str.c_str());
-            throw std::invalid_argument("ParamFactory::create_param1_impl called with"
+            throw std::invalid_argument("ParamFactory::create_param1_impl called with "
                                         "a value that could not be converted to the given type");
         }
     }
     else
     {
-        return create_param1_impl<Types..., Args...>(type, name, val, args...); // keep recursing
+        return create_param1_impl<UseExprs, Types...>(type, name, val, min, max); // keep recursing
     }
 }
 
@@ -422,55 +435,36 @@ struct ParamFactory
 
     static p::object create_param2(h::Type type, p::object val)
     {
-        return create_param1_impl<
+        return create_param1_impl<false,
                 boost::uint8_t, boost::uint16_t, boost::uint32_t,
                 boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, "", val);
+                float, double>(type, "", val, h::Expr(),  h::Expr());
     }
 
 
     static p::object create_param3(h::Type type, std::string name, p::object val)
     {
-        return create_param1_impl<
+        return create_param1_impl<false,
                 boost::uint8_t, boost::uint16_t, boost::uint32_t,
                 boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, name, val);
+                float, double>(type, name, val, h::Expr(),  h::Expr());
     }
 
-    static p::object create_param3b(ParamFactory &self, h::Type type, std::string name, float val)
+    static p::object create_param4(h::Type type, p::object val, h::Expr min, h::Expr max)
     {
-        p::object val_o(val);
-        return create_param1_impl<
+        return create_param1_impl<true,
                 boost::uint8_t, boost::uint16_t, boost::uint32_t,
                 boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, name, val_o);
+                float, double>(type, "", val, min, max);
     }
 
-    static p::object create_param3c(h::Type type, std::string name, float val)
+    static p::object create_param5(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
     {
-        p::object val_o(val);
-        return create_param1_impl<
+        return create_param1_impl<true,
                 boost::uint8_t, boost::uint16_t, boost::uint32_t,
                 boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, name, val_o);
+                float, double>(type, name, val, min, max);
     }
-
-
-//    static p::object create_param4(h::Type type, p::object val, h::Expr min, h::Expr max)
-//    {
-//        return create_param1_impl<
-//                boost::uint8_t, boost::uint16_t, boost::uint32_t,
-//                boost::int8_t, boost::int16_t, boost::int32_t,
-//                float, double>(type, "", val, min, max);
-//    }
-
-//    static p::object create_param5(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
-//    {
-//        return create_param1_impl<
-//                boost::uint8_t, boost::uint16_t, boost::uint32_t,
-//                boost::int8_t, boost::int16_t, boost::int32_t,
-//                float, double>(type, name, val, min, max);
-//    }
 
 };
 
@@ -489,36 +483,26 @@ void defineParam()
     defineParam_impl<float>("_float32", h::Float(32));
     defineParam_impl<double>("_float64", h::Float(64));
 
-    typedef p::default_call_policies dcp;
 
-    p::class_<ParamFactory>("Param",
-                            p::no_init)
-            .def("__init__", p::make_constructor(&ParamFactory::create_param0, dcp(), p::args("type")),
-                 "Construct a scalar parameter of type T with a unique auto-generated name")
-            .def("__init__", &ParamFactory::create_param1, p::args("type", "name"),
-                 "Construct a scalar parameter of type T with the given name.")
-            .def("__init__", &ParamFactory::create_param2, p::args("type", "val"),
-                 "Construct a scalar parameter of type T an initial value of "
-                 "'val'. Only triggers for scalar types.")
-//            .def("__init__", p::make_constructor(&ParamFactory::create_param3,  dcp(), p::args("type", "name", "val")),
-//                 "Construct a scalar parameter of type T with the given name "
-//                 "and an initial value of 'val'.")
+    // "Param" will look as a class, but instead it will be simply a factory method
+    p::def("Param", &ParamFactory::create_param0, p::args("type"),
+           "Construct a scalar parameter of type T with a unique auto-generated name");
+    p::def("Param", &ParamFactory::create_param1, p::args("type", "name"),
+           "Construct a scalar parameter of type T with the given name.");
+    p::def("Param", &ParamFactory::create_param2, p::args("type", "val"),
+           "Construct a scalar parameter of type T an initial value of "
+           "'val'. Only triggers for scalar types.");
+    p::def("Param", &ParamFactory::create_param3, p::args("type", "name", "val"),
+           "Construct a scalar parameter of type T with the given name "
+           "and an initial value of 'val'.");
 
-            .def("__init__", ParamFactory::create_param3b, p::args("self", "type", "name", "val"),
-                 "Construct a scalar parameter of type T with the given name "
-                 "and an initial value of 'val'.")
-
-            .def("__init__", ParamFactory::create_param3c, p::args("type", "name", "val"),
-                 "Construct a scalar parameter of type T with the given name "
-                 "and an initial value of 'val'.")
-
-//            .def("__init__", &ParamFactory::create_param4, p::args("type", "val", "min", "max"),
-//                 "Construct a scalar parameter of type T with an initial value of 'val' "
-//                 "and a given min and max.")
-//            .def("__init__", &ParamFactory::create_param5, p::args("type", "name", "val", "min", "max"),
-//                 "Construct a scalar parameter of type T with the given name "
-//                 "and an initial value of 'val' and a given min and max.")
-            ;
+    p::def("Param", &ParamFactory::create_param4, p::args("type", "val", "min", "max"),
+           "Construct a scalar parameter of type T with an initial value of 'val' "
+           "and a given min and max.");
+    p::def("Param", &ParamFactory::create_param5, p::args("type", "name", "val", "min", "max"),
+           "Construct a scalar parameter of type T with the given name "
+           "and an initial value of 'val' and a given min and max.");
+    ;
 
 
     p::def("user_context_value", &h::user_context_value,
