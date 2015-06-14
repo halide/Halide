@@ -6,12 +6,18 @@
 //#include <boost/python/def.hpp>
 
 
-template<typename A, typename B, typename ReturnType>
-ReturnType floordiv(A /*a*/, B /*b*/)
+template<typename A, typename B, typename WrappedType>
+//WrappedType floordiv(A /*a*/, B /*b*/)
+auto floordiv(A a, B b) -> decltype(a / b)
 {
-    throw std::invalid_argument("Halide floordiv not yet implemented, use '/' instead.");
-    return ReturnType();
+    //throw std::invalid_argument("Halide floordiv not yet implemented, use '/' instead.");
+    //return WrappedType();
+
+    // Halide does floordiv by default over Expr and similar.
+    // see https://lists.csail.mit.edu/pipermail/halide-dev/2015-June/001679.html
+    return a / b;
 }
+
 
 
 template<typename PythonClass, typename T>
