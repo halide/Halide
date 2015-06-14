@@ -535,7 +535,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
         if (scalar_or_buffer_t.is_buffer) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module.ptr->context, signature.ret_type));
+            llvm_arg_types.push_back(llvm_type_of(&jit_module.ptr->context, scalar_or_buffer_t.scalar_type));
         }
     }
 

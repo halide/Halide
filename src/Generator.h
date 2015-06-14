@@ -410,6 +410,8 @@ public:
         return filter_arguments;
     }
 
+    EXPORT std::vector<Argument> get_filter_output_types();
+
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
     int natural_vector_size(Halide::Type t) const {

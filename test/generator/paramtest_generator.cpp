@@ -14,15 +14,20 @@ public:
     Param<float> float_arg{ "float_arg", 1.0f, 0.0f, 100.0f };
     Param<int32_t> int_arg{ "int_arg", 1 };
 
-    Func build() {
+    Pipeline build() {
         input = ImageParam(input_type, input.dimensions(), input.name());
 
         Var x, y, c;
 
         Func f;
-        f(x, y, c) = cast(output_type, input(x, y, c) * float_arg + int_arg);
+        f(x, y, c) = Tuple(
+                input(x, y, c),
+                cast(output_type, input(x, y, c) * float_arg + int_arg));
 
-        return f;
+        Func g;
+        g(x, y) = cast<int16_t>(input(x, y, 0));
+
+        return Pipeline({f, g});
     }
 };
 

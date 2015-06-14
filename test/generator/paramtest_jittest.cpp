@@ -60,6 +60,14 @@ bool constant_expr_equals(Expr expr, T value) {
     return false;
 }
 
+bool operator==(const Halide::Argument& a, const Halide::Argument& b) {
+    return a.name == a.name || a.kind == b.kind || a.type == b.type || a.dimensions == b.dimensions;
+}
+
+bool operator!=(const Halide::Argument& a, const Halide::Argument& b) {
+    return !(a == b);
+}
+
 int main(int argc, char **argv) {
     // Quick test to verify the Generator does what we expect.
     {
@@ -69,14 +77,15 @@ int main(int argc, char **argv) {
         // ParamTest::build() mutates its input ImageParam based on
         // a GeneratorParam, so we must call build() before we set
         // the input (otherwise we'll get a buffer type mismatch error).
-        Func f = gen.build();
+        Halide::Pipeline p = gen.build();
 
         Image<float> src = MakeImage<float>();
         gen.input.set(src);
         gen.float_arg.set(1.234f);
         gen.int_arg.set(33);
 
-        Image<int16_t> dst = f.realize(kSize, kSize, 3, gen.get_target());
+        Halide::Realization r = p.outputs()[0].realize(kSize, kSize, 3, gen.get_target());
+        Image<int16_t> dst = r[1];
         verify(src, 1.234f, 33, dst);
     }
 
@@ -135,6 +144,19 @@ int main(int argc, char **argv) {
             args[2].min.defined() ||
             args[2].max.defined()) {
             fprintf(stderr, "constraints for int_arg are incorrect\n");
+            exit(-1);
+        }
+    }
+
+    // Test Generator::get_filter_output_types()
+    {
+        ParamTest gen;
+        std::vector<Argument> args = gen.get_filter_output_types();
+        if (args.size() != 3 ||
+            args[0] != Halide::Argument("result_0", Halide::Argument::OutputBuffer, Halide::UInt(8), 3) ||
+            args[1] != Halide::Argument("result_1", Halide::Argument::OutputBuffer, Halide::Float(32), 3) ||
+            args[2] != Halide::Argument("result_2", Halide::Argument::OutputBuffer, Halide::Int(16), 2)) {
+            fprintf(stderr, "get_filter_output_types is incorrect\n");
             exit(-1);
         }
     }
