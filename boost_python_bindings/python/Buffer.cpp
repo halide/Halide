@@ -1,12 +1,13 @@
 #include "Buffer.h"
 
-
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 #include "make_array.h"
+#include "no_compare_indexing_suite.h"
 
 #include "../../src/Buffer.h"
 
+#include <vector>
 #include <string>
 
 
@@ -155,5 +156,9 @@ void defineBuffer()
             ;
 
     p::implicitly_convertible<Buffer, h::Argument>();
+
+    p::class_< std::vector<Buffer> >("BuffersVector")
+                .def( no_compare_indexing_suite< std::vector<Buffer> >() );
+
     return;
 }
