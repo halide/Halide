@@ -362,7 +362,7 @@ p::object create_param1_impl(h::Type type, std::string name, p::object val, h::E
     if(std::is_same<T, end_of_recursion_t>::value)
     {
         // end of recursion, did not find a matching type
-        printf("create_param1_impl<void> received %s\n", type_repr(type).c_str());
+        printf("create_param1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
         throw std::invalid_argument("ParamFactory::create_param1_impl received type not handled");
         return p::object();
     }
