@@ -713,7 +713,10 @@ Realization Pipeline::realize(int x_size, int y_size,
 
 Realization Pipeline::realize(int x_size,
                               const Target &target) {
-    return realize({x_size}, target);
+    // Use an explicit vector here, since {x_size} can be interpreted
+    // as a scalar initializer
+    vector<int32_t> v = {x_size};
+    return realize(v, target);
 }
 
 namespace {
@@ -917,7 +920,7 @@ Pipeline::make_externs_jit_module(const Target &target,
 
             // Ensure that the pipeline is compiled.
             jit_extern.pipeline.compile_jit(target);
-            
+
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
             iter->second.c_function = pipeline_contents.jit_module.entrypoint_symbol().address;

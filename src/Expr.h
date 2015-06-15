@@ -224,8 +224,8 @@ enum class DeviceAPI {
     CUDA,
     OpenCL,
     GLSL,
-    Metal,
-    Renderscript
+    Renderscript,
+    Metal
 };
 
 namespace Internal {

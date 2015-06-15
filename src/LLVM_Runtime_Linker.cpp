@@ -518,7 +518,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         } else if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
         }
-        
     }
 
     if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {

@@ -265,6 +265,19 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
     }
 }
 
+std::vector<Argument> GeneratorBase::get_filter_output_types() {
+    std::vector<Argument> output_types;
+    Pipeline pipeline = build_pipeline();
+    std::vector<Func> pipeline_results = pipeline.outputs();
+    for (Func func : pipeline_results) {
+        for (Halide::Type t : func.output_types()) {
+            std::string name = "result_" + std::to_string(output_types.size());
+            output_types.push_back(Halide::Argument(name, Halide::Argument::OutputBuffer, t, func.dimensions()));
+        }
+    }
+    return output_types;
+}
+
 void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const std::string &function_name,
                                 const std::string &file_base_name,
