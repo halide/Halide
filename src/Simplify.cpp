@@ -2469,9 +2469,17 @@ private:
 
                 stmt = LetStmt::make(let_first->name, let_first->value, new_block);
             } else if (if_first && if_rest && equal(if_first->condition, if_rest->condition)) {
-                stmt = IfThenElse::make(if_first->condition,
-                                        mutate(Block::make(if_first->then_case, if_rest->then_case)),
-                                        mutate(Block::make(if_first->else_case, if_rest->else_case)));
+                Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
+                Stmt else_case;
+                if (if_first->else_case.defined() && if_rest->else_case.defined()) {
+                    else_case = mutate(Block::make(if_first->else_case, if_rest->else_case));
+                } else if (if_first->else_case.defined()) {
+                    // We already simplified the body of the ifs.
+                    else_case = if_first->else_case;
+                } else {
+                    else_case = if_rest->else_case;
+                }
+                stmt = IfThenElse::make(if_first->condition, then_case, else_case);
             } else if (op->first.same_as(first) && op->rest.same_as(rest)) {
                 stmt = op;
             } else {
@@ -3043,6 +3051,22 @@ void simplify_test() {
           IfThenElse::make(x < y,
                            Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
                            Block::make(Evaluate::make(x+2), Evaluate::make(x+4))));
+
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
+                      IfThenElse::make(x < y, Evaluate::make(x+2))),
+          IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))));
+
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
+                      IfThenElse::make(x < y, Evaluate::make(x+3))),
+          IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
+                           Evaluate::make(x+2)));
+
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
+                      IfThenElse::make(x < y, Evaluate::make(x+2), Evaluate::make(x+3))),
+          IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
+                           Evaluate::make(x+3)));
 
     // Check conditions involving entire exprs
     Expr foo = x + 3*y;
