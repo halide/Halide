@@ -327,6 +327,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
     builder->CreateBr(post_entry);
 
     function_name = "";
+
 }
 
 template<typename CodeGen_CPU>
