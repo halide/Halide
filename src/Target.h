@@ -65,7 +65,7 @@ struct Target {
 
         Matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
-	Metal, ///< Enable the (Apple) Metal runtime.
+        Metal, ///< Enable the (Apple) Metal runtime.
 
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of

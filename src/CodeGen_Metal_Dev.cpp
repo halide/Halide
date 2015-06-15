@@ -83,27 +83,26 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) 
 namespace {
 string simt_intrinsic(const string &name) {
     if (ends_with(name, ".__thread_id_x")) {
-        return "get_local_id(0)";
+        return "tid_in_tgroup.x";
     } else if (ends_with(name, ".__thread_id_y")) {
-        return "get_local_id(1)";
+        return "tid_in_tgroup.y";
     } else if (ends_with(name, ".__thread_id_z")) {
-        return "get_local_id(2)";
+        return "tid_in_tgroup.z";
     } else if (ends_with(name, ".__thread_id_w")) {
-        return "get_local_id(3)";
+        user_error << "Metal does not support more than three dimensions in a kernel (threads).\n";
     } else if (ends_with(name, ".__block_id_x")) {
-        return "get_group_id(0)";
+        return "tgroup_index.x";
     } else if (ends_with(name, ".__block_id_y")) {
-        return "get_group_id(1)";
+        return "tgroup_index.y";
     } else if (ends_with(name, ".__block_id_z")) {
-        return "get_group_id(2)";
+        return "tgroup_index.z";
     } else if (ends_with(name, ".__block_id_w")) {
-        return "get_group_id(3)";
+        user_error << "Metal does not support more than three dimensions in a kernel (groups).\n";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
 }
-
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
     if (op->type.is_int()) {
@@ -366,8 +365,8 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Free *op) {
 
 
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
-                                    const string &name,
-                                    const vector<GPU_Argument> &args) {
+                                   const string &name,
+                                   const vector<GPU_Argument> &args) {
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -390,12 +389,12 @@ struct BufferSize {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
-                                                      const string &name,
-                                                      const vector<GPU_Argument> &args) {
+                                                    const string &name,
+                                                    const vector<GPU_Argument> &args) {
 
     debug(2) << "Adding Metal kernel " << name << "\n";
 
-    // Figure out which arguments should be passed in __constant.
+    // Figure out which arguments should be passed in constant.
     // Such arguments should be:
     // - not written to,
     // - loads are block-uniform,
@@ -414,7 +413,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
     }
 
     // Sort the constant candidates from smallest to largest. This will put
-    // as many of the constant allocations in __constant as possible.
+    // as many of the constant allocations in constant as possible.
     // Ideally, we would prioritize constant buffers by how frequently they
     // are accessed.
     sort(constants.begin(), constants.end());
@@ -437,39 +436,71 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
             if (constant != constants.end()) {
                 stream << "#if " << constant->size << " < MAX_CONSTANT_BUFFER_SIZE && "
                        << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
-                stream << "#define " << get_memory_space(args[i].name) << " __constant\n";
+                stream << "#define " << get_memory_space(args[i].name) << " constant\n";
                 stream << "#else\n";
-                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#define " << get_memory_space(args[i].name) << " device\n";
                 stream << "#endif\n";
             } else {
-                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#define " << get_memory_space(args[i].name) << " device\n";
             }
         }
     }
 
-    // Emit the function prototype
-    stream << "__kernel void " << name << "(\n";
+    // Emit a struct to hold the scalar args of the kernel
+    bool any_scalar_args = false;
     for (size_t i = 0; i < args.size(); i++) {
+        if (!args[i].is_buffer) {
+            if (!any_scalar_args) {
+                stream << "struct " + name + "_args {\n";
+                any_scalar_args = true;
+            }
+            stream << print_type(args[i].type)
+                   << " "
+                   << print_name(args[i].name)
+                   << ";\n";
+        }
+    }
+    if (any_scalar_args) {
+        stream << "}\n";
+    }
+
+    // Emit the function prototype
+    stream << "kernel void " << name << "(\n";
+    stream << "uint3 tgroup_index [[ threadgroup_position_in_grid ]],\n"
+           << "uint3 tid_in_group [[ thread_position_in_threadgroup ]]";
+    size_t buffer_index = 0;
+    if (any_scalar_args) {
+        stream << "const " << name << "_args * [[ buffer(0) ]],\n";
+        buffer_index++;
+    }
+
+    for (size_t i = 0; i < args.size(); i++) {
+        stream << ",\n";
         if (args[i].is_buffer) {
             stream << " " << get_memory_space(args[i].name) << " ";
             if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
-                   << print_name(args[i].name);
+                   << print_name(args[i].name) << " [[ buffer(" << buffer_index++ << ") ]]";
             allocations.push(args[i].name, args[i].type);
-        } else {
-            stream << " const "
-                   << print_type(args[i].type)
-                   << " "
-                   << print_name(args[i].name);
         }
-
-        if (i < args.size()-1) stream << ",\n";
     }
     stream << ",\n" << " __address_space___shared int16* __shared";
 
     stream << ")\n";
 
     open_scope();
+
+    // Unpack args struct into local variables to match naming of generated code.
+    for (size_t i = 0; i < args.size(); i++) {
+        if (!args[i].is_buffer) {
+            stream << print_type(args[i].type)
+                   << " "
+                   << print_name(args[i].name)
+                   << " = " << name << "_args." << print_name(args[i].name)
+                   << ";\n";
+        }
+    }
+
     print(s);
     close_scope("kernel " + name);
 
@@ -517,11 +548,6 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
 
-    // This identifies the program as Metal C (as opposed to SPIR).
-    src_stream << "/*Metal C*/\n";
-
-    src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
-
     // Write out the Halide math functions.
     src_stream << "float maxval_f32() {return FLT_MAX;}\n"
                << "float minval_f32() {return -FLT_MAX;}\n"
@@ -567,41 +593,16 @@ void CodeGen_Metal_Dev::init_module() {
                << "  return 0;\n"
                << "}\n";
 
-    // __shared always has address space __local.
-    src_stream << "#define __address_space___shared __local\n";
-
-    if (target.has_feature(Target::CLDoubles)) {
-        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
-                   << "bool is_nan_f64(double x) {return x != x; }\n"
-                   << "#define sqrt_f64 sqrt\n"
-                   << "#define sin_f64 sin\n"
-                   << "#define cos_f64 cos\n"
-                   << "#define exp_f64 exp\n"
-                   << "#define log_f64 log\n"
-                   << "#define abs_f64 fabs\n"
-                   << "#define floor_f64 floor\n"
-                   << "#define ceil_f64 ceil\n"
-                   << "#define round_f64 round\n"
-                   << "#define trunc_f64 trunc\n"
-                   << "#define pow_f64 pow\n"
-                   << "#define asin_f64 asin\n"
-                   << "#define acos_f64 acos\n"
-                   << "#define tan_f64 tan\n"
-                   << "#define atan_f64 atan\n"
-                   << "#define atan2_f64 atan2\n"
-                   << "#define sinh_f64 sinh\n"
-                   << "#define asinh_f64 asinh\n"
-                   << "#define cosh_f64 cosh\n"
-                   << "#define acosh_f64 acosh\n"
-                   << "#define tanh_f64 tanh\n"
-                   << "#define atanh_f64 atanh\n";
-    }
+    // __shared always has address space threadgroup.
+    src_stream << "#define __address_space___shared threadgroup\n";
 
     src_stream << '\n';
 
+#if 0
     // Add at least one kernel to avoid errors on some implementations for functions
     // without any GPU schedules.
     src_stream << "__kernel void _at_least_one_kernel(int x) { }\n";
+#endif
 
     cur_kernel_name = "";
 }

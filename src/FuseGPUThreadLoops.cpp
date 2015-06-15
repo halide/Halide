@@ -505,7 +505,7 @@ class ZeroGPULoopMins : public IRMutator {
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::Parent) ||
           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
-	  (op->device_api == DeviceAPI::Metal);
+          (op->device_api == DeviceAPI::Metal);
 
         IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
