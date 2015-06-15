@@ -11,9 +11,10 @@
 #include <boost/cstdint.hpp>
 #endif
 
-
+#include <boost/mpl/list.hpp>
 
 #include "../../src/Image.h"
+#include "Type.h"
 
 #include <vector>
 #include <string>
@@ -313,6 +314,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
     return;
 }
 
+#ifdef USE_BOOST_NUMPY
 
 p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer, const std::string &name)
 {
@@ -420,8 +422,6 @@ p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer
 }
 
 
-#ifdef USE_BOOST_NUMPY
-
 /// Will create a Halide::Image object pointing to the array data
 p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name="")
 {
@@ -479,6 +479,123 @@ p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name=
 
 #endif
 
+
+template<typename T, typename ...Args>
+p::object create_image_object(Args ...args)
+{
+    typedef h::Image<T> ImageType;
+    typedef typename p::manage_new_object::apply<ImageType *>::type converter_t;
+    converter_t converter;
+    PyObject* obj = converter( new ImageType(args...) );
+    return p::object( p::handle<>( obj ) );
+}
+
+
+// C++ fun, variadic template recursive function !
+template<typename PixelTypes>
+p::object create_image0_impl(h::Type type)
+{
+    typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
+    if(h::type_of<pixel_t>() == type)
+    {
+        return create_image_object<pixel_t>();
+    }
+    else
+    {
+        typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
+        return create_image0_impl<pixels_types_tail_t>(type); // keep recursing
+    }
+}
+
+template<>
+p::object create_image0_impl<boost::mpl::l_end::type>(h::Type type)
+{ // end of recursion, did not find a matching type
+    printf("create_image0_impl<boost::mpl::l_end::type> received %s\n", type_repr(type).c_str());
+    throw std::invalid_argument("ImageFactory::create_image0_impl received type not handled");
+    return p::object();
+}
+
+
+
+// C++ fun, variadic template recursive function !
+// (if you wonder why struct::operator() and not a function,
+// see http://artofsoftware.org/2012/12/20/c-template-function-partial-specialization )
+template<typename PixelTypes, typename ...Args>
+struct create_image1_impl_t
+{
+ p::object operator()(h::Type type, Args... args)
+ {
+     typedef typename boost::mpl::empty<PixelTypes>::type pixels_types_list_is_empty_t;
+     if(pixels_types_list_is_empty_t::value == true)
+     {
+         // end of recursion, did not find a matching type
+         printf("create_image1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
+         throw std::invalid_argument("ImageFactory::create_image1_impl received type not handled");
+         return p::object();
+     }
+
+     typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
+     if(h::type_of<pixel_t>() == type)
+     {
+            return create_image_object<pixel_t, Args...>(args...);
+     }
+     else
+     {// keep recursing
+         typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
+         return create_image1_impl_t<pixels_types_tail_t, Args...>()(type, args...);
+     }
+ }
+};
+
+
+template<typename ...Args>
+struct create_image1_impl_t<boost::mpl::l_end::type, Args...>
+{
+ p::object operator()(h::Type type, Args... args)
+ {
+     // end of recursion, did not find a matching type
+         printf("create_image1_impl<boost::mpl::l_end::type> received %s\n", type_repr(type).c_str());
+         throw std::invalid_argument("ImageFactory::create_image1_impl received type not handled");
+         return p::object();
+ }
+};
+
+
+struct ImageFactory
+{
+    typedef boost::mpl::list<boost::uint8_t, boost::uint16_t, boost::uint32_t,
+            boost::int8_t, boost::int16_t, boost::int32_t,
+            float, double> pixel_types_t;
+
+    static p::object create_image0(h::Type type)
+    {
+        return create_image0_impl<pixel_types_t>(type);
+    }
+
+    static p::object create_image1(h::Type type, int x, int y, int z, int w, std::string name)
+    {
+        return create_image1_impl_t<pixel_types_t, int, int, int, int, std::string>()(type, x, y, z, w, name);
+    }
+
+    static p::object create_image2(h::Type type, h::Buffer &buf)
+    {
+        return create_image1_impl_t<pixel_types_t, h::Buffer &>()(type, buf);
+    }
+
+    static p::object create_image3(h::Type type, h::Realization &r)
+    {
+        return create_image1_impl_t<pixel_types_t, h::Realization &>()(type, r);
+    }
+
+    static p::object create_image4(h::Type type, buffer_t *b, std::string name)
+    {
+        return create_image1_impl_t<pixel_types_t, buffer_t *, std::string>()(type, b, name);
+    }
+
+};
+
+
+
 void defineImage()
 {
     defineImage_impl<uint8_t>("_uint8", h::UInt(8));
@@ -493,14 +610,38 @@ void defineImage()
     defineImage_impl<double>("_float64", h::Float(64));
 
 
+    // "Image" will look as a class, but instead it will be simply a factory method
+    p::def("Image", &ImageFactory::create_image0, p::args("type"),
+           "Construct an undefined image handle of type T");
+
+    p::def("Image", &ImageFactory::create_image1,
+           (p::arg("type"), p::arg("x"), p::arg("y")=0, p::arg("z")=0, p::arg("w")=0, p::arg("name")=""),
+           "Allocate an image of type T with the given dimensions.");
+
+    p::def("Image", &ImageFactory::create_image2, p::args("type", "buf"),
+           "Wrap a buffer in an Image object of type T, "
+           "so that we can directly access its pixels in a type-safe way.");
+
+    p::def("Image", &ImageFactory::create_image3, p::args("type", "r"),
+           "Wrap a single-element realization in an Image object of type T.");
+
+    p::def("Image", &ImageFactory::create_image4, (p::arg("type"), p::arg("b"), p::arg("name")=""),
+           "Wrap a buffer_t in an Image object of type T, so that we can access its pixels.");
+
+
 #ifdef USE_BOOST_NUMPY
 
     boost::numpy::initialize();
 
     p::def("ndarray_to_image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
            "Converts a numpy array into a Halide::Image."
-           "Will take into account the array size, dimensions, and type.");
+           "Will take into account the array size, dimensions, and type."
+           "Created Image refers to the array data (no copy).");
 
+    p::def("Image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
+           "Wrap numpy array in a Halide::Image."
+           "Will take into account the array size, dimensions, and type."
+           "Created Image refers to the array data (no copy).");
 #endif
 
     //    class Image(object):
