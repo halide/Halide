@@ -426,6 +426,12 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
         return_object = p::object( p::handle<>( obj ) );
     }
 
+
+    if(false)
+    {
+        printf("func_getitem_operator0 returns %s\n",
+               static_cast<std::string>(p::extract<std::string>(p::str(return_object))).c_str());
+    }
     return return_object;
 }
 
@@ -553,8 +559,8 @@ void defineFunc()
     func_class.def("compile_to_lowered_stmt", &func_compile_to_lowered_stmt0,
                    func_compile_to_lowered_stmt0_overloads(
                        p::args("self", "filename", "args", "fmt", "target"),
-                   "Write out an internal representation of lowered code. Useful "
-                   "for analyzing and debugging scheduling. Can emit html or plain text."));
+                       "Write out an internal representation of lowered code. Useful "
+                       "for analyzing and debugging scheduling. Can emit html or plain text."));
 
     func_class.def("print_loop_nest", &Func::print_loop_nest,
                    "Write out the loop nests specified by the schedule for this "
@@ -748,9 +754,9 @@ void defineFunc()
 
     p::implicitly_convertible<Func, h::Expr>();
 
-    defineFuncRef();
     defineStage();
     defineVarOrRVar();
+    defineFuncRef();
 
     return;
 }
