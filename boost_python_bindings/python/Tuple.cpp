@@ -26,6 +26,11 @@ h::Expr tuple_getitem0(h::Tuple &that, const size_t x)
     return that[x];
 }
 
+h::Buffer realization_getitem0(h::Realization &that, const size_t x)
+{
+    return that[x];
+}
+
 
 void defineRealization()
 {
@@ -33,55 +38,46 @@ void defineRealization()
     namespace p = boost::python;
     using p::self;
 
+    //auto realization_class =
+    p::class_<Realization>("Realization",
+                           "Funcs with Tuple values return multiple buffers when you realize "
+                           "them. Tuples are to Exprs as Realizations are to Buffers.",
+                           p::init< std::vector<h::Buffer> >
+                           ( // BuffersVector is defined in Buffer.cpp
+                             p::args("self", "buffers"),
+                             "Construct a Realization from a vector of Buffers"))
 
-    //    "Funcs with Tuple values return multiple buffers when you realize
-    //     "them. Tuples are to Exprs as Realizations are to Buffers."
-    //    class Realization {
-    //    private:
-    //        std::vector<Buffer> buffers;
-    //    public:
-    //        "The number of buffers in the Realization."
-    //        size_t size() const { return buffers.size(); }
+            //    "Construct a Realization from some Buffers."
+            //    template<typename ...Args>
+            //    Realization(Buffer a, Buffer b, Args... args) : buffers({a, b})
 
-    //        "Get a reference to one of the buffers."
-    //        Buffer &operator[](size_t x) {
-    //            user_assert(x < buffers.size()) << "Realization access out of bounds\n";
-    //            return buffers[x];
-    //        }
+            //    "Single-element realizations are implicitly castable to Buffers."
+            //    Realization::operator Buffer() const
 
-    //        "Get one of the buffers."
-    //        Buffer operator[](size_t x) const {
-    //            user_assert(x < buffers.size()) << "Realization access out of bounds\n";
-    //            return buffers[x];
-    //        }
+            //            "Construct a Tuple from a function reference."
+            //            Tuple(const FuncRefVar &);
+            //            Tuple(const FuncRefExpr &);
 
-    //        "Single-element realizations are implicitly castable to Buffers."
-    //        operator Buffer() const {
-    //            user_assert(buffers.size() == 1) << "Can only cast single-element realizations to buffers or images\n";
-    //            return buffers[0];
-    //        }
+            .def("size", &Realization::size, p::arg("self"),
+                 "The number of buffers in the Realization.")
 
-    //        "Construct a Realization from some Buffers."
-    //        //@{
-    //        template<typename ...Args>
-    //        Realization(Buffer a, Buffer b, Args... args) : buffers({a, b}) {
-    //            Internal::collect_args(buffers, args...);
-    //        }
-    //        //@}
+            //.def("__getitem__", &Realization::Buffer &operator[], p::args("self", "x"),
+            //     "Get a reference to one of the buffers.")
 
-    //        "Construct a Realization from a vector of Buffers"
-    //        explicit Realization(const std::vector<Buffer> &e) : buffers(e) {
-    //            user_assert(e.size() > 0) << "Realizations must have at least one element\n";
-    //        }
+            .def("__getitem__", &realization_getitem0, p::args("self", "x"),
+                 "Get one of the buffers.")
 
-    //        "Treat the Realization as a vector of Buffers"
-    //        const std::vector<Buffer> &as_vector() const {
-    //            return buffers;
-    //        }
-    //    };
+            .def("as_vector", &Realization::as_vector, p::arg("self"),
+                 p::return_value_policy<p::copy_const_reference>(),
+                 "Treat the Realization as a vector of Buffers")
+            ;
+
+    // "Single-element realizations are implicitly castable to Buffers."
+    p::implicitly_convertible<Realization, h::Buffer>();
 
     return;
 }
+
 
 void defineTuple()
 {
@@ -104,7 +100,6 @@ void defineTuple()
             //            "Construct a Tuple from a function reference."
             //            Tuple(const FuncRefVar &);
             //            Tuple(const FuncRefExpr &);
-
 
             .def("size", &Tuple::size, p::arg("self"),
                  "The number of elements in the tuple.")
