@@ -317,9 +317,10 @@ p::object create_param_object(Args ...args)
     return p::object( p::handle<>( obj ) );
 }
 
+struct end_of_recursion_t {}; // dummy helper type
 
 // C++ fun, variadic template recursive function !
-template<typename T=void, typename ...Types>
+template<typename T=end_of_recursion_t, typename ...Types>
 p::object create_param0_impl(h::Type type, std::string name)
 {
     if(h::type_of<T>() == type)
@@ -340,14 +341,12 @@ p::object create_param0_impl(h::Type type, std::string name)
 }
 
 template<>
-p::object create_param0_impl<void>(h::Type type, std::string /*name*/)
+p::object create_param0_impl<end_of_recursion_t>(h::Type type, std::string /*name*/)
 { // end of recursion, did not find a matching type
-    printf("create_param0_impl<void> received %s\n", type_repr(type).c_str());
+    printf("create_param0_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
     throw std::invalid_argument("ParamFactory::create_param0_impl received type not handled");
     return p::object();
 }
-
-struct end_of_recursion_t {}; // dummy helper type
 
 template<>
 struct h::type_of_helper<end_of_recursion_t> {
@@ -495,7 +494,6 @@ void defineParam()
     p::def("Param", &ParamFactory::create_param3, p::args("type", "name", "val"),
            "Construct a scalar parameter of type T with the given name "
            "and an initial value of 'val'.");
-
     p::def("Param", &ParamFactory::create_param4, p::args("type", "val", "min", "max"),
            "Construct a scalar parameter of type T with an initial value of 'val' "
            "and a given min and max.");
