@@ -83,7 +83,6 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-    options.DisableTailCalls = false;
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
