@@ -164,41 +164,102 @@ void add_func_ref_operators_with(PythonClass &class_a)
             .def("__lshift__", &lshift_func_refs<T, B>)
             .def("__rshift__", &rshift_func_refs<T, B>)
 
-
-            //            BOOST_PYTHON_INPLACE_OPERATOR(iadd,+=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(isub,-=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(imul,*=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(idiv,/=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(imod,%=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(ilshift,<<=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(irshift,>>=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(iand,&=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(ixor,^=)
-            //            BOOST_PYTHON_INPLACE_OPERATOR(ior,|=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(iadd,+=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(isub,-=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(imul,*=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(idiv,/=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(imod,%=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(ilshift,<<=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(irshift,>>=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(iand,&=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(ixor,^=)
+            //    BOOST_PYTHON_INPLACE_OPERATOR(ior,|=)
             ;
 
     return;
 }
 
-void defineFuncRef()
+void defineFuncRefVar()
 {
     using Halide::FuncRefVar;
-    using Halide::FuncRefExpr;
     using p::self;
-
-    // only defined so that boost::python knows about these class,
-    // not (yet) meant to be created or manipulated by the user
-    p::class_<h::Internal::Function>("InternalFunction", p::no_init);
 
 
     // only defined so that boost::python knows about these classes,
     // not (yet) meant to be created or manipulated by the user
     auto func_ref_var_class =
-            p::class_<FuncRefVar>("FuncRefVar", p::no_init)
+            p::class_<FuncRefVar>("FuncRefVar",
+                                  "A fragment of front-end syntax of the form f(x, y, z), where x, "
+                                  "y, z are Vars. It could be the left-hand side of a function "
+                                  "definition, or it could be a call to a function. We don't know "
+                                  "until we see how this object gets used.",
+                                  p::no_init)
+            //FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
+
+            //    .def("__??__", FuncRefVar::operator=(Expr);
+            //         "Use this as the left-hand-side of a definition.")
+            //    .def("__??__", FuncRefVar::operator(const Tuple &),
+            //         "Use this as the left-hand-side of an update definition for a "
+            //         "Func with multiple outputs.")
+
+            .def("__iadd__", &iadd_func_refs<FuncRefVar, h::Expr>,
+                 "Define this function as a sum reduction over the given "
+                 "expression. The expression should refer to some RDom to sum "
+                 "over. If the function does not already have a pure definition, "
+                 "this sets it to zero.")
+            .def("__isub__", &isub_func_refs<FuncRefVar, h::Expr>,
+                 "Define this function as a sum reduction over the negative of "
+                 "the given expression. The expression should refer to some RDom "
+                 "to sum over. If the function does not already have a pure "
+                 "definition, this sets it to zero.")
+            .def("__imul__", &imul_func_refs<FuncRefVar, h::Expr>,
+                 "Define this function as a product reduction. The expression "
+                 "should refer to some RDom to take the product over. If the "
+                 "function does not already have a pure definition, this sets it "
+                 "to 1.")
+            .def("__idiv__", &idiv_func_refs<FuncRefVar, h::Expr>,
+                 "Define this function as the product reduction over the inverse "
+                 "of the expression. The expression should refer to some RDom to "
+                 "take the product over. If the function does not already have a "
+                 "pure definition, this sets it to 1.")
+
+            //"Override the usual assignment operator, so that "
+            //"f(x, y) = g(x, y) defines f."
+            //Stage operator=(const FuncRefVar &);
+            //Stage operator=(const FuncRefExpr &);
+            //FIXME  implement __setitem__
+
+
+            //    .def("to_Expr", &FuncRefVar::operator Expr,
+            //         "Use this FuncRefVar as a call to the function, and not as the "
+            //         "left-hand-side of a definition. Only works for single-output funcs.")
+
+            .def("__getitem__", &FuncRefVar::operator [],
+                 "When a FuncRefVar refers to a function that provides multiple "
+                 "outputs, you can access each output as an Expr using "
+                 "operator[].")
+            .def("size", &FuncRefVar::size,
+                 "How many outputs does the function this refers to produce.")
+            .def("__len__", &FuncRefVar::size,
+                 "How many outputs does the function this refers to produce.")
+
+            .def("function", &FuncRefVar::function,
+                 "What function is this calling?")
             ;
 
     add_func_ref_operators_with<decltype(func_ref_var_class), FuncRefVar>(func_ref_var_class);
-    add_func_ref_operators_with<decltype(func_ref_var_class), FuncRefExpr>(func_ref_var_class);
+    add_func_ref_operators_with<decltype(func_ref_var_class), h::FuncRefExpr>(func_ref_var_class);
+
+    p::implicitly_convertible<FuncRefVar, h::Expr>();
+
+    return;
+}
+
+void defineFuncRefExpr()
+{
+    using Halide::FuncRefExpr;
+    using p::self;
+
 
     auto func_ref_expr_class =
             p::class_<FuncRefExpr>("FuncRefExpr",
@@ -212,12 +273,12 @@ void defineFuncRef()
             //            FuncRefExpr(Internal::Function, const std::vector<std::string> &,
             //                        int placeholder_pos = -1);
 
-//            .def("__??__", FuncRefExpr::operator=(Expr);
-//                 "Use this as the left-hand-side of an update definition (see "
-//                 "\\ref RDom). The function must already have a pure definition.")
-//            .def("__??__", FuncRefExpr::operator(const Tuple &),
-//                 "Use this as the left-hand-side of an update definition for a "
-//                 "Func with multiple outputs.")
+            //            .def("__??__", FuncRefExpr::operator=(Expr);
+            //                 "Use this as the left-hand-side of an update definition (see "
+            //                 "\\ref RDom). The function must already have a pure definition.")
+            //            .def("__??__", FuncRefExpr::operator(const Tuple &),
+            //                 "Use this as the left-hand-side of an update definition for a "
+            //                 "Func with multiple outputs.")
             .def("__iadd__", &iadd_func_refs<FuncRefExpr, h::Expr>,
                  "Define this function as a sum reduction over the given "
                  "expression. The expression should refer to some RDom to sum "
@@ -243,16 +304,16 @@ void defineFuncRef()
             //"f(x, y) = g(x, y) defines f."
             //Stage operator=(const FuncRefVar &);
             //Stage operator=(const FuncRefExpr &);
+            //FIXME  implement __setitem__
 
-//            .def("to_Expr", &FuncRefExpr::operator Expr,
-//                 "Use this as a call to the function, and not the left-hand-side"
-//                 "of a definition. Only works for single-output Funcs.")
+            //            .def("to_Expr", &FuncRefExpr::operator Expr,
+            //                 "Use this as a call to the function, and not the left-hand-side"
+            //                 "of a definition. Only works for single-output Funcs.")
 
             .def("__getitem__", &FuncRefExpr::operator [],
                  "When a FuncRefExpr refers to a function that provides multiple "
                  "outputs, you can access each output as an Expr using "
                  "operator[].")
-
             .def("size", &FuncRefExpr::size,
                  "How many outputs does the function this refers to produce.")
             .def("__len__", &FuncRefExpr::size,
@@ -263,12 +324,24 @@ void defineFuncRef()
             ;
 
 
-    add_func_ref_operators_with<decltype(func_ref_expr_class), FuncRefVar>(func_ref_expr_class);
+    add_func_ref_operators_with<decltype(func_ref_expr_class), h::FuncRefVar>(func_ref_expr_class);
     add_func_ref_operators_with<decltype(func_ref_expr_class), FuncRefExpr>(func_ref_expr_class);
 
-    p::implicitly_convertible<FuncRefVar, h::Expr>();
     p::implicitly_convertible<FuncRefExpr, h::Expr>();
 
+    return;
+}
+
+
+void defineFuncRef()
+{
+
+    // only defined so that boost::python knows about these class,
+    // not (yet) meant to be created or manipulated by the user
+    p::class_<h::Internal::Function>("InternalFunction", p::no_init);
+
+    defineFuncRefVar();
+    defineFuncRefExpr();
     return;
 }
 
