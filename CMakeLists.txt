@@ -56,7 +56,9 @@ add_subdirectory(src)
 add_subdirectory(test)
 
 # The apps and tutorials don't really compile on windows yet
-if (!WIN32)
+if (NOT WIN32)
   add_subdirectory(apps)
   add_subdirectory(tutorial)
+else()
+  message(STATUS "Building tutorials and apps disabled under windows")
 endif()
