@@ -153,27 +153,6 @@ CL_FN(cl_int,
                                          void (CL_CALLBACK * /*pfn_notify*/)( cl_mem /* memobj */, void* /*user_data*/),
                                          void * /*user_data */ ));
 
-/* Sampler APIs */
-CL_FN(cl_sampler,
-      clCreateSampler, (cl_context          /* context */,
-                        cl_bool             /* normalized_coords */,
-                        cl_addressing_mode  /* addressing_mode */,
-                        cl_filter_mode      /* filter_mode */,
-                        cl_int *            /* errcode_ret */));
-
-CL_FN(cl_int,
-      clRetainSampler, (cl_sampler /* sampler */));
-
-CL_FN(cl_int,
-      clReleaseSampler, (cl_sampler /* sampler */));
-
-CL_FN(cl_int,
-      clGetSamplerInfo, (cl_sampler         /* sampler */,
-                         cl_sampler_info    /* param_name */,
-                         size_t             /* param_value_size */,
-                         void *             /* param_value */,
-                         size_t *           /* param_value_size_ret */));
-
 /* Program Object APIs  */
 CL_FN(cl_program,
       clCreateProgramWithSource, (cl_context        /* context */,
@@ -181,23 +160,6 @@ CL_FN(cl_program,
                                   const char **     /* strings */,
                                   const size_t *    /* lengths */,
                                   cl_int *          /* errcode_ret */));
-
-CL_FN(cl_program,
-      clCreateProgramWithBinary, (cl_context                     /* context */,
-                                  cl_uint                        /* num_devices */,
-                                  const cl_device_id *           /* device_list */,
-                                  const size_t *                 /* lengths */,
-                                  const unsigned char **         /* binaries */,
-                                  cl_int *                       /* binary_status */,
-                                  cl_int *                       /* errcode_ret */));
-
-CL_FN(cl_program,
-      clCreateProgramWithBuiltInKernels, (cl_context            /* context */,
-                                          cl_uint               /* num_devices */,
-                                          const cl_device_id *  /* device_list */,
-                                          const char *          /* kernel_names */,
-                                          cl_int *              /* errcode_ret */));
-
 CL_FN(cl_int,
       clRetainProgram, (cl_program /* program */));
 
@@ -211,39 +173,6 @@ CL_FN(cl_int,
                        const char *         /* options */,
                        void (CL_CALLBACK *  /* pfn_notify */)(cl_program /* program */, void * /* user_data */),
                        void *               /* user_data */));
-
-CL_FN(cl_int,
-      clCompileProgram, (cl_program           /* program */,
-                         cl_uint              /* num_devices */,
-                         const cl_device_id * /* device_list */,
-                         const char *         /* options */,
-                         cl_uint              /* num_input_headers */,
-                         const cl_program *   /* input_headers */,
-                         const char **        /* header_include_names */,
-                         void (CL_CALLBACK *  /* pfn_notify */)(cl_program /* program */, void * /* user_data */),
-                         void *               /* user_data */));
-
-CL_FN(cl_program,
-      clLinkProgram, (cl_context           /* context */,
-                      cl_uint              /* num_devices */,
-                      const cl_device_id * /* device_list */,
-                      const char *         /* options */,
-                      cl_uint              /* num_input_programs */,
-                      const cl_program *   /* input_programs */,
-                      void (CL_CALLBACK *  /* pfn_notify */)(cl_program /* program */, void * /* user_data */),
-                      void *               /* user_data */,
-                      cl_int *             /* errcode_ret */ ));
-
-
-CL_FN(cl_int,
-      clUnloadPlatformCompiler, (cl_platform_id /* platform */));
-
-CL_FN(cl_int,
-      clGetProgramInfo, (cl_program         /* program */,
-                         cl_program_info    /* param_name */,
-                         size_t             /* param_value_size */,
-                         void *             /* param_value */,
-                         size_t *           /* param_value_size_ret */));
 
 CL_FN(cl_int,
       clGetProgramBuildInfo, (cl_program            /* program */,
@@ -260,12 +189,6 @@ CL_FN(cl_kernel,
                        cl_int *        /* errcode_ret */));
 
 CL_FN(cl_int,
-      clCreateKernelsInProgram, (cl_program     /* program */,
-                                 cl_uint        /* num_kernels */,
-                                 cl_kernel *    /* kernels */,
-                                 cl_uint *      /* num_kernels_ret */));
-
-CL_FN(cl_int,
       clRetainKernel, (cl_kernel    /* kernel */));
 
 CL_FN(cl_int,
@@ -276,69 +199,6 @@ CL_FN(cl_int,
                        cl_uint      /* arg_index */,
                        size_t       /* arg_size */,
                        const void * /* arg_value */));
-
-CL_FN(cl_int,
-      clGetKernelInfo, (cl_kernel       /* kernel */,
-                        cl_kernel_info  /* param_name */,
-                        size_t          /* param_value_size */,
-                        void *          /* param_value */,
-                        size_t *        /* param_value_size_ret */));
-
-CL_FN(cl_int,
-      clGetKernelArgInfo, (cl_kernel       /* kernel */,
-                           cl_uint         /* arg_indx */,
-                           cl_kernel_arg_info  /* param_name */,
-                           size_t          /* param_value_size */,
-                           void *          /* param_value */,
-                           size_t *        /* param_value_size_ret */));
-
-CL_FN(cl_int,
-      clGetKernelWorkGroupInfo, (cl_kernel                  /* kernel */,
-                                 cl_device_id               /* device */,
-                                 cl_kernel_work_group_info  /* param_name */,
-                                 size_t                     /* param_value_size */,
-                                 void *                     /* param_value */,
-                                 size_t *                   /* param_value_size_ret */));
-
-/* Event Object APIs */
-CL_FN(cl_int,
-      clWaitForEvents, (cl_uint             /* num_events */,
-                        const cl_event *    /* event_list */));
-
-CL_FN(cl_int,
-      clGetEventInfo, (cl_event         /* event */,
-                       cl_event_info    /* param_name */,
-                       size_t           /* param_value_size */,
-                       void *           /* param_value */,
-                       size_t *         /* param_value_size_ret */));
-
-CL_FN(cl_event,
-      clCreateUserEvent, (cl_context    /* context */,
-                          cl_int *      /* errcode_ret */));
-
-CL_FN(cl_int,
-      clRetainEvent, (cl_event /* event */));
-
-CL_FN(cl_int,
-      clReleaseEvent, (cl_event /* event */));
-
-CL_FN(cl_int,
-      clSetUserEventStatus, (cl_event   /* event */,
-                           cl_int     /* execution_status */));
-
-CL_FN(cl_int,
-      clSetEventCallback, ( cl_event    /* event */,
-                            cl_int      /* command_exec_callback_type */,
-                            void (CL_CALLBACK * /* pfn_notify */)(cl_event, cl_int, void *),
-                            void *      /* user_data */));
-
-/* Profiling APIs */
-CL_FN(cl_int,
-      clGetEventProfilingInfo, (cl_event            /* event */,
-                                cl_profiling_info   /* param_name */,
-                                size_t              /* param_value_size */,
-                                void *              /* param_value */,
-                                size_t *            /* param_value_size_ret */));
 
 /* Flush and Finish APIs */
 CL_FN(cl_int,
@@ -403,43 +263,6 @@ CL_FN(cl_int,
                                  cl_event *          /* event */));
 
 CL_FN(cl_int,
-      clEnqueueFillBuffer, (cl_command_queue   /* command_queue */,
-                            cl_mem             /* buffer */,
-                            const void *       /* pattern */,
-                            size_t             /* pattern_size */,
-                            size_t             /* offset */,
-                            size_t             /* size */,
-                            cl_uint            /* num_events_in_wait_list */,
-                            const cl_event *   /* event_wait_list */,
-                            cl_event *         /* event */));
-
-CL_FN(cl_int,
-      clEnqueueCopyBuffer, (cl_command_queue    /* command_queue */,
-                            cl_mem              /* src_buffer */,
-                            cl_mem              /* dst_buffer */,
-                            size_t              /* src_offset */,
-                            size_t              /* dst_offset */,
-                            size_t              /* size */,
-                            cl_uint             /* num_events_in_wait_list */,
-                            const cl_event *    /* event_wait_list */,
-                            cl_event *          /* event */));
-
-CL_FN(cl_int,
-      clEnqueueCopyBufferRect, (cl_command_queue    /* command_queue */,
-                                cl_mem              /* src_buffer */,
-                                cl_mem              /* dst_buffer */,
-                                const size_t *      /* src_origin */,
-                                const size_t *      /* dst_origin */,
-                                const size_t *      /* region */,
-                                size_t              /* src_row_pitch */,
-                                size_t              /* src_slice_pitch */,
-                                size_t              /* dst_row_pitch */,
-                                size_t              /* dst_slice_pitch */,
-                                cl_uint             /* num_events_in_wait_list */,
-                                const cl_event *    /* event_wait_list */,
-                                cl_event *          /* event */));
-
-CL_FN(cl_int,
       clEnqueueReadImage, (cl_command_queue     /* command_queue */,
                            cl_mem               /* image */,
                            cl_bool              /* blocking_read */,
@@ -464,49 +287,6 @@ CL_FN(cl_int,
                             cl_uint             /* num_events_in_wait_list */,
                             const cl_event *    /* event_wait_list */,
                             cl_event *          /* event */));
-
-CL_FN(cl_int,
-      clEnqueueFillImage, (cl_command_queue   /* command_queue */,
-                           cl_mem             /* image */,
-                           const void *       /* fill_color */,
-                           const size_t *     /* origin[3] */,
-                           const size_t *     /* region[3] */,
-                           cl_uint            /* num_events_in_wait_list */,
-                           const cl_event *   /* event_wait_list */,
-                           cl_event *         /* event */));
-
-CL_FN(cl_int,
-      clEnqueueCopyImage, (cl_command_queue     /* command_queue */,
-                           cl_mem               /* src_image */,
-                           cl_mem               /* dst_image */,
-                           const size_t *       /* src_origin[3] */,
-                           const size_t *       /* dst_origin[3] */,
-                           const size_t *       /* region[3] */,
-                           cl_uint              /* num_events_in_wait_list */,
-                           const cl_event *     /* event_wait_list */,
-                           cl_event *           /* event */));
-
-CL_FN(cl_int,
-      clEnqueueCopyImageToBuffer, (cl_command_queue /* command_queue */,
-                                   cl_mem           /* src_image */,
-                                   cl_mem           /* dst_buffer */,
-                                   const size_t *   /* src_origin[3] */,
-                                   const size_t *   /* region[3] */,
-                                   size_t           /* dst_offset */,
-                                   cl_uint          /* num_events_in_wait_list */,
-                                   const cl_event * /* event_wait_list */,
-                                   cl_event *       /* event */));
-
-CL_FN(cl_int,
-      clEnqueueCopyBufferToImage, (cl_command_queue /* command_queue */,
-                                   cl_mem           /* src_buffer */,
-                                   cl_mem           /* dst_image */,
-                                   size_t           /* src_offset */,
-                                   const size_t *   /* dst_origin[3] */,
-                                   const size_t *   /* region[3] */,
-                                   cl_uint          /* num_events_in_wait_list */,
-                                   const cl_event * /* event_wait_list */,
-                                   cl_event *       /* event */));
 
 CL_FN(void *,
       clEnqueueMapBuffer, (cl_command_queue /* command_queue */,
@@ -543,15 +323,6 @@ CL_FN(cl_int,
                                 cl_event *        /* event */));
 
 CL_FN(cl_int,
-      clEnqueueMigrateMemObjects, (cl_command_queue       /* command_queue */,
-                                   cl_uint                /* num_mem_objects */,
-                                   const cl_mem *         /* mem_objects */,
-                                   cl_mem_migration_flags /* flags */,
-                                   cl_uint                /* num_events_in_wait_list */,
-                                   const cl_event *       /* event_wait_list */,
-                                   cl_event *             /* event */));
-
-CL_FN(cl_int,
       clEnqueueNDRangeKernel, (cl_command_queue /* command_queue */,
                                cl_kernel        /* kernel */,
                                cl_uint          /* work_dim */,
@@ -561,49 +332,5 @@ CL_FN(cl_int,
                                cl_uint          /* num_events_in_wait_list */,
                                const cl_event * /* event_wait_list */,
                                cl_event *       /* event */));
-
-CL_FN(cl_int,
-      clEnqueueTask, (cl_command_queue  /* command_queue */,
-                      cl_kernel         /* kernel */,
-                      cl_uint           /* num_events_in_wait_list */,
-                      const cl_event *  /* event_wait_list */,
-                      cl_event *        /* event */));
-
-CL_FN(cl_int,
-      clEnqueueNativeKernel, (cl_command_queue  /* command_queue */,
-                              void (CL_CALLBACK * /*user_func*/)(void *),
-                              void *            /* args */,
-                              size_t            /* cb_args */,
-                              cl_uint           /* num_mem_objects */,
-                              const cl_mem *    /* mem_list */,
-                              const void **     /* args_mem_loc */,
-                              cl_uint           /* num_events_in_wait_list */,
-                              const cl_event *  /* event_wait_list */,
-                              cl_event *        /* event */));
-
-CL_FN(cl_int,
-      clEnqueueMarkerWithWaitList, (cl_command_queue /* command_queue */,
-                                    cl_uint           /* num_events_in_wait_list */,
-                                    const cl_event *  /* event_wait_list */,
-                                    cl_event *        /* event */));
-
-CL_FN(cl_int,
-      clEnqueueBarrierWithWaitList, (cl_command_queue /* command_queue */,
-                                     cl_uint           /* num_events_in_wait_list */,
-                                     const cl_event *  /* event_wait_list */,
-                                     cl_event *        /* event */));
-
-
-
-/* Extension function access
- *
- * Returns the extension function address for the given function name,
- * or NULL if a valid function can not be found.  The client must
- * check to make sure the address is not NULL, before using or
- * calling the returned function address.
- */
-CL_FN(void *,
-      clGetExtensionFunctionAddressForPlatform, (cl_platform_id /* platform */,
-                                                 const char *   /* func_name */));
 
 #undef CL_FN

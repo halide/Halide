@@ -46,14 +46,7 @@ CUDA_FN(CUresult, cuCtxSynchronize, ());
 CUDA_FN_4000(CUresult, cuCtxPushCurrent, cuCtxPushCurrent_v2, (CUcontext ctx));
 CUDA_FN_4000(CUresult, cuCtxPopCurrent, cuCtxPopCurrent_v2, (CUcontext *pctx));
 
-CUDA_FN(CUresult, cuEventRecord, (CUevent hEvent, CUstream hStream));
-CUDA_FN(CUresult, cuEventCreate, (CUevent *phEvent, unsigned int Flags));
-CUDA_FN_4000(CUresult, cuEventDestroy, cuEventDestroy_v2, (CUevent phEvent));
-CUDA_FN(CUresult, cuEventSynchronize, (CUevent hEvent));
-CUDA_FN(CUresult, cuEventElapsedTime, (float *pMilliseconds, CUevent hStart, CUevent hEnd));
 CUDA_FN(CUresult, cuPointerGetAttribute, (void *result, int query, CUdeviceptr ptr));
-CUDA_FN(CUresult, cuGetErrorName, (CUresult error, const char **str));
-CUDA_FN(CUresult, cuGetErrorString, (CUresult error, const char **str));
 
 #undef CUDA_FN
 #undef CUDA_FN_3020
