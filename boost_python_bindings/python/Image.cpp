@@ -12,12 +12,15 @@
 #endif
 
 #include <boost/mpl/list.hpp>
+#include <boost/functional/hash/hash.hpp>
 
 #include "../../src/Image.h"
 #include "Type.h"
 
 #include <vector>
+#include <unordered_map>
 #include <string>
+#include <functional>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -136,21 +139,32 @@ h::Buffer image_to_buffer(h::Image<T> &image)
 }
 
 template<typename T>
+boost::python::object get_type_function_wrapper()
+{
+    std::function<h::Type(h::Image<T> &)> return_type_func = [&](h::Image<T> &that)-> h::Type { return h::Buffer(that).type(); };
+    auto call_policies = p::default_call_policies();
+    typedef boost::mpl::vector<h::Type, h::Image<T> &> func_sig;
+    return p::make_function(return_type_func, call_policies, p::arg("self"), func_sig());
+}
+
+
+template<typename T>
 void defineImage_impl(const std::string suffix, const h::Type type)
 {
     using h::Image;
     using p::self;
 
 
-    p::class_< Image<T> >(("Image" + suffix).c_str(),
-                          "A reference-counted handle on a dense multidimensional array "
-                          "containing scalar values of type T. Can be directly accessed and "
-                          "modified. May have up to four dimensions. Color images are "
-                          "represented as three-dimensional, with the third dimension being "
-                          "the color channel. In general we store color images in "
-                          "color-planes, as opposed to packed RGB, because this tends to "
-                          "vectorize more cleanly.",
-                          p::init<>(p::arg("self"), "Construct an undefined image handle"))
+    p::class_< Image<T>, p::bases<h::ImageBase> >(
+                ("Image" + suffix).c_str(),
+                "A reference-counted handle on a dense multidimensional array "
+                "containing scalar values of type T. Can be directly accessed and "
+                "modified. May have up to four dimensions. Color images are "
+                "represented as three-dimensional, with the third dimension being "
+                "the color channel. In general we store color images in "
+                "color-planes, as opposed to packed RGB, because this tends to "
+                "vectorize more cleanly.",
+                p::init<>(p::arg("self"), "Construct an undefined image handle"))
 
             .def(p::init<int, int, int, int,std::string>(
                      (p::arg("self"), p::arg("x"), p::arg("y")=0, p::arg("z")=0, p::arg("w")=0, p::arg("name")=""),
@@ -186,7 +200,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "construct an image from a buffer, but you might need to call "
                  "this if you realize a gpu kernel into an existing image, or "
                  "modify the data via some other back-door.")
-            .def_readonly("type", type,
+            .def("type", get_type_function_wrapper<T>(),
                           "Return Type instance for the data type of the image.")
             .def("channels", &Image<T>::channels, p::arg("self"),
                  "Get the extent of dimension 2, which by convention we use as"
@@ -475,6 +489,90 @@ p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name=
     return raw_buffer_to_image(array, raw_buffer, name);
 }
 
+namespace std
+{
+    template<>
+    struct hash<h::Type>
+    {
+        typedef h::Type argument_type;
+        typedef std::size_t result_type;
+
+        result_type operator()(argument_type const& t) const
+        {
+            size_t seed = 0;
+            boost::hash_combine(seed, static_cast<int>(t.code));
+            boost::hash_combine(seed, t.bits);
+            boost::hash_combine(seed, t.width);
+            return seed;
+        }
+    };
+}
+
+
+boost::numpy::dtype type_to_dtype(const h::Type &t)
+{
+    using boost::numpy::dtype;
+
+    const std::unordered_map<h::Type, dtype> m =
+    {
+        {h::UInt(8), dtype::get_builtin<boost::uint8_t>()},
+        {h::UInt(16), dtype::get_builtin<boost::uint16_t>()},
+        {h::UInt(32), dtype::get_builtin<boost::uint32_t>()},
+
+        {h::Int(8), dtype::get_builtin<boost::int8_t>()},
+        {h::Int(16), dtype::get_builtin<boost::int16_t>()},
+        {h::Int(32), dtype::get_builtin<boost::int32_t>()},
+
+        {h::Float(32), dtype::get_builtin<float>()},
+        {h::Float(64), dtype::get_builtin<double>()}
+    };
+
+    if(m.find(t) == m.end())
+    {
+        printf("type_to_dtype received %s\n", type_repr(t).c_str());
+        throw std::runtime_error("type_to_dtype received a Halide::Type with no known numpy dtype equivalent");
+    }
+
+    return m.at(t);
+}
+
+
+boost::numpy::ndarray image_to_ndarray(p::object image_object)
+{
+    p::extract<h::ImageBase &> image_base_extract(image_object);
+
+    if(image_base_extract.check() == false)
+    {
+        throw std::invalid_argument("image_to_ndarray received an object that is not an Image<T>");
+    }
+
+    h::Buffer b = p::extract<h::Buffer>(image_object.attr("buffer")());
+    user_assert(b.host_ptr() != NULL) << "image_to_ndarray received an image without host data";
+
+    const h::Type& t = p::extract<h::Type &>(image_object.attr("type")());
+
+    std::vector<std::int32_t> shape_array(4), stride_array(4);
+    std::copy(b.raw_buffer()->extent, b.raw_buffer()->extent + 4, shape_array.begin());
+    std::copy(b.raw_buffer()->stride, b.raw_buffer()->stride + 4, stride_array.begin());
+
+    // we make sure the array shape does not include the "0 extent" dimensions
+    // we always keep at least one dimension (even if zero size)
+    for(size_t i = 3; i > 0; i -= 1)
+    {
+        if(shape_array[i] == 0)
+        {
+            shape_array.pop_back();
+            stride_array.pop_back();
+        }
+    }
+
+    return boost::numpy::from_data(
+                b.host_ptr(),
+                type_to_dtype(t),
+                shape_array,
+                stride_array,
+                image_object);
+}
 
 
 #endif
@@ -523,49 +621,49 @@ p::object create_image0_impl<boost::mpl::l_end::type>(h::Type type)
 template<typename PixelTypes, typename ...Args>
 struct create_image1_impl_t
 {
- p::object operator()(h::Type type, Args... args)
- {
-     typedef typename boost::mpl::empty<PixelTypes>::type pixels_types_list_is_empty_t;
-     if(pixels_types_list_is_empty_t::value == true)
-     {
-         // end of recursion, did not find a matching type
-         printf("create_image1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
-         throw std::invalid_argument("ImageFactory::create_image1_impl received type not handled");
-         return p::object();
-     }
+    p::object operator()(h::Type type, Args... args)
+    {
+        typedef typename boost::mpl::empty<PixelTypes>::type pixels_types_list_is_empty_t;
+        if(pixels_types_list_is_empty_t::value == true)
+        {
+            // end of recursion, did not find a matching type
+            printf("create_image1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
+            throw std::invalid_argument("ImageFactory::create_image1_impl received type not handled");
+            return p::object();
+        }
 
-     typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
-     if(h::type_of<pixel_t>() == type)
-     {
+        typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
+        if(h::type_of<pixel_t>() == type)
+        {
             return create_image_object<pixel_t, Args...>(args...);
-     }
-     else
-     {// keep recursing
-         typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
-         return create_image1_impl_t<pixels_types_tail_t, Args...>()(type, args...);
-     }
- }
+        }
+        else
+        {// keep recursing
+            typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
+            return create_image1_impl_t<pixels_types_tail_t, Args...>()(type, args...);
+        }
+    }
 };
 
 
 template<typename ...Args>
 struct create_image1_impl_t<boost::mpl::l_end::type, Args...>
 {
- p::object operator()(h::Type type, Args... args)
- {
-     // end of recursion, did not find a matching type
-         printf("create_image1_impl<boost::mpl::l_end::type> received %s\n", type_repr(type).c_str());
-         throw std::invalid_argument("ImageFactory::create_image1_impl received type not handled");
-         return p::object();
- }
+    p::object operator()(h::Type type, Args... args)
+    {
+        // end of recursion, did not find a matching type
+        printf("create_image1_impl<boost::mpl::l_end::type> received %s\n", type_repr(type).c_str());
+        throw std::invalid_argument("ImageFactory::create_image1_impl received type not handled");
+        return p::object();
+    }
 };
 
 
 struct ImageFactory
 {
     typedef boost::mpl::list<boost::uint8_t, boost::uint16_t, boost::uint32_t,
-            boost::int8_t, boost::int16_t, boost::int32_t,
-            float, double> pixel_types_t;
+    boost::int8_t, boost::int16_t, boost::int32_t,
+    float, double> pixel_types_t;
 
     static p::object create_image0(h::Type type)
     {
@@ -598,6 +696,10 @@ struct ImageFactory
 
 void defineImage()
 {
+    // only defined so that Boost.Python knows about it,
+    // not methods exposed
+    p::class_<h::ImageBase>("ImageBase", p::no_init);
+
     defineImage_impl<uint8_t>("_uint8", h::UInt(8));
     defineImage_impl<uint16_t>("_uint16", h::UInt(16));
     defineImage_impl<uint32_t>("_uint32", h::UInt(32));
@@ -642,6 +744,12 @@ void defineImage()
            "Wrap numpy array in a Halide::Image."
            "Will take into account the array size, dimensions, and type."
            "Created Image refers to the array data (no copy).");
+
+
+    p::def("image_to_ndarray", &image_to_ndarray, p::arg("image"),
+           "Creates a numpy array from a Halide::Image."
+           "Will take into account the Image size, dimensions, and type."
+           "Created ndarray refers to the Image data (no copy).");
 #endif
 
     //    class Image(object):
