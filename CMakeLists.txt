@@ -8,13 +8,21 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-set(LLVM_BIN "llvm3.6/bin/Debug/"
-  CACHE PATH "Path to LLVM bin directory")
-set(LLVM_LIB "llvm3.6/lib/Debug/"
-  CACHE PATH "Path to LLVM lib directory")
-set(LLVM_INCLUDE "llvm3.6/include/"
-  CACHE PATH "Path to LLVM include directory")
-set(LLVM_VERSION "36" CACHE STRING "First two digits of LLVM version (omitting '.')")
+# Find LLVM
+# Users can set LLVM_DIR to point to a directory containing LLVMConfig.cmake
+message(STATUS "Looking for LLVM")
+find_package(LLVM REQUIRED)
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+if (LLVM_PACKAGE_VERSION  VERSION_LESS 3.5)
+  message(FATAL_ERROR "Need LLVM >=3.5")
+endif()
+# TODO: Remove these variables and use LLVM variables directly
+set(LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
+message(STATUS "LLVM_BIN:${LLVM_BIN}")
+set(LLVM_INCLUDE ${LLVM_INCLUDE_DIRS})
+message(STATUS "LLVM_INCLUDE:${LLVM_INCLUDE}")
+set(LLVM_VERSION ${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR})
+message(STATUS "LLVM_VERSION:${LLVM_VERSION}")
 
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
