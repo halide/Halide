@@ -53,11 +53,17 @@ function(halide_project name folder)
 endfunction(halide_project)
 
 add_subdirectory(src)
-add_subdirectory(test)
+option(WITH_TESTS "Build tests" ON)
+if (WITH_TESTS)
+  add_subdirectory(test)
+endif()
 
-# The apps and tutorials don't really compile on windows yet
-if (!WIN32)
+option(WITH_APPS "Build apps" OFF)
+if (WITH_APPS)
   add_subdirectory(apps)
+endif()
+option(WITH_TUTORIALS "Build Tutorials" OFF)
+if (WITH_TUTORIALS)
   add_subdirectory(tutorial)
 endif()
 
