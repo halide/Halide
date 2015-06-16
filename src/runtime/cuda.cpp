@@ -23,22 +23,24 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
     // from the library. Even if the library is NULL, the symbols may
     // already be available in the process.
     void *symbol = halide_get_library_symbol(lib_cuda, name);
-    if (symbol == NULL) {
-        const char *lib_names[] = {
+    if (symbol) {
+        return symbol;
+    }
+
+    const char *lib_names[] = {
 #ifdef WINDOWS
-            "nvcuda.dll",
+        "nvcuda.dll",
 #else
-            "libcuda.so",
-            "libcuda.dylib",
-            "/Library/Frameworks/CUDA.framework/CUDA",
+        "libcuda.so",
+        "libcuda.dylib",
+        "/Library/Frameworks/CUDA.framework/CUDA",
 #endif
-        };
-        for (int i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
-            lib_cuda = halide_load_library(lib_names[i]);
-            if (lib_cuda) {
-                debug(user_context) << "    Loaded CUDA runtime library: " << lib_names[i] << "\n";
-                break;
-            }
+    };
+    for (int i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
+        lib_cuda = halide_load_library(lib_names[i]);
+        if (lib_cuda) {
+            debug(user_context) << "    Loaded CUDA runtime library: " << lib_names[i] << "\n";
+            break;
         }
     }
 

@@ -23,21 +23,23 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
     // Only try to load the library if the library isn't already
     // loaded, or we can't load the symbol from the process already.
     void *symbol = halide_get_library_symbol(lib_opencl, name);
-    if (symbol == NULL) {
-        const char *lib_names[] = {
+    if (symbol) {
+        return symbol;
+    }
+
+    const char *lib_names[] = {
 #ifdef WINDOWS
-            "opencl.dll",
+        "opencl.dll",
 #else
-            "libOpenCL.so",
-            "/System/Library/Frameworks/OpenCL.framework/OpenCL",
+        "libOpenCL.so",
+        "/System/Library/Frameworks/OpenCL.framework/OpenCL",
 #endif
-        };
-        for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
-            lib_opencl = halide_load_library(lib_names[i]);
-            if (lib_opencl) {
-                debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
-                break;
-            }
+    };
+    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+        lib_opencl = halide_load_library(lib_names[i]);
+        if (lib_opencl) {
+            debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
+            break;
         }
     }
 
