@@ -129,6 +129,42 @@ def test_basics2():
     return
 
 
+def test_basics3():
+
+    input = ImageParam(Float(32), 3, 'input')
+    r_sigma = Param(Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
+    s_sigma = 8 # This is passed during code generation in the C++ version
+
+    x = Var('x')
+    y = Var('y')
+    z = Var('z')
+    c = Var('c')
+
+    # Add a boundary condition
+    clamped = Func('clamped')
+    clamped[x, y] = input[clamp(x, 0, input.width()-1),
+                          clamp(y, 0, input.height()-1),0]
+
+    # Construct the bilateral grid
+    r = RDom(0, s_sigma, 0, s_sigma, 'r')
+    val = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
+    val = clamp(val, 0.0, 1.0)
+    #zi = cast(Int(32), val * (1.0/r_sigma) + 0.5)
+    zi = cast(Int(32), (val / r_sigma) + 0.5)
+    histogram = Func('histogram')
+    histogram[x, y, z, c] = 0.0
+
+    ss = select(c == 0, val, 1.0)
+    print("select(c == 0, val, 1.0)", ss)
+    left = histogram[x, y, zi, c]
+    print("histogram[x, y, zi, c]", histogram[x, y, zi, c])
+    print("histogram[x, y, zi, c]", left)
+    left += Expr(5) # FIX double instead of int
+    left += ss # FIX the Stage part
+
+
+    return
+
 def test_ndarray_to_image():
 
     if "ndarray_to_image" not in globals():
@@ -148,8 +184,38 @@ def test_ndarray_to_image():
 
     return
 
+
+def test_image_to_ndarray():
+
+    if "image_to_ndarray" not in globals():
+        print("Skipping test_image_to_ndarray")
+        return
+
+    import numpy
+
+    i0 = Image(Float(32), 50, 50)
+    assert i0.type() == Float(32)
+
+    a0 = image_to_ndarray(i0)
+    print("a0.shape", a0.shape)
+    print("a0.dtype", a0.dtype)
+    assert a0.dtype == numpy.float32
+
+    i1 = Image(Int(16), 50, 50)
+    assert i1.type() == Int(16)
+
+    a1 = image_to_ndarray(i1)
+    print("a1.shape", a1.shape)
+    print("a1.dtype", a1.dtype)
+    assert a1.dtype == numpy.int16
+
+    return
+
+
 if __name__ == "__main__":
+    test_ndarray_to_image()
+    test_image_to_ndarray()
     test_types()
     test_basics()
     test_basics2()
-    test_ndarray_to_image()
+    test_basics3()
