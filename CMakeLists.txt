@@ -83,3 +83,23 @@ if (NOT WIN32)
 else()
   message(STATUS "Building tutorials and apps disabled under windows")
 endif()
+
+option(WITH_DOCS "Enable building of documentation" ON)
+if (WITH_DOCS)
+find_package(Doxygen)
+  if (NOT DOXYGEN_FOUND)
+    message(FATAL_ERROR "Could not find Doxygen. Either install it or set WITH_DOCS to OFF")
+  endif()
+
+  # FIXME: Remove suffix when Doxygen support is removed from the Makefile build system or when
+  # when the Makefile build system is dropped entirely.
+  # note the ``_cmake`` suffix is so we don't clobber the Doxyfile used by the Makefile build
+  # system if we do an in source CMake build.
+  configure_file(${CMAKE_SOURCE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile_cmake @ONLY)
+  # Note documentation is not built by default, the user needs to build the "doc" target
+  add_custom_target(doc
+    COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile_cmake
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Building Doxygen documentation"
+  )
+endif()
