@@ -28,7 +28,16 @@ file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
 file(TO_NATIVE_PATH "${LLVM_BIN}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 
-message(${CLANG})
+# Check that LLVM binaries we depend on exist
+macro(check_tool_exists NAME PATH)
+  if (NOT EXISTS ${PATH})
+    message(FATAL_ERROR "Tool ${NAME} not found at ${PATH}")
+  endif()
+  message(STATUS "Using ${NAME} at ${PATH}")
+endmacro()
+check_tool_exists(llvm-as ${LLVM_AS})
+check_tool_exists(llvm-nm ${LLVM_NM})
+check_tool_exists(clang ${CLANG})
 
 option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ON)
