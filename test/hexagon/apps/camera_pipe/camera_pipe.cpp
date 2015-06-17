@@ -351,6 +351,7 @@ int main(int argc, char **argv) {
     //printf("%s\n", s.c_str());
 
     std::vector<Argument> args = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
+    processed.compile_to_bitcode("curved.ll", args, target);
     processed.compile_to_file("curved", args, target);
     processed.compile_to_assembly("curved.s", args, target);
 
