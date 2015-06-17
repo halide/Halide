@@ -5,10 +5,6 @@ add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 
 if (MSVC)
-  # Suppress some warnings
-  add_definitions("-D_CRT_SECURE_NO_WARNINGS")
-  add_definitions("-D_SCL_SECURE_NO_WARNINGS")
-  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
@@ -21,10 +17,6 @@ if (MSVC)
     add_definitions("/Zc:sizedDealloc-")
   endif()
 else()
-  add_definitions("-D__STDC_LIMIT_MACROS")
-  add_definitions("-D__STDC_CONSTANT_MACROS")
-  add_definitions("-std=c++11")
-  add_definitions("-fno-rtti")
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
@@ -35,8 +27,7 @@ else()
   set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
 
-include_directories ( "${LLVM_INCLUDE}")
-
+include_directories("${LLVM_INCLUDE}")
 # Get LLVM libraries
 # FIXME: We don't need all the LLVM components.
 # We'll get faster linking if we specify only the components we need
@@ -493,6 +484,22 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 )
 
 target_link_libraries(Halide InitialModules ${LIBS})
+
+# Note when PUBLIC scope is used in target_compile_* then targets that link
+# against the Halide library inherit those options and definitions
+if (MSVC)
+  # Suppress some warnings
+  target_compile_options(Halide PUBLIC "/wd4244 /wd4267 /wd4800 /wd4996")
+  target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
+else()
+  # I'm not sure if we want targets that link against Halide to inherit
+  # the LLVM definitions so make the scope PRIVATE.
+  target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
+  target_compile_options(Halide PUBLIC "-std=c++11")
+  if (NOT LLVM_ENABLE_RTTI)
+    target_compile_options(Halide PUBLIC "-fno-rtti")
+  endif()
+endif()
 
 # if this is a DLL, don't link dependencies to this set of libs.
 #if (HALIDE_SHARED_LIBRARY)
