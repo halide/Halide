@@ -116,6 +116,8 @@ DECLARE_CPP_INITMOD(posix_get_symbol)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(renderscript)
+DECLARE_CPP_INITMOD(profiler)
+DECLARE_CPP_INITMOD(profiler_inlined)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -422,6 +424,10 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_ssp(c, bits_64, debug));
             }
+
+            if (t.has_feature(Target::Profile)) {
+                modules.push_back(get_initmod_profiler(c, bits_64, debug));
+            }
         }
 
         if (module_type != ModuleJITShared) {
@@ -478,6 +484,9 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             }
             if (t.has_feature(Target::AVX)) {
                 modules.push_back(get_initmod_x86_avx_ll(c));
+            }
+            if (t.has_feature(Target::Profile)) {
+                modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
             }
         }
     }

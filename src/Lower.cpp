@@ -85,9 +85,11 @@ Stmt lower(const vector<Function> &outputs, const Target &t, const vector<IRMuta
     s = inject_tracing(s, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
-    debug(1) << "Injecting profiling...\n";
-    s = inject_profiling(s, pipeline_name);
-    debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+    if (t.has_feature(Target::Profile)) {
+        debug(1) << "Injecting profiling...\n";
+        s = inject_profiling(s, pipeline_name);
+        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+    }
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s, t);

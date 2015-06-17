@@ -99,6 +99,9 @@ extern int halide_do_par_for(void *user_context,
 extern void halide_shutdown_thread_pool();
 //@}
 
+/** Spawn a thread, independent of halide's thread pool. */
+extern void halide_spawn_thread(void *user_context, void (*f)(void *, void *), void *);
+
 /** Set the number of threads used by Halide's thread pool. No effect
  * on OS X or iOS. If changed after the first use of a parallel Halide
  * routine, shuts down and then reinitializes the thread pool. */
