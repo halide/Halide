@@ -50,9 +50,7 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
 template <typename T>
 INLINE T get_cuda_symbol(void *user_context, const char *name) {
     T s = (T)halide_cuda_get_symbol(user_context, name);
-    if (s) {
-        debug(user_context) << "      " << name << " = " << (void *)s << "\n";
-    } else {
+    if (!s) {
         error(user_context) << "CUDA API not found: " << name << "\n";
     }
     return s;
