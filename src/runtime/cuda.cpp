@@ -52,11 +52,10 @@ INLINE T get_cuda_symbol(void *user_context, const char *name) {
     T s = (T)halide_cuda_get_symbol(user_context, name);
     if (s) {
         debug(user_context) << "      " << name << " = " << (void *)s << "\n";
-        return s;
     } else {
         error(user_context) << "CUDA API not found: " << name << "\n";
-        return NULL;
     }
+    return s;
 }
 
 // Load a CUDA shared object/dll and get the CUDA API function pointers from it.

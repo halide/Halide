@@ -51,10 +51,8 @@ INLINE T get_cl_symbol(void *user_context, const char *name) {
     T s = (T)halide_opencl_get_symbol(user_context, name);
     if (s) {
         debug(user_context) << "      " << name << " = " << (void *)s << "\n";
-        return s;
     } else {
         error(user_context) << "OpenCL API not found: " << name << "\n";
-        return NULL;
     }
     return s;
 }
