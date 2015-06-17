@@ -284,9 +284,30 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
 WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *) = default_do_task;
 WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *) = default_do_par_for;
 
+struct one_off_task {
+    void (*f)(void *, void *);
+    void *user_context;
+    void *closure;
+};
+WEAK void *halide_spawn_thread_helper(void *arg) {
+    one_off_task *t = (one_off_task *)arg;
+    (t->f)(t->user_context, t->closure);
+    halide_free(t->user_context, t);
+    return NULL;
+}
+
 }}} // namespace Halide::Runtime::Internal
 
 extern "C" {
+
+WEAK void halide_spawn_thread(void *user_context, void (*f)(void *, void *), void *closure) {
+    pthread_t thread;
+    one_off_task *t = (one_off_task *)halide_malloc(user_context, sizeof(one_off_task));
+    t->f = f;
+    t->user_context = user_context;
+    t->closure = closure;
+    pthread_create(&thread, NULL, halide_spawn_thread_helper, t);
+}
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
     pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;

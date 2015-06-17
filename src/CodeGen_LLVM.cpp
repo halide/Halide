@@ -2590,7 +2590,6 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         // If we can't find it, declare it extern "C"
         if (!fn) {
-            // cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << endl;
             vector<llvm::Type *> arg_types(args.size());
             for (size_t i = 0; i < args.size(); i++) {
                 arg_types[i] = args[i]->getType();
@@ -2658,6 +2657,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // take a handle.
         if (op->name == "halide_current_time_ns" ||
             op->name == "halide_gpu_thread_barrier" ||
+            op->name == "halide_profiler_pipeline_end" ||
             starts_with(op->name, "halide_error")) {
             pure = false;
         }

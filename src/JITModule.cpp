@@ -500,13 +500,23 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
         for (const std::pair<std::string, Symbol> &i : dep.exports()) {
             const std::string &name = i.first;
             const Symbol &s = i.second;
-            GlobalValue *gv;
+            GlobalValue *gv = NULL;
             llvm::Type *llvm_type = copy_llvm_type_to_module(module, s.llvm_type);
             if (llvm_type->isFunctionTy()) {
-                gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)llvm_type);
+                llvm::FunctionType *fn_type = llvm::dyn_cast<llvm::FunctionType>(llvm_type);
+                internal_assert(fn_type);
+                llvm::Value *v = module->getOrInsertFunction(name, fn_type);
+                internal_assert(v);
+                // Sometimes LLVM represents functions as bitcasts of other functions.
+                v = v->stripPointerCasts();
+                gv = llvm::dyn_cast<llvm::Function>(v);
             } else {
-                gv = (GlobalValue *)module->getOrInsertGlobal(name, llvm_type);
+                Constant *c = module->getOrInsertGlobal(name, llvm_type);
+                internal_assert(c);
+                c = c->stripPointerCasts();
+                gv = llvm::dyn_cast<llvm::GlobalValue>(c);
             }
+            internal_assert(gv);
             gv->setLinkage(GlobalValue::ExternalWeakLinkage);
         }
     }
@@ -560,7 +570,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     symbol.address = address;
 
     // Struct types are uniqued on the context, but the lookup API is only available
-    // ont he Module, not hte Context.
+    // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module.ptr->context);
     llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
     if (buffer_t == NULL) {

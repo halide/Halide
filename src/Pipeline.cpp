@@ -987,6 +987,23 @@ void Pipeline::realize(Realization dst, const Target &t) {
     int exit_status = contents.ptr->jit_module.argv_function()(&(args[0]));
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
+    // If we're profiling, report runtimes and reset profiler stats.
+    if (target.has_feature(Target::Profile)) {
+        JITModule shared_runtime = JITSharedRuntime::get(NULL, target, false)[0];
+        const std::map<string, JITModule::Symbol> &exports = shared_runtime.exports();
+        auto report_sym = exports.find("halide_profiler_report");
+        auto reset_sym = exports.find("halide_profiler_reset");
+        if (report_sym != exports.end() && reset_sym != exports.end()) {
+            void *report_addr = report_sym->second.address;
+            void (*report_fn_ptr)(void *) = (void (*)(void *))report_addr;
+            report_fn_ptr(NULL);
+
+            void *reset_addr = reset_sym->second.address;
+            void (*reset_fn_ptr)(void *) = (void (*)(void *))reset_addr;
+            reset_fn_ptr(NULL);
+        }
+    }
+
     jit_context.finalize(exit_status);
 }
 
