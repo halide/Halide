@@ -1308,10 +1308,10 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
     // in LLVM (3.7) r239940 bitcode format of Instruction::LandingPad instruction
     // was changed where PersonalityFn was moved from LandingPad instruction to
     // Function instruction.
-    // With no simple fix in sight to address bitcode incompatibilty between
+    // With no simple fix in sight to address bitcode incompatibility between
     // what can be produced from LLVM IR and what Android "3.2" bitcode expects,
     // it seems that LandingPad instructions simply should not happen in
-    // Halide-generated code because there should be no expections used in Halide code.
+    // Halide-generated code because there should be no exceptions used in Halide code.
     assert("Unexpected LandingPad instruction. Exceptions should not be used.");
     break;
   }
