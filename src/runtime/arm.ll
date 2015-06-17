@@ -234,7 +234,7 @@ define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind alwaysinline {
 }
 
 define weak_odr <8 x i8> @strided_load_i8x8(i8 * %ptr, i32 %stride) nounwind alwaysinline {
-       %tmp = tail call {<8 x i8>, i8 *} asm "
+       %tmp = tail call {<8 x i8>, i8 *} asm sideeffect "
        vld1.8 $0[0], [$1], $3
        vld1.8 $0[1], [$1], $3
        vld1.8 $0[2], [$1], $3
@@ -263,7 +263,7 @@ define weak_odr void @strided_store_i8x8(i8 * %ptr, i32 %stride, <8 x i8> %val) 
 }
 
 define weak_odr <16 x i8> @strided_load_i8x16(i8 * %ptr, i32 %stride) nounwind alwaysinline {
-       %tmp = tail call {<16 x i8>, i8 *} asm "
+       %tmp = tail call {<16 x i8>, i8 *} asm sideeffect "
        vld1.8 ${0:e}[0], [$1], $3
        vld1.8 ${0:e}[1], [$1], $3
        vld1.8 ${0:e}[2], [$1], $3
@@ -308,7 +308,7 @@ define weak_odr void @strided_store_i8x16(i8 * %ptr, i32 %stride, <16 x i8> %val
 }
 
 define weak_odr <4 x i16> @strided_load_i16x4(i16 * %ptr, i32 %stride) nounwind alwaysinline {
-       %tmp = tail call {<4 x i16>, i16 *} asm "
+       %tmp = tail call {<4 x i16>, i16 *} asm sideeffect "
        vld1.16 $0[0], [$1], $3
        vld1.16 $0[1], [$1], $3
        vld1.16 $0[2], [$1], $3
@@ -329,7 +329,7 @@ define weak_odr void @strided_store_i16x4(i16 * %ptr, i32 %stride, <4 x i16> %va
 }
 
 define weak_odr <8 x i16> @strided_load_i16x8(i16 * %ptr, i32 %stride) nounwind alwaysinline {
-       %tmp = tail call {<8 x i16>, i16 *} asm "
+       %tmp = tail call {<8 x i16>, i16 *} asm sideeffect "
        vld1.16 ${0:e}[0], [$1], $3
        vld1.16 ${0:e}[1], [$1], $3
        vld1.16 ${0:e}[2], [$1], $3
@@ -358,7 +358,7 @@ define weak_odr void @strided_store_i16x8(i16 * %ptr, i32 %stride, <8 x i16> %va
 }
 
 define weak_odr <4 x i32> @strided_load_i32x4(i32 * %ptr, i32 %stride) nounwind alwaysinline {
-       %tmp = tail call {<4 x i32>, i32 *} asm "
+       %tmp = tail call {<4 x i32>, i32 *} asm sideeffect "
        vld1.32 ${0:e}[0], [$1], $3
        vld1.32 ${0:e}[1], [$1], $3
        vld1.32 ${0:f}[0], [$1], $3
@@ -379,7 +379,7 @@ define weak_odr void @strided_store_i32x4(i32 * %ptr, i32 %stride, <4 x i32> %va
 }
 
 define weak_odr <4 x float> @strided_load_f32x4(float * %ptr, i32 %stride) nounwind alwaysinline {
-       %tmp = tail call {<4 x float>, float *} asm "
+       %tmp = tail call {<4 x float>, float *} asm sideeffect "
        vld1.32 ${0:e}[0], [$1], $3
        vld1.32 ${0:e}[1], [$1], $3
        vld1.32 ${0:f}[0], [$1], $3
