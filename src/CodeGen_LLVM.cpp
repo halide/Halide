@@ -256,7 +256,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     if (target.features_any_of({Target::CUDA,
                                 Target::OpenCL,
                                 Target::OpenGL,
-                                Target::Renderscript})) {
+                                Target::Renderscript,
+                                Target::Metal})) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {
             return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);

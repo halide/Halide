@@ -38,7 +38,7 @@ public:
     
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "opencl"; }
+    std::string api_unique_name() { return "metal"; }
 
 protected:
 
