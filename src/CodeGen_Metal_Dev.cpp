@@ -50,7 +50,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
             oss << "int";
             break;
         case 64:
-            oss << "long";
+            user_error << "Metal does not support 64-bit integers.\n";
             break;
         default:
             user_error << "Can't represent an integer with this many bits in Metal C: " << type << "\n";
@@ -461,22 +461,22 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
         }
     }
     if (any_scalar_args) {
-        stream << "}\n";
+        stream << "};\n";
     }
 
     // Emit the function prototype
     stream << "kernel void " << name << "(\n";
     stream << "uint3 tgroup_index [[ threadgroup_position_in_grid ]],\n"
-           << "uint3 tid_in_group [[ thread_position_in_threadgroup ]]";
+           << "uint3 tid_in_tgroup [[ thread_position_in_threadgroup ]]";
     size_t buffer_index = 0;
     if (any_scalar_args) {
-        stream << "const " << name << "_args * [[ buffer(0) ]],\n";
+        stream << ",\nconst device " << name << "_args *_scalar_args [[ buffer(0) ]]";
         buffer_index++;
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        stream << ",\n";
         if (args[i].is_buffer) {
+            stream << ",\n";
             stream << " " << get_memory_space(args[i].name) << " ";
             if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
@@ -484,7 +484,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
             allocations.push(args[i].name, args[i].type);
         }
     }
-    stream << ",\n" << " __address_space___shared int16* __shared";
+    stream << ",\n" << " threadgroup int16_t* __shared [[ threadgroup(0) ]]";
 
     stream << ")\n";
 
@@ -496,7 +496,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
             stream << print_type(args[i].type)
                    << " "
                    << print_name(args[i].name)
-                   << " = " << name << "_args." << print_name(args[i].name)
+                   << " = _scalar_args->" << print_name(args[i].name)
                    << ";\n";
         }
     }
@@ -549,49 +549,51 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream.clear();
 
     // Write out the Halide math functions.
-    src_stream << "float maxval_f32() {return FLT_MAX;}\n"
+    src_stream << "#include <metal_stdlib>\n"
+               << "using namespace metal;\n" // Seems like the right way to go.
+               << "namespace {\n"
+               << "float float_from_bits(unsigned int x) {return *reinterpret_cast<float thread *>(&x);}\n"
+               << "float maxval_f32() {return FLT_MAX;}\n"
                << "float minval_f32() {return -FLT_MAX;}\n"
-               << "float nan_f32() { return NAN; }\n"
-               << "float neg_inf_f32() { return -INFINITY; }\n"
-               << "bool is_nan_f32(float x) {return x != x; }\n"
-               << "float inf_f32() { return INFINITY; }\n"
-               << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
+               << "float nan_f32() { return float_from_bits(0x7fc00000); }\n" // Quiet NaN with minimum fractional value.
+               << "float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
+               << "float inf_f32() { return float_from_bits(0x7f800000); }\n"
+               << "bool is_nan_f32(float x) {return isnan(x); }\n"
+               << "float fast_inverse_f32(float x) { return 1.0f / x; } \n"
                << smod_def("char") << "\n"
                << smod_def("short") << "\n"
                << smod_def("int") << "\n"
-               << smod_def("long") << "\n"
                << sdiv_def("char") << "\n"
                << sdiv_def("short") << "\n"
                << sdiv_def("int") << "\n"
-               << sdiv_def("long") << "\n"
-               << "#define sqrt_f32 sqrt \n"
-               << "#define sin_f32 sin \n"
-               << "#define cos_f32 cos \n"
-               << "#define exp_f32 exp \n"
-               << "#define log_f32 log \n"
-               << "#define abs_f32 fabs \n"
-               << "#define floor_f32 floor \n"
-               << "#define ceil_f32 ceil \n"
-               << "#define round_f32 round \n"
-               << "#define trunc_f32 trunc \n"
-               << "#define pow_f32 pow\n"
-               << "#define asin_f32 asin \n"
-               << "#define acos_f32 acos \n"
-               << "#define tan_f32 tan \n"
-               << "#define atan_f32 atan \n"
-               << "#define atan2_f32 atan2\n"
-               << "#define sinh_f32 sinh \n"
-               << "#define asinh_f32 asinh \n"
-               << "#define cosh_f32 cosh \n"
-               << "#define acosh_f32 acosh \n"
-               << "#define tanh_f32 tanh \n"
-               << "#define atanh_f32 atanh \n"
-               << "#define fast_inverse_f32 native_recip \n"
-               << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
+               << "#define sqrt_f32 fast::sqrt \n"
+               << "#define sin_f32 fast::sin \n"
+               << "#define cos_f32 fast::cos \n"
+               << "#define exp_f32 fast::exp \n"
+               << "#define log_f32 fast::log \n"
+               << "#define abs_f32 fast::fabs \n"
+               << "#define floor_f32 fast::floor \n"
+               << "#define ceil_f32 fast::ceil \n"
+               << "#define round_f32 fast::round \n"
+               << "#define trunc_f32 fast::trunc \n"
+               << "#define pow_f32 fast::pow\n"
+               << "#define asin_f32 fast::asin \n"
+               << "#define acos_f32 fast::acos \n"
+               << "#define tan_f32 fast::tan \n"
+               << "#define atan_f32 fast::atan \n"
+               << "#define atan2_f32 fast::atan2\n"
+               << "#define sinh_f32 fast::sinh \n"
+               << "#define asinh_f32 fast::asinh \n"
+               << "#define cosh_f32 fast::cosh \n"
+               << "#define acosh_f32 fast::acosh \n"
+               << "#define tanh_f32 fast::tanh \n"
+               << "#define atanh_f32 fast::atanh \n"
+               << "#define fast_inverse_sqrt_f32 fast::rsqrt \n"
                << "int halide_gpu_thread_barrier() {\n"
-               << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
+               << "  threadgroup_barrier(mem_flags::mem_threadgroup);\n" // Halide only ever needs threadgroup (OpenCL "local") memory fences.
                << "  return 0;\n"
-               << "}\n";
+               << "}\n"
+               << "}\n"; // close namespace
 
     // __shared always has address space threadgroup.
     src_stream << "#define __address_space___shared threadgroup\n";

@@ -35,7 +35,7 @@ void release_metal_object(objc_id obj) {
 
 MTLBuffer new_buffer(MTLDevice device, size_t length) {
     return objc_msgSend(device, sel_getUid("newBufferWithLength:options:"),
-			length, 0 /* MTLResourceOptionCPUCacheModeDefault */);
+                        length, 0 /* MTLResourceOptionCPUCacheModeDefault */);
 }
 
 MTLCommandQueue new_command_queue(MTLDevice device) {
@@ -72,7 +72,7 @@ MTLLibrary new_library_with_source(MTLDevice device, const char *source, size_t 
                                   sel_getUid("alloc")),
                      sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone"), source, source_len, NSUTF8StringEncoding, 0 /* NO */);
     MTLCompileOptions options = objc_msgSend(objc_msgSend(objc_getClass("MTLCompileOptions"), sel_getUid("alloc")),
-					     sel_getUid("setFastMathEnabled"), 1);
+                                             sel_getUid("setFastMathEnabled"), 1);
     // TODO: handle error.
     MTLLibrary result = objc_msgSend(device, sel_getUid("newLibraryWithSource:options:error:"), source_str, options, &error_return);
     objc_msgSend(options, sel_getUid("release"));
@@ -92,8 +92,12 @@ MTLFunction new_function_with_name(MTLLibrary library, const char *name, size_t 
     return result;
 }
 
-void set_input_buffer(MTLComputeCommandEncoder encoder, MTLBuffer input, int32_t index) {
-    objc_msgSend(encoder, sel_getUid("setBuffer:offset:atIndex:"), input, 0, index);
+void set_input_buffer(MTLComputeCommandEncoder encoder, MTLBuffer input, uint32_t index) {
+    objc_msgSend(encoder, sel_getUid("setBuffer:offset:atIndex:"), input, (uint32_t)0, index);
+}
+
+void set_threadgroup_memory_length(MTLComputeCommandEncoder encoder, uint32_t index, uint32_t length) {
+    objc_msgSend(encoder, sel_getUid("setThreadgroupMemoryLength::atIndex:"), length, index);
 }
 
 struct MTLSize {
@@ -105,7 +109,7 @@ struct MTLSize {
 void dispatch_threadgroups(MTLComputeCommandEncoder encoder, MTLSize threadgroupsPerGrid, MTLSize threadsPerThreadgroup) {
     // TODO: Verify the argument passing here is correct.
     objc_msgSend(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
-		 threadgroupsPerGrid, threadsPerThreadgroup);
+                 threadgroupsPerGrid, threadsPerThreadgroup);
 }
 
 void commit_command_buffer(MTLCommandBuffer buffer) {
@@ -496,6 +500,7 @@ WEAK int halide_metal_run(void *user_context,
             buffer_index++;
         }
     }
+    set_threadgroup_memory_length(encoder, shared_mem_bytes, 0);
 
     MTLSize blocks = { blocksX, blocksY, blocksZ };
     MTLSize threads = { threadsX, threadsY, threadsZ };
