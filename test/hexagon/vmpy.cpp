@@ -3,7 +3,12 @@
 #include "vmpy.h"
 #include <stdio.h>
 using namespace Halide;
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#ifdef NOSTDOUT
+#define OFILE "x.s"
+#else
+#define OFILE "/dev/stdout"
+#endif
+#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
 #define COMPILE_BC(X)  ((X).compile_to_bitcode("x.bc", args, target))
 
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
