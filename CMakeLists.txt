@@ -11,7 +11,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # Find LLVM
 # Users can set LLVM_DIR to point to a directory containing LLVMConfig.cmake
 message(STATUS "Looking for LLVM")
-find_package(LLVM REQUIRED)
+find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 if (LLVM_PACKAGE_VERSION  VERSION_LESS 3.5)
   message(FATAL_ERROR "Need LLVM >=3.5")
