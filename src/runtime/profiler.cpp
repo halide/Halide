@@ -82,6 +82,7 @@ WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time) {
     error(NULL) << "Could not proceed.\n";
 }
 
+// TODO: make this something like halide_nanosleep so that it can be implemented per OS
 extern "C" void usleep(int);
 
 WEAK void *sampling_profiler_thread(void *) {
@@ -146,9 +147,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
     }
     p->runs++;
 
-    int tok = p->first_func_id;
-
-    return tok;
+    return p->first_func_id;
 }
 
 WEAK void halide_profiler_report(void *user_context) {
