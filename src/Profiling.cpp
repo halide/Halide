@@ -50,6 +50,16 @@ private:
 
         stmt = ProducerConsumer::make(op->name, produce, update, consume);
     }
+
+    void visit(const For *op) {
+        // We profile by storing a token to global memory, so don't enter GPU loops
+        if (op->device_api == DeviceAPI::Parent ||
+            op->device_api == DeviceAPI::Host) {
+            IRMutator::visit(op);
+        } else {
+            stmt = op;
+        }
+    }
 };
 
 Stmt inject_profiling(Stmt s, string pipeline_name) {
