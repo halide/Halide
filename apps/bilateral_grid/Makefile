@@ -13,7 +13,7 @@ bilateral_grid.o: bilateral_grid
 	./bilateral_grid 8
 
 filter: bilateral_grid.o filter.cpp
-	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpthread -ldl -o filter  $(PNGFLAGS)
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz

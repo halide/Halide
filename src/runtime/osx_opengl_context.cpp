@@ -2,8 +2,6 @@
 #include "HalideRuntime.h"
 #include "scoped_mutex_lock.h"
 
-extern "C" void *dlopen(const char *, int);
-extern "C" void *dlsym(void *, const char *);
 #define USE_AGL 0
 #if USE_AGL
 extern "C" void *aglChoosePixelFormat(void *, int, const int *);
@@ -33,12 +31,11 @@ using namespace Halide::Runtime::Internal::OpenGL;
 WEAK void *halide_opengl_get_proc_address(void *user_context, const char *name) {
     static void *dylib = NULL;
     if (!dylib) {
-        dylib = dlopen(
-            "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL",
-            1);
+        dylib = halide_load_library(
+            "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL");
         if (!dylib) return NULL;
     }
-    return dlsym(dylib, name);
+    return halide_get_library_symbol(dylib, name);
 }
 
 // Initialize OpenGL
@@ -67,7 +64,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
         ScopedMutexLock lock(&cgl_functions_mutex);
 
         if (!cgl_initialized) {
-            if ((CGLChoosePixelFormat = 
+            if ((CGLChoosePixelFormat =
                  (int (*)(int *, void **, int *))halide_opengl_get_proc_address(user_context, "CGLChoosePixelFormat")) == NULL) {
                 return -1;
             }
@@ -95,7 +92,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
         0x1000, // kCGLOGLPVersion_Legacy -- 0x3200 is kCGLOGLPVersion_3_2_Core -- kCGLOGLPVersion_GL4_Core is 0x4100
         0 // sentinel ending list
     };
-    
+
     void *fmt;
     int numFormats = 0;
     if (CGLChoosePixelFormat(attribs, &fmt, &numFormats) != 0) {
