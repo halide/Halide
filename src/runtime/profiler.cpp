@@ -79,7 +79,7 @@ WEAK void bill_func(profiler_state *s, int func_id, uint64_t time) {
     error(NULL) << "Could not proceed.\n";
 }
 
-extern "C" int sched_yield();
+extern "C" void usleep(int);
 
 WEAK void *sampling_profiler_thread(void *) {
     profiler_state *s = halide_profiler_get_state();
@@ -93,25 +93,19 @@ WEAK void *sampling_profiler_thread(void *) {
         uint64_t t = t1;
         while (1) {
             uint64_t t_now = halide_current_time_ns(NULL);
-            uint64_t delta = t_now - t;
-            // Querying the state too frequently causes cache misses
-            // in the main process every time it goes to set
-            // current_func. If not much time has elapsed since we
-            // last checked it, delay.
-            if (delta > 100000) {
-                int func = s->current_func;
-                if (func == please_stop) {
-                    break;
-                } else if (func >= 0) {
-                    // Assume all time since I was last awake is due to
-                    // the currently running func.
-                    bill_func(s, func, t_now - t);
-                }
-                t = t_now;
+            int func = s->current_func;
+            if (func == please_stop) {
+                break;
+            } else if (func >= 0) {
+               // Assume all time since I was last awake is due to
+               // the currently running func.
+               bill_func(s, func, t_now - t);
             }
-            // Release the lock, give up my time slice, reacquire.
+            t = t_now;
+
+            // Release the lock, sleep, reacquire.
             halide_mutex_unlock(&s->lock);
-            sched_yield();
+            usleep(1000);
             halide_mutex_lock(&s->lock);
         }
     }
