@@ -1244,15 +1244,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
 void CodeGen_ARM::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::profiling_timer) {
-            // Android devices generally have read-cycle-counter
-            // disabled in user mode; fall back to calling
-            // halide_current_time_ns().
-            internal_assert(op->args.size() == 1);
-            Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
-            e.accept(this);
-            return;
-        } else if (op->name == Call::abs && op->type.is_uint()) {
+        if (op->name == Call::abs && op->type.is_uint()) {
             internal_assert(op->args.size() == 1);
             // If the arg is a subtract with narrowable args, we can use vabdl.
             const Sub *sub = op->args[0].as<Sub>();
