@@ -29,12 +29,15 @@ file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
 file(TO_NATIVE_PATH "${LLVM_BIN}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 
 # Check that LLVM binaries we depend on exist
-macro(check_tool_exists NAME PATH)
-  if (NOT EXISTS ${PATH})
-    message(FATAL_ERROR "Tool ${NAME} not found at ${PATH}")
+function(check_tool_exists NAME PATH)
+  # Need to convert to CMake path so that backslashes don't get
+  # interpreted as an escape.
+  file(TO_CMAKE_PATH "${PATH}" TOOL_PATH)
+  if (NOT EXISTS ${TOOL_PATH})
+    message(FATAL_ERROR "Tool ${NAME} not found at ${TOOL_PATH}")
   endif()
-  message(STATUS "Using ${NAME} at ${PATH}")
-endmacro()
+  message(STATUS "Using ${NAME} at ${TOOL_PATH}")
+endfunction()
 check_tool_exists(llvm-as ${LLVM_AS})
 check_tool_exists(llvm-nm ${LLVM_NM})
 check_tool_exists(clang ${CLANG})
