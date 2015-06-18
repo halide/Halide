@@ -9,7 +9,7 @@ int malloc_count = 0;
 int free_count = 0;
 
 void *my_malloc(void *user_context, size_t x) {
-    malloc_count++;
+    __sync_fetch_and_add(&malloc_count, 1);
     void *orig = malloc(x+32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
@@ -17,7 +17,7 @@ void *my_malloc(void *user_context, size_t x) {
 }
 
 void my_free(void *user_context, void *ptr) {
-    free_count++;
+    __sync_fetch_and_add(&free_count, 1);
     free(((void**)ptr)[-1]);
 }
 
@@ -45,9 +45,9 @@ int main(int argc, char **argv) {
 
     Image<int> im = h.realize(g_size+100);
 
-    // One of the malloc/free pairs comes from constructing the error
-    // message about the bound being wrong.
-    assert(error_occurred && malloc_count == 2 && free_count == 2);
+    printf("%d %d\n", malloc_count, free_count);
+
+    assert(error_occurred && malloc_count == free_count);
 
     printf("Success!\n");
     return 0;

@@ -3,12 +3,12 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 struct func_stats {
     uint64_t time;
-    char *name;
+    const char *name;
 };
 
 struct pipeline_stats {
     uint64_t time;
-    char *name;
+    const char *name;
     func_stats *funcs;
     // The following field is a pipeline_stats ptr. However, this type
     // may not be recursive, or copying it from one LLVM module to

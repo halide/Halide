@@ -1,10 +1,15 @@
 #include "runtime_internal.h"
 #include "HalideRuntime.h"
 #include "profiler_state.h"
+#include "scoped_mutex_lock.h"
+
+// Note: The profiler thread may out-live any valid user_context, or
+// be used across many different user_contexts, so nothing it calls
+// can depend on the user context.
 
 extern "C" {
-// Returns the address of the halide_profiler state
-WEAK profiler_state *halide_profiler_get_state(void *user_context) {
+// Returns the address of the global halide_profiler state
+WEAK profiler_state *halide_profiler_get_state() {
     static profiler_state s;
     return &s;
 }
@@ -12,51 +17,49 @@ WEAK profiler_state *halide_profiler_get_state(void *user_context) {
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK char *copy_string(void *user_context, const char *src) {
-    int l = strlen(src) + 1;
-    char *dst = (char *)halide_malloc(user_context, l);
-    for (int i = 0; i < l; i++) {
-        dst[i] = src[i];
-    }
-    return dst;
-}
+WEAK pipeline_stats *find_or_create_pipeline(const char *pipeline_name, int num_funcs, const char **func_names) {
+    profiler_state *s = halide_profiler_get_state();
 
-WEAK pipeline_stats *find_or_create_pipeline(void *user_context, const char *pipeline_name,
-                                             int num_funcs, const char **func_names) {
-    for (pipeline_stats *p = halide_profiler_get_state(user_context)->pipelines; p; p = (pipeline_stats *)(p->next)) {
-        if (strcmp(p->name, pipeline_name) == 0 &&
+    for (pipeline_stats *p = s->pipelines; p; p = (pipeline_stats *)(p->next)) {
+        // The same pipeline will deliver the same global constant string, so they can be compared by pointer.
+        if (p->name == pipeline_name &&
             p->num_funcs == num_funcs) {
             return p;
         }
     }
     // Create a new pipeline stats entry.
-    pipeline_stats *p = (pipeline_stats *)halide_malloc(user_context, sizeof(pipeline_stats));
-    p->next = halide_profiler_get_state(user_context)->pipelines;
-    halide_profiler_get_state(user_context)->pipelines = p;
-    p->name = copy_string(user_context, pipeline_name);
-    p->first_func_id = halide_profiler_get_state(user_context)->first_free_id;
+    pipeline_stats *p = (pipeline_stats *)halide_malloc(NULL, sizeof(pipeline_stats));
+    if (!p) return NULL;
+    p->next = s->pipelines;
+    p->name = pipeline_name;
+    p->first_func_id = s->first_free_id;
     p->num_funcs = num_funcs;
     p->runs = 0;
     p->time = 0;
     p->samples = 0;
-    p->funcs = (func_stats *)halide_malloc(user_context, num_funcs * sizeof(func_stats));
+    p->funcs = (func_stats *)halide_malloc(NULL, num_funcs * sizeof(func_stats));
+    if (!p->funcs) {
+        halide_free(NULL, p);
+        return NULL;
+    }
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].time = 0;
-        p->funcs[i].name = copy_string(user_context, func_names[i]);
+        p->funcs[i].name = func_names[i];
     }
-    halide_profiler_get_state(user_context)->first_free_id += num_funcs;
+    s->first_free_id += num_funcs;
+    s->pipelines = p;
     return p;
 }
 
-WEAK void bill_func(void *user_context, int func_id, uint64_t time) {
+WEAK void bill_func(profiler_state *s, int func_id, uint64_t time) {
     pipeline_stats *p_prev = NULL;
-    for (pipeline_stats *p = halide_profiler_get_state(user_context)->pipelines; p; p = (pipeline_stats *)(p->next)) {
+    for (pipeline_stats *p = s->pipelines; p; p = (pipeline_stats *)(p->next)) {
         if (func_id >= p->first_func_id && func_id < p->first_func_id + p->num_funcs) {
             if (p_prev) {
                 // Bubble the pipeline to the top to speed up future queries.
                 p_prev->next = (pipeline_stats *)(p->next);
-                p->next = halide_profiler_get_state(user_context)->pipelines;
-                halide_profiler_get_state(user_context)->pipelines = p;
+                p->next = s->pipelines;
+                s->pipelines = p;
             }
             p->funcs[func_id - p->first_func_id].time += time;
             p->time += time;
@@ -66,47 +69,57 @@ WEAK void bill_func(void *user_context, int func_id, uint64_t time) {
         p_prev = p;
     }
     // panic!
-    error(NULL) << "Internal error in profiler\n";
+    print(NULL)
+        << "Internal error in profiler: \n"
+        << "Could not find pipeline for func_id " << func_id << "\n"
+        << "Pipelines:\n";
+    for (pipeline_stats *p = s->pipelines; p; p = (pipeline_stats *)(p->next)) {
+        print(NULL) << p->name << " : " << p->first_func_id << ", " << p->num_funcs << "\n";
+    }
+    error(NULL) << "Could not proceed.\n";
 }
 
 extern "C" int sched_yield();
 
-WEAK void sampling_profiler_thread(void *user_context, void *) {
+WEAK void *sampling_profiler_thread(void *) {
+    profiler_state *s = halide_profiler_get_state();
+
     // grab the lock
-    halide_mutex_lock(&halide_profiler_get_state(user_context)->lock);
+    halide_mutex_lock(&s->lock);
 
-    while (halide_profiler_get_state(user_context)->current_func != please_stop) {
+    while (s->current_func != please_stop) {
 
-        uint64_t t1 = halide_current_time_ns(user_context);
+        uint64_t t1 = halide_current_time_ns(NULL);
         uint64_t t = t1;
         while (1) {
-            uint64_t t_now = halide_current_time_ns(user_context);
+            uint64_t t_now = halide_current_time_ns(NULL);
             uint64_t delta = t_now - t;
             // Querying the state too frequently causes cache misses
             // in the main process every time it goes to set
             // current_func. If not much time has elapsed since we
             // last checked it, delay.
             if (delta > 100000) {
-                int func = halide_profiler_get_state(user_context)->current_func;
+                int func = s->current_func;
                 if (func == please_stop) {
                     break;
                 } else if (func >= 0) {
                     // Assume all time since I was last awake is due to
                     // the currently running func.
-                    bill_func(user_context, func, t_now - t);
+                    bill_func(s, func, t_now - t);
                 }
                 t = t_now;
             }
             // Release the lock, give up my time slice, reacquire.
-            halide_mutex_unlock(&halide_profiler_get_state(user_context)->lock);
+            halide_mutex_unlock(&s->lock);
             sched_yield();
-            halide_mutex_lock(&halide_profiler_get_state(user_context)->lock);
+            halide_mutex_lock(&s->lock);
         }
     }
 
-    halide_profiler_get_state(user_context)->started = false;
+    s->started = false;
 
-    halide_mutex_unlock(&halide_profiler_get_state(user_context)->lock);
+    halide_mutex_unlock(&s->lock);
+    return NULL;
 }
 
 }}}
@@ -118,34 +131,48 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const char **func_names) {
-    halide_mutex_lock(&halide_profiler_get_state(user_context)->lock);
+    profiler_state *s = halide_profiler_get_state();
 
-    if (!halide_profiler_get_state(user_context)->started) {
+    ScopedMutexLock lock(&s->lock);
+
+    if (!s->started) {
         halide_spawn_thread(user_context, sampling_profiler_thread, NULL);
-        halide_profiler_get_state(user_context)->started = true;
+        s->started = true;
     }
 
-    pipeline_stats *p = find_or_create_pipeline(user_context, pipeline_name, num_funcs, func_names);
+    pipeline_stats *p = find_or_create_pipeline(pipeline_name, num_funcs, func_names);
+    if (!p) {
+        // Allocating space to track the statistics failed.
+        return halide_error_out_of_memory(user_context);
+    }
     p->runs++;
 
     int tok = p->first_func_id;
 
-    halide_mutex_unlock(&halide_profiler_get_state(user_context)->lock);
     return tok;
 }
 
 WEAK void halide_profiler_report(void *user_context) {
-    halide_mutex_lock(&halide_profiler_get_state(user_context)->lock);
-    for (pipeline_stats *p = halide_profiler_get_state(user_context)->pipelines; p; p = (pipeline_stats *)(p->next)) {
+    profiler_state *s = halide_profiler_get_state();
+
+    char line_buf[160];
+    Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
+
+    ScopedMutexLock lock(&s->lock);
+
+    for (pipeline_stats *p = s->pipelines; p; p = (pipeline_stats *)(p->next)) {
         float t = p->time / 1000000.0f;
-        print(NULL) << p->name
-                    << "  total time: " << t << " ms"
-                    << "  samples: " << p->samples
-                    << "  runs: " << p->runs
-                    << "  time per run: " << t / p->runs << " ms\n";
+        if (!p->runs) continue;
+        sstr.clear();
+        sstr << p->name
+             << "  total time: " << t << " ms"
+             << "  samples: " << p->samples
+             << "  runs: " << p->runs
+             << "  time per run: " << t / p->runs << " ms\n";
+        halide_print(user_context, sstr.str());
         if (p->time) {
             for (int i = 0; i < p->num_funcs; i++) {
-                stringstream sstr(NULL);
+                sstr.clear();
                 func_stats *fs = p->funcs + i;
                 sstr << "  " << fs->name << ": ";
                 while (sstr.size() < 25) sstr << " ";
@@ -157,52 +184,48 @@ WEAK void halide_profiler_report(void *user_context) {
                 int percent = fs->time / (p->time / 100);
                 sstr << "(" << percent << "%)\n";
 
-                halide_print(NULL, sstr.str());
+                halide_print(user_context, sstr.str());
             }
         }
     }
-    halide_mutex_unlock(&halide_profiler_get_state(user_context)->lock);
 }
 
-WEAK void halide_profiler_reset(void *user_context) {
-    halide_mutex_lock(&halide_profiler_get_state(user_context)->lock);
+WEAK void halide_profiler_reset() {
+    profiler_state *s = halide_profiler_get_state();
 
-    while (halide_profiler_get_state(user_context)->pipelines) {
-        pipeline_stats *p = halide_profiler_get_state(user_context)->pipelines;
-        halide_profiler_get_state(user_context)->pipelines = (pipeline_stats *)(p->next);
-        for (int i = 0; i < p->num_funcs; i++) {
-            halide_free(user_context, p->funcs[i].name);
-        }
-        halide_free(user_context, p->funcs);
-        halide_free(user_context, p->name);
-        halide_free(user_context, p);
+    ScopedMutexLock lock(&s->lock);
+
+    while (s->pipelines) {
+        pipeline_stats *p = s->pipelines;
+        s->pipelines = (pipeline_stats *)(p->next);
+        halide_free(NULL, p->funcs);
+        halide_free(NULL, p);
     }
-    halide_profiler_get_state(user_context)->first_free_id = 0;
-    halide_mutex_unlock(&halide_profiler_get_state(user_context)->lock);
+    s->first_free_id = 0;
 }
 
 namespace {
 __attribute__((destructor))
 WEAK void halide_profiler_shutdown() {
-    halide_profiler_get_state(NULL)->current_func = please_stop;
+    profiler_state *s = halide_profiler_get_state();
+    s->current_func = please_stop;
     do {
         // Memory barrier.
-        __sync_synchronize(&halide_profiler_get_state(NULL)->started,
-                           &halide_profiler_get_state(NULL)->current_func);
-    } while (halide_profiler_get_state(NULL)->started);
-    halide_profiler_get_state(NULL)->current_func = outside_of_halide;
+        __sync_synchronize(&s->started,
+                           &s->current_func);
+    } while (s->started);
+    s->current_func = outside_of_halide;
 
     // print results
     halide_profiler_report(NULL);
 
     // free memory
-    halide_profiler_reset(NULL);
+    halide_profiler_reset();
 }
 }
 
-WEAK int halide_profiler_pipeline_end(void *user_context, int tok) {
-    halide_profiler_get_state(user_context)->current_func = outside_of_halide;
-    return 0;
+WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {
+    ((profiler_state *)state)->current_func = outside_of_halide;
 }
 
 }
