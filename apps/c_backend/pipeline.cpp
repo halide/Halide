@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 
     g.compile_to_header("pipeline_native.h", args, "pipeline_native");
     g.compile_to_header("pipeline_c.h", args, "pipeline_c");
-    g.compile_to_object("pipeline_native.o", args, "pipeline_native");
-    g.compile_to_c("pipeline_c.c", args, "pipeline_c");
+    g.compile_to_object("pipeline_native.o", args, "pipeline_native", get_host_target());
+    g.compile_to_c("pipeline_c.c", args, "pipeline_c", get_host_target());
     return 0;
 }
