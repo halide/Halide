@@ -70,16 +70,4 @@ int CodeGen_MIPS::native_vector_bits() const {
     return 128;
 }
 
-void CodeGen_MIPS::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic &&
-        op->name == Call::profiling_timer) {
-        // LLVM doesn't know how to deal with read-cycle-counter on mips.
-        internal_assert(op->args.size() == 1);
-        Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
-        e.accept(this);
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
 }}

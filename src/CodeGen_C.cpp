@@ -63,7 +63,6 @@ const string globals =
     "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
     "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
-    "uint64_t halide_profiling_timer(void *ctx);\n"
     "}\n"
     "\n"
 
@@ -847,11 +846,6 @@ void CodeGen_C::visit(const Call *op) {
                     rhs << '0';
                 }
             }
-            rhs << ")";
-        } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 1);
-            rhs << "halide_profiling_timer(";
-            rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ")";
         } else if (op->name == Call::lerp) {
             internal_assert(op->args.size() == 3);

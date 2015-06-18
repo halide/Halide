@@ -2381,12 +2381,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                 value = value_stored;
             }
 
-        } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 1);
-            llvm::Function *fn = Intrinsic::getDeclaration(module,
-                Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
-            CallInst *call = builder->CreateCall(fn, vector<llvm::Value *>());
-            value = call;
         } else if (op->name == Call::lerp) {
             internal_assert(op->args.size() == 3);
             value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
