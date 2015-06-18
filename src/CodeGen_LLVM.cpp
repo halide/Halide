@@ -551,8 +551,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // pointing at a brand new basic block. We're good to go.
     f.body.accept(this);
 
-    // Return success
-    builder->CreateRet(ConstantInt::get(i32, 0));
+    return_with_error_code(ConstantInt::get(i32, 0));
 
     // Remove the arguments from the symbol table
     for (size_t i = 0; i < args.size(); i++) {
@@ -565,7 +564,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     module->setModuleIdentifier("halide_module_" + name);
     debug(2) << module << "\n";
 
-    internal_assert(!verifyFunction(*function));
+    internal_assert(!verifyFunction(*function, &llvm::outs()));
 
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
@@ -607,14 +606,6 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
         // The last instruction is the return op that returns it.
         builder->CreateRet(error_code);
 
-        // Create a dead block that branches to the destructor block
-        // so that the phi node has at least one incoming edge even if
-        // there are no destructors.
-        BasicBlock *pre_destructor_block = BasicBlock::Create(*context, "pre_destructor_block", function);
-        builder->SetInsertPoint(pre_destructor_block);
-        builder->CreateBr(destructor_block);
-        error_code->addIncoming(ConstantInt::get(i32, 0), pre_destructor_block);
-
         // Jump back to where we were.
         builder->restoreIP(here);
 
@@ -623,7 +614,7 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
     return destructor_block;
 }
 
-Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj) {
+Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj, DestructorType when) {
 
     // Create a null-initialized stack slot to track this object
     llvm::Type *void_ptr = i8->getPointerTo();
@@ -635,25 +626,50 @@ Instruction *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Va
     // Put it in the stack slot
     builder->CreateStore(obj, stack_slot);
 
-    // Switch to the destructor block, and add code that cleans up this object.
+    // Passing the constant null as the object means the destructor
+    // will never get called.
+    {
+        llvm::Constant *c = dyn_cast<llvm::Constant>(obj);
+        if (c && c->isNullValue()) {
+            internal_error << "Destructors must take a non-null object\n";
+        }
+    }
+
+    // Switch to the destructor block, and add code that cleans up
+    // this object if the contents of the stack slot is not NULL.
     IRBuilderBase::InsertPoint here = builder->saveIP();
     BasicBlock *dtors = get_destructor_block();
 
     builder->SetInsertPoint(dtors->getFirstNonPHI());
 
+    PHINode *error_code = dyn_cast<PHINode>(dtors->begin());
+    internal_assert(error_code) << "The destructor block is supposed to start with a phi node\n";
+
+    llvm::Value *should_call =
+        (when == Always) ?
+        ConstantInt::get(i1, 1) :
+        builder->CreateIsNotNull(error_code);
+
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
-    Value *args[] = {get_user_context(), destructor_fn, stack_slot};
-    Instruction *cleanup = builder->CreateCall(call_destructor, args);
+    Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
+    builder->CreateCall(call_destructor, args);
 
     // Switch back to the original location
     builder->restoreIP(here);
 
-    // Return the cleanup instruction so that it can also be cloned to
-    // cleanup the object in the normal course of events (e.g. at a
-    // Free node).
-    return cleanup;
+    // Return the stack slot so that it's possible to cleanup the object early.
+    return stack_slot;
+}
+
+void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stack_slot) {
+    llvm::Function *call_destructor = module->getFunction("call_destructor");
+    internal_assert(call_destructor);
+    internal_assert(destructor_fn);
+    Value *should_call = ConstantInt::get(i1, 1);
+    Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
+    builder->CreateCall(call_destructor, args);
 }
 
 void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
@@ -861,7 +877,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 }
 
 void CodeGen_LLVM::optimize_module() {
-
     debug(3) << "Optimizing module\n";
 
     #if LLVM_VERSION < 37
@@ -2553,6 +2568,20 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = builder->CreateMemCpy(codegen(op->args[0]),
                                           codegen(op->args[1]),
                                           codegen(op->args[2]), 0);
+        } else if (op->name == Call::register_destructor) {
+            internal_assert(op->args.size() == 2);
+            const StringImm *fn = op->args[0].as<StringImm>();
+            internal_assert(fn);
+            Expr arg = op->args[1];
+            internal_assert(arg.type() == Handle());
+            llvm::Function *f = module->getFunction(fn->value);
+            if (!f) {
+                llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
+                FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
+                f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module);
+                f->setCallingConv(CallingConv::C);
+            }
+            register_destructor(f, codegen(arg), Always);
         } else {
             internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
@@ -2657,7 +2686,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // take a handle.
         if (op->name == "halide_current_time_ns" ||
             op->name == "halide_gpu_thread_barrier" ||
-            op->name == "halide_profiler_pipeline_end" ||
+            op->name == "halide_profiler_get_state" ||
             starts_with(op->name, "halide_error")) {
             pure = false;
         }
@@ -2812,6 +2841,13 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *erro
     // Call the error handler
     if (!error_code) error_code = codegen(message);
 
+    return_with_error_code(error_code);
+
+    // Continue on using the success case
+    builder->SetInsertPoint(assert_succeeds_bb);
+}
+
+void CodeGen_LLVM::return_with_error_code(llvm::Value *error_code) {
     // Branch to the destructor block, which cleans up and then bails out.
     BasicBlock *dtors = get_destructor_block();
 
@@ -2821,9 +2857,6 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *erro
     phi->addIncoming(error_code, builder->GetInsertBlock());
 
     builder->CreateBr(get_destructor_block());
-
-    // Continue on using the success case
-    builder->SetInsertPoint(assert_succeeds_bb);
 }
 
 void CodeGen_LLVM::visit(const ProducerConsumer *op) {
@@ -2952,7 +2985,7 @@ void CodeGen_LLVM::visit(const For *op) {
         codegen(op->body);
 
         // Return success
-        builder->CreateRet(ConstantInt::get(i32, 0));
+        return_with_error_code(ConstantInt::get(i32, 0));
 
         // Move the builder back to the main function and call do_par_for
         builder->restoreIP(call_site);
