@@ -622,9 +622,9 @@ typedef int (*enumerate_func_t)(void* enumerate_context,
 extern int halide_enumerate_registered_filters(void *user_context, void* enumerate_context, enumerate_func_t func);
 
 
-/** Functions below control the sampling profiler. Using these will
- * produce linker errors if you didn't compile the Halide pipeline
- * with the -profile target flag. */
+/** The functions below here are relevant for pipelines compiled with
+ * the -profile target flag, which runs a sampling profiler thread
+ * alongside the pipeline. */
 
 /** Per-Func state tracked by the sampling profiler. */
 struct halide_profiler_func_stats {

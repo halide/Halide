@@ -116,6 +116,9 @@ struct JITModule {
     EXPORT void add_extern_for_export(const std::string &name,
                                       const ExternSignature &signature, void *address);
 
+    /** Look up a symbol by name in this module or its dependencies. */
+    EXPORT Symbol find_symbol_by_name(const std::string &) const;
+
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */
     EXPORT void compile_module(llvm::Module *mod, const std::string &function_name, const Target &target,
