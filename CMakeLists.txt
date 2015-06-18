@@ -16,8 +16,21 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 if (LLVM_PACKAGE_VERSION  VERSION_LESS 3.5)
   message(FATAL_ERROR "Need LLVM >=3.5")
 endif()
+
+if (MSVC)
+  # WORKAROUND: Read the location from an imported target to get LLVM's binary
+  # directory. Using the ${LLVM_TOOLS_BINARY_DIR} variable is currently broken
+  # when using Visual Studio (it contains the string $(Configuration) in the
+  # path). We shouldn't read the location from the imported binary targets on
+  # other platforms because if LLVM was built with the Autoconf/Makefile build
+  # system they won't be available.
+  get_target_property(LLVM_AS_PATH llvm-as LOCATION)
+  get_filename_component(LLVM_BIN "${LLVM_AS_PATH}" DIRECTORY)
+else()
+  set(LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
+endif()
+
 # TODO: Remove these variables and use LLVM variables directly
-set(LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
 message(STATUS "LLVM_BIN:${LLVM_BIN}")
 set(LLVM_INCLUDE ${LLVM_INCLUDE_DIRS})
 message(STATUS "LLVM_INCLUDE:${LLVM_INCLUDE}")
