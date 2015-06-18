@@ -969,8 +969,14 @@ endif
 
 .PHONY: doc
 docs: doc
-doc: src test
+doc: src test Doxyfile
 	doxygen
+
+Doxyfile: Doxyfile.in
+	@echo "Generating $@"
+	@sed -e "s#@CMAKE_BINARY_DIR@#$(shell pwd)#g" \
+	     -e "s#@CMAKE_SOURCE_DIR@#$(shell pwd)#g" \
+	    $< > $@
 
 $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools
