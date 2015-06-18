@@ -633,6 +633,7 @@ Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
 Call::ConstString Call::make_int64 = "make_int64";
 Call::ConstString Call::make_float64 = "make_float64";
+Call::ConstString Call::register_destructor = "register_destructor";
 
 }
 }
