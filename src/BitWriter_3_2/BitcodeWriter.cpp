@@ -1308,7 +1308,12 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
     const LandingPadInst &LP = cast<LandingPadInst>(I);
     Code = bitc::FUNC_CODE_INST_LANDINGPAD;
     Vals.push_back(VE.getTypeID(LP.getType()));
+#if LLVM_VERSION < 37
     PushValueAndType(LP.getPersonalityFn(), InstID, Vals, VE);
+#else
+    PushValueAndType(LP.getParent()->getParent()->getPersonalityFn(), InstID,
+                     Vals, VE);
+#endif
     Vals.push_back(LP.isCleanup());
     Vals.push_back(LP.getNumClauses());
     for (unsigned I = 0, E = LP.getNumClauses(); I != E; ++I) {

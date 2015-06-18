@@ -86,10 +86,12 @@ namespace {
       return;
     }
     // Some environments (e.g. Android logging) will emit a prefix
-    // for each line; skip the first few words we see before
-    // deciding to ignore the line.
+    // for each line; just check all the words on the line.
     int first = -1;
-    for (int i = 0; i < 4; ++i) {
+    // We know v.size() >= 8 due to earlier check, so this will never underflow.
+    // This is size-7 (rather than size-8) since we expect 7 entries *after*
+    // we find the halide_profiler keyword.
+    for (int i = 0; i < v.size() - 7; ++i) {
       if (v[i] == "halide_profiler") {
         first = i;
         break;
