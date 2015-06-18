@@ -1,4 +1,4 @@
-include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
 
 add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
@@ -9,13 +9,6 @@ if (MSVC)
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
 
-  # To compile LLVM headers following was taken from LLVM CMake files:
-  # Disable sized deallocation if the flag is supported. MSVC fails to compile
-  # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
-  check_c_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
-  if (SUPPORTS_SIZED_DEALLOC)
-    add_definitions("/Zc:sizedDealloc-")
-  endif()
 else()
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
@@ -491,6 +484,14 @@ if (MSVC)
   # Suppress some warnings
   target_compile_options(Halide PUBLIC "/wd4244 /wd4267 /wd4800 /wd4996")
   target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
+  # To compile LLVM headers following was taken from LLVM CMake files:
+  # Disable sized deallocation if the flag is supported. MSVC fails to compile
+  # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
+  # See LLVM PR: 23513 (https://llvm.org/bugs/show_bug.cgi?id=23513)
+  check_cxx_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
+  if (SUPPORTS_SIZED_DEALLOC)
+    target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
+  endif()
 else()
   # I'm not sure if we want targets that link against Halide to inherit
   # the LLVM definitions so make the scope PRIVATE.
