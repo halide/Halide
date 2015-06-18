@@ -22,7 +22,7 @@ fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
 	$(CXX) $(CXXFLAGS) -c -Wall -fopenmp -O3 $< -o $@
 
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS) $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(PNGFLAGS)
 
 out.png: process
 	./process ../images/bayer_raw.png 3700 2.0 50 5 out.png
