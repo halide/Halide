@@ -1,3 +1,5 @@
+include(CheckCCompilerFlag)
+
 add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
@@ -10,6 +12,14 @@ if (MSVC)
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
+
+  # To compile LLVM headers following was taken from LLVM CMake files:
+  # Disable sized deallocation if the flag is supported. MSVC fails to compile
+  # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
+  check_c_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
+  if (SUPPORTS_SIZED_DEALLOC)
+    add_definitions("/Zc:sizedDealloc-")
+  endif()
 else()
   add_definitions("-D__STDC_LIMIT_MACROS")
   add_definitions("-D__STDC_CONSTANT_MACROS")

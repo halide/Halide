@@ -1315,19 +1315,14 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
   }
 
   case Instruction::LandingPad: {
-    const LandingPadInst &LP = cast<LandingPadInst>(I);
-    Code = bitc::FUNC_CODE_INST_LANDINGPAD;
-    Vals.push_back(VE.getTypeID(LP.getType()));
-    PushValueAndType(LP.getPersonalityFn(), InstID, Vals, VE);
-    Vals.push_back(LP.isCleanup());
-    Vals.push_back(LP.getNumClauses());
-    for (unsigned I = 0, E = LP.getNumClauses(); I != E; ++I) {
-      if (LP.isCatch(I))
-        Vals.push_back(LandingPadInst::Catch);
-      else
-        Vals.push_back(LandingPadInst::Filter);
-      PushValueAndType(LP.getClause(I), InstID, Vals, VE);
-    }
+    // in LLVM (3.7) r239940 bitcode format of Instruction::LandingPad instruction
+    // was changed where PersonalityFn was moved from LandingPad instruction to
+    // Function instruction.
+    // With no simple fix in sight to address bitcode incompatibility between
+    // what can be produced from LLVM IR and what Android "3.2" bitcode expects,
+    // it seems that LandingPad instructions simply should not happen in
+    // Halide-generated code because there should be no exceptions used in Halide code.
+    assert("Unexpected LandingPad instruction. Exceptions should not be used.");
     break;
   }
 
