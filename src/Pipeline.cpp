@@ -989,18 +989,16 @@ void Pipeline::realize(Realization dst, const Target &t) {
 
     // If we're profiling, report runtimes and reset profiler stats.
     if (target.has_feature(Target::Profile)) {
-        JITModule shared_runtime = JITSharedRuntime::get(NULL, target, false)[0];
-        const std::map<string, JITModule::Symbol> &exports = shared_runtime.exports();
-        auto report_sym = exports.find("halide_profiler_report");
-        auto reset_sym = exports.find("halide_profiler_reset");
-        if (report_sym != exports.end() && reset_sym != exports.end()) {
+        JITModule::Symbol report_sym =
+            contents.ptr->jit_module.find_symbol_by_name("halide_profiler_report");
+        JITModule::Symbol reset_sym =
+            contents.ptr->jit_module.find_symbol_by_name("halide_profiler_reset");
+        if (report_sym.address && reset_sym.address) {
             void *uc = jit_context.user_context_param.get_scalar<void *>();
-            void *report_addr = report_sym->second.address;
-            void (*report_fn_ptr)(void *) = (void (*)(void *))report_addr;
+            void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
             report_fn_ptr(uc);
 
-            void *reset_addr = reset_sym->second.address;
-            void (*reset_fn_ptr)() = (void (*)())reset_addr;
+            void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
             reset_fn_ptr();
         }
     }
