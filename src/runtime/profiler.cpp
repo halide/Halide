@@ -173,6 +173,11 @@ WEAK void halide_profiler_report(void *user_context) {
             for (int i = 0; i < p->num_funcs; i++) {
                 sstr.clear();
                 halide_profiler_func_stats *fs = p->funcs + i;
+
+                // The first func is always a catch-all overhead
+                // slot. Only report overhead time if it's non-zero
+                if (i == 0 && fs->time == 0) continue;
+
                 sstr << "  " << fs->name << ": ";
                 while (sstr.size() < 25) sstr << " ";
 
