@@ -61,7 +61,7 @@ if (!WIN32)
   add_subdirectory(tutorial)
 endif()
 
-option(WITH_DOCS "Enable building of documentation" ON)
+option(WITH_DOCS "Enable building of documentation" OFF)
 if (WITH_DOCS)
 find_package(Doxygen)
   if (NOT DOXYGEN_FOUND)
