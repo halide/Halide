@@ -11,7 +11,17 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # Find LLVM
 # Users can set LLVM_DIR to point to a directory containing LLVMConfig.cmake
 message(STATUS "Looking for LLVM")
-find_package(LLVM REQUIRED CONFIG)
+find_package(LLVM QUIET CONFIG)
+if ((NOT LLVM_CONFIG) OR (NOT TARGET LLVMSupport))
+  # NOTE: Checking this existance of the LLVMSupport target is to detect incorrectly packaged
+  # versions of LLVM on Ubuntu (see https://llvm.org/bugs/show_bug.cgi?id=23352)
+  message(FATAL_ERROR "Could not automatically find LLVM. Try setting passing -DLLVM_DIR"
+    " to CMake and setting it to the directory containing the LLVMConfig.cmake"
+    "file. This file is available in the LLVM build tree under"
+    " share/llvm/cmake/ if LLVM was built with CMake. It is also available in"
+    "LLVM's install tree"
+  )
+endif()
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 if (LLVM_PACKAGE_VERSION  VERSION_LESS 3.5)
   message(FATAL_ERROR "Need LLVM >=3.5")
