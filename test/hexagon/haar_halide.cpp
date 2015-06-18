@@ -4,7 +4,12 @@
 using namespace Halide;
 //RUN: ./haar_halide.out | FileCheck %s
 
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#ifdef NOSTDOUT
+#define OFILE "x.s"
+#else
+#define OFILE "/dev/stdout"
+#endif
+#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);

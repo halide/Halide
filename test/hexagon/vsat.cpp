@@ -4,7 +4,12 @@
 using namespace Halide;
 
 // RUN: ./vsat.out | FileCheck %s
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#ifdef NOSTDOUT
+#define OFILE "x.s"
+#else
+#define OFILE "/dev/stdout"
+#endif
+#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
 //CHECK: vsat(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
 void testVsat(Target& target) {
   Halide::Var x("x"), y("y");
