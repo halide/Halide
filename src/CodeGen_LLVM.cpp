@@ -2007,6 +2007,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
         << "Can only codegen extern calls and intrinsics\n";
 
+
     if (op->call_type == Call::Intrinsic) {
         // Some call nodes are actually injected at various stages as a
         // cue for llvm to generate particular ops. In general these are
@@ -2607,6 +2608,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             args[i] = codegen(op->args[i]);
         }
 
+        // Add a user context arg as needed. It's never a vector.
+        bool takes_user_context = function_takes_user_context(op->name);
+        if (takes_user_context) {
+            debug(4) << "Adding user_context to " << op->name << " args\n";
+            args.insert(args.begin(), get_user_context());
+        }
+
         llvm::Function *fn = module->getFunction(op->name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
@@ -2640,28 +2648,25 @@ void CodeGen_LLVM::visit(const Call *op) {
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
             // fixed params (not varags) in llvm function.
-            // Functions which take a user context have it added below so the
-            // llvm function argument indexing is one greater in that case.
-            size_t llvm_arg_offset = function_takes_user_context(op->name) ? 1 : 0;
             FunctionType *func_t = fn->getFunctionType();
-            for (size_t i = 0;
-                 i < std::min(args.size(),
-                              func_t->getNumParams() - llvm_arg_offset);
+            for (size_t i = takes_user_context ? 1 : 0;
+                 i < std::min(args.size(), (size_t)(func_t->getNumParams()));
                  i++) {
-                if (op->args[i].type().is_handle()) {
-                    llvm::Type *t = func_t->getParamType(i + llvm_arg_offset);
+                Expr halide_arg = takes_user_context ? op->args[i-1] : op->args[i];
+                if (halide_arg.type().is_handle()) {
+                    llvm::Type *t = func_t->getParamType(i);
 
                     // Widen to vector-width as needed. If the
                     // function doesn't actually take a vector,
                     // individual lanes will be extracted below.
-                    if (op->args[i].type().is_vector() &&
+                    if (halide_arg.type().is_vector() &&
                         !t->isVectorTy()) {
-                        t = VectorType::get(t, op->args[i].type().width);
+                        t = VectorType::get(t, halide_arg.type().width);
                     }
 
                     if (t != args[i]->getType()) {
                         debug(4) << "Pointer casting argument to extern call: "
-                                 << op->args[i] << "\n";
+                                 << halide_arg << "\n";
                         args[i] = builder->CreatePointerCast(args[i], t);
                     }
                 }
@@ -2683,12 +2688,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             op->name == "halide_profiler_get_state" ||
             starts_with(op->name, "halide_error")) {
             pure = false;
-        }
-
-        // Add a user context arg as needed. It's never a vector.
-        if (function_takes_user_context(op->name)) {
-            debug(4) << "Adding user_context to " << op->name << " args\n";
-            args.insert(args.begin(), get_user_context());
         }
 
         if (op->type.is_scalar()) {
