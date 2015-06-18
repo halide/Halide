@@ -75,6 +75,7 @@ int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
+char *strncpy(char *dst, const char *src, size_t n);
 
 // Similar to strncpy, but with various non-string arguments. Writes
 // arg to dst. Does not write to pointer end or beyond. Returns
@@ -86,6 +87,17 @@ WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits)
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
 
+// Search the current process for a symbol with the given name.
+WEAK void *halide_get_symbol(const char *name);
+// Platform specific implementations of dlopen/dlsym.
+WEAK void *halide_load_library(const char *name);
+// If lib is NULL, this call should be equivalent to halide_get_symbol(name).
+WEAK void *halide_get_library_symbol(void *lib, const char *name);
+
+#ifdef DEBUG_RUNTIME
+WEAK int halide_start_clock(void *user_context);
+WEAK int64_t halide_current_time_ns(void *user_context);
+#endif
 }
 
 // A convenient namespace for weak functions that are internal to the
@@ -232,9 +244,6 @@ template <typename T>
 __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
 }
-
-// Search the process for a symbol with the given name.
-extern WEAK void *get_symbol(const char *name);
 
 }}}
 

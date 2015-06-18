@@ -16,7 +16,9 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
     #endif
 
-    #if LLVM_VERSION >= 35
+    #if LLVM_VERSION >= 37
+    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
+    #elif LLVM_VERSION >= 35
     llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get();
     #else
     llvm::Module *mod = llvm::ParseBitcodeFile(bitcode_buffer, *context);

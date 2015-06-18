@@ -11,7 +11,7 @@ local_laplacian.o: local_laplacian_gen
 	./local_laplacian_gen
 
 process: process.cpp local_laplacian.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(OPENGL_LDFLAGS)
 
 out.png: process
 	./process ../images/rgb.png 8 1 1 10 out.png
