@@ -994,13 +994,14 @@ void Pipeline::realize(Realization dst, const Target &t) {
         auto report_sym = exports.find("halide_profiler_report");
         auto reset_sym = exports.find("halide_profiler_reset");
         if (report_sym != exports.end() && reset_sym != exports.end()) {
+            void *uc = jit_context.user_context_param.get_scalar<void *>();
             void *report_addr = report_sym->second.address;
             void (*report_fn_ptr)(void *) = (void (*)(void *))report_addr;
-            report_fn_ptr(NULL);
+            report_fn_ptr(uc);
 
             void *reset_addr = reset_sym->second.address;
-            void (*reset_fn_ptr)(void *) = (void (*)(void *))reset_addr;
-            reset_fn_ptr(NULL);
+            void (*reset_fn_ptr)() = (void (*)())reset_addr;
+            reset_fn_ptr();
         }
     }
 

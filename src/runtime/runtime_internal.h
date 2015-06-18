@@ -119,9 +119,10 @@ class Printer {
 public:
     char *buf, *dst, *end;
     void *user_context;
+    bool own_mem;
 
-    Printer(void *ctx) : user_context(ctx) {
-        buf = (char *)halide_malloc(user_context, length);
+    Printer(void *ctx, char *mem = NULL) : user_context(ctx), own_mem(mem == NULL) {
+        buf = mem ? mem : (char *)halide_malloc(user_context, length);
         dst = buf;
         end = buf + (length-1);
         *end = 0;
@@ -172,6 +173,12 @@ public:
         return buf;
     }
 
+    // Clear it. Useful for reusing a stringstream.
+    void clear() {
+        dst = buf;
+        dst[0] = 0;
+    }
+
     // Returns the number of characters in the buffer
     uint64_t size() const {
         return (uint64_t)(dst-buf);
@@ -185,7 +192,7 @@ public:
         } else {
             // It's a stringstream. Do nothing.
         }
-        halide_free(user_context, buf);
+        if (own_mem) halide_free(user_context, buf);
     }
 };
 

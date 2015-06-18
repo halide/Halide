@@ -31,6 +31,8 @@ private:
         if (iter == indices.end()) {
             idx = (int)indices.size();
             indices[op->name] = idx;
+        } else {
+            idx = iter->second;
         }
 
         Stmt produce = mutate(op->produce);
@@ -66,12 +68,15 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     Expr profiler_token = Variable::make(Int(32), "profiler_token");
 
-    Expr stop_profiler = Call::make(Int(32), "halide_profiler_pipeline_end",
-                                    {profiler_token}, Call::Extern);
+    Expr stop_profiler = Call::make(Int(32), Call::register_destructor,
+                                    {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
 
-    s = Block::make(s, Evaluate::make(stop_profiler));
 
     s = LetStmt::make("profiler_state", get_state, s);
+    // If there was a problem starting the profiler, it will call an
+    // appropriate halide error function and then return the
+    // (negative) error code as the token.
+    s = Block::make(AssertStmt::make(profiler_token >= 0, profiler_token), s);
     s = LetStmt::make("profiler_token", start_profiler, s);
 
     for (std::pair<string, int> p : profiling.indices) {
@@ -79,6 +84,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     }
 
     s = Allocate::make("profiling_func_names", Handle(), {num_funcs}, const_true(), s);
+    s = Block::make(Evaluate::make(stop_profiler), s);
 
     return s;
 }

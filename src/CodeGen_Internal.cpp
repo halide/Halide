@@ -263,7 +263,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_print",
         "halide_profiler_pipeline_start",
         "halide_profiler_pipeline_end",
-        "halide_profiler_get_state",
         "halide_spawn_thread",
         "halide_device_release",
         "halide_start_clock",
