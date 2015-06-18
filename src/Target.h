@@ -62,6 +62,7 @@ struct Target {
 
         UserContext,  ///< Generated code takes a user_context pointer as first argument
         HVX, /// Enable HVX (hexagon) intrinsics
+        HVX_DOUBLE, /// Enable HVX 128Byte mode (hexagon) intrinsics
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 

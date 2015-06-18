@@ -362,6 +362,7 @@ std::string Target::to_string() const {
       "opengl", "rs",
       "user_context",
       "hvx",
+      "hvx-double",
       "register_metadata",
       "matlab"
   };

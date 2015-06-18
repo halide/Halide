@@ -6,6 +6,7 @@ using namespace Halide;
 
 #ifdef NOSTDOUT
 #define OFILE "x.s"
+#define BFILE "x.bc"
 #else
 #define OFILE "/dev/stdout"
 #endif
@@ -13,6 +14,10 @@ using namespace Halide;
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  if (argc>1) {
+   printf( "argc %d\n", argc);
+   target.set_feature(Target::HVX_DOUBLE);
+  }
   Halide::Var x("x"), y("y");
   Var xo,xi;
 
@@ -27,10 +32,11 @@ int main(int argc, char **argv) {
                       clamp((((In(x-32, y) - In(x+32,y)) + (In(x,y) - In(x+64,y)))/2), 0, 255) |
                       (clamp((((In(x-32, y) - In(x+32,y)) - (In(x,y) - In(x+64,y)))/2), 0, 255) << 8));
 
-  Haar.bound(x, 0, 64).split(x, xo, xi, 32).vectorize(xi).unroll(xo);
+  Haar.bound(x, 0, argc>1 ?128:64).split(x, xo, xi, argc>1 ? 64 : 32).vectorize(xi).unroll(xo);
 
   std::vector<Argument> args(1);
   args[0]  = In;
+  Haar.compile_to_bitcode(BFILE, args, target);
   COMPILE(Haar);
   printf ("Done\n");
   return 0;

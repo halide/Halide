@@ -8,7 +8,7 @@ then
     export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 #   export HL_DEBUG_CODEGEN=4
 #/pkg/qct/software/gnu64/gdb/7.2/bin/gdb  \
-    ./Hexagon_vsplat_vaddw
+    ./Hexagon_vsplat_vaddw $*
 
     if  grep -q vadd gradient.s; then
         if grep -q "vsplat(" gradient.s; then

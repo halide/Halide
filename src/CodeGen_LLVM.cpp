@@ -208,6 +208,12 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     wild_i16x64(Variable::make(Int(16, 64), "*")),
     wild_u16x64(Variable::make(UInt(16, 64), "*")),
 
+    wild_i32x64(Variable::make(Int(32, 64), "*")),
+    wild_i8x256(Variable::make(Int(8, 256), "*")),
+    wild_u8x256(Variable::make(UInt(8, 256), "*")),
+    wild_i16x128(Variable::make(Int(16, 128), "*")),
+    wild_u16x128(Variable::make(UInt(16, 128), "*")),
+
     wild_f32x2(Variable::make(Float(32, 2), "*")),
 
     wild_f32x4(Variable::make(Float(32, 4), "*")),
@@ -478,6 +484,12 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
 
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                 "Halide HVX internal compiler\n");
+    if (target.has_feature(Halide::Target::HVX_DOUBLE)) {
+      char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
+      ::putenv(s);
+      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",
+                                  "Halide HVX internal options\n");
+    }
 
 //  compile_for_device(stmt, name, args,images_to_embed);
 

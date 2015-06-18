@@ -15,7 +15,7 @@ using namespace Halide;
  */
 
 
-void test_median(Target& target) {
+void test_median(bool isDbl, Target& target) {
   Halide::Var x("x"),y("y");
   ImageParam input(type_of<uint8_t>(), 2);
 
@@ -50,17 +50,17 @@ void test_median(Target& target) {
   // max_x.compute_root();
   // min_x.compute_root();
   // mid_x.compute_root();
-  median.vectorize(x, 64);
+  median.vectorize(x, isDbl ? DOUBLEVECTORSIZE : VECTORSIZE );
   std::vector<Argument> args(1);
   args[0]  = input;
 #ifdef BITCODE
   median.compile_to_bitcode("median.bc", args, target);
 #endif
+#ifdef STMT
+  median.compile_to_lowered_stmt("median.html", args, HTML);
+#endif
 #ifdef ASSEMBLY
   median.compile_to_assembly("median.s", args, target);
-#endif
-#ifdef STMT
-  median.compile_to_lowered_stmt("median.html", HTML);
 #endif
 #ifdef RUN
   COMPILE_OBJ(median);
@@ -70,7 +70,12 @@ void test_median(Target& target) {
 int main(int argc, char **argv) {
 	Target target;
 	setupHexagonTarget(target);
-	test_median(target);
+        bool isDbl = false;
+        if (argc>1) {
+          target.set_feature(Target::HVX_DOUBLE);
+          isDbl = true;
+        }
+	test_median(isDbl, target);
 	printf ("Done\n");
 	return 0;
 }

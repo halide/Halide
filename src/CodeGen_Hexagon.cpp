@@ -31,6 +31,10 @@ extern llvm::cl::opt<bool> ReserveR9;
 #endif
 
 #define HEXAGON_SINGLE_MODE_VECTOR_SIZE 64
+#define CPICK(c128, c64) (B128 ? c128 : c64)
+#define WPICK(w128, w64) (B128 ? w128 : w64)
+#define IPICK(i64) (B128 ? i64##_128B : i64)
+
 namespace Halide {
 namespace Internal {
 
@@ -104,175 +108,242 @@ Expr i32_(Expr E) {
 
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
-  casts.push_back(Pattern(cast(UInt(16, 64), wild_u8x64),
-                          Intrinsic::hexagon_V6_vzb));
-  casts.push_back(Pattern(cast(UInt(32, 32), wild_u16x32),
-                          Intrinsic::hexagon_V6_vzh));
-  casts.push_back(Pattern(cast(Int(16, 64), wild_i8x64),
-                          Intrinsic::hexagon_V6_vsb));
-  casts.push_back(Pattern(cast(Int(32, 32), wild_i16x32),
-                          Intrinsic::hexagon_V6_vsh));
+  bool B128 = t.has_feature(Halide::Target::HVX_DOUBLE);
+  casts.push_back(Pattern(cast(UInt(16, CPICK(128,64)),
+                                        WPICK(wild_u8x128,wild_u8x64)),
+                                        IPICK(Intrinsic::hexagon_V6_vzb)));
+  casts.push_back(Pattern(cast(UInt(32, CPICK(64,32)),
+                                        WPICK(wild_u16x64,wild_u16x32)),
+                                        IPICK(Intrinsic::hexagon_V6_vzh)));
+  casts.push_back(Pattern(cast(Int(16, CPICK(128,64)),
+                                       WPICK(wild_i8x128,wild_i8x64)),
+                                       IPICK(Intrinsic::hexagon_V6_vsb)));
+  casts.push_back(Pattern(cast(Int(32, CPICK(64,32)),
+                                       WPICK(wild_i16x64,wild_i16x32)),
+                                       IPICK(Intrinsic::hexagon_V6_vsh)));
 
   // "shift_left (x, 8)" is converted to x*256 by Simplify.cpp
-  combiners.push_back(Pattern(bitwiseOr(sat_h_ub(wild_i16x32),
-                                        (sat_h_ub(wild_i16x32) * 256)),
-                              Intrinsic::hexagon_V6_vsathub, Pattern::Simple,
-                              true));
-  combiners.push_back(Pattern(bitwiseOr((sat_h_ub(wild_i16x32) * 256),
-                                        sat_h_ub(wild_i16x32)),
-                              Intrinsic::hexagon_V6_vsathub, Pattern::Simple,
-                              false));
-  combiners.push_back(Pattern(bitwiseOr(sat_w_h(wild_i32x16),
-                                        (sat_w_h(wild_i32x16) * 65536)),
-                              Intrinsic::hexagon_V6_vsatwh, Pattern::Simple,
-                              true));
-  combiners.push_back(Pattern(bitwiseOr((sat_w_h(wild_i32x16) * 65536),
-                                        sat_w_h(wild_i32x16)),
-                              Intrinsic::hexagon_V6_vsatwh, Pattern::Simple,
-                              false));
-  combiners.push_back(Pattern(abs(wild_u8x64 - wild_u8x64),
-                              Intrinsic::hexagon_V6_vabsdiffub));
-  combiners.push_back(Pattern(abs(wild_u16x32 - wild_u16x32),
-                              Intrinsic::hexagon_V6_vabsdiffuh));
-  combiners.push_back(Pattern(abs(wild_i16x32 - wild_i16x32),
-                              Intrinsic::hexagon_V6_vabsdiffh));
-  combiners.push_back(Pattern(abs(wild_i32x16 - wild_i32x16),
-                              Intrinsic::hexagon_V6_vabsdiffw));
+  combiners.push_back(
+    Pattern(bitwiseOr(sat_h_ub(WPICK(wild_i16x64,wild_i16x32)),
+                     (sat_h_ub(WPICK(wild_i16x64,wild_i16x32)) * 256)),
+                      IPICK(Intrinsic::hexagon_V6_vsathub), Pattern::Simple,
+                      true));
+  combiners.push_back(
+    Pattern(bitwiseOr((sat_h_ub(WPICK(wild_i16x64,wild_i16x32)) * 256),
+                       sat_h_ub(WPICK(wild_i16x64,wild_i16x32))),
+                       IPICK(Intrinsic::hexagon_V6_vsathub), Pattern::Simple,
+                       false));
+  combiners.push_back(
+    Pattern(bitwiseOr(sat_w_h(WPICK(wild_i32x32,wild_i32x16)),
+                     (sat_w_h(WPICK(wild_i32x32,wild_i32x16)) * 65536)),
+                     IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
+                     true));
+  combiners.push_back(
+    Pattern(bitwiseOr((sat_w_h(WPICK(wild_i32x32,wild_i32x16)) * 65536),
+                       sat_w_h(WPICK(wild_i32x32,wild_i32x16))),
+                       IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
+                       false));
+  combiners.push_back(Pattern(abs(WPICK(wild_u8x128,wild_u8x64) -
+                                  WPICK(wild_u8x128,wild_u8x64)),
+                                  IPICK(Intrinsic::hexagon_V6_vabsdiffub)));
+  combiners.push_back(Pattern(abs(WPICK(wild_u16x64,wild_u16x32) -
+                                  WPICK(wild_u16x64,wild_u16x32)),
+                                  IPICK(Intrinsic::hexagon_V6_vabsdiffuh)));
+  combiners.push_back(Pattern(abs(WPICK(wild_i16x64,wild_i16x32) -
+                                  WPICK(wild_i16x64,wild_i16x32)),
+                                  IPICK(Intrinsic::hexagon_V6_vabsdiffh)));
+  combiners.push_back(Pattern(abs(WPICK(wild_i32x32,wild_i32x16) -
+                                  WPICK(wild_i32x32,wild_i32x16)),
+                                  IPICK(Intrinsic::hexagon_V6_vabsdiffw)));
 
   // Our bitwise operations are all type agnostic; all they need are vectors
   // of 64 bytes (single mode) or 128 bytes (double mode). Over 4 types -
   // unsigned bytes, signed and unsigned half-word, and signed word, we have
   // 12 such patterns for each operation. But, we'll stick to only like types
   // here.
-  vbitwise.push_back(Pattern(bitwiseAnd(wild_u8x64, wild_u8x64),
-                             Intrinsic::hexagon_V6_vand));
-  vbitwise.push_back(Pattern(bitwiseAnd(wild_i16x32, wild_i16x32),
-                             Intrinsic::hexagon_V6_vand));
-  vbitwise.push_back(Pattern(bitwiseAnd(wild_u16x32, wild_u16x32),
-                             Intrinsic::hexagon_V6_vand));
-  vbitwise.push_back(Pattern(bitwiseAnd(wild_i32x16, wild_i32x16),
-                             Intrinsic::hexagon_V6_vand));
+  vbitwise.push_back(Pattern(bitwiseAnd(WPICK(wild_u8x128,wild_u8x64),
+                                        WPICK(wild_u8x128,wild_u8x64)),
+                                        IPICK(Intrinsic::hexagon_V6_vand)));
+  vbitwise.push_back(Pattern(bitwiseAnd(WPICK(wild_i16x64,wild_i16x32),
+                                        WPICK(wild_i16x64,wild_i16x32)),
+                                        IPICK(Intrinsic::hexagon_V6_vand)));
+  vbitwise.push_back(Pattern(bitwiseAnd(WPICK(wild_u16x64,wild_u16x32),
+                                        WPICK(wild_u16x64,wild_u16x32)),
+                                        IPICK(Intrinsic::hexagon_V6_vand)));
+  vbitwise.push_back(Pattern(bitwiseAnd(WPICK(wild_i32x32,wild_i32x16),
+                                        WPICK(wild_i32x32,wild_i32x16)),
+                                        IPICK(Intrinsic::hexagon_V6_vand)));
 
-  vbitwise.push_back(Pattern(bitwiseXor(wild_u8x64, wild_u8x64),
-                             Intrinsic::hexagon_V6_vxor));
-  vbitwise.push_back(Pattern(bitwiseXor(wild_i16x32, wild_i16x32),
-                             Intrinsic::hexagon_V6_vxor));
-  vbitwise.push_back(Pattern(bitwiseXor(wild_u16x32, wild_u16x32),
-                             Intrinsic::hexagon_V6_vxor));
-  vbitwise.push_back(Pattern(bitwiseXor(wild_i32x16, wild_i32x16),
-                             Intrinsic::hexagon_V6_vxor));
+  vbitwise.push_back(Pattern(bitwiseXor(WPICK(wild_u8x128,wild_u8x64),
+                                        WPICK(wild_u8x128,wild_u8x64)),
+                                        IPICK(Intrinsic::hexagon_V6_vxor)));
+  vbitwise.push_back(Pattern(bitwiseXor(WPICK(wild_i16x64,wild_i16x32),
+                                        WPICK(wild_i16x64,wild_i16x32)),
+                                        IPICK(Intrinsic::hexagon_V6_vxor)));
+  vbitwise.push_back(Pattern(bitwiseXor(WPICK(wild_u16x64,wild_u16x32),
+                                        WPICK(wild_u16x64,wild_u16x32)),
+                                        IPICK(Intrinsic::hexagon_V6_vxor)));
+  vbitwise.push_back(Pattern(bitwiseXor(WPICK(wild_i32x32,wild_i32x16),
+                                        WPICK(wild_i32x32,wild_i32x16)),
+                                        IPICK(Intrinsic::hexagon_V6_vxor)));
 
-  vbitwise.push_back(Pattern(bitwiseOr(wild_u8x64, wild_u8x64),
-                             Intrinsic::hexagon_V6_vor));
-  vbitwise.push_back(Pattern(bitwiseOr(wild_i16x32, wild_i16x32),
-                             Intrinsic::hexagon_V6_vor));
-  vbitwise.push_back(Pattern(bitwiseOr(wild_u16x32, wild_u16x32),
-                             Intrinsic::hexagon_V6_vor));
-  vbitwise.push_back(Pattern(bitwiseOr(wild_i32x16, wild_i32x16),
-                             Intrinsic::hexagon_V6_vor));
+  vbitwise.push_back(Pattern(bitwiseOr(WPICK(wild_u8x128,wild_u8x64),
+                                       WPICK(wild_u8x128,wild_u8x64)),
+                                       IPICK(Intrinsic::hexagon_V6_vor)));
+  vbitwise.push_back(Pattern(bitwiseOr(WPICK(wild_i16x64,wild_i16x32),
+                                       WPICK(wild_i16x64,wild_i16x32)),
+                                       IPICK(Intrinsic::hexagon_V6_vor)));
+  vbitwise.push_back(Pattern(bitwiseOr(WPICK(wild_u16x64,wild_u16x32),
+                                       WPICK(wild_u16x64,wild_u16x32)),
+                                       IPICK(Intrinsic::hexagon_V6_vor)));
+  vbitwise.push_back(Pattern(bitwiseOr(WPICK(wild_i32x32,wild_i32x16),
+                                       WPICK(wild_i32x32,wild_i32x16)),
+                                       IPICK(Intrinsic::hexagon_V6_vor)));
 
   // "Add"
   // Byte Vectors
-  varith.push_back(Pattern(wild_i8x64 + wild_i8x64,
-                           Intrinsic::hexagon_V6_vaddb));
-  varith.push_back(Pattern(wild_u8x64 + wild_u8x64,
-                           Intrinsic::hexagon_V6_vaddubsat));
+  varith.push_back(Pattern(WPICK(wild_i8x128,wild_i8x64) +
+                           WPICK(wild_i8x128,wild_i8x64),
+                           IPICK(Intrinsic::hexagon_V6_vaddb)));
+  varith.push_back(Pattern(WPICK(wild_u8x128,wild_u8x64) +
+                           WPICK(wild_u8x128,wild_u8x64),
+                           IPICK(Intrinsic::hexagon_V6_vaddubsat)));
   // Half Vectors
-  varith.push_back(Pattern(wild_i16x32 + wild_i16x32,
-                           Intrinsic::hexagon_V6_vaddh));
-  varith.push_back(Pattern(wild_u16x32 + wild_u16x32,
-                           Intrinsic::hexagon_V6_vadduhsat));
+  varith.push_back(Pattern(WPICK(wild_i16x64,wild_i16x32) +
+                           WPICK(wild_i16x64,wild_i16x32),
+                           IPICK(Intrinsic::hexagon_V6_vaddh)));
+  varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) +
+                           WPICK(wild_u16x64,wild_u16x32),
+                           IPICK(Intrinsic::hexagon_V6_vadduhsat)));
   // Word Vectors.
-  varith.push_back(Pattern(wild_i32x16 + wild_i32x16,
-                           Intrinsic::hexagon_V6_vaddw));
+  varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
+                           WPICK(wild_i32x32,wild_i32x16),
+                           IPICK(Intrinsic::hexagon_V6_vaddw)));
   // Double Vectors
   // Byte Double Vectors
-  varith.push_back(Pattern(wild_i8x128 + wild_i8x128,
-                           Intrinsic::hexagon_V6_vaddb_dv));
-  varith.push_back(Pattern(wild_u8x128 + wild_u8x128,
-                           Intrinsic::hexagon_V6_vaddubsat_dv));
+  varith.push_back(Pattern(WPICK(wild_i8x256,wild_i8x128) +
+                           WPICK(wild_i8x256,wild_i8x128),
+                           IPICK(Intrinsic::hexagon_V6_vaddb_dv)));
+  varith.push_back(Pattern(WPICK(wild_u8x256,wild_u8x128) +
+                           WPICK(wild_u8x256,wild_u8x128),
+                           IPICK(Intrinsic::hexagon_V6_vaddubsat_dv)));
   // Half Double Vectors
-  varith.push_back(Pattern(wild_i16x64 + wild_i16x64,
-                           Intrinsic::hexagon_V6_vaddh_dv));
-  varith.push_back(Pattern(wild_u16x64 + wild_u16x64,
-                           Intrinsic::hexagon_V6_vadduhsat_dv));
+  varith.push_back(Pattern(WPICK(wild_i16x128,wild_i16x64) +
+                           WPICK(wild_i16x128,wild_i16x64),
+                           IPICK(Intrinsic::hexagon_V6_vaddh_dv)));
+  varith.push_back(Pattern(WPICK(wild_u16x128,wild_u16x64) +
+                           WPICK(wild_u16x128,wild_u16x64),
+                           IPICK(Intrinsic::hexagon_V6_vadduhsat_dv)));
   // Word Double Vectors.
-  varith.push_back(Pattern(wild_i32x32 + wild_i32x32,
-                           Intrinsic::hexagon_V6_vaddw_dv));
+  varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) +
+                           WPICK(wild_i32x64,wild_i32x32),
+                           IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
+
 
   // "Sub"
   // Byte Vectors
-  varith.push_back(Pattern(wild_i8x64 - wild_i8x64,
-                           Intrinsic::hexagon_V6_vsubb));
-  varith.push_back(Pattern(wild_u8x64 - wild_u8x64,
-                           Intrinsic::hexagon_V6_vsububsat));
+  varith.push_back(Pattern(WPICK(wild_i8x128,wild_i8x64) +
+                           WPICK(wild_i8x128,wild_i8x64),
+                           IPICK(Intrinsic::hexagon_V6_vsubb)));
+  varith.push_back(Pattern(WPICK(wild_u8x128,wild_u8x64) +
+                           WPICK(wild_u8x128,wild_u8x64),
+                           IPICK(Intrinsic::hexagon_V6_vsububsat)));
   // Half Vectors
-  varith.push_back(Pattern(wild_i16x32 - wild_i16x32,
-                           Intrinsic::hexagon_V6_vsubh));
-  varith.push_back(Pattern(wild_u16x32 - wild_u16x32,
-                           Intrinsic::hexagon_V6_vsubuhsat));
+  varith.push_back(Pattern(WPICK(wild_i16x64,wild_i16x32) +
+                           WPICK(wild_i16x64,wild_i16x32),
+                           IPICK(Intrinsic::hexagon_V6_vsubh)));
+  varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) +
+                           WPICK(wild_u16x64,wild_u16x32),
+                           IPICK(Intrinsic::hexagon_V6_vsubuhsat)));
   // Word Vectors.
-  varith.push_back(Pattern(wild_i32x16 - wild_i32x16,
-                           Intrinsic::hexagon_V6_vsubw));
+  varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
+                           WPICK(wild_i32x32,wild_i32x16),
+                           IPICK(Intrinsic::hexagon_V6_vsubw)));
   // Double Vectors
   // Byte Double Vectors
-  varith.push_back(Pattern(wild_i8x128 - wild_i8x128,
-                           Intrinsic::hexagon_V6_vsubb_dv));
-  varith.push_back(Pattern(wild_u8x128 - wild_u8x128,
-                           Intrinsic::hexagon_V6_vsububsat_dv));
+  varith.push_back(Pattern(WPICK(wild_i8x256,wild_i8x128) +
+                           WPICK(wild_i8x256,wild_i8x128),
+                           IPICK(Intrinsic::hexagon_V6_vsubb_dv)));
+  varith.push_back(Pattern(WPICK(wild_u8x256,wild_u8x128) +
+                           WPICK(wild_u8x256,wild_u8x128),
+                           IPICK(Intrinsic::hexagon_V6_vsububsat_dv)));
   // Half Double Vectors
-  varith.push_back(Pattern(wild_i16x64 - wild_i16x64,
-                           Intrinsic::hexagon_V6_vsubh_dv));
-  varith.push_back(Pattern(wild_u16x64 - wild_u16x64,
-                           Intrinsic::hexagon_V6_vsubuhsat_dv));
+  varith.push_back(Pattern(WPICK(wild_i16x128,wild_i16x64) +
+                           WPICK(wild_i16x128,wild_i16x64),
+                           IPICK(Intrinsic::hexagon_V6_vsubh_dv)));
+  varith.push_back(Pattern(WPICK(wild_u16x128,wild_u16x64) +
+                           WPICK(wild_u16x128,wild_u16x64),
+                           IPICK(Intrinsic::hexagon_V6_vsubuhsat_dv)));
   // Word Double Vectors.
-  varith.push_back(Pattern(wild_i32x32 - wild_i32x32,
-                           Intrinsic::hexagon_V6_vsubw_dv));
+  varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) +
+                           WPICK(wild_i32x64,wild_i32x32),
+                           IPICK(Intrinsic::hexagon_V6_vsubw_dv)));
 
   // "Max"
-  varith.push_back(Pattern(max(wild_u8x64, wild_u8x64),
-                           Intrinsic::hexagon_V6_vmaxub));
-  varith.push_back(Pattern(max(wild_i16x32, wild_i16x32),
-                           Intrinsic::hexagon_V6_vmaxh));
-  varith.push_back(Pattern(max(wild_u16x32, wild_u16x32),
-                           Intrinsic::hexagon_V6_vmaxuh));
-  varith.push_back(Pattern(max(wild_i32x16, wild_i32x16),
-                           Intrinsic::hexagon_V6_vmaxw));
+  varith.push_back(Pattern(max(WPICK(wild_u8x128,wild_u8x64),
+                               WPICK(wild_u8x128,wild_u8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vmaxub)));
+  varith.push_back(Pattern(max(WPICK(wild_i16x64,wild_i16x32),
+                               WPICK(wild_i16x64,wild_i16x32)),
+                               IPICK(Intrinsic::hexagon_V6_vmaxh)));
+  varith.push_back(Pattern(max(WPICK(wild_u16x64,wild_u16x32),
+                               WPICK(wild_u16x64,wild_u16x32)),
+                               IPICK(Intrinsic::hexagon_V6_vmaxuh)));
+  varith.push_back(Pattern(max(WPICK(wild_i32x32,wild_i32x16),
+                               WPICK(wild_i32x32,wild_i32x16)),
+                               IPICK(Intrinsic::hexagon_V6_vmaxw)));
   // "Min"
-  varith.push_back(Pattern(min(wild_u8x64, wild_u8x64),
-                           Intrinsic::hexagon_V6_vminub));
-  varith.push_back(Pattern(min(wild_i16x32, wild_i16x32),
-                           Intrinsic::hexagon_V6_vminh));
-  varith.push_back(Pattern(min(wild_u16x32, wild_u16x32),
-                           Intrinsic::hexagon_V6_vminuh));
-  varith.push_back(Pattern(min(wild_i32x16, wild_i32x16),
-                           Intrinsic::hexagon_V6_vminw));
+  varith.push_back(Pattern(min(WPICK(wild_u8x128,wild_u8x64),
+                               WPICK(wild_u8x128,wild_u8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vminub)));
+  varith.push_back(Pattern(min(WPICK(wild_i16x64,wild_i16x32),
+                               WPICK(wild_i16x64,wild_i16x32)),
+                               IPICK(Intrinsic::hexagon_V6_vminh)));
+  varith.push_back(Pattern(min(WPICK(wild_u16x64,wild_u16x32),
+                               WPICK(wild_u16x64,wild_u16x32)),
+                               IPICK(Intrinsic::hexagon_V6_vminuh)));
+  varith.push_back(Pattern(min(WPICK(wild_i32x32,wild_i32x16),
+                               WPICK(wild_i32x32,wild_i32x16)),
+                               IPICK(Intrinsic::hexagon_V6_vminw)));
 
+  averages.push_back(Pattern(((WPICK(wild_u8x128,wild_u8x64) +
+                               WPICK(wild_u8x128,wild_u8x64))/2),
+                               IPICK(Intrinsic::hexagon_V6_vavgub)));
+  averages.push_back(Pattern(((WPICK(wild_u8x128,wild_u8x64) -
+                               WPICK(wild_u8x128,wild_u8x64))/2),
+                               IPICK(Intrinsic::hexagon_V6_vnavgub)));
+  averages.push_back(Pattern(((WPICK(wild_u16x64,wild_u16x32) +
+                               WPICK(wild_u16x64,wild_u16x32))/2),
+                               IPICK(Intrinsic::hexagon_V6_vavguh)));
+  averages.push_back(Pattern(((WPICK(wild_i16x64,wild_i16x32) +
+                               WPICK(wild_i16x64,wild_i16x32))/2),
+                               IPICK(Intrinsic::hexagon_V6_vavgh)));
+  averages.push_back(Pattern(((WPICK(wild_i16x64,wild_i16x32) -
+                               WPICK(wild_i16x64,wild_i16x32))/2),
+                               IPICK(Intrinsic::hexagon_V6_vnavgh)));
+  averages.push_back(Pattern(((WPICK(wild_i32x32,wild_i32x16) +
+                               WPICK(wild_i32x32,wild_i32x16))/2),
+                               IPICK(Intrinsic::hexagon_V6_vavgw)));
+  averages.push_back(Pattern(((WPICK(wild_i32x32,wild_i32x16) -
+                               WPICK(wild_i32x32,wild_i32x16))/2),
+                               IPICK(Intrinsic::hexagon_V6_vnavgw)));
 
-  averages.push_back(Pattern(((wild_u8x64 + wild_u8x64)/2),
-                             Intrinsic::hexagon_V6_vavgub));
-  averages.push_back(Pattern(((wild_u8x64 - wild_u8x64)/2),
-                             Intrinsic::hexagon_V6_vnavgub));
-  averages.push_back(Pattern(((wild_u16x32 + wild_u16x32)/2),
-                             Intrinsic::hexagon_V6_vavguh));
-  averages.push_back(Pattern(((wild_i16x32 + wild_i16x32)/2),
-                             Intrinsic::hexagon_V6_vavgh));
-  averages.push_back(Pattern(((wild_i16x32 - wild_i16x32)/2),
-                             Intrinsic::hexagon_V6_vnavgh));
-  averages.push_back(Pattern(((wild_i32x16 + wild_i32x16)/2),
-                             Intrinsic::hexagon_V6_vavgw));
-  averages.push_back(Pattern(((wild_i32x16 - wild_i32x16)/2),
-                             Intrinsic::hexagon_V6_vnavgw));
-  multiplies.push_back(Pattern(u16_(wild_u8x64 * wild_u8x64),
-                               Intrinsic::hexagon_V6_vmpyubv));
-  multiplies.push_back(Pattern(i16_(wild_i8x64 * wild_i8x64),
-                               Intrinsic::hexagon_V6_vmpybv));
-  multiplies.push_back(Pattern(u32_(wild_u16x32 * wild_u16x32),
-                               Intrinsic::hexagon_V6_vmpyuhv));
-  multiplies.push_back(Pattern(i32_(wild_i16x32 * wild_i16x32),
-                               Intrinsic::hexagon_V6_vmpyhv));
-  multiplies.push_back(Pattern(wild_i16x32 * wild_i16x32,
-                               Intrinsic::hexagon_V6_vmpyih));
+  multiplies.push_back(Pattern(u16_(WPICK(wild_u8x128,wild_u8x64) *
+                                    WPICK(wild_u8x128,wild_u8x64)),
+                                    IPICK(Intrinsic::hexagon_V6_vmpyubv)));
+  multiplies.push_back(Pattern(i16_(WPICK(wild_i8x128,wild_i8x64) *
+                                    WPICK(wild_i8x128,wild_i8x64)),
+                                    IPICK(Intrinsic::hexagon_V6_vmpybv)));
+  multiplies.push_back(Pattern(u32_(WPICK(wild_u16x64,wild_u16x32) *
+                                    WPICK(wild_u16x64,wild_u16x32)),
+                                    IPICK(Intrinsic::hexagon_V6_vmpyuhv)));
+  multiplies.push_back(Pattern(i32_(WPICK(wild_i16x64,wild_i16x32) *
+                                    WPICK(wild_i16x64,wild_i16x32)),
+                                    IPICK(Intrinsic::hexagon_V6_vmpyhv)));
+  multiplies.push_back(Pattern(WPICK(wild_i16x64,wild_i16x32) *
+                               WPICK(wild_i16x64,wild_i16x32),
+                               IPICK(Intrinsic::hexagon_V6_vmpyih)));
+
 }
 llvm::Value *
 CodeGen_Hexagon::CallLLVMIntrinsic(llvm::Function *F,
@@ -298,59 +369,30 @@ CodeGen_Hexagon::convertValueType(llvm::Value *V, llvm::Type *T) {
 void
 CodeGen_Hexagon::getHighAndLowVectors(llvm::Value *DoubleVec,
                                       std::vector<llvm::Value *> &Res) {
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   std::vector<Value *> Ops;
   Ops.push_back(DoubleVec);
   Value *Hi =
-    CallLLVMIntrinsic(Intrinsic::
-                      getDeclaration(module,
-                                     Intrinsic::hexagon_V6_hi), Ops);
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                      IPICK(Intrinsic::hexagon_V6_hi)), Ops);
   Value *Lo =
-    CallLLVMIntrinsic(Intrinsic::
-                      getDeclaration(module,
-                                     Intrinsic::hexagon_V6_lo), Ops);
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                      IPICK(Intrinsic::hexagon_V6_lo)), Ops);
   Res.push_back(Hi);
   Res.push_back(Lo);
 }
 llvm::Value *
 CodeGen_Hexagon::concatVectors(Value *High, Value *Low) {
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   std::vector<Value *>Ops;
   Ops.push_back(High);
   Ops.push_back(Low);
   Value *CombineCall =
-    CallLLVMIntrinsic(Intrinsic::
-                      getDeclaration(module,
-                                     Intrinsic::hexagon_V6_vcombine),
-                      Ops);
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                      IPICK(Intrinsic::hexagon_V6_vcombine)), Ops);
   return CombineCall;
 }
 
-#if 0
-void CodeGen_Hexagon::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    // Fix the target triple.
-    user_warning << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    user_warning << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
-                                "Halide HVX internal compiler\n");
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
-}
-#endif
 
 llvm::Triple CodeGen_Hexagon::get_target_triple() const {
     llvm::Triple triple;
@@ -364,7 +406,8 @@ llvm::Triple CodeGen_Hexagon::get_target_triple() const {
 llvm::DataLayout CodeGen_Hexagon::get_data_layout() const {
     // FIXME: what should this be?
     return llvm::DataLayout(
-       "e-p:32:32:32-i64:64:64-i32:32:32-i16:16:16-i1:32:32-f64:64:64-f32:32:32-v64:64:64-v32:32:32-a:0-n16:32");
+       "e-p:32:32:32-i64:64:64-i32:32:32-i16:16:16-i1:32:32"
+       "-f64:64:64-f32:32:32-v64:64:64-v32:32:32-a:0-n16:32");
 }
 
 
@@ -381,8 +424,13 @@ bool CodeGen_Hexagon::use_soft_float_abi() const {
 }
 
 int CodeGen_Hexagon::native_vector_bits() const {
-  return 64*8;
-  // will need 128*8 at some point
+  if (target.has_feature(Halide::Target::HVX_DOUBLE)) {
+    debug(1) << "128 Byte mode\n";
+    return 128*8;
+  } else {
+    debug(1) << "64 Byte mode\n";
+    return 64*8;
+  }
 }
 
 static bool canUseVadd(const Add *op) {
@@ -603,10 +651,14 @@ bool checkTwoWayDotProductOperandsCombinations(vector<Expr> &matches,
   }
   return false;
 }
-bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op, std::vector<Value *> &LLVMValues){
+bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op,
+                                     std::vector<Value *> &LLVMValues){
   Expr pattern;
   int I;
-  pattern = (wild_i32x16 * wild_i32x16) + (wild_i32x16 * wild_i32x16);
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+
+  pattern = WPICK( ((wild_i32x32 * wild_i32x32) + (wild_i32x32 * wild_i32x32)),
+                   ((wild_i32x16 * wild_i32x16) + (wild_i32x16 * wild_i32x16)));
   vector<Expr> matches;
   if (expr_match(pattern, op, matches)) {
     internal_assert(matches.size() == 4);
@@ -614,14 +666,14 @@ bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op, std::vector<Value *> &LLVMVa
     for (I = 0; I < 4; ++I)
       debug(4) << "matches[" << I << "] = " << matches[I] << "\n";
 
-    matches[0] = lossless_cast(Int(16, 16), matches[0]);
-    matches[1] = lossless_cast(Int(16, 16), matches[1]);
-    matches[2] = lossless_cast(Int(16, 16), matches[2]);
-    matches[3] = lossless_cast(Int(16, 16), matches[3]);
+    matches[0] = lossless_cast(Int(16, CPICK(32,16)), matches[0]);
+    matches[1] = lossless_cast(Int(16, CPICK(32,16)), matches[1]);
+    matches[2] = lossless_cast(Int(16, CPICK(32,16)), matches[2]);
+    matches[3] = lossless_cast(Int(16, CPICK(32,16)), matches[3]);
     if (!matches[0].defined() || !matches[1].defined() ||
         !matches[2].defined() || !matches[3].defined())
       return false;
-    if (!checkTwoWayDotProductOperandsCombinations(matches, 16))
+    if (!checkTwoWayDotProductOperandsCombinations(matches, CPICK(32,16)))
       return false;
 
     std::vector<Expr> vecA, vecB;
@@ -629,8 +681,8 @@ bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op, std::vector<Value *> &LLVMVa
     vecA.push_back(matches[2]);
     vecB.push_back(matches[1]);
     vecB.push_back(matches[3]);
-    Value *a = interleave_vectors(Int(16, 32), vecA);
-    Value *b = interleave_vectors(Int(16, 32), vecB);
+    Value *a = interleave_vectors(Int(16, CPICK(64,32)), vecA);
+    Value *b = interleave_vectors(Int(16, CPICK(64,32)), vecB);
     LLVMValues.push_back(a);
     LLVMValues.push_back(b);
     return true;
@@ -638,23 +690,27 @@ bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op, std::vector<Value *> &LLVMVa
   }
   return false;
 }
-bool CodeGen_Hexagon::shouldUseVMPA(const Add *op, std::vector<Value *> &LLVMValues){
+bool CodeGen_Hexagon::shouldUseVMPA(const Add *op,
+                                    std::vector<Value *> &LLVMValues){
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   Expr pattern;
   // pattern = (cast(Int(16, 64), wild_u8x64) * cast(Int(16, 64), wild_u8x64)) +
   //   (cast(Int(16, 64), wild_u8x64) * cast(Int(16, 64), wild_u8x64));
-  pattern = (wild_i16x64 * wild_i16x64) + (wild_i16x64 * wild_i16x64);
+  pattern =
+     WPICK(((wild_i16x128 * wild_i16x128) + (wild_i16x128 * wild_i16x128)),
+           ((wild_i16x64 * wild_i16x64) + (wild_i16x64 * wild_i16x64)));
   vector<Expr> matches;
   if (expr_match(pattern, op, matches)) {
     debug(4) << "Pattern matched\n";
     internal_assert(matches.size() == 4);
-    matches[0] = lossless_cast(UInt(8, 64), matches[0]);
-    matches[1] = lossless_cast(UInt(8, 64), matches[1]);
-    matches[2] = lossless_cast(UInt(8, 64), matches[2]);
-    matches[3] = lossless_cast(UInt(8, 64), matches[3]);
+    matches[0] = lossless_cast(UInt(8, CPICK(128,64)), matches[0]);
+    matches[1] = lossless_cast(UInt(8, CPICK(128,64)), matches[1]);
+    matches[2] = lossless_cast(UInt(8, CPICK(128,64)), matches[2]);
+    matches[3] = lossless_cast(UInt(8, CPICK(128,64)), matches[3]);
     if (!matches[0].defined() || !matches[1].defined() ||
         !matches[2].defined() || !matches[3].defined())
       return false;
-    if (!checkTwoWayDotProductOperandsCombinations(matches, 64))
+    if (!checkTwoWayDotProductOperandsCombinations(matches, CPICK(128,64)))
       return false;
 
     std::vector<Expr> vecA, vecB;
@@ -662,8 +718,8 @@ bool CodeGen_Hexagon::shouldUseVMPA(const Add *op, std::vector<Value *> &LLVMVal
     vecA.push_back(matches[2]);
     vecB.push_back(matches[1]);
     vecB.push_back(matches[3]);
-    Value *a = interleave_vectors(Int(8, 128), vecA);
-    Value *b = interleave_vectors(Int(8, 128), vecB);
+    Value *a = interleave_vectors(Int(8, CPICK(256,128)), vecA);
+    Value *b = interleave_vectors(Int(8, CPICK(256,128)), vecB);
     LLVMValues.push_back(a);
     LLVMValues.push_back(b);
     return true;
@@ -671,13 +727,15 @@ bool CodeGen_Hexagon::shouldUseVMPA(const Add *op, std::vector<Value *> &LLVMVal
   return false;
 }
 void CodeGen_Hexagon::visit(const Add *op) {
-  debug(4) << "HexagonCodegen: " << op->type << ", " << op->a << " + " << op->b << "\n";
+  debug(4) << "HexagonCodegen: " << op->type << ", " << op->a
+           << " + " << op->b << "\n";
   std::vector<Value *>LLVMValues;
   if (shouldUseVMPA(op, LLVMValues)) {
     internal_assert (LLVMValues.size() == 2);
     Value *Lt = LLVMValues[0];
     Value *Rt = LLVMValues[1];
-    llvm::Function *F = Intrinsic::getDeclaration(module, Intrinsic::hexagon_V6_vmpabuuv);
+    llvm::Function *F =
+      Intrinsic::getDeclaration(module, Intrinsic::hexagon_V6_vmpabuuv);
     llvm::FunctionType *FType = F->getFunctionType();
     llvm::Type *T0 = FType->getParamType(0);
     llvm::Type *T1 = FType->getParamType(1);
@@ -812,11 +870,15 @@ void CodeGen_Hexagon::visit(const Cast *op) {
   }
   matches.clear();
   // Lets look for saturate and pack.
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   std::vector<Pattern> SatAndPack;
-  SatAndPack.push_back(Pattern(u8_(min(wild_u16x64, 255)),
-                               Intrinsic::hexagon_V6_vsathub));
-  SatAndPack.push_back(Pattern(u8_(min(wild_i16x64, 255)),
-                               Intrinsic::hexagon_V6_vsathub));
+  SatAndPack.push_back(Pattern(u8_(
+    min(WPICK(wild_u16x128,wild_u16x128), CPICK(511,255))),
+        IPICK(Intrinsic::hexagon_V6_vsathub)));
+  SatAndPack.push_back(Pattern(u8_(
+    min(WPICK(wild_i16x128,wild_i16x64), CPICK(511,255))),
+        IPICK(Intrinsic::hexagon_V6_vsathub)));
+
   for (size_t I = 0; I < SatAndPack.size(); ++I) {
     const Pattern &P = SatAndPack[I];
     if (expr_match(P.pattern, op, matches)) {
@@ -867,15 +929,18 @@ void CodeGen_Hexagon::visit(const Call *op) {
       return;
     }
   }
+
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
+  if (B128) VecSize *= 2;
+
   value = emitBinaryOp(op, vbitwise);
   if (!value) {
     if (op->name == Call::bitwise_not) {
       if (op->type.is_vector() &&
-          ((op->type.bytes() * op->type.width) ==
-           HEXAGON_SINGLE_MODE_VECTOR_SIZE)) {
+          ((op->type.bytes() * op->type.width) == VecSize)) {
         llvm::Function *F =
-          Intrinsic::getDeclaration(module,
-                                    Intrinsic::hexagon_V6_vnot);
+          Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_vnot));
         llvm::FunctionType *FType = F->getFunctionType();
         llvm::Type *T0 = FType->getParamType(0);
         Value *Op0 = codegen(op->args[0]);
@@ -893,19 +958,24 @@ void CodeGen_Hexagon::visit(const Call *op) {
       }
     } else if (op->name == Call::abs) {
       if (op->type.is_vector() &&
-          ((op->type.bytes() * op->type.width) ==
-           2 * HEXAGON_SINGLE_MODE_VECTOR_SIZE)) {
+          ((op->type.bytes() * op->type.width) == 2 * VecSize)) {
         // vector sized absdiff should have been covered by the look up table
         // "combiners".
         std::vector<Pattern> doubleAbsDiff;
-        doubleAbsDiff.push_back(Pattern(abs(wild_u8x128 - wild_u8x128),
-                                        Intrinsic::hexagon_V6_vabsdiffub));
-        doubleAbsDiff.push_back(Pattern(abs(wild_u16x64 - wild_u16x64),
-                                        Intrinsic::hexagon_V6_vabsdiffuh));
-        doubleAbsDiff.push_back(Pattern(abs(wild_i16x64 - wild_i16x64),
-                                        Intrinsic::hexagon_V6_vabsdiffh));
-        doubleAbsDiff.push_back(Pattern(abs(wild_i32x32 - wild_i32x32),
-                                        Intrinsic::hexagon_V6_vabsdiffw));
+
+        doubleAbsDiff.push_back(Pattern(
+          abs(WPICK(wild_u8x256 - wild_u8x256,wild_u8x128 - wild_u8x128)),
+              IPICK(Intrinsic::hexagon_V6_vabsdiffub)));
+        doubleAbsDiff.push_back(Pattern(
+          abs(WPICK(wild_u16x128 - wild_u16x128,wild_u16x64 - wild_u16x64)),
+              IPICK(Intrinsic::hexagon_V6_vabsdiffuh)));
+        doubleAbsDiff.push_back(Pattern(
+          abs(WPICK(wild_i16x128 - wild_i16x128,wild_i16x64 - wild_i16x64)),
+              IPICK(Intrinsic::hexagon_V6_vabsdiffh)));
+        doubleAbsDiff.push_back(Pattern(
+          abs(WPICK(wild_i32x64 - wild_i32x64,wild_i32x32 - wild_i32x32)),
+              IPICK(Intrinsic::hexagon_V6_vabsdiffw)));
+
         matches.clear();
         for (size_t I = 0; I < doubleAbsDiff.size(); ++I) {
           const Pattern &P = doubleAbsDiff[I];
@@ -938,6 +1008,10 @@ void CodeGen_Hexagon::visit(const Call *op) {
   }
 }
 void CodeGen_Hexagon:: visit(const Mul *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
+  if (B128) VecSize *= 2;
+
   value = emitBinaryOp(op, multiplies);
   if (!value) {
     // There is a good chance we are dealing with
@@ -945,23 +1019,23 @@ void CodeGen_Hexagon:: visit(const Mul *op) {
     Expr A = op->a;
 
     if (A.type().is_vector() &&
-          ((A.type().bytes() * A.type().width) ==
-           2*HEXAGON_SINGLE_MODE_VECTOR_SIZE)) {
+          ((A.type().bytes() * A.type().width) == 2 * VecSize)) {
       // If it is twice the hexagon vector width, then try
       // splitting into two vector multiplies.
       debug (4) << "HexCG: visit(Const Mul *op) ** \n";
       debug (4) << "op->a:" << op->a << "\n";
       debug (4) << "op->b:" << op->b << "\n";
       Expr WildU16 = Variable::make(UInt(16), "*");
-      Expr WildBroadcast = Broadcast::make(WildU16, 64);
-      Expr PatternMatch1 = wild_u16x64 * WildBroadcast;
-      Expr PatternMatch2 = WildBroadcast * wild_u16x64;
+      Expr WildBroadcast = Broadcast::make(WildU16, CPICK(128,64));
+      Expr PatternMatch1 = WPICK(wild_u16x128,wild_u16x64) * WildBroadcast;
+      Expr PatternMatch2 = WildBroadcast * WPICK(wild_u16x128,wild_u16x64);
       std::vector<Expr> matches;
       Expr Vec, Other;
       if (expr_match(PatternMatch1, op, matches)) {
         //__builtin_HEXAGON_V6_vmpyhss, __builtin_HEXAGON_V6_hi
 
-        debug (4)<< "HexCG: Going to generate __builtin_HEXAGON_V6_vmpyhss\n";
+        debug(4) << "HexCG: Going to generate __builtin_HEXAGON_V6_vmpyhss\n";
+        if (B128) debug(4) << "B128 Mode\n";
         debug(4) << "vector " << matches[0] << "\n";
         debug(4) << "Broadcast " << matches[1] << "\n";
         Vec = matches[0];
@@ -969,7 +1043,8 @@ void CodeGen_Hexagon:: visit(const Mul *op) {
       } else if (expr_match(PatternMatch2, op, matches)) {
         //__builtin_HEXAGON_V6_vmpyhss, __builtin_HEXAGON_V6_hi
 
-        debug (4)<< "HexCG: Going to generate __builtin_HEXAGON_V6_vmpyhss\n";
+        debug(4) << "HexCG: Going to generate __builtin_HEXAGON_V6_vmpyhss\n";
+        if (B128) debug(4) << "B128 Mode\n";
         debug(4) << "Broadcast " << matches[0] << "\n";
         debug(4) << "vector " << matches[1] << "\n";
         Vec = matches[1];
@@ -995,37 +1070,29 @@ void CodeGen_Hexagon:: visit(const Mul *op) {
           debug(4) << "HexCG: Generating vmpyhss\n";
           Ops.push_back(VectorOp);
           Value *HiCall = //Odd elements in the case that the vector is an ext.
-            CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module,
-                                             Intrinsic::hexagon_V6_hi), Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                              IPICK(Intrinsic::hexagon_V6_hi)), Ops);
           Value *LoCall = //Even elements in the case that the vector is an ext.
-            CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module,
-                                             Intrinsic::hexagon_V6_lo), Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                              IPICK(Intrinsic::hexagon_V6_lo)), Ops);
           Ops.clear();
           Ops.push_back(HiCall);
           Ops.push_back(Scalar);
           Value *Call1 =  //Odd elements in the case that the vector is an ext.
-            CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module,
-                                             Intrinsic::hexagon_V6_vmpyihb),
-                              Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                              IPICK(Intrinsic::hexagon_V6_vmpyihb)), Ops);
           Ops.clear();
           Ops.push_back(LoCall);
           Ops.push_back(Scalar);
           Value *Call2 =        // Even elements.
-            CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module,
-                                             Intrinsic::hexagon_V6_vmpyihb),
-                              Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                              IPICK(Intrinsic::hexagon_V6_vmpyihb)), Ops);
           Ops.clear();
           Ops.push_back(Call1);
           Ops.push_back(Call2);
           Value *CombineCall =
-            CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module,
-                                             Intrinsic::hexagon_V6_vcombine),
-                              Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                              IPICK(Intrinsic::hexagon_V6_vcombine)), Ops);
           Halide::Type DestType = op->type;
           llvm::Type *DestLLVMType = llvm_type_of(DestType);
           if (DestLLVMType != CombineCall->getType())
@@ -1041,20 +1108,23 @@ void CodeGen_Hexagon:: visit(const Mul *op) {
   }
 
 }
-  void CodeGen_Hexagon::visit(const Broadcast *op) {
+void CodeGen_Hexagon::visit(const Broadcast *op) {
+    bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+
     //    int Width = op->width;
     Expr WildI32 = Variable::make(Int(32), "*");
-    Expr PatternMatch = Broadcast::make(WildI32, 16);
+    Expr PatternMatch = Broadcast::make(WildI32, CPICK(32,16));
     vector<Expr> Matches;
     if (expr_match(PatternMatch, op, Matches)) {
         //    if (Width == 16) {
-      Intrinsic::ID ID = Intrinsic::hexagon_V6_lvsplatw;
+      Intrinsic::ID ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
       llvm::Function *F = Intrinsic::getDeclaration(module, ID);
       Value *Op1 = codegen(op->value);
       value = builder->CreateCall(F, Op1);
       return;
     }
     CodeGen_Posix::visit(op);
-  }
+}
+
 }}
 

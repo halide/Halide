@@ -85,8 +85,11 @@ int main(int argc, char **argv) {
   // to C.
   Target target;
   setupHexagonTarget(target);
+  if (argc>1)
+   target.set_feature(Target::HVX_DOUBLE);
+
   Var x_outer, x_inner;
-  gradient.split(x, x_outer, x_inner, 16);
+  gradient.split(x, x_outer, x_inner, argc >1 ? 32 : 16);
   gradient.vectorize(x_inner);
 
   // gradient.compile_to_bitcode("gradient.bc", args, target);
