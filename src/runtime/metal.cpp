@@ -29,50 +29,54 @@ extern MTLDevice MTLCreateSystemDefaultDevice();
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
-void release_metal_object(objc_id obj) {
+WEAK void release_metal_object(objc_id obj) {
     objc_msgSend(obj, sel_getUid("release"));
 }
 
-MTLBuffer new_buffer(MTLDevice device, size_t length) {
+WEAK MTLBuffer new_buffer(MTLDevice device, size_t length) {
     return objc_msgSend(device, sel_getUid("newBufferWithLength:options:"),
-                        length, 0 /* MTLResourceOptionCPUCacheModeDefault */);
+                        (uint32_t)length, 0 /* MTLResourceOptionCPUCacheModeDefault */);
 }
 
-MTLCommandQueue new_command_queue(MTLDevice device) {
-    return objc_msgSend(device, sel_getUid("newComandQueue"));
+WEAK MTLCommandQueue new_command_queue(MTLDevice device) {
+    return objc_msgSend(device, sel_getUid("newCommandQueue"));
 }
     
-MTLCommandBuffer new_command_buffer(MTLCommandQueue queue) {
-    return objc_msgSend(queue, sel_getUid("newComandBuffer"));
+WEAK MTLCommandBuffer new_command_buffer(MTLCommandQueue queue) {
+    return objc_msgSend(queue, sel_getUid("newCommandBuffer"));
 }
 
-MTLComputeCommandEncoder new_compute_command_encoder(MTLCommandBuffer buffer) {
+WEAK MTLComputeCommandEncoder new_compute_command_encoder(MTLCommandBuffer buffer) {
     return objc_msgSend(buffer, sel_getUid("newComputeCommandEncoder"));
 }
 
-MTLComputePipelineState new_compute_pipeline_state_with_function(MTLDevice device, MTLFunction function) {
+WEAK MTLComputePipelineState new_compute_pipeline_state_with_function(MTLDevice device, MTLFunction function) {
     NSError *error_return;
     // TODO: do something with error.
     return objc_msgSend(device, sel_getUid("newComputePipelineStateWithFunction:"), function, &error_return);
 }
 
-void set_compute_pipeline_state(MTLComputeCommandEncoder encoder, MTLComputePipelineState pipeline_state) {
+WEAK void set_compute_pipeline_state(MTLComputeCommandEncoder encoder, MTLComputePipelineState pipeline_state) {
     objc_msgSend(encoder, sel_getUid("setComputePipelineState:"), pipeline_state);
 }
 
-void end_encoding(MTLComputeCommandEncoder encoder) {
+WEAK void end_encoding(MTLComputeCommandEncoder encoder) {
     objc_msgSend(encoder, sel_getUid("endEncoding"));
 }
 
-MTLLibrary new_library_with_source(MTLDevice device, const char *source, size_t source_len) {
+typedef objc_id (*init_with_bytes_msg_send)(objc_id, objc_sel, const char *, long, long, bool);
+
+WEAK MTLLibrary new_library_with_source(MTLDevice device, const char *source, size_t source_len) {
     NSError *error_return;
-    const int NSUTF8StringEncoding = 4;
+    // TODO: Fix Objective-C stubs for real
+    const size_t NSUTF8StringEncoding = 4;
+    init_with_bytes_msg_send msg_sender = (init_with_bytes_msg_send)objc_msgSend;
     objc_id source_str =
-        objc_msgSend(objc_msgSend(objc_getClass("NSString"),
+        msg_sender(objc_msgSend(objc_getClass("NSString"),
                                   sel_getUid("alloc")),
-                     sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone"), source, source_len, NSUTF8StringEncoding, 0 /* NO */);
+                     sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone:"), source, (uint64_t)source_len, (uint64_t)NSUTF8StringEncoding, (bool)0 /* NO */);
     MTLCompileOptions options = objc_msgSend(objc_msgSend(objc_getClass("MTLCompileOptions"), sel_getUid("alloc")),
-                                             sel_getUid("setFastMathEnabled"), 1);
+                                             sel_getUid("setFastMathEnabled:"), 1);
     // TODO: handle error.
     MTLLibrary result = objc_msgSend(device, sel_getUid("newLibraryWithSource:options:error:"), source_str, options, &error_return);
     objc_msgSend(options, sel_getUid("release"));
@@ -80,23 +84,24 @@ MTLLibrary new_library_with_source(MTLDevice device, const char *source, size_t 
     return result;
 }
 
-MTLFunction new_function_with_name(MTLLibrary library, const char *name, size_t name_len) {
-    const int NSUTF8StringEncoding = 4;
+WEAK MTLFunction new_function_with_name(MTLLibrary library, const char *name, size_t name_len) {
+    // TODO: Fix Objective-C stubs for real
+    const size_t NSUTF8StringEncoding = 4;
+    init_with_bytes_msg_send msg_sender = (init_with_bytes_msg_send)objc_msgSend;
     objc_id name_str =
-        objc_msgSend(objc_msgSend(objc_getClass("NSString"),
+        msg_sender(objc_msgSend(objc_getClass("NSString"),
                                   sel_getUid("alloc")),
-                     sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone"), name, name_len, NSUTF8StringEncoding, 0 /* NO */);
-    // TODO: handle error.
+                     sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone:"), name, (uint64_t)name_len, (uint64_t)NSUTF8StringEncoding, (bool)0 /* NO */);
     MTLFunction result = objc_msgSend(library, sel_getUid("newFunctionWithName:"), name_str);
     objc_msgSend(name_str, sel_getUid("release"));
     return result;
 }
 
-void set_input_buffer(MTLComputeCommandEncoder encoder, MTLBuffer input, uint32_t index) {
+WEAK void set_input_buffer(MTLComputeCommandEncoder encoder, MTLBuffer input, uint32_t index) {
     objc_msgSend(encoder, sel_getUid("setBuffer:offset:atIndex:"), input, (uint32_t)0, index);
 }
 
-void set_threadgroup_memory_length(MTLComputeCommandEncoder encoder, uint32_t index, uint32_t length) {
+WEAK void set_threadgroup_memory_length(MTLComputeCommandEncoder encoder, uint32_t index, uint32_t length) {
     objc_msgSend(encoder, sel_getUid("setThreadgroupMemoryLength::atIndex:"), length, index);
 }
 
@@ -106,21 +111,21 @@ struct MTLSize {
     unsigned long depth;
 };
 
-void dispatch_threadgroups(MTLComputeCommandEncoder encoder, MTLSize threadgroupsPerGrid, MTLSize threadsPerThreadgroup) {
+WEAK void dispatch_threadgroups(MTLComputeCommandEncoder encoder, MTLSize threadgroupsPerGrid, MTLSize threadsPerThreadgroup) {
     // TODO: Verify the argument passing here is correct.
     objc_msgSend(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
                  threadgroupsPerGrid, threadsPerThreadgroup);
 }
 
-void commit_command_buffer(MTLCommandBuffer buffer) {
+WEAK void commit_command_buffer(MTLCommandBuffer buffer) {
     objc_msgSend(buffer, sel_getUid("commit"));
 }
 
-void wait_until_completed(MTLCommandBuffer buffer) {
+WEAK void wait_until_completed(MTLCommandBuffer buffer) {
     objc_msgSend(buffer, sel_getUid("waitUntilCompleted"));
 }
 
-void *buffer_contents(MTLBuffer buffer) {
+WEAK void *buffer_contents(MTLBuffer buffer) {
     return (void *)objc_msgSend(buffer, sel_getUid("contents"));
 }
 
