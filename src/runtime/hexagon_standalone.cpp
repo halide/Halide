@@ -10,8 +10,7 @@ extern "C" {
   WEAK void halide_mutex_cleanup(struct halide_mutex *mutex_arg) {}
   WEAK void halide_error(void *user_context, const char *s) {
   }
-  WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *
-),
+  WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                              int min, int size, uint8_t *closure) {
    return 666;
   } 

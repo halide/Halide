@@ -16,6 +16,6 @@ else
   export SCHED=$1
 fi
 
-#   /pkg/qct/software/gnu64/gdb/7.2/bin/gdb \
+#  /pkg/qct/software/gnu64/gdb/7.2/bin/gdb \
    ./Hexagon_camera_pipe 8 $SCHED
 
