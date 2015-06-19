@@ -486,7 +486,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
             custom_passes.push_back(p.pass);
         }
 
-        private_body = lower(contents.ptr->outputs, target, custom_passes);
+        private_body = lower(contents.ptr->outputs, fn_name, target, custom_passes);
     }
 
     string private_name = "__" + fn_name;
