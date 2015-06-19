@@ -58,7 +58,7 @@ using std::map;
 using std::pair;
 using std::make_pair;
 
-Stmt lower(const vector<Function> &outputs, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
@@ -69,9 +69,6 @@ Stmt lower(const vector<Function> &outputs, const Target &t, const vector<IRMuta
 
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
-
-    // A name to indentify the pipeline for profiling and memoization
-    string pipeline_name = outputs[0].name();
 
     debug(1) << "Creating initial loop nests...\n";
     Stmt s = schedule_functions(outputs, order, env, !t.has_feature(Target::NoAsserts));
