@@ -150,13 +150,10 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
     return p->first_func_id;
 }
 
-WEAK void halide_profiler_report(void *user_context) {
-    halide_profiler_state *s = halide_profiler_get_state();
+WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
 
     char line_buf[160];
     Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
-
-    ScopedMutexLock lock(&s->lock);
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
@@ -194,6 +191,13 @@ WEAK void halide_profiler_report(void *user_context) {
     }
 }
 
+WEAK void halide_profiler_report(void *user_context) {
+    halide_profiler_state *s = halide_profiler_get_state();
+    ScopedMutexLock lock(&s->lock);
+    halide_profiler_report_unlocked(user_context, s);
+}
+
+
 WEAK void halide_profiler_reset() {
     halide_profiler_state *s = halide_profiler_get_state();
 
@@ -220,11 +224,16 @@ WEAK void halide_profiler_shutdown() {
     } while (s->started);
     s->current_func = halide_profiler_outside_of_halide;
 
-    // print results
-    halide_profiler_report(NULL);
+    // Print results. No need to lock anything because we just shut
+    // down the thread.
+    halide_profiler_report_unlocked(NULL, s);
 
-    // free memory
-    halide_profiler_reset();
+    // Leak the memory. Not all implementations of halide_free may be
+    // safe at static destruction time, and if there are multiple
+    // copies of the runtime in the process this shutdown might get
+    // called multiple times on the same state (Not sure why this is
+    // possible, but I have seen it happen).
+    // halide_profiler_reset();
 }
 }
 
