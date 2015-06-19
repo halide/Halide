@@ -216,6 +216,7 @@ namespace {
 __attribute__((destructor))
 WEAK void halide_profiler_shutdown() {
     halide_profiler_state *s = halide_profiler_get_state();
+    if (!s->started) return;
     s->current_func = halide_profiler_please_stop;
     do {
         // Memory barrier.
@@ -229,10 +230,7 @@ WEAK void halide_profiler_shutdown() {
     halide_profiler_report_unlocked(NULL, s);
 
     // Leak the memory. Not all implementations of halide_free may be
-    // safe at static destruction time, and if there are multiple
-    // copies of the runtime in the process this shutdown might get
-    // called multiple times on the same state (Not sure why this is
-    // possible, but I have seen it happen).
+    // safe to call at static destruction time.
     // halide_profiler_reset();
 }
 }
