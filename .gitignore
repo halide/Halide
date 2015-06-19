@@ -217,6 +217,9 @@ apps/HelloAndroidGL/jni/halide_gl_filter.h
 apps/HelloAndroid*/local.properties
 apps/HelloAndroid*/proguard-project.txt
 
+# tutorial intermediates
+tutorial/lesson_10_halide.h
+
 # test intermediates
 log.txt
 err.txt
