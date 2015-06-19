@@ -5,6 +5,8 @@
 #include "make_array.h"
 #include "no_compare_indexing_suite.h"
 
+#include <boost/format.hpp>
+
 #include "../../src/Buffer.h"
 
 #include <vector>
@@ -15,6 +17,27 @@
 Halide::Argument buffer_to_argument(Halide::Buffer &that)
 {
     return that;
+}
+
+size_t host_ptr_as_int(Halide::Buffer &that)
+{
+    return reinterpret_cast<size_t>(that.host_ptr());
+}
+
+std::string buffer_t_repr(buffer_t &that)
+{
+    boost::format format("<buffer_t [host %u (dirty %i)] [dev %u (dirty %i)] elem_size %i "
+                         "extent (%i %i %i %i) min (%i %i %i %i) stride (%i %i %i %i)>");
+    std::string repr =
+            boost::str(format
+                       % reinterpret_cast<size_t>(that.host) % that.host_dirty
+                       % reinterpret_cast<size_t>(that.dev) % that.dev_dirty
+                       % that.elem_size
+                       % that.extent[0] % that.extent[1] % that.extent[2] % that.extent[3]
+            % that.min[0] % that.min[1] % that.min[2] % that.min[3]
+            % that.stride[0] % that.stride[1] % that.stride[2] % that.stride[3]
+            );
+    return repr;
 }
 
 void defineBuffer()
@@ -52,7 +75,10 @@ void defineBuffer()
                            "mirroring this buffer, and the data has been modified on the host side.")
             .def_readwrite("dev_dirty", &buffer_t::dev_dirty,
                            "This should be true if there is an existing device allocation "
-                           "mirroring this buffer, and the data has been modified on the device side.");
+                           "mirroring this buffer, and the data has been modified on the device side.")
+            .def("__repr__", &buffer_t_repr, p::arg("self"),
+                 "Return a string containing a printable representation of a buffer_t object.")
+            ;
 
 
     p::class_<Buffer>("Buffer",
@@ -78,7 +104,8 @@ void defineBuffer()
                  //p::return_internal_reference<1>(),
                  p::return_value_policy< p::return_opaque_pointer >(), // not sure this will do what we want
                  "Get a pointer to the host-side memory.")
-
+            .def("host_ptr_as_int", &host_ptr_as_int, p::arg("self"),
+                 "Get a pointer to the host-side memory. Use with care.")
             .def("raw_buffer", &Buffer::raw_buffer, p::arg("self"),
                  p::return_internal_reference<1>(),
                  "Get a pointer to the raw buffer_t struct that this class wraps.")
@@ -158,7 +185,7 @@ void defineBuffer()
     p::implicitly_convertible<Buffer, h::Argument>();
 
     p::class_< std::vector<Buffer> >("BuffersVector")
-                .def( no_compare_indexing_suite< std::vector<Buffer> >() );
+            .def( no_compare_indexing_suite< std::vector<Buffer> >() );
 
     return;
 }
