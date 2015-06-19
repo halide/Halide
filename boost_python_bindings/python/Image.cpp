@@ -244,6 +244,9 @@ void defineImage_impl(const std::string suffix, const h::Type type)
 
             // should these be __call__ "a(b)" or __getitem___ "a[b]" ?
 
+//            FIXME must implement getittem and setittem
+//            see func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
+
             .def("__call__", &image_to_expr_operator0<T>, p::arg("self"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "

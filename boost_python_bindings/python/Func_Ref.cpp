@@ -16,97 +16,97 @@ using p::self;
 
 
 template<typename A, typename B>
-auto add_func_refs(A &a, B &b) -> decltype(a + b)
+auto add_func(A a, B b) -> decltype(a + b)
 {
     return a + b;
 }
 
 template<typename A, typename B>
-auto sub_func_refs(A &a, B &b) -> decltype(a - b)
+auto sub_func(A a, B b) -> decltype(a - b)
 {
     return a - b;
 }
 
 template<typename A, typename B>
-auto mul_func_refs(A &a, B &b) -> decltype(a * b)
+auto mul_func(A a, B b) -> decltype(a * b)
 {
     return a * b;
 }
 
 template<typename A, typename B>
-auto div_func_refs(A &a, B &b) -> decltype(a / b)
+auto div_func(A a, B b) -> decltype(a / b)
 {
     return a / b;
 }
 
 template<typename A, typename B>
-auto mod_func_refs(A &a, B &b) -> decltype(a % b)
+auto mod_func(A a, B b) -> decltype(a % b)
 {
     return a % b;
 }
 
 template<typename A, typename B>
-auto and_func_refs(A &a, B &b) -> decltype(a & b)
+auto and_func(A a, B b) -> decltype(a & b)
 {
     return a & b;
 }
 
 template<typename A, typename B>
-auto xor_func_refs(A &a, B &b) -> decltype(a ^ b)
+auto xor_func(A a, B b) -> decltype(a ^ b)
 {
     return a ^ b;
 }
 
 template<typename A, typename B>
-auto or_func_refs(A &a, B &b) -> decltype(a | b)
+auto or_func(A a, B b) -> decltype(a | b)
 {
     return a | b;
 }
 
 template<typename A, typename B>
-auto gt_func_refs(A &a, B &b) -> decltype(a > b)
+auto gt_func(A a, B b) -> decltype(a > b)
 {
     return a > b;
 }
 
 template<typename A, typename B>
-auto ge_func_refs(A &a, B &b) -> decltype(a >= b)
+auto ge_func(A a, B b) -> decltype(a >= b)
 {
     return a >= b;
 }
 
 template<typename A, typename B>
-auto lt_func_refs(A &a, B &b) -> decltype(a < b)
+auto lt_func(A a, B b) -> decltype(a < b)
 {
     return a < b;
 }
 
 template<typename A, typename B>
-auto le_func_refs(A &a, B &b) -> decltype(a <= b)
+auto le_func(A a, B b) -> decltype(a <= b)
 {
     return a <= b;
 }
 
 template<typename A, typename B>
-auto eq_func_refs(A &a, B &b) -> decltype(a == b)
+auto eq_func(A a, B b) -> decltype(a == b)
 {
     return a == b;
 }
 
 template<typename A, typename B>
-auto ne_func_refs(A &a, B &b) -> decltype(a != b)
+auto ne_func(A a, B b) -> decltype(a != b)
 {
     return a != b;
 }
 
 template<typename A, typename B>
-auto lshift_func_refs(A &a, B &b) -> decltype(a << b)
+auto lshift_func(A a, B b) -> decltype(a << b)
 {
     return a << b;
 }
 
 template<typename A, typename B>
-auto rshift_func_refs(A &a, B &b) -> decltype(a >> b)
+auto rshift_func(A a, B b) -> decltype(a >> b)
 {
     return a >> b;
 }
@@ -138,31 +138,31 @@ auto idiv_func_refs(A &a, B &b) -> decltype(a /= b)
 
 
 template<typename PythonClass, typename B>
-void add_func_ref_operators_with(PythonClass &class_a)
+void add_func_operators_with(PythonClass &class_a)
 {
     typedef typename PythonClass::wrapped_type T;
 
     // <boost/python/operators.hpp> lists all operators
     class_a
-            .def("__add__", &add_func_refs<T, B>)
-            .def("__sub__", &sub_func_refs<T, B>)
+            .def("__add__", &add_func<T, B>)
+            .def("__sub__", &sub_func<T, B>)
         #if PY_VERSION_HEX >= 0x03000000
-            .def("__truediv__", &div_func_refs<T, B>)
+            .def("__truediv__", &div_func<T, B>)
         #else
-            .def("__div__", &div_func_refs<T, B>)
+            .def("__div__", &div_func<T, B>)
         #endif
-            .def("__mod__", &mod_func_refs<T, B>)
-            .def("__and__", &and_func_refs<T, B>)
-            .def("__xor__", &xor_func_refs<T, B>)
-            .def("__or__", &or_func_refs<T, B>)
-            .def("__gt__", &gt_func_refs<T, B>)
-            .def("__ge__", &gt_func_refs<T, B>)
-            .def("__lt__", &lt_func_refs<T, B>)
-            .def("__le__", &le_func_refs<T, B>)
-            .def("__eq__", &eq_func_refs<T, B>)
-            .def("__ne__", &ne_func_refs<T, B>)
-            .def("__lshift__", &lshift_func_refs<T, B>)
-            .def("__rshift__", &rshift_func_refs<T, B>)
+            .def("__mod__", &mod_func<T, B>)
+            .def("__and__", &and_func<T, B>)
+            .def("__xor__", &xor_func<T, B>)
+            .def("__or__", &or_func<T, B>)
+            .def("__gt__", &gt_func<T, B>)
+            .def("__ge__", &gt_func<T, B>)
+            .def("__lt__", &lt_func<T, B>)
+            .def("__le__", &le_func<T, B>)
+            .def("__eq__", &eq_func<T, B>)
+            .def("__ne__", &ne_func<T, B>)
+            .def("__lshift__", &lshift_func<T, B>)
+            .def("__rshift__", &rshift_func<T, B>)
 
             //    BOOST_PYTHON_INPLACE_OPERATOR(iadd,+=)
             //    BOOST_PYTHON_INPLACE_OPERATOR(isub,-=)
@@ -247,8 +247,12 @@ void defineFuncRefVar()
                  "What function is this calling?")
             ;
 
-    add_func_ref_operators_with<decltype(func_ref_var_class), FuncRefVar>(func_ref_var_class);
-    add_func_ref_operators_with<decltype(func_ref_var_class), h::FuncRefExpr>(func_ref_var_class);
+    add_func_operators_with<decltype(func_ref_var_class), FuncRefVar>(func_ref_var_class);
+    add_func_operators_with<decltype(func_ref_var_class), h::FuncRefExpr>(func_ref_var_class);
+    add_func_operators_with<decltype(func_ref_var_class), int>(func_ref_var_class);
+    add_func_operators_with<decltype(func_ref_var_class), float>(func_ref_var_class);
+    //add_func_operators_with<int, decltype(func_ref_var_class)>(func_ref_var_class);
+    //add_func_operators_with<float, decltype(func_ref_var_class)>(func_ref_var_class);
 
     p::implicitly_convertible<FuncRefVar, h::Expr>();
 
@@ -324,8 +328,12 @@ void defineFuncRefExpr()
             ;
 
 
-    add_func_ref_operators_with<decltype(func_ref_expr_class), h::FuncRefVar>(func_ref_expr_class);
-    add_func_ref_operators_with<decltype(func_ref_expr_class), FuncRefExpr>(func_ref_expr_class);
+    add_func_operators_with<decltype(func_ref_expr_class), h::FuncRefVar>(func_ref_expr_class);
+    add_func_operators_with<decltype(func_ref_expr_class), FuncRefExpr>(func_ref_expr_class);
+    add_func_operators_with<decltype(func_ref_expr_class), int>(func_ref_expr_class);
+    add_func_operators_with<decltype(func_ref_expr_class), float>(func_ref_expr_class);
+    //add_func_operators_with<int, decltype(func_ref_expr_class)>(func_ref_expr_class);
+    //add_func_operators_with<float, decltype(func_ref_expr_class)>(func_ref_expr_class);
 
     p::implicitly_convertible<FuncRefExpr, h::Expr>();
 

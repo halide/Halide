@@ -367,22 +367,33 @@ void tuple_to_var_expr_vector(const p::tuple &args_passed,
         p::object o = args_passed[i];
         p::extract<h::Var &> var_extract(o);
         p::extract<h::Expr &> expr_extract(o);
+        p::extract<boost::int32_t> int32_extract(o);
 
-        if(var_extract.check())
+        const bool is_var = var_extract.check();
+        bool expr_added = false;
+        if(is_var)
         {
             h::Var v = var_extract();
             var_args.push_back(v);
 
-            expr_args.push_back(v); // is this really what we want ?
+            expr_args.push_back(v);
+            expr_added = true;
         }
 
         if(expr_extract.check())
         {
-            h::Expr e = expr_extract();
+            h::Expr e(expr_extract());
             expr_args.push_back(e);
+            expr_added = true;
+        }
+        else if(not is_var and int32_extract.check())
+        { // not var, not expr, but int32
+            expr_args.push_back(h::Expr(int32_extract()));
+            expr_added = true;
         }
 
-        if((var_extract.check() == false) and (expr_extract.check() == false))
+
+        if(expr_added == false)
         {
             for(size_t j=0; j < args_len; j+=1)
             {
@@ -390,7 +401,7 @@ void tuple_to_var_expr_vector(const p::tuple &args_passed,
                 const std::string o_str = p::extract<std::string>(p::str(o));
                 printf("Func args_passed[%lu] == %s\n", j, o_str.c_str());
             }
-            throw std::invalid_argument("Func::operator() only handles a list of Var or a list of (convertible to) Expr.");
+            throw std::invalid_argument("Func::operator[] only handles a list of Var or a list of (convertible to) Expr.");
         }
     }
 
