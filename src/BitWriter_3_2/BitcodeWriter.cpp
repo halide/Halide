@@ -1321,8 +1321,10 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
 #if LLVM_VERSION < 37
     PushValueAndType(LP.getPersonalityFn(), InstID, Vals, VE);
 #else
-    PushValueAndType(LP.getParent()->getParent()->getPersonalityFn(), InstID,
-                     Vals, VE);
+    PushValueAndType(LP.getPersonalityFn(), InstID, Vals, VE);
+//FIXME: Need upstream to make this work
+//  PushValueAndType(LP.getParent()->getParent()->getPersonalityFn(), InstID,
+//                   Vals, VE);
 #endif
     Vals.push_back(LP.isCleanup());
     Vals.push_back(LP.getNumClauses());
