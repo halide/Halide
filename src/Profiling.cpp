@@ -18,8 +18,11 @@ class InjectProfiling : public IRMutator {
 public:
     map<string, int> indices;   // maps from func name -> index in buffer.
 
+    vector<int> stack; // What produce nodes are we currently inside of.
+
     InjectProfiling() {
         indices["overhead"] = 0;
+        stack.push_back(0);
     }
 
 private:
@@ -35,8 +38,11 @@ private:
             idx = iter->second;
         }
 
+        stack.push_back(idx);
         Stmt produce = mutate(op->produce);
         Stmt update = op->update.defined() ? mutate(op->update) : Stmt();
+        stack.pop_back();
+
         Stmt consume = mutate(op->consume);
 
         Expr profiler_token = Variable::make(Int(32), "profiler_token");
@@ -46,7 +52,13 @@ private:
         Expr set_task = Call::make(Int(32), "halide_profiler_set_current_func",
                                    {profiler_state, profiler_token, idx}, Call::Extern);
 
+        // At the beginning of the consume step, set the current task
+        // back to the outer one.
+        Expr set_outer_task = Call::make(Int(32), "halide_profiler_set_current_func",
+                                         {profiler_state, profiler_token, stack.back()}, Call::Extern);
+
         produce = Block::make(Evaluate::make(set_task), produce);
+        consume = Block::make(Evaluate::make(set_outer_task), consume);
 
         stmt = ProducerConsumer::make(op->name, produce, update, consume);
     }
