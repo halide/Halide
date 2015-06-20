@@ -224,7 +224,7 @@ def main():
             # satisfy this single scanline of the consumer. This
             # means a 5x2 box of the producer.
             producer_storage = np.empty((2, 5), dtype=np.float32)
-            for py in range(yy + 2):
+            for py in range(yy, yy + 2):
                 for px in range(5):
                     producer_storage[py-yy][px] = math.sqrt(px * py)
                 
@@ -308,7 +308,7 @@ def main():
 
             # Compute enough of the producer to satisfy this scanline
             # of the consumer.
-            for py in range(yy + 2):
+            for py in range(yy, yy + 2):
 
                 # Skip over rows of producer that we've already
                 # computed in a previous iteration.
@@ -356,7 +356,7 @@ def main():
             producer_storage = np.empty((2, 5), dtype=np.float32)
             
             for yy in range(4):
-                for py in range(yy + 2):
+                for py in range(yy, yy + 2):
                 
                     if y > 0 and py == yy:
                         continue
@@ -417,13 +417,13 @@ def main():
                 # pixxel of the consumer, but skip values that we've
                 # alreadyy computed:
                 if (yy == 0) and (xx == 0):
-                    producer_storage[yy & 1][xx] = sqrt(xx*yy)
+                    producer_storage[yy & 1][xx] = math.sqrt(xx*yy)
                 if yy == 0:
-                    producer_storage[yy & 1][xx+1] = sqrt((xx+1)*yy)
+                    producer_storage[yy & 1][xx+1] = math.sqrt((xx+1)*yy)
                 if xx == 0:
-                    producer_storage[(yy+1) & 1][xx] = sqrt(xx*(yy+1))
+                    producer_storage[(yy+1) & 1][xx] = math.sqrt(xx*(yy+1))
                     
-                producer_storage[(yy+1) & 1][xx+1] = sqrt((xx+1)*(yy+1))
+                producer_storage[(yy+1) & 1][xx+1] = math.sqrt((xx+1)*(yy+1))
 
                 result[yy][xx] = (producer_storage[yy & 1][xx] +
                                 producer_storage[(yy+1) & 1][xx] +
@@ -516,7 +516,7 @@ def main():
                 # 2x2 tile of the consumer requires a 3x3 tile of the
                 # producer.
                 producer_storage = np.empty((3, 3), dtype=np.float32)
-                for py in range(y_base + 3):
+                for py in range(y_base, y_base + 3):
                     for px in range(x_base + 3):
                         producer_storage[py-y_base][px-x_base] = math.sqrt(px * py)
                     
@@ -589,7 +589,7 @@ def main():
 
 
         # For every strip of 16 scanlines
-        for yo in range(600/16): # (this loop is parallel in the Halide version)
+        for yo in range(600//16): # (this loop is parallel in the Halide version)
             # 16 doesn't divide 600, so push the last slice upwards to fit within [0, 599] (see lesson 05).
             y_base = yo * 16
             if y_base > (600-16):
@@ -602,13 +602,13 @@ def main():
             for yi  in range(16):
                 yy = y_base + yi
 
-                for py in range(yy+2):
+                for py in range(yy, yy+2):
                     # Skip scanlines already computed *within this task*
                     if (yi > 0) and (py == y):
                         continue
 
                     # Compute this scanline of the producer in 4-wide vectors
-                    for x_vec in range(800/4 + 1):
+                    for x_vec in range(800//4 + 1):
                         x_base = x_vec*4
                         # 4 doesn't divide 801, so push the last vector left (see lesson 05).
                         if x_base > (801 - 4):
@@ -625,33 +625,33 @@ def main():
                 
 
                 # Now compute consumer for this scanline:
-                for x_vec in range(800/4):
+                for x_vec in range(800//4):
                     x_base = x_vec * 4
                     # Again, Halide's equivalent here uses SSE.
                     xx = [x_base, x_base + 1, x_base + 2, x_base + 3]
                     vec = [
-                        (producer_storage[y & 1][xx[0]] +
-                         producer_storage[(y+1) & 1][xx[0]] +
-                         producer_storage[y & 1][xx[0]+1] +
-                         producer_storage[(y+1) & 1][xx[0]+1]),
-                        (producer_storage[y & 1][xx[1]] +
-                         producer_storage[(y+1) & 1][xx[1]] +
-                         producer_storage[y & 1][xx[1]+1] +
-                         producer_storage[(y+1) & 1][xx[1]+1]),
-                        (producer_storage[y & 1][xx[2]] +
-                         producer_storage[(y+1) & 1][xx[2]] +
-                         producer_storage[y & 1][xx[2]+1] +
-                         producer_storage[(y+1) & 1][xx[2]+1]),
-                        (producer_storage[y & 1][xx[3]] +
-                         producer_storage[(y+1) & 1][xx[3]] +
-                         producer_storage[y & 1][xx[3]+1] +
-                         producer_storage[(y+1) & 1][xx[3]+1]) 
+                        (producer_storage[yy & 1][xx[0]] +
+                         producer_storage[(yy+1) & 1][xx[0]] +
+                         producer_storage[yy & 1][xx[0]+1] +
+                         producer_storage[(yy+1) & 1][xx[0]+1]),
+                        (producer_storage[yy & 1][xx[1]] +
+                         producer_storage[(yy+1) & 1][xx[1]] +
+                         producer_storage[yy & 1][xx[1]+1] +
+                         producer_storage[(yy+1) & 1][xx[1]+1]),
+                        (producer_storage[yy & 1][xx[2]] +
+                         producer_storage[(yy+1) & 1][xx[2]] +
+                         producer_storage[yy & 1][xx[2]+1] +
+                         producer_storage[(yy+1) & 1][xx[2]+1]),
+                        (producer_storage[yy & 1][xx[3]] +
+                         producer_storage[(yy+1) & 1][xx[3]] +
+                         producer_storage[yy & 1][xx[3]+1] +
+                         producer_storage[(yy+1) & 1][xx[3]+1]) 
                     ]
 
-                    c_result[y][xx[0]] = vec[0]
-                    c_result[y][xx[1]] = vec[1]
-                    c_result[y][xx[2]] = vec[2]
-                    c_result[y][xx[3]] = vec[3]
+                    c_result[yy][xx[0]] = vec[0]
+                    c_result[yy][xx[1]] = vec[1]
+                    c_result[yy][xx[2]] = vec[2]
+                    c_result[yy][xx[3]] = vec[3]
                 
 
         print("Pseudo-code for the schedule:")
@@ -665,7 +665,8 @@ def main():
         # should tell you something.
         for yy in range(600):
             for xx in range(800):
-                error = halide_result(x, y) - c_result[y][x]
+
+                error = halide_result(xx, yy) - c_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
                 if (error < -0.001) or (error > 0.001):
                     raise Exception("halide_result(%d, %d) = %f instead of %f" % (
