@@ -6,6 +6,8 @@
 
 #include "../../src/Func.h"
 
+#include <boost/format.hpp>
+
 #include "Func_Ref.h"
 #include "Func_Stage.h"
 #include "Func_VarOrRVar.h"
@@ -357,9 +359,11 @@ void defineFuncGpuMethods(p::class_<h::Func> &func_class)
 }
 
 
-void tuple_to_var_expr_vector(const p::tuple &args_passed,
-                              std::vector<h::Var> &var_args,
-                              std::vector<h::Expr> &expr_args)
+void tuple_to_var_expr_vector(
+        const std::string debug_name,
+        const p::tuple &args_passed,
+        std::vector<h::Var> &var_args,
+        std::vector<h::Expr> &expr_args)
 {
     const size_t args_len = p::len(args_passed);
     for(size_t i=0; i < args_len; i+=1)
@@ -399,9 +403,11 @@ void tuple_to_var_expr_vector(const p::tuple &args_passed,
             {
                 p::object o = args_passed[j];
                 const std::string o_str = p::extract<std::string>(p::str(o));
-                printf("Func args_passed[%lu] == %s\n", j, o_str.c_str());
+                printf("%s args_passed[%lu] == %s\n", debug_name.c_str(), j, o_str.c_str());
             }
-            throw std::invalid_argument("Func::operator[] only handles a list of Var or a list of (convertible to) Expr.");
+            throw std::invalid_argument(
+                        boost::str(boost::format("%s::operator[] only handles "
+                                                 "a tuple of Var or a list of (convertible to) Expr.") % debug_name));
         }
     }
 
@@ -414,7 +420,7 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
     std::vector<h::Expr> expr_args;
     const size_t args_len = p::len(args_passed);
 
-    tuple_to_var_expr_vector(args_passed, var_args, expr_args);
+    tuple_to_var_expr_vector("Func", args_passed, var_args, expr_args);
 
 
     p::object return_object;
@@ -454,7 +460,7 @@ h::Stage func_setitem_operator0(h::Func &that, p::tuple args_passed, T right_han
     std::vector<h::Expr> expr_args;
     const size_t args_len = p::len(args_passed);
 
-    tuple_to_var_expr_vector(args_passed, var_args, expr_args);
+    tuple_to_var_expr_vector("Func", args_passed, var_args, expr_args);
 
     // We prioritize Args
     if(var_args.size() == args_len)
