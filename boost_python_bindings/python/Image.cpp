@@ -16,6 +16,7 @@
 
 #include "../../src/Image.h"
 #include "Type.h"
+#include "Func.h"
 
 #include <vector>
 #include <unordered_map>
@@ -68,6 +69,30 @@ h::Expr image_to_expr_operator6(h::Image<T> &that, std::vector<h::Var> args_pass
     return that(args_passed);
 }
 
+template<typename T>
+h::Expr image_to_expr_operator7(h::Image<T> &that, p::tuple &args_passed)
+{
+    std::vector<h::Var> var_args;
+    std::vector<h::Expr> expr_args;
+    const size_t args_len = p::len(args_passed);
+
+    tuple_to_var_expr_vector("Image<T>", args_passed, var_args, expr_args);
+
+    h::Expr ret;
+
+    // We prioritize Args over Expr variant
+    if(var_args.size() == args_len)
+    {
+        ret = that(var_args);
+    }
+    else
+    {   user_assert(expr_args.size() == args_len) << "Not all image_to_expr_operator7 arguments where converted to Expr";
+        ret = that(expr_args);
+    }
+
+    return ret;
+}
+
 
 template<typename T>
 T image_call_operator0(h::Image<T> &that, int x)
@@ -97,7 +122,6 @@ template<typename T>
 std::string image_repr(h::Image<T> &image)
 {
     std::string repr;
-
 
     h::Buffer b = image;
     h::Type t = b.type();
@@ -154,7 +178,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
     using h::Image;
     using p::self;
 
-
+    auto image_class =
     p::class_< Image<T>, p::bases<h::ImageBase> >(
                 ("Image" + suffix).c_str(),
                 "A reference-counted handle on a dense multidimensional array "
@@ -238,44 +262,34 @@ void defineImage_impl(const std::string suffix, const h::Type type)
             .def("bottom", &Image<T>::bottom, p::arg("self"),
                  "Get the maximum coordinate in dimension 1, which by convention "
                  "is the bottom of the image. Returns zero for zero- or "
-                 "one-dimensional images.")
+                 "one-dimensional images.");
 
-            // Access operators (to Expr, and to actual value)
 
-            // should these be __call__ "a(b)" or __getitem___ "a[b]" ?
+    const std::string get_item_doc = "Construct an expression which loads from this image. "
+                                     "The location is extended with enough implicit variables to match "
+                                     "the dimensionality of the image (see \\ref Var::implicit)";
 
+    // Access operators (to Expr, and to actual value)
+    image_class
 //            FIXME must implement getittem and setittem
 //            see func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
 
-            .def("__call__", &image_to_expr_operator0<T>, p::arg("self"),
-                 "Construct an expression which loads from this image. "
-                 "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \\ref Var::implicit)")
-            .def("__call__", &image_to_expr_operator1<T>, p::args("self", "x"),
-                 "Construct an expression which loads from this image. "
-                 "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \\ref Var::implicit)")
-            .def("__call__", &image_to_expr_operator2<T>, p::args("self", "x", "y"),
-                 "Construct an expression which loads from this image. "
-                 "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \\ref Var::implicit)")
-            .def("__call__", &image_to_expr_operator3<T>, p::args("self", "x", "y", "z"),
-                 "Construct an expression which loads from this image. "
-                 "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \\ref Var::implicit)")
-            .def("__call__", &image_to_expr_operator4<T>, p::args("self", "x", "y", "z", "w"),
-                 "Construct an expression which loads from this image. "
-                 "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \\ref Var::implicit)")
-            .def("__call__", &image_to_expr_operator5<T>, p::args("self", "args_passed"),
-                 "Construct an expression which loads from this image. "
-                 "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \\ref Var::implicit)")
-            .def("__call__", &image_to_expr_operator6<T>, p::args("self", "args_passed"),
-                 "Construct an expression which loads from this image. "
-                 "The location is extended with enough implicit variables to match "
-                 "the dimensionality of the image (see \\ref Var::implicit)")
-
+            .def("__getitem__", &image_to_expr_operator0<T>, p::arg("self"),
+                 get_item_doc.c_str())
+            .def("__getitem__", &image_to_expr_operator1<T>, p::args("self", "x"),
+                 get_item_doc.c_str())
+            .def("__getitem__", &image_to_expr_operator2<T>, p::args("self", "x", "y"),
+                 get_item_doc.c_str())
+            .def("__getitem__", &image_to_expr_operator3<T>, p::args("self", "x", "y", "z"),
+                 get_item_doc.c_str())
+            .def("__getitem__", &image_to_expr_operator4<T>, p::args("self", "x", "y", "z", "w"),
+                 get_item_doc.c_str())
+            .def("__getitem__", &image_to_expr_operator5<T>, p::args("self", "args_passed"),
+                 get_item_doc.c_str())
+            .def("__getitem__", &image_to_expr_operator6<T>, p::args("self", "args_passed"),
+                 get_item_doc.c_str())
+            .def("__getitem__", &image_to_expr_operator7<T>, p::args("self", "tuple"),
+                 get_item_doc.c_str())
 
             // Note that for now we return copy values (not references like in the C++ API)
             .def("__call__", &image_call_operator0<T>, p::args("self", "x"),

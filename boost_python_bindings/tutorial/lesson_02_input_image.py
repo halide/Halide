@@ -104,8 +104,10 @@ def main():
 
     # Save the output for inspection. It should look like a bright parrot.
     output_data = h.image_to_ndarray(output_image)
-    print("output_data", output_data)
-    imsave(output_data, "brighter.png")
+    #print("output_data", output_data)
+    #print("output_data.shape", output_data.shape)
+    imsave("brighter.png", output_data)
+    print("Created brighter.png result file.")
 
     print("Success!")
     return 0

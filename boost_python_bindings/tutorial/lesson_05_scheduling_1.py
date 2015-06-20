@@ -81,6 +81,7 @@ def main():
         # generated. The arguments are specified from the innermost
         # loop out, so the following call puts y in the inner loop:
         gradient.reorder(y, x)
+        #gradient.reorder((y, x))
 
         # This means y (the row) will vary quickly, and x (the
         # column) will vary slowly, so this is a column-major
