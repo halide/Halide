@@ -179,7 +179,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
     using p::self;
 
     auto image_class =
-    p::class_< Image<T>, p::bases<h::ImageBase> >(
+            p::class_< Image<T>, p::bases<h::ImageBase> >(
                 ("Image" + suffix).c_str(),
                 "A reference-counted handle on a dense multidimensional array "
                 "containing scalar values of type T. Can be directly accessed and "
@@ -225,7 +225,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "this if you realize a gpu kernel into an existing image, or "
                  "modify the data via some other back-door.")
             .def("type", get_type_function_wrapper<T>(),
-                          "Return Type instance for the data type of the image.")
+                 "Return Type instance for the data type of the image.")
             .def("channels", &Image<T>::channels, p::arg("self"),
                  "Get the extent of dimension 2, which by convention we use as"
                  "the number of color channels (often 3). Unlike extent(2), "
@@ -239,6 +239,16 @@ void defineImage_impl(const std::string suffix, const h::Type type)
                  "usually the extent of dimension 0. This is not necessarily true though.")
             .def("extent", &Image<T>::extent, p::args("self", "dim"),
                  "Get the size of a dimension.")
+            .def("min", &Image<T>::min, p::args("self", "dim"),
+                 "Get the min coordinate of a dimension. The top left of the "
+                 "image represents this point in a function that was realized "
+                 "into this image.")
+            .def("set_min", &Image<T>::set_min,
+                 (p::arg("self"), p::arg("m0"), p::arg("m1")=0, p::arg("m2")=0, p::arg("m3")=0),
+                 "Set the min coordinates of a dimension.")
+            ;
+
+    image_class
             .def("width", &Image<T>::width, p::arg("self"),
                  "Get the extent of dimension 0, which by convention we use as "
                  "the width of the image. Unlike extent(0), returns one if the "
@@ -262,7 +272,8 @@ void defineImage_impl(const std::string suffix, const h::Type type)
             .def("bottom", &Image<T>::bottom, p::arg("self"),
                  "Get the maximum coordinate in dimension 1, which by convention "
                  "is the bottom of the image. Returns zero for zero- or "
-                 "one-dimensional images.");
+                 "one-dimensional images.")
+            ;
 
 
     const std::string get_item_doc = "Construct an expression which loads from this image. "
@@ -271,8 +282,8 @@ void defineImage_impl(const std::string suffix, const h::Type type)
 
     // Access operators (to Expr, and to actual value)
     image_class
-//            FIXME must implement getittem and setittem
-//            see func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
+            //            FIXME must implement getittem and setittem
+            //            see func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
 
             .def("__getitem__", &image_to_expr_operator0<T>, p::arg("self"),
                  get_item_doc.c_str())
@@ -508,21 +519,21 @@ p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name=
 
 namespace std
 {
-    template<>
-    struct hash<h::Type>
-    {
-        typedef h::Type argument_type;
-        typedef std::size_t result_type;
+template<>
+struct hash<h::Type>
+{
+    typedef h::Type argument_type;
+    typedef std::size_t result_type;
 
-        result_type operator()(argument_type const& t) const
-        {
-            size_t seed = 0;
-            boost::hash_combine(seed, static_cast<int>(t.code));
-            boost::hash_combine(seed, t.bits);
-            boost::hash_combine(seed, t.width);
-            return seed;
-        }
-    };
+    result_type operator()(argument_type const& t) const
+    {
+        size_t seed = 0;
+        boost::hash_combine(seed, static_cast<int>(t.code));
+        boost::hash_combine(seed, t.bits);
+        boost::hash_combine(seed, t.width);
+        return seed;
+    }
+};
 }
 
 
