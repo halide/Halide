@@ -50,13 +50,11 @@ def main():
 
         # Blur it horizontally:
         blur_x = Func("blur_x")
-        #blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + input_16[x, y, c] * 2 + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
 
         # Blur it vertically:
         blur_y = Func("blur_y")
-        #blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + blur_x[x, y, c] * 2 + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
 
         # Convert back to 8-bit.
         output = Func("output")
@@ -159,13 +157,11 @@ def main():
 
         # Blur it horizontally:
         blur_x = Func("blur_x")
-        #blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + input_16[x, y, c] * 2 + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
 
         # Blur it vertically:
         blur_y = Func("blur_y")
-        #blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + blur_x[x, y, c] * 2+ blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
 
         # Convert back to 8-bit.
         output = Func("output")

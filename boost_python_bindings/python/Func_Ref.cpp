@@ -2,7 +2,7 @@
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-//#include "add_operators.h"
+#include "add_operators.h"
 
 #include "../../src/Func.h"
 #include "../../src/Tuple.h"
@@ -266,15 +266,15 @@ void defineFuncRefVar()
 
     typedef decltype(func_ref_var_class) func_ref_var_class_t;
     typedef func_ref_var_class_t frvc_t;
+
+    // FuncRefVar/FuncRefExpr does not have empty constructors, thus we cannot use p::self
     add_func_operators_with<FuncRefVar &, FuncRefVar &, frvc_t>(func_ref_var_class);
     add_func_operators_with<FuncRefVar &, h::FuncRefExpr &, frvc_t>(func_ref_var_class);
 
-    // the order matters, float then int, so that int is tried before float
-    add_func_operators_with<FuncRefVar &, float, frvc_t>(func_ref_var_class);
-    add_func_operators_with<FuncRefVar &, int, frvc_t>(func_ref_var_class);
-    add_func_operators_with<FuncRefVar &, h::Expr &, frvc_t>(func_ref_var_class);
-    //add_func_operators_with<int, FuncRefVar &, frvc_t>(func_ref_var_class); // this seems not to work as intended (at python level)
-    //add_func_operators_with<float, FuncRefVar &, frvc_t>(func_ref_var_class);
+    // h::Expr has empty constructor, thus self does the job
+    // h::Expr will "eat" int and float arguments via implicit conversion
+    add_operators_with<frvc_t, h::Expr>(func_ref_var_class);
+
 
     p::implicitly_convertible<FuncRefVar, h::Expr>();
 
@@ -349,18 +349,16 @@ void defineFuncRefExpr()
                  "What function is this calling?")
             ;
 
-
     typedef decltype(func_ref_expr_class) func_ref_expr_class_t;
     typedef func_ref_expr_class_t frec_t;
+
+    // FuncRefVar/FuncRefExpr does not have empty constructors, thus we cannot use p::self
     add_func_operators_with<FuncRefExpr &, h::FuncRefVar &, frec_t>(func_ref_expr_class);
     add_func_operators_with<FuncRefExpr &, FuncRefExpr &, frec_t>(func_ref_expr_class);
-    add_func_operators_with<FuncRefExpr &, h::Expr &, frec_t>(func_ref_expr_class);
 
-    // the order matters, float then int, so that int is tried before float
-    add_func_operators_with<FuncRefExpr &, float, frec_t>(func_ref_expr_class);
-    add_func_operators_with<FuncRefExpr &, int, frec_t>(func_ref_expr_class);
-    //add_func_operators_with<int, FuncRefExpr &, frec_t>(func_ref_expr_class); // does not work as intended (at python level)
-    //add_func_operators_with<float, FuncRefExpr &, frec_t>(func_ref_expr_class);
+    // h::Expr has empty constructor, thus self does the job
+    // h::Expr will "eat" int and float arguments via implicit conversion
+    add_operators_with<frec_t, h::Expr>(func_ref_expr_class);
 
     p::implicitly_convertible<FuncRefExpr, h::Expr>();
 
@@ -370,7 +368,6 @@ void defineFuncRefExpr()
 
 void defineFuncRef()
 {
-
     // only defined so that boost::python knows about these class,
     // not (yet) meant to be created or manipulated by the user
     p::class_<h::Internal::Function>("InternalFunction", p::no_init);
