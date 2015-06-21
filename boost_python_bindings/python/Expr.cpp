@@ -40,7 +40,7 @@ void defineExpr()
             .def(p::init<int>(p::arg("self"))) // Make an expression representing a const 32-bit int (i.e. an IntImm)
             .def(p::init<float>(p::arg("self"))) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
             .def(p::init<double>(p::arg("self"))) /* Make an expression representing a const 32-bit float, given a
-                                                                                                                                                                                                                                                                                     * double. Also emits a warning due to truncation. */
+                                                                                                                                                                                                                                                                                             * double. Also emits a warning due to truncation. */
             .def(p::init<std::string>(p::arg("self"))) // Make an expression representing a const string (i.e. a StringImm)
             .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self"))) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
             .def("type", &Expr::type, p::arg("self")); // Get the type of this expression node
@@ -52,9 +52,22 @@ void defineExpr()
     p::implicitly_convertible<double, h::Expr>();
     //p::implicitly_convertible<std::string, h::Expr>();
 
-
     p::class_< std::vector<Expr> >("ExprsVector")
-                .def( no_compare_indexing_suite< std::vector<Expr> >() );
+            .def( no_compare_indexing_suite< std::vector<Expr> >() );
+
+    p::enum_<h::DeviceAPI>("DeviceAPI",
+                           "An enum describing a type of device API. "
+                           "Used by schedules, and in the For loop IR node.")
+            /// Used to denote for loops that inherit their device from where they are used, generally the default
+            .value("Parent", h::DeviceAPI::Parent)
+            .value("Host", h::DeviceAPI::Host)
+            .value("Default_GPU", h::DeviceAPI::Default_GPU)
+            .value("CUDA", h::DeviceAPI::CUDA)
+            .value("OpenCL", h::DeviceAPI::OpenCL)
+            .value("GLSL", h::DeviceAPI::GLSL)
+            .value("Renderscript", h::DeviceAPI::Renderscript)
+            .export_values()
+            ;
 
     return;
 }
