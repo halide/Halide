@@ -9,7 +9,7 @@
 
 namespace h = Halide;
 namespace p = boost::python;
-using p::self;
+
 
 
 h::Expr reinterpret0(h::Type t, h::Expr e)

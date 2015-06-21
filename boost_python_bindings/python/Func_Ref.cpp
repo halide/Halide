@@ -12,7 +12,7 @@
 
 namespace h = Halide;
 namespace p = boost::python;
-using p::self;
+
 
 
 template<typename A, typename B>
@@ -203,7 +203,7 @@ h::Type func_ref_var_type(h::FuncRefVar &that)
 void defineFuncRefVar()
 {
     using Halide::FuncRefVar;
-    using p::self;
+
 
 
     // only defined so that boost::python knows about these classes,
@@ -295,7 +295,7 @@ void defineFuncRefVar()
 void defineFuncRefExpr()
 {
     using Halide::FuncRefExpr;
-    using p::self;
+
 
 
     auto func_ref_expr_class =

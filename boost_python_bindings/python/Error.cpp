@@ -9,7 +9,7 @@
 
 namespace h = Halide;
 namespace p = boost::python;
-using p::self;
+
 
 
 void translate_error(h::Error const& e)

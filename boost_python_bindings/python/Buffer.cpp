@@ -96,7 +96,7 @@ void defineBuffer()
     using Halide::Buffer;
     namespace h = Halide;
     namespace p = boost::python;
-    using p::self;
+
 
     define_buffer_t();
 

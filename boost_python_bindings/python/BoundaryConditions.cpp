@@ -142,7 +142,7 @@ void def_mirror_interior_for_image<void>()
 
 void defineBoundaryConditions()
 {
-    using p::self;
+    
 
     // Other variants of constant_exterior exist, but not yet implemented
 
