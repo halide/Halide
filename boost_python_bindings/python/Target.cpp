@@ -14,7 +14,6 @@ void defineTarget()
     using Halide::Target;
     namespace h = Halide;
     namespace p = boost::python;
-    using p::self;
 
     auto target_class =
             p::class_<Target>("Target",
@@ -23,8 +22,8 @@ void defineTarget()
 
             // not all constructors (yet) exposed
             //Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
-            .def(self == self)
-            .def(self != self)
+            .def(p::self == p::self)
+            .def(p::self != p::self)
 
             .def_readwrite("os", &Target::os)
             .def_readwrite("arch", &Target::arch)

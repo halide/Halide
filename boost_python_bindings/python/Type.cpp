@@ -46,7 +46,7 @@ void defineType()
 
     using Halide::Type;
     namespace p = boost::python;
-    using p::self;
+    
 
     p::class_<Type>("Type", p::no_init)
             .def_readonly("bits", &Type::bits,

@@ -12,7 +12,7 @@
 
 namespace h = Halide;
 namespace p = boost::python;
-using p::self;
+
 
 h::Stage &stage_split0(h::Stage &that, h::VarOrRVar old, h::VarOrRVar outer, h::VarOrRVar inner, h::Expr factor)
 {

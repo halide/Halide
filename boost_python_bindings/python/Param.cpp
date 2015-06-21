@@ -31,7 +31,7 @@ h::Expr imageparam_to_expr_operator0(h::ImageParam &that, p::tuple args_passed)
 void defineImageParam()
 {
     using Halide::ImageParam;
-    using p::self;
+    
 
     auto image_param_class =
             p::class_<ImageParam>("ImageParam",
@@ -223,7 +223,7 @@ template<typename T>
 void defineParam_impl(const std::string suffix, const h::Type type)
 {
     using Halide::Param;
-    using p::self;
+    
 
 
     auto param_class =

@@ -21,13 +21,10 @@ h::Argument::Kind argument_kind(h::Argument &that)
 
 
 
-
 void defineArgument()
 {
-
     using Halide::Argument;
     namespace p = boost::python;
-    using p::self;
 
     auto argument_class =
             p::class_<Argument>("Argument",

@@ -176,7 +176,7 @@ template<typename T>
 void defineImage_impl(const std::string suffix, const h::Type type)
 {
     using h::Image;
-    using p::self;
+    
 
     auto image_class =
             p::class_< Image<T>, p::bases<h::ImageBase> >(

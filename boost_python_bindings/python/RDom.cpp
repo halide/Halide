@@ -144,7 +144,7 @@ h::RDom *RDom_constructor4(h::Expr min0, h::Expr extent0,
 void defineRDom()
 {
     using Halide::RDom;
-    using p::self;
+    
 
     defineRVar();
 

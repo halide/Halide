@@ -36,7 +36,7 @@ void defineRealization()
 {
     using Halide::Realization;
     namespace p = boost::python;
-    using p::self;
+    
 
     //auto realization_class =
     p::class_<Realization>("Realization",
@@ -83,7 +83,7 @@ void defineTuple()
 {
     using Halide::Tuple;
     namespace p = boost::python;
-    using p::self;
+    
 
     //auto tuple_class =
     p::class_<Tuple>("Tuple",

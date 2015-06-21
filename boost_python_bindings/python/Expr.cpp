@@ -16,7 +16,7 @@ void defineExpr()
 
     namespace h = Halide;
     namespace p = boost::python;
-    using p::self;
+
 
     auto expr_class = p::class_<Expr>("Expr",
                                       "An expression or fragment of Halide code.\n" \
