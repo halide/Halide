@@ -399,16 +399,19 @@ void tuple_to_var_expr_vector(
             expr_added = true;
         }
 
-        if(expr_extract.check())
+        if(not expr_added)
         {
-            h::Expr e(expr_extract());
-            expr_args.push_back(e);
-            expr_added = true;
-        }
-        else if(not is_var and int32_extract.check())
-        { // not var, not expr, but int32
-            expr_args.push_back(h::Expr(int32_extract()));
-            expr_added = true;
+            if(expr_extract.check())
+            {
+                h::Expr e(expr_extract());
+                expr_args.push_back(e);
+                expr_added = true;
+            }
+            else if(not is_var and int32_extract.check())
+            { // not var, not expr, but int32
+                expr_args.push_back(h::Expr(int32_extract()));
+                expr_added = true;
+            }
         }
 
 
@@ -437,7 +440,6 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
 
     tuple_to_var_expr_vector("Func", args_passed, var_args, expr_args);
 
-
     p::object return_object;
 
     // We prioritize Args over Expr variant
@@ -450,7 +452,9 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
         return_object = p::object( p::handle<>( obj ) );
     }
     else
-    {   user_assert(expr_args.size() == args_len) << "Not all func_getitem_operator0 arguments where converted to Expr";
+    {   user_assert(expr_args.size() == args_len)
+                << "Not all func_getitem_operator0 arguments where converted to Expr "
+                << "( expr_args.size() " << expr_args.size() << "!= args_len " << args_len << ")";
         h::FuncRefExpr ret = that(expr_args);
 
         p::copy_non_const_reference::apply<h::FuncRefExpr &>::type converter;

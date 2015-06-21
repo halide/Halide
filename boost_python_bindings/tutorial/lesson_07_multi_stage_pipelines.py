@@ -35,7 +35,13 @@ def main():
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-        input = Image(imread("../../tutorial/images/rgb.png"))
+
+        # FIXME current Image keeps a (C++ level) reference to the ndarray object
+        # thus the line below will crash. Incref needs to be handled better.
+
+        #input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.png")
+        input_data = imread("../../tutorial/images/rgb.png")
+        input = Image(input_data, name="rgb.png")
         assert input.type() == UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -44,11 +50,13 @@ def main():
 
         # Blur it horizontally:
         blur_x = Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        #blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (input_16[x - 1, y, c] + input_16[x, y, c] * 2 + input_16[x + 1, y, c]) / 4
 
         # Blur it vertically:
         blur_y = Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        #blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (blur_x[x, y - 1, c] + blur_x[x, y, c] * 2 + blur_x[x, y + 1, c]) / 4
 
         # Convert back to 8-bit.
         output = Func("output")
@@ -90,7 +98,12 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
-        imsave("blurry_parrot_1.png", result)
+
+        result_data = image_to_ndarray(result)
+        print("result.shape", result_data.shape)
+
+        imsave("blurry_parrot_1.png", result_data)
+        print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
         # don't write code that reads out of bounds :) The more
@@ -100,7 +113,13 @@ def main():
     # The same pipeline, with a boundary condition on the input.
     if True:
         # Take a color 8-bit input
-        input = Image(imread("../../tutorial/images/rgb.png"))
+
+        # FIXME current Image keeps a (C++ level) reference to the ndarray object
+        # thus the line below will crash. Incref needs to be handled better.
+        #input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.bis.png")
+
+        input_data = imread("../../tutorial/images/rgb.png")
+        input = Image(input_data, name="rgb.bis.png")
         assert input.type() == UInt(8)
 
         # This time, we'll wrap the input in a Func that prevents
@@ -140,11 +159,13 @@ def main():
 
         # Blur it horizontally:
         blur_x = Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        #blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (input_16[x - 1, y, c] + input_16[x, y, c] * 2 + input_16[x + 1, y, c]) / 4
 
         # Blur it vertically:
         blur_y = Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        #blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (blur_x[x, y - 1, c] + blur_x[x, y, c] * 2+ blur_x[x, y + 1, c]) / 4
 
         # Convert back to 8-bit.
         output = Func("output")
@@ -157,7 +178,11 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
-        imsave("blurry_parrot_2.png", result)
+        result_data = image_to_ndarray(result)
+        print("result.shape", result_data.shape)
+
+        imsave("blurry_parrot_2.png", result_data)
+        print("Created blurry_parrot_2.png")
 
     print("Success!")
     return 0
