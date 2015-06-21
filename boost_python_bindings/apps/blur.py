@@ -40,7 +40,7 @@ def get_input_data():
     rgb_data = imread(image_path)
     print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
 
-    grey_data = np.mean(rgb_data, axis=2, dtype=float).astype(rgb_data.dtype)
+    grey_data = np.mean(rgb_data, axis=2, dtype=np.float32).astype(rgb_data.dtype)
     input_data = np.copy(grey_data, order="F")
 
     return input_data

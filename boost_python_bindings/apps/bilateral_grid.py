@@ -26,7 +26,7 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     # Add a boundary condition
     clamped = Func('clamped')
     clamped[x, y] = input[clamp(x, 0, input.width()-1),
-                          clamp(y, 0, input.height()-1),0]
+                          clamp(y, 0, input.height()-1)]
 
     # Construct the bilateral grid
     r = RDom(0, s_sigma, 0, s_sigma, 'r')
@@ -61,7 +61,7 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
 
     # Normalize
     bilateral_grid = Func('bilateral_grid')
-    bilateral_grid[x, y, c] = interpolated[x, y, 0]/interpolated[x, y, 1]
+    bilateral_grid[x, y] = interpolated[x, y, 0]/interpolated[x, y, 1]
 
     target = get_target_from_environment()
     if target.has_gpu_feature():
@@ -113,10 +113,12 @@ def get_input_data():
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
     rgb_data = imread(image_path)
-    print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
+    #print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
 
-    input_data = np.copy(rgb_data, order="F").astype(np.float32)
-    print("input_data", type(input_data), input_data.shape, input_data.dtype)
+    grey_data = np.mean(rgb_data, axis=2, dtype=np.float32)
+    input_data = np.copy(grey_data, order="F") / 255.0
+    # input is in [0, 1] range
+    #print("input_data", type(input_data), input_data.shape, input_data.dtype)
 
     return input_data
 
@@ -133,8 +135,9 @@ def filter_test_image(bilateral_grid, input):
     output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
     output_image = ndarray_to_image(output_data, "output_image")
 
-    print("input_image", input_image)
-    print("output_image", output_image)
+    if False:
+        print("input_image", input_image)
+        print("output_image", output_image)
 
     # do the actual computation
     bilateral_grid.realize(output_image)
@@ -144,16 +147,16 @@ def filter_test_image(bilateral_grid, input):
     output_path = "bilateral_grid.png"
     imsave(input_path, input_data)
     imsave(output_path, output_data)
-    print("\nbilateral_grid realized on output image.",
-          "Result saved at", output_path,
-          "( input data copy at", input_path, ")")
+    print("\nbilateral_grid realized on output_image.")
+    print("Result saved at '", output_path,
+          "' ( input data copy at '", input_path, "' ).", sep="")
 
     return
 
 
 def main():
 
-    input = ImageParam(float_t, 3, 'input')
+    input = ImageParam(float_t, 2, 'input')
     r_sigma = Param(float_t, 'r_sigma', 0.1) # Value needed if not generating an executable
     s_sigma = 8 # This is passed during code generation in the C++ version
 
