@@ -460,6 +460,9 @@ p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer
 
     p::object return_object = p::object( p::handle<>( obj ) );
 
+    //Py_IncRef(array);
+
+    // HOW TO MAKE DESTRUCTOR REDUCE REFERENCE HERE TOO ?
     return return_object;
 }
 
@@ -769,6 +772,7 @@ void defineImage()
            "Created Image refers to the array data (no copy).");
 
     p::def("Image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
+           //p::with_custodian_and_ward<1, 2> FIXME
            "Wrap numpy array in a Halide::Image."
            "Will take into account the array size, dimensions, and type."
            "Created Image refers to the array data (no copy).");

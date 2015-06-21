@@ -23,6 +23,8 @@
 #using namespace Halide
 from halide import *
 
+min_, max_ = __builtins__.min, __builtins__.max
+
 def main():
 
     # We're going to define and schedule our gradient function in
@@ -170,8 +172,8 @@ def main():
 
         print("Equivalent C:")
         for fused in range(4*4):
-            y = fused / 4
-            x = fused % 4
+            yy = fused / 4
+            xx = fused % 4
             print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
         
         print()
@@ -213,7 +215,7 @@ def main():
         for y_outer in range(2):
             for x_outer in range(2):
                 for y_inner in range(2):
-                    for x_outer in range(2):
+                    for x_inner in range(2):
                         xx = x_outer * 2 + x_inner
                         yy = y_outer * 2 + y_inner
                         print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
@@ -367,8 +369,8 @@ def main():
                     # evaluate points outside of the 5x4 box. We'll
                     # clamp x to be at most 3 (5 minus the split
                     # factor).
-                    if x > 3:
-                        x = 3
+                    if xx > 3:
+                        xx = 3
                     xx += x_inner
                     print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
@@ -468,7 +470,7 @@ def main():
     # Putting it all together.
     if True:
         # Are you ready? We're going to use all of the features above now.
-        gradient = Func_fast("gradient_fast")
+        gradient_fast = Func("gradient_fast")
         gradient_fast[x, y] = x + y
 
         # We'll process 256x256 tiles in parallel.
@@ -508,19 +510,19 @@ def main():
 
         print("Checking Halide result against equivalent C...")
         for tile_index in range(4*3):
-            y_outer = tile_index / 4
+            y_outer = tile_index // 4
             x_outer = tile_index % 4
-            for y_inner_outer in range(256/2):
-                for x_inner_outer in range(256/4):
+            for y_inner_outer in range(256//2):
+                for x_inner_outer in range(256//4):
                     # We're vectorized across x
-                    xx = min(x_outer * 256, 800-256) + x_inner_outer*4
+                    xx = min_(x_outer * 256, 800-256) + x_inner_outer*4
                     x_vec = [xx + 0,
                                     xx + 1,
                                     xx + 2,
                                     xx + 3]
 
                     # And we unrolled across y
-                    y_base = min(y_outer * 256, 600-256) + y_inner_outer*2
+                    y_base = min_(y_outer * 256, 600-256) + y_inner_outer*2
 
                     if True:
                         # y_pairs = 0
@@ -533,6 +535,8 @@ def main():
 
                         # Check the result.
                         for i in range(4):
+                            #print("x_vec[%i], y_vec[%i]" % (i, i),
+                            #      x_vec[i], y_vec[i])
                             if result(x_vec[i], y_vec[i]) != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
                                 return -1
