@@ -63,6 +63,12 @@ def main():
         # "reduction" definitions. A reduction definition is an
         # update definition that recursively refers back to the
         # function's current value at the same site:
+        if False:
+            e = f[x, y] + 17
+            print("f[x, y] + 17", e)
+            print("(f[x, y] + 17).type()", e.type())
+            print("(f[x, y]).type()", f[x,y].type())
+
         f[x, y] = f[x, y] + 17
 
         # If we confine our update to a single row, we can
@@ -169,9 +175,9 @@ def main():
         # Check the results match:
         for yy in range(100):
             for xx in range(100):
-                if halide_result(x, y) != c_result[y][x]:
+                if halide_result(xx, yy) != c_result[yy][xx]:
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
-                           x, y, halide_result(x, y), c_result[y][x]))
+                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
                     return -1
                 
             

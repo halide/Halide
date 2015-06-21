@@ -192,10 +192,9 @@ h::Func &func_reorder1(h::Func &that, p::object v0,
                        p::object v1, p::object v2, p::object v3)
 {
     p::list args_list;
-    p::object none;
     for(const p::object &v : {v0, v1, v2, v3})
     {
-        if(v != none)
+        if(not v.is_none())
         {
             args_list.append(v);
         }
@@ -472,6 +471,24 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
 }
 
 
+p::object func_getitem_operator1(h::Func &that, p::object arg_passed)
+{
+    p::tuple args_passed;
+    p::extract<p::tuple> tuple_extract(arg_passed);
+    if(tuple_extract.check())
+    {
+        args_passed = tuple_extract();
+    }
+    else
+    {
+        args_passed = p::make_tuple(arg_passed);
+    }
+
+    return func_getitem_operator0(that, args_passed);
+}
+
+
+
 template <typename T>
 h::Stage func_setitem_operator0(h::Func &that, p::tuple args_passed, T right_hand)
 {
@@ -495,6 +512,23 @@ h::Stage func_setitem_operator0(h::Func &that, p::tuple args_passed, T right_han
         h::Stage s = (ret = right_hand);
         return s;
     }
+}
+
+template <typename T>
+h::Stage func_setitem_operator1(h::Func &that, p::object arg_passed, T right_hand)
+{
+    p::tuple args_passed;
+    p::extract<p::tuple> tuple_extract(arg_passed);
+    if(tuple_extract.check())
+    {
+        args_passed = tuple_extract();
+    }
+    else
+    {
+        args_passed = p::make_tuple(arg_passed);
+    }
+
+    return func_setitem_operator0(that, args_passed, right_hand);
 }
 
 
@@ -628,11 +662,16 @@ void defineFunc()
                    "update definition (see \\ref RDom). If the function has "
                    "already been defined, and fewer arguments are given than the "
                    "function has dimensions, then enough implicit vars are added to "
-                   "the end of the argument list to make up the difference. (see \\ref Var::implicit)");
+                   "the end of the argument list to make up the difference. (see \\ref Var::implicit)")
+            .def("__getitem__", &func_getitem_operator1); // handles the case where a single index object is given
 
-    func_class.def("__setitem__", &func_setitem_operator0<h::FuncRefVar>);
-    func_class.def("__setitem__", &func_setitem_operator0<h::FuncRefExpr>);
-    func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
+    func_class
+            .def("__setitem__", &func_setitem_operator0<h::FuncRefVar>)
+            .def("__setitem__", &func_setitem_operator0<h::FuncRefExpr>)
+            .def("__setitem__", &func_setitem_operator0<h::Expr>)
+            .def("__setitem__", &func_setitem_operator1<h::FuncRefVar>) // handles the case where a single index object is given
+            .def("__setitem__", &func_setitem_operator1<h::FuncRefExpr>)
+            .def("__setitem__", &func_setitem_operator1<h::Expr>);
 
     /*
     &Func::__getitem__(self, *args):
