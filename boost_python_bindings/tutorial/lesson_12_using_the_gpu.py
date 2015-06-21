@@ -191,16 +191,20 @@ class MyPipeline:
         target = get_host_target()
 
         # Then enable OpenCL or CUDA.
-
-        # We'll enable OpenCL here, because it tends to give better
-        # performance than CUDA, even with NVidia's drivers, because
-        # NVidia's open source LLVM backend doesn't seem to do all
-        # the same optimizations their proprietary compiler does.
-        target.set_feature(TargetFeature.OpenCL)
-
-        # Uncomment the next line and comment out the line above to
-        # try CUDA instead.
-        # target.set_feature(TargetFeature.CUDA)
+        #use_opencl = False
+        use_opencl = True
+        if use_opencl:
+            # We'll enable OpenCL here, because it tends to give better
+            # performance than CUDA, even with NVidia's drivers, because
+            # NVidia's open source LLVM backend doesn't seem to do all
+            # the same optimizations their proprietary compiler does.
+            target.set_feature(TargetFeature.OpenCL)
+            print("(Using OpenCL)")
+        else:
+            # Uncomment the next line and comment out the line above to
+            # try CUDA instead.
+            target.set_feature(TargetFeature.CUDA)
+            print("(Using CUDA)")
 
         # If you want to see all of the OpenCL or CUDA API calls done
         # by the pipeline, you can also enable the Debug
