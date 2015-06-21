@@ -56,9 +56,15 @@ void func_realize3(h::Func &that, h::Buffer dst, const h::Target &target = h::Ta
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize3_overloads, func_realize3, 2, 3)
 
 
-void func_compile_jit(h::Func &that)
+void func_compile_jit0(h::Func &that)
 {
     that.compile_jit();
+    return;
+}
+
+void func_compile_jit1(h::Func &that, const h::Target &target = h::get_target_from_environment())
+{
+    that.compile_jit(target);
     return;
 }
 
@@ -493,13 +499,14 @@ void defineFunc()
                        "Compile to object file and header pair, with the given arguments. "
                        "Also names the C function to match the first argument."));
 
-    func_class.def("compile_jit", &func_compile_jit,
+    func_class.def("compile_jit", &func_compile_jit1, p::args("self", "target"),
                    "Eagerly jit compile the function to machine code. This "
                    "normally happens on the first call to realize. If you're "
                    "running your halide pipeline inside time-sensitive code and "
                    "wish to avoid including the time taken to compile a pipeline, "
                    "then you can call this ahead of time. Returns the raw function "
-                   "pointer to the compiled pipeline.");
+                   "pointer to the compiled pipeline.")
+            .def("compile_jit", &func_compile_jit0, p::arg("self"));
 
     func_class.def("debug_to_file", &Func::debug_to_file, p::args("self", "filename"),
                    "When this function is compiled, include code that dumps its values "
