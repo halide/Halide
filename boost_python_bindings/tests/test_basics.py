@@ -162,6 +162,19 @@ def test_basics3():
     left += Expr(5) # FIX double instead of int
     left += ss # FIX the Stage part
 
+    return
+
+def test_operator_order():
+
+    x = Var('x')
+    f = Func('f')
+    x + 1
+    1 + x
+    print("x", x, ", x + 1", x + 1, ", 1 + x", 1 + x)
+    f[x] = x ** 2
+    f[x] + 1
+    Expr(1) + f[x]
+    1 + f[x]
 
     return
 
@@ -216,6 +229,7 @@ if __name__ == "__main__":
     test_ndarray_to_image()
     test_image_to_ndarray()
     test_types()
+    test_operator_order()
     test_basics()
     test_basics2()
     test_basics3()
