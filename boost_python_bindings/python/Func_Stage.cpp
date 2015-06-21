@@ -6,9 +6,10 @@
 
 #include "../../src/Func.h"
 #include "Func.h"
+#include "Func_gpu.h"
 
-#include <vector>
-#include <string>
+//#include <vector>
+//#include <string>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -168,6 +169,7 @@ void defineStage()
     //Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     //                                Expr x_size, Expr y_size, Expr z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
+    defineFuncOrStageGpuMethods<h::Stage>(stage_class);
 
     return;
 }
