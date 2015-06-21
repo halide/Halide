@@ -7,6 +7,7 @@
 #include "Expr.h"
 #include "Func.h"
 #include "Image.h"
+#include "InlineReductions.h"
 #include "IROperator.h"
 #include "Param.h"
 #include "RDom.h"
@@ -36,6 +37,7 @@ BOOST_PYTHON_MODULE(halide)
     defineExpr();
     defineFunc();
     defineImage();
+    defineInlineReductions();
     defineOperators();
     defineParam();
     defineRDom();

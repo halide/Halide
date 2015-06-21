@@ -118,6 +118,80 @@ T image_call_operator3(h::Image<T> &that, int x, int y, int z, int w)
     return that(x,y,z,w);
 }
 
+
+template<typename T>
+T image_to_setitem_operator0(h::Image<T> &that, int x, T value)
+{
+    return that(x) = value;
+}
+
+template<typename T>
+T image_to_setitem_operator1(h::Image<T> &that, int x, int y, T value)
+{
+    return that(x, y) = value;
+}
+
+template<typename T>
+T image_to_setitem_operator2(h::Image<T> &that, int x, int y, int z, T value)
+{
+    return that(x, y, z) = value;
+}
+
+template<typename T>
+T image_to_setitem_operator3(h::Image<T> &that, int x, int y, int z, int w, T value)
+{
+    return that(x, y, z, w) = value;
+}
+
+
+template<typename T>
+T image_to_setitem_operator4(h::Image<T> &that, p::tuple &args_passed, T value)
+{
+    std::vector<int> int_args;
+    const size_t args_len = p::len(args_passed);
+    for(size_t i=0; i < args_len; i+=1)
+    {
+        p::object o = args_passed[i];
+        p::extract<int> int32_extract(o);
+
+        if(int32_extract.check())
+        {
+            int_args.push_back(int32_extract());
+        }
+    }
+
+    if(int_args.size() != args_len)
+    {
+        for(size_t j=0; j < args_len; j+=1)
+        {
+            p::object o = args_passed[j];
+            const std::string o_str = p::extract<std::string>(p::str(o));
+            printf("image_to_setitem_operator4 args_passed[%lu] == %s\n", j, o_str.c_str());
+        }
+        throw std::invalid_argument("image_to_setitem_operator4 only handles "
+                                             "a tuple of (convertible to) int.");
+    }
+
+    switch(int_args.size())
+    {
+    case 1:
+        return that(int_args[0]) = value;
+    case 2:
+        return that(int_args[0], int_args[1]) = value;
+    case 3:
+        return that(int_args[0], int_args[1], int_args[2]) = value;
+    case 4:
+        return that(int_args[0], int_args[1], int_args[2], int_args[3]) = value;
+
+    default:
+        printf("image_to_setitem_operator4 receive a tuple with %zu integers\n", int_args.size());
+        throw std::invalid_argument("image_to_setitem_operator4 only handles 1 to 4 dimensional tuples");
+    }
+
+    return 0; // this line should never be reached
+}
+
+
 template<typename T>
 std::string image_repr(h::Image<T> &image)
 {
@@ -284,8 +358,6 @@ void defineImage_impl(const std::string suffix, const h::Type type)
 
     // Access operators (to Expr, and to actual value)
     image_class
-            //            FIXME must implement getittem and setittem
-            //            see func_class.def("__setitem__", &func_setitem_operator0<h::Expr>);
 
             .def("__getitem__", &image_to_expr_operator0<T>, p::arg("self"),
                  get_item_doc.c_str())
@@ -314,6 +386,17 @@ void defineImage_impl(const std::string suffix, const h::Type type)
             .def("__call__", &image_call_operator3<T>, p::args("self", "x", "y", "z", "w"),
                  "Assuming this image is four-dimensional, get the value of the element at position (x, y, z, w)")
 
+            .def("__setitem__", &image_to_setitem_operator0<T>, p::args("self", "x", "value"),
+                 "Assuming this image is one-dimensional, set the value of the element at position x")
+            .def("__setitem__", &image_to_setitem_operator1<T>, p::args("self", "x", "y", "value"),
+                 "Assuming this image is two-dimensional, set the value of the element at position (x, y)")
+            .def("__setitem__", &image_to_setitem_operator2<T>, p::args("self", "x", "y", "z", "value"),
+                 "Assuming this image is three-dimensional, set the value of the element at position (x, y, z)")
+            .def("__setitem__", &image_to_setitem_operator3<T>, p::args("self", "x", "y", "z", "w", "value"),
+                 "Assuming this image is four-dimensional, set the value of the element at position (x, y, z, w)")
+            .def("__setitem__", &image_to_setitem_operator4<T>, p::args("self", "tuple", "value"),
+                 "Assuming this image is one to four-dimensional, "
+                 "set the value of the element at position indicated by tuple (x, y, z, w)")
 
             .def("buffer", &image_to_buffer<T>, p::args("self"),
                  "Cast to Halide::buffer")
