@@ -129,7 +129,8 @@ void defineStage()
                  "Reorder variables to have the given nesting order, "
                  "from innermost out")
             .def("reorder", &func_reorder1<Stage>, (p::arg("self"), p::arg("v0"), p::arg("v1")=p::object(),
-                                                    p::arg("v2")=p::object(), p::arg("v3")=p::object()),
+                                                    p::arg("v2")=p::object(), p::arg("v3")=p::object(),
+                                                    p::arg("v4")=p::object(), p::arg("v5")=p::object()),
                  p::return_internal_reference<1>(),
                  "Reorder variables to have the given nesting order, "
                  "from innermost out");

@@ -454,6 +454,8 @@ void defineFunc()
     """
 */
 
+    // FIXME should share these definitions with Stage instead of having copy and paste code
+
     func_class.def("split", &Func::split, p::args("self", "old", "outer", "inner", "factor"),
                    p::return_internal_reference<1>(),
                    "Split a dimension into inner and outer subdimensions with the "
@@ -525,7 +527,8 @@ void defineFunc()
                  "Reorder variables to have the given nesting order, "
                  "from innermost out")
             .def("reorder", &func_reorder1<Func>, (p::arg("self"), p::arg("v0"), p::arg("v1")=p::object(),
-                                                   p::arg("v2")=p::object(), p::arg("v3")=p::object()),
+                                                   p::arg("v2")=p::object(), p::arg("v3")=p::object(),
+                                                   p::arg("v4")=p::object(), p::arg("v5")=p::object()),
                  p::return_internal_reference<1>(),
                  "Reorder variables to have the given nesting order, "
                  "from innermost out");
