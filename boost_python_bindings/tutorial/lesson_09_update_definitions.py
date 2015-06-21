@@ -36,6 +36,8 @@ from halide import *
 from scipy.misc import imread
 import numpy as np
 
+min_, max_ = __builtins__.min, __builtins__.max
+
 def main():
     # Declare some Vars to use below.
     x, y = Var ("x"), Var ("y")
@@ -43,6 +45,9 @@ def main():
     # Load a grayscale image to use as an input.
     #Image<uint8_t> input = load<uint8_t>("images/gray.png")
     input_data = imread("../../tutorial/images/gray.png")
+    if True:
+         # making the image smaller to go faster
+        input_data = input_data[:160, :150]
     assert input_data.dtype == np.uint8
     input = Image(input_data)
     
@@ -222,7 +227,7 @@ def main():
 
         # Check the answers agree:
         for xx in range(256):
-            if c_result[x] != halide_result(x):
+            if c_result[xx] != halide_result(xx):
                 raise Exception("halide_result(%d) = %d instead of %d" % (
                        xx, halide_result(xx), c_result[xx]))
                 return -1
@@ -276,21 +281,21 @@ def main():
         # Pure step. Vectorized in x and parallelized in y.
         for yy in range( 16): # Should be a parallel for loop
             for x_vec in range(4):
-                x = [x_vec*4, x_vec*4+1, x_vec*4+2, x_vec*4+3]
-                c_result[yy][x[0]] = x[0] * yy
-                c_result[yy][x[1]] = x[1] * yy
-                c_result[yy][x[2]] = x[2] * yy
-                c_result[yy][x[3]] = x[3] * yy
+                xx = [x_vec*4, x_vec*4+1, x_vec*4+2, x_vec*4+3]
+                c_result[yy][xx[0]] = xx[0] * yy
+                c_result[yy][xx[1]] = xx[1] * yy
+                c_result[yy][xx[2]] = xx[2] * yy
+                c_result[yy][xx[3]] = xx[3] * yy
             
         
 
         # First update. Vectorized in x.
         for x_vec in range(4):
-            x = [x_vec*4, x_vec*4+1, x_vec*4+2, x_vec*4+3]
-            c_result[1][x[0]] = c_result[0][x[0]]
-            c_result[1][x[1]] = c_result[0][x[1]]
-            c_result[1][x[2]] = c_result[0][x[2]]
-            c_result[1][x[3]] = c_result[0][x[3]]
+            xx = [x_vec*4, x_vec*4+1, x_vec*4+2, x_vec*4+3]
+            c_result[1][xx[0]] = c_result[0][xx[0]]
+            c_result[1][xx[1]] = c_result[0][xx[1]]
+            c_result[1][xx[2]] = c_result[0][xx[2]]
+            c_result[1][xx[3]] = c_result[0][xx[3]]
         
 
         # Second update. Parallelized in chunks of size 4 in y.
@@ -446,7 +451,7 @@ def main():
             c_result = np.empty((10), dtype=np.int)
             # Pure step for the consumer
             for xx in range( 10 ):
-                c_result[x] = x
+                c_result[xx] = xx
             
             # Update step for the consumer
             for xx in range( 10 ):
@@ -575,7 +580,7 @@ def main():
             # Check the results match
             for yy in range( 10):
                 for xx in range( 10 ):
-                    if halide_result(xx) != c_result[xx]:
+                    if halide_result(xx, yy) != c_result[yy][xx]:
                         print("halide_result(%d, %d) = %d instead of %d",
                                xx, yy, halide_result(xx, yy), c_result[yy][xx])
                         return -1
@@ -599,7 +604,7 @@ def main():
             r = RDom(0, 5)
             producer[x] = x * 17
             consumer[x] = x + 10
-            consumer[x] += r + producer(x + r)
+            consumer[x] += r + producer[x + r]
 
             producer.compute_at(consumer, r)
 
@@ -624,7 +629,6 @@ def main():
                     # Now use it in the update step of the consumer.
                     c_result[xx] += rr + producer_storage[0]
                 
-            
 
             # Check the results match
             for xx in range( 10 ):
@@ -633,9 +637,6 @@ def main():
                            xx, halide_result(xx), c_result[xx]))
                     return -1
                 
-            
-
-
 
     # A real-world example of a reduction inside a producer-consumer chain.
     if True:
@@ -653,15 +654,14 @@ def main():
         # Compute the 5x5 sum around each pixel.
         local_sum = Func("local_sum")
         local_sum[x, y] = 0 # Compute the sum as a 32-bit integer
-        local_sum[x, y] += clamped(x + r.x, y + r.y)
+        local_sum[x, y] += clamped[x + r.x, y + r.y]
 
         # Divide the sum by 25 to make it an average
         blurry = Func("blurry")
         blurry[x, y] = cast(UInt(8), local_sum[x, y] / 25)
 
-        
         halide_realization = blurry.realize(input.width(), input.height())
-        halide_result = Image(Int(32), halide_realization)
+        halide_result = Image(UInt(8), halide_realization)
 
         # The default schedule will inline 'clamped' into the update
         # step of 'local_sum', because clamped only has a pure
@@ -670,38 +670,37 @@ def main():
         # because the default schedule for reductions is
         # compute-innermost. Here's the equivalent C:
 
+        #cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
+        local_sum = np.empty((1), dtype=np.int32)
+
         c_result = Image(UInt(8), input.width(), input.height())
-        for yy in range( input.height()):
-            for xx in range( input.width() ):
-                local_sum = np.empty((1), dtype=np.int)
+        for yy in range(input.height()):
+            for xx in range(input.width()):
+                # FIXME this loop is quite slow
                 # Pure step of local_sum
                 local_sum[0] = 0
                 # Update step of local_sum
                 for r_y in range(-2, 2+1):
                     for r_x in range(-2, 2+1):
                         # The clamping has been inlined into the update step.
-                        clamped_x = min(max(x + r_x, 0), input.width()-1)
-                        clamped_y = min(max(y + r_y, 0), input.height()-1)
+                        clamped_x = min_(max_(xx + r_x, 0), input.width()-1)
+                        clamped_y = min_(max_(yy + r_y, 0), input.height()-1)
                         local_sum[0] += input(clamped_x, clamped_y)
-                    
-                
+
                 # Pure step of blurry
                 #c_result(x, y) = (uint8_t)(local_sum[0] / 25)
-                c_result[x, y] = min(max((local_sum[0] / 25), 0), 255)
-            
-        
+                #c_result[xx, yy] = cast_to_uint8(local_sum[0] / 25)
+                c_result[xx, yy] = int(local_sum[0] / 25) # cast done internally
 
         # Check the results match
-        for yy in range( input.height()):
-            for xx in range( input.width() ):
-                if halide_result(xx, yy) != c_result[xx, yy]:
-                    raise Exception("halide_result(%d, %d) = %d instead of %d" % (
-                           xx, yy, halide_result(xx, yy), c_result(xx, yy)))
+        for yy in range(input.height()):
+            for xx in range(input.width()):
+                if halide_result(xx, yy) != c_result(xx, yy):
+                    raise Exception("halide_result(%d, %d) = %d instead of %d"
+                                    % (xx, yy,
+                                       halide_result(xx, yy), c_result(xx, yy)))
                     return -1
                 
-            
-        
-    
 
     # Reduction helpers.
     if True:
@@ -722,7 +721,6 @@ def main():
         # So even though f1 references a reduction domain, it is a
         # pure function. The reduction domain has been swallowed to
         # define the inner anonymous reduction.
-
         halide_result_1 = Image(Int(32), f1.realize(10))
         halide_result_2 = Image(Int(32), f2.realize(10))
 
@@ -927,7 +925,9 @@ def main():
             
 
         #endif # __SSE2__
-
+    else:
+        print("(Skipped the SSE2 section of the code, "
+              "since non-sense in python world.)")
     
     print("Success!")
     return 0
