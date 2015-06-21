@@ -159,8 +159,9 @@ def test_basics3():
     left = histogram[x, y, zi, c]
     print("histogram[x, y, zi, c]", histogram[x, y, zi, c])
     print("histogram[x, y, zi, c]", left)
-    left += Expr(5) # FIX double instead of int
-    left += ss # FIX the Stage part
+    left += 5
+    print("histogram[x, y, zi, c] after += 5", left)
+    left += ss
 
     return
 
