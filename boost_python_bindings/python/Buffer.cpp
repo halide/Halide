@@ -12,14 +12,15 @@
 #include <vector>
 #include <string>
 
+namespace h = Halide;
 
 /// helper function to access &(Buffer::operator Argument)
-Halide::Argument buffer_to_argument(Halide::Buffer &that)
+h::Argument buffer_to_argument(h::Buffer &that)
 {
     return that;
 }
 
-size_t host_ptr_as_int(Halide::Buffer &that)
+size_t host_ptr_as_int(h::Buffer &that)
 {
     return reinterpret_cast<size_t>(that.host_ptr());
 }
@@ -40,14 +41,11 @@ std::string buffer_t_repr(buffer_t &that)
     return repr;
 }
 
-void defineBuffer()
-{
 
-    using Halide::Buffer;
+void define_buffer_t()
+{
     namespace h = Halide;
     namespace p = boost::python;
-    using p::self;
-
 
     p::class_<buffer_t>("buffer_t",
                         " The raw representation of an image passed around by generated "
@@ -81,6 +79,27 @@ void defineBuffer()
             ;
 
 
+    return;
+}
+
+
+h::Buffer *buffer_init0(h::Type t, int x_size, int y_size, int z_size, int w_size,
+                          const std::string name)
+{
+    return new h::Buffer(t, x_size, y_size, z_size, w_size, NULL, name);
+}
+
+
+void defineBuffer()
+{
+
+    using Halide::Buffer;
+    namespace h = Halide;
+    namespace p = boost::python;
+    using p::self;
+
+    define_buffer_t();
+
     p::class_<Buffer>("Buffer",
                       "The internal representation of an image, or other dense array "
                       "data. The Image type provides a typed view onto a buffer for the "
@@ -91,6 +110,10 @@ void defineBuffer()
                       "wrapper on a buffer_t, which is the C-style type Halide uses for "
                       "passing buffers around.",
                       p::init<>(p::arg("self")))
+            .def("__init__", p::make_constructor(&buffer_init0, p::default_call_policies(),
+                     (/*p::arg("self"),*/ p::arg("type"),
+                      p::arg("x_size")=0, p::arg("y_size")=0, p::arg("z_size")=0, p::arg("w_size")=0,
+                      p::arg("name")="")))
             .def(p::init<h::Type, int, int, int, int, uint8_t*, std::string>(
                      (p::arg("self"), p::arg("type"),
                       p::arg("x_size")=0, p::arg("y_size")=0, p::arg("z_size")=0, p::arg("w_size")=0,
