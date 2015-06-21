@@ -196,18 +196,18 @@ class MyPipeline:
         # performance than CUDA, even with NVidia's drivers, because
         # NVidia's open source LLVM backend doesn't seem to do all
         # the same optimizations their proprietary compiler does.
-        target.set_feature(Target.OpenCL)
+        target.set_feature(TargetFeature.OpenCL)
 
         # Uncomment the next line and comment out the line above to
         # try CUDA instead.
-        # target.set_feature(Target.CUDA)
+        # target.set_feature(TargetFeature.CUDA)
 
         # If you want to see all of the OpenCL or CUDA API calls done
         # by the pipeline, you can also enable the Debug
         # flag. This is helpful for figuring out which stages are
         # slow, or when CPU -> GPU copies happen. It hurts
         # performance though, so we'll leave it commented out.
-        # target.set_feature(Target::Debug)
+        # target.set_feature(TargetFeature.Debug)
 
         self.curved.compile_jit(target)
 
