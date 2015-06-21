@@ -185,6 +185,36 @@ h::Expr print_when0(h::Expr condition, p::tuple values_passed)
     return h::print_when(condition, values);
 }
 
+h::Expr random_float0()
+{
+    return h::random_float();
+}
+
+h::Expr random_float1(h::Expr seed)
+{
+    return h::random_float(seed);
+}
+
+h::Expr random_int0()
+{
+    return h::random_int();
+}
+
+h::Expr random_int1(h::Expr seed)
+{
+    return h::random_int(seed);
+}
+
+
+h::Expr undef0(h::Type type)
+{
+    return h::undef(type);
+}
+
+h::Expr memoize_tag0(h::Expr result, const std::vector<h::Expr> &cache_key_values)
+{
+    return h::memoize_tag(result, cache_key_values);
+}
 
 void defineOperators()
 {
@@ -485,6 +515,158 @@ void defineOperators()
 
     p::def("print_when", &print_when0, (p::arg("condition"), p::arg("values")),
            "Create an Expr that prints whenever it is evaluated, provided that the condition is true.");
+
+    p::def("lerp", &h::lerp, p::args("zero_val", "one_val", "weight"),
+           "Linear interpolate between the two values according to a weight.\n"
+           "\\param zero_val The result when weight is 0\n"
+           "\\param one_val The result when weight is 1\n"
+           "\\param weight The interpolation amount\n\n"
+
+           "Both zero_val and one_val must have the same type. All types are "
+           "supported, including bool.\n"
+
+           "The weight is treated as its own type and must be float or an "
+           "unsigned integer type. It is scaled to the bit-size of the type of "
+           "x and y if they are integer, or converted to float if they are "
+           "float. Integer weights are converted to float via division by the "
+           "full-range value of the weight's type. Floating-point weights used "
+           "to interpolate between integer values must be between 0.0f and "
+           "1.0f, and an error may be signaled if it is not provably so. (clamp "
+           "operators can be added to provide proof. Currently an error is only "
+           "signalled for constant weights.)\n"
+
+           "For integer linear interpolation, out of range values cannot be "
+           "represented. In particular, weights that are conceptually less than "
+           "0 or greater than 1.0 are not representable. As such the result is "
+           "always between x and y (inclusive of course). For lerp with "
+           "floating-point values and floating-point weight, the full range of "
+           "a float is valid, however underflow and overflow can still occur.\n"
+
+           "Ordering is not required between zero_val and one_val:\n"
+           "    lerp(42, 69, .5f) == lerp(69, 42, .5f) == 56\n\n"
+
+           "Results for integer types are for exactly rounded arithmetic. As "
+           "such, there are cases where 16-bit and float differ because 32-bit "
+           "floating-point (float) does not have enough precision to produce "
+           "the exact result. (Likely true for 32-bit integer "
+           "vs. double-precision floating-point as well.)\n"
+
+           "At present, double precision and 64-bit integers are not supported.\n"
+
+           "Generally, lerp will vectorize as if it were an operation on a type "
+           "twice the bit size of the inferred type for x and y. ");
+
+
+    p::def("popcount", &h::popcount, p::args("x"),
+           "Count the number of set bits in an expression.");
+
+    p::def("count_leading_zeros", &h::count_leading_zeros, p::args("x"),
+           "Count the number of leading zero bits in an expression. The result is "
+           "undefined if the value of the expression is zero.");
+
+    p::def("count_trailing_zeros", &h::count_trailing_zeros, p::args("x"),
+           "Count the number of trailing zero bits in an expression. The result is "
+           "undefined if the value of the expression is zero.");
+
+    p::def("random_float", &random_float1, p::args("seed"),
+           "Return a random variable representing a uniformly distributed "
+           "float in the half-open interval [0.0f, 1.0f). For random numbers of "
+           "other types, use lerp with a random float as the last parameter.\n"
+
+           "Optionally takes a seed.\n"
+
+           "Note that:\n"
+           "\\code\n"
+           "Expr x = random_float();\n"
+           "Expr y = x + x;\n"
+           "\\endcode\n\n"
+
+           "is very different to\n"
+           "\\code\n"
+           "Expr y = random_float() + random_float();\n"
+           "\\endcode\n\n"
+
+           "The first doubles a random variable, and the second adds two "
+           "independent random variables.\n"
+
+           "A given random variable takes on a unique value that depends "
+           "deterministically on the pure variables of the function they belong "
+           "to, the identity of the function itself, and which definition of "
+           "the function it is used in. They are, however, shared across tuple "
+           "elements.\n"
+
+           "This function vectorizes cleanly.");
+    p::def("random_float", &random_float0); // no args
+
+    p::def("random_int", &random_int1, p::args("seed"),
+           "Return a random variable representing a uniformly distributed "
+           "32-bit integer. See \\ref random_float. Vectorizes cleanly.");
+    p::def("random_int", &random_int0); // no args
+
+    p::def("undef", &undef0, p::args("type"),
+           "Return an undef value of the given type. Halide skips stores that "
+           "depend on undef values, so you can use this to mean \"do not modify "
+           "this memory location\". This is an escape hatch that can be used for "
+           "several things:\n"
+
+           "You can define a reduction with no pure step, by setting the pure "
+           "step to undef. Do this only if you're confident that the update "
+           "steps are sufficient to correctly fill in the domain.\n"
+
+           "For a tuple-valued reduction, you can write an update step that "
+           "only updates some tuple elements.\n"
+
+           "You can define single-stage pipeline that only has update steps,"
+           "and depends on the values already in the output buffer.\n"
+
+           "Use this feature with great caution, as you can use it to load from "
+           "uninitialized memory.\n");
+
+    p::def("memoize_tag", &memoize_tag0, p::args("result", "cache_key_values"),
+           "Control the values used in the memoization cache key for memoize. "
+           "Normally parameters and other external dependencies are "
+           "automatically inferred and added to the cache key. The memoize_tag "
+           "operator allows computing one expression and using either the "
+           "computed value, or one or more other expressions in the cache key "
+           "instead of the parameter dependencies of the computation. The "
+           "single argument version is completely safe in that the cache key "
+           "will use the actual computed value -- it is difficult or imposible "
+           "to produce erroneous caching this way. The more-than-one argument "
+           "version allows generating cache keys that do not uniquely identify "
+           "the computation and thus can result in caching errors.n"
+
+           "A potential use for the single argument version is to handle a "
+           "floating-point parameter that is quantized to a small "
+           "integer. Mutliple values of the float will produce the same integer "
+           "and moving the caching to using the integer for the key is more "
+           "efficient.\n"
+
+           "The main use for the more-than-one argument version is to provide "
+           "cache key information for Handles and ImageParams, which otherwise "
+           "are not allowed inside compute_cached operations. E.g. when passing "
+           "a group of parameters to an external array function via a Handle, "
+           "memoize_tag can be used to isolate the actual values used by that "
+           "computation. If an ImageParam is a constant image with a persistent "
+           "digest, memoize_tag can be used to key computations using that image "
+           "on the digest.");
+    //Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
+
+    //template<typename ...Args>
+    //Expr memoize_tag(Expr result, Args... args)
+
+    p::def("likely", &h::likely, p::args("e"),
+           "Expressions tagged with this intrinsic are considered to be part "
+           "of the steady state of some loop with a nasty beginning and end "
+           "(e.g. a boundary condition). When Halide encounters likely "
+           "intrinsics, it splits the containing loop body into three, and "
+           "tries to simplify down all conditions that lead to the likely. For "
+           "example, given the expression: select(x < 1, bar, x > 10, bar, "
+           "likely(foo)), Halide will split the loop over x into portions where "
+           "x < 1, 1 <= x <= 10, and x > 10.\n"
+
+           "You're unlikely to want to call this directly. You probably want to "
+           "use the boundary condition helpers in the BoundaryConditions "
+           "namespace instead. ");
 
     return;
 }
