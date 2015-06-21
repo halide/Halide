@@ -31,6 +31,7 @@ def main():
     # Let's examine various scheduling options for a simple two stage
     # pipeline. We'll start with the default schedule:
     if True:
+        print("="*50)
         producer, consumer = Func("producer_default"), Func("consumer_default")
 
         # The first stage will be some simple pointwise math similar
@@ -90,6 +91,7 @@ def main():
     # values required in the producer before computing any of the
     # consumer. We call this schedule "root".
     if True:
+        print("="*50)
         # Start with the same function definitions:
         producer, consumer = Func("producer_root"), Func("consumer_root")
         producer[x, y] = sqrt(x * y)
@@ -188,6 +190,7 @@ def main():
     # compute_root. Next we'll alternate between computing the
     # producer and consumer on a per-scanline basis:
     if True:
+        print("="*50)
         # Start with the same function definitions:
         producer, consumer = Func("producer_y"), Func("consumer_y")
         producer[x, y] = sqrt(x * y)
@@ -265,6 +268,7 @@ def main():
     # which we allocate storage for producer, and the loop level at
     # which we actually compute it. This unlocks a few optimizations.
     if True:
+        print("="*50)
         producer, consumer = Func("producer_store_root_compute_y"), Func("consumer_store_root_compute_y")
         producer[x, y] = sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
@@ -382,6 +386,7 @@ def main():
     # We can do even better, by leaving the storage outermost, but
     # moving the computation into the innermost loop:
     if True:
+        print("="*50)
         producer, consumer = Func("producer_store_root_compute_x"), Func("consumer_store_root_compute_x")
         producer[x, y] = sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
@@ -468,6 +473,7 @@ def main():
     # into new inner and outer sub-variables and then schedule with
     # respect to those. We'll use this to express fusion in tiles:
     if True:
+        print("="*50)
         producer, consumer = Func("producer_tile"), Func("consumer_tile")
         producer[x, y] = sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
@@ -551,6 +557,7 @@ def main():
     # understand this schedule, then you understand 95% of scheduling
     # in Halide.
     if True:
+        print("="*50)
         producer, consumer = Func("producer_mixed"), Func("consumer_mixed")
         producer[x, y] = sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
@@ -587,9 +594,8 @@ def main():
 
         c_result = np.empty((600, 800), dtype=np.float32)
 
-
         # For every strip of 16 scanlines
-        for yo in range(600//16): # (this loop is parallel in the Halide version)
+        for yo in range(600//16 + 1): # (this loop is parallel in the Halide version)
             # 16 doesn't divide 600, so push the last slice upwards to fit within [0, 599] (see lesson 05).
             y_base = yo * 16
             if y_base > (600-16):
@@ -599,12 +605,12 @@ def main():
             producer_storage = np.empty((2, 801), dtype=np.float32)
 
             # For every scanline in the strip of 16:
-            for yi  in range(16):
+            for yi in range(16):
                 yy = y_base + yi
 
                 for py in range(yy, yy+2):
                     # Skip scanlines already computed *within this task*
-                    if (yi > 0) and (py == y):
+                    if (yi > 0) and (py == yy):
                         continue
 
                     # Compute this scanline of the producer in 4-wide vectors
@@ -615,8 +621,11 @@ def main():
                             x_base = 801 - 4
                             
                         # If you're on x86, Halide generates SSE code for this part:
-                        xx = [x_base, x_base + 1, x_base + 2, x_base + 3]
-                        vec= [math.sqrt(xx[0] * py), math.sqrt(xx[1] * py), math.sqrt(xx[2] * py), math.sqrt(xx[3] * py)]
+                        xx = [x_base + 0, x_base + 1, x_base + 2, x_base + 3]
+                        vec= [math.sqrt(xx[0] * py),
+                              math.sqrt(xx[1] * py),
+                              math.sqrt(xx[2] * py),
+                              math.sqrt(xx[3] * py)]
                         producer_storage[py & 1][xx[0]] = vec[0]
                         producer_storage[py & 1][xx[1]] = vec[1]
                         producer_storage[py & 1][xx[2]] = vec[2]
@@ -665,7 +674,6 @@ def main():
         # should tell you something.
         for yy in range(600):
             for xx in range(800):
-
                 error = halide_result(xx, yy) - c_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
                 if (error < -0.001) or (error > 0.001):
@@ -707,6 +715,7 @@ def main():
     # trade-offs between locality, redundant work, and parallelism,
     # without messing up the actual result you're trying to compute.
 
+    print("="*50)
     print("Success!")
     return 0
 
