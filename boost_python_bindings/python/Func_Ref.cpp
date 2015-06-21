@@ -113,27 +113,34 @@ auto rshift_func(A a, B b) -> decltype(a >> b)
 
 
 template<typename A, typename B>
-auto iadd_func(A a, B b) -> decltype(a += b)
+A& iadd_func(A a, B b)
 {
-    return a += b;
+    a += b;
+    // for FuncRefExpr this will create a stage,
+    // but in python the return object replaces the caller,
+    // and we do not want to change the caller
+    return a;
 }
 
 template<typename A, typename B>
-auto isub_func(A a, B b) -> decltype(a -= b)
+A& isub_func(A a, B b)
 {
-    return a -= b;
+    a -= b;
+    return a;
 }
 
 template<typename A, typename B>
-auto imul_func(A a, B b) -> decltype(a *= b)
+A& imul_func(A a, B b)
 {
-    return a *= b;
+    a *= b;
+    return a;
 }
 
 template<typename A, typename B>
-auto idiv_func(A a, B b) -> decltype(a /= b)
+A& idiv_func(A a, B b)
 {
-    return a /= b;
+    a /= b;
+    return a;
 }
 
 
@@ -216,22 +223,26 @@ void defineFuncRefVar()
             //         "Use this as the left-hand-side of an update definition for a "
             //         "Func with multiple outputs.")
 
-            .def("__iadd__", &iadd_func<FuncRefVar &, h::Expr>,
+            .def("__iadd__", &iadd_func<FuncRefVar &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as a sum reduction over the given "
                  "expression. The expression should refer to some RDom to sum "
                  "over. If the function does not already have a pure definition, "
                  "this sets it to zero.")
-            .def("__isub__", &isub_func<FuncRefVar &, h::Expr>,
+            .def("__isub__", &isub_func<FuncRefVar &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as a sum reduction over the negative of "
                  "the given expression. The expression should refer to some RDom "
                  "to sum over. If the function does not already have a pure "
                  "definition, this sets it to zero.")
-            .def("__imul__", &imul_func<FuncRefVar &, h::Expr>,
+            .def("__imul__", &imul_func<FuncRefVar &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as a product reduction. The expression "
                  "should refer to some RDom to take the product over. If the "
                  "function does not already have a pure definition, this sets it "
                  "to 1.")
-            .def("__idiv__", &idiv_func<FuncRefVar &, h::Expr>,
+            .def("__idiv__", &idiv_func<FuncRefVar &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as the product reduction over the inverse "
                  "of the expression. The expression should refer to some RDom to "
                  "take the product over. If the function does not already have a "
@@ -305,22 +316,26 @@ void defineFuncRefExpr()
             //            .def("__??__", FuncRefExpr::operator(const Tuple &),
             //                 "Use this as the left-hand-side of an update definition for a "
             //                 "Func with multiple outputs.")
-            .def("__iadd__", &iadd_func<FuncRefExpr &, h::Expr>,
+            .def("__iadd__", &iadd_func<FuncRefExpr &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as a sum reduction over the given "
                  "expression. The expression should refer to some RDom to sum "
                  "over. If the function does not already have a pure definition, "
                  "this sets it to zero.")
-            .def("__isub__", &isub_func<FuncRefExpr &, h::Expr>,
+            .def("__isub__", &isub_func<FuncRefExpr &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as a sum reduction over the negative of "
                  "the given expression. The expression should refer to some RDom "
                  "to sum over. If the function does not already have a pure "
                  "definition, this sets it to zero.")
-            .def("__imul__", &imul_func<FuncRefExpr &, h::Expr>,
+            .def("__imul__", &imul_func<FuncRefExpr &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as a product reduction. The expression "
                  "should refer to some RDom to take the product over. If the "
                  "function does not already have a pure definition, this sets it "
                  "to 1.")
-            .def("__idiv__", &idiv_func<FuncRefExpr &, h::Expr>,
+            .def("__idiv__", &idiv_func<FuncRefExpr &, h::Expr>, p::args("self", "expr"),
+                 p::return_internal_reference<1>(),
                  "Define this function as the product reduction over the inverse "
                  "of the expression. The expression should refer to some RDom to "
                  "take the product over. If the function does not already have a "
