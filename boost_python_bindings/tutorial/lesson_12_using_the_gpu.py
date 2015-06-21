@@ -54,7 +54,6 @@ class MyPipeline:
         # and then applies a look-up-table (LUT).
 
         # First we'll define the LUT. It will be a gamma curve.
-        # FIXME [i.] is a workaround
         self.lut[i] = cast(UInt(8), clamp(pow(i / 255.0, 1.2) * 255.0, 0, 255))
 
         # Augment the input with a boundary condition.
@@ -72,7 +71,6 @@ class MyPipeline:
                              self.padded16[x, y + 1, c]) / 4)
 
         # Then apply the LUT.
-        # FIXME [i,] is a workaround
         self.curved[x, y, c] = self.lut[self.sharpen[x, y, c]]
 
         return
@@ -99,8 +97,8 @@ class MyPipeline:
         # Compute sharpen as needed per scanline of curved, reusing
         # previous values computed within the same strip of 16
         # scanlines.
-        self.sharpen.store_at(curved, yo) \
-               .compute_at(curved, yi)
+        self.sharpen.store_at(self.curved, yo) \
+               .compute_at(self.curved, yi)
 
         # Vectorize the sharpen. It's 16-bit so we'll vectorize it 8-wide.
         self.sharpen.vectorize(x, 8)
@@ -108,8 +106,8 @@ class MyPipeline:
         # Compute the padded input at the same granularity as the
         # sharpen. We'll leave the cast to 16-bit inlined into
         # sharpen.
-        self.padded.store_at(curved, yo) \
-              .compute_at(curved, yi)
+        self.padded.store_at(self.curved, yo) \
+              .compute_at(self.curved, yi)
 
         # Also vectorize the padding. It's 8-bit, so we'll vectorize
         # 16-wide.
@@ -225,7 +223,20 @@ class MyPipeline:
 
         # Halide::Buffer, however, represents a buffer that may
         # exist on either CPU or GPU or both.
-        output = Buffer(UInt(8), input.width(), input.height(), input.channels())
+        output = Buffer(UInt(8), \
+                        self.input.width(),
+                        self.input.height(),
+                        self.input.channels())
+        output = Buffer(UInt(8), \
+                        self.input.width(),
+                        self.input.height(),
+                        self.input.channels(),
+                        name="output")
+        output = Buffer(UInt(8), \
+                        x_size=self.input.width(),
+                        y_size=self.input.height(),
+                        z_size=self.input.channels(),
+                        name="output")
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -238,7 +249,7 @@ class MyPipeline:
 
             # Run the filter 100 times.
             for j in range(100):
-                curved.realize(output)
+                self.curved.realize(output)
 
             # Force any GPU code to finish by copying the buffer back to the CPU.
             output.copy_to_host()
@@ -258,7 +269,8 @@ class MyPipeline:
     def test_correctness(self, reference_output):
 
         assert type(reference_output) == Image_uint8
-        output_r = curved.realize(input.width(), input.height(), input.channels())
+        output_r = curved.realize(self.input.width(), self.input.height(),
+                                  self.input.channels())
         assert type(output_r) == Realization
         output = Image(UInt(8), output_r)
         assert type(output) == Image_uint8
@@ -314,14 +326,15 @@ def have_opencl():
     import platform
 
     try:
-        if platform.system == "Windows":
+        if platform.system() == "Windows":
             ret = ctypes.windll.LoadLibrary("OpenCL.dll") != None
-        elif platform.system == "Darwin": # apple
+        elif platform.system() == "Darwin": # apple
             ret =  ctypes.cdll.LoadLibrary("/System/Library/Frameworks/OpenCL.framework/Versions/Current/OpenCL") != None
-        elif platform.system == "Linux":
+        elif platform.system() == "Linux":
             ret = ctypes.cdll.LoadLibrary("libOpenCL.so") != None
         else:
-            raise Exception("Cannot check for opencl presence on unknown system")
+            raise Exception("Cannot check for opencl presence "
+                            "on unknown system '%s'" % platform.system())
     except OSError:
             ret = False
 

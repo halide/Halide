@@ -11,6 +11,7 @@
 #include "Func_Ref.h"
 #include "Func_Stage.h"
 #include "Func_VarOrRVar.h"
+#include "Func_gpu.h"
 
 #include <vector>
 #include <string>
@@ -253,124 +254,6 @@ h::Func &func_compute_at1(h::Func &that, h::Func f, h::RVar var)
     return that.compute_at(f, var);
 }
 
-
-/// Define all gpu related methods
-
-void defineFuncGpuMethods(p::class_<h::Func> &func_class)
-{
-
-
-    /*
-                                                                &Func::gpu_threads(self, *args):
-                                                                """
-                                                                Tell Halide that the following dimensions correspond to cuda
-                                                                thread indices. This is useful if you compute a producer
-                                                                function within the block indices of a consumer function, and
-                                                                want to control how that function's dimensions map to cuda
-                                                                threads. If the selected target is not ptx, this just marks
-                                                                those dimensions as parallel.
-                                                                """
-
-                                                                &Func::gpu_single_thread(self, *args):
-                                                                """
-                                                                Tell Halide to run this stage using a single gpu thread and
-                                                                block. This is not an efficient use of your GPU, but it can be
-                                                                useful to avoid copy-back for intermediate update stages that
-                                                                touch a very small part of your Func.
-                                                                """
-
-                                                                &Func::gpu_blocks(self, *args):
-                                                                """
-                                                                Tell Halide that the following dimensions correspond to cuda
-                                                                block indices. This is useful for scheduling stages that will
-                                                                run serially within each cuda block. If the selected target is
-                                                                not ptx, this just marks those dimensions as parallel.
-                                                                """
-
-                                                                &Func::gpu(self, block_x, thread_x):
-                                                                """
-                                                                Three signatures::
-
-                                                                gpu(block_x, thread_x)
-                                                                gpu(block_x, block_y, thread_x, thread_y)
-                                                                gpu(block_x, block_y, block_z, thread_x, thread_y, thread_z)
-
-                                                                Tell Halide that the following dimensions correspond to cuda
-                                                                block indices and thread indices. If the selected target is not
-                                                                ptx, these just mark the given dimensions as parallel. The
-                                                                dimensions are consumed by this call, so do all other
-                                                                unrolling, reordering, etc first.
-                                                                """
-
-                                                                &Func::gpu_tile(self, x, x_size):
-                                                                """
-                                                                Three signatures:
-
-                                                                gpu_tile(x, x_size)
-                                                                gpu_tile(x, y, x_size, y_size)
-                                                                gpu_tile(x, y, z, x_size, y_size, z_size)
-
-                                                                Short-hand for tiling a domain and mapping the tile indices
-                                                                to cuda block indices and the coordinates within each tile to
-                                                                cuda thread indices. Consumes the variables given, so do all
-                                                                other scheduling first.
-                                                                """
-
-                                                                &Func::cuda_threads(self, *args):
-                                                                """
-                                                                deprecated Old name for #gpu_threads.
-                                                                Tell Halide that the following dimensions correspond to cuda
-                                                                thread indices. This is useful if you compute a producer
-                                                                function within the block indices of a consumer function, and
-                                                                want to control how that function's dimensions map to cuda
-                                                                threads. If the selected target is not ptx, this just marks
-                                                                those dimensions as parallel.
-                                                                """
-
-                                                                &Func::cuda_blocks(self, *args):
-                                                                """
-                                                                deprecated Old name for #cuda_blocks.
-                                                                Tell Halide that the following dimensions correspond to cuda
-                                                                block indices. This is useful for scheduling stages that will
-                                                                run serially within each cuda block. If the selected target is
-                                                                not ptx, this just marks those dimensions as parallel.
-                                                                """
-
-                                                                &Func::cuda(self, block_x, thread_x):
-                                                                """
-                                                                deprecated Old name for #cuda.
-                                                                Three signatures::
-
-                                                                cuda(block_x, thread_x)
-                                                                cuda(block_x, block_y, thread_x, thread_y)
-                                                                cuda(block_x, block_y, block_z, thread_x, thread_y, thread_z)
-
-                                                                Tell Halide that the following dimensions correspond to cuda
-                                                                block indices and thread indices. If the selected target is not
-                                                                ptx, these just mark the given dimensions as parallel. The
-                                                                dimensions are consumed by this call, so do all other
-                                                                unrolling, reordering, etc first.
-                                                                """
-
-                                                                &Func::cuda_tile(self, x, x_size):
-                                                                """
-                                                                deprecated Old name for #cuda_tile.
-                                                                Three signatures:
-
-                                                                cuda_tile(x, x_size)
-                                                                cuda_tile(x, y, x_size, y_size)
-                                                                cuda_tile(x, y, z, x_size, y_size, z_size)
-
-                                                                Short-hand for tiling a domain and mapping the tile indices
-                                                                to cuda block indices and the coordinates within each tile to
-                                                                cuda thread indices. Consumes the variables given, so do all
-                                                                other scheduling first.
-                                                                """
-
-
-*/
-    return;
-}
 
 
 void tuple_to_var_expr_vector(
