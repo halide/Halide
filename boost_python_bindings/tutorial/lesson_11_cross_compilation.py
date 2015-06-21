@@ -53,106 +53,121 @@ def main():
     # operating systems. You do this with an optional third argument
     # to compile_to_file which specifies the target to compile for.
 
-    # Let's use this to compile a 32-bit arm android version of this code:
-    target = Target()
-    target.os = Target.Android # The operating system
-    target.arch = Target.ARM   # The CPU architecture
-    target.bits = 32            # The bit-width of the architecture
-    arm_features = Target.FeaturesVector()  # A list of features to set
-    target.set_features(arm_features)
-    # Pass the target as the last argument.
-    brighter.compile_to_file("lesson_11_arm_32_android", args, target)
+    create_android = True
+    create_windows = True
+    create_ios = True
 
-    # And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
-    target.os = Target.Windows
-    target.arch = Target.X86
-    target.bits = 64
-    x86_features = Target.FeaturesVector()
-    x86_features.append(Target.AVX)
-    x86_features.append(Target.SSE41)
-    target.set_features(x86_features)
-    brighter.compile_to_file("lesson_11_x86_64_windows", args, target)
+    if create_android:
+        # Let's use this to compile a 32-bit arm android version of this code:
+        target = Target()
+        target.os = TargetOS.Android # The operating system
+        target.arch = TargetArch.ARM   # The CPU architecture
+        target.bits = 32            # The bit-width of the architecture
+        arm_features = FeaturesVector()  # A list of features to set
+        target.set_features(arm_features)
+        # Pass the target as the last argument.
+        brighter.compile_to_file("lesson_11_arm_32_android", args, target)
 
-    # And finally an iOS mach-o object file for one of Apple's 32-bit
-    # ARM processors - the A6. It's used in the iPhone 5. The A6 uses
-    # a slightly modified ARM architecture called ARMv7s. We specify
-    # this using the target features field.  Support for Apple's
-    # 64-bit ARM processors is very new in llvm, and still somewhat
-    # flaky.
-    target.os = Target.IOS
-    target.arch = Target.ARM
-    target.bits = 32
-    armv7s_features = Target.FeaturesVector()
-    armv7s_features.append(Target.ARMv7s)
-    target.set_features(armv7s_features)
-    brighter.compile_to_file("lesson_11_arm_32_ios", args, target)
+    if create_windows:
+        # And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
+        target = Target()
+        target.os = TargetOS.Windows
+        target.arch = TargetArch.X86
+        target.bits = 64
+        x86_features = FeaturesVector()
+        x86_features.append(TargetFeature.AVX)
+        x86_features.append(TargetFeature.SSE41)
+        target.set_features(x86_features)
+        brighter.compile_to_file("lesson_11_x86_64_windows", args, target)
+
+    if create_ios:
+        # And finally an iOS mach-o object file for one of Apple's 32-bit
+        # ARM processors - the A6. It's used in the iPhone 5. The A6 uses
+        # a slightly modified ARM architecture called ARMv7s. We specify
+        # this using the target features field.  Support for Apple's
+        # 64-bit ARM processors is very new in llvm, and still somewhat
+        # flaky.
+        target = Target()
+        target.os = TargetOS.IOS
+        target.arch = TargetArch.ARM
+        target.bits = 32
+        armv7s_features = FeaturesVector()
+        armv7s_features.append(TargetFeature.ARMv7s)
+        target.set_features(armv7s_features)
+        brighter.compile_to_file("lesson_11_arm_32_ios", args, target)
 
 
     # Now let's check these files are what they claim, by examining
     # their first few bytes.
 
-    # 32-arm android object files start with the magic bytes:
-    # uint8_t []
-    arm_32_android_magic = [0x7f, 'E', 'L', 'F', # ELF format
-                                      1,       # 32-bit
-                                      1,       # 2's complement little-endian
-                                      1,       # Current version of elf
-                                      3,       # Linux
-                                      0, 0, 0, 0, 0, 0, 0, 0, # 8 unused bytes
-                                      1, 0,    # Relocatable
-                                      0x28, 0]  # ARM
+    if create_android:
+        # 32-arm android object files start with the magic bytes:
+        # uint8_t []
+        arm_32_android_magic = [0x7f, ord('E'), ord('L'), ord('F'), # ELF format
+                                          1,       # 32-bit
+                                          1,       # 2's complement little-endian
+                                          1,       # Current version of elf
+                                          3,       # Linux
+                                          0, 0, 0, 0, 0, 0, 0, 0, # 8 unused bytes
+                                          1, 0,    # Relocatable
+                                          0x28, 0]  # ARM
 
-    f = open("lesson_11_arm_32_android.o", "rb")
-    try:
-        header_bytes = f.read(32)
-    except:
-        print("Android object file not generated")
-        return -1
-    f.close()
+        f = open("lesson_11_arm_32_android.o", "rb")
+        try:
+            header_bytes = f.read(20)
+        except:
+            print("Android object file not generated")
+            return -1
+        f.close()
 
-    header = unpack("B", header_bytes)
-    if header != arm_32_android_magic:
-        print("Unexpected header bytes in 32-bit arm object file.")
-        return -1
-
-
-    # 64-bit windows object files start with the magic 16-bit value 0x8664
-    # (presumably referring to x86-64)
-    # uint8_t  []
-    win_64_magic = [0x64, 0x86]
-
-    f = open("lesson_11_x86_64_windows.o", "rb")
-    try:
-        header_bytes = f.read(32)
-    except:
-        print("Windows object file not generated")
-        return -1
-    f.close()
-
-    header = unpack("B", header_bytes)
-    if header != win_64_magic:
-        print("Unexpected header bytes in 64-bit windows object file.")
-        return -1
+        header = list(unpack("B"*20, header_bytes))
+        if header != arm_32_android_magic:
+            print([x == y for x, y in zip(header, arm_32_android_magic)])
+            raise Exception("Unexpected header bytes in 32-bit arm object file.")
+            return -1
 
 
-    # 32-bit arm iOS mach-o files start with the following magic bytes:
-    #  uint32_t []
-    arm_32_ios_magic = [0xfeedface, # Mach-o magic bytes
-                                   12,  # CPU type is ARM
-                                   11,  # CPU subtype is ARMv7s
-                                   1]  # It's a relocatable object file.
-    f = open("lesson_11_arm_32_ios.o", "rb")
-    try:
-        header_bytes = f.read(32)
-    except:
-        print("ios object file not generated")
-        return -1
-    f.close()
+    if create_windows:
+        # 64-bit windows object files start with the magic 16-bit value 0x8664
+        # (presumably referring to x86-64)
+        # uint8_t  []
+        win_64_magic = [0x64, 0x86]
 
-    header = unpack("B", header_bytes)
-    if header != arm_32_ios_magic:
-        print("Unexpected header bytes in 32-bit arm ios object file.")
-        return -1
+        f = open("lesson_11_x86_64_windows.o", "rb")
+        try:
+            header_bytes = f.read(2)
+        except:
+            print("Windows object file not generated")
+            return -1
+        f.close()
+
+        header = list(unpack("B"*2, header_bytes))
+        if header != win_64_magic:
+            raise Exception("Unexpected header bytes in 64-bit windows object file.")
+            return -1
+
+
+    if create_ios:
+        # 32-bit arm iOS mach-o files start with the following magic bytes:
+        #  uint32_t []
+        arm_32_ios_magic = [
+            0xfeedface, # Mach-o magic bytes
+            #0xfe, 0xed, 0xfa, 0xce, # Mach-o magic bytes
+                                       12,  # CPU type is ARM
+                                       11,  # CPU subtype is ARMv7s
+                                       1]  # It's a relocatable object file.
+        f = open("lesson_11_arm_32_ios.o", "rb")
+        try:
+            header_bytes = f.read(4*4)
+        except:
+            print("ios object file not generated")
+            return -1
+        f.close()
+
+        header = list(unpack("I"*4, header_bytes))
+        if header != arm_32_ios_magic:
+            raise Exception("Unexpected header bytes in 32-bit arm ios object file.")
+            return -1
 
 
     # It looks like the object files we produced are plausible for
