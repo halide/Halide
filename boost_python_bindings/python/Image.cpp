@@ -507,7 +507,9 @@ p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name=
         if(c < array.get_nd())
         {
             raw_buffer.extent[c] = array.shape(c);
-            raw_buffer.stride[c] = array.strides(c);
+            // numpy counts stride in bytes, while Halide counts in number of elements
+            user_assert((array.strides(c) % raw_buffer.elem_size) == 0);
+            raw_buffer.stride[c] = array.strides(c) / raw_buffer.elem_size;
         }
         else
         {
