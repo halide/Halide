@@ -261,7 +261,7 @@ class MyPipeline:
                 best_time = elapsed
         # end of "best of three times"
 
-        print("%1.4f milliseconds", best_time * 1000)
+        print("%1.4f milliseconds" % (best_time * 1000))
 
         return
 
@@ -269,7 +269,7 @@ class MyPipeline:
     def test_correctness(self, reference_output):
 
         assert type(reference_output) == Image_uint8
-        output_r = curved.realize(self.input.width(), self.input.height(),
+        output_r = self.curved.realize(self.input.width(), self.input.height(),
                                   self.input.channels())
         assert type(output_r) == Realization
         output = Image(UInt(8), output_r)
@@ -287,6 +287,8 @@ class MyPipeline:
                                reference_output(x, y, c),
                                x, y, c))
 
+        print("CPU and GPU outputs are consistent.")
+        return
 
 def main():
     # Load an input image.
