@@ -113,25 +113,25 @@ auto rshift_func(A a, B b) -> decltype(a >> b)
 
 
 template<typename A, typename B>
-auto iadd_func_refs(A &a, B &b) -> decltype(a += b)
+auto iadd_func(A a, B b) -> decltype(a += b)
 {
     return a += b;
 }
 
 template<typename A, typename B>
-auto isub_func_refs(A &a, B &b) -> decltype(a -= b)
+auto isub_func(A a, B b) -> decltype(a -= b)
 {
     return a -= b;
 }
 
 template<typename A, typename B>
-auto imul_func_refs(A &a, B &b) -> decltype(a *= b)
+auto imul_func(A a, B b) -> decltype(a *= b)
 {
     return a *= b;
 }
 
 template<typename A, typename B>
-auto idiv_func_refs(A &a, B &b) -> decltype(a /= b)
+auto idiv_func(A a, B b) -> decltype(a /= b)
 {
     return a /= b;
 }
@@ -146,7 +146,7 @@ void add_func_operators_with(PythonClass &class_a)
             or std::is_same<A, T&>::value
             or std::is_same<B, T>::value
             or std::is_same<B, T&>::value;
-    assert(t_matches_a_or_b);
+    user_assert(t_matches_a_or_b);
 
     // <boost/python/operators.hpp> lists all operators
     class_a
@@ -186,6 +186,13 @@ void add_func_operators_with(PythonClass &class_a)
     return;
 }
 
+
+h::Type func_ref_var_type(h::FuncRefVar &that)
+{
+    return static_cast<h::Expr>(that).type();
+}
+
+
 void defineFuncRefVar()
 {
     using Halide::FuncRefVar;
@@ -209,22 +216,22 @@ void defineFuncRefVar()
             //         "Use this as the left-hand-side of an update definition for a "
             //         "Func with multiple outputs.")
 
-            .def("__iadd__", &iadd_func_refs<FuncRefVar, h::Expr>,
+            .def("__iadd__", &iadd_func<FuncRefVar &, h::Expr>,
                  "Define this function as a sum reduction over the given "
                  "expression. The expression should refer to some RDom to sum "
                  "over. If the function does not already have a pure definition, "
                  "this sets it to zero.")
-            .def("__isub__", &isub_func_refs<FuncRefVar, h::Expr>,
+            .def("__isub__", &isub_func<FuncRefVar &, h::Expr>,
                  "Define this function as a sum reduction over the negative of "
                  "the given expression. The expression should refer to some RDom "
                  "to sum over. If the function does not already have a pure "
                  "definition, this sets it to zero.")
-            .def("__imul__", &imul_func_refs<FuncRefVar, h::Expr>,
+            .def("__imul__", &imul_func<FuncRefVar &, h::Expr>,
                  "Define this function as a product reduction. The expression "
                  "should refer to some RDom to take the product over. If the "
                  "function does not already have a pure definition, this sets it "
                  "to 1.")
-            .def("__idiv__", &idiv_func_refs<FuncRefVar, h::Expr>,
+            .def("__idiv__", &idiv_func<FuncRefVar &, h::Expr>,
                  "Define this function as the product reduction over the inverse "
                  "of the expression. The expression should refer to some RDom to "
                  "take the product over. If the function does not already have a "
@@ -250,6 +257,9 @@ void defineFuncRefVar()
             .def("__len__", &FuncRefVar::size,
                  "How many outputs does the function this refers to produce.")
 
+            .def("type", &func_ref_var_type,
+                 "return type of the Expr version of FuncRefVar")
+
             .def("function", &FuncRefVar::function,
                  "What function is this calling?")
             ;
@@ -258,8 +268,10 @@ void defineFuncRefVar()
     typedef func_ref_var_class_t frvc_t;
     add_func_operators_with<FuncRefVar &, FuncRefVar &, frvc_t>(func_ref_var_class);
     add_func_operators_with<FuncRefVar &, h::FuncRefExpr &, frvc_t>(func_ref_var_class);
-    add_func_operators_with<FuncRefVar &, int, frvc_t>(func_ref_var_class);
+
+    // the order matters, float then int, so that int is tried before float
     add_func_operators_with<FuncRefVar &, float, frvc_t>(func_ref_var_class);
+    add_func_operators_with<FuncRefVar &, int, frvc_t>(func_ref_var_class);
     add_func_operators_with<FuncRefVar &, h::Expr &, frvc_t>(func_ref_var_class);
     //add_func_operators_with<int, FuncRefVar &, frvc_t>(func_ref_var_class); // this seems not to work as intended (at python level)
     //add_func_operators_with<float, FuncRefVar &, frvc_t>(func_ref_var_class);
@@ -293,22 +305,22 @@ void defineFuncRefExpr()
             //            .def("__??__", FuncRefExpr::operator(const Tuple &),
             //                 "Use this as the left-hand-side of an update definition for a "
             //                 "Func with multiple outputs.")
-            .def("__iadd__", &iadd_func_refs<FuncRefExpr, h::Expr>,
+            .def("__iadd__", &iadd_func<FuncRefExpr &, h::Expr>,
                  "Define this function as a sum reduction over the given "
                  "expression. The expression should refer to some RDom to sum "
                  "over. If the function does not already have a pure definition, "
                  "this sets it to zero.")
-            .def("__isub__", &isub_func_refs<FuncRefExpr, h::Expr>,
+            .def("__isub__", &isub_func<FuncRefExpr &, h::Expr>,
                  "Define this function as a sum reduction over the negative of "
                  "the given expression. The expression should refer to some RDom "
                  "to sum over. If the function does not already have a pure "
                  "definition, this sets it to zero.")
-            .def("__imul__", &imul_func_refs<FuncRefExpr, h::Expr>,
+            .def("__imul__", &imul_func<FuncRefExpr &, h::Expr>,
                  "Define this function as a product reduction. The expression "
                  "should refer to some RDom to take the product over. If the "
                  "function does not already have a pure definition, this sets it "
                  "to 1.")
-            .def("__idiv__", &idiv_func_refs<FuncRefExpr, h::Expr>,
+            .def("__idiv__", &idiv_func<FuncRefExpr &, h::Expr>,
                  "Define this function as the product reduction over the inverse "
                  "of the expression. The expression should refer to some RDom to "
                  "take the product over. If the function does not already have a "
@@ -343,8 +355,10 @@ void defineFuncRefExpr()
     add_func_operators_with<FuncRefExpr &, h::FuncRefVar &, frec_t>(func_ref_expr_class);
     add_func_operators_with<FuncRefExpr &, FuncRefExpr &, frec_t>(func_ref_expr_class);
     add_func_operators_with<FuncRefExpr &, h::Expr &, frec_t>(func_ref_expr_class);
-    add_func_operators_with<FuncRefExpr &, int, frec_t>(func_ref_expr_class);
+
+    // the order matters, float then int, so that int is tried before float
     add_func_operators_with<FuncRefExpr &, float, frec_t>(func_ref_expr_class);
+    add_func_operators_with<FuncRefExpr &, int, frec_t>(func_ref_expr_class);
     //add_func_operators_with<int, FuncRefExpr &, frec_t>(func_ref_expr_class); // does not work as intended (at python level)
     //add_func_operators_with<float, FuncRefExpr &, frec_t>(func_ref_expr_class);
 
