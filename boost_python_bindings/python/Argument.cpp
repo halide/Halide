@@ -9,16 +9,15 @@
 #include <string>
 
 namespace h = Halide;
-std::string argument_name(h::Argument &that)
-{
-    return that.name;
-}
+//std::string argument_name(h::Argument &that)
+//{
+//    return that.name;
+//}
 
-h::Argument::Kind argument_kind(h::Argument &that)
-{
-    return that.kind;
-}
-
+//h::Argument::Kind argument_kind(h::Argument &that)
+//{
+//    return that.kind;
+//}
 
 
 void defineArgument()
@@ -31,14 +30,17 @@ void defineArgument()
                                 "A struct representing an argument to a halide-generated function. "
                                 "Used for specifying the function signature of generated code.",
                                 p::init<>(p::arg("self")));
-    auto init_keywords =
-            (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions")=0,
-             // using h::Expr initialization creates a run-time exception
-             //(p::arg("default")=h::Expr()), (p::arg("min")=h::Expr()), (p::arg("max")=h::Expr())
-             p::arg("default"), p::arg("min"), p::arg("max")
-             );
 
-    argument_class.def(p::init<std::string, Argument::Kind, h::Type, uint8_t, h::Expr, h::Expr, h::Expr>(init_keywords));
+    argument_class
+            .def(p::init<std::string, Argument::Kind, h::Type, uint8_t, h::Expr, h::Expr, h::Expr>(
+                     (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions"),
+                      p::arg("default"), p::arg("min"), p::arg("max"))))
+            .def(p::init<std::string, Argument::Kind, h::Type, uint8_t, h::Expr>(
+                     (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions"),
+                      p::arg("default"))))
+            .def(p::init<std::string, Argument::Kind, h::Type, uint8_t>(
+                     (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions"))))
+            ;
 
     argument_class
             .def_readonly("name", &Argument::name, "The name of the argument.");
@@ -56,7 +58,6 @@ void defineArgument()
 
 
     argument_class
-            //.property("kind", &Argument::kind)
             //.def("kind", &argument_kind,
             .def_readonly("kind", &Argument::kind,
                           //.def("kind", [](Argument &that) -> Argument::Kind { return that.kind; },
@@ -69,13 +70,11 @@ void defineArgument()
                           "but there is no runtime enforcement of this at present.");
 
     argument_class
-            //.def("dimensions", [](Argument &that){ return that.dimensions;},
-            .def_readonly("kind", &Argument::kind,
+            .def_readonly("dimensions", &Argument::dimensions,
                           "If kind == InputBuffer|OutputBuffer, this is the dimensionality of the buffer. "
                           "If kind == InputScalar, this value is ignored (and should always be set to zero)");
 
     argument_class
-            //.def("type", [](Argument &that){ return that.type; },
             .def_readonly("type", &Argument::type,
                           "If this is a scalar parameter, then this is its type. "
                           " If this is a buffer parameter, this is used to determine elem_size of the buffer_t. "
@@ -83,13 +82,10 @@ void defineArgument()
 
 
     argument_class
-            //.def("default", [](Argument &that){ return that.def; },
-            .def_readonly("def", &Argument::def,
+            .def_readonly("default", &Argument::def,
                           "If this is a scalar parameter, then these are its default, min, max values. "
                           "By default, they are left unset, implying \"no default, no min, no max\". ")
-            //.def("min", [](Argument &that){ return that.min; })
             .def_readonly("min", &Argument::min)
-            //.def("max", [](Argument &that){ return that.max; })
             .def_readonly("max", &Argument::max);
 
 
@@ -102,7 +98,7 @@ void defineArgument()
             .def("is_output", &Argument::is_output, p::arg("self"));
 
     p::class_< std::vector<h::Argument> >("ArgumentsVector")
-                .def( no_compare_indexing_suite< std::vector<h::Argument> >() );
+            .def( no_compare_indexing_suite< std::vector<h::Argument> >() );
 
     return;
 }

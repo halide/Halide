@@ -115,10 +115,10 @@ FuncOrStage &func_reorder0(FuncOrStage &that, PythonIterable args_passed)
 
 template<typename FuncOrStage>
 FuncOrStage &func_reorder1(FuncOrStage &that, bp::object v0,
-                       bp::object v1, bp::object v2, bp::object v3)
+                       bp::object v1, bp::object v2, bp::object v3, bp::object v4, bp::object v5)
 {
     bp::list args_list;
-    for(const bp::object &v : {v0, v1, v2, v3})
+    for(const bp::object &v : {v0, v1, v2, v3, v4, v5})
     {
         if(not v.is_none())
         {
