@@ -158,8 +158,8 @@ h::Func &func_tile1(h::Func &that, h::VarOrRVar x, h::VarOrRVar y,
     return that.tile(x, y, xi, yi, xfactor, yfactor);
 }
 
-
-h::Func &func_reoder0(h::Func &that, p::tuple args_passed)
+template<typename PythonIterable>
+h::Func &func_reorder0(h::Func &that, PythonIterable args_passed)
 {
     std::vector<h::VarOrRVar> var_or_rvar_args;
 
@@ -167,7 +167,7 @@ h::Func &func_reoder0(h::Func &that, p::tuple args_passed)
     for(size_t i=0; i < args_len; i+=1)
     {
         p::object o = args_passed[i];
-        p::extract<h::VarOrRVar &> var_or_rvar_extract(o);
+        p::extract<h::VarOrRVar> var_or_rvar_extract(o);
 
         if(var_or_rvar_extract.check())
         {
@@ -188,8 +188,23 @@ h::Func &func_reoder0(h::Func &that, p::tuple args_passed)
     return that.reorder(var_or_rvar_args);
 }
 
+h::Func &func_reorder1(h::Func &that, p::object v0,
+                       p::object v1, p::object v2, p::object v3)
+{
+    p::list args_list;
+    p::object none;
+    for(const p::object &v : {v0, v1, v2, v3})
+    {
+        if(v != none)
+        {
+            args_list.append(v);
+        }
+    }
 
-h::Func &func_reoder_storage0(h::Func &that, p::tuple args_passed)
+    return func_reorder0<p::list>(that, args_list);
+}
+
+h::Func &func_reorder_storage0(h::Func &that, p::tuple args_passed)
 {
     std::vector<h::Var> var_args;
 
@@ -369,8 +384,8 @@ void tuple_to_var_expr_vector(
     for(size_t i=0; i < args_len; i+=1)
     {
         p::object o = args_passed[i];
-        p::extract<h::Var &> var_extract(o);
-        p::extract<h::Expr &> expr_extract(o);
+        p::extract<h::Var> var_extract(o);
+        p::extract<h::Expr> expr_extract(o);
         p::extract<boost::int32_t> int32_extract(o);
 
         const bool is_var = var_extract.check();
@@ -407,7 +422,7 @@ void tuple_to_var_expr_vector(
             }
             throw std::invalid_argument(
                         boost::str(boost::format("%s::operator[] only handles "
-                                                 "a tuple of Var or a list of (convertible to) Expr.") % debug_name));
+                                                 "a tuple of Var or a tuple of (convertible to) Expr.") % debug_name));
         }
     }
 
@@ -688,17 +703,26 @@ void defineFunc()
                  "A shorter form of tile, which reuses the old variable names as the new outer dimensions");
 
 
-    func_class.def("reorder", &func_reoder0, p::args("self", "vars"),
+    func_class.def("reorder", &func_reorder0<p::tuple>, p::args("self", "vars"),
                    p::return_internal_reference<1>(),
                    "Reorder variables to have the given nesting order, "
-                   "from innermost out");
+                   "from innermost out")
+            .def("reorder", &func_reorder0<p::list>, p::args("self", "vars"),
+                 p::return_internal_reference<1>(),
+                 "Reorder variables to have the given nesting order, "
+                 "from innermost out")
+            .def("reorder", &func_reorder1, (p::arg("self"), p::arg("v0"), p::arg("v1")=p::object(),
+                                             p::arg("v2")=p::object(), p::arg("v3")=p::object()),
+                 p::return_internal_reference<1>(),
+                 "Reorder variables to have the given nesting order, "
+                 "from innermost out");
 
     func_class.def("rename", &Func::rename, p::args("self", "old_name", "new_name"),
                    p::return_internal_reference<1>(),
                    "Rename a dimension. Equivalent to split with a inner size of one.");
 
 
-    func_class.def("reorder_storage", &func_reoder_storage0, p::args("self", "dims"),
+    func_class.def("reorder_storage", &func_reorder_storage0, p::args("self", "dims"),
                    p::return_internal_reference<1>(),
                    "Specify how the storage for the function is laid out. These "
                    "calls let you specify the nesting order of the dimensions. For "

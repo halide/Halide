@@ -152,6 +152,7 @@ void add_func_operators_with(PythonClass &class_a)
     class_a
             .def("__add__", &add_func<A, B>)
             .def("__sub__", &sub_func<A, B>)
+            .def("__mul__", &mul_func<A, B>)
         #if PY_VERSION_HEX >= 0x03000000
             .def("__truediv__", &div_func<A, B>)
         #else
@@ -259,8 +260,9 @@ void defineFuncRefVar()
     add_func_operators_with<FuncRefVar &, h::FuncRefExpr &, frvc_t>(func_ref_var_class);
     add_func_operators_with<FuncRefVar &, int, frvc_t>(func_ref_var_class);
     add_func_operators_with<FuncRefVar &, float, frvc_t>(func_ref_var_class);
-    add_func_operators_with<int, FuncRefVar &, frvc_t>(func_ref_var_class);
-    add_func_operators_with<float, FuncRefVar &, frvc_t>(func_ref_var_class);
+    add_func_operators_with<FuncRefVar &, h::Expr &, frvc_t>(func_ref_var_class);
+    //add_func_operators_with<int, FuncRefVar &, frvc_t>(func_ref_var_class); // this seems not to work as intended (at python level)
+    //add_func_operators_with<float, FuncRefVar &, frvc_t>(func_ref_var_class);
 
     p::implicitly_convertible<FuncRefVar, h::Expr>();
 
@@ -340,10 +342,11 @@ void defineFuncRefExpr()
     typedef func_ref_expr_class_t frec_t;
     add_func_operators_with<FuncRefExpr &, h::FuncRefVar &, frec_t>(func_ref_expr_class);
     add_func_operators_with<FuncRefExpr &, FuncRefExpr &, frec_t>(func_ref_expr_class);
+    add_func_operators_with<FuncRefExpr &, h::Expr &, frec_t>(func_ref_expr_class);
     add_func_operators_with<FuncRefExpr &, int, frec_t>(func_ref_expr_class);
     add_func_operators_with<FuncRefExpr &, float, frec_t>(func_ref_expr_class);
-    add_func_operators_with<int, FuncRefExpr &, frec_t>(func_ref_expr_class);
-    add_func_operators_with<float, FuncRefExpr &, frec_t>(func_ref_expr_class);
+    //add_func_operators_with<int, FuncRefExpr &, frec_t>(func_ref_expr_class); // does not work as intended (at python level)
+    //add_func_operators_with<float, FuncRefExpr &, frec_t>(func_ref_expr_class);
 
     p::implicitly_convertible<FuncRefExpr, h::Expr>();
 

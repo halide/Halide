@@ -65,7 +65,7 @@ h::RDom *RDom_constructor0(p::tuple args, std::string name="")
     for(size_t i=0; i < args_len; i += 1)
     {
         p::object o = args[i];
-        p::extract<h::Expr &> expr_extract(o);
+        p::extract<h::Expr> expr_extract(o);
 
         if(expr_extract.check())
         {
