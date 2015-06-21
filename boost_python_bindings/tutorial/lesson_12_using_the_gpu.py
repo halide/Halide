@@ -54,7 +54,7 @@ class MyPipeline:
         # and then applies a look-up-table (LUT).
 
         # First we'll define the LUT. It will be a gamma curve.
-
+        # FIXME [i.] is a workaround
         self.lut[i] = cast(UInt(8), clamp(pow(i / 255.0, 1.2) * 255.0, 0, 255))
 
         # Augment the input with a boundary condition.
@@ -69,10 +69,11 @@ class MyPipeline:
                             (self.padded16[x - 1, y, c] +
                              self.padded16[x, y - 1, c] +
                              self.padded16[x + 1, y, c] +
-                             paddeself.d16[x, y + 1, c]) / 4)
+                             self.padded16[x, y + 1, c]) / 4)
 
         # Then apply the LUT.
-        self.curved[x, y, c] = self.lut[sharpen[x, y, c]]
+        # FIXME [i,] is a workaround
+        self.curved[x, y, c] = self.lut[self.sharpen[x, y, c]]
 
         return
 
