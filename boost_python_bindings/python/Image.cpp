@@ -169,7 +169,7 @@ T image_to_setitem_operator4(h::Image<T> &that, p::tuple &args_passed, T value)
             printf("image_to_setitem_operator4 args_passed[%lu] == %s\n", j, o_str.c_str());
         }
         throw std::invalid_argument("image_to_setitem_operator4 only handles "
-                                             "a tuple of (convertible to) int.");
+                                    "a tuple of (convertible to) int.");
     }
 
     switch(int_args.size())
@@ -552,8 +552,7 @@ p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer
 }
 
 
-/// Will create a Halide::Image object pointing to the array data
-p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name="")
+buffer_t ndarray_to_buffer_t(boost::numpy::ndarray &array)
 {
     size_t num_elements = 0;
     for(size_t i = 0; i < array.get_nd(); i += 1)
@@ -604,7 +603,92 @@ p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name=
         raw_buffer.min[c] = 0;
     }
 
+    return raw_buffer;
+}
+
+/// Will create a Halide::Image object pointing to the array data
+p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name="")
+{
+    buffer_t raw_buffer = ndarray_to_buffer_t(array);
     return raw_buffer_to_image(array, raw_buffer, name);
+}
+
+
+h::ImageBase* raw_buffer_to_new_imagebase(const boost::numpy::dtype &array_dtype,
+                                          buffer_t &raw_buffer,
+                                          const std::string &name)
+{
+    namespace bn = boost::numpy;
+
+    h::ImageBase* image_base_p = NULL;
+
+    if(array_dtype == bn::dtype::get_builtin<boost::uint8_t>())
+    {
+        h::Type t = h::UInt(8);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<boost::uint8_t>(buffer);
+    }
+    else if(array_dtype == bn::dtype::get_builtin<boost::uint16_t>())
+    {
+        h::Type t = h::UInt(16);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<boost::uint16_t>(buffer);
+    }
+    else if(array_dtype == bn::dtype::get_builtin<boost::uint32_t>())
+    {
+        h::Type t = h::UInt(32);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<boost::uint32_t>(buffer);
+    }
+    else if(array_dtype == bn::dtype::get_builtin<boost::int8_t>())
+    {
+        h::Type t = h::Int(8);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<boost::int8_t>(buffer);
+    }
+    else if(array_dtype == bn::dtype::get_builtin<boost::int16_t>())
+    {
+        h::Type t = h::Int(16);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<boost::int16_t>(buffer);
+    }
+    else if(array_dtype == bn::dtype::get_builtin<boost::int32_t>())
+    {
+        h::Type t = h::Int(32);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<boost::int32_t>(buffer);
+    }
+    else if(array_dtype == bn::dtype::get_builtin<float>())
+    {
+        h::Type t = h::Float(32);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<float>(buffer);
+    }
+    else if(array_dtype == bn::dtype::get_builtin<double>())
+    {
+        h::Type t = h::Float(64);
+        h::Buffer buffer(t, &raw_buffer, name);
+        image_base_p = new h::Image<double>(buffer);
+    }
+
+    if(image_base_p == NULL)
+    {
+        const std::string type_repr = p::extract<std::string>(p::str(array_dtype));
+        printf("numpy_to_image input array type: %s", type_repr.c_str());
+        throw std::invalid_argument("ndarray_to_new_image_base received an array of type not managed in Halide.");
+    }
+
+    return image_base_p;
+}
+
+
+/// Will create a Halide::Image object pointing to the array data
+h::ImageBase* ndarray_to_new_image_base(boost::numpy::ndarray &array, const std::string name="")
+{
+    buffer_t raw_buffer = ndarray_to_buffer_t(array);
+
+    const boost::numpy::dtype array_dtype = array.get_dtype();
+    return raw_buffer_to_new_imagebase(array_dtype, raw_buffer, name);
 }
 
 namespace std
@@ -839,13 +923,16 @@ void defineImage()
            "Allocate an image of type T with the given dimensions.");
 
     p::def("Image", &ImageFactory::create_image2, p::args("type", "buf"),
+           p::with_custodian_and_ward_postcall<0, 2>(), // the buffer reference count is increased
            "Wrap a buffer in an Image object of type T, "
            "so that we can directly access its pixels in a type-safe way.");
 
     p::def("Image", &ImageFactory::create_image3, p::args("type", "r"),
+           p::with_custodian_and_ward_postcall<0, 2>(), // the realization reference count is increased
            "Wrap a single-element realization in an Image object of type T.");
 
     p::def("Image", &ImageFactory::create_image4, (p::arg("type"), p::arg("b"), p::arg("name")=""),
+           p::with_custodian_and_ward_postcall<0, 2>(), // the buffer_t reference count is increased
            "Wrap a buffer_t in an Image object of type T, so that we can access its pixels.");
 
 
@@ -854,155 +941,23 @@ void defineImage()
     boost::numpy::initialize();
 
     p::def("ndarray_to_image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
+           p::with_custodian_and_ward_postcall<0, 1>(), // the array reference count is increased
            "Converts a numpy array into a Halide::Image."
            "Will take into account the array size, dimensions, and type."
            "Created Image refers to the array data (no copy).");
 
     p::def("Image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
-           //p::with_custodian_and_ward<1, 2> FIXME
+           p::with_custodian_and_ward_postcall<0, 1>(), // the array reference count is increased
            "Wrap numpy array in a Halide::Image."
            "Will take into account the array size, dimensions, and type."
            "Created Image refers to the array data (no copy).");
 
-
     p::def("image_to_ndarray", &image_to_ndarray, p::arg("image"),
+           p::with_custodian_and_ward_postcall<0, 1>(), // the image reference count is increased
            "Creates a numpy array from a Halide::Image."
            "Will take into account the Image size, dimensions, and type."
            "Created ndarray refers to the Image data (no copy).");
 #endif
-
-    //    class Image(object):
-    //        """
-    //        Construct an Image::
-
-    //        Image(contents, [scale=None])
-    //              Image([typeval=Int(n), UInt(n), Float(n), Bool()], contents, [scale=None])
-
-    //              The contents can be:
-
-    //              - PIL image
-    //              - Numpy array
-    //              - Filename of existing file (typeval defaults to UInt(8))
-    //              - halide.Buffer
-    //              - An int or tuple -- constructs an n-D image (typeval argument is required).
-
-    //              The image can be indexed via I[x], I[y,x], etc, which gives a Halide Expr.
-
-    //              If not provided (or None) then the typeval is inferred from the input argument.
-
-    //              For PIL, numpy, and filename constructors, if scale is provided then the input is scaled by the floating point scale factor
-    //              (for example, Image(filename, UInt(16), 1.0/256) reads a UInt(16) image rescaled to have maximum value 255). If omitted,
-    //              scale is set to convert between source and target data type ranges, where int types range from 0 to maxval, and float types
-    //              range from 0 to 1.
-    //              """
-    //              def __new__(cls, typeval, contents=None, scale=None):
-    //              if contents is None:                        # If contents is None then Image(contents) is assumed as the call
-    //              (typeval, contents) = (None, typeval)
-
-    //              if isinstance(contents, str_types):    # Convert filename to PIL image
-    //              contents = PIL.open(contents)
-    //              if typeval is None:
-    //              typeval = UInt(8)
-    //              contents = numpy.asarray(contents, 'uint8')
-
-    //              if hasattr(contents, 'putpixel'):           # Convert PIL images to numpy
-    //              contents = numpy.asarray(contents)
-
-    //              if typeval is None:
-    //              if hasattr(contents, 'type'):
-    //              typeval = contents.type()
-    //              elif isinstance(contents, numpy.ndarray):
-    //              typeval = _numpy_to_type(contents)
-    //              elif isinstance(contents, Realization):
-    //              typeval = contents.as_vector()[0].type()
-    //              else:
-    //              raise ValueError('unknown halide.Image constructor %r' % contents)
-
-    //              assert isinstance(typeval, TypeType), typeval
-    //              sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
-
-    //              if sig == (8, True, False, False):
-    //              C = Image_int8
-    //              target_dtype = 'int8'
-    //              elif sig == (16, True, False, False):
-    //              C = Image_int16
-    //              target_dtype = 'int16'
-    //              elif sig == (32, True, False, False):
-    //              C = Image_int32
-    //              target_dtype = 'int32'
-    //              elif sig == (8, False, True, False):
-    //              C = Image_uint8
-    //              target_dtype = 'uint8'
-    //              elif sig == (16, False, True, False):
-    //              C = Image_uint16
-    //              target_dtype = 'uint16'
-    //              elif sig == (32, False, True, False):
-    //              C = Image_uint32
-    //              target_dtype = 'uint32'
-    //              elif sig == (32, False, False, True):
-    //              C = Image_float32
-    //              target_dtype = 'float32'
-    //              elif sig == (64, False, False, True):
-    //              C = Image_float64
-    //              target_dtype = 'float64'
-    //              else:
-    //              raise ValueError('unimplemented halide.Image type signature %r' % typeval)
-
-    //              if isinstance(contents, numpy.ndarray):
-    //              if scale is None:
-    //              in_range = _numpy_to_type(contents).typical_max()
-    //              out_range = typeval.typical_max()
-    //              if in_range != out_range:
-    //              scale = float(out_range)/in_range
-    //              if scale is not None:
-    //              contents = numpy.asarray(numpy.asarray(contents,'float')*float(scale), target_dtype)
-    //              return _numpy_to_image(contents, target_dtype, C)
-    //              elif isinstance(contents, ImageTypes+(ImageParamType,BufferType,Realization)):
-    //              return C(contents)
-    //              elif isinstance(contents, tuple) or isinstance(contents, list) or isinstance(contents, integer_types):
-    //              if isinstance(contents, integer_types):
-    //              contents = (contents,)
-    //              if not all(isinstance(x, integer_types) for x in contents):
-    //              raise ValueError('halide.Image constructor did not receive a tuple of ints for Image size')
-    //              return C(*contents)
-    //              else:
-    //              raise ValueError('unknown Image constructor contents %r' % contents)
-
-    //              def show(self, maxval=None):
-    //              """
-    //              Shows an Image instance on the screen, by converting through numpy and PIL.
-
-    //              If maxval is not None then rescales so that bright white is equal to maxval.
-    //              """
-
-    //              def save(self, filename, maxval=None):
-    //              """
-    //              Save an Image (converted via PIL).
-
-    //              If maxval is not None then rescales so that bright white is equal to maxval.
-    //              """
-
-    //              def to_pil(self):
-    //              """
-    //              Convert to PIL (Python Imaging Library) image.
-
-    //              The fromarray() constructor in PIL does not work due to ignoring array stride so this is a workaround.
-    //              """
-
-    //              def tostring(self):
-    //              """
-    //              Convert to str.
-    //              """
-
-    //              def set(self, contents):
-    //              """
-    //              Sets contents of Image or ImageParam::
-
-    //              set(Image, Buffer)
-    //              set(ImageParam, Buffer|Image)
-    //              """
-
-
 
     return;
 }
