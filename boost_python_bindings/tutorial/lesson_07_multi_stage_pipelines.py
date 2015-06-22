@@ -35,13 +35,7 @@ def main():
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-
-        # FIXME current Image keeps a (C++ level) reference to the ndarray object
-        # thus the line below will crash. Incref needs to be handled better.
-
-        #input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.png")
-        input_data = imread("../../tutorial/images/rgb.png")
-        input = Image(input_data, name="rgb.png")
+        input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.png")
         assert input.type() == UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -112,12 +106,7 @@ def main():
     if True:
         # Take a color 8-bit input
 
-        # FIXME current Image keeps a (C++ level) reference to the ndarray object
-        # thus the line below will crash. Incref needs to be handled better.
-        #input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.bis.png")
-
-        input_data = imread("../../tutorial/images/rgb.png")
-        input = Image(input_data, name="rgb.bis.png")
+        input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.bis.png")
         assert input.type() == UInt(8)
 
         # This time, we'll wrap the input in a Func that prevents
