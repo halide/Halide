@@ -26,16 +26,19 @@ from halide import *
 #include "image_io.h"
 from scipy.misc import imread, imsave
 
+import os.path
 
 def main():
     # First we'll declare some Vars to use below.
     x, y, c = Var("x"), Var("y"), Var("c")
 
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+
     # Now we'll express a multi-stage pipeline that blurs an image
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-        input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.png")
+        input = Image(imread(image_path), name="rgb.png")
         assert input.type() == UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -105,8 +108,7 @@ def main():
     # The same pipeline, with a boundary condition on the input.
     if True:
         # Take a color 8-bit input
-
-        input = Image(imread("../../tutorial/images/rgb.png"), name="rgb.bis.png")
+        input = Image(imread(image_path), name="rgb.bis.png")
         assert input.type() == UInt(8)
 
         # This time, we'll wrap the input in a Func that prevents

@@ -26,6 +26,7 @@
 import halide as h
 import numpy as np
 from scipy.misc import imread, imsave
+import os.path
 
 def main():
 
@@ -33,7 +34,8 @@ def main():
     # brightens an image.
 
     # First we'll load the input image we wish to brighten.
-    input_data = imread("../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    input_data = imread(image_path)
     assert input_data.dtype == np.uint8
 
     # We create an Image object to wrap the numpy array

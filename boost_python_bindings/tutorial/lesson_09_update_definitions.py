@@ -35,6 +35,7 @@ from halide import *
 #include "image_io.h"
 from scipy.misc import imread
 import numpy as np
+import os.path
 
 min_, max_ = __builtins__.min, __builtins__.max
 
@@ -44,7 +45,8 @@ def main():
 
     # Load a grayscale image to use as an input.
     #Image<uint8_t> input = load<uint8_t>("images/gray.png")
-    input_data = imread("../../tutorial/images/gray.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/gray.png")
+    input_data = imread(image_path)
     if True:
          # making the image smaller to go faster
         input_data = input_data[:160, :150]

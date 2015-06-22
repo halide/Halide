@@ -25,10 +25,12 @@ from halide import *
 # Include some support code for loading pngs.
 #include "image_io.h"
 from scipy.misc import imread
+import os.path
 
 # Include a clock to do performance testing.
 #include "clock.h"
 from datetime import datetime
+
 
 # Define some Vars to use.
 x, y, c, i = Var("x"), Var("y"), Var("c"), Var("i")
@@ -296,7 +298,8 @@ class MyPipeline:
 
 def main():
     # Load an input image.
-    input_data = imread("../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    input_data = imread(image_path)
     input = Image(input_data)
 
     # Allocated an image that will store the correct output
