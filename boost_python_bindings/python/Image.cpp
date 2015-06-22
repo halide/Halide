@@ -763,7 +763,7 @@ struct create_image1_impl_t
             return create_image_object<pixel_t, Args...>(args...);
         }
         else
-        {// keep recursing
+        { // keep recursing
             typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
             return create_image1_impl_t<pixels_types_tail_t, Args...>()(type, args...);
         }

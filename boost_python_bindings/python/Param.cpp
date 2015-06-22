@@ -4,6 +4,8 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
+#include <boost/mpl/list.hpp>
+
 #include "../../src/Param.h"
 #include "Type.h"
 
@@ -348,69 +350,153 @@ p::object create_param0_impl<end_of_recursion_t>(h::Type type, std::string /*nam
     return p::object();
 }
 
-template<>
-struct h::type_of_helper<end_of_recursion_t> {
-    operator h::Type() {
-        return h::Type(); // call default constructor
-    }
-};
+//template<>
+//struct h::type_of_helper<end_of_recursion_t> {
+//    operator h::Type() {
+//        return h::Type(); // call default constructor
+//    }
+//};
+
+
+//// C++ fun, variadic template recursive function !
+//template<bool UseExprs, typename T=end_of_recursion_t, typename ...Types>
+//p::object create_param1_impl(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
+//{
+//    if(std::is_same<T, end_of_recursion_t>::value)
+//    {
+//        // end of recursion, did not find a matching type
+//        printf("create_param1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
+//        throw std::invalid_argument("ParamFactory::create_param1_impl received type not handled");
+//        return p::object();
+//    }
+
+//    if(h::type_of<T>() == type)
+//    {
+//        p::extract<T> val_extract(val);
+
+//        if(val_extract.check())
+//        {
+//            T true_val = val_extract();
+//            if(UseExprs == true)
+//            {
+//                if(name != "")
+//                {
+//                    return create_param_object<T>(name, true_val, min, max);
+//                }
+//                else
+//                {
+//                    return create_param_object<T>(true_val, min, max);
+//                }
+//            }
+//            else
+//            { // UseExprs == false
+//                if(name != "")
+//                {
+//                    return create_param_object<T>(name, true_val);
+//                }
+//                else
+//                {
+//                    return create_param_object<T>(true_val);
+//                }
+//            }
+//        }
+//        else
+//        {
+//            printf("create_param1_impl type == %s\n", type_repr(type).c_str());
+//            const std::string val_str = p::extract<std::string>(p::str(val));
+//            printf("create_param1_impl val == %s\n", val_str.c_str());
+//            throw std::invalid_argument("ParamFactory::create_param1_impl called with "
+//                                        "a value that could not be converted to the given type");
+//        }
+//    }
+//    else
+//    {
+//        return create_param1_impl<UseExprs, Types...>(type, name, val, min, max); // keep recursing
+//    }
+//}
+
+typedef boost::mpl::list<boost::uint8_t, boost::uint16_t, boost::uint32_t,
+boost::int8_t, boost::int16_t, boost::int32_t,
+float, double> pixel_types_t;
 
 // C++ fun, variadic template recursive function !
-template<bool UseExprs, typename T=end_of_recursion_t, typename ...Types>
-p::object create_param1_impl(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
+// (if you wonder why struct::operator() and not a function,
+// see http://artofsoftware.org/2012/12/20/c-template-function-partial-specialization )
+
+template<typename PixelTypes, typename ...Args>
+struct create_param1_impl_t
 {
-    if(std::is_same<T, end_of_recursion_t>::value)
+    p::object operator()(h::Type type, p::object val, Args... args)
+    {
+        typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
+        if(h::type_of<pixel_t>() == type)
+        {
+            p::extract<pixel_t> val_extract(val);
+            if(val_extract.check())
+            {
+                pixel_t true_val = val_extract();
+                return call_create_param_object<pixel_t>(true_val, args ...);
+            }
+            else
+            {
+                printf("create_param1_impl type == %s\n", type_repr(type).c_str());
+                const std::string val_str = p::extract<std::string>(p::str(val));
+                printf("create_param1_impl val == %s\n", val_str.c_str());
+                throw std::invalid_argument("ParamFactory::create_param1_impl called with "
+                                            "a value that could not be converted to the given type");
+            }
+        }
+        else
+        { // keep recursing
+            typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
+            return create_param1_impl_t<pixels_types_tail_t, Args...>()(type, val, args...);
+        }
+    }
+
+    template<typename T>
+    p::object call_create_param_object(T true_val)
+    {
+        return create_param_object<T>(true_val);
+    }
+
+    template<typename T>
+    p::object call_create_param_object(T true_val, std::string name)
+    {
+        return create_param_object<T>(name, true_val);
+    }
+
+    template<typename T>
+    p::object call_create_param_object(T true_val, std::string name, h::Expr min, h::Expr max)
+    {
+        return create_param_object<T>(name, true_val, min, max);
+    }
+
+    template<typename T>
+    p::object call_create_param_object(T true_val, h::Expr min, h::Expr max)
+    {
+        return create_param_object<T>(true_val, min, max);
+    }
+
+//    template<typename T, typename ...Args2>
+//    p::object call_create_param_object(T true_val, Args2... args)
+//    {
+//        throw std::runtime_error("create_param1_impl_t was called with parameters types not yet handled");
+//        return p::object();
+//    }
+
+};
+
+template<typename ...Args>
+struct create_param1_impl_t<boost::mpl::l_end::type, Args...>
+{
+    p::object operator()(h::Type type, p::object val, Args... args)
     {
         // end of recursion, did not find a matching type
         printf("create_param1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
         throw std::invalid_argument("ParamFactory::create_param1_impl received type not handled");
         return p::object();
     }
-
-    if(h::type_of<T>() == type)
-    {
-        p::extract<T> val_extract(val);
-
-        if(val_extract.check())
-        {
-            T true_val = val_extract();
-            if(UseExprs == true)
-            {
-                if(name != "")
-                {
-                    return create_param_object<T>(name, true_val, min, max);
-                }
-                else
-                {
-                    return create_param_object<T>(true_val, min, max);
-                }
-            }
-            else
-            { // UseExprs == false
-                if(name != "")
-                {
-                    return create_param_object<T>(name, true_val);
-                }
-                else
-                {
-                    return create_param_object<T>(true_val);
-                }
-            }
-        }
-        else
-        {
-            printf("create_param1_impl type == %s\n", type_repr(type).c_str());
-            const std::string val_str = p::extract<std::string>(p::str(val));
-            printf("create_param1_impl val == %s\n", val_str.c_str());
-            throw std::invalid_argument("ParamFactory::create_param1_impl called with "
-                                        "a value that could not be converted to the given type");
-        }
-    }
-    else
-    {
-        return create_param1_impl<UseExprs, Types...>(type, name, val, min, max); // keep recursing
-    }
-}
+};
 
 
 struct ParamFactory
@@ -431,40 +517,25 @@ struct ParamFactory
                 float, double>(type, name);
     }
 
-
     static p::object create_param2(h::Type type, p::object val)
     {
-        return create_param1_impl<false,
-                boost::uint8_t, boost::uint16_t, boost::uint32_t,
-                boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, "", val, h::Expr(),  h::Expr());
+        return create_param1_impl_t<pixel_types_t>()(type, val);
     }
-
 
     static p::object create_param3(h::Type type, std::string name, p::object val)
     {
-        return create_param1_impl<false,
-                boost::uint8_t, boost::uint16_t, boost::uint32_t,
-                boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, name, val, h::Expr(),  h::Expr());
+        return create_param1_impl_t<pixel_types_t, std::string>()(type, val, name);
     }
 
     static p::object create_param4(h::Type type, p::object val, h::Expr min, h::Expr max)
     {
-        return create_param1_impl<true,
-                boost::uint8_t, boost::uint16_t, boost::uint32_t,
-                boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, "", val, min, max);
+        return create_param1_impl_t<pixel_types_t, h::Expr, h::Expr>()(type, val, min, max);
     }
 
     static p::object create_param5(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
     {
-        return create_param1_impl<true,
-                boost::uint8_t, boost::uint16_t, boost::uint32_t,
-                boost::int8_t, boost::int16_t, boost::int32_t,
-                float, double>(type, name, val, min, max);
+        return create_param1_impl_t<pixel_types_t, std::string, h::Expr, h::Expr>()(type, val, name, min, max);
     }
-
 };
 
 void defineParam()
