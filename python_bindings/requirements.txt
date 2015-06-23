@@ -28,6 +28,9 @@ scipy
 # testing
 nose
 
+# documentation
+sphinx
+sphinx_rtd_theme
 
 # Regarding C++ dependencies we have
 # A C++ compiler (gcc or clang recommended)
