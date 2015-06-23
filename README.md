@@ -120,6 +120,10 @@ from any LLVM build (3.5 and newer) that is installed.
     % cmake -DLLVM_DIR=${LLVM_ROOT}/build/share/cmake/
     % make -j8
 
+Note if you built LLVM with Visual Studio and are building Halide you will need
+to also to set ``LLVM_BUILD_TYPE`` (e.g. ``-DLLVM_BUILD_TYPE=RELEASE``) when
+invoking CMake to the build type used to build LLVM.
+
 Building Halide and llvm as 32-bit on 64-bit linux
 --------------------------------------------------
 
