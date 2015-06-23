@@ -68,7 +68,7 @@ if (WITH_TUTORIALS)
     target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
     # FIXME: This probably isn't portable
     if (NOT MSVC)
-      target_link_libraries(lesson_10_aot_compilation_run pthread)
+      target_link_libraries(lesson_10_aot_compilation_run pthread dl)
     endif()
   endif()
 else()
