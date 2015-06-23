@@ -482,7 +482,7 @@ target_link_libraries(Halide InitialModules ${LIBS})
 # against the Halide library inherit those options and definitions
 if (MSVC)
   # Suppress some warnings
-  target_compile_options(Halide PUBLIC "/wd4244 /wd4267 /wd4800 /wd4996")
+  target_compile_options(Halide PUBLIC /wd4244 /wd4267 /wd4800 /wd4996)
   target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
   # To compile LLVM headers following was taken from LLVM CMake files:
   # Disable sized deallocation if the flag is supported. MSVC fails to compile
