@@ -25,7 +25,7 @@ include_directories("${LLVM_INCLUDE}")
 # FIXME: We don't need all the LLVM components.
 # We'll get faster linking if we specify only the components we need
 # To see the available components run llvm-config --components
-llvm_map_components_to_libnames(LIBS all)
+llvm_map_components_to_libnames(LLVM_LIBS all)
 
 if (TARGET_NATIVE_CLIENT)
   add_definitions("-DWITH_NATIVE_CLIENT")
@@ -476,7 +476,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
 )
 
-target_link_libraries(Halide InitialModules ${LIBS})
+target_link_libraries(Halide InitialModules)
 
 # Note when PUBLIC scope is used in target_compile_* then targets that link
 # against the Halide library inherit those options and definitions
@@ -494,12 +494,29 @@ if (MSVC)
   endif()
 else()
   # I'm not sure if we want targets that link against Halide to inherit
-  # the LLVM definitions so make the scope PRIVATE.
+  # the LLVM definitions so make the scope PRIVATE for now.
   target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
   target_compile_options(Halide PUBLIC "-std=c++11")
   if (NOT LLVM_ENABLE_RTTI)
     target_compile_options(Halide PUBLIC "-fno-rtti")
   endif()
+endif()
+
+# Link against LLVM
+if (NUMBER_OF_LLVM_BUILD_TYPES GREATER 1)
+  # The LLVM build may expose multiple build configurations when built with
+  # Visual Studio.  We want to link against the one the user requested so we
+  # need to get the full path to those libraries and link against those.
+  foreach(libname ${LLVM_LIBS})
+    get_property(libname_path TARGET ${libname} PROPERTY LOCATION_${LLVM_BUILD_TYPE})
+    if (${libname} STREQUAL LTO)
+      # This seems to be a dll which we can't link against
+      continue()
+    endif()
+    target_link_libraries(Halide ${libname_path})
+  endforeach()
+else()
+  target_link_libraries(Halide ${LLVM_LIBS})
 endif()
 
 # if this is a DLL, don't link dependencies to this set of libs.

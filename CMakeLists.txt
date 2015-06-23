@@ -27,14 +27,30 @@ if (LLVM_PACKAGE_VERSION  VERSION_LESS 3.5)
   message(FATAL_ERROR "Need LLVM >=3.5")
 endif()
 
-if (MSVC)
-  # WORKAROUND: Read the location from an imported target to get LLVM's binary
-  # directory. Using the ${LLVM_TOOLS_BINARY_DIR} variable is currently broken
-  # when using Visual Studio (it contains the string $(Configuration) in the
-  # path). We shouldn't read the location from the imported binary targets on
-  # other platforms because if LLVM was built with the Autoconf/Makefile build
-  # system they won't be available.
-  get_target_property(LLVM_AS_PATH llvm-as LOCATION)
+# Detect the build configurations that were used to build LLVM
+# We use LLVMSupport because it is an essential library that must exist in any build of LLVM
+get_target_property(LLVMSupport_BUILD_TYPES LLVMSupport IMPORTED_CONFIGURATIONS)
+list(LENGTH LLVMSupport_BUILD_TYPES NUMBER_OF_LLVM_BUILD_TYPES)
+
+if (NUMBER_OF_LLVM_BUILD_TYPES GREATER 1)
+  # WORKAROUND: Using the ${LLVM_TOOLS_BINARY_DIR} variable is currently broken
+  # when LLVM has multiple configurations - typically Visual Studio (it contains the string $(Configuration) in the
+  # path). We need the user to tell us which configuration they want to use.
+  set(LLVM_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
+    "LLVM build type to use. Valid options: ${LLVMSupport_BUILD_TYPES}"
+  )
+  if (LLVM_BUILD_TYPE STREQUAL "")
+    message(FATAL_ERROR "LLVM_BUILD_TYPE must be set when multiple configurations are available. Valid Options: ${LLVMSupport_BUILD_TYPES}")
+  endif()
+
+  # Check the specified LLVM build type is available
+  list(FIND LLVMSupport_BUILD_TYPES "${LLVM_BUILD_TYPE}" FOUND_INDEX)
+  if (FOUND_INDEX EQUAL -1)
+    message(FATAL_ERROR "Specified LLVM build type \"${LLVM_BUILD_TYPE}\" is not "
+      "available. Valid options: ${LLVMSupport_BUILD_TYPES}")
+  endif()
+
+  get_target_property(LLVM_AS_PATH llvm-as LOCATION_${LLVM_BUILD_TYPE})
   get_filename_component(LLVM_BIN "${LLVM_AS_PATH}" DIRECTORY)
 else()
   set(LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
