@@ -42,15 +42,16 @@ if (NUMBER_OF_LLVM_BUILD_TYPES GREATER 1)
   if (LLVM_BUILD_TYPE STREQUAL "")
     message(FATAL_ERROR "LLVM_BUILD_TYPE must be set when multiple configurations are available. Valid Options: ${LLVMSupport_BUILD_TYPES}")
   endif()
-
+  # Convert to uppercase so that the LLVM_BUILD_TYPE option is case insensitive
+  string(TOUPPER "${LLVM_BUILD_TYPE}" LLVM_BUILD_TYPE_UPPERCASE)
   # Check the specified LLVM build type is available
-  list(FIND LLVMSupport_BUILD_TYPES "${LLVM_BUILD_TYPE}" FOUND_INDEX)
+  list(FIND LLVMSupport_BUILD_TYPES "${LLVM_BUILD_TYPE_UPPERCASE}" FOUND_INDEX)
   if (FOUND_INDEX EQUAL -1)
-    message(FATAL_ERROR "Specified LLVM build type \"${LLVM_BUILD_TYPE}\" is not "
+    message(FATAL_ERROR "Specified LLVM build type \"${LLVM_BUILD_TYPE_UPPERCASE}\" is not "
       "available. Valid options: ${LLVMSupport_BUILD_TYPES}")
   endif()
 
-  get_target_property(LLVM_AS_PATH llvm-as LOCATION_${LLVM_BUILD_TYPE})
+  get_target_property(LLVM_AS_PATH llvm-as LOCATION_${LLVM_BUILD_TYPE_UPPERCASE})
   get_filename_component(LLVM_BIN "${LLVM_AS_PATH}" DIRECTORY)
 else()
   set(LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
