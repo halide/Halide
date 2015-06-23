@@ -3,144 +3,30 @@
 #include "device_interface.h"
 #include "HalideRuntimeMetal.h"
 
-extern "C" {
+#include "objc_apple_metal_stubs.h"
 
+extern "C" {
 typedef void *objc_id;
 typedef void *objc_sel;
 extern objc_id objc_getClass(const char *name);
 extern objc_sel sel_getUid(const char *str);
 extern objc_id objc_msgSend(objc_id self, objc_sel op, ...);
-
-typedef objc_id NSError;
-typedef objc_id MTLDevice;
-typedef objc_id MTLBuffer;
-typedef objc_id MTLCommandQueue;
-typedef objc_id MTLCommandBuffer;
-typedef objc_id MTLComputeCommandEncoder;
-typedef objc_id MTLBlitCommandEncoder;
-typedef objc_id MTLComputePipelineState;
-typedef objc_id MTLLibrary;
-typedef objc_id MTLFunction;
-typedef objc_id MTLCompileOptions;
-
-extern MTLDevice MTLCreateSystemDefaultDevice();
-
 }
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
-WEAK void release_metal_object(objc_id obj) {
-    objc_msgSend(obj, sel_getUid("release"));
-}
-
-WEAK MTLBuffer new_buffer(MTLDevice device, size_t length) {
-    return objc_msgSend(device, sel_getUid("newBufferWithLength:options:"),
-                        (uint32_t)length, 0 /* MTLResourceOptionCPUCacheModeDefault */);
-}
-
-WEAK MTLCommandQueue new_command_queue(MTLDevice device) {
-    return objc_msgSend(device, sel_getUid("newCommandQueue"));
-}
-    
-WEAK MTLCommandBuffer new_command_buffer(MTLCommandQueue queue) {
-    return objc_msgSend(queue, sel_getUid("newCommandBuffer"));
-}
-
-WEAK MTLComputeCommandEncoder new_compute_command_encoder(MTLCommandBuffer buffer) {
-    return objc_msgSend(buffer, sel_getUid("newComputeCommandEncoder"));
-}
-
-WEAK MTLComputePipelineState new_compute_pipeline_state_with_function(MTLDevice device, MTLFunction function) {
-    NSError *error_return;
-    // TODO: do something with error.
-    return objc_msgSend(device, sel_getUid("newComputePipelineStateWithFunction:"), function, &error_return);
-}
-
-WEAK void set_compute_pipeline_state(MTLComputeCommandEncoder encoder, MTLComputePipelineState pipeline_state) {
-    objc_msgSend(encoder, sel_getUid("setComputePipelineState:"), pipeline_state);
-}
-
-WEAK void end_encoding(MTLComputeCommandEncoder encoder) {
-    objc_msgSend(encoder, sel_getUid("endEncoding"));
-}
-
-typedef objc_id (*init_with_bytes_msg_send)(objc_id, objc_sel, const char *, long, long, bool);
-
-WEAK MTLLibrary new_library_with_source(MTLDevice device, const char *source, size_t source_len) {
-    NSError *error_return;
-    // TODO: Fix Objective-C stubs for real
-    const size_t NSUTF8StringEncoding = 4;
-    init_with_bytes_msg_send msg_sender = (init_with_bytes_msg_send)objc_msgSend;
-    objc_id source_str =
-        msg_sender(objc_msgSend(objc_getClass("NSString"),
-                                  sel_getUid("alloc")),
-                     sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone:"), source, (uint64_t)source_len, (uint64_t)NSUTF8StringEncoding, (bool)0 /* NO */);
-    MTLCompileOptions options = objc_msgSend(objc_msgSend(objc_getClass("MTLCompileOptions"), sel_getUid("alloc")),
-                                             sel_getUid("setFastMathEnabled:"), 1);
-    // TODO: handle error.
-    MTLLibrary result = objc_msgSend(device, sel_getUid("newLibraryWithSource:options:error:"), source_str, options, &error_return);
-    objc_msgSend(options, sel_getUid("release"));
-    objc_msgSend(source_str, sel_getUid("release"));
-    return result;
-}
-
-WEAK MTLFunction new_function_with_name(MTLLibrary library, const char *name, size_t name_len) {
-    // TODO: Fix Objective-C stubs for real
-    const size_t NSUTF8StringEncoding = 4;
-    init_with_bytes_msg_send msg_sender = (init_with_bytes_msg_send)objc_msgSend;
-    objc_id name_str =
-        msg_sender(objc_msgSend(objc_getClass("NSString"),
-                                  sel_getUid("alloc")),
-                     sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone:"), name, (uint64_t)name_len, (uint64_t)NSUTF8StringEncoding, (bool)0 /* NO */);
-    MTLFunction result = objc_msgSend(library, sel_getUid("newFunctionWithName:"), name_str);
-    objc_msgSend(name_str, sel_getUid("release"));
-    return result;
-}
-
-WEAK void set_input_buffer(MTLComputeCommandEncoder encoder, MTLBuffer input, uint32_t index) {
-    objc_msgSend(encoder, sel_getUid("setBuffer:offset:atIndex:"), input, (uint32_t)0, index);
-}
-
-WEAK void set_threadgroup_memory_length(MTLComputeCommandEncoder encoder, uint32_t index, uint32_t length) {
-    objc_msgSend(encoder, sel_getUid("setThreadgroupMemoryLength::atIndex:"), length, index);
-}
-
-struct MTLSize {
-    unsigned long width;
-    unsigned long height;
-    unsigned long depth;
-};
-
-WEAK void dispatch_threadgroups(MTLComputeCommandEncoder encoder, MTLSize threadgroupsPerGrid, MTLSize threadsPerThreadgroup) {
-    // TODO: Verify the argument passing here is correct.
-    objc_msgSend(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
-                 threadgroupsPerGrid, threadsPerThreadgroup);
-}
-
-WEAK void commit_command_buffer(MTLCommandBuffer buffer) {
-    objc_msgSend(buffer, sel_getUid("commit"));
-}
-
-WEAK void wait_until_completed(MTLCommandBuffer buffer) {
-    objc_msgSend(buffer, sel_getUid("waitUntilCompleted"));
-}
-
-WEAK void *buffer_contents(MTLBuffer buffer) {
-    return (void *)objc_msgSend(buffer, sel_getUid("contents"));
-}
-
 extern WEAK halide_device_interface metal_device_interface;
 
 volatile int WEAK thread_lock = 0;
-WEAK MTLDevice device;
-WEAK MTLCommandQueue queue;
+WEAK mtl_device *device;
+WEAK mtl_command_queue *queue;
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
 // modules that are attached to a context in order to release them all
 // when then context is released.
 struct module_state {
-    MTLLibrary library;
+    mtl_library *library;
     module_state *next;
 };
 WEAK module_state *state_list = NULL;
@@ -168,13 +54,13 @@ WEAK size_t buf_size(void *user_context, buffer_t *buf) {
 // - A call to halide_acquire_cl_context is followed by a matching call to
 //   halide_release_cl_context. halide_acquire_cl_context should block while a
 //   previous call (if any) has not yet been released via halide_release_cl_context.
-WEAK int halide_metal_acquire_context(void *user_context, MTLDevice &device_ret,
-                                      MTLCommandQueue &queue_ret, bool create = true) {
+WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_ret,
+                                      mtl_command_queue *&queue_ret, bool create = true) {
     halide_assert(user_context, &thread_lock != NULL);
     while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
     if (device == 0 && create) {
-        device = MTLCreateSystemDefaultDevice();
+        device = system_default_device();
         if (device == 0) {
             error(user_context) << "Metal: cannot allocate system default device.\n";
             __sync_lock_release(&thread_lock);
@@ -202,6 +88,29 @@ WEAK int halide_metal_release_context(void *user_context) {
     __sync_lock_release(&thread_lock);
     return 0;
 }
+
+class MetalContextHolder {
+    void *user_context;
+    void *autorelease_pool;
+
+public:
+    mtl_device *device;
+    mtl_command_queue *queue;
+    int error;
+
+    MetalContextHolder(void *user_context, bool create) : user_context(user_context) {
+        autorelease_pool =
+            objc_msgSend(objc_msgSend(objc_getClass("NSAutoreleasePool"),
+                                      sel_getUid("alloc")), sel_getUid("init"));
+        error = halide_metal_acquire_context(user_context, device, queue, create);
+    }
+
+    ~MetalContextHolder() {
+        halide_metal_release_context(user_context);
+        objc_msgSend(autorelease_pool, sel_getUid("drain"));
+    }
+
+};
 
 }}}} // namespace Halide::Runtime::Internal::Metal
 
@@ -240,17 +149,14 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    MTLDevice device;
-    MTLCommandQueue queue;
-
-    int acquire_error = halide_metal_acquire_context(user_context, device, queue, true);
-    if (acquire_error != 0) {
-        return acquire_error;
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error != 0) {
+        return metal_context.error;
     }
 
-    MTLBuffer metal_buf = new_buffer(device, size);
+    mtl_buffer *metal_buf = new_buffer(metal_context.device, size);
     if (metal_buf == 0) {
-      error(user_context) << "Metal: Failed to allocate buffer of size " << (int64_t)size << ".\n";
+        error(user_context) << "Metal: Failed to allocate buffer of size " << (int64_t)size << ".\n";
         return -1;
     }
 
@@ -258,7 +164,6 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
     if (buf->dev == 0) {
         error(user_context) << "Metal: out of memory allocating device wrapper.\n";
         release_metal_object(metal_buf);
-        halide_metal_release_context(user_context);
         return -1;
     }
 
@@ -266,8 +171,6 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
-
-    halide_metal_release_context(user_context);
 
     return 0;
 }
@@ -282,7 +185,7 @@ WEAK int halide_metal_device_free(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    MTLBuffer metal_buf = (MTLBuffer)halide_get_device_handle(buf->dev);
+    mtl_buffer *metal_buf = (mtl_buffer *)halide_get_device_handle(buf->dev);
     release_metal_object(metal_buf);
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
@@ -312,18 +215,15 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
         state_list = *state;
     }
 
-    MTLDevice device;
-    MTLCommandQueue queue;
-    int acquire_error = halide_metal_acquire_context(user_context, device, queue);
-    if (acquire_error != 0) {
-        return acquire_error;
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error != 0) {
+        return metal_context.error;
     }
 
     if ((*state)->library == 0) {
-        (*state)->library = new_library_with_source(device, source, source_size);
+        (*state)->library = new_library_with_source(metal_context.device, source, source_size);
         if ((*state)->library == 0) {
             error(user_context) << "Metal: new_library_with_source failed.\n";
-            halide_metal_release_context(user_context);
             return -1;
         }
     }
@@ -333,22 +233,19 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
-    halide_metal_release_context(user_context);
-
     return 0;
 }
 
 WEAK int halide_metal_device_sync(void *user_context, struct buffer_t *) {
-    MTLDevice device;
-    MTLCommandQueue queue;
-    int acquire_error = halide_metal_acquire_context(user_context, device, queue);
-    if (acquire_error != 0) {
-        return acquire_error;
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error != 0) {
+        return metal_context.error;
     }
 
-    MTLCommandBuffer nop_buffer = new_command_buffer(queue);
+    mtl_command_buffer *nop_buffer = new_command_buffer(metal_context.queue);
     commit_command_buffer(nop_buffer);
     wait_until_completed(nop_buffer);
+
     return 0;
 }
 
@@ -357,20 +254,18 @@ WEAK int halide_metal_device_release(void *user_context) {
 }
 
 WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buf) {
-    MTLDevice device;
-    MTLCommandQueue queue;
-    int acquire_error = halide_metal_acquire_context(user_context, device, queue);
-    if (acquire_error != 0) {
-        return acquire_error;
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error != 0) {
+        return metal_context.error;
     }
 
-    MTLCommandBuffer nop_buffer = new_command_buffer(queue);
+    mtl_command_buffer *nop_buffer = new_command_buffer(queue);
     commit_command_buffer(nop_buffer);
     wait_until_completed(nop_buffer);
 
     halide_assert(user_context, buf->host && buf->dev);
 
-    MTLBuffer metal_buf = (MTLBuffer)halide_get_device_handle(buf->dev);
+    mtl_buffer *metal_buf = (mtl_buffer *)halide_get_device_handle(buf->dev);
     void *buffer_memory = buffer_contents(metal_buf);
     // TODO: can we just call memcpy here or do we have to do the strided copy?
     memcpy(buffer_memory, buf->host, buf_size(user_context, buf));
@@ -379,20 +274,18 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buf) {
-    MTLDevice device;
-    MTLCommandQueue queue;
-    int acquire_error = halide_metal_acquire_context(user_context, device, queue);
-    if (acquire_error != 0) {
-        return acquire_error;
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error != 0) {
+        return metal_context.error;
     }
 
-    MTLCommandBuffer nop_buffer = new_command_buffer(queue);
+    mtl_command_buffer *nop_buffer = new_command_buffer(metal_context.queue);
     commit_command_buffer(nop_buffer);
     wait_until_completed(nop_buffer);
 
     halide_assert(user_context, buf->host && buf->dev);
 
-    MTLBuffer metal_buf = (MTLBuffer)halide_get_device_handle(buf->dev);
+    mtl_buffer *metal_buf = (mtl_buffer *)halide_get_device_handle(buf->dev);
     void *buffer_memory = buffer_contents(metal_buf);
     // TODO: can we just call memcpy here or do we have to do the strided copy?
     memcpy(buf->host, buffer_memory, buf_size(user_context, buf));
@@ -413,52 +306,42 @@ WEAK int halide_metal_run(void *user_context,
                            float* vertex_buffer,
                            int num_coords_dim0,
                            int num_coords_dim1) {
-    MTLDevice device;
-    MTLCommandQueue queue;
-    int acquire_error = halide_metal_acquire_context(user_context, device, queue);
-    if (acquire_error != 0) {
-        return acquire_error;
+    // Buy an autorelease pool because this is not perf critical and it is the
+    // really safe thing to do.
+
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error != 0) {
+        return metal_context.error;
     }
 
-    MTLCommandBuffer command_buffer = new_command_buffer(queue);
+    mtl_command_buffer *command_buffer = new_command_buffer(metal_context.queue);
     if (command_buffer == 0) {
         error(user_context) << "Metal: Could not allocate command buffer.\n";
-        halide_metal_release_context(user_context);
         return -1;
     }
 
-    MTLComputeCommandEncoder encoder = new_compute_command_encoder(command_buffer);
+    mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);
     if (encoder == 0) {
         error(user_context) << "Metal: Could not allocate compute command encoder.\n";
-        release_metal_object(command_buffer);
-        halide_metal_release_context(user_context);
         return -1;
     }
 
     halide_assert(user_context, state_ptr);
     module_state *state = (module_state*)state_ptr;
 
-    MTLFunction function = new_function_with_name(state->library, entry_name, strlen(entry_name));
+    mtl_function *function = new_function_with_name(state->library, entry_name, strlen(entry_name));
     if (function == 0) {
         error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
-        release_metal_object(encoder);
-        release_metal_object(command_buffer);
-        halide_metal_release_context(user_context);
         return -1;
     }
 
-    MTLComputePipelineState pipeline_state = new_compute_pipeline_state_with_function(device, function);
+    mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
     if (pipeline_state == 0) {
         error(user_context) << "Metal: Could not allocate pipeline state.\n";
         release_metal_object(function);
-        release_metal_object(encoder);
-        release_metal_object(command_buffer);
-        halide_metal_release_context(user_context);
         return -1;
     }
     set_compute_pipeline_state(encoder, pipeline_state);
-    release_metal_object(pipeline_state);
-    release_metal_object(function);
 
     size_t total_args_size = 0;
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
@@ -474,12 +357,11 @@ WEAK int halide_metal_run(void *user_context,
 
     int32_t buffer_index = 0;
     if (total_args_size > 0) {
-        MTLBuffer args_buffer = new_buffer(device, total_args_size);
+        mtl_buffer *args_buffer = new_buffer(metal_context.device, total_args_size);
         if (args_buffer == 0) {
             error(user_context) << "Metal: Could not allocate arguments buffer.\n";
-            release_metal_object(encoder);
-            release_metal_object(command_buffer);
-            halide_metal_release_context(user_context);
+            release_metal_object(pipeline_state);
+            release_metal_object(function);
             return -1;
         }
         char *args_ptr = (char *)buffer_contents(args_buffer);
@@ -500,24 +382,22 @@ WEAK int halide_metal_run(void *user_context,
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            MTLBuffer metal_buffer = (MTLBuffer)halide_get_device_handle(*(uint64_t *)args[i]);
+            mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(*(uint64_t *)args[i]);
             set_input_buffer(encoder, metal_buffer, buffer_index);
             buffer_index++;
         }
     }
     set_threadgroup_memory_length(encoder, shared_mem_bytes, 0);
 
-    MTLSize blocks = { blocksX, blocksY, blocksZ };
-    MTLSize threads = { threadsX, threadsY, threadsZ };
-
-    dispatch_threadgroups(encoder, blocks, threads);
+    dispatch_threadgroups(encoder,
+                          blocksX, blocksY, blocksZ,
+                          threadsX, threadsY, threadsZ);
     end_encoding(encoder);
-    release_metal_object(encoder);
 
     commit_command_buffer(command_buffer);
-    release_metal_object(command_buffer);
 
-    halide_metal_release_context(user_context);
+    release_metal_object(pipeline_state);
+    release_metal_object(function);
 
     return 0;
 }
