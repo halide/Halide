@@ -508,7 +508,7 @@ if (NUMBER_OF_LLVM_BUILD_TYPES GREATER 1)
   # Visual Studio.  We want to link against the one the user requested so we
   # need to get the full path to those libraries and link against those.
   foreach(libname ${LLVM_LIBS})
-    get_property(libname_path TARGET ${libname} PROPERTY LOCATION_${LLVM_BUILD_TYPE})
+    get_property(libname_path TARGET ${libname} PROPERTY LOCATION_${LLVM_BUILD_TYPE_UPPERCASE})
     if (${libname} STREQUAL LTO)
       # This seems to be a dll which we can't link against
       continue()
