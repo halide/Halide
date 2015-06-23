@@ -36,6 +36,8 @@ if (WITH_TUTORIALS)
     use_libpng(lesson_09_update_definitions)
     add_tutorial(lesson_12_using_the_gpu.cpp)
     use_libpng(lesson_12_using_the_gpu)
+  else()
+    message(WARNING "Not building all tutorials due to missing libpng")
   endif()
 
   option(BUILD_AOT_TUTORIAL "Build the ahead-of-time compilation tutorial" ON)
