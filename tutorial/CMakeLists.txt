@@ -46,7 +46,7 @@ if (WITH_TUTORIALS)
 
     # This is name of the object file we expect lesson_10_aot_compilation_generate
     # to emit.
-    set(lesson_10_gen_obj "lesson_10_halide${CMAKE_C_OUTPUT_EXTENSION}")
+    set(lesson_10_gen_obj "lesson_10_halide.o")
     set(lesson_10_gen_header lesson_10_halide.h)
 
     # Note specifyng the command as a target should cause CMake to automatically
@@ -65,7 +65,9 @@ if (WITH_TUTORIALS)
                    ${lesson_10_gen_obj})
     target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
     # FIXME: This probably isn't portable
-    target_link_libraries(lesson_10_aot_compilation_run pthread)
+    if (NOT MSVC)
+      target_link_libraries(lesson_10_aot_compilation_run pthread)
+    endif()
   endif()
 else()
   message(STATUS "Building tutorials disabled")

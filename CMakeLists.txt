@@ -118,13 +118,8 @@ if (BUILD_TESTS)
   add_subdirectory(test)
 endif()
 
-# The apps and tutorials don't really compile on windows yet
-if (NOT WIN32)
-  add_subdirectory(apps)
-  add_subdirectory(tutorial)
-else()
-  message(STATUS "Building tutorials and apps disabled under windows")
-endif()
+add_subdirectory(apps)
+add_subdirectory(tutorial)
 
 option(WITH_DOCS "Enable building of documentation" OFF)
 if (WITH_DOCS)
