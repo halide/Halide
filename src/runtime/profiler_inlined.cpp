@@ -4,9 +4,9 @@
 extern "C" {
 
 WEAK __attribute__((always_inline)) int halide_profiler_set_current_func(halide_profiler_state *state, int tok, int t) {
-    __sync_synchronize();
-    state->current_func = tok + t;
-    __sync_synchronize();
+    // Do a volatile store to discourage llvm from reordering it.
+    volatile int *ptr = &(state->current_func);
+    *ptr = tok + t;
     return 0;
 }
 
