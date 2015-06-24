@@ -74,7 +74,12 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) {
     ostringstream oss;
-    oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
+    
+    string temp = unique_name('V');
+    string expr = print_expr(e);
+    do_indent();
+    stream << print_type(e.type()) << " " << temp << " = " << expr << ";\n";
+    oss << "*(" << print_type(type) << " thread *)(&" << temp << ")";
     return oss.str();
 }
 
@@ -159,8 +164,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
 }
 
 namespace {
-// Mapping of integer vector indices to Metal ".s" syntax.
-const char * vector_elements = "0123456789ABCDEF";
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp1(Expr e) {
@@ -236,11 +239,11 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         for (int i = 0; i < op->type.width; ++i) {
             do_indent();
             stream
-                << id << ".s" << vector_elements[i]
+              << id << "[" << i << "]"
                 << " = ((" << get_memory_space(op->name) << " "
                 << print_type(op->type.element_of()) << "*)"
                 << print_name(op->name) << ")"
-                << "[" << id_index << ".s" << vector_elements[i] << "];\n";
+                << "[" << id_index << "[" << i << "]];\n";
         }
     } else {
         print_assignment(op->type, rhs.str());
@@ -277,8 +280,8 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
                    << print_type(t.element_of()) << " *)"
                    << print_name(op->name)
                    << ")["
-                   << id_index << ".s" << vector_elements[i] << "] = "
-                   << id_value << ".s" << vector_elements[i] << ";\n";
+                   << id_index << "[" << i << "]] = "
+                   << id_value << "[" << i << "];\n";
         }
     } else {
         bool type_cast_needed = !(allocations.contains(op->name) &&
@@ -303,14 +306,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
     }
 
     cache.clear();
-}
-
-void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Cast *op) {
-    if (op->type.is_vector()) {
-        print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
-    } else {
-        CodeGen_C::visit(op);
-    }
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {

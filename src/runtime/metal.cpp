@@ -2,6 +2,7 @@
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
 #include "HalideRuntimeMetal.h"
+#include "objc_apple_foundation_stubs.h"
 
 #include "objc_apple_metal_stubs.h"
 
@@ -89,9 +90,8 @@ WEAK int halide_metal_release_context(void *user_context) {
     return 0;
 }
 
-class MetalContextHolder {
+class MetalContextHolder : private AutoreleasePool {
     void *user_context;
-    void *autorelease_pool;
 
 public:
     mtl_device *device;
@@ -99,17 +99,12 @@ public:
     int error;
 
     MetalContextHolder(void *user_context, bool create) : user_context(user_context) {
-        autorelease_pool =
-            objc_msgSend(objc_msgSend(objc_getClass("NSAutoreleasePool"),
-                                      sel_getUid("alloc")), sel_getUid("init"));
         error = halide_metal_acquire_context(user_context, device, queue, create);
     }
 
     ~MetalContextHolder() {
         halide_metal_release_context(user_context);
-        objc_msgSend(autorelease_pool, sel_getUid("drain"));
     }
-
 };
 
 }}}} // namespace Halide::Runtime::Internal::Metal
