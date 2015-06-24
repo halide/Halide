@@ -38,7 +38,7 @@ Type OutputImageParam::type() const {
     return param.type();
 }
 
-bool OutputImageParam::defined() {
+bool OutputImageParam::defined() const {
     return param.defined();
 }
 
