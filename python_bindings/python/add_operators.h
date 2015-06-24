@@ -93,10 +93,10 @@ void add_operators(PythonClass &class_instance)
     typedef typename PythonClass::wrapped_type wrapped_t;
 
     // The order of definitions matters.
-    // Python first will try input value as wrapped_t, then int, then float
-    add_operators_with<PythonClass, wrapped_t>(class_instance);
+    // Python first will try input value as int, then float, then wrapped_t
     add_operators_with<PythonClass, int>(class_instance);
     add_operators_with<PythonClass, float>(class_instance);
+    add_operators_with<PythonClass, wrapped_t>(class_instance);
 
     return;
 }
