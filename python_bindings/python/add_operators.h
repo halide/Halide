@@ -98,6 +98,17 @@ void add_operators(PythonClass &class_instance)
     add_operators_with<PythonClass, float>(class_instance);
     add_operators_with<PythonClass, wrapped_t>(class_instance);
 
+
+    // Define unary operators
+    // <boost/python/operators.hpp> lists all operators
+    class_instance
+            .def(-self) // neg
+            //.def(+self) // pos
+            .def(~self) // invert
+            //.def(abs(self))
+            //.def(!!self) // nonzero
+            ;
+
     return;
 }
 
