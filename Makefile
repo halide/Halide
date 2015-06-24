@@ -473,6 +473,7 @@ RUNTIME_CPP_COMPONENTS = \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
+  objc_apple_foundation_stubs \
   objc_apple_metal_stubs \
   opencl \
   opengl \
