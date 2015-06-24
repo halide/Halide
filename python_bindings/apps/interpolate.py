@@ -11,6 +11,8 @@ from halide import *
 
 from datetime import datetime
 from scipy.misc import imread, imsave
+import numpy as np
+import os.path
 
 int_t = Int(32)
 float_t = Float(32)
@@ -154,16 +156,17 @@ def get_interpolate():
     # JIT compile the pipeline eagerly, so we don't interfere with timing
     final.compile_jit(target)
 
-    return
+    return final
 
 def get_input_data():
 
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgba.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
     assert os.path.exists(image_path), "Could not find %s" % image_path
-    rgba_data = imread(image_path)
-    print("rgb_data", type(rgba_data), rgba_data.shape, rgba_data.dtype)
+    rgb_data = imread(image_path)
+    print("rg_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
 
-    input_data = np.copy(rgba_data, order="F").astype(np.float32)
+    input_data = np.copy(rgb_data, order="F").astype(np.float32) / 255.0
+    # input data is in range [0, 1]
 
     return input_data
 

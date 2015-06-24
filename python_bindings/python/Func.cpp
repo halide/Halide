@@ -546,22 +546,29 @@ void defineFunc()
                    p::return_internal_reference<1>(),
                    "Rename a dimension. Equivalent to split with a inner size of one.");
 
+    const std::string reorder_storage_doc = \
+            "Specify how the storage for the function is laid out. These "
+            "calls let you specify the nesting order of the dimensions. For "
+            "example, foo.reorder_storage(y, x) tells Halide to use "
+            "column-major storage for any realizations of foo, without "
+            "changing how you refer to foo in the code. You may want to do "
+            "this if you intend to vectorize across y. When representing "
+            "color images, foo.reorder_storage(c, x, y) specifies packed "
+            "storage (red, green, and blue values adjacent in memory), and "
+            "foo.reorder_storage(x, y, c) specifies planar storage (entire "
+            "red, green, and blue images one after the other in memory).\n\n"
+            "If you leave out some dimensions, those remain in the same "
+            "positions in the nesting order while the specified variables "
+            "are reordered around them.";
+    func_class.def("reorder_storage", &func_reorder_storage0<Func, p::tuple>, p::args("self", "dims"),
+                   p::return_internal_reference<1>(), reorder_storage_doc.c_str())
+            .def("reorder_storage", &func_reorder_storage0<Func, p::list>, p::args("self", "dims"),
+                 p::return_internal_reference<1>(), reorder_storage_doc.c_str())
+            .def("reorder_storage", &func_reorder_storage1<Func>, (p::arg("self"), p::arg("v0"), p::arg("v1"),
+                                                                   p::arg("v2")=p::object(), p::arg("v3")=p::object(),
+                                                                   p::arg("v4")=p::object(), p::arg("v5")=p::object()),
+                 p::return_internal_reference<1>(), reorder_storage_doc.c_str());
 
-    func_class.def("reorder_storage", &func_reorder_storage0<Func>, p::args("self", "dims"),
-                   p::return_internal_reference<1>(),
-                   "Specify how the storage for the function is laid out. These "
-                   "calls let you specify the nesting order of the dimensions. For "
-                   "example, foo.reorder_storage(y, x) tells Halide to use "
-                   "column-major storage for any realizations of foo, without "
-                   "changing how you refer to foo in the code. You may want to do "
-                   "this if you intend to vectorize across y. When representing "
-                   "color images, foo.reorder_storage(c, x, y) specifies packed "
-                   "storage (red, green, and blue values adjacent in memory), and "
-                   "foo.reorder_storage(x, y, c) specifies planar storage (entire "
-                   "red, green, and blue images one after the other in memory).\n\n"
-                   "If you leave out some dimensions, those remain in the same "
-                   "positions in the nesting order while the specified variables "
-                   "are reordered around them.");
 
     func_class.def("compute_at", &func_compute_at0, p::args("self", "f", "var"),
                    p::return_internal_reference<1>(),

@@ -9,6 +9,7 @@
 #include "Image.h"
 #include "InlineReductions.h"
 #include "IROperator.h"
+#include "Lambda.h"
 #include "Param.h"
 #include "RDom.h"
 #include "Target.h"
@@ -38,6 +39,7 @@ BOOST_PYTHON_MODULE(halide)
     defineFunc();
     defineImage();
     defineInlineReductions();
+    defineLambda();
     defineOperators();
     defineParam();
     defineRDom();
