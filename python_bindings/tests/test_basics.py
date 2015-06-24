@@ -259,11 +259,14 @@ def test_image_to_ndarray():
 
     i1 = Image(Int(16), 50, 50)
     assert i1.type() == Int(16)
+    i1[24, 24] = 42
+    assert i1(24, 24) == 42
 
     a1 = image_to_ndarray(i1)
     print("a1.shape", a1.shape)
     print("a1.dtype", a1.dtype)
     assert a1.dtype == numpy.int16
+    assert a1[24, 24] == 42
 
     return
 
