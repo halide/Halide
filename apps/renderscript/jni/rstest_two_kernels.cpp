@@ -43,13 +43,13 @@ int main(int argc, char** argv) {
     const char *cacheDir = "/data/tmp";
     halide_set_renderscript_cache_dir(cacheDir);
 
-	int width = 10;
-	int height = 10;
-	int channels = 4;
-	uint8_t *input = (uint8_t*)malloc(sizeof(uint8_t) * width * height * channels);
-	uint8_t *output = (uint8_t*)malloc(sizeof(uint8_t) * width * height * channels);
+    int width = 10;
+    int height = 10;
+    int channels = 4;
+    uint8_t *input = (uint8_t*)malloc(sizeof(uint8_t) * width * height * channels);
+    uint8_t *output = (uint8_t*)malloc(sizeof(uint8_t) * width * height * channels);
 
-	buffer_t input_buft = make_interleaved_image(width, height, channels, input);
+    buffer_t input_buft = make_interleaved_image(width, height, channels, input);
     for (int i = 0; i < std::min(input_buft.extent[0], width); i++) {
         for (int j = 0; j < std::min(input_buft.extent[1], height); j++) {
             for (int k = 0; k < input_buft.extent[2]; k++) {
@@ -60,15 +60,15 @@ int main(int argc, char** argv) {
         }
     }
 
-	std::cout << "Input :\n";
-	print(input_buft);
+    std::cout << "Input :\n";
+    print(input_buft);
 
-	buffer_t output_buft = make_interleaved_image(width, height, channels, output);
+    buffer_t output_buft = make_interleaved_image(width, height, channels, output);
 
-	input_buft.host_dirty = true;
-	generated_test_two_kernels_rs(&input_buft, &output_buft);
+    input_buft.host_dirty = true;
+    generated_test_two_kernels_rs(&input_buft, &output_buft);
     halide_copy_to_host(NULL, &output_buft);
 
-	std::cout << "Output :\n";
-	print(output_buft);
+    std::cout << "Output :\n";
+    print(output_buft);
 }

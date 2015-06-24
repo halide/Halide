@@ -32,7 +32,6 @@ LOCAL_CPPFLAGS += -std=c++11
 
 LOCAL_C_INCLUDES := ./
 
-
 include $(BUILD_SHARED_LIBRARY)
 
 # === rstest_two_kernels-standalone ===
@@ -45,12 +44,6 @@ LOCAL_STATIC_LIBRARIES := android_native_app_glue
 LOCAL_STATIC_LIBRARIES += libRScpp_static
 LOCAL_LDLIBS           := -lm -llog -landroid generated_test_two_kernels_rs.o generated_test_two_kernels_arm.o
 LOCAL_ARM_MODE         := arm
-
-LOCAL_NDK_STL_VARIANT := stlport_static
-intermediates := $(call intermediates-dir-for,STATIC_LIBRARIES,libRS,TARGET,)
-LOCAL_C_INCLUDES += $(intermediates)
-LOCAL_C_INCLUDES +=  /Volumes/Android/lmp-mr1/frameworks/rs/
-LOCAL_C_INCLUDES +=  /Volumes/Android/lmp-mr1/frameworks/rs/cpp
 
 LOCAL_CPPFLAGS += -std=c++11 -I../support -I../../include
 
