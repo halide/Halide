@@ -3,6 +3,8 @@
 Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image Processing".
 """
 
+from __future__ import division # if running with python2
+
 import sys
 from halide import *
 
@@ -33,8 +35,8 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
         upx, upy = Func('upx%d'%upsample_counter[0]), Func('upy%d'%upsample_counter[0])
         upsample_counter[0] += 1
 
-        upx[x,y,c] = 0.25 * f[(x/2) - 1 + 2*(x%2),y,c] + 0.75 * f[x/2,y,c]
-        upy[x,y,c] = 0.25 * upx[x, (y/2) - 1 + 2*(y%2),c] + 0.75 * upx[x,y/2,c]
+        upx[x,y,c] = 0.25 * f[(x//2) - 1 + 2*(x%2),y,c] + 0.75 * f[x//2,y,c]
+        upy[x,y,c] = 0.25 * upx[x, (y//2) - 1 + 2*(y%2),c] + 0.75 * upx[x,y//2,c]
 
         return upy
 
@@ -51,8 +53,8 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
         upx, upy = Func('upx%d'%upsample_counter[0]), Func('upy%d'%upsample_counter[0])
         upsample_counter[0] += 1
 
-        upx[x,y] = 0.25 * f[(x/2) - 1 + 2*(x%2),y] + 0.75 * f[x/2,y]
-        upy[x,y] = 0.25 * upx[x, (y/2) - 1 + 2*(y%2)] + 0.75 * upx[x,y/2]
+        upx[x,y] = 0.25 * f[(x//2) - 1 + 2*(x%2),y] + 0.75 * f[x//2,y]
+        upy[x,y] = 0.25 * upx[x, (y//2) - 1 + 2*(y%2)] + 0.75 * upx[x,y//2]
 
         return upy
 
@@ -65,6 +67,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
     # Make the remapping function as a lookup table.
     remap = Func('remap')
     fx = cast(float_t, x/256.0)
+    #remap[x] = alpha*fx*exp(-fx*fx/2.0)
     remap[x] = alpha*fx*exp(-fx*fx/2.0)
 
     # Convert to floating point

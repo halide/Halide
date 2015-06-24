@@ -7,7 +7,6 @@
 #include "add_operators.h"
 
 #include "../../src/Param.h"
-//#include "../../src/Func.h" // enables Param + Expr operations (which include is it ?)
 #include "../../src/IROperator.h" // enables Param + Expr operations (which include is it ?)
 #include "Type.h"
 

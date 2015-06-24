@@ -64,9 +64,12 @@ void defineExpr()
 
     add_operators(expr_class);
 
+    // implicitly_convertible declaration order matters,
+    // int should be tried before float convertion
     p::implicitly_convertible<int, h::Expr>();
     p::implicitly_convertible<float, h::Expr>();
     p::implicitly_convertible<double, h::Expr>();
+
     //p::implicitly_convertible<std::string, h::Expr>();
 
     p::class_< std::vector<Expr> >("ExprsVector")

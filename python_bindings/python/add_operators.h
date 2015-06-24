@@ -27,48 +27,55 @@ void add_operators_with(PythonClass &class_instance)
 
     typedef typename PythonClass::wrapped_type wrapped_t;
 
+    // <boost/python/operators.hpp> lists all operators
     class_instance
-            .def(self + T())
-            .def(T() + self)
+            .def(self + other<T>())
+            .def(other<T>() + self)
 
-            .def(self - T())
-            .def(T() - self)
+            .def(self - other<T>())
+            .def(other<T>() - self)
 
-            .def(self * T())
-            .def(T() * self)
+            .def(self * other<T>())
+            .def(other<T>() * self)
 
-            .def(self / T())
-            .def(T() / self)
+            .def(self / other<T>())
+            .def(other<T>() / self)
 
-            .def(self % T())
-            .def(T() % self)
+            .def(self % other<T>())
+            .def(other<T>() % self)
 
-            .def(pow(self, T()))
-            .def(pow(T(), self))
+            .def(pow(self, other<T>()))
+            .def(pow(other<T>(), self))
 
-            .def(self & T())
-            .def(T() & self)
+            .def(self & other<T>()) // and
+            .def(other<T>() & self)
 
-            .def(self | T())
-            .def(T() | self)
+            .def(self | other<T>()) // or
+            .def(other<T>() | self)
 
-            .def(self < T())
-            .def(T() < self)
+            .def(self < other<T>())
+            .def(other<T>() < self)
 
-            .def(self <= T())
-            .def(T() <= self)
+            .def(self <= other<T>())
+            .def(other<T>() <= self)
 
-            .def(self == T())
-            .def(T() == self)
+            .def(self == other<T>())
+            .def(other<T>() == self)
 
-            .def(self != T())
-            .def(T() != self)
+            .def(self != other<T>())
+            .def(other<T>() != self)
 
-            .def(self > T())
-            .def(T() > self)
+            .def(self > other<T>())
+            .def(other<T>() > self)
 
-            .def(self >= T())
-            .def(T() >= self)
+            .def(self >= other<T>())
+            .def(other<T>() >= self)
+
+            .def(self >> other<T>())
+            .def(other<T>() >> self)
+
+            .def(self << other<T>())
+            .def(other<T>() << self)
 
             .def("__floordiv__", &floordiv<wrapped_t, T, wrapped_t>)
             .def("__floordiv__", &floordiv<T, wrapped_t, wrapped_t>)
@@ -83,35 +90,13 @@ void add_operators(PythonClass &class_instance)
 {
     using namespace boost::python;
 
-    // The order of definitions matters.
-    // Python first will try input value as int, then float, then as same class (Expr, Var, etc.)
-    add_operators_with<PythonClass, int>(class_instance);
-    add_operators_with<PythonClass, float>(class_instance);
-
     typedef typename PythonClass::wrapped_type wrapped_t;
 
-    class_instance
-            .def(self + self)
-            .def(self - self)
-            .def(self * self)
-            .def(self / self)
-            .def(self % self)
-            //.def(pow(self, p::other<float>))
-            .def(pow(self, self))
-            .def(self & self) // and
-            .def(self | self) // or
-            .def(-self) // neg
-            .def(~self) // invert
-            .def(self < self)
-            .def(self <= self)
-            .def(self == self)
-            .def(self != self)
-            .def(self > self)
-            .def(self >= self)
-
-            .def("__floordiv__", &floordiv<wrapped_t, wrapped_t, wrapped_t>)
-            .def("__floordiv__", &floordiv<wrapped_t, wrapped_t, wrapped_t>)
-            ;
+    // The order of definitions matters.
+    // Python first will try input value as wrapped_t, then int, then float
+    add_operators_with<PythonClass, wrapped_t>(class_instance);
+    add_operators_with<PythonClass, int>(class_instance);
+    add_operators_with<PythonClass, float>(class_instance);
 
     return;
 }
