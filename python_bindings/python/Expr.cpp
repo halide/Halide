@@ -49,16 +49,18 @@ void defineExpr()
                                       "  hypot fast_pow max min pow\n\n" \
                                       "Ternary:\n" \
                                       "  clamp(x, lo, hi)                  -- Clamp expression to [lo, hi]\n" \
-                                      "  select(cond, if_true, if_false)   -- Return if_true if cond else if_false\n",
-                                      p::init<std::string>(p::arg("self")))
-            .def(p::init<int>(p::arg("self"))) // Make an expression representing a const 32-bit int (i.e. an IntImm)
-            .def(p::init<float>(p::arg("self"))) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
-            .def(p::init<double>(p::arg("self"))) /* Make an expression representing a const 32-bit float, given a
-                                                                                                                                                                                                                                                                                             * double. Also emits a warning due to truncation. */
-            .def(p::init<std::string>(p::arg("self"))) // Make an expression representing a const string (i.e. a StringImm)
-            .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self"))) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
-            .def("type", &Expr::type, p::arg("self")) // Get the type of this expression node
+                                      "  select(cond, if_true, if_false)   -- Return if_true if cond else if_false\n")
 
+            // constructor priority order is reverse from implicitly_convertible
+            // it important to declare int after float, after double.
+            .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self"))) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
+            .def(p::init<double>(p::arg("self"))) // Make an expression representing a const 32-bit float double. Also emits a warning due to truncation.
+            .def(p::init<float>(p::arg("self"))) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
+            .def(p::init<int>(p::arg("self"))) // Make an expression representing a const 32-bit int (i.e. an IntImm)
+            .def(p::init<std::string>(p::arg("self"))) // Make an expression representing a const string (i.e. a StringImm)
+
+            .def("type", &Expr::type, p::arg("self"),
+                 "Get the type of this expression")
             .def("__repr__", &expr_repr, p::arg("self"));
     ;
 

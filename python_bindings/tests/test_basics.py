@@ -182,6 +182,8 @@ def test_float_or_int():
 
     assert type(x) == Var
     assert (x.expr()).type() == i
+    assert (Expr(2.0)).type() == f
+    assert (Expr(2)).type() == i
     assert (x + 2).type() == i
     assert (2 + x).type() == i
     assert (x.expr() + 2).type() == i # yes this failed at some point
