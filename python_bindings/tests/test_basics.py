@@ -165,6 +165,48 @@ def test_basics3():
 
     return
 
+def test_float_or_int():
+
+    x = Var('x')
+    i, f =  Int(32), Float(32)
+
+    e0 = (x//2) - 1 + 2*(x%2)
+    e1 = (x/2) - 1 + 2*(x%2)
+    e2 = (x/2)
+    e3 = (x//2)
+    e4 = (x//2) - 1
+    e5 = (x%2)
+    e6 = 2*(x%2)
+    e7 = (x//2) - 1 + 2*(x%2)
+
+
+    assert type(x) == Var
+    assert (x.expr()).type() == i
+    assert (x + 2).type() == i
+    assert (2 + x).type() == i
+    assert (x.expr() + 2).type() == i # yes this failed at some point
+    assert (2 + x.expr()).type() == i
+    assert (2 * (x + 2)).type() == i # yes this failed at some point
+    assert (x + 0).type() == i
+    assert (x % 2).type() == i
+    assert (2 * x).type() == i
+    assert (x * 2).type() == i
+    assert (x * 2).type() == i
+    assert ((x % 2)).type() == i
+    assert ((x % 2) * 2).type() == i
+    #assert (2 * (x % 2)).type() == i # yes this failed at some point
+    assert ((x + 2) * 2).type() == i
+
+
+    types = [e.type() for e in (e0, e1, e2, e3, e4, e5, e6, e7)]
+
+    expected_types = [i, f, f, i, i, i, i, i]
+    assert len(types) == len(expected_types)
+    r = [a==b for a,b in zip(types, expected_types)] # for debugging
+    assert types == expected_types
+
+    return
+
 def test_operator_order():
 
     x = Var('x')
@@ -227,6 +269,8 @@ def test_image_to_ndarray():
 
 
 if __name__ == "__main__":
+
+    test_float_or_int()
     test_ndarray_to_image()
     test_image_to_ndarray()
     test_types()

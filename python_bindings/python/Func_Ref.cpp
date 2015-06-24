@@ -14,104 +14,6 @@ namespace h = Halide;
 namespace p = boost::python;
 
 
-
-template<typename A, typename B>
-auto add_func(A a, B b) -> decltype(a + b)
-{
-    return a + b;
-}
-
-template<typename A, typename B>
-auto sub_func(A a, B b) -> decltype(a - b)
-{
-    return a - b;
-}
-
-template<typename A, typename B>
-auto mul_func(A a, B b) -> decltype(a * b)
-{
-    return a * b;
-}
-
-template<typename A, typename B>
-auto div_func(A a, B b) -> decltype(a / b)
-{
-    return a / b;
-}
-
-template<typename A, typename B>
-auto mod_func(A a, B b) -> decltype(a % b)
-{
-    return a % b;
-}
-
-template<typename A, typename B>
-auto and_func(A a, B b) -> decltype(a & b)
-{
-    return a & b;
-}
-
-template<typename A, typename B>
-auto xor_func(A a, B b) -> decltype(a ^ b)
-{
-    return a ^ b;
-}
-
-template<typename A, typename B>
-auto or_func(A a, B b) -> decltype(a | b)
-{
-    return a | b;
-}
-
-template<typename A, typename B>
-auto gt_func(A a, B b) -> decltype(a > b)
-{
-    return a > b;
-}
-
-template<typename A, typename B>
-auto ge_func(A a, B b) -> decltype(a >= b)
-{
-    return a >= b;
-}
-
-template<typename A, typename B>
-auto lt_func(A a, B b) -> decltype(a < b)
-{
-    return a < b;
-}
-
-template<typename A, typename B>
-auto le_func(A a, B b) -> decltype(a <= b)
-{
-    return a <= b;
-}
-
-template<typename A, typename B>
-auto eq_func(A a, B b) -> decltype(a == b)
-{
-    return a == b;
-}
-
-template<typename A, typename B>
-auto ne_func(A a, B b) -> decltype(a != b)
-{
-    return a != b;
-}
-
-template<typename A, typename B>
-auto lshift_func(A a, B b) -> decltype(a << b)
-{
-    return a << b;
-}
-
-template<typename A, typename B>
-auto rshift_func(A a, B b) -> decltype(a >> b)
-{
-    return a >> b;
-}
-
-
 template<typename A, typename B>
 A& iadd_func(A a, B b)
 {
@@ -141,56 +43,6 @@ A& idiv_func(A a, B b)
 {
     a /= b;
     return a;
-}
-
-
-template<typename A, typename B, typename PythonClass>
-void add_func_operators_with(PythonClass &class_a)
-{
-    typedef typename PythonClass::wrapped_type T;
-
-    const bool t_matches_a_or_b = std::is_same<A, T>::value
-            or std::is_same<A, T&>::value
-            or std::is_same<B, T>::value
-            or std::is_same<B, T&>::value;
-    user_assert(t_matches_a_or_b);
-
-    // <boost/python/operators.hpp> lists all operators
-    class_a
-            .def("__add__", &add_func<A, B>)
-            .def("__sub__", &sub_func<A, B>)
-            .def("__mul__", &mul_func<A, B>)
-        #if PY_VERSION_HEX >= 0x03000000
-            .def("__truediv__", &div_func<A, B>)
-        #else
-            .def("__div__", &div_func<A, B>)
-        #endif
-            .def("__mod__", &mod_func<A, B>)
-            .def("__and__", &and_func<A, B>)
-            .def("__xor__", &xor_func<A, B>)
-            .def("__or__", &or_func<A, B>)
-            .def("__gt__", &gt_func<A, B>)
-            .def("__ge__", &gt_func<A, B>)
-            .def("__lt__", &lt_func<A, B>)
-            .def("__le__", &le_func<A, B>)
-            .def("__eq__", &eq_func<A, B>)
-            .def("__ne__", &ne_func<A, B>)
-            .def("__lshift__", &lshift_func<A, B>)
-            .def("__rshift__", &rshift_func<A, B>)
-
-            //    BOOST_PYTHON_INPLACE_OPERATOR(iadd,+=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(isub,-=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(imul,*=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(idiv,/=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(imod,%=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(ilshift,<<=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(irshift,>>=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(iand,&=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(ixor,^=)
-            //    BOOST_PYTHON_INPLACE_OPERATOR(ior,|=)
-            ;
-
-    return;
 }
 
 
@@ -278,16 +130,14 @@ void defineFuncRefVar()
     typedef decltype(func_ref_var_class) func_ref_var_class_t;
     typedef func_ref_var_class_t frvc_t;
 
-    // FuncRefVar/FuncRefExpr does not have empty constructors, thus we cannot use p::self
-    add_func_operators_with<FuncRefVar &, FuncRefVar &, frvc_t>(func_ref_var_class);
-    add_func_operators_with<FuncRefVar &, h::FuncRefExpr &, frvc_t>(func_ref_var_class);
+    p::implicitly_convertible<FuncRefVar, h::Expr>();
 
     // h::Expr has empty constructor, thus self does the job
     // h::Expr will "eat" int and float arguments via implicit conversion
     add_operators_with<frvc_t, h::Expr>(func_ref_var_class);
 
-
-    p::implicitly_convertible<FuncRefVar, h::Expr>();
+    add_operators_with<frvc_t, FuncRefVar>(func_ref_var_class);
+    add_operators_with<frvc_t, h::FuncRefExpr>(func_ref_var_class);
 
     return;
 }
@@ -367,9 +217,8 @@ void defineFuncRefExpr()
     typedef decltype(func_ref_expr_class) func_ref_expr_class_t;
     typedef func_ref_expr_class_t frec_t;
 
-    // FuncRefVar/FuncRefExpr does not have empty constructors, thus we cannot use p::self
-    add_func_operators_with<FuncRefExpr &, h::FuncRefVar &, frec_t>(func_ref_expr_class);
-    add_func_operators_with<FuncRefExpr &, FuncRefExpr &, frec_t>(func_ref_expr_class);
+    add_operators_with<frec_t, h::FuncRefVar>(func_ref_expr_class);
+    add_operators_with<frec_t, FuncRefExpr>(func_ref_expr_class);
 
     // h::Expr has empty constructor, thus self does the job
     // h::Expr will "eat" int and float arguments via implicit conversion
