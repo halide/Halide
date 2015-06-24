@@ -55,6 +55,16 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
+ private:
+    Expr wild_i32, wild_u32;
+    Expr wild_i16, wild_u16;
+    llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
+    llvm::Value *getLoVectorFromPair(llvm::Value *Vec);
+    void slice_into_halves(Expr, std::vector<Expr> &);
+    llvm::Value *handleLargeVectors(const Div *);
+    llvm::Value *handleLargeVectors(const Add *);
+    llvm::Value *handleLargeVectors(const Mul *);
+    llvm::Value *handleLargeVectors(const Cast *);
 
 };
 

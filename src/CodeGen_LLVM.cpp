@@ -197,23 +197,28 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     wild_u64x4(Variable::make(UInt(64, 4), "*")),
 
     wild_i32x16(Variable::make(Int(32, 16), "*")),
+    wild_u32x16(Variable::make(UInt(32, 16), "*")),
     wild_i8x64(Variable::make(Int(8, 64), "*")),
     wild_u8x64(Variable::make(UInt(8, 64), "*")),
     wild_i16x32(Variable::make(Int(16, 32), "*")),
     wild_u16x32(Variable::make(UInt(16, 32), "*")),
 
     wild_i32x32(Variable::make(Int(32, 32), "*")),
+    wild_u32x32(Variable::make(UInt(32, 32), "*")),
     wild_i8x128(Variable::make(Int(8, 128), "*")),
     wild_u8x128(Variable::make(UInt(8, 128), "*")),
     wild_i16x64(Variable::make(Int(16, 64), "*")),
     wild_u16x64(Variable::make(UInt(16, 64), "*")),
 
     wild_i32x64(Variable::make(Int(32, 64), "*")),
+    wild_u32x64(Variable::make(UInt(32, 64), "*")),
     wild_i8x256(Variable::make(Int(8, 256), "*")),
     wild_u8x256(Variable::make(UInt(8, 256), "*")),
     wild_i16x128(Variable::make(Int(16, 128), "*")),
     wild_u16x128(Variable::make(UInt(16, 128), "*")),
 
+    wild_i32x128(Variable::make(Int(32, 128), "*")),
+    wild_u32x128(Variable::make(UInt(32, 128), "*")),
     wild_f32x2(Variable::make(Float(32, 2), "*")),
 
     wild_f32x4(Variable::make(Float(32, 4), "*")),
