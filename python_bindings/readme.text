@@ -32,7 +32,7 @@ Build using:
 ## Documentation and Examples ##
 
 The Python API reflects directly the [C++ Halide API](http://halide-lang.org/docs).
-Consult the [module documentation](googledrive.com/host/0B6LzqcYZJN2cfnZKZno2MmI2TDFsWkh0M3pUOHNnaUdkV2l2dmR2eDlnV2JmeF9NeEI0cTA).
+Consult the [module documentation](http://googledrive.com/host/0B6LzqcYZJN2cfnZKZno2MmI2TDFsWkh0M3pUOHNnaUdkV2l2dmR2eDlnV2JmeF9NeEI0cTA).
 
 Check out the code for the example applications in the apps/ and tutorial/ subdirectory.
 
