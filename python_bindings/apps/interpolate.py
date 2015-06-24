@@ -17,15 +17,13 @@ import os.path
 int_t = Int(32)
 float_t = Float(32)
 
-def get_interpolate():
+def get_interpolate(input, levels):
     """
     Build function, schedules it, and invokes jit compiler
     :return: halide.Func
     """
 
     # THE ALGORITHM
-    input = ImageParam(float_t, 3, 'input')
-    levels = 10
 
     downsampled = [Func('downsampled%d'%i) for i in range(levels)]
     downx = [Func('downx%d'%l) for l in range(levels)]
@@ -160,31 +158,44 @@ def get_interpolate():
 
 def get_input_data():
 
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgba.png")
     assert os.path.exists(image_path), "Could not find %s" % image_path
-    rgb_data = imread(image_path)
-    print("rg_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
+    rgba_data = imread(image_path)
+    print("rgba_data", type(rgba_data), rgba_data.shape, rgba_data.dtype)
 
-    input_data = np.copy(rgb_data, order="F").astype(np.float32) / 255.0
+    input_data = np.copy(rgba_data, order="F").astype(np.float32) / 255.0
     # input data is in range [0, 1]
 
     return input_data
 
 
 def main():
-    interpolate = get_interpolate()
 
+    input = ImageParam(float_t, 3, "input")
+    levels = 10
+
+    interpolate = get_interpolate(input, levels)
+
+    # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
+    assert input_data.shape[2] == 4
+    input_image = Image(input_data, "input_image")
+    input.set(input_image)
 
-    input_height, input_width = input_data.shape[:2]
-    assert input_data.shape[2] == 3
+    input_width, input_height = input_data.shape[:2]
+
+    output_data = np.empty((input_width, input_height, 3),
+                           dtype=input_data.dtype, order='F')
+    output_image = Image(output_data)
 
     t0 = datetime.now()
-    output_realization = interpolate.realize(input_width, input_height, 3)
+    #output_realization = interpolate.realize(input_width, input_height, 3)
+    interpolate.realize(output_image)
     t1 = datetime.now()
-    output_data = image_to_ndarray(Image(output_realization))
-
     print('Interpolated in %.5f secs' % (t1-t0).total_seconds())
+
+    #output_data = image_to_ndarray(Image(Float(32), output_realization)) 
+    print("output_data", type(output_data), output_data.shape, output_data.dtype)
 
         # save results
     input_path = "interpolate_input.png"
