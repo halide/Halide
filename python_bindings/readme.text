@@ -1,8 +1,8 @@
 
 
 
-Prerequisites
-=============
+## Prerequisites ##
+
 
 The bindings (and demonstration applications) should work well both for python2.7 and python3.4 (or higher),
 and across platforms.
@@ -10,18 +10,17 @@ and across platforms.
 (Currently only been tested on Ubuntu 14.04, python3.4, a Halide source build).
 
 
-Python requirements:
+### Python requirements:
  See requirements.txt (to be used with `pip`: `pip install --user requirements.txt`)
 
-C++ requirements:
+### C++ requirements:
  Halide compiled (assuming `halide_git_clone_path/build`).
  For a better python experience make sure Halide was compiled with `WITH_EXCEPTIONS`
  Boost.python (already available in most boost distributions)
  Recommended (used for I/O): Boost.Numpy https://github.com/ndarray/Boost.NumPy
 
 
-Compilation instructions
-========================
+## Compilation instructions ##
 
 Build using:
   mkdir build
@@ -30,30 +29,28 @@ Build using:
   make 
 
 
-Documentation and Examples
-===========================
+## Documentation and Examples ##
 
 The Python API reflects directly the [C++ Halide API](http://halide-lang.org/docs).
-Consult the [module documentation](http://connellybarnes.com/documents/halide/). <<< TO BE UPDATED
+Consult the [module documentation](googledrive.com/host/0B6LzqcYZJN2cfnZKZno2MmI2TDFsWkh0M3pUOHNnaUdkV2l2dmR2eDlnV2JmeF9NeEI0cTA).
 
 Check out the code for the example applications in the apps/ and tutorial/ subdirectory.
 
-You can run them individually or as a batch:
-<<< TO BE DONE (from run_test.sh)
-    make run_apps             % Run apps/*.py with GUI output
-    make run_apps_headless    % Run apps; output to apps/out*.png
+You can run them as a batch via:
+    run_apps.sh
+    run_tutorial.sh
 
 
-License
-=======
+## License ## 
 
 The Python bindings use the same [MIT license](https://github.com/halide/Halide/blob/master/LICENSE.txt) as Halide.
 
 Python bindings provided by Connelly Barnes (2012-2013), Fred Rotbart (2014), Rodrigo Benenson (2015)
 and the Halide open-source community.
 
-Why did we move from SWIG to Boost.Python ?
-===========================================
+
+## Why did we move from SWIG to Boost.Python ? ## 
+
 Problems with (old) SWIG bindings:
 
 P1) SWIG cannot parse C++15, and it will always lag
