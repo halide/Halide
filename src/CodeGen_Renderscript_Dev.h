@@ -40,7 +40,8 @@ public:
 
     std::string api_unique_name() { return "renderscript"; }
 
-size_t slots_taken() const;
+    virtual size_t slots_taken() const;
+
 protected:
     using CodeGen_LLVM::visit;
 
