@@ -10,6 +10,7 @@
 #include "../../src/IROperator.h" // enables Param + Expr operations (which include is it ?)
 #include "Type.h"
 
+#include <boost/format.hpp>
 #include <vector>
 #include <string>
 
@@ -29,6 +30,27 @@ h::Expr imageparam_to_expr_operator0(h::ImageParam &that, p::tuple args_passed)
 
     return that(expr_args);
 }
+
+
+std::string imageparam_repr(h::ImageParam &param) // non-const due to a Halide bug in master (to be fixed)
+{
+    std::string repr;
+    const h::Type &t = param.type();
+    if (param.defined())
+    {
+        boost::format f("<halide.ImageParam named '%s' (not yet defined) >");
+        repr = boost::str(f % param.name());
+    }
+    else
+    {
+        boost::format f("<halide.ImageParam named '%s' of type '%s(%i)' and dimensions %i %i %i %i>");
+        repr = boost::str(f % param.name()
+                          % type_code_to_string(t) % t.bits
+                          % param.extent(0) % param.extent(1) % param.extent(2) % param.extent(3));
+    }
+    return repr;
+}
+
 
 
 void defineImageParam()
@@ -84,6 +106,8 @@ void defineImageParam()
                  "The location is extended with enough implicit variables to match "
                  "the dimensionality of the image (see \\ref Var::implicit).\n\n"
                  "Call with: [x], [x,y], [x,y,z], or [x,y,z,w]")
+
+            .def("__repr__", &imageparam_repr, p::arg("self"))
             ;
 
     p::implicitly_convertible<ImageParam, h::Argument>();
@@ -91,6 +115,7 @@ void defineImageParam()
 
     return;
 }
+
 
 void defineOutputImageParam()
 {
@@ -228,6 +253,16 @@ h::Expr param_as_expr(h::Param<T> &that)
     return static_cast<h::Expr>(that);
 }
 
+template<typename T>
+std::string param_repr(const h::Param<T> &param)
+{
+    std::string repr;
+    const h::Type &t = param.type();
+    boost::format f("<halide.Param named '%s' of type '%s(%i)'>");
+    repr = boost::str(f % param.name() % type_code_to_string(t) % t.bits);
+
+    return repr;
+}
 
 template<typename T>
 void defineParam_impl(const std::string suffix, const h::Type type)
@@ -309,6 +344,7 @@ void defineParam_impl(const std::string suffix, const h::Type type)
             //            "statically compiling halide pipelines."
             //            operator Argument() const
 
+            .def("__repr__", &param_repr<T>, p::arg("self"))
             ;
 
     p::implicitly_convertible<Param<T>, h::Argument>();
