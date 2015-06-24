@@ -1,4 +1,4 @@
-
+#!/usr/bin/python3
 from halide import *
 
 import numpy as np
