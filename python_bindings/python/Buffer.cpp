@@ -8,6 +8,7 @@
 #include <boost/format.hpp>
 
 #include "../../src/Buffer.h"
+#include "Type.h" // for the repr function
 
 #include <vector>
 #include <string>
@@ -27,7 +28,7 @@ size_t host_ptr_as_int(h::Buffer &that)
 
 std::string buffer_t_repr(const buffer_t &that)
 {
-    boost::format format("<buffer_t [host %u (dirty %i)] [dev %u (dirty %i)] elem_size %i "
+    boost::format format("<buffer_t [host 0x%X (dirty %i)] [dev 0x%X (dirty %i)] elem_size %i "
                          "extent (%i %i %i %i) min (%i %i %i %i) stride (%i %i %i %i)>");
     std::string repr =
             boost::str(format
@@ -90,13 +91,33 @@ h::Buffer *buffer_init0(h::Type t, int x_size, int y_size, int z_size, int w_siz
 }
 
 
+std::string buffer_repr(const h::Buffer &that)
+{
+    std::string repr;
+    if(that.defined())
+    {
+        const h::Type &t = that.type();
+        boost::format format("<halide.Buffer named '%s' of type %s(%i) containing %s>");
+
+        repr = boost::str(format % that.name()
+                          % type_code_to_string(t) % t.bits
+                          % buffer_t_repr(*that.raw_buffer()));
+    }
+    else
+    {
+        boost::format format("<halide.Buffer named '%s' (data not yet defined)>");
+        repr = boost::str(format % that.name());
+    }
+
+    return repr;
+}
+
+
 void defineBuffer()
 {
 
     using Halide::Buffer;
-    namespace h = Halide;
     namespace p = boost::python;
-
 
     define_buffer_t();
 
@@ -203,6 +224,8 @@ void defineBuffer()
                  "device-aware target (e.g. PTX), then free the device-side "
                  "allocation, if there is one. Done automatically when the last "
                  "reference to this buffer dies.")
+
+            .def("__repr__", &buffer_repr, p::arg("self"))
             ;
 
     p::implicitly_convertible<Buffer, h::Argument>();

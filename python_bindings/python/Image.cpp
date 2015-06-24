@@ -443,6 +443,8 @@ void defineImage_impl(const std::string suffix, const h::Type type)
 
 #ifdef USE_BOOST_NUMPY
 
+// To be used with care, since return object uses a  C++ pointer to data,
+// use p::with_custodian_and_ward_postcall to link the objects lifetime
 p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer, const std::string &name)
 {
     namespace bn = boost::numpy;
@@ -544,10 +546,6 @@ p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer
 
 
     p::object return_object = p::object( p::handle<>( obj ) );
-
-    //Py_IncRef(array);
-
-    // HOW TO MAKE DESTRUCTOR REDUCE REFERENCE HERE TOO ?
     return return_object;
 }
 
@@ -676,9 +674,11 @@ boost::numpy::ndarray image_to_ndarray(p::object image_object)
 
     const h::Type& t = p::extract<h::Type &>(image_object.attr("type")());
 
+    buffer_t &raw_buffer = *b.raw_buffer();
     std::vector<std::int32_t> shape_array(4), stride_array(4);
-    std::copy(b.raw_buffer()->extent, b.raw_buffer()->extent + 4, shape_array.begin());
-    std::copy(b.raw_buffer()->stride, b.raw_buffer()->stride + 4, stride_array.begin());
+    std::copy(raw_buffer.extent, raw_buffer.extent + 4, shape_array.begin());
+    std::copy(raw_buffer.stride, raw_buffer.stride + 4, stride_array.begin());
+
 
     // we make sure the array shape does not include the "0 extent" dimensions
     // we always keep at least one dimension (even if zero size)
@@ -689,6 +689,12 @@ boost::numpy::ndarray image_to_ndarray(p::object image_object)
             shape_array.pop_back();
             stride_array.pop_back();
         }
+    }
+
+    // numpy counts stride in bytes, while Halide counts in number of elements
+    for(size_t i = 0; i < 4; i += 1)
+    {
+           stride_array[i] *= raw_buffer.elem_size;
     }
 
     return boost::numpy::from_data(
