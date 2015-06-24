@@ -168,7 +168,6 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
         debug(2) << "var: " << i.first << "\n";
         res.push_back(GPU_Argument(i.first, false, i.second, 0));
     }
-    vector<GPU_Argument> writes;
     for (const pair<string, BufferRef> &i : buffers) {
         debug(2) << "buffer: " << i.first << " " << i.second.size;
         if (i.second.read) debug(2) << " (read)";
@@ -178,16 +177,8 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
         GPU_Argument arg(i.first, true, i.second.type, i.second.dimensions, i.second.size);
         arg.read = i.second.read;
         arg.write = i.second.write;
-        // Make sure that the output buffer comes last. Last buffer will be used
-        // for running Renderscript kernel using foreach API.
-        // At runtime there is no indication as to whether buffer is input or output.
-        if (i.second.read) {
-            res.push_back(arg);
-        } else {
-            writes.push_back(arg);
-        }
-     }
-    res.insert(res.end(), writes.begin(), writes.end());
+        res.push_back(arg);
+    }
     return res;
 }
 

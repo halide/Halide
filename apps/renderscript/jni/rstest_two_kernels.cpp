@@ -25,8 +25,8 @@ void print(buffer_t bt) {
                     std::cout << std::setw(4);
                 }
                 std::cout << +((uint8_t*)bt.host)[i * bt.stride[0] +
-                                                j * bt.stride[1] +
-                                                k * bt.stride[2]];
+                                                  j * bt.stride[1] +
+                                                  k * bt.stride[2]];
             }
             std::cout << "]";
         }
