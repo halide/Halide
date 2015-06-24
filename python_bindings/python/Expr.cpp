@@ -8,14 +8,28 @@
 #include "../../src/Expr.h"
 #include "../../src/IROperator.h"
 
+#include "Type.h"
+
+#include <boost/format.hpp>
 #include <string>
+
+namespace h = Halide;
+namespace p = boost::python;
+
+std::string expr_repr(const h::Expr &expr)
+{
+    std::string repr;
+    boost::format f("<halide.Expr of type '%s(%i)'>");
+
+    const h::Type &t = expr.type();
+    repr = boost::str(f % type_code_to_string(t) % t.bits);
+    return repr;
+}
+
 
 void defineExpr()
 {
     using Halide::Expr;
-
-    namespace h = Halide;
-    namespace p = boost::python;
 
 
     auto expr_class = p::class_<Expr>("Expr",
@@ -43,7 +57,10 @@ void defineExpr()
                                                                                                                                                                                                                                                                                              * double. Also emits a warning due to truncation. */
             .def(p::init<std::string>(p::arg("self"))) // Make an expression representing a const string (i.e. a StringImm)
             .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self"))) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
-            .def("type", &Expr::type, p::arg("self")); // Get the type of this expression node
+            .def("type", &Expr::type, p::arg("self")) // Get the type of this expression node
+
+            .def("__repr__", &expr_repr, p::arg("self"));
+    ;
 
     add_operators(expr_class);
 

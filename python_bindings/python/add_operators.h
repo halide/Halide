@@ -88,6 +88,8 @@ void add_operators(PythonClass &class_instance)
     add_operators_with<PythonClass, int>(class_instance);
     add_operators_with<PythonClass, float>(class_instance);
 
+    typedef typename PythonClass::wrapped_type wrapped_t;
+
     class_instance
             .def(self + self)
             .def(self - self)
@@ -105,9 +107,16 @@ void add_operators(PythonClass &class_instance)
             .def(self == self)
             .def(self != self)
             .def(self > self)
-            .def(self >= self);
+            .def(self >= self)
+
+            .def("__floordiv__", &floordiv<wrapped_t, wrapped_t, wrapped_t>)
+            .def("__floordiv__", &floordiv<wrapped_t, wrapped_t, wrapped_t>)
+            ;
 
     return;
 }
+
+
+
 
 #endif // ADD_OPERATORS_H

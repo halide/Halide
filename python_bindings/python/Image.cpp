@@ -193,7 +193,7 @@ T image_to_setitem_operator4(h::Image<T> &that, p::tuple &args_passed, T value)
 
 
 template<typename T>
-std::string image_repr(h::Image<T> &image)
+std::string image_repr(const h::Image<T> &image)
 {
     std::string repr;
 

@@ -8,6 +8,7 @@
 #include "../../src/Var.h"
 #include "../../src/IROperator.h"
 
+#include <boost/format.hpp>
 #include <string>
 
 namespace h = Halide;
@@ -48,6 +49,15 @@ bool var_is_placeholder1(const std::string name)
 h::Expr var_as_expr(h::Var &that)
 {
     return static_cast<h::Expr>(that);
+}
+
+
+std::string var_repr(const h::Var &var)
+{
+    std::string repr;
+    boost::format f("<halide.Var '%s'>");
+    repr = boost::str(f % var.name());
+    return repr;
 }
 
 
@@ -118,7 +128,9 @@ void defineVar()
 
             .def("outermost", &Var::outermost, // no args
                  "A Var that represents the location outside the outermost loop.").staticmethod("outermost")
-            ;
+
+            .def("__repr__", &var_repr, p::arg("self"));
+    ;
 
     add_operators(var_class);
     add_operators_with<decltype(var_class), h::Expr>(var_class);

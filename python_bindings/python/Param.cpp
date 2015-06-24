@@ -3,10 +3,12 @@
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-
 #include <boost/mpl/list.hpp>
+#include "add_operators.h"
 
 #include "../../src/Param.h"
+//#include "../../src/Func.h" // enables Param + Expr operations (which include is it ?)
+#include "../../src/IROperator.h" // enables Param + Expr operations (which include is it ?)
 #include "Type.h"
 
 #include <vector>
@@ -222,12 +224,17 @@ void defineOutputImageParam()
 }
 
 template<typename T>
+h::Expr param_as_expr(h::Param<T> &that)
+{
+    return static_cast<h::Expr>(that);
+}
+
+
+template<typename T>
 void defineParam_impl(const std::string suffix, const h::Type type)
 {
     using Halide::Param;
     
-
-
     auto param_class =
             p::class_<Param<T>>(("Param"+ suffix).c_str(),
                                 "A scalar parameter to a halide pipeline. If you're jitting, this "
@@ -286,6 +293,10 @@ void defineParam_impl(const std::string suffix, const h::Type type)
             .def("get_min_value", &Param<T>::get_min_value, p::arg("self"))
             .def("get_max_value", &Param<T>::get_max_value, p::arg("self"))
 
+            .def("expr", &param_as_expr<T>, p::arg("self"),
+                 "You can use this parameter as an expression in a halide "
+                 "function definition")
+
             //            "You can use this parameter as an expression in a halide
             //            "function definition"
             //            operator Expr() const
@@ -304,6 +315,22 @@ void defineParam_impl(const std::string suffix, const h::Type type)
     p::implicitly_convertible<Param<T>, h::Argument>();
     //p::implicitly_convertible<Param<T>, h::ExternFuncArgument>();
     p::implicitly_convertible<Param<T>, h::Expr>();
+
+    typedef decltype(param_class) pc_t;
+    add_operators_with<pc_t, int>(param_class);
+    add_operators_with<pc_t, float>(param_class);
+    add_operators_with<pc_t, h::Expr>(param_class);
+
+    add_operators_with<pc_t, Param<uint8_t>>(param_class);
+    add_operators_with<pc_t, Param<uint16_t>>(param_class);
+    add_operators_with<pc_t, Param<uint32_t>>(param_class);
+
+    add_operators_with<pc_t, Param<int8_t>>(param_class);
+    add_operators_with<pc_t, Param<int16_t>>(param_class);
+    add_operators_with<pc_t, Param<int32_t>>(param_class);
+
+    add_operators_with<pc_t, Param<float>>(param_class);
+    add_operators_with<pc_t, Param<double>>(param_class);
 
     return;
 }
@@ -477,12 +504,12 @@ struct create_param1_impl_t
         return create_param_object<T>(true_val, min, max);
     }
 
-//    template<typename T, typename ...Args2>
-//    p::object call_create_param_object(T true_val, Args2... args)
-//    {
-//        throw std::runtime_error("create_param1_impl_t was called with parameters types not yet handled");
-//        return p::object();
-//    }
+    //    template<typename T, typename ...Args2>
+    //    p::object call_create_param_object(T true_val, Args2... args)
+    //    {
+    //        throw std::runtime_error("create_param1_impl_t was called with parameters types not yet handled");
+    //        return p::object();
+    //    }
 
 };
 
