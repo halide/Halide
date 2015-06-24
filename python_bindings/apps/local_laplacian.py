@@ -5,11 +5,12 @@ Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image
 
 from __future__ import division # if running with python2
 
-import sys
 from halide import *
 
 import numpy as np
 from scipy.misc import imread, imsave
+
+import os.path
 
 
 int_t = Int(32)
@@ -191,7 +192,8 @@ def get_input_data():
     rgb_data = imread(image_path)
     #print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
 
-    input_data = np.copy(rgb_data, order="F").astype(np.uint16)
+    input_data = np.copy(rgb_data.astype(np.uint16), order="F") << 8
+    # input data is in range [0, 256*256]
     #print("input_data", type(input_data), input_data.shape, input_data.dtype)
 
     return input_data
