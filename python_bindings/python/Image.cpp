@@ -694,7 +694,7 @@ boost::numpy::ndarray image_to_ndarray(p::object image_object)
     // numpy counts stride in bytes, while Halide counts in number of elements
     for(size_t i = 0; i < 4; i += 1)
     {
-           stride_array[i] *= raw_buffer.elem_size;
+        stride_array[i] *= raw_buffer.elem_size;
     }
 
     return boost::numpy::from_data(
@@ -829,7 +829,9 @@ void defineImage()
 {
     // only defined so that Boost.Python knows about it,
     // not methods exposed
-    p::class_<h::ImageBase>("ImageBase", p::no_init);
+    p::class_<h::ImageBase>("ImageBase",
+                            "Base class shared by all Image<T> classes.",
+                            p::no_init);
 
     defineImage_impl<uint8_t>("_uint8", h::UInt(8));
     defineImage_impl<uint16_t>("_uint16", h::UInt(16));
