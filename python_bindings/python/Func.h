@@ -68,17 +68,17 @@ FuncOrStage &func_unroll1(FuncOrStage &that, hh::VarOrRVar var, int factor)
 
 template<typename FuncOrStage>
 FuncOrStage &func_tile0(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
-                    hh::VarOrRVar xo, hh::VarOrRVar yo,
-                    hh::VarOrRVar xi, hh::VarOrRVar yi,
-                    hh::Expr xfactor, hh::Expr yfactor)
+                        hh::VarOrRVar xo, hh::VarOrRVar yo,
+                        hh::VarOrRVar xi, hh::VarOrRVar yi,
+                        hh::Expr xfactor, hh::Expr yfactor)
 {
     return that.tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
 }
 
 template<typename FuncOrStage>
 FuncOrStage &func_tile1(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
-                    hh::VarOrRVar xi, hh::VarOrRVar yi,
-                    hh::Expr xfactor, hh::Expr yfactor)
+                        hh::VarOrRVar xi, hh::VarOrRVar yi,
+                        hh::Expr xfactor, hh::Expr yfactor)
 {
     return that.tile(x, y, xi, yi, xfactor, yfactor);
 }
@@ -115,7 +115,7 @@ FuncOrStage &func_reorder0(FuncOrStage &that, PythonIterable args_passed)
 
 template<typename FuncOrStage>
 FuncOrStage &func_reorder1(FuncOrStage &that, bp::object v0,
-                       bp::object v1, bp::object v2, bp::object v3, bp::object v4, bp::object v5)
+                           bp::object v1, bp::object v2, bp::object v3, bp::object v4, bp::object v5)
 {
     bp::list args_list;
     for(const bp::object &v : {v0, v1, v2, v3, v4, v5})
@@ -129,8 +129,8 @@ FuncOrStage &func_reorder1(FuncOrStage &that, bp::object v0,
     return func_reorder0<FuncOrStage, bp::list>(that, args_list);
 }
 
-template<typename FuncOrStage>
-FuncOrStage &func_reorder_storage0(FuncOrStage &that, bp::tuple args_passed)
+template<typename FuncOrStage, typename PythonIterable>
+FuncOrStage &func_reorder_storage0(FuncOrStage &that, PythonIterable args_passed)
 {
     std::vector<hh::Var> var_args;
 
@@ -158,6 +158,24 @@ FuncOrStage &func_reorder_storage0(FuncOrStage &that, bp::tuple args_passed)
 
     return that.reorder_storage(var_args);
 }
+
+template<typename FuncOrStage>
+FuncOrStage &func_reorder_storage1(FuncOrStage &that, bp::object v0,
+                                   bp::object v1, bp::object v2,
+                                   bp::object v3, bp::object v4, bp::object v5)
+{
+    bp::list args_list;
+    for(const bp::object &v : {v0, v1, v2, v3, v4, v5})
+    {
+        if(not v.is_none())
+        {
+            args_list.append(v);
+        }
+    }
+
+    return func_reorder_storage0<FuncOrStage, bp::list>(that, args_list);
+}
+
 
 } // end of namespace func_and_stage_implementation_details
 
