@@ -11,10 +11,9 @@
 
 namespace h = Halide;
 
-std::string type_repr(const h::Type &t)
-{
-    auto message_format = boost::format("<Halide::Type code '%s' with %i bits and width %i>");
 
+std::string type_code_to_string(const h::Type &t)
+{
     std::string code_string = "unknown";
     switch(t.code)
     {
@@ -38,7 +37,15 @@ std::string type_repr(const h::Type &t)
         code_string = "unknown";
     }
 
-    return boost::str(message_format % code_string % t.bits % t.width);
+    return code_string;
+}
+
+std::string type_repr(const h::Type &t)
+{
+    auto message_format = boost::format("<halide.Type code '%s' with %i bits and width %i>");
+
+
+    return boost::str(message_format % type_code_to_string(t) % t.bits % t.width);
 }
 
 void defineType()

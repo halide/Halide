@@ -25,7 +25,7 @@ size_t host_ptr_as_int(h::Buffer &that)
     return reinterpret_cast<size_t>(that.host_ptr());
 }
 
-std::string buffer_t_repr(buffer_t &that)
+std::string buffer_t_repr(const buffer_t &that)
 {
     boost::format format("<buffer_t [host %u (dirty %i)] [dev %u (dirty %i)] elem_size %i "
                          "extent (%i %i %i %i) min (%i %i %i %i) stride (%i %i %i %i)>");

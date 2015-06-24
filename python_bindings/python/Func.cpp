@@ -300,6 +300,15 @@ h::Stage func_setitem_operator1(h::Func &that, p::object arg_passed, T right_han
 }
 
 
+std::string func_repr(const h::Func &func)
+{
+    std::string repr;
+    boost::format f("<halide.Func '%s'>");
+    repr = boost::str(f % func.name());
+    return repr;
+}
+
+
 void defineFunc()
 {
     using Halide::Func;
@@ -612,6 +621,8 @@ void defineFunc()
                    "Func where the given condition is true. The most effective "
                    "conditions are those of the form param == value, and boolean "
                    "Params. See C++ documentation for more details.");
+
+    func_class.def("__repr__", &func_repr, p::arg("self"));
 
 
     defineFuncGpuMethods(func_class);
