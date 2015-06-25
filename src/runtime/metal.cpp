@@ -196,6 +196,7 @@ WEAK int halide_metal_device_free(void *user_context, buffer_t* buf) {
 WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, const char* source, int source_size) {
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
+    debug(user_context) << "t_before is: " << t_before << "\n";
     #endif
 
     // Create the state object if necessary. This only happens once, regardless
@@ -216,22 +217,38 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
     }
 
     if ((*state)->library == 0) {
+        #ifdef DEBUG_RUNTIME
+        uint64_t t_before_compile = halide_current_time_ns(user_context);
+        #endif
+
         (*state)->library = new_library_with_source(metal_context.device, source, source_size);
         if ((*state)->library == 0) {
             error(user_context) << "Metal: new_library_with_source failed.\n";
             return -1;
         }
+
+        #ifdef DEBUG_RUNTIME
+        uint64_t t_after_compile = halide_current_time_ns(user_context);
+        debug(user_context) << "Time for halide_metal_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n";
+        #endif
     }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    //debug(user_context) << "t_before is: " << t_before << " and 42.42 is " << 42.42 << "\n";
+    //debug(user_context) << "t_after is: " << t_after << " and 42.42 is " << 42.42 << "\n";
+    
+    debug(user_context) << "Time for halide_metal_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
 }
 
 WEAK int halide_metal_device_sync(void *user_context, struct buffer_t *) {
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
         return metal_context.error;
@@ -241,6 +258,11 @@ WEAK int halide_metal_device_sync(void *user_context, struct buffer_t *) {
     commit_command_buffer(nop_buffer);
     wait_until_completed(nop_buffer);
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "Time for halide_metal_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
     return 0;
 }
 
@@ -249,6 +271,10 @@ WEAK int halide_metal_device_release(void *user_context) {
 }
 
 WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buf) {
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
         return metal_context.error;
@@ -265,10 +291,19 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buf) {
     // TODO: can we just call memcpy here or do we have to do the strided copy?
     memcpy(buffer_memory, buf->host, buf_size(user_context, buf));
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "Time for halide_metal_copy_to_device: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
     return 0;
 }
 
 WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buf) {
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
         return metal_context.error;
@@ -284,6 +319,11 @@ WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buf) {
     void *buffer_memory = buffer_contents(metal_buf);
     // TODO: can we just call memcpy here or do we have to do the strided copy?
     memcpy(buf->host, buffer_memory, buf_size(user_context, buf));
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "Time for halide_metal_copy_to_host: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
 
     return 0;
 }
