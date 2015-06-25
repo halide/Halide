@@ -26,10 +26,7 @@ else()
 	endif()
 endif()
 
-option(USE_BOOST_NUMPY "Use Boost.Numpy dependency" ON)
-
-set(BoostNumpy_INCLUDE_DIRS "")
-set(BoostNumpy_LIBRARIES boost_numpy)
+option(USE_BOOST_NUMPY "Use Boost.Numpy dependency" OFF)
 
 add_definitions("-std=c++11")
 
@@ -42,7 +39,29 @@ ${NUMPY_INCLUDE_DIRS} )
 link_directories(
 ../build/lib
 ${Boost_LIBRARY_DIR}
+${BoostNumpy_LIBRARY_DIR}
+${Numpy_LIBRARY_DIR}
 )
+
+if(USE_BOOST_NUMPY)
+set(BoostNumpy_INCLUDE_DIRS "")
+set(BoostNumpy_LIBRARY_DIR "")
+set(BoostNumpy_LIBRARIES boost_numpy)
+else()
+#(NOT USE_BOOST_NUMPY) is true
+
+file(GLOB MicroNumpyCpp
+numpy/*.cpp
+numpy/*.hpp
+)
+
+add_library(micro_numpy SHARED ${MicroNumpyCpp})
+target_link_libraries(micro_numpy ${NumPy_LIBRARIES})
+
+set(BoostNumpy_INCLUDE_DIRS ./numpy)
+set(BoostNumpy_LIBRARY_DIR ./numpy)
+set(BoostNumpy_LIBRARIES micro_numpy)
+endif()
 
 
 #file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/__init__.py" "" )
