@@ -26,7 +26,7 @@ else()
 	endif()
 endif()
 
-option(USE_BOOST_NUMPY "Use Boost.Numpy dependency instead of Halide.Numpy" ON)
+option(USE_BOOST_NUMPY "Use Boost.Numpy dependency instead of Halide.Numpy" OFF)
 
 
 if(USE_BOOST_NUMPY)
