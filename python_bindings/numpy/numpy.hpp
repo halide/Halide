@@ -12,7 +12,6 @@
 
 #include "dtype.hpp"
 #include "ndarray.hpp"
-#include "invoke_matching.hpp"
 
 namespace Halide {
 namespace numpy {
