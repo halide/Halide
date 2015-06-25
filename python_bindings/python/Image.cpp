@@ -879,7 +879,6 @@ void defineImage()
 
 
 #ifdef USE_NUMPY
-
     bn::initialize();
 
     p::def("ndarray_to_image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
@@ -899,8 +898,6 @@ void defineImage()
            "Creates a numpy array from a Halide::Image."
            "Will take into account the Image size, dimensions, and type."
            "Created ndarray refers to the Image data (no copy).");
-
-
 #endif
 
     return;

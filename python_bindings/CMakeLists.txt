@@ -26,22 +26,8 @@ else()
 	endif()
 endif()
 
-option(USE_BOOST_NUMPY "Use Boost.Numpy dependency instead of Halide.Numpy" OFF)
+option(USE_BOOST_NUMPY "Use Boost.Numpy dependency instead of Halide.Numpy" ON)
 
-add_definitions("-std=c++11")
-
-include_directories(
-../build/include
-${Boost_INCLUDE_DIRS}
-${BoostNumpy_INCLUDE_DIRS}
-${PYTHON_INCLUDE_DIRS}
-${NUMPY_INCLUDE_DIRS} )
-link_directories(
-../build/lib
-${Boost_LIBRARY_DIR}
-${BoostNumpy_LIBRARY_DIR}
-${Numpy_LIBRARY_DIR}
-)
 
 if(USE_BOOST_NUMPY)
 add_definitions( -DUSE_BOOST_NUMPY )
@@ -56,16 +42,32 @@ numpy/*.cpp
 numpy/*.hpp
 )
 
-add_library(micro_numpy STATIC ${MicroNumpyCpp})
-target_link_libraries(micro_numpy ${NumPy_LIBRARIES})
+add_library(halide_numpy STATIC ${MicroNumpyCpp})
+target_link_libraries(halide_numpy ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${NumPy_LIBRARIES})
+set_property(TARGET halide_numpy PROPERTY POSITION_INDEPENDENT_CODE TRUE)
 
 set(BoostNumpy_INCLUDE_DIRS ./numpy)
 set(BoostNumpy_LIBRARY_DIR ./numpy)
-set(BoostNumpy_LIBRARIES micro_numpy)
+set(BoostNumpy_LIBRARIES halide_numpy)
 endif()
 
+add_definitions("-std=c++11")
 
-#file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/__init__.py" "" )
+include_directories(
+  ../build/include
+  ${Boost_INCLUDE_DIRS}
+  ${BoostNumpy_INCLUDE_DIRS}
+  ${PYTHON_INCLUDE_DIRS}
+  ${NUMPY_INCLUDE_DIRS}
+)
+
+link_directories(
+  ../build/lib
+  ${Boost_LIBRARY_DIR}
+  ${BoostNumpy_LIBRARY_DIR}
+  ${Numpy_LIBRARY_DIR}
+)
+
 
 if(FALSE AND UNIX )
 	# Disable the pointer-to-function and pointer-to-object warnings
@@ -79,11 +81,10 @@ python/*.cpp
 
 add_library(halide SHARED ${SrcCpp})
 target_link_libraries(halide
-Halide InitialModules
-${Boost_LIBRARIES}
-${BoostNumpy_LIBRARIES}
-${PYTHON_LIBRARIES}
-
+  Halide InitialModules
+  ${Boost_LIBRARIES}
+  ${BoostNumpy_LIBRARIES}
+  ${PYTHON_LIBRARIES}
 )
 
 set_target_properties( halide PROPERTIES PREFIX "")
