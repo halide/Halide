@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		296DAF091B39E74F00555E8A /* reaction_diffusion_2_init.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 296DAF061B39E74F00555E8A /* reaction_diffusion_2_init.o */; };
+		296DAF0A1B39E74F00555E8A /* reaction_diffusion_2_render.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 296DAF071B39E74F00555E8A /* reaction_diffusion_2_render.o */; };
+		296DAF0B1B39E74F00555E8A /* reaction_diffusion_2_update.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 296DAF081B39E74F00555E8A /* reaction_diffusion_2_update.o */; };
+		29A23DAC1B33E68C00A92A6F /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 29A23DAB1B33E68C00A92A6F /* Metal.framework */; };
 		3D6C4DBB198051DB002AD41E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBA198051DB002AD41E /* Foundation.framework */; };
 		3D6C4DBD198051DB002AD41E /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBC198051DB002AD41E /* CoreGraphics.framework */; };
 		3D6C4DBF198051DB002AD41E /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBE198051DB002AD41E /* UIKit.framework */; };
@@ -15,13 +19,14 @@
 		3D6C4DCB198051DB002AD41E /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DCA198051DB002AD41E /* AppDelegate.m */; };
 		3D6C4DCD198051DB002AD41E /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3D6C4DCC198051DB002AD41E /* Images.xcassets */; };
 		3D6C4DEB19805225002AD41E /* HalideView.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DEA19805225002AD41E /* HalideView.m */; };
-		3D6C4DF219805335002AD41E /* reaction_diffusion_2_init.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DEF19805335002AD41E /* reaction_diffusion_2_init.o */; };
-		3D6C4DF319805335002AD41E /* reaction_diffusion_2_render.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DF019805335002AD41E /* reaction_diffusion_2_render.o */; };
-		3D6C4DF419805335002AD41E /* reaction_diffusion_2_update.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DF119805335002AD41E /* reaction_diffusion_2_update.o */; };
 		3D6C4DF619805438002AD41E /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DF519805438002AD41E /* QuartzCore.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		296DAF061B39E74F00555E8A /* reaction_diffusion_2_init.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_init.o; path = "../../Intermediates/HelloiOS.build/Debug-iphoneos/HelloiOS.build/DerivedSources/reaction_diffusion_2_init.o"; sourceTree = BUILT_PRODUCTS_DIR; };
+		296DAF071B39E74F00555E8A /* reaction_diffusion_2_render.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_render.o; path = "../../Intermediates/HelloiOS.build/Debug-iphoneos/HelloiOS.build/DerivedSources/reaction_diffusion_2_render.o"; sourceTree = BUILT_PRODUCTS_DIR; };
+		296DAF081B39E74F00555E8A /* reaction_diffusion_2_update.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_update.o; path = "../../Intermediates/HelloiOS.build/Debug-iphoneos/HelloiOS.build/DerivedSources/reaction_diffusion_2_update.o"; sourceTree = BUILT_PRODUCTS_DIR; };
+		29A23DAB1B33E68C00A92A6F /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		3D6C4DB7198051DB002AD41E /* HelloiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HelloiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D6C4DBA198051DB002AD41E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		3D6C4DBC198051DB002AD41E /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
@@ -37,9 +42,6 @@
 		3D6C4DE919805225002AD41E /* HalideView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HalideView.h; sourceTree = "<group>"; };
 		3D6C4DEA19805225002AD41E /* HalideView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HalideView.m; sourceTree = "<group>"; };
 		3D6C4DEC1980522C002AD41E /* reaction_diffusion_2.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = reaction_diffusion_2.cpp; sourceTree = "<group>"; };
-		3D6C4DEF19805335002AD41E /* reaction_diffusion_2_init.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_init.o; path = HelloiOS/reaction_diffusion_2_init.o; sourceTree = "<group>"; };
-		3D6C4DF019805335002AD41E /* reaction_diffusion_2_render.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_render.o; path = HelloiOS/reaction_diffusion_2_render.o; sourceTree = "<group>"; };
-		3D6C4DF119805335002AD41E /* reaction_diffusion_2_update.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_update.o; path = HelloiOS/reaction_diffusion_2_update.o; sourceTree = "<group>"; };
 		3D6C4DF519805438002AD41E /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -48,10 +50,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				296DAF0B1B39E74F00555E8A /* reaction_diffusion_2_update.o in Frameworks */,
+				29A23DAC1B33E68C00A92A6F /* Metal.framework in Frameworks */,
+				296DAF091B39E74F00555E8A /* reaction_diffusion_2_init.o in Frameworks */,
 				3D6C4DF619805438002AD41E /* QuartzCore.framework in Frameworks */,
-				3D6C4DF219805335002AD41E /* reaction_diffusion_2_init.o in Frameworks */,
-				3D6C4DF319805335002AD41E /* reaction_diffusion_2_render.o in Frameworks */,
-				3D6C4DF419805335002AD41E /* reaction_diffusion_2_update.o in Frameworks */,
+				296DAF0A1B39E74F00555E8A /* reaction_diffusion_2_render.o in Frameworks */,
 				3D6C4DBD198051DB002AD41E /* CoreGraphics.framework in Frameworks */,
 				3D6C4DBF198051DB002AD41E /* UIKit.framework in Frameworks */,
 				3D6C4DBB198051DB002AD41E /* Foundation.framework in Frameworks */,
@@ -81,10 +84,11 @@
 		3D6C4DB9198051DB002AD41E /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				296DAF061B39E74F00555E8A /* reaction_diffusion_2_init.o */,
+				296DAF071B39E74F00555E8A /* reaction_diffusion_2_render.o */,
+				296DAF081B39E74F00555E8A /* reaction_diffusion_2_update.o */,
+				29A23DAB1B33E68C00A92A6F /* Metal.framework */,
 				3D6C4DF519805438002AD41E /* QuartzCore.framework */,
-				3D6C4DEF19805335002AD41E /* reaction_diffusion_2_init.o */,
-				3D6C4DF019805335002AD41E /* reaction_diffusion_2_render.o */,
-				3D6C4DF119805335002AD41E /* reaction_diffusion_2_update.o */,
 				3D6C4DBA198051DB002AD41E /* Foundation.framework */,
 				3D6C4DBC198051DB002AD41E /* CoreGraphics.framework */,
 				3D6C4DBE198051DB002AD41E /* UIKit.framework */,
@@ -184,12 +188,22 @@
 			files = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/reaction_diffusion_2.cpp",
+				"$(SRCROOT)/../../bin/libHalide.a",
+				"$(SRCROOT)/../../include/Halide.h",
 			);
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_generator",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_init.o",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_init.h",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_update.o",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_update.h",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_render.o",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_render.h",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n# xcode puts all sorts of junk in the environment which prevents building a binary for osx (instead of ios). sudo'ing to yourself gives a fresh environment.\n\nsudo -u ${USER} c++ reaction_diffusion_2.cpp -std=c++11 -I ${SRCROOT}/../../include -I ${SRCROOT}/../../build/include -arch x86_64 -L ${SRCROOT}/../../bin -L ${SRCROOT}/../../build/lib -lHalide -o reaction_diffusion_2_generator\n\nHL_TARGET=arm-64-ios DYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib ./reaction_diffusion_2_generator";
+			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n\n# xcode puts all sorts of junk in the environment which prevents building a binary for osx (instead of ios). sudo'ing to yourself gives a fresh environment.\nsudo -u ${USER} c++ reaction_diffusion_2.cpp -std=c++11 -I ${SRCROOT}/../../include -I ${SRCROOT}/../../build/include -arch x86_64 -L ${SRCROOT}/../../bin -lHalide -o ${DERIVED_FILE_DIR}/reaction_diffusion_2_generator\n\n(cd ${DERIVED_FILE_DIR}; HL_TARGET=arm-64-ios-metal DYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib ./reaction_diffusion_2_generator)";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -297,11 +311,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				DEBUG_INFORMATION_FORMAT = dwarf;
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";
 				INFOPLIST_FILE = "HelloiOS/HelloiOS-Info.plist";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)../../../include/";
+				"USER_HEADER_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/../../include/";
 				WRAPPER_EXTENSION = app;
 			};
 			name = Debug;
@@ -311,11 +328,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				DEBUG_INFORMATION_FORMAT = dwarf;
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";
 				INFOPLIST_FILE = "HelloiOS/HelloiOS-Info.plist";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/../../include/";
+				"USER_HEADER_SEARCH_PATHS[arch=*]" = ../../../../include/;
 				WRAPPER_EXTENSION = app;
 			};
 			name = Release;
@@ -339,6 +359,7 @@
 				3D6C4DE5198051DB002AD41E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
         Expr r = dx * dx + dy * dy;
         Expr mask = r < 200 * 200;
         initial(x, y, c) = random_float();// * select(mask, 1.0f, 0.001f);
+	initial.reorder(c, x, y).bound(c, 0, 3).vectorize(c).gpu_tile(x, y, 4, 4);
         initial.compile_to_file("reaction_diffusion_2_init", {cx, cy});
     }
 
@@ -94,17 +95,21 @@ int main(int argc, char **argv) {
         Expr radius = dx * dx + dy * dy;
         new_state(clobber.x, clobber.y, c) = select(radius < 400.0f, 1.0f, new_state(clobber.x, clobber.y, c));
 
+#define USE_CPU 0
+#if USE_CPU
         new_state.reorder(c, x, y).bound(c, 0, 3).unroll(c);
-
         Var yi;
         new_state.split(y, y, yi, 64).parallel(y);
-
         //blur_x.store_at(new_state, y).compute_at(new_state, yi);
         blur.compute_at(new_state, yi);
         clamped.store_at(new_state, y).compute_at(new_state, yi);
-
         new_state.vectorize(x, 4);
         blur.vectorize(x, 4);
+#else
+        new_state.reorder(c, x, y).bound(c, 0, 3).vectorize(c);
+	//	blur.compute_at(new_state, y);
+	new_state.gpu_tile(x, y, 4, 4);
+#endif
 
         std::vector<Argument> args(6);
         args[0] = state;
@@ -137,10 +142,13 @@ int main(int argc, char **argv) {
         Func render;
         render(x, y) = alpha + red + green + blue;
 
+#if 0
         render.vectorize(x, 4);
         Var yi;
         render.split(y, y, yi, 64).parallel(y);
-
+#else
+	render.gpu_tile(x, y, 4, 4);
+#endif
         render.compile_to_file("reaction_diffusion_2_render", {state});
     }
 
