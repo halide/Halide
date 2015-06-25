@@ -4,13 +4,18 @@
 #include <boost/python.hpp>
 #include <boost/format.hpp>
 
-#define USE_BOOST_NUMPY
+#define USE_NUMPY
 
+#ifdef USE_NUMPY
 #ifdef USE_BOOST_NUMPY
 #include <boost/numpy.hpp>
-#include <boost/cstdint.hpp>
+#else
+// we use Halide::numpy
+#include "../numpy/numpy.hpp"
 #endif
+#endif // USE_NUMPY
 
+#include <boost/cstdint.hpp>
 #include <boost/mpl/list.hpp>
 #include <boost/functional/hash/hash.hpp>
 
@@ -25,6 +30,14 @@
 
 namespace h = Halide;
 namespace p = boost::python;
+
+#ifdef USE_NUMPY
+#ifdef USE_BOOST_NUMPY
+namespace bn = boost::numpy;
+#else
+namespace bn = Halide::numpy;
+#endif
+#endif // USE_NUMPY
 
 
 template<typename T>
@@ -441,14 +454,12 @@ void defineImage_impl(const std::string suffix, const h::Type type)
     return;
 }
 
-#ifdef USE_BOOST_NUMPY
+#ifdef USE_NUMPY
 
 // To be used with care, since return object uses a  C++ pointer to data,
 // use p::with_custodian_and_ward_postcall to link the objects lifetime
-p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer, const std::string &name)
+p::object raw_buffer_to_image(bn::ndarray &array, buffer_t &raw_buffer, const std::string &name)
 {
-    namespace bn = boost::numpy;
-
     PyObject* obj = NULL;
 
     if(array.get_dtype() == bn::dtype::get_builtin<boost::uint8_t>())
@@ -550,7 +561,7 @@ p::object raw_buffer_to_image(boost::numpy::ndarray &array, buffer_t &raw_buffer
 }
 
 
-buffer_t ndarray_to_buffer_t(boost::numpy::ndarray &array)
+buffer_t ndarray_to_buffer_t(bn::ndarray &array)
 {
     size_t num_elements = 0;
     for(size_t i = 0; i < array.get_nd(); i += 1)
@@ -605,7 +616,7 @@ buffer_t ndarray_to_buffer_t(boost::numpy::ndarray &array)
 }
 
 /// Will create a Halide::Image object pointing to the array data
-p::object ndarray_to_image(boost::numpy::ndarray &array, const std::string name="")
+p::object ndarray_to_image(bn::ndarray &array, const std::string name="")
 {
     buffer_t raw_buffer = ndarray_to_buffer_t(array);
     return raw_buffer_to_image(array, raw_buffer, name);
@@ -632,9 +643,9 @@ struct hash<h::Type>
 }
 
 
-boost::numpy::dtype type_to_dtype(const h::Type &t)
+bn::dtype type_to_dtype(const h::Type &t)
 {
-    using boost::numpy::dtype;
+    using bn::dtype;
 
     const std::unordered_map<h::Type, dtype> m =
     {
@@ -660,7 +671,7 @@ boost::numpy::dtype type_to_dtype(const h::Type &t)
 }
 
 
-boost::numpy::ndarray image_to_ndarray(p::object image_object)
+bn::ndarray image_to_ndarray(p::object image_object)
 {
     p::extract<h::ImageBase &> image_base_extract(image_object);
 
@@ -697,7 +708,7 @@ boost::numpy::ndarray image_to_ndarray(p::object image_object)
         stride_array[i] *= raw_buffer.elem_size;
     }
 
-    return boost::numpy::from_data(
+    return bn::from_data(
                 b.host_ptr(),
                 type_to_dtype(t),
                 shape_array,
@@ -867,9 +878,9 @@ void defineImage()
            "Wrap a buffer_t in an Image object of type T, so that we can access its pixels.");
 
 
-#ifdef USE_BOOST_NUMPY
+#ifdef USE_NUMPY
 
-    boost::numpy::initialize();
+    bn::initialize();
 
     p::def("ndarray_to_image", &ndarray_to_image, (p::arg("array"), p::arg("name")=""),
            p::with_custodian_and_ward_postcall<0, 1>(), // the array reference count is increased
@@ -888,6 +899,8 @@ void defineImage()
            "Creates a numpy array from a Halide::Image."
            "Will take into account the Image size, dimensions, and type."
            "Created ndarray refers to the Image data (no copy).");
+
+
 #endif
 
     return;
