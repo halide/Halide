@@ -53,8 +53,8 @@ Problems with (old) SWIG bindings:
 - P1) SWIG cannot parse C++15, and it will always lag
 - P2) Python code is not compiled/tested together with C++ codebase
 - P3) Albeit SWIG is ment to provide "automagic" conversion, current code base has explicit code for every class (and class member) of interest
-- P4) Current __init__.py has a lot of "python magic" to get things running, code is spread around multiple pieces (py_util.cpp, cHalide.i, and __init__.py)
-- P5) Current python bindings do not work at all
+- P4) Old swig bindings `__init__.py` file has a lot of "python magic" to get things running, code is spread around multiple pieces (`py_util.cpp`, `cHalide.i`, and `__init__.py`)
+- P5) Old swig python bindings stopped working at all
 
 The boost python approach helps because:
 - a) P1 is solved out of the box, since no C++ parsing is involved
