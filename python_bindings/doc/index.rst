@@ -10,7 +10,7 @@ The `example applications`_ and tutorials_ demonstrate how to use the bindings.
 
 For install and license information see the readme_.
 
-.. _readme: https://github.com/halide/Halide/blob/master/python_bindings/readme.text
+.. _readme: https://github.com/halide/Halide/blob/master/python_bindings/readme.md
 .. _tutorials: https://github.com/halide/Halide/blob/master/python_bindings/tutorial
 .. _example applications: https://github.com/halide/Halide/blob/master/python_bindings/apps/
 .. _Python bindings: https://github.com/halide/Halide/blob/master/python_bindings/
