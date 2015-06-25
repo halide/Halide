@@ -26,7 +26,7 @@ else()
 	endif()
 endif()
 
-option(USE_BOOST_NUMPY "Use Boost.Numpy dependency" OFF)
+option(USE_BOOST_NUMPY "Use Boost.Numpy dependency instead of Halide.Numpy" OFF)
 
 add_definitions("-std=c++11")
 
@@ -44,6 +44,7 @@ ${Numpy_LIBRARY_DIR}
 )
 
 if(USE_BOOST_NUMPY)
+add_definitions( -DUSE_BOOST_NUMPY )
 set(BoostNumpy_INCLUDE_DIRS "")
 set(BoostNumpy_LIBRARY_DIR "")
 set(BoostNumpy_LIBRARIES boost_numpy)
@@ -55,7 +56,7 @@ numpy/*.cpp
 numpy/*.hpp
 )
 
-add_library(micro_numpy SHARED ${MicroNumpyCpp})
+add_library(micro_numpy STATIC ${MicroNumpyCpp})
 target_link_libraries(micro_numpy ${NumPy_LIBRARIES})
 
 set(BoostNumpy_INCLUDE_DIRS ./numpy)
