@@ -42,16 +42,54 @@ void check_interleave_count(Func f, int correct) {
     }
 }
 
+template <typename FuncRefVarOrExpr>
+void define(FuncRefVarOrExpr f, std::vector<Expr> values) {
+    if (values.size() == 1) {
+        f = values[0];
+    } else {
+        f = Tuple(values);
+    }
+}
+
+template <typename FuncRefVarOrExpr>
+void define(FuncRefVarOrExpr f, Expr value, int count) {
+    std::vector<Expr> values;
+    for (int i = 0; i < count; i++) {
+        values.push_back(value);
+    }
+    define(f, values);
+}
+
+template <typename FuncRefVarOrExpr>
+Expr element(FuncRefVarOrExpr f, int i) {
+    if (f.size() == 1) {
+        assert(i == 0);
+        return f;
+    } else {
+        return f[i];
+    }
+}
+
 // Make sure the interleave pattern generates good vector code
 
 int main(int argc, char **argv) {
     Var x, y, c;
 
-    {
+    for (int elements = 1; elements <= 5; elements++) {
         Func f, g, h;
-        f(x) = sin(x);
-        g(x) = cos(x);
-        h(x) = select(x % 2 == 0, 1.0f/f(x/2), g(x/2)*17.0f);
+        std::vector<Expr> f_def, g_def;
+        for (int i = 0; i < elements; i++) {
+            f_def.push_back(sin(x + i));
+            g_def.push_back(cos(x + i));
+        }
+        define(f(x), f_def);
+        define(g(x), g_def);
+        std::vector<Expr> h_def;
+        for (int i = 0; i < elements; i++) {
+            h_def.push_back(select(x % 2 == 0, 1.0f/element(f(x/2), i), element(g(x/2), i)*17.0f));
+            g_def.push_back(cos(x + i));
+        }
+        define(h(x), h_def);
 
         f.compute_root();
         g.compute_root();
@@ -59,13 +97,16 @@ int main(int argc, char **argv) {
 
         check_interleave_count(h, 1);
 
-        Image<float> result = h.realize(16);
-        for (int x = 0; x < 16; x++) {
-            float correct = ((x % 2) == 0) ? (1.0f/(sinf(x/2))) : (cosf(x/2)*17.0f);
-            float delta = result(x) - correct;
-            if (delta > 0.01 || delta < -0.01) {
-                printf("result(%d) = %f instead of %f\n", x, result(x), correct);
-                return -1;
+        Realization results = h.realize(16);
+        for (int i = 0; i < elements; i++) {
+            Image<float> result = results[i];
+            for (int x = 0; x < 16; x++) {
+                float correct = ((x % 2) == 0) ? (1.0f/(sinf(x/2 + i))) : (cosf(x/2 + i)*17.0f);
+                float delta = result(x) - correct;
+                if (delta > 0.01 || delta < -0.01) {
+                    printf("result(%d) = %f instead of %f\n", x, result(x), correct);
+                    return -1;
+                }
             }
         }
     }
@@ -230,59 +271,69 @@ int main(int argc, char **argv) {
         check_interleave_count(unrolled, 4);
     }
 
-    {
+    for (int elements = 1; elements <= 5; elements++) {
         // Make sure we don't interleave when the reordering would change the meaning.
-        Image<uint8_t> ref;
+        Realization* refs;
         for (int i = 0; i < 2; i++) {
             Func output6;
-            output6(x, y) = cast<uint8_t>(x);
+            define(output6(x, y), cast<uint8_t>(x), elements);
             RDom r(0, 16);
 
             // A not-safe-to-merge pair of updates
-            output6(2*r, 0) = cast<uint8_t>(3);
-            output6(2*r+1, 0) = output6(2*r, 0)+2;
+            define(output6(2*r, 0), cast<uint8_t>(3), elements);
+            define(output6(2*r+1, 0), cast<uint8_t>(4), elements);
 
             // A safe-to-merge pair of updates
-            output6(2*r, 1) = cast<uint8_t>(3);
-            output6(2*r+1, 1) = cast<uint8_t>(4);
+            define(output6(2*r, 1), cast<uint8_t>(3), elements);
+            define(output6(2*r+1, 1), cast<uint8_t>(4), elements);
 
             // A safe-to-merge-but-not-complete triple of updates:
-            output6(3*r, 3) = cast<uint8_t>(3);
-            output6(3*r+1, 3) = cast<uint8_t>(4);
+            define(output6(3*r, 3), cast<uint8_t>(3), elements);
+            define(output6(3*r+1, 3), cast<uint8_t>(4), elements);
 
             // A safe-to-merge-but-we-don't pair of updates, because they
             // load recursively, so we conservatively bail out.
-            output6(2*r, 2) += 1;
-            output6(2*r+1, 2) += 2;
+            std::vector<Expr> rdef0, rdef1;
+            for (int i = 0; i < elements; i++) {
+                rdef0.push_back(element(output6(2*r, 2), i) + 1);
+                rdef1.push_back(element(output6(2*r+1, 2), i) + 1);
+            }
+            define(output6(2*r, 2), rdef0);
+            define(output6(2*r+1, 2), rdef1);
 
             // A safe-to-merge triple of updates:
-            output6(3*r, 3) = cast<uint8_t>(7);
-            output6(3*r+2, 3) = cast<uint8_t>(9);
-            output6(3*r+1, 3) = cast<uint8_t>(8);
+            define(output6(3*r, 3), cast<uint8_t>(7), elements);
+            define(output6(3*r+2, 3), cast<uint8_t>(9), elements);
+            define(output6(3*r+1, 3), cast<uint8_t>(8), elements);
 
             if (i == 0) {
                 // Making the reference output.
-                ref = output6.realize(50, 4);
+                refs = new Realization(output6.realize(50, 4));
             } else {
                 // Vectorize and compare to the reference.
                 for (int j = 0; j < 11; j++) {
                     output6.update(j).vectorize(r);
                 }
 
-                check_interleave_count(output6, 2);
+                check_interleave_count(output6, 2*elements);
 
-                Image<uint8_t> out = output6.realize(50, 4);
-                for (int y = 0; y < ref.height(); y++) {
-                    for (int x = 0; x < ref.width(); x++) {
-                        if (out(x, y) != ref(x, y)) {
-                            printf("result(%d, %d) = %d instead of %d\n",
-                                   x, y, out(x, y), ref(x, y));
-                            return -1;
+                Realization outs = output6.realize(50, 4);
+                for (int e = 0; e < elements; e++) {
+                    Image<uint8_t> ref = (*refs)[e];
+                    Image<uint8_t> out = outs[e];
+                    for (int y = 0; y < ref.height(); y++) {
+                        for (int x = 0; x < ref.width(); x++) {
+                            if (out(x, y) != ref(x, y)) {
+                                printf("result(%d, %d) = %d instead of %d\n",
+                                       x, y, out(x, y), ref(x, y));
+                                return -1;
+                            }
                         }
                     }
                 }
             }
         }
+        delete refs;
     }
 
     {
