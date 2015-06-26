@@ -124,6 +124,10 @@ Note if you built LLVM with Visual Studio and are building Halide you will need
 to also to set ``LLVM_BUILD_TYPE`` (e.g. ``-DLLVM_BUILD_TYPE=RELEASE``) when
 invoking CMake to the build type used to build LLVM.
 
+Note if you need to use different LLVM binaries from the ones automatically
+detected you can pass ``-DLLVM_BIN=/path/to/llvm/binaries/directory/`` to CMake
+to use a different directory for the LLVM binaries.
+
 Building Halide and llvm as 32-bit on 64-bit linux
 --------------------------------------------------
 
