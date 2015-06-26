@@ -63,6 +63,7 @@ protected:
         void visit(const Broadcast *op);
         void visit(const Load *op);
         void visit(const Store *op);
+        void visit(const Select *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
     };

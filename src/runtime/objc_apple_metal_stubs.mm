@@ -141,6 +141,10 @@ WEAK mtl_library *new_library_with_source(mtl_device *device, const char *source
     // TODO: handle error.
     id <MTLLibrary> result = [device_obj newLibraryWithSource: source_str options: options error: &error_return];
 
+    if (result == 0) {
+	NSLog(@"%@", error_return);
+    }
+
     [options release];
     [source_str release];
     return (mtl_library *)result;
@@ -163,7 +167,7 @@ WEAK void set_input_buffer(mtl_compute_command_encoder *encoder, mtl_buffer *inp
     [encoder_obj setBuffer: buffer_obj offset: 0 atIndex: index];
 }
 
-WEAK void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, uint32_t index, uint32_t length) {
+WEAK void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, uint32_t length, uint32_t index) {
     id <MTLComputeCommandEncoder> encoder_obj = (id <MTLComputeCommandEncoder>)encoder;
     [encoder_obj setThreadgroupMemoryLength: length atIndex: index];
 }
