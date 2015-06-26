@@ -208,7 +208,7 @@ public:
     EXPORT Type type() const;
 
     /** Is this parameter handle non-NULL */
-    EXPORT bool defined();
+    EXPORT bool defined() const;
 
     /** Get an expression representing the minimum coordinates of this image
      * parameter in the given dimension. */

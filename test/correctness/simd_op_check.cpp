@@ -262,7 +262,11 @@ void check_sse_all() {
         // Padding out the lanes of a div isn't necessarily a good
         // idea, and so llvm doesn't do it.
         if (w > 1) {
-            check("divps", 2*w, f32_1 / f32_2);
+            // LLVM no longer generates division instructions with
+            // fast-math on (instead it uses the approximate
+            // reciprocal, a newtown rhapson step, and a
+            // multiplication by the numerator).
+            //check("divps", 2*w, f32_1 / f32_2);
         }
 
         check("rcpps", 2*w, fast_inverse(f32_2));
@@ -429,8 +433,9 @@ void check_sse_all() {
         check("vmulpd", 4, f64_1 * f64_2);
         check("vsubps", 8, f32_1 - f32_2);
         check("vsubpd", 4, f64_1 - f64_2);
-        check("vdivps", 8, f32_1 / f32_2);
-        check("vdivpd", 4, f64_1 / f64_2);
+        // LLVM no longer generates division instruction when fast-math is on
+        //check("vdivps", 8, f32_1 / f32_2);
+        //check("vdivpd", 4, f64_1 / f64_2);
         check("vminps", 8, min(f32_1, f32_2));
         check("vminpd", 4, min(f64_1, f64_2));
         check("vmaxps", 8, max(f32_1, f32_2));
