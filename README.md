@@ -110,23 +110,12 @@ There is no 'make install' yet. If you want to make an install
 package, run 'make distrib'.
 
 If you wish to use cmake to build Halide, the build procedure is:
-Note that ``LLVM_DIR`` should point to a directory containing ``LLVMConfig.cmake``.
-It is available in the LLVM build tree if LLVM was built with CMake and it is available
-from any LLVM build (3.5 and newer) that is installed.
 
     % mkdir build
     % cd build
     % LLVM_ROOT=/path/to/llvm3.5
-    % cmake -DLLVM_DIR=${LLVM_ROOT}/build/share/cmake/
+    % cmake -DLLVM_BIN=${LLVM_ROOT}/build/bin -DLLVM_INCLUDE="${LLVM_ROOT}/include;${LLVM_ROOT}/build/include" -DLLVM_LIB=${LLVM_ROOT}/build/lib -DLLVM_VERSION=35 ..
     % make -j8
-
-Note if you built LLVM with Visual Studio and are building Halide you will need
-to also to set ``LLVM_BUILD_TYPE`` (e.g. ``-DLLVM_BUILD_TYPE=RELEASE``) when
-invoking CMake to the build type used to build LLVM.
-
-Note if you need to use different LLVM binaries from the ones automatically
-detected you can pass ``-DLLVM_BIN=/path/to/llvm/binaries/directory/`` to CMake
-to use a different directory for the LLVM binaries.
 
 Building Halide and llvm as 32-bit on 64-bit linux
 --------------------------------------------------

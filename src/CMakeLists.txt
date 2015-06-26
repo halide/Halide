@@ -1,15 +1,30 @@
-include(CheckCXXCompilerFlag)
+include(CheckCCompilerFlag)
 
 add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 
 if (MSVC)
+  # Suppress some warnings
+  add_definitions("-D_CRT_SECURE_NO_WARNINGS")
+  add_definitions("-D_SCL_SECURE_NO_WARNINGS")
+  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
 
+  # To compile LLVM headers following was taken from LLVM CMake files:
+  # Disable sized deallocation if the flag is supported. MSVC fails to compile
+  # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
+  check_c_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
+  if (SUPPORTS_SIZED_DEALLOC)
+    add_definitions("/Zc:sizedDealloc-")
+  endif()
 else()
+  add_definitions("-D__STDC_LIMIT_MACROS")
+  add_definitions("-D__STDC_CONSTANT_MACROS")
+  add_definitions("-std=c++11")
+  add_definitions("-fno-rtti")
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
@@ -20,21 +35,18 @@ else()
   set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
 
-include_directories("${LLVM_INCLUDE}")
-# Get LLVM libraries
-# FIXME: We don't need all the LLVM components.
-# We'll get faster linking if we specify only the components we need
-# To see the available components run llvm-config --components
-llvm_map_components_to_libnames(LLVM_LIBS all)
+include_directories ( "${LLVM_INCLUDE}")
+link_directories ("${LLVM_LIB}")
 
-# Workaround LLVM bug 23967.
-# (https://llvm.org/bugs/show_bug.cgi?id=23967
-#
-# The internal gtest and gtest_main libraries are acciddently included so we
-# need to remove them because
-# - we don't need them
-# - will cause link failures on a system without gtest installed.
-list(REMOVE_ITEM LLVM_LIBS gtest gtest_main)
+set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
+if(WIN32)
+  file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
+else()
+  #file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/libLLVM*.a")
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles OUTPUT_VARIABLE LIBS_UNSTRIPPED)
+  string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
+  string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
+endif()
 
 if (TARGET_NATIVE_CLIENT)
   add_definitions("-DWITH_NATIVE_CLIENT")
@@ -485,48 +497,62 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
 )
 
-target_link_libraries(Halide InitialModules)
-
-# Note when PUBLIC scope is used in target_compile_* then targets that link
-# against the Halide library inherit those options and definitions
-if (MSVC)
-  # Suppress some warnings
-  target_compile_options(Halide PUBLIC /wd4244 /wd4267 /wd4800 /wd4996)
-  target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
-  # To compile LLVM headers following was taken from LLVM CMake files:
-  # Disable sized deallocation if the flag is supported. MSVC fails to compile
-  # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
-  # See LLVM PR: 23513 (https://llvm.org/bugs/show_bug.cgi?id=23513)
-  check_cxx_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
-  if (SUPPORTS_SIZED_DEALLOC)
-    target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
-  endif()
+# CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
+# to target_link_libraries. This makes the CMake generation step take a very
+# long time. Instead, since we add the libs to the extra.LinkFileList passed to
+# Xcode below it is not necessary to pass them to target_link_libraries as well.
+if (XCODE)
+  target_link_libraries(Halide InitialModules)
 else()
-  # I'm not sure if we want targets that link against Halide to inherit
-  # the LLVM definitions so make the scope PRIVATE for now.
-  target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
-  target_compile_options(Halide PUBLIC "-std=c++11")
-  if (NOT LLVM_ENABLE_RTTI)
-    target_compile_options(Halide PUBLIC "-fno-rtti")
-  endif()
+  target_link_libraries(Halide InitialModules ${LIBS})
 endif()
 
-# Link against LLVM
-if (NUMBER_OF_LLVM_BUILD_TYPES GREATER 1)
-  # The LLVM build may expose multiple build configurations when built with
-  # Visual Studio.  We want to link against the one the user requested so we
-  # need to get the full path to those libraries and link against those.
-  foreach(libname ${LLVM_LIBS})
-    get_property(libname_path TARGET ${libname} PROPERTY LOCATION_${LLVM_BUILD_TYPE_UPPERCASE})
-    if (${libname} STREQUAL LTO)
-      # This seems to be a dll which we can't link against
-      continue()
-    endif()
-    target_link_libraries(Halide ${libname_path})
-  endforeach()
-else()
-  target_link_libraries(Halide ${LLVM_LIBS})
+if (NOT WIN32)
+  if (${LLVM_VERSION} GREATER 34)
+    execute_process(COMMAND "${LLVM_CONFIG}" --system-libs OUTPUT_VARIABLE EXTRA_LIBS)
+  else()
+    execute_process(COMMAND "${LLVM_CONFIG}" --ldflags OUTPUT_VARIABLE EXTRA_LIBS)
+  endif()
+  string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
+  target_link_libraries(Halide ${EXTRA_LIBS})
 endif()
+
+if (NOT HALIDE_SHARED_LIBRARY)
+
+# For the Xcode build, we want the static library version of libHalide.a
+# to include all of its dependencies so that other projects can link to the
+# library without having to worry about which version of LLVM or the initial
+# modules it was built with. This is accomplished by adding an additional file
+# list to the link line containing all of these dependencies
+
+if (XCODE)
+
+# Create a link file list
+set(EXTRA_LINKFILELIST "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/extra.LinkFileList")
+
+# Determine the location of libInitialModules.a so we can include the path to it
+# in the link file list
+IF (CMAKE_BUILD_TYPE)
+  set(InitialModulesPath ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/${CMAKE_BUILD_TYPE}/libInitialModules.a)
+ELSE()
+  set(InitialModulesPath ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/Debug/libInitialModules.a)
+ENDIF()
+
+# We need a newline delimited list of the lib files
+execute_process(COMMAND "${LLVM_CONFIG}" --libfiles OUTPUT_VARIABLE LIBS)
+string(REPLACE " " "\n" LIBS ${LIBS})
+
+# Write the archive file dependencies to a new LinkFileList
+file(WRITE ${EXTRA_LINKFILELIST} "${LIBS}${InitialModulesPath}\n")
+
+set_target_properties(Halide PROPERTIES XCODE_ATTRIBUTE_OTHER_LIBTOOLFLAGS "-filelist ${EXTRA_LINKFILELIST}")
+
+endif(XCODE)
+
+endif (NOT HALIDE_SHARED_LIBRARY)
 
 # if this is a DLL, don't link dependencies to this set of libs.
 #if (HALIDE_SHARED_LIBRARY)

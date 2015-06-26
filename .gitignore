@@ -155,7 +155,6 @@ src/test_*.s
 *.guru
 *.dSYM
 .*.swp
-Doxyfile
 
 # jrk editor settings
 .tm_properties
