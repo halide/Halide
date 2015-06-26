@@ -30,7 +30,8 @@ endfunction(halide_generator_output_path)
 #                                   GENERATOR_NAME <string>
 #                                   GENERATED_FUNCTION <string>
 #                                   GENERATOR_ARGS <arg> <arg> ...
-#                                   [OUTPUT_LIB_VAR <var>])
+#                                   [OUTPUT_LIB_VAR <var>]
+#                                   [OUTPUT_TARGET_VAR <var>])
 #
 #   TARGET is the name of the app or test target that the generator
 #     invocation target should be added to. Can either be a ordinary or Utility
