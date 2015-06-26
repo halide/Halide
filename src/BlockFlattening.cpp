@@ -26,11 +26,15 @@ private:
             }
         }
 
-        if (first.same_as(op->first)) {
-            rest = mutate(rest);
-            stmt = rest.same_as(op->rest)? op: Block::make(first, rest);
+        // first might be a LetStmt or something else containing blocks that
+        // need to be flattened.
+        first = mutate(first);
+        rest = mutate(rest);
+
+        if (first.same_as(op->first) && rest.same_as(op->rest)) {
+            stmt = op;
         } else {
-            stmt = Block::make(first, mutate(rest));
+            stmt = Block::make(first, rest);
         }
     }
 };
