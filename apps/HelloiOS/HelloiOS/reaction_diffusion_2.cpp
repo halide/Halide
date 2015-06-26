@@ -107,8 +107,8 @@ int main(int argc, char **argv) {
         blur.vectorize(x, 4);
 #else
         new_state.reorder(c, x, y).bound(c, 0, 3).vectorize(c);
-	//	blur.compute_at(new_state, y);
-	new_state.gpu_tile(x, y, 4, 4);
+	blur.compute_at(new_state, Var::gpu_threads());
+	new_state.gpu_tile(x, y, 8, 2);
 #endif
 
         std::vector<Argument> args(6);

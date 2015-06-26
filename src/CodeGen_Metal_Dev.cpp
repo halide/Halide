@@ -19,7 +19,6 @@ static ostringstream nil;
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
     metal_c(src_stream), target(t) {
 }
-
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
     ostringstream oss;
     if (type.is_float()) {
@@ -37,7 +36,6 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
         if (type.is_uint() && type.bits > 1) oss << 'u';
         switch (type.bits) {
         case 1:
-            user_assert(type.width == 1) << "Vector of bool not valid in Metal C (yet)\n";
             oss << "bool";
             break;
         case 8:
@@ -306,6 +304,32 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
     }
 
     cache.clear();
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Select *op) {
+#if 0
+    ostringstream rhs;
+    string true_val = print_expr(op->true_value);
+    string false_val = print_expr(op->false_value);
+    string cond = print_expr(op->condition);
+    rhs << "(" << print_type(op->type) << ")"
+        << "(" << cond
+        << " ? " << true_val
+        << " : " << false_val
+        << ")";
+    print_assignment(op->type, rhs.str());
+#else
+    ostringstream rhs;
+    string true_val = print_expr(op->true_value);
+    string false_val = print_expr(op->false_value);
+    string cond = print_expr(op->condition);
+    rhs << "(" << print_type(op->type) << ")"
+        << "select(" << true_val
+        << ", " << false_val
+        << ", " << cond
+        << ")";
+    print_assignment(op->type, rhs.str());
+#endif
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {

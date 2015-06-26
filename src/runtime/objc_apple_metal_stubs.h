@@ -24,7 +24,7 @@ extern void end_encoding(mtl_compute_command_encoder *encoder);
 extern mtl_library *new_library_with_source(mtl_device *device, const char *source, size_t source_len);
 extern mtl_function *new_function_with_name(mtl_library *library, const char *name, size_t name_len);
 extern void set_input_buffer(mtl_compute_command_encoder *encoder, mtl_buffer *input_buffer, uint32_t index);
-extern void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, uint32_t index, uint32_t length);
+extern void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, uint32_t length, uint32_t index);
 WEAK void dispatch_threadgroups(mtl_compute_command_encoder *encoder,
 	                        int32_t blocks_x, int32_t blocks_y, int32_t blocks_z,
 	                        int32_t threads_x, int32_t threads_y, int32_t threads_z);
