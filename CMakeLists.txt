@@ -8,19 +8,91 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-set(LLVM_BIN "llvm3.6/bin/Debug/"
-  CACHE PATH "Path to LLVM bin directory")
-set(LLVM_LIB "llvm3.6/lib/Debug/"
-  CACHE PATH "Path to LLVM lib directory")
-set(LLVM_INCLUDE "llvm3.6/include/"
-  CACHE PATH "Path to LLVM include directory")
-set(LLVM_VERSION "36" CACHE STRING "First two digits of LLVM version (omitting '.')")
+# Find LLVM
+# Users can set LLVM_DIR to point to a directory containing LLVMConfig.cmake
+message(STATUS "Looking for LLVM")
+find_package(LLVM QUIET CONFIG)
+if ((NOT LLVM_CONFIG) OR (NOT TARGET LLVMSupport))
+  # NOTE: Checking this existance of the LLVMSupport target is to detect incorrectly packaged
+  # versions of LLVM on Ubuntu (see https://llvm.org/bugs/show_bug.cgi?id=23352)
+  message(FATAL_ERROR "Could not automatically find LLVM. Try setting passing -DLLVM_DIR"
+    " to CMake and setting it to the directory containing the LLVMConfig.cmake"
+    "file. This file is available in the LLVM build tree under"
+    " share/llvm/cmake/ if LLVM was built with CMake. It is also available in"
+    "LLVM's install tree"
+  )
+endif()
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+if (LLVM_PACKAGE_VERSION  VERSION_LESS 3.5)
+  message(FATAL_ERROR "Need LLVM >=3.5")
+endif()
+
+# Detect the build configurations that were used to build LLVM
+# We use LLVMSupport because it is an essential library that must exist in any build of LLVM
+get_target_property(LLVMSupport_BUILD_TYPES LLVMSupport IMPORTED_CONFIGURATIONS)
+list(LENGTH LLVMSupport_BUILD_TYPES NUMBER_OF_LLVM_BUILD_TYPES)
+
+if (NUMBER_OF_LLVM_BUILD_TYPES GREATER 1)
+  # WORKAROUND: Using the ${LLVM_TOOLS_BINARY_DIR} variable is currently broken
+  # when LLVM has multiple configurations - typically Visual Studio (it contains the string $(Configuration) in the
+  # path). We need the user to tell us which configuration they want to use.
+  set(LLVM_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
+    "LLVM build type to use. Valid options: ${LLVMSupport_BUILD_TYPES}"
+  )
+  if (LLVM_BUILD_TYPE STREQUAL "")
+    message(FATAL_ERROR "LLVM_BUILD_TYPE must be set when multiple configurations are available. Valid Options: ${LLVMSupport_BUILD_TYPES}")
+  endif()
+  # Convert to uppercase so that the LLVM_BUILD_TYPE option is case insensitive
+  string(TOUPPER "${LLVM_BUILD_TYPE}" LLVM_BUILD_TYPE_UPPERCASE)
+  # Check the specified LLVM build type is available
+  list(FIND LLVMSupport_BUILD_TYPES "${LLVM_BUILD_TYPE_UPPERCASE}" FOUND_INDEX)
+  if (FOUND_INDEX EQUAL -1)
+    message(FATAL_ERROR "Specified LLVM build type \"${LLVM_BUILD_TYPE_UPPERCASE}\" is not "
+      "available. Valid options: ${LLVMSupport_BUILD_TYPES}")
+  endif()
+
+  get_target_property(LLVM_AS_PATH llvm-as LOCATION_${LLVM_BUILD_TYPE_UPPERCASE})
+  get_filename_component(_LLVM_BIN "${LLVM_AS_PATH}" DIRECTORY)
+else()
+  set(_LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
+endif()
+
+# Provide a user settable option to set the LLVM binaries directory. We
+# initialise it with the detected directory so that by default the user won't
+# need to specify this directory.
+set(LLVM_BIN "${_LLVM_BIN}" CACHE FILEPATH "The path to the directory containing the LLVM binaries")
+if (NOT IS_DIRECTORY "${LLVM_BIN}")
+  message(FATAL_ERROR "LLVM_BIN (\"${LLVM_BIN}\") must be a directory")
+endif()
+if (NOT LLVM_BIN STREQUAL _LLVM_BIN)
+  message(WARNING "The recommended default value for LLVM_BIN (\"${_LLVM_BIN}\") is not being used."
+                  " Using \"${LLVM_BIN}\" instead.")
+endif()
+
+# TODO: Remove these variables and use LLVM variables directly
+message(STATUS "LLVM_BIN:${LLVM_BIN}")
+set(LLVM_INCLUDE ${LLVM_INCLUDE_DIRS})
+message(STATUS "LLVM_INCLUDE:${LLVM_INCLUDE}")
+set(LLVM_VERSION ${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR})
+message(STATUS "LLVM_VERSION:${LLVM_VERSION}")
 
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
 file(TO_NATIVE_PATH "${LLVM_BIN}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 
-message(${CLANG})
+# Check that LLVM binaries we depend on exist
+function(check_tool_exists NAME PATH)
+  # Need to convert to CMake path so that backslashes don't get
+  # interpreted as an escape.
+  file(TO_CMAKE_PATH "${PATH}" TOOL_PATH)
+  if (NOT EXISTS ${TOOL_PATH})
+    message(FATAL_ERROR "Tool ${NAME} not found at ${TOOL_PATH}")
+  endif()
+  message(STATUS "Using ${NAME} at ${TOOL_PATH}")
+endfunction()
+check_tool_exists(llvm-as ${LLVM_AS})
+check_tool_exists(llvm-nm ${LLVM_NM})
+check_tool_exists(clang ${CLANG})
 
 option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ON)
@@ -40,7 +112,8 @@ endif()
 set (PROJECT_LIBS )
 if (WIN32)
   list(APPEND PROJECT_LIBS Kernel32)
-  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996 /wd4305 /wd4146")
+  # FIXME: Do we really only want to supress the warnings here?
+  add_definitions("/wd4305 /wd4146")
 endif()
 
 function(halide_project name folder)
@@ -53,10 +126,30 @@ function(halide_project name folder)
 endfunction(halide_project)
 
 add_subdirectory(src)
-add_subdirectory(test)
+option(BUILD_TESTS "Build tests" ON)
+if (BUILD_TESTS)
+  add_subdirectory(test)
+endif()
 
-# The apps and tutorials don't really compile on windows yet
-if (!WIN32)
-  add_subdirectory(apps)
-  add_subdirectory(tutorial)
+add_subdirectory(apps)
+add_subdirectory(tutorial)
+
+option(WITH_DOCS "Enable building of documentation" OFF)
+if (WITH_DOCS)
+find_package(Doxygen)
+  if (NOT DOXYGEN_FOUND)
+    message(FATAL_ERROR "Could not find Doxygen. Either install it or set WITH_DOCS to OFF")
+  endif()
+
+  # FIXME: Remove suffix when Doxygen support is removed from the Makefile build system or when
+  # when the Makefile build system is dropped entirely.
+  # note the ``_cmake`` suffix is so we don't clobber the Doxyfile used by the Makefile build
+  # system if we do an in source CMake build.
+  configure_file(${CMAKE_SOURCE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile_cmake @ONLY)
+  # Note documentation is not built by default, the user needs to build the "doc" target
+  add_custom_target(doc
+    COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile_cmake
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Building Doxygen documentation"
+  )
 endif()

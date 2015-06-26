@@ -25,7 +25,6 @@ function(tests folder)
 endfunction(tests)
 
 include_directories ("${CMAKE_BINARY_DIR}/include")
-link_directories ("${LLVM_LIB}")
 
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
