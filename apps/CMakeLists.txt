@@ -1,5 +1,4 @@
-# FIXME: Renable by default once we fix the build
-option(WITH_APPS "Build apps" OFF)
+option(WITH_APPS "Build apps" ON)
 
 include_directories ("${CMAKE_BINARY_DIR}/include")
 link_directories ("${LLVM_LIB}")
