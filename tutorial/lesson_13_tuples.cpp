@@ -18,6 +18,7 @@
 
 #include "Halide.h"
 #include <stdio.h>
+#include <algorithm>
 using namespace Halide;
 
 int main(int argc, char **argv) {

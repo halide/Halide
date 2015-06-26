@@ -108,7 +108,6 @@ function(halide_add_generator_dependency)
 
   else()
     if (NOT target_is_pnacl)
-      message(STATUS "The filter lib is ${FILTER_LIB}")
       add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
         DEPENDS "${args_GENERATOR_TARGET}"
         COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
