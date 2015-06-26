@@ -52,9 +52,21 @@ if (NUMBER_OF_LLVM_BUILD_TYPES GREATER 1)
   endif()
 
   get_target_property(LLVM_AS_PATH llvm-as LOCATION_${LLVM_BUILD_TYPE_UPPERCASE})
-  get_filename_component(LLVM_BIN "${LLVM_AS_PATH}" DIRECTORY)
+  get_filename_component(_LLVM_BIN "${LLVM_AS_PATH}" DIRECTORY)
 else()
-  set(LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
+  set(_LLVM_BIN ${LLVM_TOOLS_BINARY_DIR})
+endif()
+
+# Provide a user settable option to set the LLVM binaries directory. We
+# initialise it with the detected directory so that by default the user won't
+# need to specify this directory.
+set(LLVM_BIN "${_LLVM_BIN}" CACHE FILEPATH "The path to the directory containing the LLVM binaries")
+if (NOT IS_DIRECTORY "${LLVM_BIN}")
+  message(FATAL_ERROR "LLVM_BIN (\"${LLVM_BIN}\") must be a directory")
+endif()
+if (NOT LLVM_BIN STREQUAL _LLVM_BIN)
+  message(WARNING "The recommended default value for LLVM_BIN (\"${_LLVM_BIN}\") is not being used."
+                  " Using \"${LLVM_BIN}\" instead.")
 endif()
 
 # TODO: Remove these variables and use LLVM variables directly
