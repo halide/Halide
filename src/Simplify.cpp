@@ -860,6 +860,9 @@ private:
         } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (x * (b*a) + y) % b -> (y % b)
             expr = mutate(add_a->b % ib);
+        } else if (add_a && const_int(add_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
+            // (y + (b*a)) % b -> (y % b)
+            expr = mutate(add_a->a % ib);
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % ib);
@@ -2754,6 +2757,7 @@ void simplify_test() {
           Expr(Broadcast::make(x % y, 4)));
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y % 4);
+    check((y + 8) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
     check(Expr(Ramp::make(x, 2, 4)) % (Broadcast::make(2, 4)),
