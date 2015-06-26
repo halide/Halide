@@ -27,6 +27,15 @@ include_directories("${LLVM_INCLUDE}")
 # To see the available components run llvm-config --components
 llvm_map_components_to_libnames(LLVM_LIBS all)
 
+# Workaround LLVM bug 23967.
+# (https://llvm.org/bugs/show_bug.cgi?id=23967
+#
+# The internal gtest and gtest_main libraries are acciddently included so we
+# need to remove them because
+# - we don't need them
+# - will cause link failures on a system without gtest installed.
+list(REMOVE_ITEM LLVM_LIBS gtest gtest_main)
+
 if (TARGET_NATIVE_CLIENT)
   add_definitions("-DWITH_NATIVE_CLIENT")
 endif()
