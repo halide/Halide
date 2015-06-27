@@ -319,14 +319,6 @@ void CodeGen_Renderscript_Dev::init_module() {
 #endif
 }
 
-llvm::Triple CodeGen_LLVM::get_target_triple() const {
-    return Triple(Triple::normalize("armv7-none-linux-gnueabi"));
-}
-
-llvm::DataLayout CodeGen_Renderscript_Dev::get_data_layout() const {
-    return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
-}
-
 //
 // Loops become kernels. There should be no explicit loops in
 // generated RenderScript code.
@@ -494,10 +486,6 @@ bool CodeGen_Renderscript_Dev::use_soft_float_abi() const {
     return target.bits == 32;
 }
 
-llvm::Triple CodeGen_Renderscript_Dev::get_target_triple() const {
-    return Triple(Triple::normalize(march() + "-" + mcpu() + "-" + mattrs()));
-}
-
 // Data structures below as well as writeAndroidBitcodeWrapper function are
 // taken from https://android.googlesource.com/platform/frameworks/compile/libbcc/+/master/include/bcinfo/BitcodeWrapper.h
 struct AndroidBitcodeWrapper {
@@ -566,8 +554,8 @@ static inline size_t writeAndroidBitcodeWrapper(AndroidBitcodeWrapper *wrapper,
 }
 
 vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
-    llvm::Triple triple = get_target_triple();
-    llvm::DataLayout dl = get_data_layout();
+    llvm::Triple triple(Triple::normalize(march() + "-" + mcpu() + "-" + mattrs()));
+    llvm::DataLayout dl("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
     module->setTargetTriple(triple.str());
 
     #if LLVM_VERSION > 36
