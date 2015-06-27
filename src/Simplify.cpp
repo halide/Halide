@@ -1134,6 +1134,9 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (no_overflow(op->type) && sub_a && is_const(sub_a->a) && is_const(b)) {
+            // min(8 - x, 3) -> 8 - max(x, 5)
+            expr = mutate(sub_a->a - max(sub_a->b, sub_a->a - b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1361,6 +1364,9 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (no_overflow(op->type) && sub_a && is_const(sub_a->a) && is_const(b)) {
+            // max(8 - x, 3) -> 8 - min(x, 5)
+            expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -3146,6 +3152,10 @@ void simplify_test() {
 
     check(max(0, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
     check(min(7, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
+
+    check(min(8 - x, 2), 8 - max(x, 6));
+    check(max(3, 77 - x), 77 - min(x, 74));
+    check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
 
     std::cout << "Simplify test passed" << std::endl;
 }
