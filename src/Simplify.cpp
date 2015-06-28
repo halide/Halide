@@ -1479,6 +1479,7 @@ private:
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
+        const Mul *delta_ramp_mul = delta_ramp ? delta_ramp->base.as<Mul>() : NULL;
 
         int ia = 0, ib = 0, ic = 0;
 
@@ -1628,6 +1629,10 @@ private:
             } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
                 expr = const_false(delta_ramp->width);
+            } else if (delta_ramp_mul && const_int(delta_ramp_mul->b, &ia) &&
+                       is_one(mutate(abs(ia) >= abs(delta_ramp->stride*delta_ramp->width)))) {
+                // Ramp(x*a, b, c) < 0 -> Broadcast(x, c) if |a| >= |b*c|
+                expr = Broadcast::make(mutate(LT::make(delta_ramp_mul->a, 0)), delta_ramp->width);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -1656,6 +1661,8 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
         const LE *le_a = a.as<LE>();
         const LE *le_b = b.as<LE>();
         const LT *lt_a = a.as<LT>();
@@ -1714,6 +1721,10 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
             expr = const_false(op->type.width);
+        } else if (broadcast_a && broadcast_b &&
+                   broadcast_a->width == broadcast_b->width) {
+            // x8(a) && x8(b) -> x8(a && b)
+            expr = Broadcast::make(mutate(And::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1724,6 +1735,8 @@ private:
     void visit(const Or *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
         const EQ *eq_a = a.as<EQ>();
         const EQ *eq_b = b.as<EQ>();
         const NE *neq_a = a.as<NE>();
@@ -1770,6 +1783,10 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b || b <= a
             expr = const_true(op->type.width);
+        } else if (broadcast_a && broadcast_b &&
+                   broadcast_a->width == broadcast_b->width) {
+            // x8(a) || x8(b) -> x8(a || b)
+            expr = Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -3008,6 +3025,9 @@ void simplify_test() {
     check((x/8)*8 < x - 8, f);
     check((x/8)*8 < x - 9, f);
     check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
+    check(Ramp::make(x*8, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4));
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
@@ -3099,6 +3119,12 @@ void simplify_test() {
     check(!b1 && b1, f);
     check(b1 && b1, b1);
     check(b1 || b1, b1);
+    check(Broadcast::make(b1, 4) || Broadcast::make(!b1, 4), Broadcast::make(t, 4));
+    check(Broadcast::make(!b1, 4) || Broadcast::make(b1, 4), Broadcast::make(t, 4));
+    check(Broadcast::make(b1, 4) && Broadcast::make(!b1, 4), Broadcast::make(f, 4));
+    check(Broadcast::make(!b1, 4) && Broadcast::make(b1, 4), Broadcast::make(f, 4));
+    check(Broadcast::make(b1, 4) && Broadcast::make(b1, 4), Broadcast::make(b1, 4));
+    check(Broadcast::make(b1, 4) || Broadcast::make(b1, 4), Broadcast::make(b1, 4));
 
     v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
