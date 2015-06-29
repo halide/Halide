@@ -90,7 +90,9 @@ private:
         const Ramp *r = op->index.as<Ramp>();
         if (!r || !is_const(r->stride, store_stride)) {
             // Store doesn't store to the ramp we're looking
-            // for. Can't interleave it.
+            // for. Can't interleave it. Since we don't want to
+            // reorder stores, stop collecting.
+            collecting = false;
             return;
         }
 
