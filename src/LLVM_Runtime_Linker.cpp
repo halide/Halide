@@ -163,8 +163,12 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
-            } else if (target.os == Target::Windows) {
-                return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-S32");
+            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+                #if LLVM_VERSION >= 37
+                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+                #else
+                return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+                #endif
             } else {
                 // Linux/Android/NaCl
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
@@ -174,6 +178,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+                return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
             } else {
                 return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
             }
@@ -300,7 +306,7 @@ llvm::Triple get_triple_for_target(Target target) {
             user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
             triple.setArch(llvm::Triple::mips64el);
         }
-        
+
         if (target.os == Target::Android) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::Android);
@@ -340,7 +346,7 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
         #endif
         modules[i]->setTargetTriple(triple.str());
     }
-    
+
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
         string err_msg;
