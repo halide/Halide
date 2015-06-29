@@ -16,9 +16,6 @@ public:
     /** Create an ARM code generator for the given arm target. */
     CodeGen_ARM(Target);
 
-    llvm::Triple get_target_triple() const;
-    llvm::DataLayout get_data_layout() const;
-
 protected:
 
     using CodeGen_Posix::visit;
