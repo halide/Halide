@@ -158,42 +158,197 @@ DECLARE_NO_INITMOD(mips)
 
 namespace {
 
-// Link all modules together and with the result in modules[0],
-// all other input modules are destroyed.
-void link_modules(std::vector<llvm::Module *> &modules) {
-    #if LLVM_VERSION >= 35
-    // LLVM is moving to requiring data layouts to exist. Use the
-    // datalayout of the first module that has one for all modules.
-    const llvm::DataLayout *data_layout = NULL;
-    for (size_t i = 0; data_layout == NULL && i < modules.size(); i++) {
-        #if LLVM_VERSION >= 37
-        data_layout = &modules[i]->getDataLayout();
+llvm::DataLayout get_data_layout_for_target(Target target) {
+    if (target.arch == Target::X86) {
+        if (target.bits == 32) {
+            if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+                #if LLVM_VERSION >= 37
+                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+                #else
+                return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+                #endif
+            } else {
+                // Linux/Android/NaCl
+                return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+            }
+        } else { // 64-bit
+            if (target.os == Target::NaCl) {
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+                return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
+            } else {
+                return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
+            }
+        }
+    } else if (target.arch == Target::ARM) {
+        if (target.bits == 32) {
+            if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+            } else {
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
+            }
+        } else { // 64-bit
+            if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
+            } else {
+                return llvm::DataLayout("e-m:e-i64:64-i128:128-n32:64-S128");
+            }
+        }
+    } else if (target.arch == Target::MIPS) {
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
+        } else {
+            return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
+        }
+    } else if (target.arch == Target::PNaCl) {
+        return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
+    } else {
+        internal_error << "Bad target arch: " << target.arch << "\n";
+        return llvm::DataLayout("unreachable");
+    }
+}
+
+llvm::Triple get_triple_for_target(Target target) {
+    llvm::Triple triple;
+
+    if (target.arch == Target::X86) {
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::x86);
+        } else {
+            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
+            triple.setArch(llvm::Triple::x86_64);
+        }
+
+        if (target.os == Target::Linux) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::GNU);
+        } else if (target.os == Target::OSX) {
+            triple.setVendor(llvm::Triple::Apple);
+            triple.setOS(llvm::Triple::MacOSX);
+        } else if (target.os == Target::Windows) {
+            triple.setVendor(llvm::Triple::PC);
+            triple.setOS(llvm::Triple::Win32);
+            #if LLVM_VERSION >= 36
+            triple.setEnvironment(llvm::Triple::MSVC);
+            #endif
+            if (target.has_feature(Target::JIT)) {
+                // Use ELF for jitting
+                #if LLVM_VERSION < 35
+                triple.setEnvironment(llvm::Triple::ELF);
+                #else
+                triple.setObjectFormat(llvm::Triple::ELF);
+                #endif
+            }
+        } else if (target.os == Target::Android) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::Android);
+
+            if (target.bits == 64) {
+                std::cerr << "Warning: x86-64 android is untested\n";
+            }
+        } else if (target.os == Target::NaCl) {
+            #ifdef WITH_NATIVE_CLIENT
+            triple.setOS(llvm::Triple::NaCl);
+            triple.setEnvironment(llvm::Triple::GNU);
+            #else
+            user_error << "This version of Halide was compiled without nacl support.\n";
+            #endif
+        } else if (target.os == Target::IOS) {
+            // X86 on iOS for the simulator
+            triple.setVendor(llvm::Triple::Apple);
+            triple.setOS(llvm::Triple::IOS);
+        }
+    } else if (target.arch == Target::ARM) {
+        if (target.bits == 32) {
+            if (target.has_feature(Target::ARMv7s)) {
+                triple.setArchName("armv7s");
+            } else {
+                triple.setArch(llvm::Triple::arm);
+            }
+        } else {
+            user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
+            #if (WITH_AARCH64)
+            triple.setArch(llvm::Triple::aarch64);
+            #else
+            user_error << "AArch64 llvm target not enabled in this build of Halide\n";
+            #endif
+        }
+
+        if (target.os == Target::Android) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::EABI);
+        } else if (target.os == Target::IOS) {
+            triple.setOS(llvm::Triple::IOS);
+            triple.setVendor(llvm::Triple::Apple);
+        } else if (target.os == Target::NaCl) {
+            user_assert(target.bits == 32) << "ARM NaCl must be 32-bit\n";
+            #ifdef WITH_NATIVE_CLIENT
+            triple.setOS(llvm::Triple::NaCl);
+            triple.setEnvironment(llvm::Triple::EABI);
+            #else
+            user_error << "This version of Halide was compiled without nacl support\b";
+            #endif
+        } else if (target.os == Target::Linux) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else {
+            user_error << "No arm support for this OS\n";
+        }
+    } else if (target.arch == Target::MIPS) {
+        // Currently MIPS support is only little-endian.
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::mipsel);
+        } else {
+            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
+            triple.setArch(llvm::Triple::mips64el);
+        }
+
+        if (target.os == Target::Android) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::Android);
+        } else {
+            user_error << "No mips support for this OS\n";
+        }
+    } else if (target.arch == Target::PNaCl) {
+        #if (WITH_NATIVE_CLIENT)
+        triple.setArch(llvm::Triple::le32);
+        triple.setVendor(llvm::Triple::UnknownVendor);
+        triple.setOS(llvm::Triple::NaCl);
         #else
-        data_layout = modules[i]->getDataLayout();
+        user_error << "This version of Halide was compiled without nacl support.\n";
         #endif
+    } else {
+        internal_error << "Bad target arch: " << target.arch << "\n";
     }
 
-    // If LLVM is 3.5 or greater, we have C++11.
-    std::unique_ptr<llvm::DataLayout> default_layout;
-    if (data_layout == NULL) {
-        // An empty data layout is acceptable as a last ditch default.
-        default_layout.reset(new llvm::DataLayout(""));
-        data_layout = default_layout.get();
+    return triple;
+}
+
+// Link all modules together and with the result in modules[0], all
+// other input modules are destroyed. Sets the datalayout and target
+// triple appropriately for the target.
+void link_modules(std::vector<llvm::Module *> &modules, Target t) {
+
+    llvm::DataLayout data_layout = get_data_layout_for_target(t);
+    llvm::Triple triple = get_triple_for_target(t);
+
+    // Set the layout and triple on the modules before linking, so
+    // llvm doesn't complain while combining them.
+    for (size_t i = 0; i < modules.size(); i++) {
+        #if LLVM_VERSION >= 37
+        modules[i]->setDataLayout(data_layout);
+        #else
+        modules[i]->setDataLayout(&data_layout);
+        #endif
+        modules[i]->setTargetTriple(triple.str());
     }
-    #endif
 
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
-        #if LLVM_VERSION >= 37
-        modules[i]->setDataLayout(*data_layout);
-        #elif LLVM_VERSION >= 35
-        modules[i]->setDataLayout(data_layout);
-        #endif
-        // This is a workaround to silence some linkage warnings during
-        // tests: normally all modules will have the same triple,
-        // but on 64-bit targets some may have "x86_64-unknown-unknown-unknown"
-        // as a workaround for -m64 requiring an explicit 64-bit target.
-        modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
         #if LLVM_VERSION >= 36
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
@@ -523,7 +678,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         modules.push_back(get_initmod_matlab(c, bits_64, debug));
     }
 
-    link_modules(modules);
+    link_modules(modules, t);
 
     if (t.os == Target::Windows &&
         t.bits == 32 &&
@@ -560,7 +715,7 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     }
     modules.push_back(module);
 
-    link_modules(modules);
+    link_modules(modules, target);
 
     // For now, the PTX backend does not handle calling functions. So mark all functions
     // AvailableExternally to ensure they are inlined or deleted.

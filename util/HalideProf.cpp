@@ -89,7 +89,9 @@ namespace {
     // for each line; just check all the words on the line.
     int first = -1;
     // We know v.size() >= 8 due to earlier check, so this will never underflow.
-    for (int i = 0; i < v.size() - 8; ++i) {
+    // This is size-7 (rather than size-8) since we expect 7 entries *after*
+    // we find the halide_profiler keyword.
+    for (int i = 0; i < v.size() - 7; ++i) {
       if (v[i] == "halide_profiler") {
         first = i;
         break;

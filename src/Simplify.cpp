@@ -860,6 +860,9 @@ private:
         } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (x * (b*a) + y) % b -> (y % b)
             expr = mutate(add_a->b % ib);
+        } else if (add_a && const_int(add_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
+            // (y + (b*a)) % b -> (y % b)
+            expr = mutate(add_a->a % ib);
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % ib);
@@ -1131,6 +1134,9 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (no_overflow(op->type) && sub_a && is_const(sub_a->a) && is_const(b)) {
+            // min(8 - x, 3) -> 8 - max(x, 5)
+            expr = mutate(sub_a->a - max(sub_a->b, sub_a->a - b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1358,6 +1364,9 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (no_overflow(op->type) && sub_a && is_const(sub_a->a) && is_const(b)) {
+            // max(8 - x, 3) -> 8 - min(x, 5)
+            expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2754,6 +2763,7 @@ void simplify_test() {
           Expr(Broadcast::make(x % y, 4)));
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y % 4);
+    check((y + 8) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
     check(Expr(Ramp::make(x, 2, 4)) % (Broadcast::make(2, 4)),
@@ -3140,6 +3150,10 @@ void simplify_test() {
 
     check(max(0, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
     check(min(7, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
+
+    check(min(8 - x, 2), 8 - max(x, 6));
+    check(max(3, 77 - x), 77 - min(x, 74));
+    check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
 
     std::cout << "Simplify test passed" << std::endl;
 }

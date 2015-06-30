@@ -288,7 +288,7 @@ int main(int argc, char **argv) {
 
     // Unrolling a loop.
     {
-        Func gradient("gradient_in_vectors");
+        Func gradient("gradient_unroll");
         gradient(x, y) = x + y;
         gradient.trace_stores();
 

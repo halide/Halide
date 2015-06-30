@@ -4,7 +4,68 @@
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
 
+#define INLINE inline __attribute__((always_inline))
+
 namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
+
+// Define the function pointers for the CUDA API.
+#define CUDA_FN(ret, fn, args) WEAK ret (CUDAAPI *fn)args;
+#define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret (CUDAAPI *fn)args;
+#define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret (CUDAAPI *fn)args;
+#include "cuda_functions.h"
+
+// The default implementation of halide_cuda_get_symbol attempts to load
+// the CUDA shared library/DLL, and then get the symbol from it.
+WEAK void *lib_cuda = NULL;
+
+extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *name) {
+    // Only try to load the library if we can't already get the symbol
+    // from the library. Even if the library is NULL, the symbols may
+    // already be available in the process.
+    void *symbol = halide_get_library_symbol(lib_cuda, name);
+    if (symbol) {
+        return symbol;
+    }
+
+    const char *lib_names[] = {
+#ifdef WINDOWS
+        "nvcuda.dll",
+#else
+        "libcuda.so",
+        "libcuda.dylib",
+        "/Library/Frameworks/CUDA.framework/CUDA",
+#endif
+    };
+    for (int i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
+        lib_cuda = halide_load_library(lib_names[i]);
+        if (lib_cuda) {
+            debug(user_context) << "    Loaded CUDA runtime library: " << lib_names[i] << "\n";
+            break;
+        }
+    }
+
+    return halide_get_library_symbol(lib_cuda, name);
+}
+
+template <typename T>
+INLINE T get_cuda_symbol(void *user_context, const char *name) {
+    T s = (T)halide_cuda_get_symbol(user_context, name);
+    if (!s) {
+        error(user_context) << "CUDA API not found: " << name << "\n";
+    }
+    return s;
+}
+
+// Load a CUDA shared object/dll and get the CUDA API function pointers from it.
+WEAK void load_libcuda(void *user_context) {
+    debug(user_context) << "    load_libcuda (user_context: " << user_context << ")\n";
+    halide_assert(user_context, cuInit == NULL);
+
+    #define CUDA_FN(ret, fn, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn);
+    #define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn_3020);
+    #define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn_4000);
+    #include "cuda_functions.h"
+}
 
 extern WEAK halide_device_interface cuda_device_interface;
 
@@ -21,13 +82,6 @@ using namespace Halide::Runtime::Internal;
 using namespace Halide::Runtime::Internal::Cuda;
 
 extern "C" {
-
-extern void *malloc(size_t);
-
-#ifdef DEBUG_RUNTIME
-extern int halide_start_clock(void *user_context);
-extern int64_t halide_current_time_ns(void *user_context);
-#endif
 
 // The default implementation of halide_cuda_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
@@ -81,6 +135,10 @@ public:
     Context(void *user_context) : user_context(user_context),
                                   context(NULL),
                                   error(CUDA_SUCCESS) {
+        if (cuInit == NULL) {
+            load_libcuda(user_context);
+        }
+
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
