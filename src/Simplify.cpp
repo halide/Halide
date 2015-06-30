@@ -3042,6 +3042,8 @@ void simplify_test() {
     check(Ramp::make(x*8 + 1, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
     check(Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4));
     check(Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4));
+    check(Select::make(Ramp::make((x/16)*16, 1, 8) < Broadcast::make((y/8)*8, 8), Broadcast::make(1, 8), Broadcast::make(3, 8)),
+          Select::make((x/16)*2 < y/8, Broadcast::make(1, 8), Broadcast::make(3, 8)));
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
