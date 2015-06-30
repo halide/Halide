@@ -1,6 +1,8 @@
 option(WITH_APPS "Build apps" ON)
 
 include_directories ("${CMAKE_CURRENT_LIST_DIR}/support")
+# The support header file depends on Halide.h
+include_directories("${CMAKE_BINARY_DIR}/include")
 
 macro(add_if_have_libpng dirname)
   if (PNG_FOUND)
