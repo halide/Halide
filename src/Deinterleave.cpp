@@ -46,7 +46,7 @@ public:
     StoreCollector(const std::string& name, int stride, int ms,
                    std::vector<LetStmt>& lets, std::vector<Store>& ss) :
         store_name(name), store_stride(stride), max_stores(ms),
-        let_stmts(lets), stores(ss) {}
+        let_stmts(lets), stores(ss), collecting(true) {}
 private:
 
     using IRMutator::visit;
@@ -58,6 +58,8 @@ private:
     void visit(const Allocate *op) {stmt = op;}
     void visit(const Realize *op) {stmt = op;}
 
+    bool collecting;
+
     // Returns whether the store was collected.
     bool collect_store(const Store *op) {
         // Check the value doesn't load from the buffer we're
@@ -65,6 +67,11 @@ private:
         ContainsLoad has_load(store_name);
         op->value.accept(&has_load);
         if (has_load.result) {
+            // If we are loading from the buffer we want to get stores
+            // from, we have to give up to avoid changing the meaning
+            // of the program by reordering loads/stores from the same
+            // buffer.
+            collecting = false;
             return false;
         }
 
@@ -75,6 +82,7 @@ private:
 
         if (stores.size() >= (size_t)max_stores) {
             // Already have enough stores.
+            collecting = false;
             return false;
         }
 
@@ -100,6 +108,7 @@ private:
         ContainsLoad has_load(store_name);
         op->value.accept(&has_load);
         if (has_load.result) {
+            collecting = false;
             return false;
         } else {
             let_stmts.push_back(*op);
@@ -108,42 +117,37 @@ private:
     }
 
     void visit(const Store *op) {
+        internal_assert(collecting);
         if (collect_store(op)) {
             // Replace with a no-op.
             stmt = Evaluate::make(0);
+        } else if (collecting) {
+            IRMutator::visit(op);
         } else {
             stmt = op;
         }
     }
 
     void visit(const LetStmt *op) {
+        internal_assert(collecting);
         if (collect_let(op)) {
             stmt = mutate(op->body);
+        } else if (collecting) {
+            IRMutator::visit(op);
         } else {
             stmt = op;
         }
     }
 
     void visit(const Block *op) {
-        const LetStmt *let = op->first.as<LetStmt>();
-        const Store   *store = op->first.as<Store>();
-
-        if (let) {
-            if (collect_let(let)) {
-                let_stmts.push_back(*let);
-                stmt = mutate(Block::make(let->body, op->rest));
-            } else {
-                stmt = op;
-            }
-        } else if (store) {
-            if (collect_store(store)) {
-                stmt = mutate(op->rest);
-            } else {
-                stmt = op;
-            }
-        } else {
-            stmt = Block::make(op->first, mutate(op->rest));
+        internal_assert(collecting);
+        Stmt first = mutate(op->first);
+        Stmt rest = op->rest;
+        // We might have decided to stop collecting during mutation of first.
+        if (collecting) {
+            rest = mutate(rest);
         }
+        stmt = Block::make(first, rest);
     }
 };
 
@@ -738,3 +742,4 @@ void deinterleave_vector_test() {
 
 }
 }
+
