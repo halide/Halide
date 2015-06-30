@@ -157,54 +157,6 @@ struct SharedOpenCLContext {
     // We never free the context, for the same reason as above.
 } cl_ctx;
 
-void load_libcuda() {
-    // Make sure extern cuda calls inside the module point to the
-    // right things. If cuda is already linked in we should be
-    // fine. If not we need to tell llvm to load it.
-    if (have_symbol("cuInit")) {
-        debug(1) << "This program was linked to cuda already\n";
-    } else {
-        debug(1) << "Looking for cuda shared library...\n";
-        string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
-        }
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
-        }
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
-        }
-        user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
-    }
-}
-
-void load_libopencl() {
-    if (have_symbol("clCreateContext")) {
-        debug(1) << "This program was linked to OpenCL already\n";
-    } else {
-        debug(1) << "Looking for OpenCL shared library...\n";
-        string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
-        }
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
-        }
-        user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
-    }
-}
-
-void load_libmetal() {
-}
-
 void load_opengl() {
 #if defined(__linux__)
     if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
@@ -769,15 +721,12 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         switch (runtime_kind) {
         case OpenCL:
             one_gpu.set_feature(Target::OpenCL);
-            load_libopencl();
             break;
         case Metal:
             one_gpu.set_feature(Target::Metal);
-            load_libmetal();
             break;
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
-            load_libcuda();
             break;
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);

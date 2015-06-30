@@ -7,7 +7,62 @@
 
 #include "cuda_opencl_shared.h"
 
+#define INLINE inline __attribute__((always_inline))
+
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
+
+// Define the function pointers for the OpenCL API.
+#define CL_FN(ret, fn, args) WEAK ret (CL_API_CALL *fn) args;
+#include "cl_functions.h"
+
+// The default implementation of halide_opencl_get_symbol attempts to load
+// the OpenCL runtime shared library/DLL, and then get the symbol from it.
+WEAK void *lib_opencl = NULL;
+
+extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *name) {
+    // Only try to load the library if the library isn't already
+    // loaded, or we can't load the symbol from the process already.
+    void *symbol = halide_get_library_symbol(lib_opencl, name);
+    if (symbol) {
+        return symbol;
+    }
+
+    const char *lib_names[] = {
+#ifdef WINDOWS
+        "opencl.dll",
+#else
+        "libOpenCL.so",
+        "/System/Library/Frameworks/OpenCL.framework/OpenCL",
+#endif
+    };
+    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+        lib_opencl = halide_load_library(lib_names[i]);
+        if (lib_opencl) {
+            debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
+            break;
+        }
+    }
+
+    return halide_get_library_symbol(lib_opencl, name);
+}
+
+template <typename T>
+INLINE T get_cl_symbol(void *user_context, const char *name) {
+    T s = (T)halide_opencl_get_symbol(user_context, name);
+    if (!s) {
+        error(user_context) << "OpenCL API not found: " << name << "\n";
+    }
+    return s;
+}
+
+// Load an OpenCL shared object/dll, and get the function pointers for the OpenCL API from it.
+WEAK void load_libopencl(void *user_context) {
+    debug(user_context) << "    load_libopencl (user_context: " << user_context << ")\n";
+    halide_assert(user_context, clCreateContext == NULL);
+
+    #define CL_FN(ret, fn, args) fn = get_cl_symbol<ret (CL_API_CALL *)args>(user_context, #fn);
+    #include "cl_functions.h"
+}
 
 extern WEAK halide_device_interface opencl_device_interface;
 
@@ -36,18 +91,6 @@ using namespace Halide::Runtime::Internal::OpenCL;
 #define ENABLE_OPENCL_11
 
 extern "C" {
-
-extern void free(void *);
-extern void *malloc(size_t);
-extern const char * strstr(const char *, const char *);
-extern char *strncpy(char *dst, const char *src, size_t n);
-extern int atoi(const char *);
-extern char *getenv(const char *);
-
-#ifdef DEBUG_RUNTIME
-extern int halide_start_clock(void *user_context);
-extern int64_t halide_current_time_ns(void *user_context);
-#endif
 
 WEAK void halide_opencl_set_platform_name(const char *n) {
     if (n) {
@@ -143,9 +186,14 @@ public:
                                     context(NULL),
                                     cmd_queue(NULL),
                                     error(CL_SUCCESS) {
+        if (clCreateContext == NULL) {
+            load_libopencl(user_context);
+        }
+
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
+
         error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
         halide_assert(user_context, context != NULL && cmd_queue != NULL);
     }
