@@ -1479,7 +1479,6 @@ private:
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
-        const Mul *delta_ramp_mul = delta_ramp ? delta_ramp->base.as<Mul>() : NULL;
 
         int ia = 0, ib = 0, ic = 0;
 
@@ -1495,6 +1494,12 @@ private:
                 expr = const_false();
                 return;
             }
+        }
+
+        ModulusRemainder mod_rem(0, 1);
+        if (delta_ramp && delta_ramp->base.type() == Int(32)) {
+            // Do modulus remainder analysis on the base.
+            mod_rem = modulus_remainder(delta_ramp->base, alignment_info);
         }
 
         // Note that the computation of delta could be incorrect if
@@ -1629,10 +1634,10 @@ private:
             } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
                 expr = const_false(delta_ramp->width);
-            } else if (delta_ramp_mul && const_int(delta_ramp_mul->b, &ia) &&
-                       is_one(mutate(abs(ia) >= abs(delta_ramp->stride*delta_ramp->width)))) {
-                // Ramp(x*a, b, c) < 0 -> Broadcast(x, c) if |a| >= |b*c|
-                expr = Broadcast::make(mutate(LT::make(delta_ramp_mul->a, 0)), delta_ramp->width);
+            } else if (delta_ramp && const_int(delta_ramp->stride, &ia) && ia > 0 && mod_rem.modulus > 0 &&
+                       ((ia * (delta_ramp->width - 1)) + mod_rem.remainder) < mod_rem.modulus) {
+                // ramp(x, a, b) < 0 -> broadcast(x < 0, b)
+                expr = Broadcast::make(mutate(LT::make(delta_ramp->base / mod_rem.modulus, 0)), delta_ramp->width);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -3025,8 +3030,17 @@ void simplify_test() {
     check((x/8)*8 < x - 8, f);
     check((x/8)*8 < x - 9, f);
     check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
+    check(Ramp::make(x*4, 1, 4) < Broadcast::make(y*4, 4), Broadcast::make(x < y, 4));
     check(Ramp::make(x*8, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 1, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 4, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 8, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y + (-1), 4));
+    check(Ramp::make(x*8 + 5, 1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 5, 1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 - 1, 1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + (-1), 1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8, 1, 4) < Broadcast::make(y*4, 4), Broadcast::make(x*2 < y, 4));
     check(Ramp::make(x*8, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 1, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4));
     check(Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4));
 
     check(min(x, likely(x)), likely(x));
