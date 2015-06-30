@@ -71,4 +71,25 @@ int main(int argc, char** argv) {
 
     std::cout << "Output :\n";
     print(output_buft);
+
+    bool test_pass = true;
+    for (int i = 0; i < std::min(input_buft.extent[0], width); i++) {
+        for (int j = 0; j < std::min(input_buft.extent[1], height); j++) {
+            for (int k = 0; k < input_buft.extent[2]; k++) {
+                uint8_t input_value = input[i * input_buft.stride[0] +
+                                            j * input_buft.stride[1] +
+                                            k * input_buft.stride[2]];
+                uint8_t output_value = output[i * input_buft.stride[0] +
+                                              j * input_buft.stride[1] +
+                                              k * input_buft.stride[2]];
+                if (input_value != output_value) {
+                    std::cout << "Mismatch at (" << i << ", " << j << ", " << k << "): " <<
+                        " input=" << (+input_value) << " output=" << (+output_value) << "\n";
+                    test_pass = false;
+                }
+            }
+        }
+    }
+
+    std::cout << (test_pass? "Test passed.\n": "Test failed.\n");
 }
