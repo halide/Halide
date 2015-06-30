@@ -1634,8 +1634,9 @@ private:
             } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
                 expr = const_false(delta_ramp->width);
-            } else if (delta_ramp && const_int(delta_ramp->stride, &ia) && ia > 0 && mod_rem.modulus > 0 &&
-                       ((ia * (delta_ramp->width - 1)) + mod_rem.remainder) < mod_rem.modulus) {
+            } else if (delta_ramp && mod_rem.modulus > 0 && const_int(delta_ramp->stride, &ia) &&
+                       0 <= ia * (delta_ramp->width - 1) + mod_rem.remainder &&
+                       ia * (delta_ramp->width - 1) + mod_rem.remainder < mod_rem.modulus) {
                 // ramp(x, a, b) < 0 -> broadcast(x < 0, b)
                 expr = Broadcast::make(mutate(LT::make(delta_ramp->base / mod_rem.modulus, 0)), delta_ramp->width);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -3044,6 +3045,13 @@ void simplify_test() {
     check(Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4));
     check(Select::make(Ramp::make((x/16)*16, 1, 8) < Broadcast::make((y/8)*8, 8), Broadcast::make(1, 8), Broadcast::make(3, 8)),
           Select::make((x/16)*2 < y/8, Broadcast::make(1, 8), Broadcast::make(3, 8)));
+
+    check(Ramp::make(x*8, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, -1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 + 1, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 1, -1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 + 4, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 8, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 8, -1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 + 5, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 - 1, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y + 1, 4));
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
