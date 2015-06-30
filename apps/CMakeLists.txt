@@ -19,7 +19,7 @@ if(WITH_APPS)
   add_if_have_libpng(camera_pipe)
   #add_subdirectory(HelloAndroid)
   #add_subdirectory(HelloNaCl)
-  add_subdirectory(interpolate)
+  add_if_have_libpng(interpolate)
   # Disabled due to CMake error
   #add_subdirectory(local_laplacian)
   add_subdirectory(wavelet)
