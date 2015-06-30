@@ -119,8 +119,18 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(metal)
-DECLARE_CPP_INITMOD(objc_apple_foundation_stubs)
-DECLARE_CPP_INITMOD(objc_apple_metal_stubs)
+#ifdef WITH_ARM
+DECLARE_CPP_INITMOD(objc_apple_arm_foundation_stubs)
+#endif
+#ifdef WITH_X86
+DECLARE_CPP_INITMOD(objc_apple_x86_foundation_stubs)
+#endif
+#ifdef WITH_ARM
+DECLARE_CPP_INITMOD(objc_apple_arm_metal_stubs)
+#endif
+#ifdef WITH_X86
+DECLARE_CPP_INITMOD(objc_apple_x86_metal_stubs)
+#endif
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -556,7 +566,13 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_objc_apple_foundation_stubs(c, bits_64, debug));
+	        if (t.arch == Target::X86) {
+		    modules.push_back(get_initmod_objc_apple_x86_foundation_stubs(c, bits_64, debug));
+		} else if (t.arch == Target::ARM) {
+		    modules.push_back(get_initmod_objc_apple_arm_foundation_stubs(c, bits_64, debug));
+		} else {
+  	  	    user_error << "OSX is not supported on architectures other than X86 and ARM.\n";
+		}
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
@@ -573,7 +589,13 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
-                modules.push_back(get_initmod_objc_apple_foundation_stubs(c, bits_64, debug));
+	        if (t.arch == Target::X86) {
+		    modules.push_back(get_initmod_objc_apple_x86_foundation_stubs(c, bits_64, debug));
+		} else if (t.arch == Target::ARM) {
+		    modules.push_back(get_initmod_objc_apple_arm_foundation_stubs(c, bits_64, debug));
+		} else {
+  	  	    user_error << "IOS is not supported on architectures other than X86 and ARM.\n";
+		}
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
@@ -678,7 +700,13 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_renderscript(c, bits_64, debug));
         } else if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
-            modules.push_back(get_initmod_objc_apple_metal_stubs(c, bits_64, debug));
+	    if (t.arch == Target::X86) {
+	        modules.push_back(get_initmod_objc_apple_x86_metal_stubs(c, bits_64, debug));
+	    } else if (t.arch == Target::ARM) {
+	        modules.push_back(get_initmod_objc_apple_arm_metal_stubs(c, bits_64, debug));
+	    } else {
+		user_error << "Metal is not supported on architectures other than X86 and ARM.\n";
+	    }
         }
     }
 
