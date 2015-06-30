@@ -781,13 +781,37 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
         #endif
     }
 
+    llvm::Triple triple("nvptx64--");
+    modules[0]->setTargetTriple(triple.str());
+
+    llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
+    #if LLVM_VERSION > 36
+    modules[0]->setDataLayout(dl);
+    #else
+    modules[0]->setDataLayout(&dl);
+    #endif
+
+
+
     return modules[0];
 }
 #endif
 
 #ifdef WITH_RENDERSCRIPT
 llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c) {
-    return get_initmod_renderscript_dev_ll(c);
+    llvm::Module *m = get_initmod_renderscript_dev_ll(c);
+
+    llvm::Triple triple("armv7-none-linux-gnueabi");
+    m->setTargetTriple(triple.str());
+
+    llvm::DataLayout dl("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
+    #if LLVM_VERSION > 36
+    m->setDataLayout(dl);
+    #else
+    m->setDataLayout(&dl);
+    #endif
+
+    return m;
 }
 #endif
 
