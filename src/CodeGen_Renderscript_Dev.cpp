@@ -554,15 +554,6 @@ static inline size_t writeAndroidBitcodeWrapper(AndroidBitcodeWrapper *wrapper,
 }
 
 vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
-    llvm::Triple triple(Triple::normalize(march() + "-" + mcpu() + "-" + mattrs()));
-    llvm::DataLayout dl("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
-    module->setTargetTriple(triple.str());
-
-    #if LLVM_VERSION > 36
-    module->setDataLayout(dl);
-    #else
-    module->setDataLayout(&dl);
-    #endif
 
     // Generic llvm optimizations on the module.
     optimize_module();
