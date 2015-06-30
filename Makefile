@@ -131,6 +131,7 @@ ifeq ($(UNAME), Linux)
 OPENGL_LDFLAGS = -lX11 -lGL
 endif
 ifeq ($(UNAME), Darwin)
+LLVM_LDFLAGS += -framework Foundation -framework Metal
 OPENGL_LDFLAGS = -framework OpenGL -framework AGL
 endif
 endif
@@ -471,8 +472,10 @@ RUNTIME_CPP_COMPONENTS = \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
-  objc_apple_foundation_stubs \
-  objc_apple_metal_stubs \
+  objc_apple_arm_foundation_stubs \
+  objc_apple_x86_foundation_stubs \
+  objc_apple_arm_metal_stubs \
+  objc_apple_x86_metal_stubs \
   opencl \
   opengl \
   osx_clock \
@@ -584,17 +587,20 @@ RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
 # Objective-C APIs is to get clang to do it. The triple must specify
 # apple environment to use their Objective-C calling convention, not
 # the GNU one.
-# TODO: Figure out if it is possible to compile for both arm and x86
-# without the objc_msgSend_fixup undefined issue. If not, add arm and
-# x86 versions.
-# TODO: Makefile.
-RUNTIME_TRIPLE_OBJC_APPLE_32 = "arm-apple-ios-unknown"
-RUNTIME_TRIPLE_OBJC_APPLE_64 = "arm64-apple-ios-unknown"
+# TODO: CMake
+RUNTIME_TRIPLE_OBJC_APPLE_ARM_32 = "arm-apple-ios-unknown"
+RUNTIME_TRIPLE_OBJC_APPLE_ARM_64 = "arm64-apple-ios-unknown"
+RUNTIME_TRIPLE_OBJC_APPLE_X86_32 = "i386-apple-macosx-unknown"
+RUNTIME_TRIPLE_OBJC_APPLE_X86_64 = "x86_64-apple-macosx-unknown"
 
 # -m64 isn't respected unless we also use a 64-bit target
-$(BUILD_DIR)/initmod.objc_apple_%_64.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.objc_apple_arm_%_64.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target $(RUNTIME_TRIPLE_OBJC_APPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_$*_64.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target $(RUNTIME_TRIPLE_OBJC_APPLE_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_arm_$*_64.d
+
+$(BUILD_DIR)/initmod.objc_apple_x86_%_64.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target $(RUNTIME_TRIPLE_OBJC_APPLE_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_x86_$*_64.d
 
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
@@ -604,17 +610,25 @@ $(BUILD_DIR)/initmod.windows_%_32.ll: src/runtime/windows_%.cpp $(BUILD_DIR)/cla
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target $(RUNTIME_TRIPLE_WIN_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32.d
 
-$(BUILD_DIR)/initmod.objc_apple_%_32.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.objc_apple_arm_%_32.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target $(RUNTIME_TRIPLE_OBJC_APPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_$*_32.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target $(RUNTIME_TRIPLE_OBJC_APPLE_ARM_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_arm_$*_32.d
+
+$(BUILD_DIR)/initmod.objc_apple_x86_%_32.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target $(RUNTIME_TRIPLE_OBJC_APPLE_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_x86_$*_32.d
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
 
-$(BUILD_DIR)/initmod.objc_apple_%_64_debug.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.objc_apple_arm_%_64_debug.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 -ffreestanding -fno-blocks -fno-exceptions -m64 -target  $(RUNTIME_TRIPLE_OBJC_APPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_$*_64_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 -ffreestanding -fno-blocks -fno-exceptions -m64 -target  $(RUNTIME_TRIPLE_OBJC_APPLE_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_arm_$*_64_debug.d
+
+$(BUILD_DIR)/initmod.objc_apple_x86_%_64_debug.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 -ffreestanding -fno-blocks -fno-exceptions -m64 -target  $(RUNTIME_TRIPLE_OBJC_APPLE_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_x86_$*_64_debug.d
 
 $(BUILD_DIR)/initmod.%_64_debug.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
@@ -624,9 +638,13 @@ $(BUILD_DIR)/initmod.windows_%_32_debug.ll: src/runtime/windows_%.cpp $(BUILD_DI
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 -ffreestanding -fno-blocks -fno-exceptions -m32 -target $(RUNTIME_TRIPLE_WIN_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32_debug.d
 
-$(BUILD_DIR)/initmod.objc_apple_%_32_debug.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.objc_apple_arm_%_32_debug.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 -ffreestanding -fno-blocks -fno-exceptions -m32 -target  $(RUNTIME_TRIPLE_OBJC_APPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_$*_32_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 -ffreestanding -fno-blocks -fno-exceptions -m32 -target  $(RUNTIME_TRIPLE_OBJC_APPLE_ARM_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_arm_$*_32_debug.d
+
+$(BUILD_DIR)/initmod.objc_apple_x86_%_32_debug.ll: src/runtime/objc_apple_%.mm $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 -ffreestanding -fno-blocks -fno-exceptions -m32 -target  $(RUNTIME_TRIPLE_OBJC_APPLE_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/objc_apple_$*.mm -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.objc_apple_x86_$*_32_debug.d
 
 $(BUILD_DIR)/initmod.%_32_debug.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
