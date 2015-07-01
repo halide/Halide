@@ -90,7 +90,8 @@ WEAK int halide_metal_release_context(void *user_context) {
     return 0;
 }
 
-class MetalContextHolder : private AutoreleasePool {
+class MetalContextHolder {
+    void *pool;
     void *user_context;
 
 public:
@@ -99,11 +100,13 @@ public:
     int error;
 
     MetalContextHolder(void *user_context, bool create) : user_context(user_context) {
+        pool = halide_ns_create_autorelease_pool();
         error = halide_metal_acquire_context(user_context, device, queue, create);
     }
 
     ~MetalContextHolder() {
         halide_metal_release_context(user_context);
+	halide_ns_release_and_free_autorelease_pool(pool);
     }
 };
 
