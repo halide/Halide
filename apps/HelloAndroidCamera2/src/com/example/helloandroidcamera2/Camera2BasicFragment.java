@@ -156,17 +156,29 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
 
         @Override
         public void onImageAvailable(ImageReader reader) {
+            Log.d(TAG, "onImageAvailable");
             if (mCameraDevice != null) {
                 Image image = reader.acquireLatestImage();
                 if (image == null) {
                     return;
                 }
-                if (mUseEdgeDetector) {
-                    //Log.d(TAG, "using edge detector");
-                    JNIUtils.edgeDetect(image, mSurface);
-                } else {
-                    //Log.d(TAG, "blitting");
-                    JNIUtils.blit(image, mSurface);
+
+                NativeSurfaceHandle dstSurface = NativeSurfaceHandle.lockSurface(mSurface);
+                if (dstSurface != null) {
+                    HalideYuvBufferT srcYuv = HalideYuvBufferT.fromImage(image);
+                    if (srcYuv != null) {
+                        HalideYuvBufferT dstYuv = dstSurface.allocNativeYuvBufferT();
+
+                        if (mUseEdgeDetector) {
+                            HalideFilters.edgeDetect(srcYuv, dstYuv);
+                        } else {
+                            HalideFilters.copy(srcYuv, dstYuv);
+                        }
+
+                        dstYuv.close();
+                        srcYuv.close();
+                    }
+                    dstSurface.close();
                 }
                 image.close();
             }
