@@ -410,6 +410,9 @@ public:
      * been rescheduled. */
     EXPORT void invalidate_cache();
 
+    private:
+        std::string generate_function_name();
+
 };
 
 namespace {

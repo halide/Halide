@@ -860,6 +860,9 @@ private:
         } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (x * (b*a) + y) % b -> (y % b)
             expr = mutate(add_a->b % ib);
+        } else if (add_a && const_int(add_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
+            // (y + (b*a)) % b -> (y % b)
+            expr = mutate(add_a->a % ib);
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % ib);
@@ -1131,6 +1134,9 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (no_overflow(op->type) && sub_a && is_const(sub_a->a) && is_const(b)) {
+            // min(8 - x, 3) -> 8 - max(x, 5)
+            expr = mutate(sub_a->a - max(sub_a->b, sub_a->a - b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1358,6 +1364,9 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (no_overflow(op->type) && sub_a && is_const(sub_a->a) && is_const(b)) {
+            // max(8 - x, 3) -> 8 - min(x, 5)
+            expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1485,6 +1494,12 @@ private:
                 expr = const_false();
                 return;
             }
+        }
+
+        ModulusRemainder mod_rem(0, 1);
+        if (delta_ramp && delta_ramp->base.type() == Int(32)) {
+            // Do modulus remainder analysis on the base.
+            mod_rem = modulus_remainder(delta_ramp->base, alignment_info);
         }
 
         // Note that the computation of delta could be incorrect if
@@ -1619,6 +1634,11 @@ private:
             } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
                 expr = const_false(delta_ramp->width);
+            } else if (delta_ramp && mod_rem.modulus > 0 && const_int(delta_ramp->stride, &ia) &&
+                       0 <= ia * (delta_ramp->width - 1) + mod_rem.remainder &&
+                       ia * (delta_ramp->width - 1) + mod_rem.remainder < mod_rem.modulus) {
+                // ramp(x, a, b) < 0 -> broadcast(x < 0, b)
+                expr = Broadcast::make(mutate(LT::make(delta_ramp->base / mod_rem.modulus, 0)), delta_ramp->width);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -1647,6 +1667,8 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
         const LE *le_a = a.as<LE>();
         const LE *le_b = b.as<LE>();
         const LT *lt_a = a.as<LT>();
@@ -1705,6 +1727,10 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
             expr = const_false(op->type.width);
+        } else if (broadcast_a && broadcast_b &&
+                   broadcast_a->width == broadcast_b->width) {
+            // x8(a) && x8(b) -> x8(a && b)
+            expr = Broadcast::make(mutate(And::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1715,6 +1741,8 @@ private:
     void visit(const Or *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
         const EQ *eq_a = a.as<EQ>();
         const EQ *eq_b = b.as<EQ>();
         const NE *neq_a = a.as<NE>();
@@ -1761,6 +1789,10 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b || b <= a
             expr = const_true(op->type.width);
+        } else if (broadcast_a && broadcast_b &&
+                   broadcast_a->width == broadcast_b->width) {
+            // x8(a) || x8(b) -> x8(a || b)
+            expr = Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2754,6 +2786,7 @@ void simplify_test() {
           Expr(Broadcast::make(x % y, 4)));
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y % 4);
+    check((y + 8) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
     check(Expr(Ramp::make(x, 2, 4)) % (Broadcast::make(2, 4)),
@@ -2998,6 +3031,27 @@ void simplify_test() {
     check((x/8)*8 < x - 8, f);
     check((x/8)*8 < x - 9, f);
     check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
+    check(Ramp::make(x*4, 1, 4) < Broadcast::make(y*4, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 1, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 4, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 8, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y + (-1), 4));
+    check(Ramp::make(x*8 + 5, 1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 5, 1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 - 1, 1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + (-1), 1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8, 1, 4) < Broadcast::make(y*4, 4), Broadcast::make(x*2 < y, 4));
+    check(Ramp::make(x*8, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 1, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4));
+    check(Select::make(Ramp::make((x/16)*16, 1, 8) < Broadcast::make((y/8)*8, 8), Broadcast::make(1, 8), Broadcast::make(3, 8)),
+          Select::make((x/16)*2 < y/8, Broadcast::make(1, 8), Broadcast::make(3, 8)));
+
+    check(Ramp::make(x*8, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, -1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 + 1, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 1, -1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 + 4, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 + 8, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 8, -1, 4) < Broadcast::make(y*8, 4));
+    check(Ramp::make(x*8 + 5, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
+    check(Ramp::make(x*8 - 1, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y + 1, 4));
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
@@ -3089,6 +3143,12 @@ void simplify_test() {
     check(!b1 && b1, f);
     check(b1 && b1, b1);
     check(b1 || b1, b1);
+    check(Broadcast::make(b1, 4) || Broadcast::make(!b1, 4), Broadcast::make(t, 4));
+    check(Broadcast::make(!b1, 4) || Broadcast::make(b1, 4), Broadcast::make(t, 4));
+    check(Broadcast::make(b1, 4) && Broadcast::make(!b1, 4), Broadcast::make(f, 4));
+    check(Broadcast::make(!b1, 4) && Broadcast::make(b1, 4), Broadcast::make(f, 4));
+    check(Broadcast::make(b1, 4) && Broadcast::make(b1, 4), Broadcast::make(b1, 4));
+    check(Broadcast::make(b1, 4) || Broadcast::make(b1, 4), Broadcast::make(b1, 4));
 
     v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
@@ -3140,6 +3200,10 @@ void simplify_test() {
 
     check(max(0, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
     check(min(7, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
+
+    check(min(8 - x, 2), 8 - max(x, 6));
+    check(max(3, 77 - x), 77 - min(x, 74));
+    check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
 
     std::cout << "Simplify test passed" << std::endl;
 }

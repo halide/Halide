@@ -255,14 +255,6 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
     return false;
 }
 
-llvm::Triple CodeGen_PTX_Dev::get_target_triple() const {
-    return Triple(Triple::normalize(march() + "--"));
-}
-
-llvm::DataLayout CodeGen_PTX_Dev::get_data_layout() const {
-    return llvm::DataLayout("e-i64:64-v16:16-v32:32-n16:32:64");
-}
-
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     #ifdef WITH_PTX
@@ -277,9 +269,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Generic llvm optimizations on the module.
     optimize_module();
 
-    // Set up TargetTriple
-    Triple TheTriple = get_target_triple();
-    module->setTargetTriple(TheTriple.str());
+    llvm::Triple triple(module->getTargetTriple());
 
     // Allocate target machine
     const std::string MArch = march();
@@ -287,7 +277,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     const llvm::Target* TheTarget = 0;
 
     std::string errStr;
-    TheTarget = TargetRegistry::lookupTarget(TheTriple.getTriple(), errStr);
+    TheTarget = TargetRegistry::lookupTarget(triple.str(), errStr);
     internal_assert(TheTarget);
 
     TargetOptions Options;
@@ -316,13 +306,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.GuaranteedTailCallOpt = false;
     Options.StackAlignmentOverride = 0;
     // Options.DisableJumpTables = false;
+    #if LLVM_VERSION < 37
     Options.TrapFuncName = "";
+    #endif
 
     CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
     const std::string FeaturesStr = mattrs();
-    std::auto_ptr<TargetMachine>
-        target(TheTarget->createTargetMachine(TheTriple.getTriple(),
+    std::unique_ptr<TargetMachine>
+        target(TheTarget->createTargetMachine(triple.str(),
                                               MCPU, FeaturesStr, Options,
                                               llvm::Reloc::Default,
                                               llvm::CodeModel::Default,
@@ -342,9 +334,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #endif
 
     #if LLVM_VERSION < 37
-    PM.add(new TargetLibraryInfo(TheTriple));
+    PM.add(new TargetLibraryInfo(triple));
     #else
-    PM.add(new TargetLibraryInfoWrapperPass(TheTriple));
+    PM.add(new TargetLibraryInfoWrapperPass(triple));
     #endif
 
     if (target.get()) {
