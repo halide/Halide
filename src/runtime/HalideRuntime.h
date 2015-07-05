@@ -473,7 +473,9 @@ typedef struct buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t dev;
 
-    /** A pointer to the start of the data in main memory. */
+    /** A pointer to the start of the data in main memory. In terms of
+     * the Halide coordinate system, this is the address of the min
+     * coordinates (defined below). */
     uint8_t* host;
 
     /** The size of the buffer in each dimension. */
@@ -482,7 +484,10 @@ typedef struct buffer_t {
     /** Gives the spacing in memory between adjacent elements in the
     * given dimension.  The correct memory address for a load from
     * this buffer at position x, y, z, w is:
-    * host + (x * stride[0] + y * stride[1] + z * stride[2] + w * stride[3]) * elem_size
+    * host + elem_size * ((x - min[0]) * stride[0] +
+    *                     (y - min[1]) * stride[1] +
+    *                     (z - min[2]) * stride[2] +
+    *                     (w - min[3]) * stride[3]) * elem_size
     * By manipulating the strides and extents you can lazily crop,
     * transpose, and even flip buffers without modifying the data.
     */
