@@ -284,16 +284,34 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
 WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *) = default_do_task;
 WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *) = default_do_par_for;
 
+struct spawn_thread_task {
+    void (*f)(void *);
+    void *closure;
+};
+WEAK void *halide_spawn_thread_helper(void *arg) {
+    spawn_thread_task *t = (spawn_thread_task *)arg;
+    t->f(t->closure);
+    free(t);
+    return NULL;
+}
+
 }}} // namespace Halide::Runtime::Internal
 
 extern "C" {
-
-WEAK void halide_spawn_thread(void *user_context, void *(*f)(void *), void *closure) {
+    
+WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
     // Note that we don't pass the user_context through to the
     // thread. It may begin well after the user context is no longer a
     // valid thing.
     pthread_t thread;
-    pthread_create(&thread, NULL, f, closure);
+    // For the same reason we use malloc instead of
+    // halide_malloc. Custom malloc/free overrides may well not behave
+    // well if run at unexpected times (e.g. the matching free may
+    // occur at static destructor time if the thread never returns).
+    spawn_thread_task *t = (spawn_thread_task *)malloc(sizeof(spawn_thread_task));
+    t->f = f;
+    t->closure = closure;
+    pthread_create(&thread, NULL, halide_spawn_thread_helper, t);
 }
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
