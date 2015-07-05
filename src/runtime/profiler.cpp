@@ -85,7 +85,7 @@ WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time) {
 // TODO: make this something like halide_nanosleep so that it can be implemented per OS
 extern "C" void usleep(int);
 
-WEAK void *sampling_profiler_thread(void *) {
+WEAK void sampling_profiler_thread(void *) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     // grab the lock
@@ -101,9 +101,9 @@ WEAK void *sampling_profiler_thread(void *) {
             if (func == halide_profiler_please_stop) {
                 break;
             } else if (func >= 0) {
-               // Assume all time since I was last awake is due to
-               // the currently running func.
-               bill_func(s, func, t_now - t);
+                // Assume all time since I was last awake is due to
+                // the currently running func.
+                bill_func(s, func, t_now - t);
             }
             t = t_now;
 
@@ -118,7 +118,6 @@ WEAK void *sampling_profiler_thread(void *) {
     s->started = false;
 
     halide_mutex_unlock(&s->lock);
-    return NULL;
 }
 
 }}}
@@ -135,6 +134,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
     ScopedMutexLock lock(&s->lock);
 
     if (!s->started) {
+        halide_start_clock(user_context);
         halide_spawn_thread(user_context, sampling_profiler_thread, NULL);
         s->started = true;
     }

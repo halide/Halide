@@ -94,10 +94,8 @@ WEAK void *halide_load_library(const char *name);
 // If lib is NULL, this call should be equivalent to halide_get_symbol(name).
 WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
-#ifdef DEBUG_RUNTIME
 WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
-#endif
 }
 
 // A convenient namespace for weak functions that are internal to the
