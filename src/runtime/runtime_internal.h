@@ -96,6 +96,7 @@ WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
 WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
+WEAK void halide_sleep_ms(void *user_context, int ms);
 }
 
 // A convenient namespace for weak functions that are internal to the

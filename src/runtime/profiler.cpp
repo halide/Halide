@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, NULL, 1000000, 0, 0, false};
+    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, false};
     return &s;
 }
 }
@@ -82,9 +82,6 @@ WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time) {
     error(NULL) << "Could not proceed.\n";
 }
 
-// TODO: make this something like halide_nanosleep so that it can be implemented per OS
-extern "C" void usleep(int);
-
 WEAK void sampling_profiler_thread(void *) {
     halide_profiler_state *s = halide_profiler_get_state();
 
@@ -106,11 +103,11 @@ WEAK void sampling_profiler_thread(void *) {
                 bill_func(s, func, t_now - t);
             }
             t = t_now;
-
+       
             // Release the lock, sleep, reacquire.
-            uint64_t sleep_ns = s->sleep_time;
+            int sleep_ms = s->sleep_time;
             halide_mutex_unlock(&s->lock);
-            usleep(sleep_ns/1000);
+            halide_sleep_ms(NULL, sleep_ms);
             halide_mutex_lock(&s->lock);
         }
     }

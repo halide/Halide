@@ -680,8 +680,8 @@ struct halide_profiler_state {
     halide_profiler_pipeline_stats *pipelines;
 
     /** The amount of time the profiler thread sleeps between samples
-     * in nanoseconds. Defaults to 1000000 (1 millisecond) */
-    uint64_t sleep_time;
+     * in milliseconds. Defaults to 1 */
+    int sleep_time;
 
     /** An internal id used for bookkeeping. */
     int first_free_id;
