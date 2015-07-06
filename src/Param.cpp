@@ -23,11 +23,8 @@ void OutputImageParam::add_implicit_args_if_placeholder(std::vector<Expr> &args,
     }
 }
 
-OutputImageParam::OutputImageParam(const Internal::Parameter &p) :
-    param(p) {
-}
-
-OutputImageParam::~OutputImageParam() {
+OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k) :
+    param(p), kind(k) {
 }
 
 const std::string &OutputImageParam::name() const {
@@ -38,7 +35,7 @@ Type OutputImageParam::type() const {
     return param.type();
 }
 
-bool OutputImageParam::defined() {
+bool OutputImageParam::defined() const {
     return param.defined();
 }
 
@@ -123,7 +120,7 @@ Internal::Parameter OutputImageParam::parameter() const {
 }
 
 OutputImageParam::operator Argument() const {
-    return Argument(name(), Argument::OutputBuffer, type(), dimensions());
+    return Argument(name(), kind, type(), dimensions());
 }
 
 OutputImageParam::operator ExternFuncArgument() const {
@@ -131,15 +128,12 @@ OutputImageParam::operator ExternFuncArgument() const {
 }
 
 ImageParam::ImageParam(Type t, int d) :
-    OutputImageParam(Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide::ImageParam", 'p'))) {}
+    OutputImageParam(Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide::ImageParam", 'p')), Argument::InputBuffer) {}
 
 ImageParam::ImageParam(Type t, int d, const std::string &n) :
-    OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true)) {
+    OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true), Argument::InputBuffer) {
     // Discourage future Funcs from having the same name
     Internal::unique_name(n);
-}
-
-ImageParam::~ImageParam() {
 }
 
 void ImageParam::set(Buffer b) {
@@ -229,10 +223,6 @@ Expr ImageParam::operator()(std::vector<Var> args_passed) const {
 
     Internal::check_call_arg_types(name(), &args, dimensions());
     return Internal::Call::make(param, args);
-}
-
-ImageParam::operator Argument() const {
-    return Argument(name(), Argument::InputBuffer, type(), dimensions());
 }
 
 }

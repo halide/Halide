@@ -22,5 +22,6 @@ public class HalideRenderscriptActivity extends Activity {
         Log.i(TAG, "Data dir: " + getApplicationInfo().dataDir);
         runTest(getApplicationInfo().dataDir + "/cache");
         Log.d(TAG, "Done");
+        finish();
    }
 }
