@@ -60,7 +60,7 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
 
 Expr random_expr(Type T, int depth, bool overflow_undef = false);
 
-Expr random_condition(Type T, int depth) {
+Expr random_condition(Type T, int depth, bool maybe_scalar) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
@@ -71,6 +71,10 @@ Expr random_condition(Type T, int depth) {
         GE::make,
     };
     const int op_count = sizeof(make_bin_op)/sizeof(make_bin_op[0]);
+
+    if (maybe_scalar && rand() % T.width == 0) {
+        T = T.element_of();
+    }
 
     Expr a = random_expr(T, depth);
     Expr b = random_expr(T, depth);
@@ -110,7 +114,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     int op = rand() % op_count;
     switch(op) {
     case 0: return random_leaf(T);
-    case 1: return Select::make(random_condition(T, depth),
+    case 1: return Select::make(random_condition(T, depth, true),
                                 random_expr(T, depth, overflow_undef),
                                 random_expr(T, depth, overflow_undef));
 
@@ -137,7 +141,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     case 5:
         // When generating boolean expressions, maybe throw in a condition on non-bool types.
         if (T.is_bool()) {
-            return random_condition(T, depth);
+            return random_condition(T, depth, false);
         }
         break;
 
@@ -275,4 +279,3 @@ int main(int argc, char **argv) {
     std::cout << "Success!" << std::endl;
     return 0;
 }
-

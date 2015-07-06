@@ -306,7 +306,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.GuaranteedTailCallOpt = false;
     Options.StackAlignmentOverride = 0;
     // Options.DisableJumpTables = false;
+    #if LLVM_VERSION < 37
     Options.TrapFuncName = "";
+    #endif
 
     CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
