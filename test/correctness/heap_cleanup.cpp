@@ -1,15 +1,16 @@
 #include <stdio.h>
 #include "Halide.h"
+#include <atomic>
 
 using namespace Halide;
 
 // Check that assertion failures free allocations appropriately
 
-int malloc_count = 0;
-int free_count = 0;
+std::atomic<int> malloc_count = 0;
+std::atomic<int> free_count = 0;
 
 void *my_malloc(void *user_context, size_t x) {
-    __sync_fetch_and_add(&malloc_count, 1);
+	malloc_count++;
     void *orig = malloc(x+32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
@@ -17,8 +18,8 @@ void *my_malloc(void *user_context, size_t x) {
 }
 
 void my_free(void *user_context, void *ptr) {
-    __sync_fetch_and_add(&free_count, 1);
-    free(((void**)ptr)[-1]);
+	free_count++;
+	free(((void**)ptr)[-1]);
 }
 
 bool error_occurred = false;
@@ -45,9 +46,9 @@ int main(int argc, char **argv) {
 
     Image<int> im = h.realize(g_size+100);
 
-    printf("%d %d\n", malloc_count, free_count);
+    printf("%d %d\n", (int)malloc_count, (int)free_count);
 
-    assert(error_occurred && malloc_count == free_count);
+    assert(error_occurred && (int)malloc_count == (int)free_count);
 
     printf("Success!\n");
     return 0;
