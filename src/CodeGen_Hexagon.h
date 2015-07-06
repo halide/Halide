@@ -17,9 +17,6 @@ public:
     /** Create an ARM code generator for the given arm target. */
     CodeGen_Hexagon(Target);
 
-    llvm::Triple get_target_triple() const;
-    llvm::DataLayout get_data_layout() const;
-
     static void test();
 
 protected:

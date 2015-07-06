@@ -424,17 +424,6 @@ bool CodeGen_LLVM::llvm_Mips_enabled = false;
 llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     init_module();
 
-    llvm::Triple triple = get_target_triple();
-    llvm::DataLayout dl = get_data_layout();
-    module->setTargetTriple(triple.str());
-
-    #if LLVM_VERSION > 36
-//  module->setDataLayout(dl);
-    module->setDataLayout(&dl);
-    #else
-    module->setDataLayout(&dl);
-    #endif
-
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     module->setModuleIdentifier(input.name());

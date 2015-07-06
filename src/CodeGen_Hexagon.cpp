@@ -87,6 +87,7 @@ Expr bitwiseXor(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_xor, {A, B},
                               Internal::Call::Intrinsic);
 }
+#ifdef THESE_ARE_UNUSED
 Expr bitwiseNot(Expr A) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_not, {A},
                               Internal::Call::Intrinsic);
@@ -95,6 +96,7 @@ Expr shiftLeft(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_left, {A, B},
                               Internal::Call::Intrinsic);
 }
+#endif
 Expr u8_(Expr E) {
   return cast (UInt(8, E.type().width), E);
 }
@@ -435,22 +437,6 @@ CodeGen_Hexagon::slice_into_halves(Expr a, std::vector<Expr> &Res) {
   return;
 }
 
-llvm::Triple CodeGen_Hexagon::get_target_triple() const {
-    llvm::Triple triple;
-    triple.setVendor(llvm::Triple::UnknownVendor);
-    triple.setArch(llvm::Triple::hexagon);
-    triple.setObjectFormat(llvm::Triple::ELF);
-    return triple;
-}
-
-
-llvm::DataLayout CodeGen_Hexagon::get_data_layout() const {
-    // FIXME: what should this be?
-    return llvm::DataLayout(
-       "e-p:32:32:32-i64:64:64-i32:32:32-i16:16:16-i1:32:32"
-       "-f64:64:64-f32:32:32-v64:64:64-v32:32:32-a:0-n16:32");
-}
-
 
 string CodeGen_Hexagon::mcpu() const {
   return "hexagonv60";
@@ -474,6 +460,7 @@ int CodeGen_Hexagon::native_vector_bits() const {
   }
 }
 
+#ifdef THESE_ARE_UNUSED
 static bool canUseVadd(const Add *op) {
   const Ramp *RampA = op->a.as<Ramp>();
   const Ramp *RampB = op->b.as<Ramp>();
@@ -493,6 +480,7 @@ static bool canUseVadd(const Add *op) {
   }
   return false;
 }
+#endif
 
 static bool
 isLargeVector(Type t, int vec_bits) {
@@ -653,7 +641,7 @@ bool checkTwoWayDotProductOperandsCombinations(vector<Expr> &matches,
     // (Hint: Think 4 broadcasts), but this is rare, so now we will deal
     // only with 2 broadcasts and 2 loads to catch this case for example
     // 3*f(2x) + 7*f(2x+1);
-    const Load *InterleavedLoad1, *InterleavedLoad2;
+    const Load *InterleavedLoad1 = NULL, *InterleavedLoad2 = NULL;
     if (!LoadA && LoadB) {
       const Broadcast *BroadcastA = matches[0].as<Broadcast>();
       if (!BroadcastA) {
@@ -1522,8 +1510,8 @@ void CodeGen_Hexagon:: visit(const Mul *op) {
           }
           if (Imm) {
             int ImmValue = Imm->value;
-            int ScalarValue;
-            Intrinsic::ID IntrinsID;
+            int ScalarValue = 0;
+            Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
             if (Vec.type().bits == 16
                 && ImmValue <= UInt(8).imax()) {
               int A = ImmValue & 0xFF;

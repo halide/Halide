@@ -168,19 +168,6 @@ DECLARE_NO_INITMOD(hexagon)
 
 namespace {
 
-<<<<<<< HEAD
-// Link all modules together and with the result in modules[0],
-// all other input modules are destroyed.
-void link_modules(std::vector<llvm::Module *> &modules) {
-    #if LLVM_VERSION >= 35
-    // LLVM is moving to requiring data layouts to exist. Use the
-    // datalayout of the first module that has one for all modules.
-    const llvm::DataLayout *data_layout = NULL;
-    for (size_t i = 0; data_layout == NULL && i < modules.size(); i++) {
-        #if LLVM_VERSION >= 37
-        //data_layout = &modules[i]->getDataLayout();
-        data_layout = modules[i]->getDataLayout();
-=======
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
         if (target.bits == 32) {
@@ -229,6 +216,11 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         }
     } else if (target.arch == Target::PNaCl) {
         return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
+    } else if (target.arch == Target::Hexagon) {
+      return llvm::DataLayout(
+         "e-p:32:32:32-i64:64:64-i32:32:32-i16:16:16-i1:32:32"
+         "-f64:64:64-f32:32:32-v64:64:64-v32:32:32-a:0-n16:32");
+
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
         return llvm::DataLayout("unreachable");
@@ -341,11 +333,14 @@ llvm::Triple get_triple_for_target(Target target) {
         triple.setArch(llvm::Triple::le32);
         triple.setVendor(llvm::Triple::UnknownVendor);
         triple.setOS(llvm::Triple::NaCl);
->>>>>>> tip
         #else
         user_error << "This version of Halide was compiled without nacl support.\n";
         #endif
-    } else {
+    } else if (target.arch == Target::Hexagon) {
+      triple.setVendor(llvm::Triple::UnknownVendor);
+      triple.setArch(llvm::Triple::hexagon);
+      triple.setObjectFormat(llvm::Triple::ELF);
+ } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
     }
 
@@ -365,7 +360,7 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     for (size_t i = 0; i < modules.size(); i++) {
         #if LLVM_VERSION >= 37
         //modules[i]->setDataLayout(*data_layout);
-        modules[i]->setDataLayout(data_layout);
+        modules[i]->setDataLayout(&data_layout);
         #elif LLVM_VERSION >= 35
         modules[i]->setDataLayout(data_layout);
         #else
@@ -814,7 +809,7 @@ llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LL
 
     llvm::DataLayout dl("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
     #if LLVM_VERSION > 36
-    m->setDataLayout(dl);
+    m->setDataLayout(&dl);
     #else
     m->setDataLayout(&dl);
     #endif

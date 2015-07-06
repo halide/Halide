@@ -589,6 +589,7 @@ static void WriteValueAsMetadata(const ValueAsMetadata *MD,
   Record.clear();
 }
 
+#ifdef THESE_ARE_UNUSED
 static void WriteMDTuple(const MDTuple *N, const llvm_3_2::ValueEnumerator &VE,
                          BitstreamWriter &Stream,
                          SmallVectorImpl<uint64_t> &Record, unsigned Abbrev) {
@@ -612,6 +613,7 @@ static void WriteMDTuple(const MDTuple *N, const llvm_3_2::ValueEnumerator &VE,
   Stream.EmitRecord(bitc::METADATA_OLD_NODE, Record, Abbrev);
   Record.clear();
 }
+#endif
 
 #if LLVM_VERSION < 37
 static void WriteMDLocation(const MDLocation *N, const llvm_3_2::ValueEnumerator &VE,
