@@ -71,15 +71,7 @@ WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time) {
         }
         p_prev = p;
     }
-    // panic!
-    print(NULL)
-        << "Internal error in profiler: \n"
-        << "Could not find pipeline for func_id " << func_id << "\n"
-        << "Pipelines:\n";
-    for (halide_profiler_pipeline_stats *p = s->pipelines; p; p = (halide_profiler_pipeline_stats *)(p->next)) {
-        print(NULL) << p->name << " : " << p->first_func_id << ", " << p->num_funcs << "\n";
-    }
-    error(NULL) << "Could not proceed.\n";
+    // Someone must have called reset_state while a kernel was running. Do nothing.
 }
 
 // TODO: make this something like halide_nanosleep so that it can be implemented per OS
