@@ -118,6 +118,7 @@ set(RUNTIME_CPP
   posix_print
   posix_thread_pool
   renderscript
+  runtime_api
   ssp
   to_string
   tracing
