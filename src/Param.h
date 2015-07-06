@@ -186,6 +186,9 @@ protected:
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 
+    /** Is this an input or an output? OutputImageParam is the base class for both. */
+    Argument::Kind kind;
+    
     void add_implicit_args_if_placeholder(std::vector<Expr> &args,
                                           Expr last_arg,
                                           int total_args,
@@ -195,11 +198,8 @@ public:
     /** Construct a NULL image parameter handle. */
     OutputImageParam() {}
 
-    /** Virtual destructor. Does nothing. */
-    EXPORT virtual ~OutputImageParam();
-
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    EXPORT OutputImageParam(const Internal::Parameter &p);
+    EXPORT OutputImageParam(const Internal::Parameter &p, Argument::Kind k);
 
     /** Get the name of this Param */
     EXPORT const std::string &name() const;
@@ -296,7 +296,7 @@ public:
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
-    EXPORT virtual operator Argument() const;
+    EXPORT operator Argument() const;
 
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
@@ -310,9 +310,6 @@ public:
 
     /** Construct a NULL image parameter handle. */
     ImageParam() : OutputImageParam() {}
-
-    /** Virtual destructor. Does nothing. */
-    EXPORT virtual ~ImageParam();
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
@@ -359,11 +356,6 @@ public:
     operator Expr() const {
         return (*this)(_);
     }
-
-    /** Construct the appropriate argument matching this parameter,
-     * for the purpose of generating the right type signature when
-     * statically compiling halide pipelines. */
-    EXPORT virtual operator Argument() const;
 };
 
 }
