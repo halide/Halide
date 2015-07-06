@@ -27,7 +27,11 @@ ObjectType object_types[] = {
 
     ObjectType("cuCtxCreate", "cuCtxDestroy", true),
     ObjectType("cuModuleLoad", "cuModuleUnload"),
-    ObjectType("cuMemAlloc", "cuMemFree")
+    ObjectType("cuMemAlloc", "cuMemFree"),
+
+    ObjectType("Allocating: MTLCreateSystemDefaultDevice", "Releasing: MTLCreateSystemDefaultDevice", true),
+    ObjectType("Allocating: new_command_queue", "Releasing: new_command_queue"),
+    ObjectType("Allocating: new_library_with_source", "Releasing: new_library_with_source")
 };
 
 const int object_type_count = sizeof(object_types)/sizeof(object_types[0]);

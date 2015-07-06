@@ -19,6 +19,7 @@ static ostringstream nil;
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
     metal_c(src_stream), target(t) {
 }
+
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
     ostringstream oss;
     if (type.is_float()) {
@@ -185,19 +186,16 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
-    // If we're loading a contiguous ramp into a vector, use vload instead.
+    // If we're loading a contiguous ramp, load from a vector type pointer.
     Expr ramp_base = is_ramp1(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->type.is_vector());
         string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
-        rhs << "vload" << op->type.width
-            << "(0, (" << get_memory_space(op->name) << " "
-            << print_type(op->type.element_of()) << "*)"
-            << print_name(op->name) << " + " << id_ramp_base << ")";
-
+	rhs << "*(" << get_memory_space(op->name) << " " << print_type(op->type) << " *)(" << id_ramp_base << ")";
         print_assignment(op->type, rhs.str());
+
         return;
     }
 
@@ -252,20 +250,15 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
     string id_value = print_expr(op->value);
     Type t = op->value.type();
 
-    // If we're writing a contiguous ramp, use vstore instead.
+    // If we're writing a contiguous ramp, store through a pointer of vector type.
     Expr ramp_base = is_ramp1(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
 
         do_indent();
-        stream << "vstore" << t.width << "("
-               << id_value << ","
-               << 0 << ", (" << get_memory_space(op->name) << " "
-               << print_type(t.element_of()) << "*)"
-               << print_name(op->name) << " + " << id_ramp_base
-               << ");\n";
-
+	stream << "*(" << get_memory_space(op->name) << " " << print_type(t) << " *)(" << id_ramp_base << ") = "
+	       << id_value << ";\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
@@ -307,29 +300,16 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Select *op) {
-#if 0
     ostringstream rhs;
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
     string cond = print_expr(op->condition);
     rhs << "(" << print_type(op->type) << ")"
-        << "(" << cond
-        << " ? " << true_val
-        << " : " << false_val
-        << ")";
-    print_assignment(op->type, rhs.str());
-#else
-    ostringstream rhs;
-    string true_val = print_expr(op->true_value);
-    string false_val = print_expr(op->false_value);
-    string cond = print_expr(op->condition);
-    rhs << "(" << print_type(op->type) << ")"
-        << "select(" << true_val
-        << ", " << false_val
+        << "select(" << false_val
+        << ", " << true_val
         << ", " << cond
         << ")";
     print_assignment(op->type, rhs.str());
-#endif
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
@@ -357,7 +337,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
         stream << print_type(op->type) << ' '
                << print_name(op->name) << "[" << size << "];\n";
         do_indent();
-        stream << "#define " << get_memory_space(op->name) << " __private\n";
+        stream << "#define " << get_memory_space(op->name) << " thread\n";
 
         allocations.push(op->name, op->type);
 
@@ -609,7 +589,7 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define atanh_f32 fast::atanh \n"
                << "#define fast_inverse_sqrt_f32 fast::rsqrt \n"
                << "int halide_gpu_thread_barrier() {\n"
-               << "  threadgroup_barrier(mem_flags::mem_threadgroup);\n" // Halide only ever needs threadgroup (OpenCL "local") memory fences.
+               << "  threadgroup_barrier(mem_flags::mem_device_and_threadgroup);\n" // Halide only ever needs threadgroup (OpenCL "local") memory fences. (mem_threadgroup)
                << "  return 0;\n"
                << "}\n"
                << "}\n"; // close namespace

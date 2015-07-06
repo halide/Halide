@@ -4,7 +4,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
+    Target t(get_jit_target_from_environment());
+    if (!t.has_gpu_feature()) {
         printf("No gpu target enabled. Skipping test.\n");
         return 0;
     }
@@ -21,7 +22,11 @@ int main(int argc, char **argv) {
     out(x, y, z) = h(x, y, z);
     out(x, y, z) += 1;
 
-    out.gpu_tile(x, y, z, 4, 4, 4);
+    // Metal can't seem to deal with a 4x4x4 set of threads
+    // TODO: Figure this out as it seems ok with a 16x16 one elsewhere
+    // so it does not seem to be total size.
+    int thread_per_dim = t.has_feature(Target::Metal) ? 3 : 4;
+    out.gpu_tile(x, y, z, thread_per_dim, thread_per_dim, thread_per_dim);
     out.update().gpu_tile(x, y, 4, 4);
     h.compute_at(out, Var::gpu_blocks()).gpu_threads(x, y);
     h.update().gpu_threads(x);
