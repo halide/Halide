@@ -122,9 +122,6 @@ struct JITModule {
                                const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
                                const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
-    /** Make extern declarations for all exports of a set of JITModules in another llvm::Module */
-    EXPORT static void make_externs(const std::vector<JITModule> &deps, llvm::Module *mod);
-
     /** Encapsulate device (GPU) and buffer interactions. */
     EXPORT int copy_to_device(struct buffer_t *buf) const;
     EXPORT int copy_to_host(struct buffer_t *buf) const;
