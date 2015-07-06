@@ -26,13 +26,13 @@ clean:
 .PHONY: assembly
 
 assembly: median.cpp
-	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon
+	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: median.cpp
-	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon
+	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: all
@@ -65,13 +65,13 @@ run: median.out
 .PHONY: stmt
 
 stmt: median.cpp
-	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon
+	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out
 
 .PHONY: synthetic
 
 median_run.synthetic.o: median.o median.h median_run.cpp
-	${CLANG} -c median_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o median_run.synthetic.o
+	${CLANG} -c median_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o median_run.synthetic.o ${CXXFLAGS}
 
 
 median.synthetic.out: median_run.synthetic.o median.o median.h

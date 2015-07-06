@@ -8,7 +8,7 @@ echo "$myname: Compiling all .cpp files first."
 for test in `cat testlist`
 do
     echo "$myname: Compiling $test.cpp."
-    g++ ${test}.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o ${test}.out -O0
+    g++ ${test}.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o ${test}.out -O0 -std=c++11
     echo "$myname: Creating test - ${test}.out"
 done
 
