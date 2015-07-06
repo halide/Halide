@@ -15,27 +15,6 @@ namespace Internal {
 using std::pair;
 using std::make_pair;
 
-class ContainsLoad : public IRVisitor {
-public:
-    const std::string load_name;
-    bool result;
-
-    ContainsLoad(const std::string& name) :
-        load_name(name), result(false) {}
-
-private:
-
-    using IRVisitor::visit;
-
-    void visit(const Load *op) {
-        if (op->name == load_name) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-};
-
 class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
@@ -46,104 +25,113 @@ public:
     StoreCollector(const std::string& name, int stride, int ms,
                    std::vector<LetStmt>& lets, std::vector<Store>& ss) :
         store_name(name), store_stride(stride), max_stores(ms),
-        let_stmts(lets), stores(ss) {}
+        let_stmts(lets), stores(ss), collecting(true) {}
 private:
 
     using IRMutator::visit;
 
     // Don't enter any inner constructs for which it's not safe to pull out stores.
-    void visit(const For *op) {stmt = op;}
-    void visit(const IfThenElse *op) {stmt = op;}
-    void visit(const ProducerConsumer *op) {stmt = op;}
-    void visit(const Allocate *op) {stmt = op;}
-    void visit(const Realize *op) {stmt = op;}
+    void visit(const For *op) {collecting = false; stmt = op;}
+    void visit(const IfThenElse *op) {collecting = false; stmt = op;}
+    void visit(const ProducerConsumer *op) {collecting = false; stmt = op;}
+    void visit(const Allocate *op) {collecting = false; stmt = op;}
+    void visit(const Realize *op) {collecting = false; stmt = op;}
 
-    // Returns whether the store was collected.
-    bool collect_store(const Store *op) {
-        // Check the value doesn't load from the buffer we're
-        // collecting stores for.
-        ContainsLoad has_load(store_name);
-        op->value.accept(&has_load);
-        if (has_load.result) {
-            return false;
+    bool collecting;
+    // These are lets that we've encountered since the last collected
+    // store. If we collect another store, these "potential" lets
+    // become lets used by the collected stores.
+    std::vector<LetStmt> potential_lets;
+
+    void visit(const Load *op) {
+        if (!collecting) {
+            expr = op;
+            return;
         }
 
-        if (op->name != store_name) {
-            // Not a store to the buffer we're looking for.
-            return false;
-        }
-
-        if (stores.size() >= (size_t)max_stores) {
-            // Already have enough stores.
-            return false;
-        }
-
-        const Ramp *r = op->index.as<Ramp>();
-        if (!r) {
-            // Store doesn't store to a ramp. Can't interleave it.
-            return false;
-        }
-
-        if (!is_const(r->stride, store_stride)) {
-            // Ramp has wrong stride.
-            return false;
-        }
-
-        // This store is good.
-        stores.push_back(*op);
-        return true;
-    }
-
-    bool collect_let(const LetStmt *op) {
-        // First check the value doesn't load from the buffer we're
-        // collecting stores for.
-        ContainsLoad has_load(store_name);
-        op->value.accept(&has_load);
-        if (has_load.result) {
-            return false;
+        // If we hit a load from the buffer we're trying to collect
+        // stores for, stop collecting to avoid reordering loads and
+        // stores from the same buffer.
+        if (op->name == store_name) {
+            collecting = false;
+            expr = op;
         } else {
-            let_stmts.push_back(*op);
-            return true;
+            IRMutator::visit(op);
         }
     }
 
     void visit(const Store *op) {
-        if (collect_store(op)) {
-            // Replace with a no-op.
-            stmt = Evaluate::make(0);
-        } else {
+        if (!collecting) {
             stmt = op;
+            return;
         }
+
+        // By default, do nothing.
+        stmt = op;
+
+        if (stores.size() >= (size_t)max_stores) {
+            // Already have enough stores.
+            collecting = false;
+            return;
+        }
+
+        // Make sure this Store doesn't do anything that causes us to
+        // stop collecting.
+        IRMutator::visit(op);
+        if (!collecting) {
+            return;
+        }
+
+        if (op->name != store_name) {
+            // Not a store to the buffer we're looking for.
+            return;
+        }
+
+        const Ramp *r = op->index.as<Ramp>();
+        if (!r || !is_const(r->stride, store_stride)) {
+            // Store doesn't store to the ramp we're looking
+            // for. Can't interleave it. Since we don't want to
+            // reorder stores, stop collecting.
+            collecting = false;
+            return;
+        }
+
+        // This store is good, collect it and replace with a no-op.
+        stores.push_back(*op);
+        stmt = Evaluate::make(0);
+
+        // Because we collected this store, we need to save the
+        // potential lets since the last collected store.
+        let_stmts.insert(let_stmts.end(), potential_lets.begin(), potential_lets.end());
+        potential_lets.clear();
     }
 
     void visit(const LetStmt *op) {
-        if (collect_let(op)) {
-            stmt = mutate(op->body);
-        } else {
+        if (!collecting) {
             stmt = op;
+            return;
+        }
+        IRMutator::visit(op);
+
+        // If we're still collecting, we need to save the let as a potential let.
+        if (collecting) {
+            potential_lets.push_back(*op);
         }
     }
 
     void visit(const Block *op) {
-        const LetStmt *let = op->first.as<LetStmt>();
-        const Store   *store = op->first.as<Store>();
-
-        if (let) {
-            if (collect_let(let)) {
-                let_stmts.push_back(*let);
-                stmt = mutate(Block::make(let->body, op->rest));
-            } else {
-                stmt = op;
-            }
-        } else if (store) {
-            if (collect_store(store)) {
-                stmt = mutate(op->rest);
-            } else {
-                stmt = op;
-            }
-        } else {
-            stmt = Block::make(op->first, mutate(op->rest));
+        if (!collecting) {
+            stmt = op;
+            return;
         }
+
+        Stmt first = mutate(op->first);
+        Stmt rest = op->rest;
+        // We might have decided to stop collecting during mutation of first.
+        if (collecting) {
+            rest = mutate(rest);
+        }
+        stmt = Block::make(first, rest);
     }
 };
 
@@ -738,3 +726,4 @@ void deinterleave_vector_test() {
 
 }
 }
+

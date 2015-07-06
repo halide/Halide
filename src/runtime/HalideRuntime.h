@@ -100,7 +100,7 @@ extern void halide_shutdown_thread_pool();
 //@}
 
 /** Spawn a thread, independent of halide's thread pool. */
-extern void halide_spawn_thread(void *user_context, void *(*f)(void *), void *closure);
+extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
 
 /** Set the number of threads used by Halide's thread pool. No effect
  * on OS X or iOS. If changed after the first use of a parallel Halide
@@ -473,7 +473,9 @@ typedef struct buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t dev;
 
-    /** A pointer to the start of the data in main memory. */
+    /** A pointer to the start of the data in main memory. In terms of
+     * the Halide coordinate system, this is the address of the min
+     * coordinates (defined below). */
     uint8_t* host;
 
     /** The size of the buffer in each dimension. */
@@ -482,7 +484,10 @@ typedef struct buffer_t {
     /** Gives the spacing in memory between adjacent elements in the
     * given dimension.  The correct memory address for a load from
     * this buffer at position x, y, z, w is:
-    * host + (x * stride[0] + y * stride[1] + z * stride[2] + w * stride[3]) * elem_size
+    * host + elem_size * ((x - min[0]) * stride[0] +
+    *                     (y - min[1]) * stride[1] +
+    *                     (z - min[2]) * stride[2] +
+    *                     (w - min[3]) * stride[3]) * elem_size
     * By manipulating the strides and extents you can lazily crop,
     * transpose, and even flip buffers without modifying the data.
     */
@@ -675,8 +680,8 @@ struct halide_profiler_state {
     halide_profiler_pipeline_stats *pipelines;
 
     /** The amount of time the profiler thread sleeps between samples
-     * in nanoseconds. Defaults to 1000000 (1 millisecond) */
-    uint64_t sleep_time;
+     * in milliseconds. Defaults to 1 */
+    int sleep_time;
 
     /** An internal id used for bookkeeping. */
     int first_free_id;

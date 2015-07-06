@@ -457,6 +457,12 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target) {
     user_assert(defined()) << "Can't compile undefined Pipeline\n";
+    string new_fn_name(fn_name);
+    if (new_fn_name.empty()) {
+        new_fn_name = generate_function_name();
+    }
+    internal_assert(!new_fn_name.empty()) << "new_fn_name cannot be empty\n";
+    // TODO: Assert that the function name is legal
 
     // TODO: This is a bit of a wart. Right now, IR cannot directly
     // reference Buffers because neither CodeGen_LLVM nor
@@ -489,7 +495,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         private_body = lower(contents.ptr->outputs, fn_name, target, custom_passes);
     }
 
-    string private_name = "__" + fn_name;
+    string private_name = "__" + new_fn_name;
 
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = args;
@@ -520,7 +526,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     }
 
     // Create a module with all the global images in it.
-    Module module(fn_name, target);
+    Module module(new_fn_name, target);
 
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
@@ -551,11 +557,23 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
     public_body = LetStmt::make(private_result_name, call_private, public_body);
 
-    module.append(LoweredFunc(fn_name, public_args, public_body, LoweredFunc::External));
+    module.append(LoweredFunc(new_fn_name, public_args, public_body, LoweredFunc::External));
 
     contents.ptr->module = module;
 
     return module;
+}
+
+std::string Pipeline::generate_function_name() {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    // Come up with a name for a generated function
+    string name = contents.ptr->outputs[0].name();
+    for (size_t i = 0; i < name.size(); i++) {
+        if (!isalnum(name[i])) {
+            name[i] = '_';
+        }
+    }
+    return name;
 }
 
 void *Pipeline::compile_jit(const Target &target_arg) {
@@ -581,12 +599,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     infer_arguments();
 
     // Come up with a name for the generated function
-    string name = contents.ptr->outputs[0].name();
-    for (size_t i = 0; i < name.size(); i++) {
-        if (!isalnum(name[i])) {
-            name[i] = '_';
-        }
-    }
+    string name = generate_function_name();
 
     vector<Argument> args;
     for (const InferredArgument &arg : contents.ptr->inferred_args) {

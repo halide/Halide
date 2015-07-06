@@ -94,61 +94,56 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
     for (size_t i = 0; i < args.size(); i++) {
         string arg_name = args[i].name;
         debug(1) << "CodeGen_Renderscript_Dev arg[" << i << "].name=" << arg_name << "\n";
-        if (args[i].is_buffer) {
-            // Remember actual type of buffer argument - will use it for kernel input buffer type.
+        if (args[i].is_buffer && args[i].write) {
+            // Remember actual type of buffer argument - will use it for kernel output buffer type.
             argument_type = llvm_type_of(args[i].type);
+            debug(1) << "  this is our output buffer type\n";
         }
 
-        // Reuse global variables between kernels.
-        std::map<std::string, GlobalVariable*>::const_iterator f = rs_global_vars.find(arg_name);
-        if (f != rs_global_vars.end()) {
-            globals_sym_names.push_back(std::make_tuple(arg_name, f->second));
-        } else {
-            enum RS_ARGUMENT_TYPE { RS_INT = 6, RS_BUFFER = 20 } rs_argument_type;
-            GlobalVariable *gvar;
-            if (!args[i].is_buffer) {
-                gvar = new GlobalVariable(*module, llvm::Type::getInt32Ty(*context),
-                                          false,  // isConstant
-                                          GlobalValue::CommonLinkage,
-                                          0,  // has initializer, specified below
-                                         arg_name);
-                gvar->setInitializer(const_0);
-                globals_sym_names.push_back(std::make_tuple(arg_name, gvar));
-
-                rs_argument_type = RS_INT;
-            } else {
-                gvar = new GlobalVariable(*module, StructTy_struct_rs_allocation,
-                                          false,  // isConstant
-                                          GlobalValue::CommonLinkage,
-                                          0,  // has initializer, specified below
-                                          arg_name);
-                gvar->setInitializer(const_empty_allocation_struct);
-
-                rs_argument_type = RS_BUFFER;
-
-                LLVMMDNodeArgumentType md_args[] = {
-                    MDString::get(*context, std::to_string(rs_export_var->getNumOperands()))
-                };
-                rs_objects_slots->addOperand(MDNode::get(*context, md_args));
-            }
-            gvar->setAlignment(4);
+        enum RS_ARGUMENT_TYPE { RS_INT = 6, RS_BUFFER = 20 } rs_argument_type;
+        GlobalVariable *gvar;
+        if (!args[i].is_buffer) {
+            gvar = new GlobalVariable(*module, llvm::Type::getInt32Ty(*context),
+                                      false,  // isConstant
+                                      GlobalValue::CommonLinkage,
+                                      0,  // has initializer, specified below
+                                     kernel_name + "_" + arg_name);
+            gvar->setInitializer(const_0);
             globals_sym_names.push_back(std::make_tuple(arg_name, gvar));
-            rs_global_vars.insert(std::pair<std::string,GlobalVariable*>(arg_name, gvar));
 
-            {
-                LLVMMDNodeArgumentType md_args[] = {
-                    MDString::get(*context, arg_name),
-                    MDString::get(*context, std::to_string(rs_argument_type))
-                };
-                rs_export_var->addOperand(MDNode::get(*context, md_args));
-            }
+            rs_argument_type = RS_INT;
+        } else {
+            gvar = new GlobalVariable(*module, StructTy_struct_rs_allocation,
+                                      false,  // isConstant
+                                      GlobalValue::CommonLinkage,
+                                      0,  // has initializer, specified below
+                                      kernel_name + "_" + arg_name);
+            gvar->setInitializer(const_empty_allocation_struct);
 
-            debug(2) << "args[" << i << "] = {"
-                     << "name=" << args[i].name
-                     << " is_buffer=" << args[i].is_buffer
-                     << " dimensions=" << (+args[i].dimensions)
-                     << " type=" << args[i].type << "}\n";
+            rs_argument_type = RS_BUFFER;
+
+            LLVMMDNodeArgumentType md_args[] = {
+                MDString::get(*context, std::to_string(rs_export_var->getNumOperands()))
+            };
+            rs_objects_slots->addOperand(MDNode::get(*context, md_args));
         }
+        gvar->setAlignment(4);
+        globals_sym_names.push_back(std::make_tuple(arg_name, gvar));
+        rs_global_vars.insert(std::pair<std::string,GlobalVariable*>(arg_name, gvar));
+
+        {
+            LLVMMDNodeArgumentType md_args[] = {
+                MDString::get(*context, kernel_name + "_" + arg_name),
+                MDString::get(*context, std::to_string(rs_argument_type))
+            };
+            rs_export_var->addOperand(MDNode::get(*context, md_args));
+        }
+
+        debug(2) << "args[" << i << "] = {"
+                 << "name=" << args[i].name
+                 << " is_buffer=" << args[i].is_buffer
+                 << " dimensions=" << (+args[i].dimensions)
+                 << " type=" << args[i].type << "}\n";
     }
 
     // Make our function with arguments for kernel defined per Renderscript
@@ -319,14 +314,6 @@ void CodeGen_Renderscript_Dev::init_module() {
 #endif
 }
 
-llvm::Triple CodeGen_LLVM::get_target_triple() const {
-    return Triple(Triple::normalize("armv7-none-linux-gnueabi"));
-}
-
-llvm::DataLayout CodeGen_Renderscript_Dev::get_data_layout() const {
-    return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
-}
-
 //
 // Loops become kernels. There should be no explicit loops in
 // generated RenderScript code.
@@ -483,6 +470,8 @@ void CodeGen_Renderscript_Dev::visit(const Call *op) {
     CodeGen_LLVM::visit(op);
 }
 
+size_t CodeGen_Renderscript_Dev::slots_taken() const { return module->getOrInsertNamedMetadata("#rs_export_var")->getNumOperands(); }
+
 string CodeGen_Renderscript_Dev::march() const { return "armv7"; }
 
 string CodeGen_Renderscript_Dev::mcpu() const { return "none"; }
@@ -492,10 +481,6 @@ string CodeGen_Renderscript_Dev::mattrs() const { return "linux-gnueabi"; }
 bool CodeGen_Renderscript_Dev::use_soft_float_abi() const {
     // Taken from CodeGen_ARM::use_soft_float_abit.
     return target.bits == 32;
-}
-
-llvm::Triple CodeGen_Renderscript_Dev::get_target_triple() const {
-    return Triple(Triple::normalize(march() + "-" + mcpu() + "-" + mattrs()));
 }
 
 // Data structures below as well as writeAndroidBitcodeWrapper function are
@@ -566,15 +551,6 @@ static inline size_t writeAndroidBitcodeWrapper(AndroidBitcodeWrapper *wrapper,
 }
 
 vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
-    llvm::Triple triple = get_target_triple();
-    llvm::DataLayout dl = get_data_layout();
-    module->setTargetTriple(triple.str());
-
-    #if LLVM_VERSION > 36
-    module->setDataLayout(dl);
-    #else
-    module->setDataLayout(&dl);
-    #endif
 
     // Generic llvm optimizations on the module.
     optimize_module();
