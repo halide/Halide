@@ -119,12 +119,6 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(metal)
-DECLARE_CPP_INITMOD(objc_apple_ios_foundation_stubs)
-DECLARE_CPP_INITMOD(objc_apple_macosx_foundation_stubs)
-#ifdef WITH_METAL
-DECLARE_CPP_INITMOD(objc_apple_ios_metal_stubs)
-DECLARE_CPP_INITMOD(objc_apple_macosx_metal_stubs)
-#endif
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -560,7 +554,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_objc_apple_macosx_foundation_stubs(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
@@ -577,7 +570,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
-                modules.push_back(get_initmod_objc_apple_ios_foundation_stubs(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
@@ -682,13 +674,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_renderscript(c, bits_64, debug));
         } else if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
-            if (t.os == Target::IOS) {
-                modules.push_back(get_initmod_objc_apple_ios_metal_stubs(c, bits_64, debug));
-            } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_objc_apple_macosx_metal_stubs(c, bits_64, debug));
-            } else {
-                user_error << "Metal is not supported on OSes other than IOS and OSX.\n";
-            }
         }
     }
 

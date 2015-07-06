@@ -147,6 +147,22 @@ struct Target {
       return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }
 
+    /** Does this target allow using a certain type. Generally all
+     * types except 64-bit float and int/uint should be supported by
+     * all backends.
+     */
+    bool supports_type(const Type &t) {
+        if (t.width == 64) {
+	    if (t.is_float()) {
+	        return !has_feature(Metal) &&
+		       (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
+	    } else {
+	        return !has_feature(Metal);
+	    }
+	}
+        return true;
+    }
+
     bool operator==(const Target &other) const {
       return os == other.os &&
           arch == other.arch &&
