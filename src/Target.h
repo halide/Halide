@@ -152,14 +152,14 @@ struct Target {
      * all backends.
      */
     bool supports_type(const Type &t) {
-        if (t.width == 64) {
-	    if (t.is_float()) {
-	        return !has_feature(Metal) &&
-		       (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
-	    } else {
-	        return !has_feature(Metal);
-	    }
-	}
+        if (t.bits == 64) {
+            if (t.is_float()) {
+                return !has_feature(Metal) &&
+                       (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
+            } else {
+                return !has_feature(Metal);
+            }
+        }
         return true;
     }
 
