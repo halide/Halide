@@ -70,9 +70,7 @@ int main(int argc, char **argv) {
     // For AOT-compiled code, we need to explicitly declare the
     // arguments to the routine. This routine takes two. Arguments are
     // usually Params or ImageParams.
-    std::vector<Argument> args(2);
-    args[0] = input;
-    args[1] = offset;
+    std::vector<Argument> args = {input, offset};
     brighter.compile_to_file("lesson_10_halide", args);
 
     // If you're using C++11, you can just say:
