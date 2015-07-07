@@ -6,11 +6,11 @@ using namespace Halide;
 
 // Check that assertion failures free allocations appropriately
 
-std::atomic<int> malloc_count = 0;
-std::atomic<int> free_count = 0;
+std::atomic<int> malloc_count;
+std::atomic<int> free_count;
 
 void *my_malloc(void *user_context, size_t x) {
-	malloc_count++;
+    malloc_count++;
     void *orig = malloc(x+32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
@@ -18,8 +18,8 @@ void *my_malloc(void *user_context, size_t x) {
 }
 
 void my_free(void *user_context, void *ptr) {
-	free_count++;
-	free(((void**)ptr)[-1]);
+    free_count++;
+    free(((void**)ptr)[-1]);
 }
 
 bool error_occurred = false;
@@ -30,6 +30,9 @@ void my_error_handler(void *user_context, const char *) {
 int main(int argc, char **argv) {
     Func f, g, h;
     Var x;
+
+    malloc_count = 0;
+    free_count = 0;
 
     f(x) = x;
     f.compute_root();
