@@ -147,19 +147,22 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Ramp *op) {
 
     ostringstream rhs;
     rhs << id_base << " + " << id_stride << " * ("
-        << print_type(op->type.vector_of(op->width)) << ")(0";
+        << print_type(op->type.vector_of(op->width)) << "(0";
     // Note 0 written above.
     for (int i = 1; i < op->width; ++i) {
         rhs << ", " << i;
     }
-    rhs << ")";
+    rhs << "))";
     print_assignment(op->type.vector_of(op->width), rhs.str());
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
 
-    print_assignment(op->type.vector_of(op->width), id_value);
+    ostringstream rhs;
+    rhs << print_type(op->type.vector_of(op->width)) << "(" << id_value << ")";
+
+    print_assignment(op->type.vector_of(op->width), rhs.str());
 }
 
 namespace {
@@ -193,7 +196,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
-	rhs << "*(" << get_memory_space(op->name) << " " << print_type(op->type) << " *)(" << id_ramp_base << ")";
+        rhs << "*(" << get_memory_space(op->name) << " " << print_type(op->type) << " *)(("
+            << get_memory_space(op->name) << " " << print_type(op->type.element_of()) << " *)" << print_name(op->name)
+            << " + " << id_ramp_base << ")";
         print_assignment(op->type, rhs.str());
 
         return;
@@ -257,8 +262,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
         string id_ramp_base = print_expr(ramp_base);
 
         do_indent();
-	stream << "*(" << get_memory_space(op->name) << " " << print_type(t) << " *)(" << id_ramp_base << ") = "
-	       << id_value << ";\n";
+        stream << "*(" << get_memory_space(op->name) << " " << print_type(t) << " *)(("
+               << get_memory_space(op->name) << " " << print_type(t.element_of()) << " *)" << print_name(op->name)
+               << " + " << id_ramp_base << ") = " << id_value << ";\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());

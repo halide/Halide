@@ -8,6 +8,7 @@
 
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
+extern struct ObjectiveCClass _NSConcreteGlobalBlock;
 }
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
@@ -36,6 +37,16 @@ WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
     
 WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue) {
     return (mtl_command_buffer *)objc_msgSend(queue, sel_getUid("commandBuffer"));
+}
+
+WEAK void add_command_buffer_completed_handler(mtl_command_buffer *command_buffer, struct command_buffer_completed_handler_block_literal *handler) {
+    typedef void (*add_completed_handler_method)(objc_id command_buffer, objc_sel sel, struct command_buffer_completed_handler_block_literal *handler);
+    add_completed_handler_method method = (add_completed_handler_method)&objc_msgSend;
+    (*method)(command_buffer, sel_getUid("addCompletedHandler:"), handler);
+}
+
+WEAK objc_id command_buffer_error(mtl_command_buffer *buffer) {
+    return objc_msgSend(buffer, sel_getUid("error"));
 }
 
 WEAK mtl_compute_command_encoder *new_compute_command_encoder(mtl_command_buffer *buffer) {
@@ -276,6 +287,39 @@ public:
         halide_metal_release_context(user_context);
         drain_autorelease_pool(pool);
     }
+};
+
+struct command_buffer_completed_handler_block_descriptor_1 {
+    unsigned long reserved;
+    unsigned long block_size;
+};
+
+struct command_buffer_completed_handler_block_literal {
+    void *isa;
+    int flags;
+    int reserved;
+    void (*invoke)(command_buffer_completed_handler_block_literal *, mtl_command_buffer *buffer);
+    struct command_buffer_completed_handler_block_descriptor_1 *descriptor;
+};
+
+WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_completed_handler_descriptor = {
+    0, sizeof(command_buffer_completed_handler_block_literal)
+};
+
+void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
+  debug(NULL) << "command_buffer_completed_handler_invoke called.\n";
+    objc_id buffer_error = command_buffer_error(buffer);
+    if (buffer_error != NULL) {
+        ns_log_object(buffer_error);
+        release_ns_object(buffer_error);
+    }
+}
+
+WEAK command_buffer_completed_handler_block_literal command_buffer_completed_handler_block = {
+    &_NSConcreteGlobalBlock,
+    (1 << 28) | (1 << 29), // BLOCK_IS_GLOBAL | BLOCK_HAS_DESCRIPTOR
+    0, command_buffer_completed_handler_invoke,
+    &command_buffer_completed_handler_descriptor
 };
 
 }}}} // namespace Halide::Runtime::Internal::Metal
@@ -608,6 +652,8 @@ WEAK int halide_metal_run(void *user_context,
         error(user_context) << "Metal: Could not allocate command buffer.\n";
         return -1;
     }
+
+    add_command_buffer_completed_handler(command_buffer, &command_buffer_completed_handler_block);
 
     mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);
     if (encoder == 0) {
