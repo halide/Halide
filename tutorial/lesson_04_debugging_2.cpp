@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
     // Printing expressions at compile-time.
     {
         // The code above builds up a Halide Expr across several lines
-        // of code. If you're programmatically aconstructing a complex
+        // of code. If you're programmatically constructing a complex
         // expression, and you want to check the Expr you've created
         // is what you think it is, you can also print out the
         // expression itself using C++ streams:
