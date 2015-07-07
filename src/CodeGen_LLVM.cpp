@@ -554,7 +554,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     module->setModuleIdentifier("halide_module_" + name);
     debug(2) << module << "\n";
 
-    internal_assert(!verifyFunction(*function, &llvm::outs()));
+    internal_assert(!verifyFunction(*function));
 
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).

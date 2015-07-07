@@ -229,13 +229,15 @@ foreach ($d in "32_trunk","64_trunk", "32_pnacl") {
     Get-ChildItem . -filter correctness*.exe | ForEach {
       echo ""
       echo $_.Fullname
-      $env:HL_JIT_TARGET = "cuda"
+      $env:HL_JIT_TARGET = "host-cuda"
       &$_.Fullname
       if ($LastExitCode) {
         echo "Test failed with cuda!"
         exit $LastExitCode
       }
-      $env:HL_JIT_TARGET = "opencl"
+      $env:HL_JIT_TARGET = "host-opencl"
+      $env:HL_OCL_PLATFORM_NAME = "Intel"
+      $env:HL_OCL_DEVICE_TYPE = "cpu"
       &$_.Fullname
       if ($LastExitCode) {
         echo "Test failed with opencl!"
