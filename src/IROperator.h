@@ -247,7 +247,9 @@ inline Expr &operator*=(Expr &a, Expr b) {
 }
 
 /** Return the ratio of two expressions, doing any necessary type
- * coercion using \ref Internal::match_types */
+ * coercion using \ref Internal::match_types. Note that signed integer
+ * division in Halide rounds towards minus infinity, unlike C, which
+ * rounds towards zero. */
 inline Expr operator/(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator/ of undefined Expr\n";
     user_assert(!Internal::is_const(b, 0)) << "operator/ with constant 0 divisor\n";
@@ -257,7 +259,9 @@ inline Expr operator/(Expr a, Expr b) {
 
 /** Modify the first expression to be the ratio of two expressions,
  * without changing its type. This casts the second argument to match
- * the type of the first. */
+ * the type of the first. Note that signed integer division in Halide
+ * rounds towards minus infinity, unlike C, which rounds towards
+ * zero. */
 inline Expr &operator/=(Expr &a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator/= of undefined Expr\n";
     user_assert(!Internal::is_const(b, 0)) << "operator/= with constant 0 divisor\n";
@@ -266,7 +270,11 @@ inline Expr &operator/=(Expr &a, Expr b) {
 }
 
 /** Return the first argument reduced modulo the second, doing any
- * necessary type coercion using \ref Internal::match_types */
+ * necessary type coercion using \ref Internal::match_types. For
+ * signed integers, the sign of the result matches the sign of the
+ * second argument (unlike in C, where it matches the sign of the
+ * first argument). For example, this means that x%2 is always either
+ * zero or one, even if x is negative.*/
 inline Expr operator%(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator% of undefined Expr\n";
     user_assert(!Internal::is_const(b, 0)) << "operator% with constant 0 modulus\n";

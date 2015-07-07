@@ -160,7 +160,7 @@ ifneq ($(TEST_OPENCL), )
 OPENCL_LDFLAGS ?= -lOpenCL
 endif
 HOST_OS=linux
-endif	
+endif
 
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
@@ -969,7 +969,7 @@ endif
 
 .PHONY: doc
 docs: doc
-doc: src test
+doc: src
 	doxygen
 
 $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
