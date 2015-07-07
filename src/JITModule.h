@@ -1,7 +1,8 @@
 #ifndef HALIDE_JIT_MODULE_H
 #define HALIDE_JIT_MODULE_H
 
-/** \file Defines the struct representing lifetime and dependencies of
+/** \file
+ * Defines the struct representing lifetime and dependencies of
  * a JIT compiled halide pipeline
  */
 
