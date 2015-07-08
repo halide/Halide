@@ -594,10 +594,8 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define tanh_f32 fast::tanh \n"
                << "#define atanh_f32 fast::atanh \n"
                << "#define fast_inverse_sqrt_f32 fast::rsqrt \n"
-               << "int halide_gpu_thread_barrier() {\n"
-               << "  threadgroup_barrier(mem_flags::mem_device_and_threadgroup);\n" // Halide only ever needs threadgroup (OpenCL "local") memory fences. (mem_threadgroup)
-               << "  return 0;\n"
-               << "}\n"
+               << "#define halide_gpu_thread_barrier() \\\n" // Must to be a #define as barriers in an inline function don't work
+               << "  (threadgroup_barrier(mem_flags::mem_threadgroup), 0)\n" // Halide only ever needs threadgroup (OpenCL "local") memory fences. (mem_threadgroup)
                << "}\n"; // close namespace
 
     // __shared always has address space threadgroup.
