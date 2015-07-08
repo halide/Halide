@@ -4,11 +4,6 @@
 // evaluate pixels in a Func, including vectorization,
 // parallelization, unrolling, and tiling.
 
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_05_scheduling_1
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
-
 // On linux, you can compile and run it like so:
 // g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_05
@@ -16,6 +11,12 @@
 // On os x:
 // g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_05
+
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_05_schedule_1
+// in a shell with the current directory at the top of the halide
+// source tree.
 
 #include "Halide.h"
 #include <stdio.h>
