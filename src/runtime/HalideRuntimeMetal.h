@@ -34,31 +34,31 @@ extern int halide_metal_run(void *user_context,
                             int num_coords_dim1);
 // @}
 
-/** Set the underlying dev_ptr for a buffer_t. This memory should be
- * allocated using clCreateBuffer or similar and must have an extent
- * large enough to cover that specified by the buffer_t extent
- * fields. The dev field of the buffer_t must be NULL when this
+/** Set the underlying MTLBuffer for a buffer_t. This memory should be
+ * allocated using newBufferWithLength:options or similar and must
+ * have an extent large enough to cover that specified by the buffer_t
+ * extent fields. The dev field of the buffer_t must be NULL when this
  * routine is called. This call can fail due to running out of memory
- * or being passed an invalid device pointer. The device and host
- * dirty bits are left unmodified. */
-extern int halide_metal_wrap_dev_ptr(void *user_context, struct buffer_t *buf, uintptr_t device_ptr);
+ * or being passed an invalid buffer. The device and host dirty bits
+ * are left unmodified. */
+extern int halide_metal_wrap_buffer(void *user_context, struct buffer_t *buf, uintptr_t buffer);
 
 /** Disconnect a buffer_t from the memory it was previously wrapped
  * around. Should only be called for a buffer_t that
- * halide_metal_wrap_device_ptr was previously called on. Frees any
- * storage associated with the binding of the buffer_t and the device
- * pointer, but does not free the dev_ptr. The previously wrapped
- * dev_ptr is returned. The dev field of the buffer_t will be NULL on
+ * halide_metal_wrap_buffer was previously called on. Frees any
+ * storage associated with the binding of the buffer_t and the buffer,
+ * but does not free the MTLBuffer. The previously wrapped
+ * buffer is returned. The dev field of the buffer_t will be NULL on
  * return.
  */
-extern uintptr_t halide_metal_detach_dev_ptr(void *user_context, struct buffer_t *buf);
+extern uintptr_t halide_metal_detach_buffer(void *user_context, struct buffer_t *buf);
 
-/** Return the underlying dev_ptr for a buffer_t. This buffer must be
+/** Return the underlying MTLBuffer for a buffer_t. This buffer must be
  *  valid on an Metal device, or not have any associated device
  *  memory. If there is no device memory (dev field is NULL), this
  *  returns 0.
  */
-extern uintptr_t halide_metal_get_dev_ptr(void *user_context, struct buffer_t *buf);
+extern uintptr_t halide_metal_get_buffer(void *user_context, struct buffer_t *buf);
 
 #ifdef __cplusplus
 } // End extern "C"
