@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         // reading out of bounds:
         Func clamped("clamped");
 
-        // Define an expression that clamps x to lie within the the
+        // Define an expression that clamps x to lie within the
         // range [0, input.width()-1].
         Expr clamped_x = clamp(x, 0, input.width()-1);
         // Similarly clamp y.
