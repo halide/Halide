@@ -2,11 +2,6 @@
 
 // This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
 
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_01_basics
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
-
 // On linux, you can compile and run it like so:
 // g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_01 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_01
@@ -14,6 +9,12 @@
 // On os x:
 // g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -o lesson_01 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_01
+
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_01_basics
+// in a shell with the current directory at the top of the halide
+// source tree.
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include "Halide.h"

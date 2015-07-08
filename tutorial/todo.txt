@@ -1,5 +1,4 @@
 - debug_to_file
-- print, print_when
 - the bounds query interface
 - multi-output pipelines
 - overriding the runtime
@@ -10,4 +9,3 @@
 - specialize
 - parallel reductions
 - constraints
-
