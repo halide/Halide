@@ -123,17 +123,23 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     wild_u16(Variable::make(UInt(16), "*")) {
   bool B128 = t.has_feature(Halide::Target::HVX_DOUBLE);
   casts.push_back(Pattern(cast(UInt(16, CPICK(128,64)),
-                                        WPICK(wild_u8x128,wild_u8x64)),
-                                        IPICK(Intrinsic::hexagon_V6_vzb)));
-  casts.push_back(Pattern(cast(UInt(32, CPICK(64,32)),
-                                        WPICK(wild_u16x64,wild_u16x32)),
-                                        IPICK(Intrinsic::hexagon_V6_vzh)));
+                               WPICK(wild_u8x128,wild_u8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vzb)));
   casts.push_back(Pattern(cast(Int(16, CPICK(128,64)),
-                                       WPICK(wild_i8x128,wild_i8x64)),
-                                       IPICK(Intrinsic::hexagon_V6_vsb)));
+                               WPICK(wild_u8x128,wild_u8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vzb)));
+  casts.push_back(Pattern(cast(UInt(32, CPICK(64,32)),
+                               WPICK(wild_u16x64,wild_u16x32)),
+                          IPICK(Intrinsic::hexagon_V6_vzh)));
   casts.push_back(Pattern(cast(Int(32, CPICK(64,32)),
-                                       WPICK(wild_i16x64,wild_i16x32)),
-                                       IPICK(Intrinsic::hexagon_V6_vsh)));
+                               WPICK(wild_u16x64,wild_u16x32)),
+                          IPICK(Intrinsic::hexagon_V6_vzh)));
+  casts.push_back(Pattern(cast(Int(16, CPICK(128,64)),
+                               WPICK(wild_i8x128,wild_i8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vsb)));
+  casts.push_back(Pattern(cast(Int(32, CPICK(64,32)),
+                               WPICK(wild_i16x64,wild_i16x32)),
+                          IPICK(Intrinsic::hexagon_V6_vsh)));
 
   // "shift_left (x, 8)" is converted to x*256 by Simplify.cpp
   combiners.push_back(
