@@ -306,7 +306,7 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
     0, sizeof(command_buffer_completed_handler_block_literal)
 };
 
-void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
+WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
     objc_id buffer_error = command_buffer_error(buffer);
     if (buffer_error != NULL) {
         ns_log_object(buffer_error);
