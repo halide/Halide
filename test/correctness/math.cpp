@@ -15,18 +15,23 @@ bool relatively_equal(value_t a, value_t b) {
         double relative_error;
 
         // This test seems a bit high.
-        if (fabs(db - da) < .0001)
-          return true;
+        if (fabs(db - da) < .0001) {
+            return true;
+        }
 
-        if (fabs(da) > fabs(db))
+        if (fabs(da) > fabs(db)) {
             relative_error = fabs((db - da) / da);
-        else
+        } else {
             relative_error = fabs((db - da) / db);
+        }
 
-        if (relative_error < .0000005)
-          return true;
-        std::cerr << "relatively_equal failed for (" << a << ", " << b <<
-          ") with relative error " << relative_error << std::endl;
+        if (relative_error < .000001) {
+            return true;
+        }
+
+        std::cerr
+            << "relatively_equal failed for (" << a << ", " << b
+            << ") with relative error " << relative_error << std::endl;
     } else {
         std::cerr << "relatively_equal failed for (" << (double)a << ", " << (double)b << ")" << std::endl;
     }
