@@ -9,11 +9,6 @@
 // to actually run the pipeline. This means that compiling this code
 // is a multi-step process.
 
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_10_aot_compilation_run
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
-
 // On linux, you can compile and run it like so:
 // g++ lesson_10*generate.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_10_generate
 // LD_LIBRARY_PATH=../bin ./lesson_10_generate
@@ -29,6 +24,12 @@
 // The benefits of this approach are that the final program:
 // - Doesn't do any jit compilation at runtime, so it's fast.
 // - Doesn't depend on libHalide at all, so it's a small, easy-to-deploy binary.
+
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_10_aot_compilation_run
+// in a shell with the current directory at the top of the halide
+// source tree.
 
 #include "Halide.h"
 #include <stdio.h>
