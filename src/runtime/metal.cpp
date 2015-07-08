@@ -123,7 +123,7 @@ WEAK mtl_library *new_library_with_source(mtl_device *device, const char *source
     options = objc_msgSend(options, sel_getUid("init"));
     typedef void (*set_fast_math_method)(objc_id options, objc_sel sel, uint8_t flag);
     set_fast_math_method method1 = (set_fast_math_method)&objc_msgSend;
-    (*method1)(options, sel_getUid("setFastMathEnabled:"), true);
+    (*method1)(options, sel_getUid("setFastMathEnabled:"), false);
 
     typedef mtl_library *(*new_library_with_source_method)(objc_id device, objc_sel sel, objc_id source, objc_id options, objc_id *error_return);
     new_library_with_source_method method2 = (new_library_with_source_method)&objc_msgSend;

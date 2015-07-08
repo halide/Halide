@@ -66,6 +66,8 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Image<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
         for (int i = 0; i < in_buf->extent[0]; i++) {                         \
           type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]);  \
+	  if (!relatively_equal(c_result, result(i)))			\
+	    printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)reinterpret_cast<type *>(in_buf->host)[i], (double)c_result, (double)result(i)); \
           assert(relatively_equal(c_result, result(i)) &&                     \
                  "Failure on function " #name);                               \
         }                                                                     \
