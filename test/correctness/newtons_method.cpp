@@ -73,10 +73,11 @@ int main(int argc, char **argv) {
     if (result != 0)
         return result;
 
-    // Test in float.
-    result = find_pi<double>();
-    if (result != 0)
-        return result;
+    if (get_jit_target_from_environment().supports_type(type_of<double>())) {
+        result = find_pi<double>();
+        if (result != 0)
+            return result;
+    }
 
     printf("Success!\n");
     return 0;

@@ -16,7 +16,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 objc_id create_autorelease_pool() {
     objc_id pool =
       objc_msgSend(objc_msgSend(objc_getClass("NSAutoreleasePool"),
-				sel_getUid("alloc")), sel_getUid("init"));
+                                sel_getUid("alloc")), sel_getUid("init"));
     return pool;
 }
 
@@ -33,7 +33,7 @@ objc_id wrap_string_as_ns_string(const char *string, size_t length) {
     objc_id ns_string = objc_msgSend(objc_getClass("NSString"), sel_getUid("alloc"));
     init_with_bytes_no_copy_method method = (init_with_bytes_no_copy_method)&objc_msgSend;
     return (*method)(ns_string, sel_getUid("initWithBytesNoCopy:length:encoding:freeWhenDone:"),
-		     string, length, 4, 0);
+                     string, length, 4, 0);
 }
 
 extern "C" size_t strlen(const char *string);
