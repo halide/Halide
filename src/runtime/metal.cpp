@@ -738,16 +738,37 @@ WEAK int halide_metal_run(void *user_context,
     return 0;
 }
 
-#if 0 // TODO: get naming right
-WEAK int halide_metal_wrap_cl_mem(void *user_context, struct buffer_t *buf, uintptr_t mem) {
+WEAK int halide_metal_wrap_buffer(void *user_context, struct buffer_t *buf, uintptr_t buffer) {
+    halide_assert(user_context, buf->dev == 0);
+    if (buf->dev != 0) {
+        return -2;
+    }
+    buf->dev = halide_new_device_wrapper(buffer, &metal_device_interface);
+    if (buf->dev == 0) {
+        return -1;
+    }
+    return 0;
 }
 
-WEAK uintptr_t halide_metal_detach_cl_mem(void *user_context, struct buffer_t *buf) {
+WEAK uintptr_t halide_metal_detach_buffer(void *user_context, struct buffer_t *buf) {
+    if (buf->dev == NULL) {
+        return 0;
+    }
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &metal_device_interface);
+    uint64_t buffer = halide_get_device_handle(buf->dev);
+    halide_delete_device_wrapper(buf->dev);
+    buf->dev = 0;
+    return (uintptr_t)buffer;
 }
 
-WEAK uintptr_t halide_metal_get_cl_mem(void *user_context, struct buffer_t *buf) {
+WEAK uintptr_t halide_metal_get_buffer(void *user_context, struct buffer_t *buf) {
+    if (buf->dev == NULL) {
+        return 0;
+    }
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &metal_device_interface);
+    uint64_t buffer = halide_get_device_handle(buf->dev);
+    return (uintptr_t)buffer;
 }
-#endif
 
 WEAK const struct halide_device_interface *halide_metal_device_interface() {
     return &metal_device_interface;

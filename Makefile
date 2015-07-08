@@ -131,7 +131,7 @@ ifeq ($(UNAME), Linux)
 OPENGL_LDFLAGS = -lX11 -lGL
 endif
 ifeq ($(UNAME), Darwin)
-LLVM_LDFLAGS += -framework Foundation -framework Metal
+#LLVM_LDFLAGS += -framework Foundation -framework Metal
 OPENGL_LDFLAGS = -framework OpenGL -framework AGL
 endif
 endif
