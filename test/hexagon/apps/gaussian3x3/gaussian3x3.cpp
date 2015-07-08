@@ -2,6 +2,8 @@
 #include "halide-hexagon-setup.h"
 #include <stdio.h>
 using namespace Halide;
+using namespace Halide::Internal;
+IRPrinter irp(std::cerr);
 
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
@@ -22,7 +24,7 @@ void test_gaussian3x3(Target& target) {
   Func input_16("input_16");
   Func clamped_input = BoundaryConditions::constant_exterior(input, 0);
   clamped_input.compute_root();
-  input_16(x, y) = cast<uint16_t>(clamped_input(x, y));
+  input_16(x, y) = cast<int16_t>(clamped_input(x, y));
 
   /* EJP: note that there's some overlap between max and min and mid.
    * Does the compiler pick this up automatically, or do we need to tweak the code?

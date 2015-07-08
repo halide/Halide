@@ -36,9 +36,13 @@ extern llvm::cl::opt<bool> ReserveR9;
 #define WPICK(w128, w64) (B128 ? w128 : w64)
 #define IPICK(i64) (B128 ? i64##_128B : i64)
 #define UINT_8_MAX UInt(8).imax()
+#define UINT_8_MIN UInt(8).imin()
 #define UINT_16_MAX UInt(16).imax()
+#define UINT_16_MIN UInt(16).imin()
 #define INT_8_MAX Int(8).imax()
+#define INT_8_MIN Int(8).imin()
 #define INT_16_MAX Int(16).imax()
+#define INT_16_MIN Int(16).imin()
 
 namespace Halide {
 namespace Internal {
@@ -93,6 +97,10 @@ Expr bitwiseNot(Expr A) {
 }
 Expr shiftLeft(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_left, {A, B},
+                              Internal::Call::Intrinsic);
+}
+Expr shiftRight(Expr A, Expr B) {
+  return Internal::Call::make(A.type(), Internal::Call::shift_right, {A, B},
                               Internal::Call::Intrinsic);
 }
 Expr u8_(Expr E) {
@@ -1266,7 +1274,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
                                  IPICK(Intrinsic::hexagon_V6_vsathub)));
     SatAndPack.push_back(Pattern(u8_(min(WPICK(wild_i16x128, wild_i16x64),
                                          255)),
-                                 Intrinsic::hexagon_V6_vsathub));
+                                 IPICK(Intrinsic::hexagon_V6_vsathub)));
     matches.clear();
     for (size_t I = 0; I < SatAndPack.size(); ++I) {
       const Pattern &P = SatAndPack[I];
@@ -1279,6 +1287,89 @@ void CodeGen_Hexagon::visit(const Cast *op) {
           CallLLVMIntrinsic(Intrinsic::getDeclaration(module,ID), Ops);
         value = convertValueType(SatAndPackInst, llvm_type_of(op->type));
         return;
+      }
+    }
+    matches.clear();
+    SatAndPack.clear();
+    int WrdsInVP  = 2 * (native_vector_bits() / 32);
+    int HWrdsInVP = WrdsInVP * 2 ;
+    SatAndPack.push_back(Pattern(u8_(max(min(WPICK(wild_i16x128, wild_i16x64)
+                                             >> Broadcast::make(wild_i16,
+                                                                HWrdsInVP),
+                                             UINT_8_MAX), UINT_8_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrhubsat)));
+    SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_i16x128, wild_i16x64)
+                                             >> Broadcast::make(wild_i16,
+                                                                HWrdsInVP),
+                                             INT_8_MAX), INT_8_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrhbrndsat)));
+    SatAndPack.push_back(Pattern(i16_(max(min(WPICK(wild_i32x64, wild_i32x32)
+                                              >> Broadcast::make(wild_i32,
+                                                                 WrdsInVP),
+                                              INT_16_MAX), INT_16_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrwhsat)));
+    SatAndPack.push_back(Pattern(u16_(max(min(WPICK(wild_i32x64, wild_i32x32)
+                                              >> Broadcast::make(wild_i32,
+                                                                 WrdsInVP),
+                                              UINT_16_MAX), UINT_16_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrwuhsat)));
+
+    for (size_t I = 0; I < SatAndPack.size(); ++I) {
+      const Pattern &P = SatAndPack[I];
+      if (expr_match(P.pattern, op, matches)) {
+        std::vector<Value *> Ops;
+        Intrinsic::ID IntrinsID = P.ID;
+        Value *DoubleVector = codegen(matches[0]);
+        Value *ShiftOperand = codegen(matches[1]);
+        getHighAndLowVectors(DoubleVector, Ops);
+        Ops.push_back(ShiftOperand);
+        Value *SatAndPackInst =
+          CallLLVMIntrinsic(Intrinsic::getDeclaration(module, IntrinsID), Ops);
+        value = convertValueType(SatAndPackInst, llvm_type_of(op->type));
+        return;
+      }
+    }
+    // when saturating a signed value to an unsigned value, we see "max"
+    // unlike saturating an unsinged value to a smaller unsinged value when
+    // the max(Expr, 0) part is redundant.
+    SatAndPack.push_back(Pattern(u8_(max(min(WPICK(wild_i16x128, wild_i16x64)
+                                             / Broadcast::make(wild_i16,
+                                                               HWrdsInVP),
+                                             UINT_8_MAX), UINT_8_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrhubsat)));
+    SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_i16x128, wild_i16x64)
+                                             / Broadcast::make(wild_i16,
+                                                               HWrdsInVP),
+                                             INT_8_MAX), INT_8_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrhbrndsat)));
+    SatAndPack.push_back(Pattern(i16_(max(min(WPICK(wild_i32x64, wild_i32x32)
+                                              / Broadcast::make(wild_i32,
+                                                                WrdsInVP),
+                                              INT_16_MAX), INT_16_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrwhsat)));
+    SatAndPack.push_back(Pattern(u16_(max(min(WPICK(wild_i32x64, wild_i32x32)
+                                              / Broadcast::make(wild_i32,
+                                                                WrdsInVP),
+                                              UINT_16_MAX), UINT_16_MIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vasrwuhsat)));
+
+    for (size_t I = 0; I < SatAndPack.size(); ++I) {
+      const Pattern &P = SatAndPack[I];
+      if (expr_match(P.pattern, op, matches)) {
+          int rt_shift_by = 0;
+          if (is_const_power_of_two_integer(matches[1], &rt_shift_by)) {
+            Value *DoubleVector = codegen(matches[0]);
+            Value *ShiftBy = codegen(rt_shift_by);
+            Intrinsic::ID IntrinsID = P.ID;
+            std::vector<Value *> Ops;
+            getHighAndLowVectors(DoubleVector, Ops);
+            Ops.push_back(ShiftBy);
+            Value *Result =
+              CallLLVMIntrinsic(Intrinsic::getDeclaration(module, IntrinsID),
+                                Ops);
+            value = convertValueType(Result, llvm_type_of(op->type));
+            return;
+          }
       }
     }
   }
