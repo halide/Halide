@@ -524,9 +524,9 @@ endif()
 # long time. Instead, since we add the libs to the extra.LinkFileList passed to
 # Xcode below it is not necessary to pass them to target_link_libraries as well.
 if (XCODE)
-  target_link_libraries(Halide INTERFACE InitialModules)
+  target_link_libraries(Halide PUBLIC  InitialModules)
 else()
-  target_link_libraries(Halide INTERFACE InitialModules ${LIBS})
+  target_link_libraries(Halide PUBLIC InitialModules ${LIBS})
 endif()
 
 if (NOT WIN32)
