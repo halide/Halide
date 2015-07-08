@@ -307,7 +307,6 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
 };
 
 void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
-  debug(NULL) << "command_buffer_completed_handler_invoke called.\n";
     objc_id buffer_error = command_buffer_error(buffer);
     if (buffer_error != NULL) {
         ns_log_object(buffer_error);
@@ -435,7 +434,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
         uint64_t t_before_compile = halide_current_time_ns(user_context);
         #endif
 
-        debug(user_context) << "Metal - Allocating: new_library_with_source" << (*state)->library << "\n";
+        debug(user_context) << "Metal - Allocating: new_library_with_source " << (*state)->library << "\n";
         (*state)->library = new_library_with_source(metal_context.device, source, source_size);
         if ((*state)->library == 0) {
             error(user_context) << "Metal: new_library_with_source failed.\n";
@@ -639,8 +638,9 @@ WEAK int halide_metal_run(void *user_context,
                            float* vertex_buffer,
                            int num_coords_dim0,
                            int num_coords_dim1) {
-    // Buy an autorelease pool because this is not perf critical and it is the
-    // really safe thing to do.
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
 
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
@@ -652,8 +652,6 @@ WEAK int halide_metal_run(void *user_context,
         error(user_context) << "Metal: Could not allocate command buffer.\n";
         return -1;
     }
-
-    add_command_buffer_completed_handler(command_buffer, &command_buffer_completed_handler_block);
 
     mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);
     if (encoder == 0) {
@@ -730,10 +728,17 @@ WEAK int halide_metal_run(void *user_context,
                           threadsX, threadsY, threadsZ);
     end_encoding(encoder);
 
+    add_command_buffer_completed_handler(command_buffer, &command_buffer_completed_handler_block);
+
     commit_command_buffer(command_buffer);
 
     release_ns_object(pipeline_state);
     release_ns_object(function);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "Time for halide_metal_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
 
     return 0;
 }
