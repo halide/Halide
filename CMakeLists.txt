@@ -66,7 +66,6 @@ if (LLVM_VERSION LESS 35)
   message(FATAL_ERROR "LLVM version must be 3.5 or newer")
 endif()
 
-
 option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ON)
 option(TARGET_ARM "Include ARM target" ON)
@@ -85,12 +84,13 @@ endif()
 set (PROJECT_LIBS )
 if (WIN32)
   list(APPEND PROJECT_LIBS Kernel32)
-  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996 /wd4305 /wd4146")
+  # FIXME: It isn't clear what target these warnings are meant for.
+  add_definitions("/wd4305 /wd4146")
 endif()
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
-  target_link_libraries("${name}" Halide ${PROJECT_LIBS})
+  target_link_libraries("${name}" PRIVATE Halide ${PROJECT_LIBS})
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (WIN32)
     set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")

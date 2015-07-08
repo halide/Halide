@@ -1,30 +1,13 @@
-include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
 
 add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
-
 if (MSVC)
-  # Suppress some warnings
-  add_definitions("-D_CRT_SECURE_NO_WARNINGS")
-  add_definitions("-D_SCL_SECURE_NO_WARNINGS")
-  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
-
-  # To compile LLVM headers following was taken from LLVM CMake files:
-  # Disable sized deallocation if the flag is supported. MSVC fails to compile
-  # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
-  check_c_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
-  if (SUPPORTS_SIZED_DEALLOC)
-    add_definitions("/Zc:sizedDealloc-")
-  endif()
 else()
-  add_definitions("-D__STDC_LIMIT_MACROS")
-  add_definitions("-D__STDC_CONSTANT_MACROS")
-  add_definitions("-std=c++11")
-  add_definitions("-fno-rtti")
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
@@ -34,9 +17,6 @@ if (HALIDE_SHARED_LIBRARY)
 else()
   set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
-
-include_directories ( "${LLVM_INCLUDE}")
-link_directories ("${LLVM_LIB}")
 
 set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(WIN32)
@@ -48,39 +28,6 @@ else()
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
 
-if (TARGET_NATIVE_CLIENT)
-  add_definitions("-DWITH_NATIVE_CLIENT")
-endif()
-
-if (TARGET_X86)
-  add_definitions("-DWITH_X86")
-endif()
-
-if (TARGET_ARM)
-  add_definitions("-DWITH_ARM")
-endif()
-
-if (TARGET_AARCH64)
-  add_definitions("-DWITH_AARCH64")
-endif()
-
-if (TARGET_PTX)
-  add_definitions("-DWITH_PTX")
-endif()
-
-if (TARGET_OPENCL)
-  add_definitions("-DWITH_OPENCL")
-endif()
-
-if (TARGET_OPENGL)
-  add_definitions("-DWITH_OPENGL")
-endif()
-
-if (TARGET_MIPS)
-  add_definitions("-DWITH_MIPS")
-endif()
-
-add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
 
 set(RUNTIME_CPP
   android_clock
@@ -497,14 +444,89 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
 )
 
+# Set definitions and compiler flags
+
+# Note when PUBLIC or INTERFACE scope is used in target_compile_* then targets
+# that link against the Halide library inherit those options and definitions
+target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
+target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
+
+if (TARGET_NATIVE_CLIENT)
+  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_NATIVE_CLIENT")
+endif()
+
+if (TARGET_X86)
+  target_compile_definitions(Halide PRIVATE "-DWITH_X86")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_X86")
+endif()
+
+if (TARGET_ARM)
+  target_compile_definitions(Halide PRIVATE "-DWITH_ARM")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_ARM")
+endif()
+
+if (TARGET_AARCH64)
+  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_AARCH64")
+endif()
+
+if (TARGET_PTX)
+  add_definitions("-DWITH_PTX")
+  target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_PTX")
+endif()
+
+if (TARGET_OPENCL)
+  add_definitions("-DWITH_OPENCL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_OPENCL")
+endif()
+
+if (TARGET_OPENGL)
+  add_definitions("-DWITH_OPENGL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_OPENGL")
+endif()
+
+if (TARGET_MIPS)
+  add_definitions("-DWITH_MIPS")
+  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
+  target_compile_definitions(InitialModules PRIVATE "-DWITH_MIPS")
+endif()
+
+target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
+target_compile_definitions(InitialModules PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
+
+if (MSVC)
+  # Suppress some warnings
+  target_compile_options(Halide PUBLIC /wd4244 /wd4267 /wd4800 /wd4996)
+  target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
+  # To compile LLVM headers following was taken from LLVM CMake files:
+  # Disable sized deallocation if the flag is supported. MSVC fails to compile
+  # the operator new overload in LLVM/IR/Function.h and Instruction.h otherwise.
+  # See LLVM PR: 23513 (https://llvm.org/bugs/show_bug.cgi?id=23513)
+  check_cxx_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
+  if (SUPPORTS_SIZED_DEALLOC)
+    target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
+  endif()
+else()
+  # I'm not sure if we want targets that link against Halide to inherit
+  # the LLVM definitions so make the scope PRIVATE for now.
+  # FIXME: These defines should come from ``llvm-config --cppflags``
+  target_compile_definitions(Halide PRIVATE "-D__STDC_LIMIT_MACROS" "-D__STDC_CONSTANT_MACROS" "-D__STDC_FORMAT_MACROS")
+  target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
+  target_compile_options(Halide PUBLIC "-fno-rtti")
+endif()
+
 # CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
 # to target_link_libraries. This makes the CMake generation step take a very
 # long time. Instead, since we add the libs to the extra.LinkFileList passed to
 # Xcode below it is not necessary to pass them to target_link_libraries as well.
 if (XCODE)
-  target_link_libraries(Halide InitialModules)
+  target_link_libraries(Halide INTERFACE InitialModules)
 else()
-  target_link_libraries(Halide InitialModules ${LIBS})
+  target_link_libraries(Halide INTERFACE InitialModules ${LIBS})
 endif()
 
 if (NOT WIN32)
@@ -517,7 +539,7 @@ if (NOT WIN32)
   string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
-  target_link_libraries(Halide ${EXTRA_LIBS})
+  target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
 endif()
 
 if (NOT HALIDE_SHARED_LIBRARY)
