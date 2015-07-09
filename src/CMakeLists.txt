@@ -452,57 +452,48 @@ target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
 
 if (TARGET_NATIVE_CLIENT)
   target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_NATIVE_CLIENT")
 endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
 if (TARGET_X86)
   target_compile_definitions(Halide PRIVATE "-DWITH_X86")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_X86")
   list(APPEND LLVM_COMPONENTS x86)
 endif()
 
 if (TARGET_ARM)
   target_compile_definitions(Halide PRIVATE "-DWITH_ARM")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_ARM")
   list(APPEND LLVM_COMPONENTS arm)
 endif()
 
 if (TARGET_AARCH64)
   target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_AARCH64")
   list(APPEND LLVM_COMPONENTS aarch64)
 endif()
 
 if (TARGET_PTX)
   add_definitions("-DWITH_PTX")
   target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_PTX")
   list(APPEND LLVM_COMPONENTS nvptx)
 endif()
 
 if (TARGET_OPENCL)
   add_definitions("-DWITH_OPENCL")
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_OPENCL")
 endif()
 
 if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL")
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_OPENGL")
 endif()
 
 if (TARGET_MIPS)
   add_definitions("-DWITH_MIPS")
   target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
-  target_compile_definitions(InitialModules PRIVATE "-DWITH_MIPS")
   list(APPEND LLVM_COMPONENTS mips)
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
-target_compile_definitions(InitialModules PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 
 if (MSVC)
   # Suppress some warnings
