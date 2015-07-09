@@ -65,6 +65,8 @@ struct Target {
 
         Matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
+        NoRuntime, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
