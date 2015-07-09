@@ -120,8 +120,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     } else {
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
-        malloc_fn->setDoesNotAlias(0);
         internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
+        malloc_fn->setDoesNotAlias(0);
 
         llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *

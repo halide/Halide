@@ -465,6 +465,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_thread_pool \
   renderscript \
+  runtime_api \
   ssp \
   to_string \
   tracing \
@@ -762,17 +763,24 @@ $(FILTERS_DIR)/tiled_blur.generator: test/generator/tiled_blur_blur_generator.cp
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
 $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
 
-# Usually, it's considered best practice to have one Generator per .cpp file,
-# with the generator-name and filename matching; nested_externs_generators.cpp
-# is a counterexample, and thus requires some special casing to get right.
-# First, make a special rule to build each of the Generators in nested_externs_generator.cpp
-# (which all have the form nested_externs_*)
+# Usually, it's considered best practice to have one Generator per
+# .cpp file, with the generator-name and filename matching;
+# nested_externs_generators.cpp is a counterexample, and thus requires
+# some special casing to get right.  First, make a special rule to
+# build each of the Generators in nested_externs_generator.cpp (which
+# all have the form nested_externs_*). We'll build them without
+# including the Halide runtime in each, to also test that
+# functionality.
 $(FILTERS_DIR)/nested_externs_%.o $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_DIR)/nested_externs.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -g nested_externs_$* -o ../$(FILTERS_DIR) target=$(HL_TARGET)
+	cd tmp; $(LD_PATH_SETUP) ../$< -g nested_externs_$* -o ../$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
+
+$(FILTERS_DIR)/nested_externs_runtime.o: $(FILTERS_DIR)/nested_externs.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -r nested_externs_runtime.o -o ../$(FILTERS_DIR) target=$(HL_TARGET)
 
 # Synthesize 'nested_externs.o' based on the four generator products we need:
-$(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o
+$(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o $(FILTERS_DIR)/nested_externs_runtime.o
 	$(LD) -r $(FILTERS_DIR)/nested_externs_*.o -o $(FILTERS_DIR)/nested_externs.o
 
 # Synthesize 'nested_externs.h' based on the four generator products we need:

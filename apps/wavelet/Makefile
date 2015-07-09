@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-HL_MODULES = daubechies_x.o inverse_daubechies_x.o haar_x.o inverse_haar_x.o
+HL_MODULES = daubechies_x.o inverse_daubechies_x.o haar_x.o inverse_haar_x.o halide_runtime.o
 
 all: filter
 
