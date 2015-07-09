@@ -18,17 +18,6 @@ else()
   set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
 
-set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
-if(WIN32)
-  file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
-else()
-  #file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/libLLVM*.a")
-  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles OUTPUT_VARIABLE LIBS_UNSTRIPPED)
-  string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
-  string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
-endif()
-
-
 set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
@@ -444,6 +433,16 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
 )
 
+# List of LLVM Components required
+# This list will be appended to depending on the targets we need to support
+# See the output of ``llvm-config --components`` for a list of possible components
+set(LLVM_COMPONENTS mcjit;bitwriter;linker)
+if (LLVM_VERSION GREATER 36)
+  list(APPEND LLVM_COMPONENTS passes)
+else()
+  list(APPEND LLVM_COMPONENTS ipo)
+endif()
+
 # Set definitions and compiler flags
 
 # Note when PUBLIC or INTERFACE scope is used in target_compile_* then targets
@@ -456,25 +455,31 @@ if (TARGET_NATIVE_CLIENT)
   target_compile_definitions(InitialModules PRIVATE "-DWITH_NATIVE_CLIENT")
 endif()
 
+# TODO: For targets we can link against even fewer libraries by specifying
+# only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
 if (TARGET_X86)
   target_compile_definitions(Halide PRIVATE "-DWITH_X86")
   target_compile_definitions(InitialModules PRIVATE "-DWITH_X86")
+  list(APPEND LLVM_COMPONENTS x86)
 endif()
 
 if (TARGET_ARM)
   target_compile_definitions(Halide PRIVATE "-DWITH_ARM")
   target_compile_definitions(InitialModules PRIVATE "-DWITH_ARM")
+  list(APPEND LLVM_COMPONENTS arm)
 endif()
 
 if (TARGET_AARCH64)
   target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
   target_compile_definitions(InitialModules PRIVATE "-DWITH_AARCH64")
+  list(APPEND LLVM_COMPONENTS aarch64)
 endif()
 
 if (TARGET_PTX)
   add_definitions("-DWITH_PTX")
   target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
   target_compile_definitions(InitialModules PRIVATE "-DWITH_PTX")
+  list(APPEND LLVM_COMPONENTS nvptx)
 endif()
 
 if (TARGET_OPENCL)
@@ -493,6 +498,7 @@ if (TARGET_MIPS)
   add_definitions("-DWITH_MIPS")
   target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
   target_compile_definitions(InitialModules PRIVATE "-DWITH_MIPS")
+  list(APPEND LLVM_COMPONENTS mips)
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
@@ -519,13 +525,23 @@ else()
   target_compile_options(Halide PUBLIC "-fno-rtti")
 endif()
 
+# Get the LLVM libraries we need
+set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
+if(WIN32)
+  file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
+else()
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
+  string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
+  string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
+endif()
+
 target_link_libraries(Halide PUBLIC InitialModules ${LIBS})
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
-    execute_process(COMMAND "${LLVM_CONFIG}" --system-libs OUTPUT_VARIABLE EXTRA_LIBS)
+    execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   else()
-    execute_process(COMMAND "${LLVM_CONFIG}" --ldflags OUTPUT_VARIABLE EXTRA_LIBS)
+    execute_process(COMMAND "${LLVM_CONFIG}" --ldflags ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   endif()
   string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
