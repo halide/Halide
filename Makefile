@@ -469,6 +469,8 @@ RUNTIME_CPP_COMPONENTS = \
   matlab \
   metadata \
   metal \
+  metal_objc_arm \
+  metal_objc_x86 \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \

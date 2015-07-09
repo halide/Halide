@@ -6,6 +6,8 @@
 #include "cuda_opencl_shared.h"
 #include "objc_support.h"
 
+#include "metal_objc_platform_dependent.h"
+
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
 extern struct ObjectiveCClass _NSConcreteGlobalBlock;
@@ -163,32 +165,6 @@ WEAK void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, ui
     set_threadgroup_memory_length_method method = (set_threadgroup_memory_length_method)&objc_msgSend;
     (*method)(encoder, sel_getUid("setThreadgroupMemoryLength:atIndex:"),
               length, index);
-}
-
-struct MTLSize {
-    unsigned long width;
-    unsigned long height;
-    unsigned long depth;
-};
-
-WEAK void dispatch_threadgroups(mtl_compute_command_encoder *encoder,
-                                int32_t blocks_x, int32_t blocks_y, int32_t blocks_z,
-                                int32_t threads_x, int32_t threads_y, int32_t threads_z) {
-    MTLSize threadgroupsPerGrid;
-    threadgroupsPerGrid.width = blocks_x;
-    threadgroupsPerGrid.height = blocks_y;
-    threadgroupsPerGrid.depth = blocks_z;
-
-    MTLSize threadsPerThreadgroup;
-    threadsPerThreadgroup.width = threads_x;
-    threadsPerThreadgroup.height = threads_y;
-    threadsPerThreadgroup.depth = threads_z;
-
-    typedef void (*dispatch_threadgroups_method)(objc_id encoder, objc_sel sel,
-                                                  MTLSize threadgroupsPerGrid, MTLSize threadsPerThreadgroup);
-    dispatch_threadgroups_method method = (dispatch_threadgroups_method)&objc_msgSend;
-    (*method)(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
-              threadgroupsPerGrid, threadsPerThreadgroup);
 }
 
 WEAK void commit_command_buffer(mtl_command_buffer *buffer) {
