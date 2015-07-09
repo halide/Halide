@@ -119,6 +119,12 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(metal)
+#ifdef WITH_ARM
+DECLARE_CPP_INITMOD(metal_objc_arm)
+#endif
+#ifdef WITH_X86
+DECLARE_CPP_INITMOD(metal_objc_x86)
+#endif
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -674,6 +680,13 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_renderscript(c, bits_64, debug));
         } else if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
+            if (t.arch == Target::ARM) {
+                modules.push_back(get_initmod_metal_objc_arm(c, bits_64, debug));
+            } else if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_metal_objc_x86(c, bits_64, debug));
+            } else {
+                user_error << "Metal can only be used on ARM or X86 architectures.\n";
+            }
         }
     }
 
