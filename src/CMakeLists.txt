@@ -528,7 +528,7 @@ endif()
 # Get the LLVM libraries we need
 set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(WIN32)
-  file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
+  file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
   execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
   string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
