@@ -1,6 +1,4 @@
-// Halide tutorial lesson 9
-
-// This lesson demonstrates how to define a Func in multiple passes, including scattering.
+// Halide tutorial lesson 9: Multi-pass Funcs, update definitions, and reductions
 
 // On linux, you can compile and run it like so:
 // g++ lesson_09*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09

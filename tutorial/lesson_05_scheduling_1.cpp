@@ -1,4 +1,4 @@
-// Halide tutorial lesson 5
+// Halide tutorial lesson 5: Vectorize, parallelize, unroll and tile your code
 
 // This lesson demonstrates how to manipulate the order in which you
 // evaluate pixels in a Func, including vectorization,

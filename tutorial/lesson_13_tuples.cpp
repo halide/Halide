@@ -1,4 +1,4 @@
-// Halide tutorial lesson 13.
+// Halide tutorial lesson 13: Tuples
 
 // This lesson describes how to write Funcs that evaluate to multiple
 // values.

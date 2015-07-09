@@ -1,4 +1,4 @@
-// Halide tutorial lesson 3
+// Halide tutorial lesson 3: Inspecting the generated code
 
 // This lesson demonstrates how to inspect what the Halide compiler is producing.
 

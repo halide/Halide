@@ -1,6 +1,4 @@
-// Halide tutorial lesson 7
-
-// This lesson demonstrates how express multi-stage pipelines.
+// Halide tutorial lesson 7: Multi-stage pipelines
 
 // On linux, you can compile and run it like so:
 // g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
