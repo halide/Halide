@@ -76,11 +76,6 @@ option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 
-if (WIN32)
-  # FIXME: It isn't clear what target these warnings are meant for.
-  add_definitions("/wd4305 /wd4146")
-endif()
-
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   target_link_libraries("${name}" PRIVATE Halide)
