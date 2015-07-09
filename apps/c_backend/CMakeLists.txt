@@ -7,13 +7,14 @@ set(pipeline_native_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_native.h")
 set(pipeline_native_obj "${CMAKE_CURRENT_BINARY_DIR}/pipeline_native.o")
 
 # Final executable
-add_executable(run run.cpp ${pipeline_c_src} ${pipeline_c_h} ${pipeline_native_h})
-target_link_libraries(run PRIVATE ${pipeline_native_obj})
-target_include_directories(run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+set(run_target run_c_backend_and_native)
+add_executable(${run_target} run.cpp ${pipeline_c_src} ${pipeline_c_h} ${pipeline_native_h})
+target_link_libraries(${run_target} PRIVATE ${pipeline_native_obj})
+target_include_directories(${run_target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 if (NOT WIN32)
-  target_link_libraries(run PRIVATE dl pthread)
+  target_link_libraries(${run_target} PRIVATE dl pthread)
 endif()
-set_target_properties(run pipeline PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+set_target_properties(${run_target} pipeline PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                       "${CMAKE_CURRENT_BINARY_DIR}")
 
 # HACK: Emitted C code isn't valid C code, just compile with
