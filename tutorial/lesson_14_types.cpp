@@ -1,4 +1,4 @@
-// Halide tutorial lesson 14.
+// Halide tutorial lesson 14: The Halide type system
 
 // This lesson more precisely describes Halide's type system.
 

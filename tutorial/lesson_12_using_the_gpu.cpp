@@ -1,6 +1,6 @@
-// Halide tutorial lesson 12.
+// Halide tutorial lesson 12: Using the GPU
 
-// This lesson demonstrates how to use Halide to run code on a GPU.
+// This lesson demonstrates how to use Halide to run code on a GPU using OpenCL.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12

@@ -1,4 +1,4 @@
-// Halide tutorial lesson 4
+// Halide tutorial lesson 4: Debugging with tracing, print, and print_when
 
 // This lesson demonstrates how to follow what Halide is doing at runtime.
 

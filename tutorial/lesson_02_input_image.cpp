@@ -1,6 +1,7 @@
-// Halide tutorial lesson 2.
+// Halide tutorial lesson 2: Processing images
 
-// This lesson demonstrates how to pass in input images.
+// This lesson demonstrates how to pass in input images and manipulate
+// them.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_02 -std=c++11
