@@ -76,19 +76,18 @@ option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 
-set (PROJECT_LIBS )
 if (WIN32)
-  list(APPEND PROJECT_LIBS Kernel32)
   # FIXME: It isn't clear what target these warnings are meant for.
   add_definitions("/wd4305 /wd4146")
 endif()
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
-  target_link_libraries("${name}" PRIVATE Halide ${PROJECT_LIBS})
+  target_link_libraries("${name}" PRIVATE Halide)
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (WIN32)
     set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
+    target_link_libraries("${name}" PRIVATE Kernel32)
   endif()
 endfunction(halide_project)
 
