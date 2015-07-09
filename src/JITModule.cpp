@@ -337,6 +337,18 @@ const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module.ptr->exports;
 }
 
+JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const {
+    std::map<std::string, JITModule::Symbol>::iterator it = jit_module.ptr->exports.find(name);
+    if (it != jit_module.ptr->exports.end()) {
+        return it->second;
+    }
+    for (const JITModule &dep : jit_module.ptr->dependencies) {
+        JITModule::Symbol s = dep.find_symbol_by_name(name);
+        if (s.address) return s;
+    }
+    return JITModule::Symbol();
+}
+
 void *JITModule::main_function() const {
     return jit_module.ptr->entrypoint.address;
 }
@@ -385,7 +397,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     symbol.address = address;
 
     // Struct types are uniqued on the context, but the lookup API is only available
-    // ont he Module, not hte Context.
+    // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module.ptr->context);
     llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
     if (buffer_t == NULL) {

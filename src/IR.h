@@ -367,7 +367,6 @@ struct Call : public ExprNode<Call> {
         abs,
         absd,
         rewrite_buffer,
-        profiling_timer,
         random,
         lerp,
         create_buffer_t,
@@ -397,7 +396,8 @@ struct Call : public ExprNode<Call> {
         copy_memory,
         likely,
         make_int64,
-        make_float64;
+        make_float64,
+        register_destructor;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

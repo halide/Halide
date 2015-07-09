@@ -492,7 +492,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
             custom_passes.push_back(p.pass);
         }
 
-        private_body = lower(contents.ptr->outputs, target, custom_passes);
+        private_body = lower(contents.ptr->outputs, fn_name, target, custom_passes);
     }
 
     string private_name = "__" + new_fn_name;
@@ -999,6 +999,22 @@ void Pipeline::realize(Realization dst, const Target &t) {
     debug(2) << "Calling jitted function\n";
     int exit_status = contents.ptr->jit_module.argv_function()(&(args[0]));
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
+
+    // If we're profiling, report runtimes and reset profiler stats.
+    if (target.has_feature(Target::Profile)) {
+        JITModule::Symbol report_sym =
+            contents.ptr->jit_module.find_symbol_by_name("halide_profiler_report");
+        JITModule::Symbol reset_sym =
+            contents.ptr->jit_module.find_symbol_by_name("halide_profiler_reset");
+        if (report_sym.address && reset_sym.address) {
+            void *uc = jit_context.user_context_param.get_scalar<void *>();
+            void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
+            report_fn_ptr(uc);
+
+            void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
+            reset_fn_ptr();
+        }
+    }
 
     jit_context.finalize(exit_status);
 }

@@ -99,6 +99,9 @@ extern int halide_do_par_for(void *user_context,
 extern void halide_shutdown_thread_pool();
 //@}
 
+/** Spawn a thread, independent of halide's thread pool. */
+extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
+
 /** Set the number of threads used by Halide's thread pool. No effect
  * on OS X or iOS. If changed after the first use of a parallel Halide
  * routine, shuts down and then reinitializes the thread pool. */
@@ -622,6 +625,95 @@ typedef int (*enumerate_func_t)(void* enumerate_context,
  * terminate early and return that nonzero result.
  */
 extern int halide_enumerate_registered_filters(void *user_context, void* enumerate_context, enumerate_func_t func);
+
+
+/** The functions below here are relevant for pipelines compiled with
+ * the -profile target flag, which runs a sampling profiler thread
+ * alongside the pipeline. */
+
+/** Per-Func state tracked by the sampling profiler. */
+struct halide_profiler_func_stats {
+    /** Total time taken evaluating this Func (in nanoseconds). */
+    uint64_t time;
+
+    /** The name of this Func. A global constant string. */
+    const char *name;
+};
+
+/** Per-pipeline state tracked by the sampling profiler. These exist
+ * in a linked list. */
+struct halide_profiler_pipeline_stats {
+    /** Total time spent inside this pipeline (in nanoseconds) */
+    uint64_t time;
+
+    /** The name of this pipeline. A global constant string. */
+    const char *name;
+
+    /** An array containing states for each Func in this pipeline. */
+    halide_profiler_func_stats *funcs;
+
+    /** The next pipeline_stats pointer. It's a void * because types
+     * in the Halide runtime may not currently be recursive. */
+    void *next;
+
+    /** The number of funcs in this pipeline. */
+    int num_funcs;
+
+    /** An internal base id used to identify the funcs in this pipeline. */
+    int first_func_id;
+
+    /** The number of times this pipeline has been run. */
+    int runs;
+
+    /** The total number of samples taken inside of this pipeline. */
+    int samples;
+};
+
+/** The global state of the profiler. */
+struct halide_profiler_state {
+    /** Guards access to the fields below. If not locked, the sampling
+     * profiler thread is free to modify things below (including
+     * reordering the linked list of pipeline stats). */
+    halide_mutex lock;
+
+    /** A linked list of stats gathered for each pipeline. */
+    halide_profiler_pipeline_stats *pipelines;
+
+    /** The amount of time the profiler thread sleeps between samples
+     * in milliseconds. Defaults to 1 */
+    int sleep_time;
+
+    /** An internal id used for bookkeeping. */
+    int first_free_id;
+
+    /** The id of the current running Func. Set by the pipeline, read
+     * periodically by the profiler thread. */
+    int current_func;
+
+    /** Is the profiler thread running. */
+    bool started;
+};
+
+/** Profiler func ids with special meanings. */
+enum {
+    /// current_func takes on this value when not inside Halide code
+    halide_profiler_outside_of_halide = -1,
+    /// Set current_func to this value to tell the profiling thread to
+    /// halt. It will start up again next time you run a pipeline with
+    /// profiling enabled.
+    halide_profiler_please_stop = -2
+};
+
+/** Get a pointer to the global profiler state for programmatic
+ * inspection. Lock it before using to pause the profiler. */
+extern halide_profiler_state *halide_profiler_get_state();
+
+/** Reset all profiler state. */
+extern void halide_profiler_reset();
+
+/** Print out timing statistics for everything run since the last
+ * reset. Also happens at process exit. */
+extern void halide_profiler_report(void *user_context);
 
 #ifdef __cplusplus
 } // End extern "C"

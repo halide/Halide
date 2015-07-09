@@ -17,7 +17,8 @@ extern dispatch_queue_t dispatch_get_global_queue(
 
 extern void dispatch_apply_f(size_t iterations, dispatch_queue_t queue,
                              void *context, void (*work)(void *, size_t));
-
+extern void dispatch_async_f(dispatch_queue_t queue, void *context, void (*work)(void *));
+    
 typedef struct dispatch_semaphore_s *dispatch_semaphore_t;
 typedef uint64_t dispatch_time_t;
 #define DISPATCH_TIME_FOREVER (~0ull)
@@ -27,9 +28,14 @@ extern long dispatch_semaphore_wait(dispatch_semaphore_t dsema, dispatch_time_t 
 extern long dispatch_semaphore_signal(dispatch_semaphore_t dsema);
 extern void dispatch_release(void *object);
 
+    
 WEAK int halide_do_task(void *user_context, halide_task f, int idx,
                         uint8_t *closure);
 
+}
+
+WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
+    dispatch_async_f(dispatch_get_global_queue(0, 0), closure, f);
 }
 
 namespace Halide { namespace Runtime { namespace Internal {
