@@ -76,11 +76,6 @@ option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 
-set(CAT cat)
-if(WIN32)
-  set(CAT type)
-endif()
-
 set (PROJECT_LIBS )
 if (WIN32)
   list(APPEND PROJECT_LIBS Kernel32)
