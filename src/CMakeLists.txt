@@ -120,6 +120,7 @@ set(RUNTIME_CPP
   profiler
   profiler_inlined
   renderscript
+  runtime_api
   ssp
   to_string
   tracing

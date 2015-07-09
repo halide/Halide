@@ -77,6 +77,9 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
 char *strncpy(char *dst, const char *src, size_t n);
 
+// Below are prototypes for various functions called by generated code
+// and parts of the runtime but not exposed to users:
+
 // Similar to strncpy, but with various non-string arguments. Writes
 // arg to dst. Does not write to pointer end or beyond. Returns
 // pointer to one beyond the last character written so that calls can
@@ -97,6 +100,12 @@ WEAK void *halide_get_library_symbol(void *lib, const char *name);
 WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_sleep_ms(void *user_context, int ms);
+WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
+
+WEAK int halide_profiler_pipeline_start(void *user_context,
+                                        const char *pipeline_name,
+                                        int num_funcs,
+                                        const char **func_names);
 }
 
 // A convenient namespace for weak functions that are internal to the
@@ -245,6 +254,8 @@ __attribute__((always_inline)) T max(const T &a, const T &b) {
 }
 
 }}}
+
+
 
 using namespace Halide::Runtime::Internal;
 
