@@ -28,13 +28,6 @@ const float D1 = 0.83651630373780772f;
 const float D2 = 0.22414386804201339f;
 const float D3 = -0.12940952255126034f;
 
-/*
-const float D0 = 0.34150635f;
-const float D1 = 0.59150635f;
-const float D2 = 0.15849365f;
-const float D3 = -0.1830127f;
-*/
-
 Func daubechies_x(Func in) {
     Func out;
     out(x, y, c) = select(c == 0,
@@ -63,17 +56,22 @@ int main(int argc, char **argv) {
 
     Func wavelet_clamped = BoundaryConditions::repeat_edge(wavelet);
 
+    Target t = get_target_from_environment();
+    t.set_feature(Target::NoRuntime);
+
     Func inv_haar_x = inverse_haar_x(wavelet_clamped);
-    inv_haar_x.compile_to_file("inverse_haar_x", {wavelet});
+    inv_haar_x.compile_to_file("inverse_haar_x", {wavelet}, t);
 
     Func for_haar_x = haar_x(clamped);
-    for_haar_x.compile_to_file("haar_x", {image});
+    for_haar_x.compile_to_file("haar_x", {image}, t);
 
     Func inv_daub_x = inverse_daubechies_x(wavelet_clamped);
-    inv_daub_x.compile_to_file("inverse_daubechies_x", {wavelet});
+    inv_daub_x.compile_to_file("inverse_daubechies_x", {wavelet}, t);
 
     Func for_daub_x = daubechies_x(clamped);
-    for_daub_x.compile_to_file("daubechies_x", {image});
+    for_daub_x.compile_to_file("daubechies_x", {image}, t);
+
+    compile_standalone_runtime("halide_runtime.o", t);
 
     return 0;
 }

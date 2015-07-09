@@ -398,12 +398,6 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
     #endif
 
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(module, target);
-
-        JITModule::make_externs(shared_runtime, module);
-    }
-
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
@@ -2618,6 +2612,10 @@ void CodeGen_LLVM::visit(const Call *op) {
                     VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
                     arg_types[i] = vt->getElementType();
                 }
+            }
+
+            if (function_takes_user_context(op->name)) {
+                arg_types.insert(arg_types.begin(), i8->getPointerTo());
             }
 
             llvm::Type *scalar_result_type = result_type;

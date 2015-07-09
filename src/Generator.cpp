@@ -1,4 +1,5 @@
 #include "Generator.h"
+#include "Output.h"
 
 namespace {
 
@@ -45,12 +46,16 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-e EMIT_OPTIONS] "
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] "
                           "target=target-string [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of optional files to emit. Accepted values are "
                           "[assembly, bitcode, stmt, html]\n";
 
-    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" }, { "-e", "" } };
+    std::map<std::string, std::string> flags_info = { { "-f", "" },
+                                                      { "-g", "" },
+                                                      { "-o", "" },
+                                                      { "-e", "" },
+                                                      { "-r", "" }};
     std::map<std::string, std::string> generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -78,17 +83,19 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
+    std::string runtime_name = flags_info["-r"];
+
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
-    if (generator_names.size() == 0) {
-        cerr << "No generators have been registered\n";
+    if (generator_names.size() == 0 && runtime_name.empty()) {
+        cerr << "No generators have been registered and not compiling a standalone runtime\n";
         cerr << kUsage;
         return 1;
     }
 
     std::string generator_name = flags_info["-g"];
-    if (generator_name.empty()) {
+    if (generator_name.empty() && runtime_name.empty()) {
         // If -g isn't specified, but there's only one generator registered, just use that one.
-        if (generator_names.size() != 1) {
+        if (generator_names.size() > 1) {
             cerr << "-g must be specified if multiple generators are registered:\n";
             for (auto name : generator_names) {
                 cerr << "    " << name << "\n";
@@ -128,6 +135,15 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         } else if (!opt.empty()) {
             cerr << "Unrecognized emit option: " << opt
                  << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+        }
+    }
+
+    if (!runtime_name.empty()) {
+        compile_standalone_runtime(output_dir + "/" + runtime_name,
+                                   parse_target_string(generator_args["target"]));
+        if (generator_name.empty()) {
+            // We're just compiling a runtime
+            return 0;
         }
     }
 

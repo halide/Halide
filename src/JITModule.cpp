@@ -31,100 +31,6 @@ using std::string;
 
 namespace {
 
-llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_type) {
-    llvm::LLVMContext &context(to_module->getContext());
-    if (&from_type->getContext() == &context) {
-        return from_type;
-    }
-
-    switch (from_type->getTypeID()) {
-    case llvm::Type::VoidTyID:
-        return llvm::Type::getVoidTy(context);
-        break;
-    case llvm::Type::HalfTyID:
-        return llvm::Type::getHalfTy(context);
-        break;
-    case llvm::Type::FloatTyID:
-        return llvm::Type::getFloatTy(context);
-        break;
-    case llvm::Type::DoubleTyID:
-        return llvm::Type::getDoubleTy(context);
-        break;
-    case llvm::Type::X86_FP80TyID:
-        return llvm::Type::getX86_FP80Ty(context);
-        break;
-    case llvm::Type::FP128TyID:
-        return llvm::Type::getFP128Ty(context);
-        break;
-    case llvm::Type::PPC_FP128TyID:
-        return llvm::Type::getPPC_FP128Ty(context);
-        break;
-    case llvm::Type::LabelTyID:
-        return llvm::Type::getLabelTy(context);
-        break;
-    case llvm::Type::MetadataTyID:
-        return llvm::Type::getMetadataTy(context);
-        break;
-    case llvm::Type::X86_MMXTyID:
-        return llvm::Type::getX86_MMXTy(context);
-        break;
-    case llvm::Type::IntegerTyID:
-        return llvm::Type::getIntNTy(context, from_type->getIntegerBitWidth());
-        break;
-    case llvm::Type::FunctionTyID: {
-        llvm::FunctionType *f = llvm::cast<llvm::FunctionType>(from_type);
-        llvm::Type *return_type = copy_llvm_type_to_module(to_module, f->getReturnType());
-        std::vector<llvm::Type *> arg_types;
-        for (size_t i = 0; i < f->getNumParams(); i++) {
-            arg_types.push_back(copy_llvm_type_to_module(to_module, f->getParamType(i)));
-        }
-        return llvm::FunctionType::get(return_type, arg_types, f->isVarArg());
-    } break;
-    case llvm::Type::StructTyID: {
-        llvm::StructType *result;
-        llvm::StructType *s = llvm::cast<llvm::StructType>(from_type);
-        std::vector<llvm::Type *> element_types;
-        for (size_t i = 0; i < s->getNumElements(); i++) {
-            element_types.push_back(copy_llvm_type_to_module(to_module, s->getElementType(i)));
-        }
-        if (s->isLiteral()) {
-            result = llvm::StructType::get(context, element_types, s->isPacked());
-        } else {
-            result = to_module->getTypeByName(s->getName());
-            if (result == NULL) {
-                result = llvm::StructType::create(context, s->getName());
-                if (!element_types.empty()) {
-                    result->setBody(element_types, s->isPacked());
-                }
-            } else {
-                if (result->isOpaque() &&
-                    !element_types.empty()) {
-                    result->setBody(element_types, s->isPacked());
-                }
-            }
-        }
-        return result;
-    } break;
-    case llvm::Type::ArrayTyID: {
-        llvm::ArrayType *a = llvm::cast<llvm::ArrayType>(from_type);
-        return llvm::ArrayType::get(copy_llvm_type_to_module(to_module, a->getElementType()), a->getNumElements());
-    } break;
-    case llvm::Type::PointerTyID: {
-        llvm::PointerType *p = llvm::cast<llvm::PointerType>(from_type);
-        return llvm::PointerType::get(copy_llvm_type_to_module(to_module, p->getElementType()), p->getAddressSpace());
-    } break;
-    case llvm::Type::VectorTyID: {
-        llvm::VectorType *v = llvm::cast<llvm::VectorType>(from_type);
-        return llvm::VectorType::get(copy_llvm_type_to_module(to_module, v->getElementType()), v->getNumElements());
-    } break;
-    default: {
-        internal_error << "Unhandled LLVM type\n";
-        return NULL;
-    }
-    }
-
-}
-
 typedef struct CUctx_st *CUcontext;
 
 struct SharedCudaContext {
@@ -370,25 +276,6 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
         ee->RegisterJITEventListener(listeners[i]);
     }
 
-    // Add exported symbols for all dependencies.
-    std::set<std::string> provided_symbols;
-    for (const JITModule &dep : dependencies) {
-        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
-            const std::string &name = i.first;
-            const Symbol &s = i.second;
-            if (provided_symbols.find(i.first) == provided_symbols.end()) {
-                llvm::Type *llvm_type = copy_llvm_type_to_module(m, s.llvm_type);
-                if (llvm_type->isFunctionTy()) {
-                    m->getOrInsertFunction(name, cast<FunctionType>(llvm_type));
-                } else {
-                    m->getOrInsertGlobal(name, llvm_type);
-                }
-                debug(3) << "Global value " << name << " is at address " << s.address << "\n";
-                provided_symbols.insert(name);
-            }
-        }
-    }
-
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
     debug(1) << "JIT compiling...\n";
@@ -460,33 +347,6 @@ JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const 
         if (s.address) return s;
     }
     return JITModule::Symbol();
-}
-
-void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *module) {
-    for (const JITModule &dep : deps) {
-        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
-            const std::string &name = i.first;
-            const Symbol &s = i.second;
-            GlobalValue *gv = NULL;
-            llvm::Type *llvm_type = copy_llvm_type_to_module(module, s.llvm_type);
-            if (llvm_type->isFunctionTy()) {
-                llvm::FunctionType *fn_type = llvm::dyn_cast<llvm::FunctionType>(llvm_type);
-                internal_assert(fn_type);
-                llvm::Value *v = module->getOrInsertFunction(name, fn_type);
-                internal_assert(v);
-                // Sometimes LLVM represents functions as bitcasts of other functions.
-                v = v->stripPointerCasts();
-                gv = llvm::dyn_cast<llvm::Function>(v);
-            } else {
-                Constant *c = module->getOrInsertGlobal(name, llvm_type);
-                internal_assert(c);
-                c = c->stripPointerCasts();
-                gv = llvm::dyn_cast<llvm::GlobalValue>(c);
-            }
-            internal_assert(gv);
-            gv->setLinkage(GlobalValue::ExternalWeakLinkage);
-        }
-    }
 }
 
 void *JITModule::main_function() const {
