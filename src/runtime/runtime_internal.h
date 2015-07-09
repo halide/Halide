@@ -77,6 +77,9 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
 char *strncpy(char *dst, const char *src, size_t n);
 
+// Below are prototypes for various functions called by generated code
+// and parts of the runtime but not exposed to users:
+
 // Similar to strncpy, but with various non-string arguments. Writes
 // arg to dst. Does not write to pointer end or beyond. Returns
 // pointer to one beyond the last character written so that calls can
@@ -96,9 +99,13 @@ WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
 WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
-
+WEAK void halide_sleep_ms(void *user_context, int ms);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 
+WEAK int halide_profiler_pipeline_start(void *user_context,
+                                        const char *pipeline_name,
+                                        int num_funcs,
+                                        const char **func_names);
 }
 
 // A convenient namespace for weak functions that are internal to the
@@ -132,9 +139,10 @@ class Printer {
 public:
     char *buf, *dst, *end;
     void *user_context;
+    bool own_mem;
 
-    Printer(void *ctx) : user_context(ctx) {
-        buf = (char *)halide_malloc(user_context, length);
+    Printer(void *ctx, char *mem = NULL) : user_context(ctx), own_mem(mem == NULL) {
+        buf = mem ? mem : (char *)halide_malloc(user_context, length);
         dst = buf;
         end = buf + (length-1);
         *end = 0;
@@ -185,6 +193,12 @@ public:
         return buf;
     }
 
+    // Clear it. Useful for reusing a stringstream.
+    void clear() {
+        dst = buf;
+        dst[0] = 0;
+    }
+
     // Returns the number of characters in the buffer
     uint64_t size() const {
         return (uint64_t)(dst-buf);
@@ -198,7 +212,7 @@ public:
         } else {
             // It's a stringstream. Do nothing.
         }
-        halide_free(user_context, buf);
+        if (own_mem) halide_free(user_context, buf);
     }
 };
 

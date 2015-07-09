@@ -149,9 +149,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // Register a destructor for it.
         llvm::Function *free_fn = module->getFunction("halide_free");
         internal_assert(free_fn) << "Could not find halide_free in module.\n";
-        allocation.destructor = register_destructor(free_fn, allocation.ptr);
+        allocation.destructor = register_destructor(free_fn, allocation.ptr, OnError);
     }
-
 
     // Push the allocation base pointer onto the symbol table
     debug(3) << "Pushing allocation called " << name << ".host onto the symbol table\n";
@@ -172,7 +171,8 @@ void CodeGen_Posix::visit(const Free *stmt) {
         internal_assert(alloc.destructor);
 
         // Trigger the destructor
-        builder->Insert(alloc.destructor->clone());
+        llvm::Function *free_fn = module->getFunction("halide_free");
+        trigger_destructor(free_fn, alloc.destructor);
     }
 
     allocations.pop(name);
