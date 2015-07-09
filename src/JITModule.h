@@ -64,11 +64,11 @@ struct JITModule {
      * result Func of the compilation, which takes its name directly
      * from the Func declaration. One can also make a module which
      * contains no code itself but is just an exports maps providing
-     * arbitarty pointers to functions or global variables to JITted
+     * arbitrary pointers to functions or global variables to JITted
      * code. */
     EXPORT const std::map<std::string, Symbol> &exports() const;
 
-    /** A pointer to the raw halide function. It's true type depends
+    /** A pointer to the raw halide function. Its true type depends
      * on the Argument vector passed to CodeGen_LLVM::compile. Image
      * parameters become (buffer_t *), and scalar parameters become
      * pointers to the appropriate values. The final argument is a
@@ -116,6 +116,9 @@ struct JITModule {
      * external routines. */
     EXPORT void add_extern_for_export(const std::string &name,
                                       const ExternSignature &signature, void *address);
+
+    /** Look up a symbol by name in this module or its dependencies. */
+    EXPORT Symbol find_symbol_by_name(const std::string &) const;
 
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */

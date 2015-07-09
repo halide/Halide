@@ -10,254 +10,104 @@
 namespace Halide {
 namespace Internal {
 
-namespace {
-    const char kBufName[] = "ProfilerBuffer";
-    const char kToplevel[] = "$total$";
-    const char kOverhead[] = "$overhead$";
-    const char kIgnore[] = "$ignore$";
-    const char kIgnoreBuf[] = "$ignore_buf$";
-}
-
-int profiling_level() {
-    char *trace = getenv("HL_PROFILE");
-    return trace ? atoi(trace) : 0;
-}
-
-int profiling_loop_level() {
-    char *loop_level = getenv("HL_PROFILE_LOOP_LEVEL");
-    return loop_level ? atoi(loop_level) : std::numeric_limits<int>::max();
-}
-
 using std::map;
 using std::string;
 using std::vector;
 
 class InjectProfiling : public IRMutator {
 public:
-    InjectProfiling(string func_name)
-        : level(profiling_level()),
-          maximum_loop_level(profiling_loop_level()),
-          current_loop_level(0),
-          func_name(sanitize(func_name)),
-          dummy(Variable::make(Int(32), "dummy")),
-          dummy_counter(0) {
-    }
+    map<string, int> indices;   // maps from func name -> index in buffer.
 
-    Stmt inject(Stmt s) {
-        if (level >= 1) {
-            // Add calls to the nsec and timer at the start and end,
-            // so that we can get an estimate of how long a single
-            // tick of the profiling_timer is (since it may be dependent
-            // on e.g. processor clock rate)
-            {
-                PushCallStack st(this, kToplevel, kToplevel);
-                s = mutate(s);
-            }
-            s = add_count_and_ticks(kToplevel, kToplevel, s);
-            s = add_nsec(kToplevel, kToplevel, s);
+    vector<int> stack; // What produce nodes are we currently inside of.
 
-            // Note that this is tacked on to the front of the block, since it must come
-            // before the calls to halide_current_time_ns.
-            Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", vector<Expr>(), Call::Extern);
-            Stmt begin_clock = Evaluate::make(begin_clock_call);
-            s = Block::make(begin_clock, s);
-
-            // Do a little calibration: make a loop that does a large number of calls to add_ticks
-            // and measures the total time, so we can calculate the average overhead
-            // and subtract it from the final results. (The "body" of this loop is just
-            // a store of 0 to scratch that we expect to be optimized away.) This isn't a perfect
-            // solution, but is much better than nothing.
-            //
-            // Note that we deliberately unroll a bit to minimize loop overhead, otherwise our
-            // estimate will be too high.
-            //
-            // NOTE: we deliberately do this *after* measuring
-            // the total, so this should *not* be included in "kToplevel".
-            Expr j = Variable::make(Int(32), "j");
-
-            const int kIters = 100000;
-            const int kUnroll = 4;
-            Stmt ticker_block = Stmt();
-            for (int i = 0; i < kUnroll; i++) {
-                ticker_block = Block::make(
-                    add_ticks(kIgnore, kIgnore, Store::make(kIgnoreBuf, Cast::make(UInt(32), 0), 0)),
-                        ticker_block);
-            }
-
-            Stmt do_timings = For::make("j", 0, kIters, ForType::Serial, DeviceAPI::Host, ticker_block);
-            do_timings = add_ticks(kOverhead, kOverhead, do_timings);
-            do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
-                Cast::make(UInt(64), kIters * kUnroll), do_timings);
-            s = Block::make(s, do_timings);
-            s = Allocate::make(kIgnoreBuf, UInt(32), {1}, const_true(), s);
-
-            // Tack on code to print the counters.
-            for (const std::pair<std::string, int> &i : indices) {
-                int idx = i.second;
-                Expr val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
-                Expr print_val = print(i.first, val);
-                Stmt print_stmt = Evaluate::make(print_val);
-                s = Block::make(s, print_stmt);
-            }
-
-            // Now that we know the final size, allocate the buffer and init to zero.
-            Expr i = Variable::make(Int(32), "i");
-            Stmt init = For::make("i", 0, (int)indices.size(), ForType::Serial, DeviceAPI::Host,
-                Store::make(kBufName, Cast::make(UInt(64), 0), i));
-            s = Block::make(init, s);
-
-            s = Allocate::make(kBufName, UInt(64), {(int)indices.size()}, const_true(), s);
-        } else {
-            s = mutate(s);
-        }
-        return s;
+    InjectProfiling() {
+        indices["overhead"] = 0;
+        stack.push_back(0);
     }
 
 private:
     using IRMutator::visit;
 
-    const int level;
-    const int maximum_loop_level;
-    int current_loop_level;
-    const string func_name;
-    map<string, int> indices;   // map name -> index in buffer.
-    vector<string> call_stack;  // names of the nodes upstream
-
-    Expr dummy;
-    int dummy_counter;
-
-    class PushCallStack {
-    public:
-        InjectProfiling* ip;
-
-        PushCallStack(InjectProfiling* ip, const string& op_type, const string& op_name) : ip(ip) {
-            ip->call_stack.push_back(op_type + " " + op_name);
-        }
-
-        ~PushCallStack() {
-            ip->call_stack.pop_back();
-        }
-    };
-
-    // replace all spaces with '_'
-    static string sanitize(const string& s) {
-      string san = s;
-      std::replace(san.begin(), san.end(), ' ', '_');
-      return san;
-    }
-
-    Expr get_index(const string& s) {
-        if (indices.find(s) == indices.end()) {
-            int idx = indices.size();
-            indices[s] = idx;
-        }
-        return indices[s];
-    }
-
-    Stmt add_count_and_ticks(const string& op_type, const string& op_name, Stmt s) {
-        s = add_count(op_type, op_name, s);
-        s = add_ticks(op_type, op_name, s);
-        return s;
-    }
-
-    Stmt add_count(const string& op_type, const string& op_name, Stmt s) {
-        return add_delta("count", op_type, op_name, Cast::make(UInt(64), 0), Cast::make(UInt(64), 1), s);
-    }
-
-    Stmt add_ticks(const string& op_type, const string& op_name, Stmt s) {
-        std::vector<Expr> args;
-        args.push_back(dummy + dummy_counter++);
-        Expr ticks = Call::make(UInt(64), Internal::Call::profiling_timer, args, Call::Intrinsic);
-        return add_delta("ticks", op_type, op_name, ticks, ticks, s);
-    }
-
-    Stmt add_nsec(const string& op_type, const string& op_name, Stmt s) {
-        Expr nsec = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
-        return add_delta("nsec", op_type, op_name, nsec, nsec, s);
-    }
-
-    Stmt add_delta(const string& metric_name, const string& op_type, const string& op_name,
-                   Expr begin_val, Expr end_val, Stmt s) {
-        string parent_name_pair = call_stack.empty() ?
-            "null null" :
-            call_stack.back();
-        string full_name = "halide_profiler " +
-            metric_name + " " +
-            func_name + " " +
-            op_type + " " +
-            sanitize(op_name) + " " +
-            parent_name_pair;
-        internal_assert(begin_val.type() == UInt(64));
-        internal_assert(end_val.type() == UInt(64));
-        Expr idx = get_index(full_name);
-
-        string begin_var_name = "begin_" + full_name;
-        // variable name doesn't matter at all, but de-spacing
-        // makes the Stmt output easier to read
-        std::replace(begin_var_name.begin(), begin_var_name.end(), ' ', '_');
-        Expr begin_var = Variable::make(UInt(64), begin_var_name);
-
-        Expr old_val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
-        Expr delta_val = Sub::make(end_val, begin_var);
-        Expr new_val = Add::make(old_val, delta_val);
-        s = Block::make(s, Store::make(kBufName, new_val, idx));
-        s = LetStmt::make(begin_var_name, begin_val, s);
-
-        return s;
-    }
-
     void visit(const ProducerConsumer *op) {
-        if (level >= 1) {
-            Stmt produce, update, consume;
-            {
-                PushCallStack st(this, "produce", op->name);
-                produce = mutate(op->produce);
-            }
-            {
-                PushCallStack st(this, "update", op->name);
-                update = op->update.defined() ? mutate(op->update) : Stmt();
-            }
-            {
-                PushCallStack st(this, "consume", op->name);
-                consume = mutate(op->consume);
-            }
-
-            produce = add_count_and_ticks("produce", op->name, produce);
-            update = update.defined() ? add_count_and_ticks("update", op->name, update) : Stmt();
-            consume = add_count_and_ticks("consume", op->name, consume);
-
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+        int idx;
+        map<string, int>::iterator iter = indices.find(op->name);
+        if (iter == indices.end()) {
+            idx = (int)indices.size();
+            indices[op->name] = idx;
         } else {
-            IRMutator::visit(op);
+            idx = iter->second;
         }
+
+        stack.push_back(idx);
+        Stmt produce = mutate(op->produce);
+        Stmt update = op->update.defined() ? mutate(op->update) : Stmt();
+        stack.pop_back();
+
+        Stmt consume = mutate(op->consume);
+
+        Expr profiler_token = Variable::make(Int(32), "profiler_token");
+        Expr profiler_state = Variable::make(Handle(), "profiler_state");
+
+        // This call gets inlined and becomes a single store instruction.
+        Expr set_task = Call::make(Int(32), "halide_profiler_set_current_func",
+                                   {profiler_state, profiler_token, idx}, Call::Extern);
+
+        // At the beginning of the consume step, set the current task
+        // back to the outer one.
+        Expr set_outer_task = Call::make(Int(32), "halide_profiler_set_current_func",
+                                         {profiler_state, profiler_token, stack.back()}, Call::Extern);
+
+        produce = Block::make(Evaluate::make(set_task), produce);
+        consume = Block::make(Evaluate::make(set_outer_task), consume);
+
+        stmt = ProducerConsumer::make(op->name, produce, update, consume);
     }
 
     void visit(const For *op) {
-        current_loop_level++;
-        if (op->for_type == ForType::Parallel && level >= 1) {
-            std::cerr << "Warning: The Halide profiler does not yet support "
-                      << "parallel schedules. Not profiling inside the loop over "
-                      << op->name << "\n";
-            stmt = op;
-        } else {
-            PushCallStack st(this, "forloop", op->name);
+        // We profile by storing a token to global memory, so don't enter GPU loops
+        if (op->device_api == DeviceAPI::Parent ||
+            op->device_api == DeviceAPI::Host) {
             IRMutator::visit(op);
+        } else {
+            stmt = op;
         }
-        // We only instrument loops at profiling level 2 or higher
-        if ((level >= 2) && (current_loop_level <= maximum_loop_level)) {
-            // for loop with Vectorized type is unrolled into vectorized ops,
-            // which usually is too short to profile individually
-            if (op->for_type != ForType::Vectorized) {
-                stmt = add_count_and_ticks("forloop", op->name, stmt);
-            }
-        }
-        current_loop_level--;
     }
 };
 
-Stmt inject_profiling(Stmt s, string name) {
-    InjectProfiling profiling(name);
-    s = profiling.inject(s);
+Stmt inject_profiling(Stmt s, string pipeline_name) {
+    InjectProfiling profiling;
+    s = profiling.mutate(s);
+
+    int num_funcs = (int)(profiling.indices.size());
+
+    Expr func_names_buf = Load::make(Handle(), "profiling_func_names", 0, Buffer(), Parameter());
+    func_names_buf = Call::make(Handle(), Call::address_of, {func_names_buf}, Call::Intrinsic);
+
+    Expr start_profiler = Call::make(Int(32), "halide_profiler_pipeline_start",
+                                     {pipeline_name, num_funcs, func_names_buf}, Call::Extern);
+
+    Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
+
+    Expr profiler_token = Variable::make(Int(32), "profiler_token");
+
+    Expr stop_profiler = Call::make(Int(32), Call::register_destructor,
+                                    {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
+
+
+    s = LetStmt::make("profiler_state", get_state, s);
+    // If there was a problem starting the profiler, it will call an
+    // appropriate halide error function and then return the
+    // (negative) error code as the token.
+    s = Block::make(AssertStmt::make(profiler_token >= 0, profiler_token), s);
+    s = LetStmt::make("profiler_token", start_profiler, s);
+
+    for (std::pair<string, int> p : profiling.indices) {
+        s = Block::make(Store::make("profiling_func_names", p.first, p.second), s);
+    }
+
+    s = Allocate::make("profiling_func_names", Handle(), {num_funcs}, const_true(), s);
+    s = Block::make(Evaluate::make(stop_profiler), s);
+
     return s;
 }
 
