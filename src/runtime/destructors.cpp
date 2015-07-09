@@ -4,11 +4,11 @@
 
 extern "C" {
 
-INLINE void call_destructor(void *user_context, void (*fn)(void *user_context, void *object), void **object) {
+INLINE void call_destructor(void *user_context, void (*fn)(void *user_context, void *object), void **object, bool should_call) {
     void *o = *object;
     *object = NULL;
     // Call the function
-    if (o) {
+    if (o && should_call) {
         fn(user_context, o);
     }
 }
