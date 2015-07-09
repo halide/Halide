@@ -313,7 +313,6 @@ file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
-add_definitions("-DCOMPILING_HALIDE")
 
 IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
   set(BITWRITER_FILES
@@ -493,6 +492,7 @@ if (TARGET_MIPS)
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
+target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
 
 if (MSVC)
   # Suppress some warnings
