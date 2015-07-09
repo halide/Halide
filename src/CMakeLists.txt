@@ -472,23 +472,19 @@ if (TARGET_AARCH64)
 endif()
 
 if (TARGET_PTX)
-  add_definitions("-DWITH_PTX")
   target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
   list(APPEND LLVM_COMPONENTS nvptx)
 endif()
 
 if (TARGET_OPENCL)
-  add_definitions("-DWITH_OPENCL")
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL")
 endif()
 
 if (TARGET_OPENGL)
-  add_definitions("-DWITH_OPENGL")
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
 endif()
 
 if (TARGET_MIPS)
-  add_definitions("-DWITH_MIPS")
   target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
   list(APPEND LLVM_COMPONENTS mips)
 endif()
