@@ -89,7 +89,10 @@ endfunction(halide_project)
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
+  message(STATUS "Building tests enabled")
   add_subdirectory(test)
+else()
+  message(STATUS "Building tests disabled")
 endif()
 
 # Look for libpng. Some apps and tutorials depend on it
