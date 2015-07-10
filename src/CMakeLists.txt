@@ -118,7 +118,10 @@ set(RUNTIME_CPP
   posix_math
   posix_print
   posix_thread_pool
+  profiler
+  profiler_inlined
   renderscript
+  runtime_api
   ssp
   to_string
   tracing

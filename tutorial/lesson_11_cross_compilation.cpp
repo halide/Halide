@@ -1,6 +1,7 @@
-// Halide tutorial lesson 11.
+// Halide tutorial lesson 11: Cross-compilation
 
-// This lesson demonstrates how to use Halide as a cross-compiler.
+// This lesson demonstrates how to use Halide as a cross-compiler to
+// generate code for any platform from any platform.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_11*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_11

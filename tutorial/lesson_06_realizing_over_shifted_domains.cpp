@@ -1,4 +1,4 @@
-// Halide tutorial lesson 6.
+// Halide tutorial lesson 6: Realizing Funcs over arbitrary domains
 
 // This lesson demonstrates how to evaluate a Func over a domain that
 // does not start at (0, 0).

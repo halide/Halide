@@ -56,5 +56,43 @@ extern "C" {
     custom_free(user_context, ptr);
   }
 
+  WEAK int halide_error_out_of_memory(void *user_context) {
+    // The error message builder uses malloc, so we can't use it here.
+    halide_error(user_context, "Out of memory (halide_malloc returned NULL)");
+    return halide_error_code_out_of_memory;
+  }
+
+struct spawn_thread_task {
+    void (*f)(void *);
+    void *closure;
+};
+WEAK void *halide_spawn_thread_helper(void *arg) {
+    spawn_thread_task *t = (spawn_thread_task *)arg;
+    t->f(t->closure);
+    free(t);
+    return NULL;
+}
+
+    
+WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
+#if 0
+    // Note that we don't pass the user_context through to the
+    // thread. It may begin well after the user context is no longer a
+    // valid thing.
+    pthread_t thread;
+    // For the same reason we use malloc instead of
+    // halide_malloc. Custom malloc/free overrides may well not behave
+    // well if run at unexpected times (e.g. the matching free may
+    // occur at static destructor time if the thread never returns).
+    spawn_thread_task *t = (spawn_thread_task *)malloc(sizeof(spawn_thread_task));
+    t->f = f;
+    t->closure = closure;
+    pthread_create(&thread, NULL, halide_spawn_thread_helper, t);
+#else
+    halide_error(user_context, "Halide spawn thread called");
+#endif
+}
+
+
 }
 #endif

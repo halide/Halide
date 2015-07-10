@@ -34,7 +34,13 @@ WEAK int halide_start_clock(void *user_context) {
 
 WEAK int64_t halide_current_time_ns(void *user_context) {
     uint64_t now = mach_absolute_time();
-
     return (now - halide_reference_clock) * halide_timebase_info.numer / halide_timebase_info.denom;
 }
+
+
+extern int usleep(int);
+WEAK void halide_sleep_ms(void *user_context, int ms) {
+	usleep(ms * 1000);
+}
+
 }

@@ -1,4 +1,4 @@
-// Halide tutorial lesson 10.
+// Halide tutorial lesson 10: AOT compilation part 1
 
 // This lesson demonstrates how to use Halide as an more traditional
 // ahead-of-time (AOT) compiler.

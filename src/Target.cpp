@@ -302,6 +302,10 @@ bool Target::merge_string(const std::string &target) {
             set_features({Target::F16C, Target::SSE41, Target::AVX});
         } else if (tok == "matlab") {
             set_feature(Target::Matlab);
+        } else if (tok == "profile") {
+            set_feature(Target::Profile);
+        } else if (tok == "no_runtime") {
+            set_feature(Target::NoRuntime);
         } else {
             return false;
         }
@@ -347,7 +351,7 @@ bool Target::merge_string(const std::string &target) {
 
 std::string Target::to_string() const {
   const char* const arch_names[] = {
-      "arch_unknown", "x86", "arm", "pnacl", "mips"
+      "arch_unknown", "x86", "arm", "pnacl", "mips", "hexagon"
   };
   const char* const os_names[] = {
       "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
@@ -364,7 +368,9 @@ std::string Target::to_string() const {
       "hvx",
       "hvx-double",
       "register_metadata",
-      "matlab"
+      "matlab",
+      "profile",
+      "no_runtime"
   };
   internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
   string result = string(arch_names[arch])

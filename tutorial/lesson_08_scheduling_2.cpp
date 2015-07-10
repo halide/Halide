@@ -1,6 +1,4 @@
-// Halide tutorial lesson 8
-
-// This lesson demonstrates how schedule multi-stage pipelines.
+// Halide tutorial lesson 8: Scheduling multi-stage pipelines
 
 // On linux, you can compile and run it like so:
 // g++ lesson_08*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
@@ -46,7 +44,7 @@ int main(int argc, char **argv) {
         consumer.trace_stores();
         producer.trace_stores();
 
-        // And evaluate it over a 5x5 box.
+        // And evaluate it over a 4x4 box.
         printf("\nEvaluating producer-consumer pipeline with default schedule\n");
         consumer.realize(4, 4);
 
