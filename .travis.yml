@@ -1,0 +1,47 @@
+language: cpp
+compiler:
+  # Comment out for now to keep build matrix small
+  #- clang
+  - gcc
+env:
+  # Configurations
+  #
+  # Each line in the ``env`` section represents a set of environment
+  # variables passed to a build configuration
+  #
+  # Test LLVM 3.5 at least once
+  - LLVM_VERSION=3.5 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=1
+  - LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=1
+  - LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=0
+  - LLVM_VERSION=3.6 BUILD_SYSTEM=MAKE  BUILD_TYPE=Debug
+  # Test Release builds
+  - LLVM_VERSION=3.6 BUILD_SYSTEM=MAKE  BUILD_TYPE=Release
+  - LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Release HALIDE_SHARED_LIBRARY=1
+cache: apt
+# Note the commands below are written assuming Ubuntu 12.04LTS
+before_install:
+  # Needed for new libstdc++ and gcc4.8
+  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
+  - wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
+  - sudo sh -c 'echo "deb http://llvm.org/apt/precise/ llvm-toolchain-precise-'${LLVM_VERSION}' main" >> /etc/apt/sources.list.d/llvm.list'
+  - sudo sh -c 'echo "deb-src http://llvm.org/apt/precise/ llvm-toolchain-precise-'${LLVM_VERSION}' main" >> /etc/apt/sources.list.d/llvm.list'
+  - sudo apt-get update
+install:
+  - sudo apt-get -y install gcc-4.8 g++-4.8 libedit-dev
+  # Make gcc4.8 the default gcc version
+  - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 20
+  - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 20
+  # Make Clang ${LLVM_VERSION} the default clang version
+  - sudo apt-get -y install clang-${LLVM_VERSION}
+  - sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${LLVM_VERSION} 20
+  - sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${LLVM_VERSION} 20
+  # Get libpng for the tutorials and apps
+  - sudo apt-get -y install libpng-dev
+  # For generating docs
+  - sudo apt-get -y --no-install-recommends install doxygen
+  # Grab a version of CMake >= 2.8.12
+  - wget http://www.cmake.org/files/v3.2/cmake-3.2.3-Linux-x86_64.sh
+  - chmod a+x cmake-3.2.3-Linux-x86_64.sh
+  - sudo ./cmake-3.2.3-Linux-x86_64.sh --skip-license --prefix=/usr/local
+script:
+  - test/scripts/build_ubuntu1204.sh
