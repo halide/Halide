@@ -77,10 +77,10 @@ function(halide_add_generator_dependency)
   # generated library
   if (WIN32)
     add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-                              "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
+                              "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.obj"
       DEPENDS "${args_GENERATOR_TARGET}"
       COMMAND "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${generator_exec}" ${invoke_args}
-      COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${SCRATCH_DIR}\\${args_GENERATED_FUNCTION}.o"
+      COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${SCRATCH_DIR}\\${args_GENERATED_FUNCTION}.obj"
       WORKING_DIRECTORY "${SCRATCH_DIR}"
       )
   elseif(XCODE)
@@ -111,11 +111,11 @@ function(halide_add_generator_dependency)
   else()
     if (NOT target_is_pnacl)
       add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-                                "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
+                                "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.obj"
         DEPENDS "${args_GENERATOR_TARGET}"
         COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
         # Create an archive using ar (or similar)
-        COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
+        COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.obj"
         WORKING_DIRECTORY "${SCRATCH_DIR}"
         )
     else()
