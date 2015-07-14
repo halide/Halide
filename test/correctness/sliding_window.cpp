@@ -27,7 +27,7 @@ extern "C" void my_free(void *, void *) {
 int main(int argc, char **argv) {
     Var x, y;
 
-    if (0) {
+    {
         Func f, g;
 
         f(x) = call_counter(x, 0);
