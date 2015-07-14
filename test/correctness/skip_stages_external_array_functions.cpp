@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         for (int32_t i = 0; i < 10; i++) {
             assert(result1(i) == i + 1);
         }
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 0);
 
         reset_counts();
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         for (int32_t i = 0; i < 10; i++) {
             assert(result2(i) == i + 2);
         }
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(0, 1);
     }
 
@@ -126,28 +126,28 @@ int main(int argc, char **argv) {
         toggle1.set(true);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 1);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 0, 1);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(0, 0, 0);
 
     }
@@ -183,13 +183,13 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 1);
 
         reset_counts();
         toggle1.set(false);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 1);
     }
 
@@ -222,13 +222,13 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 1);
 
         reset_counts();
         toggle1.set(false);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(0, 0);
     }
 
@@ -270,28 +270,28 @@ int main(int argc, char **argv) {
         toggle1.set(true);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 1);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 0, 1);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(0, 0, 0);
     }
 
