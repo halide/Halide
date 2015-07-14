@@ -1,7 +1,7 @@
 # Generator
 halide_project(halide_blur "apps" halide_blur.cpp)
 set(halide_blur_h "${CMAKE_CURRENT_BINARY_DIR}/halide_blur.h")
-set(halide_blur_obj "${CMAKE_CURRENT_BINARY_DIR}/halide_blur.o")
+set(halide_blur_obj "${CMAKE_CURRENT_BINARY_DIR}/halide_blur${CMAKE_CXX_OUTPUT_EXTENSION}")
 
 # Final executable
 # FIXME: Need to mimic the OpenMP, -O2 and -msse2 flags in the Makefile
