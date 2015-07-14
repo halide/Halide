@@ -49,9 +49,7 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz -s 320 320 -t 1 -d 10000 -h 4 -f gr
 make_gif lesson_05_parallel_tiles.gif 8
 
 # fused parallel tiles
-cat tmp/trace.bin |  ../../bin/HalideTraceViz -s 700 500 -t 1000 -d 2 -h 30 -f gradient_fast 0 600 -1 2 1 1 1 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 700x500 -i /dev/stdin tmp/frames_%04d.tif
-
-make_gif lesson_05_fast.gif 5
-
 rm -f figures/lesson_05_fast.mp4
 cat tmp/trace.bin |  ../../bin/HalideTraceViz -s 700 500 -t 1000 -d 2 -h 30 -f gradient_fast 0 600 -1 2 1 1 1 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 700x500 -i /dev/stdin -c:v h264 lesson_05_fast.mp4
+
+rm -rf tmp
