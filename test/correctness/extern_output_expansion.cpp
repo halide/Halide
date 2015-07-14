@@ -51,28 +51,35 @@ extern "C" DLLEXPORT int extern_stage(buffer_t *in, buffer_t *out) {
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Func f, g, h;
-    Var x;
-    f(x) = x*x;
 
-    g.define_extern("extern_stage", {f}, Int(32), 1);
+    // We have two variants we want to test
+    for (int i = 0; i < 2; i++) {
+        Func f, g, h;
+        Var x;
+        f(x) = x*x;
 
-    h(x) = g(x) * 2;
+        g.define_extern("extern_stage", {f}, Int(32), 1);
 
-    // Compute h in 10-wide sections
-    Var xo;
-    h.split(x, xo, x, 10);
-    //f.compute_at(h, xo);
-    f.compute_root();
-    g.compute_at(h, xo);
+        h(x) = g(x) * 2;
 
-    Image<int32_t> result = h.realize(100);
+        // Compute h in 10-wide sections
+        Var xo;
+        h.split(x, xo, x, 10);
+        f.compute_root();
+        if (i == 0) {
+            g.compute_at(h, xo);
+        } else {
+            g.compute_root();
+        }
 
-    for (int i = 0; i < 100; i++) {
-        int32_t correct = i*i*i*2;
-        if (result(i) != correct) {
-            printf("result(%d) = %d instead of %d\n", i, result(i), correct);
-            return -1;
+        Image<int32_t> result = h.realize(100);
+
+        for (int i = 0; i < 100; i++) {
+            int32_t correct = i*i*i*2;
+            if (result(i) != correct) {
+                printf("result(%d) = %d instead of %d\n", i, result(i), correct);
+                return -1;
+            }
         }
     }
 
