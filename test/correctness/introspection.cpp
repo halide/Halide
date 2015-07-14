@@ -52,11 +52,9 @@ namespace {
 struct Bar {
     typedef int bint;
     bint bar_int;
-    Bar(int x) : bar_int(x) {
-        check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
-        check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
-    }
-    ~Bar() {
+    Bar(int x) : bar_int(x) {}
+    ~Bar() {}
+    void check_bar() {
         check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
         check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
     }
@@ -67,6 +65,7 @@ struct Bar {
 
 int g(int x) {
     Bar b(x*7);
+    b.check_bar();
     return b.get();
 }
 
