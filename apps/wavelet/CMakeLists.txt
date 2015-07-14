@@ -1,17 +1,15 @@
 # Generator
 halide_project(wavelet "apps" wavelet.cpp)
 
-set(_HL_MODULES daubechies_x.o inverse_daubechies_x.o haar_x.o inverse_haar_x.o)
-set(HL_MODULES "")
-set(_HL_HEADER_FILES daubechies_x.h inverse_daubechies_x.h haar_x.h inverse_haar_x.h)
-set(HL_HEADER_FILES "")
+set(_HL_MODULES daubechies_x inverse_daubechies_x haar_x inverse_haar_x)
 set(HALIDE_RUNTIME_OBJ "${CMAKE_CURRENT_BINARY_DIR}/halide_runtime.o")
 
-foreach(object_file ${_HL_MODULES})
-  list(APPEND HL_MODULES "${CMAKE_CURRENT_BINARY_DIR}/${object_file}")
+foreach(module ${_HL_MODULES})
+  list(APPEND HL_MODULES "${CMAKE_CURRENT_BINARY_DIR}/${module}${CMAKE_CXX_OUTPUT_EXTENSION}")
+  list(APPEND HL_HEADER_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module}.h")
 endforeach()
 foreach(header_file ${_HL_HEADER_FILES})
-  list(APPEND HL_HEADER_FILES "${CMAKE_CURRENT_BINARY_DIR}/${header_file}")
+
 endforeach()
 
 # Final executable
