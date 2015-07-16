@@ -356,10 +356,10 @@ protected:
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using Image = Halide::Image<T>;
     template <typename T> using Param = Halide::Param<T>;
-    inline Type Bool(int width = 1) { return Halide::Bool(width); }
-    inline Type Float(int bits, int width = 1) { return Halide::Float(bits, width); }
-    inline Type Int(int bits, int width = 1) { return Halide::Int(bits, width); }
-    inline Type UInt(int bits, int width = 1) { return Halide::UInt(bits, width); }
+    inline Type Bool(int width = 1) const { return Halide::Bool(width); }
+    inline Type Float(int bits, int width = 1) const { return Halide::Float(bits, width); }
+    inline Type Int(int bits, int width = 1) const { return Halide::Int(bits, width); }
+    inline Type UInt(int bits, int width = 1) const { return Halide::UInt(bits, width); }
 };
 
 namespace Internal {
