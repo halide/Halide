@@ -162,6 +162,9 @@ class InjectBufferCopies : public IRMutator {
           case DeviceAPI::GLSL:
             interface_name = "halide_opengl_device_interface";
             break;
+          case DeviceAPI::OpenGLCompute:
+            interface_name = "halide_openglcompute_device_interface";
+            break;
           case DeviceAPI::Renderscript:
             interface_name = "halide_renderscript_device_interface";
             break;

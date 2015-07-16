@@ -572,6 +572,7 @@ enum RuntimeKind {
     OpenCL,
     CUDA,
     OpenGL,
+    OpenGLCompute,
     MaxRuntimeKind
 };
 
@@ -609,6 +610,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);
             load_opengl();
+            break;
+        case OpenGLCompute:
+            internal_assert(false) << "opengl compute is not supported\n";
             break;
         default:
             break;
