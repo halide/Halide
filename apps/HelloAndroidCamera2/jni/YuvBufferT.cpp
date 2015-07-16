@@ -66,7 +66,7 @@ YuvBufferT::YuvBufferT(uint8_t *lumaPointer,
     chromaStorage_ = ChromaStorage::kOther;
     // U and V must have the same extents and strides.
     if (equalExtents(chromaU_, chromaV_) && equalStrides(chromaU_, chromaV_)) {
-        // If strides are exactly 2, check of they are interleaved.
+        // If strides are exactly 2, check if they are interleaved.
         if (chromaU_.stride[0] == 2 && chromaV_.stride[0] == 2) {
             if (chromaU_.host == chromaV_.host - 1) {
                 chromaStorage_ = ChromaStorage::kInterleavedUFirst;
