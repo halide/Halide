@@ -1,4 +1,4 @@
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#include "halide-hexagon-setup.h"
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 
 template<typename T>
@@ -13,7 +13,7 @@ void testZeroExtend(Target &target) {
   ZeroExtend.vectorize(x_inner);
   std::vector<Argument> args(1);
   args[0]  = inputOne;
-  COMPILE(ZeroExtend);
+  COMPILE(ZeroExtend, "ZeroExtF");
 }
 
 template<typename T>
@@ -28,5 +28,5 @@ void testSignExtend(Target &target) {
   SignExtend.vectorize(x_inner);
   std::vector<Argument> args(1);
   args[0]  = inputOne;
-  COMPILE(SignExtend);
+  COMPILE(SignExtend, "SignExtF");
 }

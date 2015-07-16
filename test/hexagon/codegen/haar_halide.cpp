@@ -3,14 +3,6 @@
 #include <stdio.h>
 using namespace Halide;
 //RUN: ./haar_halide.out | FileCheck %s
-
-#ifdef NOSTDOUT
-#define OFILE "x.s"
-#define BFILE "x.bc"
-#else
-#define OFILE "/dev/stdout"
-#endif
-#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
@@ -36,8 +28,7 @@ int main(int argc, char **argv) {
 
   std::vector<Argument> args(1);
   args[0]  = In;
-  Haar.compile_to_bitcode(BFILE, args, target);
-  COMPILE(Haar);
+  COMPILE(Haar, "haar");
   printf ("Done\n");
   return 0;
 }

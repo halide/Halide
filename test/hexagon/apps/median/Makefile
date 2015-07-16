@@ -8,7 +8,7 @@ B128_MODE=
 GDB=
 
 median.o median.h: median.cpp
-	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./median.generate.out  ${B128_MODE}
 
 
@@ -26,7 +26,7 @@ clean:
 .PHONY: assembly
 
 assembly: median.cpp
-	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: bitcode
@@ -65,7 +65,7 @@ run: median.out
 .PHONY: stmt
 
 stmt: median.cpp
-	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} median.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o median.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out
 
 .PHONY: synthetic

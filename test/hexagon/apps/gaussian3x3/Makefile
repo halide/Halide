@@ -7,7 +7,7 @@ CURR_DIR = `pwd`
 
 
 gaussian3x3.o gaussian3x3.h: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon -v ${CXXFLAGS}
+	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon/include -v ${CXXFLAGS}
 	./gaussian3x3.generate.out
 
 
@@ -25,13 +25,13 @@ clean:
 .PHONY: assembly
 
 assembly: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: bitcode
 
 bitcode: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: all
@@ -64,7 +64,7 @@ run: gaussian3x3.out
 .PHONY: stmt
 
 stmt: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: synthetic

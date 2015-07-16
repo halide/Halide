@@ -1,4 +1,4 @@
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#include "halide-hexagon-setup.h"
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
 
@@ -16,7 +16,7 @@ void testSub(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(Subt);
+  COMPILE(Subt, "Subt");
 }
 
 template<typename T>
@@ -33,8 +33,7 @@ void testAdd(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  //  Addb.compile_to_bitcode("vaddb.bc", args, target);
-  COMPILE(Addb);
+  COMPILE(Addb, "Addb");
 }
 
 
@@ -52,7 +51,7 @@ void testSubDouble(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(Subt);
+  COMPILE(Subt, "Subt");
 }
 
 template<typename T>
@@ -69,8 +68,7 @@ void testAddDouble(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  //  Addb.compile_to_bitcode("vaddb.bc", args, target);
-  COMPILE(Addb);
+  COMPILE(Addb, "Addb");
 }
 
 
@@ -88,7 +86,7 @@ void testAvg(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(Avg);
+  COMPILE(Avg, "Avg");
 
 
   Halide::Func Navg;
@@ -97,5 +95,5 @@ void testAvg(Target& target) {
   Navg.vectorize(x_inner);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(Navg);
+  COMPILE(Navg, "Navg");
 }

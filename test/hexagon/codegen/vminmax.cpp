@@ -1,5 +1,4 @@
 #include <Halide.h>
-#include "halide-hexagon-setup.h"
 #include "vminmax.h"
 #include <stdio.h>
 using namespace Halide;

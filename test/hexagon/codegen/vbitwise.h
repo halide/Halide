@@ -1,4 +1,4 @@
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#include "halide-hexagon-setup.h"
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
 
@@ -16,7 +16,7 @@ void testAnd(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(AndFunction);
+  COMPILE(AndFunction, "AndF");
 }
 
 template<typename T>
@@ -33,7 +33,7 @@ void testOr(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(OrFunction);
+  COMPILE(OrFunction, "OrF");
 }
 
 template<typename T>
@@ -50,7 +50,7 @@ void testXor(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(XorFunction);
+  COMPILE(XorFunction, "XorF");
 }
 
 template<typename T>
@@ -65,5 +65,5 @@ void testNot(Target& target) {
   NotFunction.vectorize(x_inner);
   std::vector<Argument> args(1);
   args[0]  = inputOne;
-  COMPILE(NotFunction);
+  COMPILE(NotFunction, "NotF");
 }

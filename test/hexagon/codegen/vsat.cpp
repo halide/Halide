@@ -4,12 +4,6 @@
 using namespace Halide;
 
 // RUN: ./vsat.out | FileCheck %s
-#ifdef NOSTDOUT
-#define OFILE "x.s"
-#else
-#define OFILE "/dev/stdout"
-#endif
-#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
 //CHECK: vsat(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
 void testVsat(Target& target) {
   Halide::Var x("x"), y("y");
@@ -24,7 +18,7 @@ void testVsat(Target& target) {
   VsatTest.vectorize(x_inner);
   args[0]  = InputOne;
   args[1] = InputTwo;
-  COMPILE(VsatTest);
+  COMPILE(VsatTest, "VsatF");
 }
 
 int main(int argc, char **argv) {

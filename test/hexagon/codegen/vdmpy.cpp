@@ -2,13 +2,8 @@
 #include "halide-hexagon-setup.h"
 #include <stdio.h>
 using namespace Halide;
-#ifdef NOSTDOUT
-#define OFILE "x.s"
-#else
-#define OFILE "/dev/stdout"
-#endif
-#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
-#define COMPILE_BC(X)  ((X).compile_to_bitcode("x.bc", args, target))
+using namespace Halide::Internal;
+IRPrinter irp(std::cerr);
 
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
@@ -30,7 +25,7 @@ void testOne(Target &target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(Result);
+  COMPILE(Result, "testOne");
 }
 // CHECK: testTwo,@function
 //CHECK: vdmpy(v{{[0-9]+}}.h,v{{[0-9]+}}.h):sat
@@ -44,7 +39,7 @@ void testTwo(Target &target) {
   Result.vectorize(x, 16);
   std::vector<Argument> args(1);
   args[0]  = inputOne;
-  COMPILE(Result);
+  COMPILE(Result, "testTwo");
 }
 int main(int argc, char **argv) {
   Target target;

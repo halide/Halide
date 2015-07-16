@@ -1,15 +1,9 @@
 #include <Halide.h>
-#include "halide-hexagon-setup.h"
 #include "vmpy.h"
 #include <stdio.h>
 using namespace Halide;
-#ifdef NOSTDOUT
-#define OFILE "x.s"
-#else
-#define OFILE "/dev/stdout"
-#endif
-#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
-#define COMPILE_BC(X)  ((X).compile_to_bitcode("x.bc", args, target))
+using namespace Halide::Internal;
+IRPrinter irp(std::cerr);
 
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128

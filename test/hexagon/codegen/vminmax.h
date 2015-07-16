@@ -1,4 +1,4 @@
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#include "halide-hexagon-setup.h"
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
 
@@ -16,7 +16,7 @@ void testMax(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(MaxFunction);
+  COMPILE(MaxFunction, "MaxF");
 }
 
 template<typename T>
@@ -33,5 +33,5 @@ void testMin(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = inputOne;
   args[1] = inputTwo;
-  COMPILE(MinFunction);
+  COMPILE(MinFunction, "MinF");
 }

@@ -1,5 +1,4 @@
 #include <Halide.h>
-#include "halide-hexagon-setup.h"
 #include "vbitwise.h"
 #include <stdio.h>
 using namespace Halide;

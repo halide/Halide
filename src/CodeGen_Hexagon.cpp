@@ -273,40 +273,40 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
 
   // "Sub"
   // Byte Vectors
-  varith.push_back(Pattern(WPICK(wild_i8x128,wild_i8x64) +
+  varith.push_back(Pattern(WPICK(wild_i8x128,wild_i8x64) -
                            WPICK(wild_i8x128,wild_i8x64),
                            IPICK(Intrinsic::hexagon_V6_vsubb)));
-  varith.push_back(Pattern(WPICK(wild_u8x128,wild_u8x64) +
+  varith.push_back(Pattern(WPICK(wild_u8x128,wild_u8x64) -
                            WPICK(wild_u8x128,wild_u8x64),
                            IPICK(Intrinsic::hexagon_V6_vsububsat)));
   // Half Vectors
-  varith.push_back(Pattern(WPICK(wild_i16x64,wild_i16x32) +
+  varith.push_back(Pattern(WPICK(wild_i16x64,wild_i16x32) -
                            WPICK(wild_i16x64,wild_i16x32),
                            IPICK(Intrinsic::hexagon_V6_vsubh)));
-  varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) +
+  varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) -
                            WPICK(wild_u16x64,wild_u16x32),
                            IPICK(Intrinsic::hexagon_V6_vsubuhsat)));
   // Word Vectors.
-  varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
+  varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) -
                            WPICK(wild_i32x32,wild_i32x16),
                            IPICK(Intrinsic::hexagon_V6_vsubw)));
   // Double Vectors
   // Byte Double Vectors
-  varith.push_back(Pattern(WPICK(wild_i8x256,wild_i8x128) +
+  varith.push_back(Pattern(WPICK(wild_i8x256,wild_i8x128) -
                            WPICK(wild_i8x256,wild_i8x128),
                            IPICK(Intrinsic::hexagon_V6_vsubb_dv)));
-  varith.push_back(Pattern(WPICK(wild_u8x256,wild_u8x128) +
+  varith.push_back(Pattern(WPICK(wild_u8x256,wild_u8x128) -
                            WPICK(wild_u8x256,wild_u8x128),
                            IPICK(Intrinsic::hexagon_V6_vsububsat_dv)));
   // Half Double Vectors
-  varith.push_back(Pattern(WPICK(wild_i16x128,wild_i16x64) +
+  varith.push_back(Pattern(WPICK(wild_i16x128,wild_i16x64) -
                            WPICK(wild_i16x128,wild_i16x64),
                            IPICK(Intrinsic::hexagon_V6_vsubh_dv)));
-  varith.push_back(Pattern(WPICK(wild_u16x128,wild_u16x64) +
+  varith.push_back(Pattern(WPICK(wild_u16x128,wild_u16x64) -
                            WPICK(wild_u16x128,wild_u16x64),
                            IPICK(Intrinsic::hexagon_V6_vsubuhsat_dv)));
   // Word Double Vectors.
-  varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) +
+  varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) -
                            WPICK(wild_i32x64,wild_i32x32),
                            IPICK(Intrinsic::hexagon_V6_vsubw_dv)));
 
@@ -1180,34 +1180,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
           return;
       }
       matches.clear();
-      // Try to generate the following casts.
-      // Vdd32.uh=vzxt(Vu32.ub) i.e. u8x64 -> u16x64
-      // Vdd32.uw=vzxt(Vu32.uh) i.e. u16x32 -> u32x32
-      // Vdd32.h=vsxt(Vu32.b) i.e. i8x64 -> i16x64
-      // Vdd32.w=vsxt(Vu32.h) i.e. i16x32 -> i32x32
-      for (size_t I = 0; I < casts.size(); ++I) {
-        const Pattern &P = casts[I];
-        if (expr_match(P.pattern, op, matches)) {
-          Intrinsic::ID ID = P.ID;
-          llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-          llvm::FunctionType *FType = F->getFunctionType();
-          Value *Op0 = codegen(matches[0]);
-          const Cast *C = P.pattern.as<Cast>();
-          internal_assert (C);
-          internal_assert(FType->getNumParams() == 1);
-          Halide::Type DestType = C->type;
-          llvm::Type *DestLLVMType = llvm_type_of(DestType);
-          llvm::Type *T0 = FType->getParamType(0);
-          if (T0 != Op0->getType()) {
-            Op0 = builder->CreateBitCast(Op0, T0);
-          }
-          Value *Call = builder->CreateCall(F, Op0);
-          value = builder->CreateBitCast(Call, DestLLVMType);
-          return;
-        }
-      }
-      matches.clear();
-
+      // vmpy - vector multiply - vector by vector.
       // Vdd32.uh=vmpy(Vu32.ub,Vv32.ub)
       // Vdd32.h=vmpy(Vu32.b,Vv32.b)
       // Vdd32.uw=vmpy(Vu32.uh,Vv32.uh)
@@ -1242,6 +1215,33 @@ void CodeGen_Hexagon::visit(const Cast *op) {
             value = builder->CreateBitCast(Call, DestLLVMType);
           else
             value = Call;
+          return;
+        }
+      }
+      matches.clear();
+      // Try to generate the following casts.
+      // Vdd32.uh=vzxt(Vu32.ub) i.e. u8x64 -> u16x64
+      // Vdd32.uw=vzxt(Vu32.uh) i.e. u16x32 -> u32x32
+      // Vdd32.h=vsxt(Vu32.b) i.e. i8x64 -> i16x64
+      // Vdd32.w=vsxt(Vu32.h) i.e. i16x32 -> i32x32
+      for (size_t I = 0; I < casts.size(); ++I) {
+        const Pattern &P = casts[I];
+        if (expr_match(P.pattern, op, matches)) {
+          Intrinsic::ID ID = P.ID;
+          llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+          llvm::FunctionType *FType = F->getFunctionType();
+          Value *Op0 = codegen(matches[0]);
+          const Cast *C = P.pattern.as<Cast>();
+          internal_assert (C);
+          internal_assert(FType->getNumParams() == 1);
+          Halide::Type DestType = C->type;
+          llvm::Type *DestLLVMType = llvm_type_of(DestType);
+          llvm::Type *T0 = FType->getParamType(0);
+          if (T0 != Op0->getType()) {
+            Op0 = builder->CreateBitCast(Op0, T0);
+          }
+          Value *Call = builder->CreateCall(F, Op0);
+          value = builder->CreateBitCast(Call, DestLLVMType);
           return;
         }
       }

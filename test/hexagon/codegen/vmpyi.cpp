@@ -1,15 +1,7 @@
 #include <Halide.h>
 #include "halide-hexagon-setup.h"
-#include "vmpy.h"
 #include <stdio.h>
 using namespace Halide;
-#ifdef NOSTDOUT
-#define OFILE "x.s"
-#else
-#define OFILE "/dev/stdout"
-#endif
-#define COMPILE(X)  ((X).compile_to_assembly(OFILE, args, target))
-#define COMPILE_BC(X)  ((X).compile_to_bitcode("x.bc", args, target))
 
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
@@ -29,5 +21,6 @@ int main(int argc, char **argv) {
   std::vector<Argument> args(2);
   args[0]  = i1;
   args[1] = i2;
-  COMPILE(F);  return 0;
+  COMPILE(F, "vmpyiF");
+  return 0;
 }

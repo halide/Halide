@@ -1,5 +1,15 @@
 using namespace Halide;
 #include <Halide.h>
+#ifdef NOSTDOUT
+#define OFILE_AS "x.s"
+#else
+#define OFILE_AS "/dev/stdout"
+#endif
+#define OFILE_BC "x.bc"
+
+#define COMPILE(X, Y)  ((X).compile_to_assembly(OFILE_AS, args, Y, target))
+#define COMPILE_BC(X, Y)  ((X).compile_to_bitcode(OFILE_BC, args, Y, target))
+
 void setupHexagonTarget(Target &target) {
         target.os = Target::OSUnknown; // The operating system
         target.arch = Target::Hexagon;   // The CPU architecture

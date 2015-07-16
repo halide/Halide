@@ -1,4 +1,4 @@
-#define COMPILE(X)  ((X).compile_to_assembly("/dev/stdout", args, target))
+#include "halide-hexagon-setup.h"
 #define VECTORSIZE 64 //Vector width in bytes. (Single mode)
 #define DOUBLEVECTORSIZE 128
 
@@ -14,5 +14,5 @@ void testVMPY(Target& target) {
   std::vector<Argument> args(2);
   args[0]  = i1;
   args[1] = i2;
-  COMPILE(F);
+  COMPILE(F, "testVMPY");
 }

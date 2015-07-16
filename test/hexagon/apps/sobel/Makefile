@@ -5,7 +5,7 @@ CXXFLAGS="--std=c++11"
 
 
 sobel.o sobel.h: sobel.cpp
-	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 	./sobel.generate.out
 
@@ -24,14 +24,14 @@ clean:
 .PHONY: assembly
 
 assembly: sobel.cpp
-	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 	./sobel.generate.out
 
 .PHONY: bitcode
 
 bitcode: sobel.cpp
-	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 	./sobel.generate.out
 
@@ -47,6 +47,6 @@ run: sobel.out
 .PHONY: stmt
 
 stmt: sobel.cpp
-	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon ${CXXFLAGS}
+	${CC} sobel.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o sobel.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:$LD_LIBRARY_PATH
 	./sobel.generate.out
