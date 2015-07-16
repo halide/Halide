@@ -62,7 +62,7 @@ protected:
     llvm::Value *handleLargeVectors(const Add *);
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Cast *);
-
+    bool possiblyCodeGenWideningMultiply(const Mul *);
 };
 
 }}

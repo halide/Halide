@@ -16,3 +16,17 @@ void testVMPY(Target& target) {
   args[1] = i2;
   COMPILE(F, "testVMPY");
 }
+
+template<typename T1, typename T2>
+void testWideningMultiply(Target& target) {
+  Halide::Var x("x");
+  ImageParam i1 (type_of<T1>(), 1);
+  Halide::Func f, g;
+  g(x) = cast<T2> (i1(x));
+  f(x) = 3 * g(x);
+  int vector_factor = VECTORSIZE / sizeof(T1);
+  f.vectorize(x, vector_factor);
+  std::vector<Argument> args(1);
+  args[0]  = i1;
+  COMPILE(f, "testWideningMultiply");
+}

@@ -1529,7 +1529,133 @@ CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
   }
   return NULL;
 }
-void CodeGen_Hexagon:: visit(const Mul *op) {
+bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
+  const Broadcast *bc_a = op->a.as<Broadcast>();
+  const Broadcast *bc_b = op->b.as<Broadcast>();
+  if (!bc_a && !bc_b)
+    // both cannot be broadcasts because simplify should have reduced them.
+    return false;
+  // So we know at least one is a broadcast.
+  //   Vdd.h=vmpy(Vu.ub,Rt.b)
+  //   Vdd.w=vmpy(Vu.h,Rt.h)
+  //   Vdd.uh=vmpy(Vu.ub,Rt.ub)
+  //   Vdd.uw=vmpy(Vu.uh,Rt.uh)
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Pattern>Patterns;
+  std::vector<Expr> matches;
+  std::vector<Value *> Ops;
+  Expr Vec, BC, bc_value;;
+  Intrinsic::ID IntrinsID;
+  //   Deal with these first.
+  //   Vdd.h=vmpy(Vu.ub,Rt.b)
+  //   Vdd.w=vmpy(Vu.h,Rt.h)
+  Patterns.push_back(Pattern(WPICK(wild_i16x128, wild_i16x64) *
+                             WPICK(wild_i16x128, wild_i16x64),
+                             IPICK(Intrinsic::hexagon_V6_vmpybus)));
+  Patterns.push_back(Pattern(WPICK(wild_i32x64, wild_i32x32) *
+                             WPICK(wild_i32x64, wild_i32x32),
+                             IPICK(Intrinsic::hexagon_V6_vmpyh)));
+  for (size_t I = 0; I < Patterns.size(); ++I) {
+    const Pattern &P = Patterns[I];
+    if (expr_match(P.pattern, op, matches)) {
+      if (bc_a) {
+        BC = matches[0];
+        Vec = matches[1];
+        bc_value = bc_a->value;
+      } else {
+        Vec = matches[0];
+        BC = matches[1];
+        bc_value = bc_b->value;
+      }
+      Type t_vec, t_bc;
+      if (Vec.type().bits == 16) {
+        t_vec = UInt(8, Vec.type().width);
+        t_bc = Int(8, Vec.type().width);
+      }
+      else if (Vec.type().bits == 32) {
+        t_vec = Int(16, Vec.type().width);
+        t_bc = Int(16, Vec.type().width);
+      }
+      Vec  = lossless_cast(t_vec, Vec);
+      BC = lossless_cast(t_bc, BC);
+      IntrinsID = P.ID;
+      break;
+    }
+  }
+  if (!Vec.defined()) {
+    Patterns.clear();
+    matches.clear();
+    Ops.clear();
+    //   Vdd.uh=vmpy(Vu.ub,Rt.ub)
+    //   Vdd.uw=vmpy(Vu.uh,Rt.uh)
+    Patterns.push_back(Pattern(WPICK(wild_u16x128, wild_u16x64) *
+                               WPICK(wild_u16x128, wild_u16x64),
+                               IPICK(Intrinsic::hexagon_V6_vmpyub)));
+    Patterns.push_back(Pattern(WPICK(wild_u32x64, wild_u32x32) *
+                               WPICK(wild_u32x64, wild_u32x32),
+                               IPICK(Intrinsic::hexagon_V6_vmpyuh)));
+    for (size_t I = 0; I < Patterns.size(); ++I) {
+      const Pattern &P = Patterns[I];
+      if (expr_match(P.pattern, op, matches)) {
+        if (bc_a) {
+          BC = matches[0];
+          Vec = matches[1];
+          bc_value = bc_a->value;
+        } else {
+          Vec = matches[0];
+          BC = matches[1];
+          bc_value = bc_b->value;
+        }
+        Type t_vec, t_bc;
+        if (Vec.type().bits == 16) {
+          t_vec = UInt(8, Vec.type().width);
+          t_bc = UInt(8, Vec.type().width);
+        }
+        else if (Vec.type().bits == 32) {
+          t_vec = UInt(16, Vec.type().width);
+          t_bc = UInt(16, Vec.type().width);
+        }
+        Vec  = lossless_cast(t_vec, Vec);
+        BC = lossless_cast(t_bc, BC);
+        IntrinsID = P.ID;
+        break;
+      }
+    }
+  }
+  if (!Vec.defined() || !BC.defined())
+    return false;
+  Value *Vector = codegen(Vec);
+  const IntImm *Imm = bc_value.as<IntImm>();
+  if (!Imm) {
+    const Cast *C = bc_value.as<Cast>();
+    if (C) {
+      Imm = C->value.as<IntImm>();
+    }
+  }
+  if (!Imm)
+    return false;
+  //   Vdd.h=vmpy(Vu.ub,Rt.b)
+  //   Vdd.w=vmpy(Vu.h,Rt.h)
+  int ScalarValue = 0;
+  int ImmValue = Imm->value;
+  if (Vec.type().bits == 8) {
+    int A = ImmValue & 0xFF;
+    int B = A | (A << 8);
+    ScalarValue = B | (B << 16);
+  } else {
+    int A = ImmValue & 0xFFFF;
+    ScalarValue = A | (A << 16);
+  }
+  Expr ScalarImmExpr = IntImm::make(ScalarValue);
+  Value *Scalar = codegen(ScalarImmExpr);
+  Ops.push_back(Vector);
+  Ops.push_back(Scalar);
+  Value *Vmpy =
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module, IntrinsID), Ops);
+  value = convertValueType(Vmpy, llvm_type_of(op->type));
+  return true;
+}
+void CodeGen_Hexagon::visit(const Mul *op) {
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
@@ -1565,6 +1691,10 @@ void CodeGen_Hexagon:: visit(const Mul *op) {
       debug (4) << "HexCG: visit(Const Mul *op) ** \n";
       debug (4) << "op->a:" << op->a << "\n";
       debug (4) << "op->b:" << op->b << "\n";
+      // Before we generate vector by scalar multiplies check if we can
+      // use widening multiplies
+      if (possiblyCodeGenWideningMultiply(op))
+        return;
       int types[] = {16, 32};
       std::vector<Expr> Patterns;
       for (size_t i = 0; i < sizeof(types)/sizeof(types[0]); i++) {
@@ -1624,7 +1754,8 @@ void CodeGen_Hexagon:: visit(const Mul *op) {
                 ScalarValue = B | (B << 16);
                 IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwb);
               } else if (ImmValue <= UInt(16).imax()) {
-                ScalarValue = ImmValue & 0xFFFF;
+                int A = ImmValue & 0xFFFF;
+                ScalarValue = (A << 16) | A;
                 IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwh);
               } else
                 internal_error <<

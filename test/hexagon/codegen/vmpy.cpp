@@ -17,5 +17,11 @@ int main(int argc, char **argv) {
   testVMPY<uint8_t, uint8_t, uint16_t>(target);
   //CHECK: vmpy(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
   testVMPY<int16_t, int16_t, int32_t>(target);
+  //CHECK: vmpy(v{{[0-9]+}}.ub,r{{[0-9]+}}.b)
+  testWideningMultiply<uint8_t, int16_t>(target);
+  // CHECK: vmpy(v{{[0-9]+}}.h,r{{[0-9]+}}.h)
+  testWideningMultiply<int16_t, int32_t>(target);
+  //CHECK: vmpy(v{{[0-9]+}}.ub,r{{[0-9]+}}.ub)
+  testWideningMultiply<uint8_t, uint16_t>(target);
   return 0;
 }
