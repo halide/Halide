@@ -60,6 +60,16 @@ extern uintptr_t halide_metal_detach_buffer(void *user_context, struct buffer_t 
  */
 extern uintptr_t halide_metal_get_buffer(void *user_context, struct buffer_t *buf);
 
+struct halide_metal_device;
+struct halide_metal_command_queue;
+
+// TODO: docs, check if these are exported for other GPU APIs.
+extern int halide_metal_acquire_context(void *user_context, halide_metal_device *&device_ret,
+                                        halide_metal_command_queue *&queue_ret, bool create = true);
+
+// TODO: docs
+extern int halide_metal_release_context(void *user_context);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif
