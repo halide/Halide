@@ -15,9 +15,9 @@ extern struct ObjectiveCClass _NSConcreteGlobalBlock;
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
-struct mtl_device;
+typedef halide_metal_device mtl_device;
+typedef halide_metal_command_queue mtl_command_queue;
 struct mtl_buffer;
-struct mtl_command_queue;
 struct mtl_command_buffer;
 struct mtl_compute_command_encoder;
 struct mtl_blit_command_encoder;
@@ -195,6 +195,13 @@ struct module_state {
 };
 WEAK module_state *state_list = NULL;
 
+}}}}
+
+using namespace Halide::Runtime::Internal;
+using namespace Halide::Runtime::Internal::Metal;
+
+extern "C" {
+
 // The default implementation of halide_metal_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
@@ -205,7 +212,7 @@ WEAK module_state *state_list = NULL;
 //   halide_release_cl_context. halide_acquire_cl_context should block while a
 //   previous call (if any) has not yet been released via halide_release_cl_context.
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_ret,
-                                      mtl_command_queue *&queue_ret, bool create = true) {
+                                      mtl_command_queue *&queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
     while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
@@ -244,6 +251,10 @@ WEAK int halide_metal_release_context(void *user_context) {
     __sync_lock_release(&thread_lock);
     return 0;
 }
+
+} // extern "C"
+
+namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
 class MetalContextHolder {
     objc_id pool;

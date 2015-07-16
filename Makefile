@@ -514,7 +514,7 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_sse41
 
-RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h include/HalideRuntimeRenderscript.h
+RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h include/HalideRuntimeRenderscript.h include/HalideRuntimeMetal.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
