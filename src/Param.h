@@ -6,9 +6,6 @@
  * Classes for declaring scalar and image parameters to halide pipelines
  */
 
-#include <sstream>
-#include <vector>
-
 #include "IR.h"
 #include "Var.h"
 #include "Util.h"
@@ -144,11 +141,11 @@ public:
         param.set_max_value(max);
     }
 
-    Expr get_min_value() {
+    Expr get_min_value() const {
         return param.get_min_value();
     }
 
-    Expr get_max_value() {
+    Expr get_max_value() const {
         return param.get_max_value();
     }
     // @}
@@ -169,7 +166,8 @@ public:
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
     operator Argument() const {
-        return Argument(name(), false, type());
+        return Argument(name(), Argument::InputScalar, type(), 0,
+            param.get_scalar_expr(), param.get_min_value(), param.get_max_value());
     }
 };
 
@@ -177,7 +175,8 @@ public:
  * the function (if any). It is rare that this function is necessary
  * (e.g. to pass the user context to an extern function written in C). */
 inline Expr user_context_value() {
-    return Internal::Variable::make(Handle(), "__user_context");
+    return Internal::Variable::make(Handle(), "__user_context",
+        Internal::Parameter(Handle(), false, 0, "__user_context", true));
 }
 
 /** A handle on the output buffer of a pipeline. Used to make static
@@ -187,6 +186,9 @@ protected:
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 
+    /** Is this an input or an output? OutputImageParam is the base class for both. */
+    Argument::Kind kind;
+    
     void add_implicit_args_if_placeholder(std::vector<Expr> &args,
                                           Expr last_arg,
                                           int total_args,
@@ -197,7 +199,7 @@ public:
     OutputImageParam() {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    EXPORT OutputImageParam(const Internal::Parameter &p);
+    EXPORT OutputImageParam(const Internal::Parameter &p, Argument::Kind k);
 
     /** Get the name of this Param */
     EXPORT const std::string &name() const;
@@ -206,7 +208,7 @@ public:
     EXPORT Type type() const;
 
     /** Is this parameter handle non-NULL */
-    EXPORT bool defined();
+    EXPORT bool defined() const;
 
     /** Get an expression representing the minimum coordinates of this image
      * parameter in the given dimension. */
@@ -301,7 +303,7 @@ public:
     EXPORT operator ExternFuncArgument() const;
 };
 
-/** An Image parameter to a halide pipelin\e. E.g., the input image. */
+/** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
 
 public:
@@ -354,7 +356,6 @@ public:
     operator Expr() const {
         return (*this)(_);
     }
-
 };
 
 }

@@ -233,7 +233,7 @@ private:
         }
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         Stmt produce = mutate(op->produce);
         if (!produce.defined()) {
             produce = Evaluate::make(Expr("Produce step elided due to use of Halide::undef"));
@@ -246,7 +246,7 @@ private:
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 
@@ -268,7 +268,7 @@ private:
             body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, min, extent, op->for_type, body);
+            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
         }
     }
 
@@ -276,13 +276,13 @@ private:
         predicate = Expr();
 
         Expr value = mutate(op->value);
-        if (!expr.defined()) {
+        if (!value.defined()) {
             stmt = Stmt();
             return;
         }
 
         Expr index = mutate(op->index);
-        if (!expr.defined()) {
+        if (!index.defined()) {
             stmt = Stmt();
             return;
         }
@@ -300,6 +300,8 @@ private:
     }
 
     void visit(const Provide *op) {
+        predicate = Expr();
+
         vector<Expr> new_args(op->args.size());
         vector<Expr> new_values(op->values.size());
         bool changed = false;
@@ -327,7 +329,10 @@ private:
             new_values[i] = new_value;
         }
 
-        if (!changed) {
+        if (predicate.defined()) {
+            stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args));
+            predicate = Expr();
+        } else if (!changed) {
             stmt = op;
         } else {
             stmt = Provide::make(op->name, new_values, new_args);
@@ -477,7 +482,9 @@ private:
 Stmt remove_undef(Stmt s) {
     RemoveUndef r;
     s = r.mutate(s);
-    internal_assert(!r.predicate.defined()) << "Undefined expression leaked outside of a Store node\n";
+    internal_assert(!r.predicate.defined())
+        << "Undefined expression leaked outside of a Store node: "
+        << r.predicate << "\n";
     return s;
 }
 

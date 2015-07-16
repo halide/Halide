@@ -14,7 +14,7 @@ Func vignette(Func in, Expr center_x, Expr center_y, Expr radius) {
     assert(in.output_types().size() == 1 &&
            in.output_types()[0] == Float(32));
     Func f;
-    f.define_extern("vignette_impl", Internal::vec<ExternFuncArgument>(in, center_x, center_y, radius), Float(32), 2);
+    f.define_extern("vignette_impl", {in, center_x, center_y, radius}, Float(32), 2);
     return f;
 }
 
@@ -23,7 +23,7 @@ Func flip(Func in, Expr total_width) {
     assert(in.output_types().size() == 1 &&
            in.output_types()[0] == Float(32));
     Func f;
-    f.define_extern("flip_impl", Internal::vec<ExternFuncArgument>(in, total_width), Float(32), 2);
+    f.define_extern("flip_impl", {in, total_width}, Float(32), 2);
     return f;
 }
 

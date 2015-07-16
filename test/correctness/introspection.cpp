@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
@@ -6,9 +6,9 @@ namespace Halide {
 void check(const void *var, const std::string &type,
            const std::string &correct_name,
            const std::string &correct_file, int line) {
-    std::string correct_loc = correct_file + ":" + Halide::Internal::int_to_string(line);
-    std::string loc = Halide::Internal::get_source_location();
-    std::string name = Halide::Internal::get_variable_name(var, type);
+    std::string correct_loc = correct_file + ":" + std::to_string(line);
+    std::string loc = Halide::Internal::Introspection::get_source_location();
+    std::string name = Halide::Internal::Introspection::get_variable_name(var, type);
 
     if (name != correct_name) {
         printf("Mispredicted name: %s vs %s\n",
@@ -52,11 +52,9 @@ namespace {
 struct Bar {
     typedef int bint;
     bint bar_int;
-    Bar(int x) : bar_int(x) {
-        check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
-        check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
-    }
-    ~Bar() {
+    Bar(int x) : bar_int(x) {}
+    ~Bar() {}
+    void check_bar() {
         check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
         check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
     }
@@ -67,12 +65,11 @@ struct Bar {
 
 int g(int x) {
     Bar b(x*7);
+    b.check_bar();
     return b.get();
 }
 
 }
-
-
 
 int f(int x) {
     static float static_float_in_f = 0.3f;
@@ -83,6 +80,24 @@ int f(int x) {
 }
 
 }
+
+typedef float fancy_float;
+
+struct HeapObject {
+    float f;
+    fancy_float f2;
+    int i;
+    struct  {
+        char c;
+        double d;
+        int i_array[20];
+    } inner;
+    HeapObject *ptr;
+    struct inner2 {
+        int a[5];
+    };
+    inner2 inner2_array[10];
+};
 
 int main(int argc, char **argv) {
     bool result = HalideIntrospectionCanary::test();
@@ -106,6 +121,24 @@ int main(int argc, char **argv) {
     int *on_the_heap = new int;
     check(on_the_heap, "int", "", __FILE__, __LINE__);
     delete on_the_heap;
+
+    // .. unless they're members of explicitly registered objects
+    HeapObject *obj = new HeapObject;
+    static HeapObject *dummy_heap_object_ptr = NULL;
+    Halide::Internal::Introspection::register_heap_object(obj, sizeof(HeapObject), &dummy_heap_object_ptr);
+    check(&(obj->f), "float", "f", __FILE__, __LINE__);
+    check(&(obj->f2), "fancy_float", "f2", __FILE__, __LINE__);
+    check(&(obj->f2), "float", "f2", __FILE__, __LINE__);
+    check(&(obj->i), "int", "i", __FILE__, __LINE__);
+    check(&(obj->inner.c), "char", "inner.c", __FILE__, __LINE__);
+    check(&(obj->inner.d), "double", "inner.d", __FILE__, __LINE__);
+    check(&(obj->ptr), "HeapObject *", "ptr", __FILE__, __LINE__);
+    // TODO:
+    check(&(obj->inner.i_array[10]), "int", "inner.i_array[10]", __FILE__, __LINE__);
+    check(&(obj->inner2_array[4].a[2]), "int", "inner2_array[4].a[2]", __FILE__, __LINE__);
+    check(&(obj->inner.i_array), "int [20]", "inner.i_array", __FILE__, __LINE__);
+    Halide::Internal::Introspection::deregister_heap_object(obj, sizeof(HeapObject));
+    delete obj;
 
     // Make sure it works for arrays.
     float an_array[17];

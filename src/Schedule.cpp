@@ -135,5 +135,24 @@ bool Schedule::allow_race_conditions() const {
     return contents.ptr->allow_race_conditions;
 }
 
+void Schedule::accept(IRVisitor *visitor) const {
+    for (const Split &s : splits()) {
+        if (s.factor.defined()) {
+            s.factor.accept(visitor);
+        }
+    }
+    for (const Bound &b : bounds()) {
+        if (b.min.defined()) {
+            b.min.accept(visitor);
+        }
+        if (b.extent.defined()) {
+            b.extent.accept(visitor);
+        }
+    }
+    for (const Specialization &s : specializations()) {
+        s.condition.accept(visitor);
+    }
+}
+
 }
 }

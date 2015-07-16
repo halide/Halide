@@ -1,20 +1,21 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
-#include <stdint.h>
-#include "buffer_t.h"
-#include "IntrusivePtr.h"
-#include "Type.h"
-#include "Argument.h"
-
 /** \file
  * Defines Buffer - A c++ wrapper around a buffer_t.
  */
 
+#include <stdint.h>
+
+#include "runtime/HalideRuntime.h" // For buffer_t
+#include "IntrusivePtr.h"
+#include "Type.h"
+#include "Argument.h"
+
 namespace Halide {
 namespace Internal {
 struct BufferContents;
-struct JITCompiledModule;
+struct JITModule;
 }
 
 /** The internal representation of an image, or other dense array
@@ -107,15 +108,6 @@ public:
     /** Convert this buffer to an argument to a halide pipeline. */
     EXPORT operator Argument() const;
 
-    /** Declare that this buffer was created by the given jit-compiled
-     * module. Used internally for reference counting the module. */
-    EXPORT void set_source_module(const Internal::JITCompiledModule &module);
-
-    /** If this buffer was the output of a jit-compiled realization,
-     * retrieve the module it came from. Otherwise returns a module
-     * struct full of null pointers. */
-    EXPORT const Internal::JITCompiledModule &source_module();
-
     /** If this buffer was created *on-device* by a jit-compiled
      * realization, then copy it back to the cpu-side memory. This is
      * usually achieved by casting the Buffer to an Image. */
@@ -131,7 +123,7 @@ public:
      * host_dirty bit so that Halide can manage the copy lazily for
      * you. Casting the Buffer to an Image sets the dirty bit for
      * you. */
-    EXPORT int copy_to_dev();
+    EXPORT int copy_to_device();
 
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then free the device-side

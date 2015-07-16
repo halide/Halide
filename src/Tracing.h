@@ -5,8 +5,9 @@
  * Defines the lowering pass that injects print statements when tracing is turned on
  */
 
-#include "IR.h"
 #include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -15,7 +16,9 @@ namespace Internal {
  * tracing functions at interesting points, such as
  * allocations. Should be done before storage flattening, but after
  * all bounds inference. */
-Stmt inject_tracing(Stmt, const std::map<std::string, Function> &env, Function output);
+Stmt inject_tracing(Stmt,
+                    const std::map<std::string, Function> &env,
+                    const std::vector<Function> &outputs);
 
 }
 }

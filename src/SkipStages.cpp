@@ -100,7 +100,7 @@ private:
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         in_pipeline.push(op->name, 0);
         if (op->name != buffer) {
             op->produce.accept(this);
@@ -213,7 +213,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         // If the predicate at this stage depends on something
         // vectorized we should bail out.
         if (op->name == buffer) {
@@ -222,11 +222,11 @@ private:
                 Expr predicate_var = Variable::make(Bool(), buffer + ".needed");
                 Stmt produce = IfThenElse::make(predicate_var, op->produce);
                 Stmt update = IfThenElse::make(predicate_var, op->update);
-                stmt = Pipeline::make(op->name, produce, update, op->consume);
+                stmt = ProducerConsumer::make(op->name, produce, update, op->consume);
                 stmt = LetStmt::make(buffer + ".needed", predicate, stmt);
             } else {
                 Stmt produce = IfThenElse::make(predicate, op->produce);
-                stmt = Pipeline::make(op->name, produce, Stmt(), op->consume);
+                stmt = ProducerConsumer::make(op->name, produce, Stmt(), op->consume);
             }
 
         } else {
@@ -249,14 +249,14 @@ private:
         bool old_in_vector_loop = in_vector_loop;
 
         // We want to be sure that the predicate doesn't vectorize.
-        if (op->for_type == For::Vectorized) {
+        if (op->for_type == ForType::Vectorized) {
             vector_vars.push(op->name, 0);
             in_vector_loop = true;
         }
 
         IRMutator::visit(op);
 
-        if (op->for_type == For::Vectorized) {
+        if (op->for_type == ForType::Vectorized) {
             vector_vars.pop(op->name);
         }
 
@@ -338,12 +338,7 @@ class MightBeSkippable : public IRVisitor {
         }
         IRVisitor::visit(op);
         if (op->name == func || extern_call_uses_buffer(op, func)) {
-            if (!found_call) {
-                result = guarded;
-                found_call = true;
-            } else {
-                result &= guarded;
-            }
+            result &= guarded;
         }
     }
 
@@ -380,9 +375,12 @@ class MightBeSkippable : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (op->name == func) {
+            bool old_result = result;
+            result = true;
             op->consume.accept(this);
+            result = result || old_result;
         } else {
             IRVisitor::visit(op);
         }
@@ -393,9 +391,8 @@ class MightBeSkippable : public IRVisitor {
 
 public:
     bool result;
-    bool found_call;
 
-    MightBeSkippable(string f) : func(f), guarded(false), result(false), found_call(false) {}
+    MightBeSkippable(string f) : func(f), guarded(false), result(false) {}
 };
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {

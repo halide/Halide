@@ -1,4 +1,5 @@
 #include "StmtToHtml.h"
+#include "IRVisitor.h"
 #include "IROperator.h"
 #include "Scope.h"
 
@@ -136,15 +137,6 @@ private:
         return "</a>";
     }
 
-    void print(Expr ir) {
-        ir.accept(this);
-    }
-
-    void print(Stmt ir) {
-        ir.accept(this);
-    }
-
-public:
     void visit(const IntImm *op){
         stream << open_span("IntImm Imm");
         stream << op->value;
@@ -235,12 +227,12 @@ public:
 
     void visit(const Min *op) {
         stream << open_span("Min");
-        print_list(symbol("min") + "(", vec(op->a, op->b), ")");
+        print_list(symbol("min") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
     void visit(const Max *op) {
         stream << open_span("Max");
-        print_list(symbol("max") + "(", vec(op->a, op->b), ")");
+        print_list(symbol("max") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
     void visit(const Not *op) {
@@ -251,7 +243,7 @@ public:
     }
     void visit(const Select *op) {
         stream << open_span("Select");
-        print_list(symbol("select") + "(", vec(op->condition, op->true_value, op->false_value), ")");
+        print_list(symbol("select") + "(", {op->condition, op->true_value, op->false_value}, ")");
         stream << close_span();
     }
     void visit(const Load *op) {
@@ -265,7 +257,7 @@ public:
     }
     void visit(const Ramp *op) {
         stream << open_span("Ramp");
-        print_list(symbol("ramp") + "(", vec(op->base, op->stride, Expr(op->width)), ")");
+        print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->width)}, ")");
         stream << close_span();
     }
     void visit(const Broadcast *op) {
@@ -341,7 +333,7 @@ public:
         print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         scope.push(op->name, unique_id());
         stream << open_div("Produce");
         int produce_id = unique_id();
@@ -382,14 +374,20 @@ public:
         int id = unique_id();
         stream << open_expand_button(id);
         stream << open_span("Matched");
-        if (op->for_type == 0) {
+        if (op->for_type == ForType::Serial) {
             stream << keyword("for");
-        } else {
+        } else if (op->for_type == ForType::Parallel) {
             stream << keyword("parallel");
+        } else if (op->for_type == ForType::Vectorized) {
+            stream << keyword("vectorized");
+        } else if (op->for_type == ForType::Unrolled) {
+            stream << keyword("unrolled");
+        } else {
+            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
         stream << " (";
         stream << close_span();
-        print_list(vec(Variable::make(Int(32), op->name), op->min, op->extent));
+        print_list({Variable::make(Int(32), op->name), op->min, op->extent});
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
@@ -491,7 +489,7 @@ public:
         stream << var(op->name);
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            print_list("[", vec(op->bounds[i].min, op->bounds[i].extent), "]");
+            print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
             if (i < op->bounds.size() - 1) stream << ", ";
         }
         stream << matched(")");
@@ -567,6 +565,49 @@ public:
         stream << close_div();
     }
 
+public:
+    void print(Expr ir) {
+        ir.accept(this);
+    }
+
+    void print(Stmt ir) {
+        ir.accept(this);
+    }
+
+    void print(const LoweredFunc &op) {
+        scope.push(op.name, unique_id());
+        stream << open_div("Function");
+
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << open_span("Matched");
+        stream << keyword("func");
+        stream << " " << op.name << "(";
+        stream << close_span();
+        for (size_t i = 0; i < op.args.size(); i++) {
+            if (i > 0) {
+                stream << matched(",") << " ";
+            }
+            stream << var(op.args[i].name);
+        }
+        stream << matched(")");
+        stream << close_expand_button();
+        stream << " " << matched("{");
+        stream << open_div("FunctionBody Indent", id);
+        print(op.body);
+        stream << close_div();
+        stream << matched("}");
+
+        stream << close_div();
+        scope.pop(op.name);
+    }
+
+    void print(const Buffer &op) {
+        stream << open_div("Buffer");
+        stream << keyword("buffer ") << var(op.name());
+        stream << close_div();
+    }
+
     StmtToHtml(string filename) : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
@@ -579,8 +620,7 @@ public:
         stream << "</head>\n <body>\n";
     }
 
-    void generate(Stmt s){
-        print(s);
+    ~StmtToHtml() {
         stream << "<script>\n"
                << "$( '.Matched' ).each( function() {\n"
                << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight'); }\n"
@@ -588,10 +628,7 @@ public:
                << "} );\n"
                << "</script>\n";
         stream << "</body>";
-        stream.close();
     }
-
-    ~StmtToHtml(){}
 };
 
 const std::string StmtToHtml::css = "\n \
@@ -634,7 +671,17 @@ function toggle(id) { \n \
 
 void print_to_html(string filename, Stmt s) {
     StmtToHtml sth(filename);
-    sth.generate(s);
+    sth.print(s);
+}
+
+void print_to_html(string filename, const Module &m) {
+    StmtToHtml sth(filename);
+    for (size_t i = 0; i < m.buffers.size(); i++) {
+        sth.print(m.buffers[i]);
+    }
+    for (size_t i = 0; i < m.functions.size(); i++) {
+        sth.print(m.functions[i]);
+    }
 }
 
 }

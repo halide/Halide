@@ -1,21 +1,20 @@
-// Halide tutorial lesson 7
-
-// This lesson demonstrates how express multi-stage pipelines.
-
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_07_multi_stage_pipelines
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
+// Halide tutorial lesson 7: Multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
 // LD_LIBRARY_PATH=../bin ./lesson_07
 
 // On os x:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
 
-#include <Halide.h>
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_07_multi_stage_pipelines
+// in a shell with the current directory at the top of the halide
+// source tree.
+
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -101,7 +100,7 @@ int main(int argc, char **argv) {
         // reading out of bounds:
         Func clamped("clamped");
 
-        // Define an expression that clamps x to lie within the the
+        // Define an expression that clamps x to lie within the
         // range [0, input.width()-1].
         Expr clamped_x = clamp(x, 0, input.width()-1);
         // Similarly clamp y.
@@ -112,6 +111,16 @@ int main(int argc, char **argv) {
         // style boundary condition, and is the simplest boundary
         // condition to express in Halide.
         clamped(x, y, c) = input(clamped_x, clamped_y, c);
+
+        // Defining 'clamped' in that way can be done more concisely
+        // using a helper function from the BoundaryConditions
+        // namespace like so:
+        //
+        // clamped = BoundaryConditions::repeat_edge(input);
+        //
+        // These are important to use for other boundary conditions,
+        // because they are expressed in the way that Halide can best
+        // understand and optimize.
 
         // Upgrade it to 16-bit, so we can do math without it
         // overflowing. This time we'll refer to our new Func

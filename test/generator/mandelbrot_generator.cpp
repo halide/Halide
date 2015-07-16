@@ -48,7 +48,7 @@ public:
     Param<int> w{"w"};
     Param<int> h{"h"};
 
-    Func build() override {
+    Func build() {
         Var x, y, z;
 
         Complex initial(lerp(x_min, x_max, cast<float>(x) / w),

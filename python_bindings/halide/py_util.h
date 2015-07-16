@@ -95,7 +95,7 @@ Expr call(const ImageParam &a, Expr b, Expr c, Expr d, Expr e);
 Expr call(Image<T> &a, Expr b);                             \
 Expr call(Image<T> &a, Expr b, Expr c);                     \
 Expr call(Image<T> &a, Expr b, Expr c, Expr d);                     \
-Expr call(Image<T> &a, Expr b, Expr c, Expr d, Expr e);                   
+Expr call(Image<T> &a, Expr b, Expr c, Expr d, Expr e);
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)
 DEFINE_TYPE(uint32_t)

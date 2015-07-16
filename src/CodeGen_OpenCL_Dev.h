@@ -35,6 +35,10 @@ public:
     std::string get_current_kernel_name();
 
     void dump();
+    
+    virtual std::string print_gpu_name(const std::string &name);
+
+    std::string api_unique_name() { return "opencl"; }
 
 protected:
 

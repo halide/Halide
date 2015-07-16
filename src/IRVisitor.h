@@ -1,6 +1,7 @@
 #ifndef HALIDE_IR_VISITOR_H
 #define HALIDE_IR_VISITOR_H
 
+#include "IR.h"
 #include "Util.h"
 
 #include <set>
@@ -12,54 +13,7 @@
  */
 
 namespace Halide {
-
-struct Expr;
-
 namespace Internal {
-
-struct IRNode;
-struct Stmt;
-struct IntImm;
-struct FloatImm;
-struct StringImm;
-struct Cast;
-struct Variable;
-struct Add;
-struct Sub;
-struct Mul;
-struct Div;
-struct Mod;
-struct Min;
-struct Max;
-struct EQ;
-struct NE;
-struct LT;
-struct LE;
-struct GT;
-struct GE;
-struct And;
-struct Or;
-struct Not;
-struct Select;
-struct Load;
-struct Ramp;
-struct Broadcast;
-struct Call;
-struct Let;
-struct LetStmt;
-struct AssertStmt;
-struct Pipeline;
-struct For;
-struct Store;
-struct Provide;
-struct Allocate;
-struct Free;
-struct Realize;
-struct Block;
-struct IfThenElse;
-struct Evaluate;
-
-class Function;
 
 /** A base class for algorithms that need to recursively walk over the
  * IR. The default implementations just recursively walk over the
@@ -97,7 +51,7 @@ public:
     EXPORT virtual void visit(const Let *);
     EXPORT virtual void visit(const LetStmt *);
     EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const Pipeline *);
+    EXPORT virtual void visit(const ProducerConsumer *);
     EXPORT virtual void visit(const For *);
     EXPORT virtual void visit(const Store *);
     EXPORT virtual void visit(const Provide *);
@@ -160,7 +114,7 @@ public:
     EXPORT virtual void visit(const Let *);
     EXPORT virtual void visit(const LetStmt *);
     EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const Pipeline *);
+    EXPORT virtual void visit(const ProducerConsumer *);
     EXPORT virtual void visit(const For *);
     EXPORT virtual void visit(const Store *);
     EXPORT virtual void visit(const Provide *);
