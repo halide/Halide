@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 // This file demonstrates two example custom lowering passes. The

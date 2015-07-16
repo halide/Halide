@@ -9,20 +9,9 @@
 #pragma warning(push, 0)
 #endif
 
-// LLVM is moving to MCJIT as the only JIT, however MCJIT doesn't seem
-// to work right on os x for some older versions of llvm, and doesn't
-// work on Windows at all.
-#if LLVM_VERSION >= 36 || (!defined(_WIN32) && !defined(__APPLE__))
-#define USE_MCJIT
-#endif
-
-#ifdef USE_MCJIT
 #include <llvm/ExecutionEngine/MCJIT.h>
-#else
-#include <llvm/ExecutionEngine/JIT.h>
-#endif
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/ExecutionEngine/JITEventListener.h>
-
 
 #if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
@@ -38,7 +27,11 @@
 #if LLVM_VERSION < 36
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
 #endif
+#if LLVM_VERSION < 37
 #include <llvm/PassManager.h>
+#else
+#include <llvm/IR/LegacyPassManager.h>
+#endif
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/TargetRegistry.h>
@@ -53,6 +46,7 @@
 #include <llvm/Target/TargetSubtargetInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/ADT/StringMap.h>
 #include <llvm/Object/ObjectFile.h>
 
@@ -82,6 +76,10 @@
 #include <llvm/IR/MDBuilder.h>
 #endif
 
+#if WITH_NATIVE_CLIENT
+#include <llvm/Transforms/NaCl.h>
+#endif
+
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(pop)
@@ -95,7 +93,7 @@
 #endif
 
 namespace Halide { namespace Internal {
-#if LLVM_VERSION >= 36
+#if (LLVM_VERSION >= 36) && !(WITH_NATIVE_CLIENT)
 typedef llvm::Metadata *LLVMMDNodeArgumentType;
 inline llvm::Metadata *value_as_metadata_type(llvm::Value *val) { return llvm::ValueAsMetadata::get(val); }
 #else

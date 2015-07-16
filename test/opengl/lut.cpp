@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -83,7 +83,7 @@ int test_lut1d() {
     for (int c = 0; c != out0.extent(2); ++c) {
         for (int y = 0; y != out0.extent(1); ++y) {
             for (int x = 0; x != out0.extent(0); ++x) {
-                float expected;
+                float expected = std::numeric_limits<float>::infinity();
                 switch (c) {
                     case 0:
                         expected = (float)(1 + x);
@@ -117,7 +117,9 @@ int main() {
         return 1;
     }
 
-    test_lut1d();
+    if (test_lut1d() == 0) {
+        printf("PASSED\n");
+    }
 
     return 0;
 }

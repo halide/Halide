@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 #include <limits>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -18,6 +18,13 @@ extern "C" void halide_print(void *user_context, const char *message) {
 #endif
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().has_feature(Target::Profile)) {
+        // The profiler adds lots of extra prints, so counting the
+        // number of prints is not useful.
+        printf("Skipping test because profiler is active\n");
+        return 0;
+    }
+
     Var x;
 
     {
@@ -42,7 +49,7 @@ int main(int argc, char **argv) {
             int scan_count = sscanf(messages[i].c_str(), "%lld the answer is %f unsigned %llu",
                                     &square, &forty_two, &one_forty_five);
             assert(scan_count == 3);
-            assert(square == i * i);
+            assert(square == static_cast<long long>(i * i));
             assert(forty_two == 42.0f);
             assert(one_forty_five == 145);
         }
@@ -138,6 +145,7 @@ int main(int argc, char **argv) {
                    x == 8, -std::numeric_limits<float>::min(),
                    x == 9, std::numeric_limits<float>::max(),
                    x == 10, -std::numeric_limits<float>::max(),
+                   x == 11, 1.0f - 1.0f / (1 << 22),
                    e);
 
         f(x) = print(e);
@@ -145,7 +153,7 @@ int main(int argc, char **argv) {
         f.set_custom_print(halide_print);
         Image<float> imf = f.realize(N);
 
-        assert(messages.size() == N);
+        assert(messages.size() == (size_t)N);
 
         char correct[1024];
         for (int i = 0; i < N; i++) {
@@ -166,7 +174,7 @@ int main(int argc, char **argv) {
         g.set_custom_print(halide_print);
         Image<double> img = g.realize(N);
 
-        assert(messages.size() == N);
+        assert(messages.size() == (size_t)N);
 
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%e\n", img(i));

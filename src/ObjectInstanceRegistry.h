@@ -13,9 +13,7 @@
 #include <stdint.h>
 
 #include <map>
-#if __cplusplus > 199711L || _MSC_VER >= 1800
 #include <mutex>
-#endif
 #include <vector>
 
 namespace Halide {
@@ -79,9 +77,7 @@ private:
             : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {}
     };
 
-#if __cplusplus > 199711L || _MSC_VER >= 1800
     std::mutex mutex;
-#endif
     std::map<uintptr_t, InstanceInfo> instances;
 
     ObjectInstanceRegistry() {}

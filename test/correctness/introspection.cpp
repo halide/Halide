@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
@@ -6,7 +6,7 @@ namespace Halide {
 void check(const void *var, const std::string &type,
            const std::string &correct_name,
            const std::string &correct_file, int line) {
-    std::string correct_loc = correct_file + ":" + Halide::Internal::int_to_string(line);
+    std::string correct_loc = correct_file + ":" + std::to_string(line);
     std::string loc = Halide::Internal::Introspection::get_source_location();
     std::string name = Halide::Internal::Introspection::get_variable_name(var, type);
 
@@ -52,11 +52,9 @@ namespace {
 struct Bar {
     typedef int bint;
     bint bar_int;
-    Bar(int x) : bar_int(x) {
-        check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
-        check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
-    }
-    ~Bar() {
+    Bar(int x) : bar_int(x) {}
+    ~Bar() {}
+    void check_bar() {
         check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
         check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
     }
@@ -67,6 +65,7 @@ struct Bar {
 
 int g(int x) {
     Bar b(x*7);
+    b.check_bar();
     return b.get();
 }
 

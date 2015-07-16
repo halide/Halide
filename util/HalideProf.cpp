@@ -80,16 +80,18 @@ namespace {
     return std::string();
   }
 
-  void ProcessLine(const std::string& s, FuncInfoMap& info) {
+  void ProcessLine(const std::string& s, FuncInfoMap& info, bool accumulate_runs) {
     std::vector<std::string> v = Split(s, ' ');
     if (v.size() < 8) {
       return;
     }
     // Some environments (e.g. Android logging) will emit a prefix
-    // for each line; skip the first few words we see before
-    // deciding to ignore the line.
+    // for each line; just check all the words on the line.
     int first = -1;
-    for (int i = 0; i < 4; ++i) {
+    // We know v.size() >= 8 due to earlier check, so this will never underflow.
+    // This is size-7 (rather than size-8) since we expect 7 entries *after*
+    // we find the halide_profiler keyword.
+    for (int i = 0; i < v.size() - 7; ++i) {
       if (v[i] == "halide_profiler") {
         first = i;
         break;
@@ -117,35 +119,38 @@ namespace {
     op_info.parent_type = parent_type;
     op_info.parent_name = parent_name;
     if (metric == "count") {
-      op_info.count = value;
+      op_info.count = (accumulate_runs ? op_info.count : 0) + value;
     } else if (metric == "ticks") {
-      op_info.ticks = value;
+      op_info.ticks = (accumulate_runs ? op_info.ticks : 0) + value;
     } else if (metric == "nsec") {
-      op_info.nsec = value;
+      op_info.nsec = (accumulate_runs ? op_info.nsec : 0) + value;
     }
   }
 
   typedef std::map<std::string, std::vector<OpInfo*> > ChildMap;
 
   int64_t AdjustOverhead(OpInfo& op_info, ChildMap& child_map, double overhead_ticks_avg) {
-    int64_t overhead_ticks = op_info.count * overhead_ticks_avg;
+    int64_t overhead_local = op_info.count * overhead_ticks_avg;
+    int64_t overhead_ticks = overhead_local;
+
     std::string qual_name = qualified_name(op_info.op_type, op_info.op_name);
     const std::vector<OpInfo*>& children = child_map[qual_name];
     for (std::vector<OpInfo*>::const_iterator it = children.begin(); it != children.end(); ++it) {
       OpInfo* c = *it;
       int64_t child_overhead = AdjustOverhead(*c, child_map, overhead_ticks_avg);
       overhead_ticks += child_overhead;
-      op_info.ticks -= child_overhead;
-      op_info.ticks_only -= child_overhead;
     }
-    return overhead_ticks;
+
+    op_info.ticks -= overhead_ticks;
+
+    // double the overhead of this level
+    return overhead_ticks + overhead_local;
   }
 
   void FinishOpInfo(OpInfoMap& op_info_map, bool adjust_for_overhead) {
 
     std::string toplevel_qual_name = qualified_name(kToplevel, kToplevel);
     OpInfo& total = op_info_map[toplevel_qual_name];
-    total.count = 1;
     total.percent = 1.0;
 
     double ticks_per_nsec = (double)total.ticks / (double)total.nsec;
@@ -158,7 +163,7 @@ namespace {
     OpInfoMap::iterator it = op_info_map.find(overhead_qual_name);
     if (it != op_info_map.end()) {
       OpInfo overhead = it->second;
-      overhead_ticks_avg = (double)overhead.ticks / (double)overhead.count;
+      overhead_ticks_avg = (double)overhead.ticks / ((double)overhead.count * 2.0);
       op_info_map.erase(it);
     }
 
@@ -169,6 +174,11 @@ namespace {
       child_map[parent_qual_name].push_back(&op_info);
     }
 
+    if (adjust_for_overhead) {
+      // Adjust values to account for profiling overhead
+      AdjustOverhead(total, child_map, overhead_ticks_avg);
+    }
+
     for (OpInfoMap::iterator o = op_info_map.begin(); o != op_info_map.end(); ++o) {
       OpInfo& op_info = o->second;
       op_info.ticks_only = op_info.ticks;
@@ -177,11 +187,6 @@ namespace {
         OpInfo* c = *it;
         op_info.ticks_only -= c->ticks;
       }
-    }
-
-    if (adjust_for_overhead) {
-      // Adjust values to account for profiling overhead
-      AdjustOverhead(total, child_map, overhead_ticks_avg);
     }
 
     // Calc the derived fields
@@ -214,7 +219,7 @@ namespace {
 int main(int argc, char** argv) {
 
   if (HasOpt(argv, argv + argc, "-h")) {
-    printf("HalideProf [-f funcname] [-sort c|t|to] [-top N] [-overhead=0|1] < profiledata\n");
+    printf("HalideProf [-f funcname] [-sort c|t|to] [-top N] [-overhead=0|1] [-accumulate=[0|1]] < profiledata\n");
     return 0;
   }
 
@@ -248,10 +253,16 @@ int main(int argc, char** argv) {
     std::istringstream(adjust_for_overhead_str) >> adjust_for_overhead;
   }
 
+  int32_t accumulate_runs = 0;
+  std::string accumulate_runs_str = GetOpt(argv, argv + argc, "-accumulate");
+  if (!accumulate_runs_str.empty()) {
+    std::istringstream(accumulate_runs_str) >> accumulate_runs;
+  }
+
   FuncInfoMap func_info_map;
   std::string line;
   while (std::getline(std::cin, line)) {
-    ProcessLine(line, func_info_map);
+    ProcessLine(line, func_info_map, accumulate_runs);
   }
 
   for (FuncInfoMap::iterator f = func_info_map.begin(); f != func_info_map.end(); ++f) {

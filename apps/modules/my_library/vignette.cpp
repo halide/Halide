@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -19,8 +19,7 @@ int main(int argc, char **argv) {
     // Any scheduling for a goes here
     vignette.vectorize(x, 4);
 
-    vignette.compile_to_file("vignette_impl", in, center_x, center_y, radius);
+    vignette.compile_to_file("vignette_impl", {in, center_x, center_y, radius});
 
     return 0;
 }
-

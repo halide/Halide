@@ -6,7 +6,7 @@ class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
     ImageParam input{ Float(32), 3, "input" };
 
-    Func build() override {
+    Func build() {
         Image<float> matrix(3, 3);
 
         for (int i = 0; i < 3; i++) {

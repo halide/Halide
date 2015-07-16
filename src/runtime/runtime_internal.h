@@ -51,9 +51,13 @@ typedef int32_t intptr_t;
 
 // Commonly-used extern functions
 extern "C" {
+void *halide_malloc(void *user_context, size_t x);
+void halide_free(void *user_context, void *ptr);
 WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_print(void *user_context, const char *msg);
 WEAK void halide_error(void *user_context, const char *msg);
+WEAK void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
+WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
 
 char *getenv(const char *);
 void free(void *);
@@ -71,6 +75,10 @@ int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
+char *strncpy(char *dst, const char *src, size_t n);
+
+// Below are prototypes for various functions called by generated code
+// and parts of the runtime but not exposed to users:
 
 // Similar to strncpy, but with various non-string arguments. Writes
 // arg to dst. Does not write to pointer end or beyond. Returns
@@ -82,6 +90,22 @@ WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits)
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
 
+// Search the current process for a symbol with the given name.
+WEAK void *halide_get_symbol(const char *name);
+// Platform specific implementations of dlopen/dlsym.
+WEAK void *halide_load_library(const char *name);
+// If lib is NULL, this call should be equivalent to halide_get_symbol(name).
+WEAK void *halide_get_library_symbol(void *lib, const char *name);
+
+WEAK int halide_start_clock(void *user_context);
+WEAK int64_t halide_current_time_ns(void *user_context);
+WEAK void halide_sleep_ms(void *user_context, int ms);
+WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
+
+WEAK int halide_profiler_pipeline_start(void *user_context,
+                                        const char *pipeline_name,
+                                        int num_funcs,
+                                        const char **func_names);
 }
 
 // A convenient namespace for weak functions that are internal to the
@@ -109,14 +133,18 @@ enum PrinterType {BasicPrinter = 0,
 // Then remember the print only happens when the debug object leaves
 // scope, which may print at a confusing time.
 
+namespace {
 template<int type, uint64_t length = 1024>
 class Printer {
 public:
-    char buf[length];
-    char *dst, *end;
+    char *buf, *dst, *end;
     void *user_context;
+    bool own_mem;
 
-    Printer(void *ctx) : dst(buf), end(buf + (length-1)), user_context(ctx) {
+    Printer(void *ctx, char *mem = NULL) : user_context(ctx), own_mem(mem == NULL) {
+        buf = mem ? mem : (char *)halide_malloc(user_context, length);
+        dst = buf;
+        end = buf + (length-1);
         *end = 0;
     }
 
@@ -165,9 +193,15 @@ public:
         return buf;
     }
 
+    // Clear it. Useful for reusing a stringstream.
+    void clear() {
+        dst = buf;
+        dst[0] = 0;
+    }
+
     // Returns the number of characters in the buffer
     uint64_t size() const {
-        return (uint64_t)(end-dst);
+        return (uint64_t)(dst-buf);
     }
 
     ~Printer() {
@@ -178,6 +212,7 @@ public:
         } else {
             // It's a stringstream. Do nothing.
         }
+        if (own_mem) halide_free(user_context, buf);
     }
 };
 
@@ -201,10 +236,27 @@ typedef Printer<BasicPrinter> debug;
 #else
 typedef SinkPrinter debug;
 #endif
+}
+
+extern WEAK void halide_use_jit_module();
+extern WEAK void halide_release_jit_module();
+
+template <typename T>
+__attribute__((always_inline)) void swap(T &a, T &b) {
+    T t = a;
+    a = b;
+    b = t;
+}
+
+template <typename T>
+__attribute__((always_inline)) T max(const T &a, const T &b) {
+    return a > b ? a : b;
+}
 
 }}}
+
+
 
 using namespace Halide::Runtime::Internal;
 
 #endif
-

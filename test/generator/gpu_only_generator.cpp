@@ -6,7 +6,7 @@ class GpuOnly : public Halide::Generator<GpuOnly> {
 public:
     ImageParam input{ Int(32), 2, "input" };
 
-    Func build() override {
+    Func build() {
         Var x("x"), y("y");
 
         // Create a simple pipeline that scales pixel values by 2.

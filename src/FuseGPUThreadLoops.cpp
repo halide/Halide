@@ -1,5 +1,6 @@
 #include "FuseGPUThreadLoops.h"
 #include "CodeGen_GPU_Dev.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Bounds.h"
@@ -28,7 +29,6 @@ class InjectThreadBarriers : public IRMutator {
 
     void visit(const For *op) {
         bool old_in_threads = in_threads;
-
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             in_threads = true;
         }
@@ -38,7 +38,7 @@ class InjectThreadBarriers : public IRMutator {
         in_threads = old_in_threads;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (!in_threads) {
             Stmt produce = mutate(op->produce);
             if (!is_no_op(produce)) {
@@ -55,7 +55,7 @@ class InjectThreadBarriers : public IRMutator {
 
             Stmt consume = mutate(op->consume);
 
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         } else {
             IRMutator::visit(op);
         }
@@ -97,7 +97,6 @@ class ExtractBlockSize : public IRVisitor {
     }
 
     void visit(const For *op) {
-
         Interval ie = bounds_of_expr_in_scope(op->extent, scope);
         Interval im = bounds_of_expr_in_scope(op->min, scope);
 
@@ -148,6 +147,7 @@ class NormalizeDimensionality : public IRMutator {
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
+    const DeviceAPI device_api;
 
     int depth;
     int max_depth;
@@ -163,13 +163,13 @@ class NormalizeDimensionality : public IRMutator {
         }
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, For::Parallel, s);
+            s = For::make("." + name, 0, 1, ForType::Parallel, device_api, s);
             max_depth++;
         }
         return s;
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         Stmt produce = wrap(op->produce);
         Stmt update;
         if (op->update.defined()) {
@@ -182,7 +182,7 @@ class NormalizeDimensionality : public IRMutator {
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 
@@ -216,7 +216,8 @@ class NormalizeDimensionality : public IRMutator {
     }
 
 public:
-    NormalizeDimensionality(const ExtractBlockSize &e) : block_size(e), depth(0), max_depth(0) {}
+    NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
+      : block_size(e), device_api(device_api), depth(0), max_depth(0) {}
 };
 
 class ReplaceForWithIf : public IRMutator {
@@ -257,7 +258,6 @@ public:
 };
 
 class ExtractSharedAllocations : public IRMutator {
-
     using IRMutator::visit;
 
     struct SharedAllocation {
@@ -382,7 +382,7 @@ public:
         allocations.push_back(sentinel);
 
         Expr total_size = Variable::make(Int(32), allocations.back().name + ".shared_offset");
-        s = Allocate::make(shared_mem_name, UInt(8), vec(total_size), const_true(), s);
+        s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
 
         // Define an offset for each allocation. The offsets are in
         // elements, not bytes, so that the stores and loads can use
@@ -417,7 +417,12 @@ class FuseGPUThreadLoops : public IRMutator {
     Scope<Interval> scope;
 
     void visit(const For *op) {
-        user_assert(!CodeGen_GPU_Dev::is_gpu_thread_var(op->name))
+         if (op->device_api == DeviceAPI::GLSL) {
+            stmt = op;
+            return;
+        }
+
+        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "
             << "This schedule is malformed. There must be a GPU block "
@@ -442,7 +447,7 @@ class FuseGPUThreadLoops : public IRMutator {
 
             debug(3) << "Fusing thread block:\n" << body << "\n\n";
 
-            NormalizeDimensionality n(e);
+            NormalizeDimensionality n(e, op->device_api);
             body = n.mutate(body);
 
             debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
@@ -464,12 +469,12 @@ class FuseGPUThreadLoops : public IRMutator {
 
             // Rewrap the whole thing in the loop over threads
             for (int i = 0; i < e.dimensions(); i++) {
-                body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, body);
+                body = For::make("." + thread_names[i], 0, e.extent(i), ForType::Parallel, op->device_api, body);
             }
 
             // There at least needs to be a loop over __thread_id_x as a marker for codegen
             if (e.dimensions() == 0) {
-                body = For::make(".__thread_id_x", 0, 1, For::Parallel, body);
+                body = For::make(".__thread_id_x", 0, 1, ForType::Parallel, op->device_api, body);
             }
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";
@@ -482,7 +487,7 @@ class FuseGPUThreadLoops : public IRMutator {
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             }
         } else {
             IRMutator::visit(op);
@@ -495,18 +500,29 @@ class FuseGPUThreadLoops : public IRMutator {
 };
 
 class ZeroGPULoopMins : public IRMutator {
+    bool in_non_glsl_gpu;
     using IRMutator::visit;
 
     void visit(const For *op) {
+        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
+
+        in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::Parent) ||
+          (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL);
+
         IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, op->extent, op->for_type, body);
+            stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
         }
+
+        in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
+
+public:
+    ZeroGPULoopMins() : in_non_glsl_gpu(false) { }
 };
 
 Stmt zero_gpu_loop_mins(Stmt s) {

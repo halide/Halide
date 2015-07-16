@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #ifndef _MSC_VER
 #include <unistd.h>
@@ -21,18 +21,7 @@ int main(int argc, char **argv) {
 
     {
         const char *result_file = "compile_to_lowered_stmt.stmt";
-        j.compile_to_lowered_stmt(result_file);
-
-        #ifndef _MSC_VER
-        assert(access(result_file, F_OK) == 0 && "Output file not created.");
-        #endif
-    }
-
-    {
-        const char *result_file = "compile_to_lowered_stmt-simplified.stmt";
-        std::map<std::string, Expr> params;
-        params["myParam"] = 1.0f;
-        j.compile_to_simplified_lowered_stmt(result_file, 100, 100, params);
+        j.compile_to_lowered_stmt(result_file, j.infer_arguments());
 
         #ifndef _MSC_VER
         assert(access(result_file, F_OK) == 0 && "Output file not created.");

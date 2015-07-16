@@ -301,6 +301,12 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const Call *op) {
+        // Some functions are known to be monotonic
+        if (op->name == Call::likely && op->call_type == Call::Intrinsic) {
+            op->args[0].accept(this);
+            return;
+        }
+
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
             if (result != Constant) {
@@ -333,7 +339,7 @@ class Monotonic : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         internal_error << "Monotonic of statement\n";
     }
 
@@ -372,6 +378,7 @@ class Monotonic : public IRVisitor {
     void visit(const Evaluate *op) {
         internal_error << "Monotonic of statement\n";
     }
+
 public:
     MonotonicResult result;
 

@@ -7,7 +7,7 @@ public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
 
-    Func build() override {
+    Func build() {
         // This is the outermost pipeline, so input width and height
         // are meaningful. If you want to be able to call this outer
         // pipeline in a tiled fashion itself, then you should pass in

@@ -233,7 +233,7 @@ private:
         }
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         Stmt produce = mutate(op->produce);
         if (!produce.defined()) {
             produce = Evaluate::make(Expr("Produce step elided due to use of Halide::undef"));
@@ -246,7 +246,7 @@ private:
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 
@@ -268,7 +268,7 @@ private:
             body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, min, extent, op->for_type, body);
+            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
         }
     }
 

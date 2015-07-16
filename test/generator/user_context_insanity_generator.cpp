@@ -6,7 +6,7 @@ class UserContextInsanity : public Halide::Generator<UserContextInsanity> {
 public:
     ImageParam input{ Float(32), 2, "input" };
 
-    Func build() override {
+    Func build() {
         Var x, y;
 
         Func g;

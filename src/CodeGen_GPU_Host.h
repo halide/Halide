@@ -5,10 +5,14 @@
  * Defines the code-generator for producing GPU host code
  */
 
+#include <map>
+
 #include "CodeGen_ARM.h"
 #include "CodeGen_X86.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -28,17 +32,9 @@ public:
 
     virtual ~CodeGen_GPU_Host();
 
-    /** Compile to an internally-held llvm module. Takes a halide
-     * statement, the name of the function produced, and the arguments
-     * to the function produced. After calling this, call
-     * CodeGen::compile_to_file or
-     * CodeGen::compile_to_function_pointer to get at the generated machine
-     * code. */
-    void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
-                 const std::vector<Buffer> &images_to_embed);
-
 protected:
+    void compile_func(const LoweredFunc &func);
+
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
      * compiler doesn't know that CodeGen_CPU will in fact inherit
@@ -72,31 +68,24 @@ protected:
     using CodeGen_CPU::i64;
     using CodeGen_CPU::buffer_t_type;
     using CodeGen_CPU::allocations;
+    using CodeGen_CPU::register_destructor;
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
+    void visit(const Free *);
+    void visit(const Call *);
     // @}
 
-    /** Finds and links in the CUDA runtime symbols prior to jitting */
-    void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
+    std::string function_name;
 
-    /** Reaches inside the module at sets it to use a single shared
-     * cuda context */
-    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod,
-                      std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines);
-
-    static bool lib_cuda_linked;
-
-    static CodeGen_GPU_Dev* make_dev(Target);
-
-    llvm::Value *get_module_state();
+    llvm::Value *get_module_state(const std::string &api_unique_name,
+                                  bool create = true);
 
 private:
     /** Child code generator for device kernels. */
-    CodeGen_GPU_Dev *cgdev;
+    std::map<DeviceAPI, CodeGen_GPU_Dev *> cgdev;
 };
-
 
 }}
 

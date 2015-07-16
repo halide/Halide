@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "Debug.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,150 +21,32 @@ using std::make_pair;
 using namespace llvm;
 
 CodeGen_Posix::CodeGen_Posix(Target t) :
-    CodeGen(t),
-
-    // Vector types. These need an LLVMContext before they can be initialized.
-    i8x8(NULL),
-    i8x16(NULL),
-    i8x32(NULL),
-    i16x4(NULL),
-    i16x8(NULL),
-    i16x16(NULL),
-    i32x2(NULL),
-    i32x4(NULL),
-    i32x8(NULL),
-    i64x2(NULL),
-    i64x4(NULL),
-    f32x2(NULL),
-    f32x4(NULL),
-    f32x8(NULL),
-    f64x2(NULL),
-    f64x4(NULL),
-
-    // Wildcards for pattern matching
-    wild_u1x16(Variable::make(UInt(1, 16), "*")),
-    wild_u1x8(Variable::make(UInt(1, 8), "*")),
-    wild_u1x4(Variable::make(UInt(1, 4), "*")),
-    wild_u1x2(Variable::make(UInt(1, 2), "*")),
-
-    wild_i8x8(Variable::make(Int(8, 8), "*")),
-    wild_i16x4(Variable::make(Int(16, 4), "*")),
-    wild_i32x2(Variable::make(Int(32, 2), "*")),
-
-    wild_u8x8(Variable::make(UInt(8, 8), "*")),
-    wild_u16x4(Variable::make(UInt(16, 4), "*")),
-    wild_u32x2(Variable::make(UInt(32, 2), "*")),
-
-    wild_i8x16(Variable::make(Int(8, 16), "*")),
-    wild_i16x8(Variable::make(Int(16, 8), "*")),
-    wild_i32x4(Variable::make(Int(32, 4), "*")),
-    wild_i64x2(Variable::make(Int(64, 2), "*")),
-
-    wild_u8x16(Variable::make(UInt(8, 16), "*")),
-    wild_u16x8(Variable::make(UInt(16, 8), "*")),
-    wild_u32x4(Variable::make(UInt(32, 4), "*")),
-    wild_u64x2(Variable::make(UInt(64, 2), "*")),
-
-    wild_i8x32(Variable::make(Int(8, 32), "*")),
-    wild_i16x16(Variable::make(Int(16, 16), "*")),
-    wild_i32x8(Variable::make(Int(32, 8), "*")),
-    wild_i64x4(Variable::make(Int(64, 4), "*")),
-
-    wild_u8x32(Variable::make(UInt(8, 32), "*")),
-    wild_u16x16(Variable::make(UInt(16, 16), "*")),
-    wild_u32x8(Variable::make(UInt(32, 8), "*")),
-    wild_u64x4(Variable::make(UInt(64, 4), "*")),
-
-    wild_f32x2(Variable::make(Float(32, 2), "*")),
-
-    wild_f32x4(Variable::make(Float(32, 4), "*")),
-    wild_f64x2(Variable::make(Float(64, 2), "*")),
-
-    wild_f32x8(Variable::make(Float(32, 8), "*")),
-    wild_f64x4(Variable::make(Float(64, 4), "*")),
-
-    wild_u1x_ (Variable::make(UInt(1, -1), "*")),
-    wild_i8x_ (Variable::make(Int(8, -1), "*")),
-    wild_u8x_ (Variable::make(UInt(8, -1), "*")),
-    wild_i16x_(Variable::make(Int(16, -1), "*")),
-    wild_u16x_(Variable::make(UInt(16, -1), "*")),
-    wild_i32x_(Variable::make(Int(32, -1), "*")),
-    wild_u32x_(Variable::make(UInt(32, -1), "*")),
-    wild_i64x_(Variable::make(Int(64, -1), "*")),
-    wild_u64x_(Variable::make(UInt(64, -1), "*")),
-    wild_f32x_(Variable::make(Float(32, -1), "*")),
-    wild_f64x_(Variable::make(Float(64, -1), "*")),
-
-    // Bounds of types
-    min_i8(Int(8).min()),
-    max_i8(Int(8).max()),
-    max_u8(UInt(8).max()),
-
-    min_i16(Int(16).min()),
-    max_i16(Int(16).max()),
-    max_u16(UInt(16).max()),
-
-    min_i32(Int(32).min()),
-    max_i32(Int(32).max()),
-    max_u32(UInt(32).max()),
-
-    min_i64(Int(64).min()),
-    max_i64(Int(64).max()),
-    max_u64(UInt(64).max()),
-
-    min_f32(Float(32).min()),
-    max_f32(Float(32).max()),
-
-    min_f64(Float(64).min()),
-    max_f64(Float(64).max()) {
-
-}
-
-void CodeGen_Posix::init_module() {
-    CodeGen::init_module();
-
-    i8x8 = VectorType::get(i8, 8);
-    i8x16 = VectorType::get(i8, 16);
-    i8x32 = VectorType::get(i8, 32);
-    i16x4 = VectorType::get(i16, 4);
-    i16x8 = VectorType::get(i16, 8);
-    i16x16 = VectorType::get(i16, 16);
-    i32x2 = VectorType::get(i32, 2);
-    i32x4 = VectorType::get(i32, 4);
-    i32x8 = VectorType::get(i32, 8);
-    i64x2 = VectorType::get(i64, 2);
-    i64x4 = VectorType::get(i64, 4);
-    f32x2 = VectorType::get(f32, 2);
-    f32x4 = VectorType::get(f32, 4);
-    f32x8 = VectorType::get(f32, 8);
-    f64x2 = VectorType::get(f64, 2);
-    f64x4 = VectorType::get(f64, 4);
+  CodeGen_LLVM(t) {
 }
 
 Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
     // Compute size from list of extents checking for 32-bit signed overflow.
     // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
     // does not work with NaCl at the moment.
-    Value *overflow = NULL;
-    int bytes_per_item = type.width * type.bytes();
-    Value *llvm_size_wide = ConstantInt::get(i64, bytes_per_item);
+
+    Expr no_overflow = const_true(1);
+    Expr total_size = cast<int64_t>(type.width * type.bytes());
+    Expr max_size = cast<int64_t>(0x7fffffff);
     for (size_t i = 0; i < extents.size(); i++) {
-        llvm_size_wide = builder->CreateMul(llvm_size_wide, codegen(Cast::make(Int(64), extents[i])));
-        if (overflow == NULL) {
-            overflow = llvm_size_wide;
-        } else {
-            overflow = builder->CreateOr(overflow, llvm_size_wide);
-        }
-    }
-    Value *llvm_size = builder->CreateTrunc(llvm_size_wide, i32);
-
-    if (overflow != NULL) {
-        Constant *zero = ConstantInt::get(i64, 0);
-        create_assertion(builder->CreateICmpEQ(builder->CreateLShr(overflow, 31), zero),
-                         std::string("32-bit signed overflow computing size of allocation ") + name);
+        total_size *= extents[i];
+        no_overflow = no_overflow && (total_size <= max_size);
     }
 
-    return llvm_size;
+    // For constant-sized allocations this check should simplify away.
+    no_overflow = simplify(no_overflow);
+    if (!is_one(no_overflow)) {
+        create_assertion(codegen(no_overflow),
+                         Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+                                    {name, total_size, max_size}, Call::Extern));
+    }
+
+    total_size = simplify(cast<int32_t>(total_size));
+    return codegen(total_size);
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
@@ -202,6 +85,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = stack_bytes;
     allocation.ptr = NULL;
+    allocation.destructor = NULL;
+
     if (stack_bytes != 0) {
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
@@ -230,14 +115,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
-            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, name);
+            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, false, name);
             allocation.stack_bytes = stack_bytes;
         }
     } else {
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
-        malloc_fn->setDoesNotAlias(0);
         internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
+        malloc_fn->setDoesNotAlias(0);
 
         llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *
@@ -259,7 +144,13 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         Value *zero_size = builder->CreateIsNull(llvm_size);
         check = builder->CreateOr(check, zero_size);
 
-        create_assertion(check, "Out of memory (malloc returned NULL)");
+        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+                                           std::vector<Expr>(), Call::Extern));
+
+        // Register a destructor for it.
+        llvm::Function *free_fn = module->getFunction("halide_free");
+        internal_assert(free_fn) << "Could not find halide_free in module.\n";
+        allocation.destructor = register_destructor(free_fn, allocation.ptr, OnError);
     }
 
     // Push the allocation base pointer onto the symbol table
@@ -273,29 +164,23 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 void CodeGen_Posix::free_allocation(const std::string &name, Stmt delete_stmt) {
     Allocation alloc = allocations.get(name);
 
-    internal_assert(alloc.ptr);
-
-    CallInst *call_inst = dyn_cast<CallInst>(alloc.ptr);
-    llvm::Function *allocated_in = call_inst ? call_inst->getParent()->getParent() : NULL;
-    llvm::Function *current_func = builder->GetInsertBlock()->getParent();
-
     if (alloc.stack_bytes) {
         // Remember this allocation so it can be re-used by a later allocation.
         free_stack_allocs.push_back(alloc);
-    } else if (allocated_in == current_func) { // Skip over allocations from outside this function.
-        // Call free
+    } else {
+        internal_assert(alloc.destructor);
+
+        // Trigger the destructor
+        // TODO: make this execute the delete stmt
         llvm::Function *free_fn = module->getFunction("halide_free");
-        internal_assert(free_fn) << "Could not find halide_free in module.\n";
-        debug(4) << "Creating call to halide_free\n";
-        Value *args[2] = { get_user_context(), alloc.ptr };
-        builder->CreateCall(free_fn, args);
+        trigger_destructor(free_fn, alloc.destructor);
     }
 
     allocations.pop(name);
+    sym_pop(name + ".host");
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
-
     if (sym_exists(alloc->name + ".host")) {
         user_error << "Can't have two different buffers with the same name: "
                    << alloc->name << "\n";
@@ -313,37 +198,8 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
+  // TODO: Figure out if having a separate method here is still useful.
     free_allocation(stmt->name, stmt->delete_stmt);
-    sym_pop(stmt->name + ".host");
-}
-
-void CodeGen_Posix::prepare_for_early_exit() {
-    // We've jumped to a code path that will be called just before
-    // bailing out. Free everything outstanding.
-    vector<string> names;
-    for (Scope<Allocation>::iterator iter = allocations.begin();
-         iter != allocations.end(); ++iter) {
-        names.push_back(iter.name());
-    }
-
-    for (size_t i = 0; i < names.size(); i++) {
-        std::vector<Allocation> stash;
-        while (allocations.contains(names[i])) {
-            // The value in the symbol table is not necessarily the
-            // one in the allocation - it may have been forwarded
-            // inside a parallel for loop
-            stash.push_back(allocations.get(names[i]));
-            free_allocation(names[i], stash.back().delete_stmt);
-        }
-
-        // Restore all the allocations before we jump back to the main
-        // code path.
-        for (size_t j = stash.size(); j > 0; j--) {
-            allocations.push(names[i], stash[j-1]);
-        }
-    }
-
-    free_stack_allocs.clear();
 }
 
 }}

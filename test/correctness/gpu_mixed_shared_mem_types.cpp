@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -40,8 +40,8 @@ int main(int argc, char **argv) {
     out.gpu_tile(x, 23);
 
     Image<uint64_t> output = out.realize(23*5);
-    for (uint64_t x = 0; x < output.width(); x++) {
-        uint64_t correct = n_types * (x / 16) + offset;
+    for (int x = 0; x < output.width(); x++) {
+        uint64_t correct = n_types * (static_cast<uint16_t>(x) / 16) + offset;
         if (output(x) != correct) {
             printf("output(%d) = %d instead of %d\n",
                    (unsigned int)x, (unsigned int)output(x), (unsigned int)correct);

@@ -18,69 +18,20 @@ public:
     FindParameterDependencies() { }
     ~FindParameterDependencies() { }
 
-  void visit_function(const Function &function) {
-        if (function.has_pure_definition()) {
-            const std::vector<Expr> &values = function.values();
-            for (size_t i = 0; i < values.size(); i++) {
-                values[i].accept(this);
-            }
-        }
-
-        const std::vector<UpdateDefinition> &updates =
-            function.updates();
-        for (size_t i = 0; i < updates.size(); i++) {
-            const std::vector<Expr> &values = updates[i].values;
-            for (size_t j = 0; j < values.size(); j++) {
-                values[j].accept(this);
-            }
-
-            const std::vector<Expr> &args = updates[i].args;
-            for (size_t j = 0; j < args.size(); j++) {
-                args[j].accept(this);
-            }
-
-            if (updates[i].domain.defined()) {
-                const std::vector<ReductionVariable> &rvars =
-                    updates[i].domain.domain();
-                for (size_t j = 0; j < rvars.size(); j++) {
-                    rvars[j].min.accept(this);
-                    rvars[j].extent.accept(this);
-                }
-            }
-        }
+    void visit_function(const Function &function) {
+        function.accept(this);
 
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
                 function.extern_arguments();
             for (size_t i = 0; i < extern_args.size(); i++) {
-                if (extern_args[i].is_func()) {
-                  visit_function(extern_args[i].func);
-                } else if (extern_args[i].is_expr()) {
-                    extern_args[i].expr.accept(this);
-                } else if (extern_args[i].is_buffer()) {
+                if (extern_args[i].is_buffer()) {
                     // Function with an extern definition
                     record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
                                                        extern_args[i].buffer.dimensions(),
                                                        extern_args[i].buffer.name()));
                 } else if (extern_args[i].is_image_param()) {
                     record(extern_args[i].image_param);
-                } else {
-                    assert(!extern_args[i].defined() && "Unexpected ExternFunctionArgument type.");
-                }
-            }
-        }
-        const std::vector<Parameter> &output_buffers =
-            function.output_buffers();
-        for (size_t i = 0; i < output_buffers.size(); i++) {
-            for (int j = 0; j < function.dimensions() && j < 4; j++) {
-                if (output_buffers[i].min_constraint(i).defined()) {
-                    output_buffers[i].min_constraint(i).accept(this);
-                }
-                if (output_buffers[i].stride_constraint(i).defined()) {
-                    output_buffers[i].stride_constraint(i).accept(this);
-                }
-                if (output_buffers[i].extent_constraint(i).defined()) {
-                    output_buffers[i].extent_constraint(i).accept(this);
                 }
             }
         }
@@ -186,6 +137,8 @@ public:
     std::map<DependencyKey, DependencyInfo> dependency_info;
 };
 
+typedef std::pair<FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> DependencyKeyInfoPair;
+
 class KeyInfo {
     FindParameterDependencies dependencies;
     Expr key_size_expr;
@@ -194,13 +147,9 @@ class KeyInfo {
 
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
         // Find maximum natural alignment needed.
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
-            int alignment = iter->second.type.bytes();
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+            int alignment = i.second.type.bytes();
             if (alignment > max_alignment) {
                 max_alignment = alignment;
             }
@@ -215,13 +164,13 @@ class KeyInfo {
 
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
-                                    vec(Load::make(UInt(8), key_name, index, Buffer(), Parameter())),
-                                    Call::Intrinsic);
+                               {Load::make(UInt(8), key_name, index, Buffer(), Parameter())},
+                               Call::Intrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
 
         return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
-                                         vec(dest, src, copy_size), Call::Intrinsic));
+                                         {dest, src, copy_size}, Call::Intrinsic));
     }
 
 public:
@@ -229,8 +178,6 @@ public:
         : top_level_name(name), function_name(function.name())
     {
         dependencies.visit_function(function);
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
         size_t size_so_far = 0;
 
         size_so_far = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
@@ -242,10 +189,8 @@ public:
         }
         key_size_expr = (int32_t)size_so_far;
 
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
-            key_size_expr += iter->second.size_expr;
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+            key_size_expr += i.second.size_expr;
         }
     }
 
@@ -296,15 +241,11 @@ public:
             }
         }
 
-        std::map<FindParameterDependencies::DependencyKey,
-                 FindParameterDependencies::DependencyInfo>::const_iterator iter;
-        for (iter = dependencies.dependency_info.begin();
-             iter != dependencies.dependency_info.end();
-             iter++) {
+        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
-                                         iter->second.value_expr,
-                                         (index / iter->second.size_expr)));
-            index += iter->second.size_expr;
+                                         i.second.value_expr,
+                                         (index / i.second.size_expr)));
+            index += i.second.size_expr;
         }
         Stmt blocks;
         for (size_t i = writes.size(); i > 0; i--) {
@@ -322,7 +263,7 @@ public:
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
                                   Call::Intrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -332,7 +273,7 @@ public:
             buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
@@ -345,7 +286,7 @@ public:
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
                                   Call::Intrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -355,7 +296,7 @@ public:
             buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
@@ -369,7 +310,7 @@ public:
                              int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
-                                  vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
                                   Call::Intrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -378,7 +319,7 @@ public:
             args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+              args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
 
@@ -401,7 +342,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -442,15 +383,14 @@ private:
             Stmt mutated_consume = Block::make(consume, cache_release);
             mutated_consume = Block::make(cache_store_back, mutated_consume);
 
-            Stmt mutated_pipeline = Pipeline::make(op->name, mutated_produce, mutated_update, mutated_consume);
-
+            Stmt mutated_pipeline = ProducerConsumer::make(op->name, mutated_produce, mutated_update, mutated_consume);
             Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name), mutated_pipeline);
 
             std::vector<Expr> computed_bounds_args;
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(f.output_types()[0].bytes());
-            std::string max_stage_num = int_to_string(f.updates().size());
+            std::string max_stage_num = std::to_string(f.updates().size());
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
                 Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");
@@ -465,7 +405,9 @@ private:
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
-            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), const_true(), generate_key);
+            Stmt cache_key_alloc =
+                Allocate::make(cache_key_name, UInt(8), {key_info.key_size()},
+                               const_true(), generate_key);
 
             stmt = cache_key_alloc;
         } else {

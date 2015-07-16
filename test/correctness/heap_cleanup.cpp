@@ -1,12 +1,13 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
+#include <atomic>
 
 using namespace Halide;
 
 // Check that assertion failures free allocations appropriately
 
-int malloc_count = 0;
-int free_count = 0;
+std::atomic<int> malloc_count;
+std::atomic<int> free_count;
 
 void *my_malloc(void *user_context, size_t x) {
     malloc_count++;
@@ -30,6 +31,9 @@ int main(int argc, char **argv) {
     Func f, g, h;
     Var x;
 
+    malloc_count = 0;
+    free_count = 0;
+
     f(x) = x;
     f.compute_root();
     g(x) = f(x)+1;
@@ -45,7 +49,9 @@ int main(int argc, char **argv) {
 
     Image<int> im = h.realize(g_size+100);
 
-    assert(error_occurred && malloc_count == 1 && free_count == 1);
+    printf("%d %d\n", (int)malloc_count, (int)free_count);
+
+    assert(error_occurred && (int)malloc_count == (int)free_count);
 
     printf("Success!\n");
     return 0;

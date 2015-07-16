@@ -3,7 +3,7 @@
 
 #include "IRPrinter.h"
 #include "IROperator.h"
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -42,6 +42,46 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     return stream;
 }
 
+ostream &operator <<(ostream &stream, const Buffer &buffer) {
+    return stream << "buffer " << buffer.name() << " = {...}\n";
+}
+
+ostream &operator<<(ostream &stream, const Module &m) {
+    stream << "Target = " << m.target().to_string() << "\n";
+    for (size_t i = 0; i < m.buffers.size(); i++) {
+        stream << m.buffers[i] << "\n";
+    }
+    for (size_t i = 0; i < m.functions.size(); i++) {
+        stream << m.functions[i] << "\n";
+    }
+    return stream;
+}
+
+ostream &operator<<(ostream &out, const DeviceAPI &api) {
+    switch (api) {
+    case DeviceAPI::Host:
+        break;
+    case DeviceAPI::Parent:
+        out << "<Parent>";
+        break;
+    case DeviceAPI::Default_GPU:
+        out << "<Default_GPU>";
+        break;
+    case DeviceAPI::CUDA:
+        out << "<CUDA>";
+        break;
+    case DeviceAPI::OpenCL:
+        out << "<OpenCL>";
+        break;
+    case DeviceAPI::GLSL:
+        out << "<GLSL>";
+        break;
+    case DeviceAPI::Renderscript:
+        out << "<Renderscript>";
+        break;    }
+    return out;
+}
+
 namespace Internal {
 
 void IRPrinter::test() {
@@ -54,23 +94,24 @@ void IRPrinter::test() {
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
-    Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, store);
+    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x);
-    Stmt for_loop2 = For::make("x", 0, y, For::Vectorized , store2);
-    Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
-    Stmt assertion = AssertStmt::make(y > 3, vec<Expr>(Expr("y is greater than "), 3));
+    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
+    Stmt pipeline = ProducerConsumer::make("buf", for_loop, Stmt(), for_loop2);
+    Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
+                                                         {string("y"), y, 3}, Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), const_true(), let_stmt);
+    Stmt allocate = Allocate::make("buf", f32, {1023}, const_true(), let_stmt);
 
     ostringstream source;
     source << allocate;
     std::string correct_source = \
         "allocate buf[float32 * 1023]\n"
         "let y = 17\n"
-        "assert((y > 3), stringify(\"y is greater than \", 3))\n"
+        "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
         "produce buf {\n"
         "  parallel (x, -2, (y + 2)) {\n"
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
@@ -88,18 +129,18 @@ void IRPrinter::test() {
     std::cout << "IRPrinter test passed\n";
 }
 
-ostream &operator<<(ostream &out, const For::ForType &type) {
+ostream &operator<<(ostream &out, const ForType &type) {
     switch (type) {
-    case For::Serial:
+    case ForType::Serial:
         out << "for";
         break;
-    case For::Parallel:
+    case ForType::Parallel:
         out << "parallel";
         break;
-    case For::Unrolled:
+    case ForType::Unrolled:
         out << "unrolled";
         break;
-    case For::Vectorized:
+    case ForType::Vectorized:
         out << "vectorized";
         break;
     }
@@ -114,6 +155,34 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
         p.print(ir);
     }
     return stream;
+}
+
+
+ostream &operator <<(ostream &stream, const LoweredFunc &function) {
+    stream << function.linkage << " func " << function.name << " (";
+    for (size_t i = 0; i < function.args.size(); i++) {
+        stream << function.args[i].name;
+        if (i + 1 < function.args.size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") {\n";
+    stream << function.body;
+    stream << "}\n\n";
+    return stream;
+}
+
+
+std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
+    switch (type) {
+    case LoweredFunc::External:
+        out << "external";
+        break;
+    case LoweredFunc::Internal:
+        out << "internal";
+        break;
+    }
+    return out;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {
@@ -391,7 +460,7 @@ void IRPrinter::visit(const AssertStmt *op) {
     stream << ")\n";
 }
 
-void IRPrinter::visit(const Pipeline *op) {
+void IRPrinter::visit(const ProducerConsumer *op) {
 
     do_indent();
     stream << "produce " << op->name << " {\n";
@@ -417,7 +486,7 @@ void IRPrinter::visit(const Pipeline *op) {
 void IRPrinter::visit(const For *op) {
 
     do_indent();
-    stream << op->for_type << " (" << op->name << ", ";
+    stream << op->for_type << op->device_api << " (" << op->name << ", ";
     print(op->min);
     stream << ", ";
     print(op->extent);

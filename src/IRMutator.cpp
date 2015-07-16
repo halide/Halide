@@ -168,7 +168,7 @@ void IRMutator::visit(const AssertStmt *op) {
     }
 }
 
-void IRMutator::visit(const Pipeline *op) {
+void IRMutator::visit(const ProducerConsumer *op) {
     Stmt produce = mutate(op->produce);
     Stmt update = mutate(op->update);
     Stmt consume = mutate(op->consume);
@@ -177,7 +177,7 @@ void IRMutator::visit(const Pipeline *op) {
         consume.same_as(op->consume)) {
         stmt = op;
     } else {
-        stmt = Pipeline::make(op->name, produce, update, consume);
+        stmt = ProducerConsumer::make(op->name, produce, update, consume);
     }
 }
 
@@ -190,7 +190,7 @@ void IRMutator::visit(const For *op) {
         body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = For::make(op->name, min, extent, op->for_type, body);
+        stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
     }
 }
 
