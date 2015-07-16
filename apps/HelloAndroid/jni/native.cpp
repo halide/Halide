@@ -44,7 +44,6 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
     LOGD("[src array length] jSrc.length = %d", env->GetArrayLength(jSrc));
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, surf);
-    ANativeWindow_acquire(win);
 
     static bool first_call = true;
     static unsigned counter = 0;
