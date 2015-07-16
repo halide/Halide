@@ -4,6 +4,7 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_Renderscript_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -194,9 +195,14 @@ void GPU_Host_Closure::visit(const For *loop) {
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
-    // For the default GPU, OpenCL is preferred, CUDA next, and OpenGL last.
+    // For the default GPU, OpenCL is preferred, CUDA next, then OpenGL and finally OpenGLCompute.
     // The code is in reverse order to allow later tests to override earlier ones.
     DeviceAPI default_api = DeviceAPI::Default_GPU;
+    if (target.has_feature(Target::OpenGLCompute)) {
+        debug(1) << "Constructing OpenGL Compute device codegen\n";
+        cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
+        default_api = DeviceAPI::OpenGLCompute;
+    }
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);

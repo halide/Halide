@@ -49,6 +49,7 @@ WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_OPENGL ?= not-empty
+WITH_OPENGLCOMPUTE ?= not-empty
 WITH_RENDERSCRIPT ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
@@ -78,6 +79,8 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
 OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
 
+OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE=1, )
+
 RENDERSCRIPT_CXX_FLAGS=$(if $(WITH_RENDERSCRIPT), -DWITH_RENDERSCRIPT=1, )
 
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
@@ -96,6 +99,7 @@ CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGL_CXX_FLAGS)
+CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(RENDERSCRIPT_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
@@ -129,6 +133,8 @@ ifeq ($(UNAME), Darwin)
 OPENGL_LDFLAGS = -framework OpenGL -framework AGL
 endif
 endif
+
+OPENGLCOMPUTE_LDFLAGS = $(OPENGL_LDFLAGS)
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
@@ -222,6 +228,7 @@ SOURCE_FILES = \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
+  CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_PNaCl.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PTX_Dev.cpp \
@@ -336,6 +343,7 @@ HEADER_FILES = \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_OpenGL_Dev.h \
+  CodeGen_OpenGLCompute_Dev.h \
   CodeGen_PNaCl.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
@@ -452,6 +460,7 @@ RUNTIME_CPP_COMPONENTS = \
   nacl_host_cpu_count \
   opencl \
   opengl \
+  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
@@ -493,9 +502,18 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_sse41
 
-RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h include/HalideRuntimeOpenCL.h include/HalideRuntimeOpenGL.h include/HalideRuntimeRenderscript.h
+RUNTIME_EXPORTED_INCLUDES = include/HalideRuntime.h include/HalideRuntimeCuda.h \
+                            include/HalideRuntimeOpenCL.h \
+                            include/HalideRuntimeOpenGL.h \
+                            include/HalideRuntimeOpenGLCompute.h \
+                            include/HalideRuntimeRenderscript.h
 
-INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
+                  $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
+                  $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
 .PHONY: all
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
@@ -631,6 +649,7 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
+OPENGLCOMPUTE_TESTS := $(shell ls test/openglcompute/*.cpp)
 RENDERSCRIPT_TESTS := $(shell ls test/renderscript/*.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
@@ -646,6 +665,7 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
+test_openglcompute: $(OPENGLCOMPUTE_TESTS:test/openglcompute/%.cpp=openglcompute_%)
 test_renderscript: $(RENDERSCRIPT_TESTS:test/renderscript/%.cpp=renderscript_%)
 
 # There are two types of tests for generators:
@@ -662,6 +682,7 @@ ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warni
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
+time_compilation_openglcompute: init_time_compilation_openglcompute $(OPENGLCOMPUTE_TESTS:test/openglcompute/%.cpp=time_compilation_openglcompute_%)
 time_compilation_renderscript: init_time_compilation_renderscript $(RENDERSCRIPT_TESTS:test/renderscript/%.cpp=time_compilation_renderscript_%)
 time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=time_compilation_generator_%)
 
@@ -696,6 +717,9 @@ $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/opengl_%: test/opengl/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
+
+$(BIN_DIR)/openglcompute_%: test/openglcompute/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/renderscript_%: test/renderscript/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
@@ -855,6 +879,12 @@ opengl_%: $(BIN_DIR)/opengl_%
 	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
 	@-echo
 
+openglcompute_%: HL_JIT_TARGET ?= host-opengcomputel
+openglcompute_%: $(BIN_DIR)/openglcompute_%
+	@-mkdir -p tmp
+	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
+	@-echo
+
 renderscript_jit_%: HL_JIT_TARGET = host-renderscript
 renderscript_jit_%: HL_TARGET =
 renderscript_aot_%: HL_TARGET = arm-32-android-armv7s-renderscript
@@ -890,6 +920,9 @@ time_compilation_performance_%: $(BIN_DIR)/performance_%
 
 time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 	$(TIME_COMPILATION) compile_times_opengl.csv make $(@:time_compilation_opengl_%=opengl_%)
+
+time_compilation_openglcompute_%: $(BIN_DIR)/openglcompute_%
+	$(TIME_COMPILATION) compile_times_openglcompute.csv make $(@:time_compilation_openglcompute_%=openglcompute_%)
 
 time_compilation_renderscript_%: $(BIN_DIR)/renderscript_%
 	$(TIME_COMPILATION) compile_times_renderscript.csv make $(@:time_compilation_renderscript_%=renderscript_%)

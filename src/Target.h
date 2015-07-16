@@ -56,6 +56,7 @@ struct Target {
         CLDoubles,  ///< Enable double support on OpenCL targets
 
         OpenGL,  ///< Enable the OpenGL runtime.
+        OpenGLCompute, ///< Enable OpenGL Compute runtime.
 
         Renderscript, ///< Enable the Renderscript runtime.
 

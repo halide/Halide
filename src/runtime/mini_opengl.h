@@ -166,4 +166,9 @@ typedef void (*PFNGLDELETEVERTEXARRAYS)(GLsizei n, const GLuint *arrays);
 typedef const GLubyte *(*PFNGLGETSTRINGI)(GLenum name, GLuint index);
 typedef void (*PFNDRAWBUFFERS)(GLsizei n, const GLenum *bufs);
 
+// ---------- OpenGL ES 3.1 ----------
+
+#define GL_COMPUTE_SHADER                 0x91B9
+
+
 #endif  // MINI_OPENGL_H

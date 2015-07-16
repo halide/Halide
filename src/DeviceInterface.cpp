@@ -5,6 +5,7 @@
 #include "runtime/HalideRuntimeCuda.h"
 #include "runtime/HalideRuntimeOpenCL.h"
 #include "runtime/HalideRuntimeOpenGL.h"
+#include "runtime/HalideRuntimeOpenGLCompute.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -135,6 +136,16 @@ const struct halide_device_interface *halide_opengl_device_interface() {
     target.set_feature(Target::OpenGL);
     struct halide_device_interface *(*fn)();
     if (lookup_runtime_routine("halide_opengl_device_interface", target, fn)) {
+        return (*fn)();
+    }
+    return NULL;
+}
+
+const struct halide_device_interface *halide_openglcompute_device_interface() {
+    Target target(get_host_target());
+    target.set_feature(Target::OpenGLCompute);
+    struct halide_device_interface *(*fn)();
+    if (lookup_runtime_routine("halide_openglcompute_device_interface", target, fn)) {
         return (*fn)();
     }
     return NULL;
