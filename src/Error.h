@@ -1,7 +1,6 @@
 #ifndef HALIDE_ERROR_H
 #define HALIDE_ERROR_H
 
-#include <string>
 #include <sstream>
 #include <stdexcept>
 
@@ -59,7 +58,7 @@ public:
  * it is up to the caller to ensure that this is the case (and to do any
  * cleanup necessary).
  */
-void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter);
+EXPORT void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter);
 
 namespace Internal {
 
@@ -78,7 +77,7 @@ struct ErrorReport {
         msg(NULL), file(f), condition_string(cs), line(l), condition(c), user(u), warning(w), runtime(r) {
         if (condition) return;
         msg = new std::ostringstream;
-        const std::string &source_loc = get_source_location();
+        const std::string &source_loc = Introspection::get_source_location();
 
         if (user) {
             // Only mention where inside of libHalide the error tripped if we have debug level > 0

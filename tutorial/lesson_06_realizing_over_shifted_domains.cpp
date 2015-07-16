@@ -1,22 +1,23 @@
-// Halide tutorial lesson 6.
+// Halide tutorial lesson 6: Realizing Funcs over arbitrary domains
 
 // This lesson demonstrates how to evaluate a Func over a domain that
 // does not start at (0, 0).
 
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_06_realizing_over_shifted_domains
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
-
 // On linux, you can compile and run it like so:
-// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06
+// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_06
 
 // On os x:
-// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -o lesson_06
+// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -o lesson_06 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_06
 
-#include <Halide.h>
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_06_realizing_over_shifted_domains
+// in a shell with the current directory at the top of the halide
+// source tree.
+
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;

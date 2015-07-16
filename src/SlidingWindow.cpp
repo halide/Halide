@@ -89,7 +89,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         if (op->name != func.name()) {
             IRMutator::visit(op);
         } else {
@@ -107,7 +107,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
-            string prefix = func.name() + ".s" + int_to_string(func.updates().size()) + ".";
+            string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func.args()[i];
@@ -143,8 +143,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             // If the function is not pure in the given dimension, give up
             bool pure = true;
-            for (size_t i = 0; i < func.updates().size(); i++) {
-                const Variable *var = func.updates()[i].args[dim_idx].as<Variable>();
+            for (const UpdateDefinition &i : func.updates()) {
+                const Variable *var = i.args[dim_idx].as<Variable>();
                 if (!var) {
                     pure = false;
                 } else if (var->name != dim) {
@@ -172,7 +172,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 can_slide_down = true;
             }
 
-
             if (!can_slide_up && !can_slide_down) {
                 debug(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
@@ -194,13 +193,25 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, max_required) + 1;
             Expr prev_min_minus_one = substitute(loop_var, loop_var_expr - 1, min_required) - 1;
 
+            // If there's no overlap between adjacent iterations, we shouldn't slide.
+            if (is_one(simplify(min_required >= prev_max_plus_one)) ||
+                is_one(simplify(max_required <= prev_min_minus_one))) {
+                debug(3) << "Not sliding " << func.name()
+                         << " over dimension " << dim
+                         << " along loop variable " << loop_var
+                         << " there's no overlap in the region computed across iterations\n"
+                         << "Min is " << min_required << "\n"
+                         << "Max is " << max_required << "\n";
+                return;
+            }
+
             Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = select(loop_var_expr == loop_min, min_required, prev_max_plus_one);
+                new_min = select(loop_var_expr <= loop_min, min_required, likely(prev_max_plus_one));
                 new_max = max_required;
             } else {
                 new_min = min_required;
-                new_max = select(loop_var_expr == loop_min, max_required, prev_min_minus_one);
+                new_max = select(loop_var_expr <= loop_min, max_required, likely(prev_min_minus_one));
             }
 
             Expr early_stages_min_required = new_min;
@@ -218,7 +229,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             for (size_t i = 0; i < func.updates().size(); i++) {
-                string n = func.name() + ".s" + int_to_string(i) + "." + dim;
+                string n = func.name() + ".s" + std::to_string(i) + "." + dim;
                 replacements[n + ".min"] = Variable::make(Int(32), prefix + dim + ".min");
                 replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");
             }
@@ -252,11 +263,23 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
         Expr extent = expand_expr(op->extent, scope);
-        if (is_monotonic(min, loop_var) != Constant ||
-            is_monotonic(extent, loop_var) != Constant) {
+        if (is_one(extent)) {
+            // Just treat it like a let
+            Stmt s = LetStmt::make(op->name, min, op->body);
+            s = mutate(s);
+            // Unpack it back into the for
+            const LetStmt *l = s.as<LetStmt>();
+            internal_assert(l);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, l->body);
+        } else if (is_monotonic(min, loop_var) != Constant ||
+                   is_monotonic(extent, loop_var) != Constant) {
+            debug(3) << "Not entering loop over " << op->name
+                     << " because the bounds depend on the var we're sliding over: "
+                     << min << ", " << extent << "\n";
             stmt = op;
         } else {
             IRMutator::visit(op);
+
         }
     }
 
@@ -288,6 +311,7 @@ public:
 class SlidingWindowOnFunction : public IRMutator {
     Function func;
 
+
     using IRMutator::visit;
 
     void visit(const For *op) {
@@ -297,14 +321,15 @@ class SlidingWindowOnFunction : public IRMutator {
 
         new_body = mutate(new_body);
 
-        if (op->for_type == For::Serial || op->for_type == For::Unrolled) {
+        if (op->for_type == ForType::Serial ||
+            op->for_type == ForType::Unrolled) {
             new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);
         }
 
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, new_body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
         }
     }
 

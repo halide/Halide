@@ -74,7 +74,7 @@ private:
         in_loop = old_in_loop;
     }
 
-    void visit(const Pipeline *pipe) {
+    void visit(const ProducerConsumer *pipe) {
         if (in_loop) {
             IRVisitor::visit(pipe);
         } else {
@@ -135,7 +135,7 @@ private:
         }
     }
 
-    void visit(const Pipeline *pipe) {
+    void visit(const ProducerConsumer *pipe) {
         // Do it in reverse order, so the injection occurs in the last instance of the stmt.
         Stmt new_consume = inject_marker(pipe->consume);
         Stmt new_update;
@@ -149,7 +149,7 @@ private:
             new_consume.same_as(pipe->consume)) {
             stmt = pipe;
         } else {
-            stmt = Pipeline::make(pipe->name, new_produce, new_update, new_consume);
+            stmt = ProducerConsumer::make(pipe->name, new_produce, new_update, new_consume);
         }
     }
 

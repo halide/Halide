@@ -4,7 +4,7 @@
 // algorithms.
 
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <vector>
 #include "clock.h"
 
@@ -69,7 +69,7 @@ int product(const std::vector<int> &R) {
 void add_implicit_args(std::vector<Var> &defined, Func implicit) {
     // Add implicit args for each argument missing in defined from
     // implicit's args.
-    for (int i = 0; defined.size() < implicit.dimensions(); i++) {
+    for (int i = 0; static_cast<int>(defined.size()) < implicit.dimensions(); i++) {
         defined.push_back(Var::implicit(i));
     }
 }
@@ -92,7 +92,7 @@ std::vector<Var> add_implicit_args(Var x0, Var x1, Func implicit) {
 // Find the first argument of f that is a placeholder, or outermost if
 // no placeholders are found.
 Var outermost(Func f) {
-    for (size_t i = 0; i < f.dimensions(); i++) {
+    for (int i = 0; i < f.dimensions(); i++) {
         if (f.args()[i].is_implicit()) {
             return f.args()[i];
         }
@@ -344,7 +344,7 @@ Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, f
 
     Var n0 = xT.args()[0];
     Var n1 = xT.args()[1];
-    xT.compute_at(dft, outermost(dft)).vectorize(n0).unroll(n1);
+    xT.compute_at(dft, outermost(dft)).vectorize(n1).unroll(n0);
 
     dft1T.compute_at(dft, outermost(dft));
     dft.compute_root();
@@ -485,7 +485,7 @@ std::vector<int> radix_factor(int N) {
     const int radices[] = { 8, 5, 4, 3, 2 };
 
     std::vector<int> R;
-    for (int i = 0; i < sizeof(radices)/sizeof(radices[0]); i++) {
+    for (size_t i = 0; i < sizeof(radices)/sizeof(radices[0]); i++) {
         while (N % radices[i] == 0) {
             R.push_back(radices[i]);
             N /= radices[i];

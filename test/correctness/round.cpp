@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -112,6 +112,9 @@ int main(int argc, char **argv) {
         ok = ok && test(floor(input(x)), "floor", N, input, floor_result);
         ok = ok && test(ceil(input(x)), "ceil", N, input, ceil_result);
         ok = ok && test(trunc(input(x)), "trunc", N, input, trunc_result);
+    }
+    if (ok) {
+        printf("Success!\n");
     }
     return ok ? 0 : -1;
 }

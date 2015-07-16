@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <time.h>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
@@ -60,7 +60,7 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
 
 Expr random_expr(Type T, int depth, bool overflow_undef = false);
 
-Expr random_condition(Type T, int depth) {
+Expr random_condition(Type T, int depth, bool maybe_scalar) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
@@ -71,6 +71,10 @@ Expr random_condition(Type T, int depth) {
         GE::make,
     };
     const int op_count = sizeof(make_bin_op)/sizeof(make_bin_op[0]);
+
+    if (maybe_scalar && rand() % T.width == 0) {
+        T = T.element_of();
+    }
 
     Expr a = random_expr(T, depth);
     Expr b = random_expr(T, depth);
@@ -110,7 +114,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     int op = rand() % op_count;
     switch(op) {
     case 0: return random_leaf(T);
-    case 1: return Select::make(random_condition(T, depth),
+    case 1: return Select::make(random_condition(T, depth, true),
                                 random_expr(T, depth, overflow_undef),
                                 random_expr(T, depth, overflow_undef));
 
@@ -137,17 +141,19 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     case 5:
         // When generating boolean expressions, maybe throw in a condition on non-bool types.
         if (T.is_bool()) {
-            return random_condition(T, depth);
+            return random_condition(T, depth, false);
         }
         break;
 
     case 6:
+    {
         // Get a random type that isn't T or int32 (int32 can overflow and we don't care about that).
         Type subT;
         do {
             subT = random_type(T.width);
         } while (subT == T || (subT.is_int() && subT.bits == 32));
         return Cast::make(T, random_expr(subT, depth, overflow_undef));
+    }
 
     default:
         make_bin_op_fn maker;
@@ -257,7 +263,7 @@ int main(int argc, char **argv) {
 
     int max_fuzz_vector_width = 4;
 
-    for (size_t i = 0; i < fuzz_type_count; i++) {
+    for (int i = 0; i < fuzz_type_count; i++) {
         Type T = fuzz_types[i];
         for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
             Type VT = T.vector_of(w);
@@ -273,4 +279,3 @@ int main(int argc, char **argv) {
     std::cout << "Success!" << std::endl;
     return 0;
 }
-

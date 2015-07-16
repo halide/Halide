@@ -1,7 +1,8 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #include "clock.h"
 #include <memory>
+#include <algorithm>
 
 using namespace Halide;
 
@@ -17,27 +18,34 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
             .set_min(i, dst.min(i));
     }
 
-    if (dst.stride(0) == 1) {
+    if (dst.stride(0) == 1 && src.stride(0) == 1) {
+        // packed -> packed
         f.vectorize(x, 16);
     } else if (dst.stride(0) == 3 && src.stride(0) == 3) {
-        // For a memcpy of packed rgb data, we can fuse x and c and
-        // vectorize over the combination.
+        // packed -> packed
         Var fused("fused");
         f.reorder(c, x, y).fuse(c, x, fused).vectorize(fused, 16);
+    } else if (dst.stride(0) == 3) {
+        // planar -> packed
+        f.reorder(c, x, y).unroll(c).vectorize(x, 16);
+    } else {
+        // packed -> planar
+        f.reorder(c, x, y).unroll(c).vectorize(x, 16);
     }
-
-    f.compile_to_assembly(std::string("copy_") + f.name() + ".s", Internal::vec<Argument>(src), "copy");
 
     f.realize(dst);
 
-
-
-    double t1 = current_time();
-    for (int i = 0; i < 10; i++) {
-        f.realize(dst);
+    double t = 1e20;
+    for (int j = 0; j < 5; j++) {
+        double t1 = current_time();
+        for (int i = 0; i < 10; i++) {
+            f.realize(dst);
+        }
+        double t2 = current_time();
+        t = std::min(t, t2 - t1);
     }
-    double t2 = current_time();
-    return t2 - t1;
+
+    return t;
 }
 
 Image<uint8_t> make_packed(uint8_t *host, int W, int H) {
@@ -93,18 +101,18 @@ int main(int argc, char **argv) {
     delete[] storage_1;
     delete[] storage_2;
 
-    if (t_planar_planar > t_packed_packed * 1.4 ||
-        t_packed_packed > t_packed_planar * 1.4 ||
-        t_packed_planar > t_planar_packed * 1.4) {
+    if (t_planar_planar > t_packed_packed * 2 ||
+        t_packed_packed > t_packed_planar * 2 ||
+        t_planar_packed > t_packed_planar * 2) {
         printf("Times were not in expected order:\n"
                "planar -> planar: %f \n"
                "packed -> packed: %f \n"
-               "packed -> planar: %f \n"
-               "planar -> packed: %f \n",
+               "planar -> packed: %f \n"
+               "packed -> planar: %f \n",
                t_planar_planar,
                t_packed_packed,
-               t_packed_planar,
-               t_planar_packed);
+               t_planar_packed,
+               t_packed_planar);
 
         return -1;
     }

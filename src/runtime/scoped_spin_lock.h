@@ -7,11 +7,11 @@ namespace Halide { namespace Runtime { namespace Internal {
 struct ScopedSpinLock {
     volatile int *lock;
 
-    ScopedSpinLock(volatile int *l) : lock(l) {
+    ScopedSpinLock(volatile int *l) __attribute__((always_inline)) : lock(l) {
         while (__sync_lock_test_and_set(lock, 1)) { }
     }
 
-    ~ScopedSpinLock() {
+    ~ScopedSpinLock() __attribute__((always_inline)) {
         __sync_lock_release(lock);
     }
 };

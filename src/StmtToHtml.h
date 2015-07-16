@@ -5,7 +5,7 @@
  * Defines a function to dump an HTML-formatted stmt to a file.
  */
 
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 namespace Internal {
@@ -14,6 +14,9 @@ namespace Internal {
  * Dump an HTML-formatted print of a Stmt to filename.
  */
 EXPORT void print_to_html(std::string filename, Stmt s);
+
+/** Dump an HTML-formatted print of a Module to filename. */
+EXPORT void print_to_html(std::string filename, const Module &m);
 
 }}
 

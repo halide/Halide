@@ -38,16 +38,13 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-/** Convert an integer to a string. */
-string int_to_string(int x) {
-    // Most calls to this function are during lowering, and correspond
-    // to the dimensions of some buffer. So this gets called with 0,
-    // 1, 2, and 3 a lot, and it's worth optimizing those cases.
-    static const string small_ints[] = {"0", "1", "2", "3", "4", "5", "6", "7"};
-    if (x < 8) return small_ints[x];
-    ostringstream ss;
-    ss << x;
-    return ss.str();
+string replace_all(string &str, const string &find, const string &replace) {
+    size_t pos = 0;
+    while ((pos = str.find(find, pos)) != string::npos) {
+        str.replace(pos, find.length(), replace);
+        pos += replace.length();
+    }
+    return str;
 }
 
 string unique_name(const string &name, bool user) {
@@ -92,7 +89,8 @@ string base_name(const string &name, char delim) {
 }
 
 string make_entity_name(void *stack_ptr, const string &type, char prefix) {
-    string name = get_variable_name(stack_ptr, type);
+    string name = Introspection::get_variable_name(stack_ptr, type);
+
     if (name.empty()) {
         return unique_name(prefix);
     } else {

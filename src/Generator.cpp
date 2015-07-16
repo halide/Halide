@@ -1,7 +1,5 @@
-// Generator requires C++11
-#if __cplusplus > 199711L || _MSC_VER >= 1800
-
 #include "Generator.h"
+#include "Output.h"
 
 namespace {
 
@@ -48,10 +46,16 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR]  "
-                          "target=target-string [generator_arg=value [...]]\n";
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] "
+                          "target=target-string [generator_arg=value [...]]\n\n"
+                          "  -e  A comma separated list of optional files to emit. Accepted values are "
+                          "[assembly, bitcode, stmt, html]\n";
 
-    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" } };
+    std::map<std::string, std::string> flags_info = { { "-f", "" },
+                                                      { "-g", "" },
+                                                      { "-o", "" },
+                                                      { "-e", "" },
+                                                      { "-r", "" }};
     std::map<std::string, std::string> generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -79,17 +83,19 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
+    std::string runtime_name = flags_info["-r"];
+
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
-    if (generator_names.size() == 0) {
-        cerr << "No generators have been registered\n";
+    if (generator_names.size() == 0 && runtime_name.empty()) {
+        cerr << "No generators have been registered and not compiling a standalone runtime\n";
         cerr << kUsage;
         return 1;
     }
 
     std::string generator_name = flags_info["-g"];
-    if (generator_name.empty()) {
+    if (generator_name.empty() && runtime_name.empty()) {
         // If -g isn't specified, but there's only one generator registered, just use that one.
-        if (generator_names.size() != 1) {
+        if (generator_names.size() > 1) {
             cerr << "-g must be specified if multiple generators are registered:\n";
             for (auto name : generator_names) {
                 cerr << "    " << name << "\n";
@@ -115,6 +121,31 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
+    GeneratorBase::EmitOptions emit_options;
+    std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    for (const std::string &opt : emit_flags) {
+        if (opt == "assembly") {
+            emit_options.emit_assembly = true;
+        } else if (opt == "bitcode") {
+            emit_options.emit_bitcode = true;
+        } else if (opt == "stmt") {
+            emit_options.emit_stmt = true;
+        } else if (opt == "html") {
+            emit_options.emit_stmt_html = true;
+        } else if (!opt.empty()) {
+            cerr << "Unrecognized emit option: " << opt
+                 << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+        }
+    }
+
+    if (!runtime_name.empty()) {
+        compile_standalone_runtime(output_dir + "/" + runtime_name,
+                                   parse_target_string(generator_args["target"]));
+        if (generator_name.empty()) {
+            // We're just compiling a runtime
+            return 0;
+        }
+    }
 
     std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
     if (gen == nullptr) {
@@ -122,13 +153,18 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name);
+    gen->emit_filter(output_dir, function_name, function_name, emit_options);
     return 0;
 }
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
-                                              this);
+                                              this, nullptr);
+}
+
+GeneratorParamBase::GeneratorParamBase(const GeneratorParamBase &that) : name(that.name) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
+                                              this, nullptr);
 }
 
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
@@ -174,14 +210,14 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     std::vector<std::string> result;
-    for (auto it = registry.factories.begin(); it != registry.factories.end(); ++it) {
-        result.push_back(it->first);
+    for (const auto& i : registry.factories) {
+        result.push_back(i.first);
     }
     return result;
 }
 
-GeneratorBase::GeneratorBase(size_t size) : size(size), params_built(false) {
-    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this);
+GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper) : size(size), params_built(false) {
+    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
 }
 
 GeneratorBase::~GeneratorBase() { ObjectInstanceRegistry::unregister_instance(this); }
@@ -195,10 +231,18 @@ void GeneratorBase::build_params() {
             internal_assert(param != nullptr);
             user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
-            user_assert(filter_params.find(param->name()) == filter_params.end())
-                << "Duplicate Param name: " << param->name();
-            filter_params[param->name()] = param;
-            filter_arguments.push_back(Argument(param->name(), param->is_buffer(), param->type()));
+            for (const Argument& arg : filter_arguments) {
+                user_assert(arg.name != param->name()) << "Duplicate Param name: " << param->name();
+            }
+            Expr def, min, max;
+            if (!param->is_buffer()) {
+                def = param->get_scalar_expr();
+                min = param->get_min_value();
+                max = param->get_max_value();
+            }
+            filter_arguments.push_back(Argument(param->name(),
+                param->is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
+                param->type(), param->dimensions(), def, min, max));
         }
 
         std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
@@ -213,15 +257,6 @@ void GeneratorBase::build_params() {
         }
         params_built = true;
     }
-}
-
-std::vector<Internal::Parameter> GeneratorBase::get_filter_parameters() {
-    build_params();
-    std::vector<Internal::Parameter> result;
-    for (size_t i = 0; i < filter_arguments.size(); ++i) {
-        result.push_back(*filter_params[filter_arguments[i].name]);
-    }
-    return result;
 }
 
 GeneratorParamValues GeneratorBase::get_generator_param_values() {
@@ -246,46 +281,76 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
     }
 }
 
+std::vector<Argument> GeneratorBase::get_filter_output_types() {
+    std::vector<Argument> output_types;
+    Pipeline pipeline = build_pipeline();
+    std::vector<Func> pipeline_results = pipeline.outputs();
+    for (Func func : pipeline_results) {
+        for (Halide::Type t : func.output_types()) {
+            std::string name = "result_" + std::to_string(output_types.size());
+            output_types.push_back(Halide::Argument(name, Halide::Argument::OutputBuffer, t, func.dimensions()));
+        }
+    }
+    return output_types;
+}
+
 void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const std::string &function_name,
                                 const std::string &file_base_name,
                                 const EmitOptions &options) {
     build_params();
 
-    Func func = build();
+    Pipeline pipeline = build_pipeline();
 
     std::vector<Halide::Argument> inputs = get_filter_arguments();
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
-    if (options.emit_o) {
-        func.compile_to_object(base_path + ".o", inputs, function_name, target);
+    if (options.emit_o || options.emit_assembly || options.emit_bitcode) {
+        Outputs output_files;
+        if (options.emit_o) {
+            // If the target arch is pnacl, then the output "object" file is
+            // actually a pnacl bitcode file.
+            if (Target(target).arch == Target::PNaCl) {
+                output_files.object_name = base_path + ".bc";
+            } else {
+                // Otherwise it is an ordinary object file
+                output_files.object_name = base_path + ".o";
+            }
+        }
+        if (options.emit_assembly) {
+            output_files.assembly_name = base_path + ".s";
+        }
+        if (options.emit_bitcode) {
+            // In this case, bitcode refers to the LLVM IR generated by Halide
+            // and passed to LLVM, for both the pnacl and ordinary archs
+            output_files.bitcode_name = base_path + ".bc";
+        }
+        pipeline.compile_to(output_files, inputs, function_name, target);
     }
     if (options.emit_h) {
-        func.compile_to_header(base_path + ".h", inputs, function_name, target);
+        pipeline.compile_to_header(base_path + ".h", inputs, function_name, target);
     }
     if (options.emit_cpp) {
-        func.compile_to_c(base_path + ".cpp", inputs, function_name, target);
-    }
-    if (options.emit_assembly) {
-        func.compile_to_assembly(base_path + ".s", inputs, function_name, target);
-    }
-    if (options.emit_bitcode) {
-        func.compile_to_bitcode(base_path + ".bc", inputs, function_name, target);
+        pipeline.compile_to_c(base_path + ".cpp", inputs, function_name, target);
     }
     if (options.emit_stmt) {
-        func.compile_to_lowered_stmt(base_path + ".stmt", Halide::Text, target);
+        pipeline.compile_to_lowered_stmt(base_path + ".stmt", inputs, Halide::Text, target);
     }
     if (options.emit_stmt_html) {
-        func.compile_to_lowered_stmt(base_path + ".html", Halide::HTML, target);
+        pipeline.compile_to_lowered_stmt(base_path + ".html", inputs, Halide::HTML, target);
     }
 }
 
 Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                 std::string function_name){
-    Func f = build();
+                                std::string function_name){
+    Pipeline p = build_pipeline();
+    user_assert(p.outputs().size() == 1) \
+        << "Can only call_extern Pipelines with a single output Func\n";
+    Func f = p.outputs()[0];
     Func f_extern;
     if (function_name.empty()) {
         function_name = generator_name();
-        user_assert(!function_name.empty()) << "call_extern: generator_name is empty";
+        user_assert(!function_name.empty())
+            << "call_extern: generator_name is empty\n";
     }
     f_extern.define_extern(function_name, function_arguments, f.output_types(), f.dimensions());
     return f_extern;
@@ -304,5 +369,3 @@ Func GeneratorBase::call_extern_by_name(const std::string &generator_name,
 
 }  // namespace Internal
 }  // namespace Halide
-
-#endif  // __cplusplus > 199711L

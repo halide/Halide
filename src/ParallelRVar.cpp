@@ -2,7 +2,6 @@
 #include "ParallelRVar.h"
 #include "IRMutator.h"
 #include "Debug.h"
-#include "CSE.h"
 #include "Simplify.h"
 #include "IROperator.h"
 
@@ -31,7 +30,7 @@ class FindLoads : public IRVisitor {
 public:
     FindLoads(const string &f) : func(f) {}
 
-    vector<vector<Expr> > loads;
+    vector<vector<Expr>> loads;
 };
 
 /** Rename all free variables to unique new names. */

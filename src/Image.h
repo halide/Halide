@@ -5,9 +5,8 @@
  * Defines Halide's Image data type
  */
 
-#include "Buffer.h"
-#include "Tuple.h"
 #include "Var.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -21,14 +20,19 @@ protected:
     /** The underlying memory object */
     Buffer buffer;
 
-    /** These fields are also stored in the buffer, but they're cached
-     * here in the handle to make operator() fast. This is safe to do
-     * because the buffer is never modified
-     */
-    // @{
+    /** The address of the zero coordinate. The buffer_t stores the
+     * address of the min coordinate, but it's easier to index off the
+     * zero coordinate. */
     void *origin;
-    int stride_0, stride_1, stride_2, stride_3, dims;
-    // @}
+
+    /** The strides. These fields are also stored in the buffer, but
+     * they're cached here in the handle to make operator() fast. This
+     * is safe to do because the buffer is never modified.
+     */
+    int stride_0, stride_1, stride_2, stride_3;
+
+    /** The dimensionality. */
+    int dims;
 
     /** Prepare the buffer to be used as an image. Makes sure that the
      * cached strides are correct, and that the image data is on the

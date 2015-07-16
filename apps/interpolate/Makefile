@@ -6,7 +6,8 @@ CXXFLAGS += -g -Wall
 
 interpolate: ../../ interpolate.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) $(CXXFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../$(LIB_HALIDE) -o interpolate -lpthread -ldl -lz $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS) $(LDFLAGS) $(LLVM_SHARED_LIBS)
+	$(CXX) $(CXXFLAGS) interpolate.cpp ../../$(LIB_HALIDE) -o interpolate -lpthread -ldl -lz \
+	$(PNGFLAGS) $(LDFLAGS) $(LLVM_SHARED_LIBS)
 
 out.png: interpolate
 	./interpolate ../images/rgba.png out.png
