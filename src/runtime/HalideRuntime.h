@@ -487,7 +487,7 @@ typedef struct buffer_t {
     * host + elem_size * ((x - min[0]) * stride[0] +
     *                     (y - min[1]) * stride[1] +
     *                     (z - min[2]) * stride[2] +
-    *                     (w - min[3]) * stride[3]) * elem_size
+    *                     (w - min[3]) * stride[3])
     * By manipulating the strides and extents you can lazily crop,
     * transpose, and even flip buffers without modifying the data.
     */
