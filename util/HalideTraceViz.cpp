@@ -277,7 +277,7 @@ void usage() {
 }
 
 int run(int argc, char **argv) {
-    assert(sizeof(Packet) == 4096);
+    static_assert(sizeof(Packet) == 4096, "");
 
     // State that determines how different funcs get drawn
     int frame_width = 1920, frame_height = 1080;
