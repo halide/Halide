@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include "clock.h"
 
 using namespace Halide;
@@ -29,7 +29,7 @@ bool test(int vec_width) {
     Image<A> input(W, H+20);
     for (int y = 0; y < H+20; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (A)(rand()*0.125 + 1.0);
+            input(x, y) = (A)((rand() & 0xffff)*0.125 + 1.0);
         }
     }
 
@@ -67,8 +67,9 @@ bool test(int vec_width) {
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             if (outputf(x, y) != outputg(x, y)) {
-                printf("%s x %d failed: %d vs %d\n",
+                printf("%s x %d failed at %d %d: %d vs %d\n",
                        string_of_type<A>(), vec_width,
+                       x, y,
                        (int)outputf(x, y),
                        (int)outputg(x, y)
                     );

@@ -6,7 +6,6 @@
  */
 
 #include "CodeGen_Posix.h"
-#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -17,21 +16,7 @@ public:
     /** Create an ARM code generator for the given arm target. */
     CodeGen_ARM(Target);
 
-    /** Compile to an internally-held llvm module. Takes a halide
-     * statement, the name of the function produced, and the arguments
-     * to the function produced. After calling this, call
-     * CodeGen::compile_to_file or
-     * CodeGen::compile_to_function_pointer to get at the ARM machine
-     * code. */
-    void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
-                 const std::vector<Buffer> &images_to_embed);
-
-    static void test();
-
 protected:
-
-    llvm::Triple get_target_triple() const;
 
     using CodeGen_Posix::visit;
 
@@ -70,6 +55,13 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
+
+    // On 64-bit ARM, the NEON instrinsics do not work as the syntax
+    // changed from 32-bit and this has not been updated.
+    // On 32-bit, NEON can be disabled for older processors.
+    bool neon_intrinsics_disabled() {
+        return target.bits == 64 || target.has_feature(Target::NoNEON);
+    }
 };
 
 }}

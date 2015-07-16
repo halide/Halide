@@ -1,8 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Halide.h>
-#include <HalideRuntime.h>
+#include "Halide.h"
+#include "HalideRuntime.h"
 
 using namespace Halide;
 
@@ -65,9 +65,9 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t
             in->extent[i] = out->extent[i];
             in->stride[i] = out->stride[i];
         }
-      in->elem_size = out->elem_size;
+        in->elem_size = out->elem_size;
     } else if (out->host) {
-        assert(stage < sizeof(call_count_staged)/sizeof(call_count_staged[0]));
+        assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
         for (int32_t i = 0; i < out->extent[0]; i++) {
             for (int32_t j = 0; j < out->extent[1]; j++) {
@@ -84,9 +84,7 @@ int main(int argc, char **argv) {
     {
         call_count = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f;
         f() = count_calls(0, 0);
@@ -105,9 +103,7 @@ int main(int argc, char **argv) {
         call_count = 0;
         Param<int32_t> coord;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f, g;
         Var x, y;
@@ -144,9 +140,7 @@ int main(int argc, char **argv) {
     {
         call_count = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -169,14 +163,10 @@ int main(int argc, char **argv) {
 
     {
         Func count_calls_23;
-        count_calls_23.define_extern("count_calls_with_arg",
-                                     Internal::vec(ExternFuncArgument(cast<uint8_t>(23))),
-                                     UInt(8), 2);
+        count_calls_23.define_extern("count_calls_with_arg", {cast<uint8_t>(23)}, UInt(8), 2);
 
         Func count_calls_42;
-        count_calls_42.define_extern("count_calls_with_arg",
-                                     Internal::vec(ExternFuncArgument(cast<uint8_t>(42))),
-                                     UInt(8), 2);
+        count_calls_42.define_extern("count_calls_with_arg", {cast<uint8_t>(42)}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -202,14 +192,10 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls_val1;
-        count_calls_val1.define_extern("count_calls_with_arg",
-                                       Internal::vec(ExternFuncArgument(Expr(val1))),
-                                       UInt(8), 2);
+        count_calls_val1.define_extern("count_calls_with_arg", {val1}, UInt(8), 2);
 
         Func count_calls_val2;
-        count_calls_val2.define_extern("count_calls_with_arg",
-                                       Internal::vec(ExternFuncArgument(Expr(val2))),
-                                       UInt(8), 2);
+        count_calls_val2.define_extern("count_calls_with_arg", {val2}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -254,9 +240,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -282,9 +266,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(memoize_tag(cast<uint8_t>(val)))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {memoize_tag(cast<uint8_t>(val))}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -312,9 +294,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
         Func f, g, h;
         Var x;
 
@@ -345,9 +325,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -390,9 +368,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -401,7 +377,7 @@ int main(int argc, char **argv) {
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
@@ -416,6 +392,9 @@ int main(int argc, char **argv) {
         }
         // TODO work out an assertion on call count here.
         fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {
@@ -424,9 +403,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -435,7 +412,7 @@ int main(int argc, char **argv) {
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
@@ -473,6 +450,9 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {
@@ -480,9 +460,7 @@ int main(int argc, char **argv) {
         Param<float> val;
 
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg_parallel",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 3);
+        count_calls.define_extern("count_calls_with_arg_parallel", {cast<uint8_t>(val)}, UInt(8), 3);
 
         Func f;
         Var x, y;
@@ -497,7 +475,7 @@ int main(int argc, char **argv) {
         g.parallel(y, 16);
 
         val.set(23.0f);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
         Image<uint8_t> out = g.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
@@ -510,6 +488,9 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 8; i++) {
           fprintf(stderr, "Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {

@@ -67,4 +67,6 @@
  * \example tutorial/lesson_10_aot_compilation_run.cpp
  * \example tutorial/lesson_11_cross_compilation.cpp
  * \example tutorial/lesson_12_using_the_gpu.cpp
+ * \example tutorial/lesson_13_tuples.cpp
+ * \example tutorial/lesson_14_types.cpp
  */

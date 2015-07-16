@@ -1,8 +1,8 @@
 #include <iostream>
 
 #include "CodeGen_X86.h"
+#include "JITModule.h"
 #include "IROperator.h"
-#include "buffer_t.h"
 #include "IRMatch.h"
 #include "Debug.h"
 #include "Util.h"
@@ -20,8 +20,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
-                                     jitEventListener(NULL) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
@@ -32,82 +31,6 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
     #if !(WITH_NATIVE_CLIENT)
     user_assert(t.os != Target::NaCl) << "llvm build not configured with native client enabled.\n";
     #endif
-}
-
-llvm::Triple CodeGen_X86::get_target_triple() const {
-    llvm::Triple triple;
-
-    if (target.bits == 32) {
-        triple.setArch(llvm::Triple::x86);
-    } else {
-        user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
-        triple.setArch(llvm::Triple::x86_64);
-    }
-
-    // Fix the target triple
-
-    if (target.os == Target::Linux) {
-        triple.setOS(llvm::Triple::Linux);
-        triple.setEnvironment(llvm::Triple::GNU);
-    } else if (target.os == Target::OSX) {
-        triple.setVendor(llvm::Triple::Apple);
-        triple.setOS(llvm::Triple::MacOSX);
-    } else if (target.os == Target::Windows) {
-        triple.setVendor(llvm::Triple::PC);
-        triple.setOS(llvm::Triple::Win32);
-#if LLVM_VERSION >= 36
-        triple.setEnvironment(llvm::Triple::MSVC);
-#endif
-        if (target.has_feature(Target::JIT)) {
-            // Use ELF for jitting
-            #if LLVM_VERSION < 35
-            triple.setEnvironment(llvm::Triple::ELF);
-            #else
-            triple.setObjectFormat(llvm::Triple::ELF);
-            #endif
-        }
-    } else if (target.os == Target::Android) {
-        triple.setOS(llvm::Triple::Linux);
-        triple.setEnvironment(llvm::Triple::Android);
-
-        if (target.bits == 64) {
-            std::cerr << "Warning: x86-64 android is untested\n";
-        }
-    } else if (target.os == Target::NaCl) {
-        #ifdef WITH_NATIVE_CLIENT
-        triple.setOS(llvm::Triple::NaCl);
-        triple.setEnvironment(llvm::Triple::GNU);
-        #else
-        user_error << "This version of Halide was compiled without nacl support.\n";
-        #endif
-    } else if (target.os == Target::IOS) {
-        // X86 on iOS for the simulator
-        triple.setVendor(llvm::Triple::Apple);
-        triple.setOS(llvm::Triple::IOS);
-    }
-
-    return triple;
-}
-
-void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    // Fix the target triple
-    module = get_initial_module_for_target(target, context);
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
 }
 
 Expr _i64(Expr e) {
@@ -207,10 +130,10 @@ bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
 
     Type narrow = t;
     narrow.bits = 16;
-    vector<Expr> args = vec(lossless_cast(narrow, ma->a),
-                            lossless_cast(narrow, ma->b),
-                            lossless_cast(narrow, mb->a),
-                            lossless_cast(narrow, mb->b));
+    vector<Expr> args = {lossless_cast(narrow, ma->a),
+                         lossless_cast(narrow, ma->b),
+                         lossless_cast(narrow, mb->a),
+                         lossless_cast(narrow, mb->b)};
     if (!args[0].defined() || !args[1].defined() ||
         !args[2].defined() || !args[3].defined()) {
         return false;
@@ -228,7 +151,7 @@ void CodeGen_X86::visit(const Add *op) {
     if (should_use_pmaddwd(op->a, op->b, matches)) {
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -244,7 +167,7 @@ void CodeGen_X86::visit(const Sub *op) {
         }
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -289,7 +212,7 @@ void CodeGen_X86::visit(const EQ *op) {
     int bits = t.width * t.bits;
     if (t.width == 1 || bits % 128 == 0) {
         // LLVM is fine for native vector widths or scalars
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     } else {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
@@ -459,8 +382,7 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-    CodeGen::visit(op);
-
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const Div *op) {
@@ -475,7 +397,7 @@ void CodeGen_X86::visit(const Div *op) {
     if (!int_imm) int_imm = op->b.as<IntImm>();
     int const_divisor = int_imm ? int_imm->value : 0;
     int shift_amount;
-    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
     vector<Expr> matches;
     if (power_of_two && op->type.is_int()) {
@@ -519,7 +441,7 @@ void CodeGen_X86::visit(const Div *op) {
 
         // Widening multiply, keep high half, shift
         if (op->type.element_of() == Int(16) && op->type.is_vector()) {
-            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", vec(flipped, mult));
+            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", {flipped, mult});
             if (shift) {
                 Constant *shift_amount = ConstantInt::get(narrower, shift);
                 val = builder->CreateLShr(val, shift_amount);
@@ -570,7 +492,7 @@ void CodeGen_X86::visit(const Div *op) {
         Value *val = num;
 
         if (op->type.element_of() == UInt(16) && op->type.is_vector()) {
-            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", vec(val, mult));
+            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", {val, mult});
             if (shift && method == 1) {
                 Constant *shift_amount = ConstantInt::get(narrower, shift);
                 val = builder->CreateLShr(val, shift_amount);
@@ -613,212 +535,83 @@ void CodeGen_X86::visit(const Div *op) {
         value = val;
 
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Min *op) {
     if (!op->type.is_vector()) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
     bool use_sse_41 = target.has_feature(Target::SSE41);
     if (op->type.element_of() == UInt(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse2.pminu.b", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse2.pminu.b", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse41.pminsb", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse41.pminsb", {op->a, op->b});
     } else if (op->type.element_of() == Int(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmins.w", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmins.w", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse41.pminuw", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse41.pminuw", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminsd", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminsd", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {
         if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
             // This condition should possibly be > 4, rather than a
             // multiple of 8, but shuffling in undefs seems to work
             // poorly with avx.
-            value = call_intrin(op->type, 8, "min_f32x8", vec(op->a, op->b));
+            value = call_intrin(op->type, 8, "min_f32x8", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 4, "min_f32x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "min_f32x4", {op->a, op->b});
         }
     } else if (op->type.element_of() == Float(64)) {
         if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 4, "min_f64x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "min_f64x4", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 2, "min_f64x2", vec(op->a, op->b));
+            value = call_intrin(op->type, 2, "min_f64x2", {op->a, op->b});
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Max *op) {
     if (!op->type.is_vector()) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
     bool use_sse_41 = target.has_feature(Target::SSE41);
     if (op->type.element_of() == UInt(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse2.pmaxu.b", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse2.pmaxu.b", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse41.pmaxsb", vec(op->a, op->b));
+        value = call_intrin(op->type, 16, "llvm.x86.sse41.pmaxsb", {op->a, op->b});
     } else if (op->type.element_of() == Int(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmaxs.w", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmaxs.w", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse41.pmaxuw", vec(op->a, op->b));
+        value = call_intrin(op->type, 8, "llvm.x86.sse41.pmaxuw", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == Int(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxsd", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxsd", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", vec(op->a, op->b));
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {
         if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 8, "max_f32x8", vec(op->a, op->b));
+            value = call_intrin(op->type, 8, "max_f32x8", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 4, "max_f32x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "max_f32x4", {op->a, op->b});
         }
     } else if (op->type.element_of() == Float(64)) {
         if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 4, "max_f64x4", vec(op->a, op->b));
+            value = call_intrin(op->type, 4, "max_f64x4", {op->a, op->b});
         } else {
-            value = call_intrin(op->type, 2, "max_f64x2", vec(op->a, op->b));
+            value = call_intrin(op->type, 2, "max_f64x2", {op->a, op->b});
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
-}
-
-static bool extern_function_1_was_called = false;
-extern "C" int extern_function_1(float x) {
-    extern_function_1_was_called = true;
-    return x < 0.4 ? 3 : 1;
-}
-
-void CodeGen_X86::test() {
-    // corner cases to test:
-    // signed mod by power of two, non-power of two
-    // loads of mismatched types (e.g. load a float from something allocated as an array of ints)
-    // Calls to vectorized externs, and externs for which no vectorized version exists
-
-    Argument buffer_arg("buf", true, Int(0));
-    Argument float_arg("alpha", false, Float(32));
-    Argument int_arg("beta", false, Int(32));
-    vector<Argument> args(3);
-    args[0] = buffer_arg;
-    args[1] = float_arg;
-    args[2] = int_arg;
-    Var x("x"), i("i");
-    Param<float> alpha("alpha");
-    Param<int> beta("beta");
-
-    // We'll clear out the initial buffer except for the first and
-    // last two elements using dense unaligned vectors
-    Stmt init = For::make("i", 0, 3, For::Serial,
-                          Store::make("buf",
-                                      Ramp::make(i*4+2, 1, 4),
-                                      Ramp::make(i*4+2, 1, 4)));
-
-    // Now set the first two elements using scalars, and last four elements using a dense aligned vector
-    init = Block::make(init, Store::make("buf", 0, 0));
-    init = Block::make(init, Store::make("buf", 1, 1));
-    init = Block::make(init, Store::make("buf", Ramp::make(12, 1, 4), Ramp::make(12, 1, 4)));
-
-    // Then multiply the even terms by 17 using sparse vectors
-    init = Block::make(init,
-                       For::make("i", 0, 2, For::Serial,
-                                 Store::make("buf",
-                                             Mul::make(Broadcast::make(17, 4),
-                                                       Load::make(Int(32, 4), "buf",
-                                                                  Ramp::make(i*8, 2, 4), Buffer(), Parameter())),
-                                             Ramp::make(i*8, 2, 4))));
-
-    // Then print some stuff (disabled to prevent debugging spew)
-    // vector<Expr> print_args = vec<Expr>(3, 4.5f, Cast::make(Int(8), 2), Ramp::make(alpha, 3.2f, 4));
-
-    // Then run a parallel for loop that clobbers three elements of buf
-    Expr e = Select::make(alpha > 4.0f, 3, 2);
-    e += (Call::make(Int(32), "extern_function_1", vec<Expr>(alpha), Call::Extern));
-    Stmt loop = Store::make("buf", e, x + i);
-    loop = LetStmt::make("x", beta+1, loop);
-    // Do some local allocations within the loop
-    loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), const_true(), Block::make(loop, Free::make("tmp_stack")));
-    loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), Block::make(loop, Free::make("tmp_heap")));
-    loop = For::make("i", -1, 3, For::Parallel, loop);
-
-    Stmt s = Block::make(init, loop);
-
-    CodeGen_X86 cg(get_host_target());
-    cg.compile(s, "test1", args, vector<Buffer>());
-
-    //cg.compile_to_bitcode("test1.bc");
-    //cg.compile_to_native("test1.o", false);
-    //cg.compile_to_native("test1.s", true);
-
-    debug(2) << "Compiling to function pointers \n";
-    JITCompiledModule m = cg.compile_to_function_pointers();
-
-    typedef int (*fn_type)(::buffer_t *, float, int);
-    fn_type fn = reinterpret_bits<fn_type>(m.function);
-
-    debug(2) << "Function pointer lives at " << m.function << "\n";
-
-    int scratch_buf[64];
-    int *scratch = &scratch_buf[0];
-    while (((size_t)scratch) & 0x1f) scratch++;
-    ::buffer_t buf;
-    memset(&buf, 0, sizeof(buf));
-    buf.host = (uint8_t *)scratch;
-
-    fn(&buf, -32, 0);
-    internal_assert(scratch[0] == 5);
-    internal_assert(scratch[1] == 5);
-    internal_assert(scratch[2] == 5);
-    internal_assert(scratch[3] == 3);
-    internal_assert(scratch[4] == 4*17);
-    internal_assert(scratch[5] == 5);
-    internal_assert(scratch[6] == 6*17);
-
-    fn(&buf, 37.32f, 2);
-    internal_assert(scratch[0] == 0);
-    internal_assert(scratch[1] == 1);
-    internal_assert(scratch[2] == 4);
-    internal_assert(scratch[3] == 4);
-    internal_assert(scratch[4] == 4);
-    internal_assert(scratch[5] == 5);
-    internal_assert(scratch[6] == 6*17);
-
-    fn(&buf, 4.0f, 1);
-    internal_assert(scratch[0] == 0);
-    internal_assert(scratch[1] == 3);
-    internal_assert(scratch[2] == 3);
-    internal_assert(scratch[3] == 3);
-    internal_assert(scratch[4] == 4*17);
-    internal_assert(scratch[5] == 5);
-    internal_assert(scratch[6] == 6*17);
-    internal_assert(extern_function_1_was_called);
-
-    // Check the wrapped version does the same thing
-    extern_function_1_was_called = false;
-    for (int i = 0; i < 16; i++) scratch[i] = 0;
-
-    float float_arg_val = 4.0f;
-    int int_arg_val = 1;
-    const void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
-    m.wrapped_function(arg_array);
-    internal_assert(scratch[0] == 0);
-    internal_assert(scratch[1] == 3);
-    internal_assert(scratch[2] == 3);
-    internal_assert(scratch[3] == 3);
-    internal_assert(scratch[4] == 4*17);
-    internal_assert(scratch[5] == 5);
-    internal_assert(scratch[6] == 6*17);
-    internal_assert(extern_function_1_was_called);
-
-    std::cout << "CodeGen_X86 test passed" << std::endl;
 }
 
 string CodeGen_X86::mcpu() const {
@@ -836,15 +629,15 @@ string CodeGen_X86::mattrs() const {
     // These attrs only exist in llvm 3.5+
     if (target.has_feature(Target::FMA)) {
         features += "+fma";
-        separator = " ";
+        separator = ",";
     }
     if (target.has_feature(Target::FMA4)) {
         features += separator + "+fma4";
-        separator = " ";
+        separator = ",";
     }
     if (target.has_feature(Target::F16C)) {
         features += separator + "+f16c";
-        separator = " ";
+        separator = ",";
     }
     #endif
     return features;
@@ -859,23 +652,6 @@ int CodeGen_X86::native_vector_bits() const {
         return 256;
     } else {
         return 128;
-    }
-}
-
-void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)
-{
-    jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
-    if (jitEventListener) {
-        ee->RegisterJITEventListener(jitEventListener);
-    }
-}
-
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *)
-{
-    if (jitEventListener) {
-        ee->UnregisterJITEventListener(jitEventListener);
-        delete jitEventListener;
-        jitEventListener = NULL;
     }
 }
 

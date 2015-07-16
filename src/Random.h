@@ -1,15 +1,12 @@
 #ifndef HALIDE_RANDOM_H
 #define HALIDE_RANDOM_H
 
-#include <vector>
-#include <string>
-#include "IR.h"
-
 /** \file
  *
  * Defines deterministic random functions, and methods to redirect
  * front-end calls to random_float and random_int to use them. */
 
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

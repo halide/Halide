@@ -1,5 +1,5 @@
 
-NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_39
+NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_41
 
 WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I ../../include
@@ -27,6 +27,7 @@ CXX_64 := $(TC)/bin/x86_64-nacl-g++ -m64 -O3 -Wall -s -Wl,--gc-sections
 CXX_32 := $(TC)/bin/i686-nacl-g++ -m32 -O3 -Wall -s -Wl,--gc-sections
 CXX_ARM := $(ARM_TC)/bin/arm-nacl-g++ -O3 -Wall -s -Wl,--gc-sections -fstack-protector
 CXX_PNACL := $(PNACL_TC)/bin/pnacl-clang++ -O3
+STRIP_64 := $(TC)/bin/x86_64-nacl-strip
 LDFLAGS_64 := -L $(LIBDIR_64) -lppapi_cpp -lppapi
 LDFLAGS_32 := -L $(LIBDIR_32) -lppapi_cpp -lppapi
 LDFLAGS_ARM := -L $(LIBDIR_ARM) -lppapi_cpp -lppapi
@@ -94,7 +95,7 @@ build_pnacl/%.objects: %.generate
 	@touch build_pnacl/$*.objects
 
 %.generate: %.cpp
-	$(CXX) $< -o $@ -I ../../include -L ../../bin -lHalide -lpthread -ldl -lz
+	$(CXX) $< -o $@ -I ../../include -L ../../bin -lHalide -lpthread -ldl -lz -std=c++11
 
 clean:
 	rm -f *.generate *.o *.nexe *.pexe *.bc *.ll *.s *.zip $(DEMOS:%=%.h) build_32/* build_64/* build_arm/* build_pnacl/*

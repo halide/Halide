@@ -107,7 +107,7 @@ string simt_intrinsic(const string &name) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
     if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
+        print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), {op->a, op->b}, Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -115,7 +115,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
     if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "smod_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
+        print_expr(Call::make(op->type, "smod_" + print_type(op->type), {op->a, op->b}, Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
@@ -123,7 +123,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
+        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
         internal_assert(is_zero(loop->min));
 
         do_indent();
@@ -133,7 +133,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         loop->body.accept(this);
 
     } else {
-        user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
+        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
         CodeGen_C::visit(loop);
     }
 }
@@ -625,7 +625,7 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 void CodeGen_OpenCL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
 }
-    
+
 std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
     return name;
 }

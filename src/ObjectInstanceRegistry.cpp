@@ -14,7 +14,6 @@ ObjectInstanceRegistry &ObjectInstanceRegistry::get_registry() {
 /* static */
 void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind kind,
                                                void *subject_ptr, const void *introspection_helper) {
-#if __cplusplus > 199711L || _MSC_VER >= 1800
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
@@ -25,12 +24,10 @@ void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind
     } else {
         registry.instances[key] = InstanceInfo(size, kind, subject_ptr, false);
     }
-#endif
 }
 
 /* static */
 void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
-#if __cplusplus > 199711L || _MSC_VER >= 1800
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
@@ -40,7 +37,6 @@ void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
         Introspection::deregister_heap_object(this_ptr, it->second.size);
     }
     registry.instances.erase(it);
-#endif
 }
 
 /* static */
@@ -48,7 +44,6 @@ std::vector<void *> ObjectInstanceRegistry::instances_in_range(void *start, size
                                                                Kind kind) {
     std::vector<void *> results;
 
-#if __cplusplus > 199711L || _MSC_VER >= 1800
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
 
@@ -68,7 +63,6 @@ std::vector<void *> ObjectInstanceRegistry::instances_in_range(void *start, size
             it++;
         }
     }
-#endif
 
     return results;
 }

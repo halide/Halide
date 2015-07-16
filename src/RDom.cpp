@@ -72,134 +72,28 @@ RDom::RDom(ReductionDomain d) : dom(d) {
     }
 }
 
-// We suffix all RVars with $r to prevent unintentional name matches with pure vars called x, y, z, w.
-RDom::RDom(Expr min, Expr extent, string name) {
-    if (name == "") {
+void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min), cast<int>(extent) },
-    };
-    dom = build_domain(vars);
-    init_vars(name);
-}
-
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
-    if (name == "") {
-        name = make_entity_name(this, "Halide::RDom", 'r');
+    std::vector<ReductionVariable> vars;
+    for (size_t i = 0; i < ranges.size(); i++) {
+        std::string rvar_uniquifier;
+        switch (i) {
+            case 0: rvar_uniquifier = "x"; break;
+            case 1: rvar_uniquifier = "y"; break;
+            case 2: rvar_uniquifier = "z"; break;
+            case 3: rvar_uniquifier = "w"; break;
+            default: rvar_uniquifier = std::to_string(i); break;
+        }
+        ReductionVariable rv;
+        rv.var = name + "." + rvar_uniquifier + "$r";
+        rv.min = cast<int32_t>(ranges[i].first);
+        rv.extent = cast<int32_t>(ranges[i].second);
+        vars.push_back(rv);
     }
-
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-    };
-    dom = build_domain(vars);
-    init_vars(name);
-}
-
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
-    if (name == "") {
-        name = make_entity_name(this, "Halide::RDom", 'r');
-    }
-
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-    };
-    dom = build_domain(vars);
-    init_vars(name);
-}
-
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-           string name) {
-    if (name == "") {
-        name = make_entity_name(this, "Halide::RDom", 'r');
-    }
-
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-    };
-    dom = build_domain(vars);
-    init_vars(name);
-}
-
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-           Expr min4, Expr extent4, string name) {
-    if (name == "") {
-        name = make_entity_name(this, "Halide::RDom", 'r');
-    }
-
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
-    };
-    dom = build_domain(vars);
-    init_vars(name);
-}
-
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-           Expr min4, Expr extent4, Expr min5, Expr extent5, string name) {
-    if (name == "") {
-        name = make_entity_name(this, "Halide::RDom", 'r');
-    }
-
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
-        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
-    };
-    dom = build_domain(vars);
-    init_vars(name);
-}
-
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-           Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, string name) {
-    if (name == "") {
-        name = make_entity_name(this, "Halide::RDom", 'r');
-    }
-
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
-        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
-        { name + ".6$r", cast<int>(min6), cast<int>(extent6) },
-    };
-    dom = build_domain(vars);
-    init_vars(name);
-}
-
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
-           Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, Expr min7, Expr extent7,
-           string name) {
-    if (name == "") {
-        name = make_entity_name(this, "Halide::RDom", 'r');
-    }
-
-    ReductionVariable vars[] = {
-        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
-        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
-        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
-        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
-        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
-        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
-        { name + ".6$r", cast<int>(min6), cast<int>(extent6) },
-        { name + ".7$r", cast<int>(min7), cast<int>(extent7) },
-    };
-    dom = build_domain(vars);
+    dom = ReductionDomain(vars);
     init_vars(name);
 }
 

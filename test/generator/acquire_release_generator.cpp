@@ -6,7 +6,7 @@ class AcquireRelease : public Halide::Generator<AcquireRelease> {
 public:
     ImageParam input{ Float(32), 2, "input" };
 
-    Func build() override {
+    Func build() {
         Var x("x"), y("y");
         Func f("f");
 

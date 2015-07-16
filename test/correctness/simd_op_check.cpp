@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
@@ -32,10 +32,10 @@ void check(const char *op, int vector_width, Expr e) {
         if (strncmp(op, filter, strlen(filter)) != 0) return;
     }
 
-    printf("%s %d\n", op, vector_width);
+    // printf("%s %d\n", op, vector_width);
 
     std::string name = std::string("test_") + op + Internal::unique_name('_');
-    for (int i = 0; i < name.size(); i++) {
+    for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.') name[i] = '_';
     }
     Func f(name);
@@ -43,27 +43,16 @@ void check(const char *op, int vector_width, Expr e) {
     f.vectorize(x, vector_width);
 
     vector<Argument> arg_types;
-    Argument arg("", true, Int(1));
-    arg.name = "in_f32";
-    arg_types.push_back(arg);
-    arg.name = "in_f64";
-    arg_types.push_back(arg);
-    arg.name = "in_i8";
-    arg_types.push_back(arg);
-    arg.name = "in_u8";
-    arg_types.push_back(arg);
-    arg.name = "in_i16";
-    arg_types.push_back(arg);
-    arg.name = "in_u16";
-    arg_types.push_back(arg);
-    arg.name = "in_i32";
-    arg_types.push_back(arg);
-    arg.name = "in_u32";
-    arg_types.push_back(arg);
-    arg.name = "in_i64";
-    arg_types.push_back(arg);
-    arg.name = "in_u64";
-    arg_types.push_back(arg);
+    arg_types.push_back(Argument("in_f32", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_f64", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i8", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u8", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i16", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u16", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i32", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u32", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_i64", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_u64", Argument::InputBuffer, Int(1), 1));
 
     char *module = new char[1024];
     snprintf(module, 1024, "test_%s_%s", op, f.name().c_str());
@@ -273,7 +262,11 @@ void check_sse_all() {
         // Padding out the lanes of a div isn't necessarily a good
         // idea, and so llvm doesn't do it.
         if (w > 1) {
-            check("divps", 2*w, f32_1 / f32_2);
+            // LLVM no longer generates division instructions with
+            // fast-math on (instead it uses the approximate
+            // reciprocal, a newtown rhapson step, and a
+            // multiplication by the numerator).
+            //check("divps", 2*w, f32_1 / f32_2);
         }
 
         check("rcpps", 2*w, fast_inverse(f32_2));
@@ -440,8 +433,9 @@ void check_sse_all() {
         check("vmulpd", 4, f64_1 * f64_2);
         check("vsubps", 8, f32_1 - f32_2);
         check("vsubpd", 4, f64_1 - f64_2);
-        check("vdivps", 8, f32_1 / f32_2);
-        check("vdivpd", 4, f64_1 / f64_2);
+        // LLVM no longer generates division instruction when fast-math is on
+        //check("vdivps", 8, f32_1 / f32_2);
+        //check("vdivpd", 4, f64_1 / f64_2);
         check("vminps", 8, min(f32_1, f32_2));
         check("vminpd", 4, min(f64_1, f64_2));
         check("vmaxps", 8, max(f32_1, f32_2));
@@ -772,13 +766,9 @@ void check_neon_all() {
         check("vhadd.s32", 2*w, i32((i64(i32_1) + i64(i32_2))/2));
         check("vhadd.u32", 2*w, u32((u64(u32_1) + u64(u32_2))/2));
 
-        // This is common enough that we also allow a version that ignores overflow issues
-        check("vhadd.s8", 8*w, (i8_1 + i8_2)/i8(2));
-        check("vhadd.u8", 8*w, (u8_1 + u8_2)/2);
-        check("vhadd.s16", 4*w, (i16_1 + i16_2)/2);
-        check("vhadd.u16", 4*w, (u16_1 + u16_2)/2);
+        // Halide doesn't define overflow behavior for i32 so we
+        // can use vhadd instruction. We can't use it for unsigned u8,i16,u16,u32.
         check("vhadd.s32", 2*w, (i32_1 + i32_2)/2);
-        check("vhadd.u32", 2*w, (u32_1 + u32_2)/2);
 
         // VHSUB    I       -       Halving Subtract
         check("vhsub.s8", 8*w, i8((i16(i8_1) - i16(i8_2))/2));
@@ -1339,8 +1329,7 @@ int main(int argc, char **argv) {
     else filter = NULL;
 
     target = get_target_from_environment();
-    target.set_feature(Target::NoAsserts);
-    target.set_feature(Target::NoBoundsQuery);
+    target.set_features({Target::NoAsserts, Target::NoBoundsQuery, Target::JIT});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);

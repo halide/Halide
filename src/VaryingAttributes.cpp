@@ -8,9 +8,6 @@
 #include "CSE.h"
 #include "Simplify.h"
 
-// TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-// #include "LinearSolve.h"
-
 namespace Halide {
 namespace Internal {
 
@@ -26,6 +23,8 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
 
+    bool in_glsl_loops;
+
     Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
         internal_assert(name.length() > 0);
@@ -38,7 +37,7 @@ protected:
         // attribute. These tagged variables will be pulled out of the fragment
         // shader during a subsequent pass
         Expr intrinsic = Call::make(e.type(), Call::glsl_varying,
-                                    vec(Expr(name + ".varying"), e),
+                                    {name + ".varying", e},
                                     Call::Intrinsic);
         ++total_found;
 
@@ -91,8 +90,8 @@ protected:
         if ((value_order == 1) && (total_found < max_expressions)) {
             // Wrap the let value with a varying tag
             mutated_value = Call::make(mutated_value.type(), Call::glsl_varying,
-                              vec<Expr>(op->name + ".varying", mutated_value),
-                              Call::Intrinsic);
+                                       {op->name + ".varying", mutated_value},
+                                       Call::Intrinsic);
             ++total_found;
         }
 
@@ -102,18 +101,27 @@ protected:
     }
 
     virtual void visit(const For *op) {
-        // Check if the loop variable is a GPU variable thread variable
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        bool old_in_glsl_loops = in_glsl_loops;
+        // Check if the loop variable is a GPU variable thread variable and for GLSL
+        if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) ||
+            (in_glsl_loops && op->device_api == DeviceAPI::Parent)) {
             loop_vars.push_back(op->name);
+            in_glsl_loops = true;
         }
 
         Stmt mutated_body = mutate(op->body);
 
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)  && op->device_api == DeviceAPI::GLSL) {
             loop_vars.pop_back();
         }
 
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, mutated_body);
+        in_glsl_loops = old_in_glsl_loops;
+
+        if (mutated_body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, mutated_body);
+        }
     }
 
     virtual void visit(const Variable *op) {
@@ -262,8 +270,6 @@ protected:
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
 
-    // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-
     // Once this is done, Min and Max should call visit_binary_linear and the code
     // in setup_mesh will handle piecewise linear behavior introduced by these
     // expressions
@@ -359,7 +365,7 @@ public:
     // scalar slots are used by boilerplate code to pass pixel coordinates.
     const unsigned int max_expressions;
 
-    FindLinearExpressions() : total_found(0), max_expressions(62) {}
+    FindLinearExpressions() : in_glsl_loops(false), total_found(0), max_expressions(62) {}
 };
 
 Stmt find_linear_expressions(Stmt s) {
@@ -460,16 +466,16 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
 
     std::vector<std::string> remove_list;
 
-    for (std::map<std::string, Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
-        const std::string &name = i->first;
+    for (const std::pair<std::string, Expr> &i : varying) {
+        const std::string &name = i.first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
             remove_list.push_back(name);
         }
     }
 
-    for (std::vector<std::string>::iterator name = remove_list.begin(); name != remove_list.end(); ++name) {
-        varying.erase(*name);
+    for (const std::string &i : remove_list) {
+        varying.erase(i);
     }
 }
 
@@ -673,7 +679,7 @@ protected:
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
     virtual void visit(const AssertStmt *);
-    virtual void visit(const Pipeline *);
+    virtual void visit(const ProducerConsumer *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
     virtual void visit(const Provide *);
@@ -818,7 +824,7 @@ void IRFilter::visit(const AssertStmt *op) {
     mutate_operator(this, op, op->condition, op->message, &stmt);
 }
 
-void IRFilter::visit(const Pipeline *op) {
+void IRFilter::visit(const ProducerConsumer *op) {
     mutate_operator(this, op, op->produce, op->update, op->consume, &stmt);
 }
 
@@ -972,7 +978,7 @@ public:
     }
 
     virtual void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) {
             // Create a for-loop of integers iterating over the coordinates in
             // this dimension
 
@@ -1019,8 +1025,9 @@ public:
                 // The GPU will take texture coordinates at pixel centers during
                 // interpolation, we offset the Halide integer grid by 0.5 so that
                 // these coordinates line up on integer coordinate values.
-                mutated_body = CastVariablesToFloatAndOffset(vec(for_loops[0]->name,
-                                                                 for_loops[1]->name)).mutate(mutated_body);
+                std::vector<std::string> names = {for_loops[0]->name, for_loops[1]->name};
+                CastVariablesToFloatAndOffset cast_and_offset(names);
+                mutated_body = cast_and_offset.mutate(mutated_body);
 
                 // Store the coordinates into the vertex buffer in interleaved
                 // order
@@ -1048,7 +1055,7 @@ public:
             // Add a let statement for the for-loop name variable
             Stmt loop_var = LetStmt::make(op->name, coord_expr, mutated_body);
 
-            stmt = For::make(name, 0, (int)dim.size(), For::Serial, loop_var);
+            stmt = For::make(name, 0, (int)dim.size(), ForType::Serial, DeviceAPI::Parent, loop_var);
 
         } else {
             IRFilter::visit(op);
@@ -1060,7 +1067,7 @@ public:
 
     // Expressions for the spatial values of each coordinate in the GPU scheduled
     // loop dimensions.
-    typedef std::map<std::string, std::vector<Expr> > DimsType;
+    typedef std::map<std::string, std::vector<Expr>> DimsType;
     DimsType dims;
 
     // The channel of each varying attribute in the interleaved vertex buffer
@@ -1095,14 +1102,14 @@ public:
 Expr dont_simplify(Expr v_) {
     return Internal::Call::make(v_.type(),
                                 Internal::Call::return_second,
-                                Internal::vec<Expr>(0, v_),
+                                {0, v_},
                                 Internal::Call::Intrinsic);
 }
 
 Stmt used_in_codegen(Type type_, const std::string &v_) {
     return Evaluate::make(Internal::Call::make(Int(32),
                                                Internal::Call::return_second,
-                                               Internal::vec<Expr>(Variable::make(type_, v_), 0),
+                                               {Variable::make(type_, v_), 0},
                                                Internal::Call::Intrinsic));
 }
 
@@ -1114,7 +1121,7 @@ public:
     using IRMutator::visit;
 
     virtual void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) {
 
             const For *loop1 = op;
             const For *loop0 = loop1->body.as<For>();
@@ -1136,8 +1143,8 @@ public:
             attribute_order["__vertex_y"] = 1;
 
             int idx = 2;
-            for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-                attribute_order[v->first] = idx++;
+            for (const std::pair<std::string, Expr> &v : varyings) {
+                attribute_order[v.first] = idx++;
             }
 
             // Construct a list of expressions giving to coordinate locations along
@@ -1149,17 +1156,13 @@ public:
             Expr loop0_max = Add::make(loop0->min, loop0->extent);
             Expr loop1_max = Add::make(loop1->min, loop1->extent);
 
-            std::vector<std::vector<Expr> > coords(2);
+            std::vector<std::vector<Expr>> coords(2);
 
             coords[0].push_back(loop0->min);
             coords[0].push_back(loop0_max);
 
             coords[1].push_back(loop1->min);
             coords[1].push_back(loop1_max);
-
-            // TODO:(abstephensg) Need to integrate with the
-            // specialize_branched_loops branch linear solver functionality to
-            // handle piecewise linear expressions.
 
             // Count the two spatial x and y coordinates plus the number of
             // varying attribute expressions found
@@ -1219,7 +1222,7 @@ public:
             stmt = LetStmt::make("glsl.num_coords_dim0", dont_simplify(IntImm::make(coords[0].size())),
                    LetStmt::make("glsl.num_coords_dim1", dont_simplify(IntImm::make(coords[1].size())),
                    LetStmt::make("glsl.num_padded_attributes", dont_simplify(IntImm::make(num_padded_attributes)),
-                   Allocate::make(vs.vertex_buffer_name, Float(32), vec(Expr(vertex_buffer_size)), const_true(),
+                                 Allocate::make(vs.vertex_buffer_name, Float(32), {vertex_buffer_size}, const_true(),
                    Block::make(vertex_setup,
                    Block::make(loop_stmt,
                    Block::make(used_in_codegen(Int(32),"glsl.num_coords_dim0"),

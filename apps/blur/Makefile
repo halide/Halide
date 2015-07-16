@@ -4,7 +4,7 @@ all: test
 
 halide_blur: ../../ halide_blur.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) halide_blur.cpp -I ../../include ../../$(LIB_HALIDE) -o halide_blur -ldl -lpthread -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) halide_blur.cpp ../../$(LIB_HALIDE) -o halide_blur -ldl -lpthread -lz $(LDFLAGS)
 
 halide_blur.o: halide_blur
 	./halide_blur
@@ -19,7 +19,7 @@ endif
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 test: test.cpp halide_blur.o
-	$(CXX) $(OPENMP_FLAGS) -msse2 -Wall -O2 -I ../support/ test.cpp halide_blur.o -o test -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(OPENMP_FLAGS) -msse2 -Wall -O2 test.cpp halide_blur.o -o test -lpthread -ldl $(PNGFLAGS)
 
 clean:
 	rm -f test halide_blur.o halide_blur

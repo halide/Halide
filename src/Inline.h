@@ -1,12 +1,11 @@
 #ifndef HALIDE_INLINE_H
 #define HALIDE_INLINE_H
 
-
-#include "IR.h"
-
 /** \file
  * Methods for replacing calls to functions with their definitions.
  */
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

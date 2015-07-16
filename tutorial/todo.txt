@@ -1,8 +1,6 @@
 - debug_to_file
-- print, print_when
-- using the gpu
 - the bounds query interface
-- tuples
+- multi-output pipelines
 - overriding the runtime
 - lambdas
   useful tricks, e.g., `Image<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);`
@@ -11,4 +9,3 @@
 - specialize
 - parallel reductions
 - constraints
-

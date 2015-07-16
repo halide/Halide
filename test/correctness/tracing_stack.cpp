@@ -6,7 +6,7 @@
 
 #if defined(__linux__) || defined(__APPLE__) || defined(__unix) || defined(__posix)
 
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 #include <signal.h>
 #include <stack>

@@ -17,9 +17,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), z("z"), c("c");
 
     // Add a boundary condition
-    Func clamped("clamped");
-    clamped(x, y) = input(clamp(x, 0, input.width()-1),
-                          clamp(y, 0, input.height()-1));
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     // Construct the bilateral grid
     RDom r(0, s_sigma, 0, s_sigma);
@@ -86,11 +84,8 @@ int main(int argc, char **argv) {
         blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 4).unroll(c);
         bilateral_grid.compute_root().parallel(y).vectorize(x, 4);
     }
-    
-    bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input, target);
+
+    bilateral_grid.compile_to_file("bilateral_grid", {r_sigma, input}, target);
 
     return 0;
 }
-
-
-

@@ -1,11 +1,11 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
 
 int bits_diff(float fa, float fb) {
-    uint32_t a = *((uint32_t *)(&fa));
-    uint32_t b = *((uint32_t *)(&fb));
+    uint32_t a = Halide::Internal::reinterpret_bits<uint32_t>(fa);
+    uint32_t b = Halide::Internal::reinterpret_bits<uint32_t>(fb);
     uint32_t a_exp = a >> 23;
     uint32_t b_exp = b >> 23;
     if (a_exp != b_exp) return -100;

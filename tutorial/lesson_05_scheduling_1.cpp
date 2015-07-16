@@ -1,24 +1,26 @@
-// Halide tutorial lesson 5
+// Halide tutorial lesson 5: Vectorize, parallelize, unroll and tile your code
 
 // This lesson demonstrates how to manipulate the order in which you
 // evaluate pixels in a Func, including vectorization,
 // parallelization, unrolling, and tiling.
 
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_05_scheduling_1
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
-
 // On linux, you can compile and run it like so:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_05
 
 // On os x:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_05
 
-#include <Halide.h>
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_05_schedule_1
+// in a shell with the current directory at the top of the halide
+// source tree.
+
+#include "Halide.h"
 #include <stdio.h>
+#include <algorithm>
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -42,6 +44,9 @@ int main(int argc, char **argv) {
         printf("Evaluating gradient row-major\n");
         Image<int> output = gradient.realize(4, 4);
 
+        // See figures/lesson_05_row_major.gif for a visualization of
+        // what this did.
+
         // The equivalent C is:
         printf("Equivalent C:\n");
         for (int y = 0; y < 4; y++) {
@@ -50,6 +55,19 @@ int main(int argc, char **argv) {
             }
         }
         printf("\n\n");
+
+        // Tracing is one useful way to understand what a schedule is
+        // doing. You can also ask Halide to print out pseudocode
+        // showing what loops Halide is generating:
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
+
+        // Because we're using the default ordering, it should print:
+        // compute gradient:
+        //   for y:
+        //     for x:
+        //       gradient(...) = ...
     }
 
     // Reorder variables.
@@ -72,13 +90,22 @@ int main(int argc, char **argv) {
         printf("Evaluating gradient column-major\n");
         Image<int> output = gradient.realize(4, 4);
 
+        // See figures/lesson_05_col_major.gif for a visualization of
+        // what this did.
+
         printf("Equivalent C:\n");
         for (int x = 0; x < 4; x++) {
             for (int y = 0; y < 4; y++) {
                 printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        // If we print pseudo-code for this schedule, we'll see that
+        // the loop over y is now inside the loop over x.
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Split a variable into two.
@@ -114,7 +141,11 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
 
         // Note that the order of evaluation of pixels didn't actually
         // change! Splitting by itself does nothing, but it does open
@@ -145,6 +176,11 @@ int main(int argc, char **argv) {
             int x = fused % 4;
             printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
         }
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Evaluating in tiles.
@@ -164,29 +200,36 @@ int main(int argc, char **argv) {
         // input data, for example in a blur. We can express a tiled
         // traversal like so:
         Var x_outer, x_inner, y_outer, y_inner;
-        gradient.split(x, x_outer, x_inner, 2);
-        gradient.split(y, y_outer, y_inner, 2);
+        gradient.split(x, x_outer, x_inner, 4);
+        gradient.split(y, y_outer, y_inner, 4);
         gradient.reorder(x_inner, y_inner, x_outer, y_outer);
 
         // This pattern is common enough that there's a shorthand for it:
-        // gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2);
+        // gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);
 
-        printf("Evaluating gradient in 2x2 tiles\n");
-        Image<int> output = gradient.realize(4, 4);
+        printf("Evaluating gradient in 4x4 tiles\n");
+        Image<int> output = gradient.realize(8, 8);
+
+        // See figures/lesson_05_tiled.gif for a visualization of this
+        // schedule.
 
         printf("Equivalent C:\n");
         for (int y_outer = 0; y_outer < 2; y_outer++) {
             for (int x_outer = 0; x_outer < 2; x_outer++) {
-                for (int y_inner = 0; y_inner < 2; y_inner++) {
-                    for (int x_inner = 0; x_inner < 2; x_inner++) {
-                        int x = x_outer * 2 + x_inner;
-                        int y = y_outer * 2 + y_inner;
+                for (int y_inner = 0; y_inner < 4; y_inner++) {
+                    for (int x_inner = 0; x_inner < 4; x_inner++) {
+                        int x = x_outer * 4 + x_inner;
+                        int y = y_outer * 4 + y_inner;
                         printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
                     }
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Evaluating in vectors.
@@ -220,14 +263,13 @@ int main(int argc, char **argv) {
         // Note that in this case we reused the name 'x' as the new
         // outer variable. Later scheduling calls that refer to x
         // will refer to this new outer variable named x.
-        //
-        // Our snoop function isn't set-up to print out vectors, this
-        // is why we included one called snoopx4 above.
 
         // This time we'll evaluate over an 8x4 box, so that we have
         // more than one vector of work per scanline.
         printf("Evaluating gradient with x_inner vectorized \n");
         Image<int> output = gradient.realize(8, 4);
+
+        // See figures/lesson_05_vectors.gif for a visualization.
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 4; y++) {
@@ -250,12 +292,16 @@ int main(int argc, char **argv) {
                        val[0], val[1], val[2], val[3]);
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Unrolling a loop.
     {
-        Func gradient("gradient_in_vectors");
+        Func gradient("gradient_unroll");
         gradient(x, y) = x + y;
         gradient.trace_stores();
 
@@ -292,13 +338,16 @@ int main(int argc, char **argv) {
                 }
             }
         }
+        printf("\n");
 
-
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Splitting by factors that don't divide the extent.
     {
-        Func gradient("gradient_split_5x4");
+        Func gradient("gradient_split_7x4");
         gradient(x, y) = x + y;
         gradient.trace_stores();
 
@@ -306,34 +355,41 @@ int main(int argc, char **argv) {
         // the split factor, which is important for the uses we saw
         // above. So what happens when the total extent we wish to
         // evaluate x over isn't a multiple of the split factor? We'll
-        // split by a factor of two again, but now we'll evaluate
-        // gradient over a 5x4 box instead of the 4x4 box we've been
-        // using.
+        // split by a factor three, and we'll evaluate gradient over a
+        // 7x4 box instead of the 4x4 box we've been using.
         Var x_outer, x_inner;
-        gradient.split(x, x_outer, x_inner, 2);
+        gradient.split(x, x_outer, x_inner, 3);
 
-        printf("Evaluating gradient over a 5x4 box with x split by two \n");
-        Image<int> output = gradient.realize(5, 4);
+        printf("Evaluating gradient over a 7x4 box with x split by three \n");
+        Image<int> output = gradient.realize(7, 4);
+
+        // See figures/lesson_05_split_7_by_3.gif for a visualization
+        // of what happened. Note that some points get evaluated more
+        // than once!
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 4; y++) {
             for (int x_outer = 0; x_outer < 3; x_outer++) { // Now runs from 0 to 3
-                for (int x_inner = 0; x_inner < 2; x_inner++) {
-                    int x = x_outer * 2;
+                for (int x_inner = 0; x_inner < 3; x_inner++) {
+                    int x = x_outer * 3;
                     // Before we add x_inner, make sure we don't
-                    // evaluate points outside of the 5x4 box. We'll
-                    // clamp x to be at most 3 (5 minus the split
+                    // evaluate points outside of the 7x4 box. We'll
+                    // clamp x to be at most 4 (7 minus the split
                     // factor).
-                    if (x > 3) x = 3;
+                    if (x > 4) x = 4;
                     x += x_inner;
                     printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
 
         // If you read the output, you'll see that some coordinates
-        // were evaluated more than once! That's generally OK, because
+        // were evaluated more than once. That's generally OK, because
         // pure Halide functions have no side-effects, so it's safe to
         // evaluate the same point multiple times. If you're calling
         // out to C functions like we are, it's your responsibility to
@@ -377,7 +433,7 @@ int main(int argc, char **argv) {
         // First we'll tile, then we'll fuse the tile indices and
         // parallelize across the combination.
         Var x_outer, y_outer, x_inner, y_inner, tile_index;
-        gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2);
+        gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);
         gradient.fuse(x_outer, y_outer, tile_index);
         gradient.parallel(tile_index);
 
@@ -392,25 +448,30 @@ int main(int argc, char **argv) {
 
 
         printf("Evaluating gradient tiles in parallel\n");
-        Image<int> output = gradient.realize(4, 4);
+        Image<int> output = gradient.realize(8, 8);
 
         // The tiles should occur in arbitrary order, but within each
-        // tile the pixels will be traversed in row-major order.
+        // tile the pixels will be traversed in row-major order. See
+        // figures/lesson_05_parallel_tiles.gif for a visualization.
 
         printf("Equivalent (serial) C:\n");
         // This outermost loop should be a parallel for loop, but that's hard in C.
-        for (int tile_index = 0; tile_index < 4; tile_index++) {
-            int y_outer = tile_index / 2;
-            int x_outer = tile_index % 2;
-            for (int y_inner = 0; y_inner < 2; y_inner++) {
-                for (int x_inner = 0; x_inner < 2; x_inner++) {
-                    int y = y_outer * 2 + y_inner;
-                    int x = x_outer * 2 + x_inner;
+        for (int tile_index = 0; tile_index < 16; tile_index++) {
+            int y_outer = tile_index / 4;
+            int x_outer = tile_index % 4;
+            for (int y_inner = 0; y_inner < 4; y_inner++) {
+                for (int x_inner = 0; x_inner < 4; x_inner++) {
+                    int y = y_outer * 4 + y_inner;
+                    int x = x_outer * 4 + x_inner;
                     printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
                 }
             }
         }
-        printf("\n\n");
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient.print_loop_nest();
+        printf("\n");
     }
 
     // Putting it all together.
@@ -419,10 +480,10 @@ int main(int argc, char **argv) {
         Func gradient_fast("gradient_fast");
         gradient_fast(x, y) = x + y;
 
-        // We'll process 256x256 tiles in parallel.
+        // We'll process 64x64 tiles in parallel.
         Var x_outer, y_outer, x_inner, y_inner, tile_index;
         gradient_fast
-            .tile(x, y, x_outer, y_outer, x_inner, y_inner, 256, 256)
+            .tile(x, y, x_outer, y_outer, x_inner, y_inner, 64, 64)
             .fuse(x_outer, y_outer, tile_index)
             .parallel(tile_index);
 
@@ -448,23 +509,25 @@ int main(int argc, char **argv) {
         // If you like you can turn on tracing, but it's going to
         // produce a lot of printfs. Instead we'll compute the answer
         // both in C and Halide and see if the answers match.
-        Image<int> result = gradient_fast.realize(800, 600);
+        Image<int> result = gradient_fast.realize(350, 250);
+
+        // See figures/lesson_05_fast.mp4 for a visualization.
 
         printf("Checking Halide result against equivalent C...\n");
         for (int tile_index = 0; tile_index < 4 * 3; tile_index++) {
             int y_outer = tile_index / 4;
             int x_outer = tile_index % 4;
-            for (int y_inner_outer = 0; y_inner_outer < 256/2; y_inner_outer++) {
-                for (int x_inner_outer = 0; x_inner_outer < 256/4; x_inner_outer++) {
+            for (int y_inner_outer = 0; y_inner_outer < 64/2; y_inner_outer++) {
+                for (int x_inner_outer = 0; x_inner_outer < 64/4; x_inner_outer++) {
                     // We're vectorized across x
-                    int x = std::min(x_outer * 256, 800-256) + x_inner_outer*4;
+                    int x = std::min(x_outer * 64, 350-64) + x_inner_outer*4;
                     int x_vec[4] = {x + 0,
                                     x + 1,
                                     x + 2,
                                     x + 3};
 
                     // And we unrolled across y
-                    int y_base = std::min(y_outer * 256, 600-256) + y_inner_outer*2;
+                    int y_base = std::min(y_outer * 64, 250-64) + y_inner_outer*2;
                     {
                         // y_pairs = 0
                         int y = y_base + 0;
@@ -502,17 +565,23 @@ int main(int argc, char **argv) {
                 }
             }
         }
+        printf("\n");
+
+        printf("Pseudo-code for the schedule:\n");
+        gradient_fast.print_loop_nest();
+        printf("\n");
+
+        // Note that in the Halide version, the algorithm is specified
+        // once at the top, separately from the optimizations, and there
+        // aren't that many lines of code total. Compare this to the C
+        // version. There's more code (and it isn't even parallelized or
+        // vectorized properly). More annoyingly, the statement of the
+        // algorithm (the result is x plus y) is buried in multiple places
+        // within the mess. This C code is hard to write, hard to read,
+        // hard to debug, and hard to optimize further. This is why Halide
+        // exists.
     }
 
-    // Note that in the Halide version, the algorithm is specified
-    // once at the top, separately from the optimizations, and there
-    // aren't that many lines of code total. Compare this to the C
-    // version. There's more code (and it isn't even parallelized or
-    // vectorized properly). More annoyingly, the statement of the
-    // algorithm (the result is x plus y) is buried in multiple places
-    // within the mess. This C code is hard to write, hard to read,
-    // hard to debug, and hard to optimize further. This is why Halide
-    // exists.
 
     printf("Success!\n");
     return 0;

@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <iostream>
 
 #include "../common/gpu_object_lifetime.h"
@@ -12,6 +12,10 @@ void halide_print(void *user_context, const char *str) {
 }
 
 int main(int argc, char *argv[]) {
+    Internal::JITHandlers handlers;
+    handlers.custom_print = halide_print;
+    Internal::JITSharedRuntime::set_default_handlers(handlers);
+
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
         printf("Not running test because no gpu target enabled\n");
@@ -37,7 +41,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    int ret = validate_gpu_object_lifetime(true /* allow_globals */, false /* allow_none */);
+    Halide::Internal::JITSharedRuntime::release_all();
+
+    int ret = validate_gpu_object_lifetime(true /* allow_globals */, false /* allow_none */, 1 /* max_globals */);
     if (ret != 0) {
         return ret;
     }
