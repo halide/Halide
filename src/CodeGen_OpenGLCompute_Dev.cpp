@@ -116,7 +116,13 @@ string simt_intrinsic(const string &name) {
 }
 }
 
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Div *op) {
+    visit_binop(op->type, op->a, op->b, "/");
+}
 
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Mod *op) {
+    visit_binop(op->type, op->a, op->b, "%");
+}
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
@@ -135,19 +141,59 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
     }
 }
 
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
+    ostringstream rhs;
+    rhs << print_type(op->type) << "(";
 
+    if (op->width > 4)
+        internal_error << "GLSL: ramp width " << op->width << " is not supported\n";
+
+    rhs << print_expr(op->base);
+
+    for (int i = 1; i < op->width; ++i) {
+        rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
+    }
+
+    rhs << ")";
+    print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
+    string id_value = print_expr(op->value);
+    ostringstream oss;
+    oss << print_type(op->type.vector_of(op->width)) << "(" << id_value << ")";
+    print_assignment(op->type.vector_of(op->width), oss.str());
+}
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
+    const Ramp *ramp = op->index.as<Ramp>();
+    if (!ramp) {
+        user_error << "Only vectorized images are supported by OpenGLCompute.\n";
+        return;
+    }
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+    user_assert(stride && stride->value == 1 && ramp->width == 4) <<
+        "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
+
     ostringstream oss;
-    oss << "imageLoad(" << print_name(op->name) << ", " << op->index << ");\n";
+    oss << "imageLoad(" << print_name(op->name) << ", " << print_expr(ramp->base) << ")";
     print_assignment(op->type, oss.str());
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
-    string id_value = print_expr(op->value);
-    string id_index = print_expr(op->index);
-    // Type t = op->value.type();
+    const Ramp *ramp = op->index.as<Ramp>();
+    if (!ramp) {
+        user_error << "Only vectorized images are supported by OpenGLCompute.\n";
+        return;
+    }
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+    user_assert(stride && stride->value == 1 && ramp->width == 4) <<
+        "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
+    string id_index = print_expr(ramp->base);
+    string id_value = print_expr(op->value);
+
+    do_indent();
     stream << "imageStore(" << print_name(op->name) << ", " << id_index << ", " << id_value << ");\n";
 }
 
@@ -164,11 +210,12 @@ void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
 namespace {
 string print_image_buffer_type(Type type) {
     if (type.is_float()) {
-        if (type.width == 4) {
-            return "rgba32f";
+        switch(type.width) {
+            case 1: return "r32f";
+            case 4: return "rgba32f";
         }
     }
-    user_error << "OpenGLCompute: " << type << " is not supported.\n";
+    user_error << "OpenGLCompute: Images of type " << type << " are not supported.\n";
     return "";
 }
 }
@@ -184,12 +231,11 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
             stream << "layout(binding=" << i << ", " << print_image_buffer_type(args[i].type) << ")"
                 << " uniform mediump " << (args[i].write? "writeonly": "readonly")
                 << " imageBuffer " << print_name(args[i].name) << ";\n";
-        // } else {
-        //     user_error << "OpenGLCompute: Can't handle non-buffer kernel argument "<< args[i].name << " of type " << args[i].type << ".\n";
+        } else {
+            stream << "uniform " << print_type(args[i].type) << " " << print_name(args[i].name) << ";\n";
         }
     }
-// layout(binding=0, rgba32f) uniform mediump readonly imageBuffer velocity_buffer;
-// layout(binding=1, rgba32f) uniform mediump writeonly imageBuffer position_buffer;
+
     stream << R"EOF(
 void main()
 {
@@ -211,6 +257,8 @@ void CodeGen_OpenGLCompute_Dev::init_module() {
 #extension GL_ANDROID_extension_pack_es31a : require
 
 layout(local_size_x = LOCAL_SIZE) in;
+
+float float_from_bits(int x) { return intBitsToFloat(x); }
 )EOF";
 
     cur_kernel_name = "";
