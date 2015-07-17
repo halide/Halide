@@ -2137,8 +2137,12 @@ private:
                     // stride.
                     Expr diff = mutate(new_args[i] - new_args[i-1]);
                     const Broadcast *b = diff.as<Broadcast>();
-                    Expr check = mutate(b->value * terms - r->stride);
-                    can_collapse &= is_zero(check);
+                    if (b) {
+                        Expr check = mutate(b->value * terms - r->stride);
+                        can_collapse &= is_zero(check);
+                    } else {
+                        can_collapse = false;
+                    }
                 }
                 if (can_collapse) {
                     expr = Ramp::make(r->base, mutate(r->stride / terms), r->width * terms);
@@ -3303,6 +3307,8 @@ void simplify_test() {
         e = interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4)});
         check(e, e);
         e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 2, 4), ramp(x+1, 3, 4)});
         check(e, e);
     }
 
