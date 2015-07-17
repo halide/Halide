@@ -275,6 +275,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_trace",
         "halide_memoization_cache_lookup",
         "halide_memoization_cache_store",
+        "halide_memoization_cache_release",
         "halide_cuda_run",
         "halide_opencl_run",
         "halide_opengl_run",
