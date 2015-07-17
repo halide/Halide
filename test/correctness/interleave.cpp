@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         Realization r3({buff3});
         interleaved.realize(r3);
 
-        check_interleave_count(interleaved, 2);
+        check_interleave_count(interleaved, 1);
 
         Image<float> result3 = r3[0];
         for (int x = 0; x < 16; x++) {
