@@ -29,6 +29,7 @@ using std::map;
 using std::pair;
 using std::make_pair;
 using std::ostringstream;
+using std::vector;
 
 // Things that we can constant fold: Immediates and broadcasts of
 // immediates.
@@ -1918,7 +1919,7 @@ private:
         Stmt else_nosubs = else_case;
 
         // Mine the condition for useful constraints to apply (eg var == value && bool_param).
-        std::vector<Expr> stack;
+        vector<Expr> stack;
         stack.push_back(condition);
         bool and_chain = false, or_chain = false;
         while (!stack.empty()) {
@@ -2064,7 +2065,8 @@ private:
             } else {
                 expr = a >> b;
             }
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::bitwise_and) {
+        } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::bitwise_and) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
             int ib = 0;
             int bits;
@@ -2109,10 +2111,76 @@ private:
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
             }
         } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::interleave_vectors) {
+            // Mutate the args
+            vector<Expr> new_args;
+            bool changed = false;
+            for (Expr arg : op->args) {
+                Expr new_arg = mutate(arg);
+                if (!arg.same_as(new_arg)) {
+                    changed = true;
+                }
+                new_args.push_back(new_arg);
+            }
+            int terms = (int)new_args.size();
+
+            // Try to collapse an interleave of ramps into a single ramp.
+            const Ramp *r = new_args[0].as<Ramp>();
+            if (r) {
+                bool can_collapse = true;
+                for (size_t i = 1; i < new_args.size(); i++) {
+                    // If we collapse these terms into a single ramp,
+                    // the new stride is going to be the old stride
+                    // divided by the number of terms, so the
+                    // difference between two adjacent terms in the
+                    // interleave needs to be a broadcast of the new
+                    // stride.
+                    Expr diff = mutate(new_args[i] - new_args[i-1]);
+                    const Broadcast *b = diff.as<Broadcast>();
+                    Expr check = mutate(b->value * terms - r->stride);
+                    can_collapse &= is_zero(check);
+                }
+                if (can_collapse) {
+                    expr = Ramp::make(r->base, mutate(r->stride / terms), r->width * terms);
+                    return;
+                }
+            }
+
+            // Try to collapse an interleave of strided loads of ramps
+            // from the same buffer into a single load of a ramp.
+            if (const Load *first_load = new_args[0].as<Load>()) {
+                vector<Expr> load_indices;
+                for (Expr e : new_args) {
+                    const Load *load = e.as<Load>();
+                    if (load && load->name == first_load->name) {
+                        load_indices.push_back(load->index);
+                    }
+                }
+
+                if ((int)load_indices.size() == terms) {
+                    Type t = load_indices[0].type();
+                    t.width *= terms;
+                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::Intrinsic);
+                    interleaved_index = mutate(interleaved_index);
+                    if (interleaved_index.as<Ramp>()) {
+                        t = first_load->type;
+                        t.width *= terms;
+                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image, first_load->param);
+                        return;
+                    }
+                }
+            }
+
+            if (!changed) {
+                expr = op;
+            } else {
+                expr = Call::make(op->type, op->name, new_args, op->call_type);
+            }
+        } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
-            std::vector<Expr> new_args;
+            vector<Expr> new_args;
             const StringImm *last = NULL;
             for (size_t i = 0; i < op->args.size(); i++) {
                 Expr arg = mutate(op->args[i]);
@@ -2617,6 +2685,21 @@ void test_int_cast_constant() {
     }
 }
 
+// Helper functions to use in the tests below
+Expr interleave_vectors(vector<Expr> e) {
+    Type t = e[0].type();
+    t.width *= e.size();
+    return Call::make(t, Call::interleave_vectors, e, Call::Intrinsic);
+}
+
+Expr ramp(Expr base, Expr stride, int w) {
+    return Ramp::make(base, stride, w);
+}
+
+Expr broadcast(Expr base, int w) {
+    return Broadcast::make(base, w);
+}
+
 }
 
 void simplify_test() {
@@ -2633,12 +2716,12 @@ void simplify_test() {
     test_int_cast_constant<uint16_t>();
     test_int_cast_constant<uint32_t>();
 
-    check(Cast::make(Int(32), Cast::make(Int(32), x)), x);
-    check(Cast::make(Float(32), 3), 3.0f);
-    check(Cast::make(Int(32), 5.0f), 5);
+    check(cast(Int(32), cast(Int(32), x)), x);
+    check(cast(Float(32), 3), 3.0f);
+    check(cast(Int(32), 5.0f), 5);
 
-    check(Cast::make(Int(32), Cast::make(Int(8), 3)), 3);
-    check(Cast::make(Int(32), Cast::make(Int(8), 1232)), -48);
+    check(cast(Int(32), cast(Int(8), 3)), 3);
+    check(cast(Int(32), cast(Int(8), 1232)), -48);
 
     // Check evaluation of constant expressions involving casts
     check(cast(UInt(16), 53) + cast(UInt(16), 87), cast(UInt(16), 140));
@@ -2682,10 +2765,10 @@ void simplify_test() {
     check(Expr(3.25f) + Expr(7.75f), 11.0f);
     check(x + 0, x);
     check(0 + x, x);
-    check(Expr(Ramp::make(x, 2, 3)) + Expr(Ramp::make(y, 4, 3)), Ramp::make(x+y, 6, 3));
-    check(Expr(Broadcast::make(4.0f, 5)) + Expr(Ramp::make(3.25f, 4.5f, 5)), Ramp::make(7.25f, 4.5f, 5));
-    check(Expr(Ramp::make(3.25f, 4.5f, 5)) + Expr(Broadcast::make(4.0f, 5)), Ramp::make(7.25f, 4.5f, 5));
-    check(Expr(Broadcast::make(3, 3)) + Expr(Broadcast::make(1, 3)), Broadcast::make(4, 3));
+    check(Expr(ramp(x, 2, 3)) + Expr(ramp(y, 4, 3)), ramp(x+y, 6, 3));
+    check(Expr(broadcast(4.0f, 5)) + Expr(ramp(3.25f, 4.5f, 5)), ramp(7.25f, 4.5f, 5));
+    check(Expr(ramp(3.25f, 4.5f, 5)) + Expr(broadcast(4.0f, 5)), ramp(7.25f, 4.5f, 5));
+    check(Expr(broadcast(3, 3)) + Expr(broadcast(1, 3)), broadcast(4, 3));
     check((x + 3) + 4, x + 7);
     check(4 + (3 + x), x + 7);
     check((x + 3) + y, (x + y) + 3);
@@ -2700,10 +2783,10 @@ void simplify_test() {
     check(x - 0, x);
     check((x/y) - (x/y), 0);
     check(x - 2, x + (-2));
-    check(Expr(Ramp::make(x, 2, 3)) - Expr(Ramp::make(y, 4, 3)), Ramp::make(x-y, -2, 3));
-    check(Expr(Broadcast::make(4.0f, 5)) - Expr(Ramp::make(3.25f, 4.5f, 5)), Ramp::make(0.75f, -4.5f, 5));
-    check(Expr(Ramp::make(3.25f, 4.5f, 5)) - Expr(Broadcast::make(4.0f, 5)), Ramp::make(-0.75f, 4.5f, 5));
-    check(Expr(Broadcast::make(3, 3)) - Expr(Broadcast::make(1, 3)), Broadcast::make(2, 3));
+    check(Expr(ramp(x, 2, 3)) - Expr(ramp(y, 4, 3)), ramp(x-y, -2, 3));
+    check(Expr(broadcast(4.0f, 5)) - Expr(ramp(3.25f, 4.5f, 5)), ramp(0.75f, -4.5f, 5));
+    check(Expr(ramp(3.25f, 4.5f, 5)) - Expr(broadcast(4.0f, 5)), ramp(-0.75f, 4.5f, 5));
+    check(Expr(broadcast(3, 3)) - Expr(broadcast(1, 3)), broadcast(2, 3));
     check((x + y) - x, y);
     check((x + y) - y, x);
     check(x - (x + y), 0 - y);
@@ -2735,9 +2818,9 @@ void simplify_test() {
     check(Expr(2)*4, 8);
     check((3*x)*4, x*12);
     check(4*(3+x), x*4 + 12);
-    check(Expr(Broadcast::make(4.0f, 5)) * Expr(Ramp::make(3.0f, 4.0f, 5)), Ramp::make(12.0f, 16.0f, 5));
-    check(Expr(Ramp::make(3.0f, 4.0f, 5)) * Expr(Broadcast::make(2.0f, 5)), Ramp::make(6.0f, 8.0f, 5));
-    check(Expr(Broadcast::make(3, 3)) * Expr(Broadcast::make(2, 3)), Broadcast::make(6, 3));
+    check(Expr(broadcast(4.0f, 5)) * Expr(ramp(3.0f, 4.0f, 5)), ramp(12.0f, 16.0f, 5));
+    check(Expr(ramp(3.0f, 4.0f, 5)) * Expr(broadcast(2.0f, 5)), ramp(6.0f, 8.0f, 5));
+    check(Expr(broadcast(3, 3)) * Expr(broadcast(2, 3)), broadcast(6, 3));
 
     check(0/x, 0);
     check(x/1, x);
@@ -2757,24 +2840,24 @@ void simplify_test() {
     check((xf - yf)*-2.0f, (yf - xf)*2.0f);
 
     check(xf / 4.0f, xf * 0.25f);
-    check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
-          Expr(Broadcast::make(y/x, 4)));
-    check(Expr(Ramp::make(x, 4, 4)) / 2, Ramp::make(x/2, 2, 4));
-    check(Expr(Ramp::make(x, -4, 7)) / 2, Ramp::make(x/2, -2, 7));
-    check(Expr(Ramp::make(x, 4, 5)) / -2, Ramp::make(x/-2, -2, 5));
-    check(Expr(Ramp::make(x, -8, 5)) / -2, Ramp::make(x/-2, 4, 5));
+    check(Expr(broadcast(y, 4)) / Expr(broadcast(x, 4)),
+          Expr(broadcast(y/x, 4)));
+    check(Expr(ramp(x, 4, 4)) / 2, ramp(x/2, 2, 4));
+    check(Expr(ramp(x, -4, 7)) / 2, ramp(x/2, -2, 7));
+    check(Expr(ramp(x, 4, 5)) / -2, ramp(x/-2, -2, 5));
+    check(Expr(ramp(x, -8, 5)) / -2, ramp(x/-2, 4, 5));
 
-    check(Expr(Ramp::make(4*x, 1, 4)) / 4, Broadcast::make(x, 4));
-    check(Expr(Ramp::make(x*4, 1, 3)) / 4, Broadcast::make(x, 3));
-    check(Expr(Ramp::make(x*8, 2, 4)) / 8, Broadcast::make(x, 4));
-    check(Expr(Ramp::make(x*8, 3, 3)) / 8, Broadcast::make(x, 3));
-    check(Expr(Ramp::make(0, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
-    check(Expr(Ramp::make(8, 1, 8)) % 16, Expr(Ramp::make(8, 1, 8)));
-    check(Expr(Ramp::make(9, 1, 8)) % 16, Expr(Ramp::make(9, 1, 8)) % 16);
-    check(Expr(Ramp::make(16, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
-    check(Expr(Ramp::make(0, 1, 8)) % 8, Expr(Ramp::make(0, 1, 8)));
-    check(Expr(Ramp::make(x*8+17, 1, 4)) % 8, Expr(Ramp::make(1, 1, 4)));
-    check(Expr(Ramp::make(x*8+17, 1, 8)) % 8, Expr(Ramp::make(1, 1, 8) % 8));
+    check(Expr(ramp(4*x, 1, 4)) / 4, broadcast(x, 4));
+    check(Expr(ramp(x*4, 1, 3)) / 4, broadcast(x, 3));
+    check(Expr(ramp(x*8, 2, 4)) / 8, broadcast(x, 4));
+    check(Expr(ramp(x*8, 3, 3)) / 8, broadcast(x, 3));
+    check(Expr(ramp(0, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
+    check(Expr(ramp(8, 1, 8)) % 16, Expr(ramp(8, 1, 8)));
+    check(Expr(ramp(9, 1, 8)) % 16, Expr(ramp(9, 1, 8)) % 16);
+    check(Expr(ramp(16, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
+    check(Expr(ramp(0, 1, 8)) % 8, Expr(ramp(0, 1, 8)));
+    check(Expr(ramp(x*8+17, 1, 4)) % 8, Expr(ramp(1, 1, 4)));
+    check(Expr(ramp(x*8+17, 1, 8)) % 8, Expr(ramp(1, 1, 8) % 8));
 
 
     check(Expr(7) % 2, 1);
@@ -2782,43 +2865,43 @@ void simplify_test() {
     check(Expr(-7.25f) % 2.0f, 0.75f);
     check(Expr(-7.25f) % -2.0f, -1.25f);
     check(Expr(7.25f) % -2.0f, -0.75f);
-    check(Expr(Broadcast::make(x, 4)) % Expr(Broadcast::make(y, 4)),
-          Expr(Broadcast::make(x % y, 4)));
+    check(Expr(broadcast(x, 4)) % Expr(broadcast(y, 4)),
+          Expr(broadcast(x % y, 4)));
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y % 4);
     check((y + 8) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
-    check(Expr(Ramp::make(x, 2, 4)) % (Broadcast::make(2, 4)),
-          Broadcast::make(x % 2, 4));
-    check(Expr(Ramp::make(2*x+1, 4, 4)) % (Broadcast::make(2, 4)),
-          Broadcast::make(1, 4));
+    check(Expr(ramp(x, 2, 4)) % (broadcast(2, 4)),
+          broadcast(x % 2, 4));
+    check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),
+          broadcast(1, 4));
 
-    check(Min::make(7, 3), 3);
-    check(Min::make(4.25f, 1.25f), 1.25f);
-    check(Min::make(Broadcast::make(x, 4), Broadcast::make(y, 4)),
-          Broadcast::make(Min::make(x, y), 4));
-    check(Min::make(x, x+3), x);
-    check(Min::make(x+4, x), x);
-    check(Min::make(x-1, x+2), x+(-1));
-    check(Min::make(7, Min::make(x, 3)), Min::make(x, 3));
-    check(Min::make(Min::make(x, y), x), Min::make(x, y));
-    check(Min::make(Min::make(x, y), y), Min::make(x, y));
-    check(Min::make(x, Min::make(x, y)), Min::make(x, y));
-    check(Min::make(y, Min::make(x, y)), Min::make(x, y));
+    check(min(7, 3), 3);
+    check(min(4.25f, 1.25f), 1.25f);
+    check(min(broadcast(x, 4), broadcast(y, 4)),
+          broadcast(min(x, y), 4));
+    check(min(x, x+3), x);
+    check(min(x+4, x), x);
+    check(min(x-1, x+2), x+(-1));
+    check(min(7, min(x, 3)), min(x, 3));
+    check(min(min(x, y), x), min(x, y));
+    check(min(min(x, y), y), min(x, y));
+    check(min(x, min(x, y)), min(x, y));
+    check(min(y, min(x, y)), min(x, y));
 
-    check(Max::make(7, 3), 7);
-    check(Max::make(4.25f, 1.25f), 4.25f);
-    check(Max::make(Broadcast::make(x, 4), Broadcast::make(y, 4)),
-          Broadcast::make(Max::make(x, y), 4));
-    check(Max::make(x, x+3), x+3);
-    check(Max::make(x+4, x), x+4);
-    check(Max::make(x-1, x+2), x+2);
-    check(Max::make(7, Max::make(x, 3)), Max::make(x, 7));
-    check(Max::make(Max::make(x, y), x), Max::make(x, y));
-    check(Max::make(Max::make(x, y), y), Max::make(x, y));
-    check(Max::make(x, Max::make(x, y)), Max::make(x, y));
-    check(Max::make(y, Max::make(x, y)), Max::make(x, y));
+    check(max(7, 3), 7);
+    check(max(4.25f, 1.25f), 4.25f);
+    check(max(broadcast(x, 4), broadcast(y, 4)),
+          broadcast(max(x, y), 4));
+    check(max(x, x+3), x+3);
+    check(max(x+4, x), x+4);
+    check(max(x-1, x+2), x+2);
+    check(max(7, max(x, 3)), max(x, 7));
+    check(max(max(x, y), x), max(x, y));
+    check(max(max(x, y), y), max(x, y));
+    check(max(x, max(x, y)), max(x, y));
+    check(max(y, max(x, y)), max(x, y));
 
     check(x == x, t);
     check(x == (x+1), f);
@@ -2862,16 +2945,16 @@ void simplify_test() {
     // The result of min/max with extreme is known to be either the extreme or
     // the other expression.  The result of < or > comparison is known to be true or false.
     check(x <= Int(32).max(), const_true());
-    check(Cast::make(Int(16), x) >= Int(16).min(), const_true());
+    check(cast(Int(16), x) >= Int(16).min(), const_true());
     check(x < Int(32).min(), const_false());
-    check(Min::make(Cast::make(UInt(16), x), Cast::make(UInt(16), 65535)), Cast::make(UInt(16), x));
-    check(Min::make(x, Int(32).max()), x);
-    check(Min::make(Int(32).min(), x), Int(32).min());
-    check(Max::make(Cast::make(Int(8), x), Cast::make(Int(8), -128)), Cast::make(Int(8), x));
-    check(Max::make(x, Int(32).min()), x);
-    check(Max::make(x, Int(32).max()), Int(32).max());
+    check(min(cast(UInt(16), x), cast(UInt(16), 65535)), cast(UInt(16), x));
+    check(min(x, Int(32).max()), x);
+    check(min(Int(32).min(), x), Int(32).min());
+    check(max(cast(Int(8), x), cast(Int(8), -128)), cast(Int(8), x));
+    check(max(x, Int(32).min()), x);
+    check(max(x, Int(32).max()), Int(32).max());
     // Check that non-extremes do not lead to incorrect simplification
-    check(Max::make(Cast::make(Int(8), x), Cast::make(Int(8), -127)), Max::make(Cast::make(Int(8), x), Cast::make(Int(8), -127)));
+    check(max(cast(Int(8), x), cast(Int(8), -127)), max(cast(Int(8), x), cast(Int(8), -127)));
 
     // Check an optimization important for fusing dimensions
     check((x/3)*3 + x%3, x);
@@ -2884,16 +2967,16 @@ void simplify_test() {
     check((y + (x/3*3)) + x%3, y + x);
 
     // Check bitshift operations
-    check(Cast::make(Int(16), x) << 10, Cast::make(Int(16), x) * 1024);
-    check(Cast::make(Int(16), x) >> 10, Cast::make(Int(16), x) / 1024);
-    check(Cast::make(Int(16), x) << -10, Cast::make(Int(16), x) / 1024);
+    check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
+    check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
+    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
     // Correctly triggers a warning:
-    //check(Cast::make(Int(16), x) << 20, Cast::make(Int(16), x) << 20);
+    //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
 
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
-    check(Cast::make(UInt(64), Cast::make(UInt(32), Cast::make(Int(8), -1))),
-          Cast::make(UInt(64), Cast::make(UInt(32), -1)));
+    check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
+          cast(UInt(64), cast(UInt(32), -1)));
 
 
     // Some quaternary rules with cancellations
@@ -2988,8 +3071,8 @@ void simplify_test() {
     // The min of two matching clamps is the clamp of the mins
     check(min(clamp(x, -10, 14), clamp(y, -10, 14)), clamp(min(x, y), -10, 14));
 
-    check(Ramp::make(0, 1, 4) == Broadcast::make(2, 4),
-          Ramp::make(-2, 1, 4) == Broadcast::make(0, 4));
+    check(ramp(0, 1, 4) == broadcast(2, 4),
+          ramp(-2, 1, 4) == broadcast(0, 4));
 
     check(min(x/4, y/4), min(x, y)/4);
     check(max(x/4, y/4), max(x, y)/4);
@@ -3006,8 +3089,8 @@ void simplify_test() {
     check(!(x == y), x != y);
     check(!(x != y), x == y);
     check(!(!(x == 0)), x == 0);
-    check(!Expr(Broadcast::make(x > y, 4)),
-          Broadcast::make(x <= y, 4));
+    check(!Expr(broadcast(x > y, 4)),
+          broadcast(x <= y, 4));
 
     check(t && (x < 0), x < 0);
     check(f && (x < 0), f);
@@ -3031,27 +3114,27 @@ void simplify_test() {
     check((x/8)*8 < x - 8, f);
     check((x/8)*8 < x - 9, f);
     check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
-    check(Ramp::make(x*4, 1, 4) < Broadcast::make(y*4, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8 + 1, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8 + 4, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8 + 8, 1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y + (-1), 4));
-    check(Ramp::make(x*8 + 5, 1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 5, 1, 4) < Broadcast::make(y*8, 4));
-    check(Ramp::make(x*8 - 1, 1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + (-1), 1, 4) < Broadcast::make(y*8, 4));
-    check(Ramp::make(x*8, 1, 4) < Broadcast::make(y*4, 4), Broadcast::make(x*2 < y, 4));
-    check(Ramp::make(x*8, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8 + 1, 2, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 2, 2, 4) < Broadcast::make(y*8, 4));
-    check(Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, 3, 4) < Broadcast::make(y*8, 4));
-    check(Select::make(Ramp::make((x/16)*16, 1, 8) < Broadcast::make((y/8)*8, 8), Broadcast::make(1, 8), Broadcast::make(3, 8)),
-          Select::make((x/16)*2 < y/8, Broadcast::make(1, 8), Broadcast::make(3, 8)));
+    check(ramp(x*4, 1, 4) < broadcast(y*4, 4), broadcast(x < y, 4));
+    check(ramp(x*8, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
+    check(ramp(x*8 + 1, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
+    check(ramp(x*8 + 4, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
+    check(ramp(x*8 + 8, 1, 4) < broadcast(y*8, 4), broadcast(x < y + (-1), 4));
+    check(ramp(x*8 + 5, 1, 4) < broadcast(y*8, 4), ramp(x*8 + 5, 1, 4) < broadcast(y*8, 4));
+    check(ramp(x*8 - 1, 1, 4) < broadcast(y*8, 4), ramp(x*8 + (-1), 1, 4) < broadcast(y*8, 4));
+    check(ramp(x*8, 1, 4) < broadcast(y*4, 4), broadcast(x*2 < y, 4));
+    check(ramp(x*8, 2, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
+    check(ramp(x*8 + 1, 2, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
+    check(ramp(x*8 + 2, 2, 4) < broadcast(y*8, 4), ramp(x*8 + 2, 2, 4) < broadcast(y*8, 4));
+    check(ramp(x*8, 3, 4) < broadcast(y*8, 4), ramp(x*8, 3, 4) < broadcast(y*8, 4));
+    check(select(ramp((x/16)*16, 1, 8) < broadcast((y/8)*8, 8), broadcast(1, 8), broadcast(3, 8)),
+          select((x/16)*2 < y/8, broadcast(1, 8), broadcast(3, 8)));
 
-    check(Ramp::make(x*8, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8, -1, 4) < Broadcast::make(y*8, 4));
-    check(Ramp::make(x*8 + 1, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 1, -1, 4) < Broadcast::make(y*8, 4));
-    check(Ramp::make(x*8 + 4, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8 + 8, -1, 4) < Broadcast::make(y*8, 4), Ramp::make(x*8 + 8, -1, 4) < Broadcast::make(y*8, 4));
-    check(Ramp::make(x*8 + 5, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y, 4));
-    check(Ramp::make(x*8 - 1, -1, 4) < Broadcast::make(y*8, 4), Broadcast::make(x < y + 1, 4));
+    check(ramp(x*8, -1, 4) < broadcast(y*8, 4), ramp(x*8, -1, 4) < broadcast(y*8, 4));
+    check(ramp(x*8 + 1, -1, 4) < broadcast(y*8, 4), ramp(x*8 + 1, -1, 4) < broadcast(y*8, 4));
+    check(ramp(x*8 + 4, -1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
+    check(ramp(x*8 + 8, -1, 4) < broadcast(y*8, 4), ramp(x*8 + 8, -1, 4) < broadcast(y*8, 4));
+    check(ramp(x*8 + 5, -1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
+    check(ramp(x*8 - 1, -1, 4) < broadcast(y*8, 4), broadcast(x < y + 1, 4));
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
@@ -3077,16 +3160,16 @@ void simplify_test() {
     Expr b1 = Variable::make(Bool(), "b1");
     Expr b2 = Variable::make(Bool(), "b2");
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(Select::make(b1, x+3, x+4) + Select::make(b2, x+5, x+7)),
-                           Evaluate::make(Select::make(b1, x+3, x+8) - Select::make(b2, x+5, x+7))),
+                           Evaluate::make(select(b1, x+3, x+4) + select(b2, x+5, x+7)),
+                           Evaluate::make(select(b1, x+3, x+8) - select(b2, x+5, x+7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(Select::make(b1, x+3, x+4) + Select::make(b2, x+5, x+7)),
+                           Evaluate::make(select(b1, x+3, x+4) + select(b2, x+5, x+7)),
                            Evaluate::make(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
     check(IfThenElse::make(b1,
-                           Evaluate::make(Select::make(b1, x, y)),
-                           Evaluate::make(Select::make(b1, z, w))),
+                           Evaluate::make(select(b1, x, y)),
+                           Evaluate::make(select(b1, z, w))),
           IfThenElse::make(b1,
                            Evaluate::make(x),
                            Evaluate::make(w)));
@@ -3143,24 +3226,24 @@ void simplify_test() {
     check(!b1 && b1, f);
     check(b1 && b1, b1);
     check(b1 || b1, b1);
-    check(Broadcast::make(b1, 4) || Broadcast::make(!b1, 4), Broadcast::make(t, 4));
-    check(Broadcast::make(!b1, 4) || Broadcast::make(b1, 4), Broadcast::make(t, 4));
-    check(Broadcast::make(b1, 4) && Broadcast::make(!b1, 4), Broadcast::make(f, 4));
-    check(Broadcast::make(!b1, 4) && Broadcast::make(b1, 4), Broadcast::make(f, 4));
-    check(Broadcast::make(b1, 4) && Broadcast::make(b1, 4), Broadcast::make(b1, 4));
-    check(Broadcast::make(b1, 4) || Broadcast::make(b1, 4), Broadcast::make(b1, 4));
+    check(broadcast(b1, 4) || broadcast(!b1, 4), broadcast(t, 4));
+    check(broadcast(!b1, 4) || broadcast(b1, 4), broadcast(t, 4));
+    check(broadcast(b1, 4) && broadcast(!b1, 4), broadcast(f, 4));
+    check(broadcast(!b1, 4) && broadcast(b1, 4), broadcast(f, 4));
+    check(broadcast(b1, 4) && broadcast(b1, 4), broadcast(b1, 4));
+    check(broadcast(b1, 4) || broadcast(b1, 4), broadcast(b1, 4));
 
     v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
     check(Let::make("x", 3, x+4), 7);
 
     // Check ramps in lets get pushed inwards
-    check(Let::make("v", Ramp::make(x*2+7, 3, 4), v + Expr(Broadcast::make(2, 4))),
-          Ramp::make(x*2+9, 3, 4));
+    check(Let::make("v", ramp(x*2+7, 3, 4), v + Expr(broadcast(2, 4))),
+          ramp(x*2+9, 3, 4));
 
     // Check broadcasts in lets get pushed inwards
-    check(Let::make("v", Broadcast::make(x, 4), v + Expr(Broadcast::make(2, 4))),
-          Broadcast::make(x+2, 4));
+    check(Let::make("v", broadcast(x, 4), v + Expr(broadcast(2, 4))),
+          broadcast(x+2, 4));
 
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
@@ -3180,30 +3263,66 @@ void simplify_test() {
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
     bounds_info.push("x", Interval(0,4));
-    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(0,4),  const_false(4), bounds_info);
-    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(8,4),  const_true(4),  bounds_info);
-    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(-4,4), const_false(4), bounds_info);
-    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(5,4),  const_true(4),  bounds_info);
+    check_in_bounds(ramp(x, 1,4) < broadcast(0,4),  const_false(4), bounds_info);
+    check_in_bounds(ramp(x, 1,4) < broadcast(8,4),  const_true(4),  bounds_info);
+    check_in_bounds(ramp(x,-1,4) < broadcast(-4,4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x,-1,4) < broadcast(5,4),  const_true(4),  bounds_info);
 
     // min and max on constant ramp v broadcast
-    check(max(Ramp::make(0, 1, 8), 0), Ramp::make(0, 1, 8));
-    check(min(Ramp::make(0, 1, 8), 7), Ramp::make(0, 1, 8));
-    check(max(Ramp::make(0, 1, 8), 7), Broadcast::make(7, 8));
-    check(min(Ramp::make(0, 1, 8), 0), Broadcast::make(0, 8));
-    check(min(Ramp::make(0, 1, 8), 4), min(Ramp::make(0, 1, 8), 4));
+    check(max(ramp(0, 1, 8), 0), ramp(0, 1, 8));
+    check(min(ramp(0, 1, 8), 7), ramp(0, 1, 8));
+    check(max(ramp(0, 1, 8), 7), broadcast(7, 8));
+    check(min(ramp(0, 1, 8), 0), broadcast(0, 8));
+    check(min(ramp(0, 1, 8), 4), min(ramp(0, 1, 8), 4));
 
-    check(max(Ramp::make(7, -1, 8), 0), Ramp::make(7, -1, 8));
-    check(min(Ramp::make(7, -1, 8), 7), Ramp::make(7, -1, 8));
-    check(max(Ramp::make(7, -1, 8), 7), Broadcast::make(7, 8));
-    check(min(Ramp::make(7, -1, 8), 0), Broadcast::make(0, 8));
-    check(min(Ramp::make(7, -1, 8), 4), min(Ramp::make(7, -1, 8), 4));
+    check(max(ramp(7, -1, 8), 0), ramp(7, -1, 8));
+    check(min(ramp(7, -1, 8), 7), ramp(7, -1, 8));
+    check(max(ramp(7, -1, 8), 7), broadcast(7, 8));
+    check(min(ramp(7, -1, 8), 0), broadcast(0, 8));
+    check(min(ramp(7, -1, 8), 4), min(ramp(7, -1, 8), 4));
 
-    check(max(0, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
-    check(min(7, Ramp::make(0, 1, 8)), Ramp::make(0, 1, 8));
+    check(max(0, ramp(0, 1, 8)), ramp(0, 1, 8));
+    check(min(7, ramp(0, 1, 8)), ramp(0, 1, 8));
 
     check(min(8 - x, 2), 8 - max(x, 6));
     check(max(3, 77 - x), 77 - min(x, 74));
     check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
+
+    // Collapse some vector interleaves
+    check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));
+    check(interleave_vectors({ramp(x, 4, 4), ramp(x+2, 4, 4)}), ramp(x, 2, 8));
+    check(interleave_vectors({ramp(x-y, 2*y, 4), ramp(x, 2*y, 4)}), ramp(x-y, y, 8));
+    check(interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4), ramp(x+2, 3, 4)}), ramp(x, 1, 12));
+
+    // Now some ones that can't work
+    {
+        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 2, 4), ramp(x+2, 2, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
+        check(e, e);
+    }
+
+    // Now check that an interleave of some collapsible loads collapses into a single dense load
+    {
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer(), Parameter());
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer(), Parameter());
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer(), Parameter());
+        check(interleave_vectors({load1, load2}), load12);
+
+        // They don't collapse in the other order
+        Expr e = interleave_vectors({load2, load1});
+        check(e, e);
+
+        // Or if the buffers are different
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer(), Parameter());
+        e = interleave_vectors({load1, load3});
+        check(e, e);
+
+    }
 
     std::cout << "Simplify test passed" << std::endl;
 }
