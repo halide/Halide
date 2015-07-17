@@ -315,13 +315,15 @@ public:
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
+        std::vector<Expr> buffers;
         if (tuple_count == 1) {
-            args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-              args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
+        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
         return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_release", args, Call::Extern));

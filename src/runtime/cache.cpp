@@ -398,6 +398,7 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
 
 WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                          buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
+  debug(user_context) << "halide_memoization_cache_store\n";
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -408,8 +409,10 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 
     debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
+    debug(user_context) << "Printing allocation bounds for " << tuple_count << " buffers.\n";
     {
         for (int32_t i = 0; i < tuple_count; i++) {
+	  debug(user_context) << "Printing allocation bounds for buffer " << i << " " << tuple_buffers[i] << "\n";
             buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
@@ -477,9 +480,11 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 #if CACHE_DEBUGGING
     validate_cache();
 #endif
+    debug(user_context) << "Exiting halide_memoization_cache_store\n";
 }
 
 WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
+  debug(user_context) << "halide_memoization_cache_release\n";
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -490,8 +495,10 @@ WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *ca
 
     debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
+    debug(user_context) << "Printing allocation bounds for " << tuple_count << " buffers.\n";
     {
         for (int32_t i = 0; i < tuple_count; i++) {
+	  debug(user_context) << "Printing allocation bounds for buffer " << i << " " << tuple_buffers[i] << "\n";
             buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
@@ -521,10 +528,12 @@ WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *ca
         }
         entry = entry->next;
     }
-    halide_assert(user_context, false);
+    // TODO: Was an assert false here.
+    debug(user_context) << "Exited halide_memoization_cache_release.\n";
 }
 
 WEAK void halide_memoization_cache_cleanup() {
+  debug(NULL) << "halide_memoization_cache_cleanup\n";
     for (int i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
         cache_entries[i] = NULL;
