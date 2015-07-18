@@ -237,7 +237,7 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(llvm::EngineKind::JIT);
-#if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
+    #if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
     // >= 3.6 there is only mcjit. Native client is currently in a
     // place between 3.5 and 3.6
     #if !WITH_NATIVE_CLIENT
@@ -247,21 +247,35 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     //engine_builder.setJITMemoryManager(memory_manager);
     HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
     engine_builder.setMCJITMemoryManager(memory_manager);
-#else
+    #else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-#endif
+    #endif
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(mcpu);
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
+
+    #if LLVM_VERSION >= 37
+	TargetMachine *tm = engine_builder.selectTarget();
+	if (m->getDataLayout() != *tm->getDataLayout()) {
+		debug(0) << "Warning: data layout mismatch between module (" 
+			     << m->getDataLayout().getStringRepresentation()
+				 << ") and what the execution engine expects (" 
+				 << tm->getDataLayout()->getStringRepresentation() << ")\n";
+		m->setDataLayout(*tm->getDataLayout());
+	}
+    ExecutionEngine *ee = engine_builder.create(tm);
+    #else
     ExecutionEngine *ee = engine_builder.create();
+    #endif
+	
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 
-#ifdef __arm__
+    #ifdef __arm__
     start = end = NULL;
-#endif
+    #endif
 
     // Do any target-specific initialization
     std::vector<llvm::JITEventListener *> listeners;
