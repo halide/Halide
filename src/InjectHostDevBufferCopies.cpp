@@ -21,6 +21,8 @@ DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
             return DeviceAPI::OpenCL;
         } else if (target.has_feature(Target::CUDA)) {
             return DeviceAPI::CUDA;
+        } else if (target.has_feature(Target::OpenGLCompute)) {
+            return DeviceAPI::OpenGLCompute;
         } else {
             user_error << "Schedule uses Default_GPU without a valid GPU (OpenCL or CUDA) specified in target.\n";
         }
