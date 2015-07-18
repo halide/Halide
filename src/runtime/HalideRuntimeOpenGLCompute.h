@@ -34,44 +34,6 @@ extern int halide_openglcompute_run(void *user_context,
                              int num_coords_dim1);
 // @}
 
-/** Set the underlying OpenGL texture for a buffer. The texture must
- * have an extent large enough to cover that specified by the buffer_t
- * extent fields. The dev field of the buffer_t must be NULL when this
- * routine is called. This call can fail due to running out of memory
- * or being passed an invalid texture. The device and host dirty bits
- * are left unmodified. */
-extern int halide_openglcompute_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t texture_id);
-
-/** Set the underlying OpenGL texture for a buffer to refer to the current render target
- * (e.g., the frame buffer or an FBO). The render target must have an extent large enough
- * to cover that specified by the buffer_t extent fields. The dev field of the buffer_t
- * must be NULL when this routine is called. This call can fail due to running out of memory
- * The device and host dirty bits are left unmodified. */
-extern int halide_openglcompute_wrap_render_target(void *user_context, struct buffer_t *buf);
-
-/** Disconnect this buffer_t from the texture it was previously
- * wrapped around. Should only be called for a buffer_t that
- * halide_openglcompute_wrap_texture was previously called on. Frees any
- * storage associated with the binding of the buffer_t and the device
- * pointer, but does not free the texture. The previously wrapped
- * texture is returned. (If the buffer was wrapped with halide_openglcompute_wrap_render_target,
- * the return value is always zero.) The dev field of the buffer_t will be NULL
- * on return.
- */
-extern uintptr_t halide_openglcompute_detach_texture(void *user_context, struct buffer_t *buf);
-
-/** Return the underlying texture for a buffer_t. This buffer
- *  must be valid on an OpenGL device, or not have any associated device
- *  memory. If there is no device memory (dev field is NULL), or if the buffer
- *  was wrapped via halide_openglcompute_wrap_render_target(), this returns 0.
- */
-extern uintptr_t halide_openglcompute_get_texture(void *user_context, struct buffer_t *buf);
-
-/** Forget all state associated with the previous OpenGL context.  This is
- * similar to halide_openglcompute_release, except that we assume that all OpenGL
- * resources have already been reclaimed by the OS. */
-extern void halide_openglcompute_context_lost(void *user_context);
-
 /** This functions MUST be provided by the host environment to retrieve pointers
  *  to OpenGL API functions. */
 void *halide_opengl_get_proc_address(void *user_context, const char *name);

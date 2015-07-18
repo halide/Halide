@@ -129,12 +129,15 @@ typedef void (*PFNGLGETSHADERINFOLOGPROC) (GLuint shader, GLsizei bufSize, GLsiz
 typedef GLint (*PFNGLGETUNIFORMLOCATIONPROC) (GLuint program, const GLchar *name);
 typedef void (*PFNGLLINKPROGRAMPROC) (GLuint program);
 typedef void (*PFNGLSHADERSOURCEPROC) (GLuint shader, GLsizei count, const GLchar* *string, const GLint *length);
+typedef void (*PFNGLUNIFORM1FPROC) (GLuint location, GLfloat value);
+typedef void (*PFNGLUNIFORM1IPROC) (GLuint location, GLint value);
 typedef void (*PFNGLUNIFORM1IVPROC) (GLint location, GLsizei count, const GLint *value);
 typedef void (*PFNGLUNIFORM2IVPROC) (GLint location, GLsizei count, const GLint *value);
 typedef void (*PFNGLUNIFORM1FVPROC) (GLint location, GLsizei count, const GLfloat *value);
 typedef void (*PFNGLUSEPROGRAMPROC) (GLuint program);
 typedef void (*PFNGLVERTEXATTRIBPOINTERPROC) (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
 typedef void (*PFNGLGETINTEGERV)(GLenum pname, GLint *data);
+typedef void (*PFNGLFINISHPROC) (void);
 
 
 // ---------- OpenGL 3.0 ----------
@@ -168,7 +171,23 @@ typedef void (*PFNDRAWBUFFERS)(GLsizei n, const GLenum *bufs);
 
 // ---------- OpenGL ES 3.1 ----------
 
-#define GL_COMPUTE_SHADER                 0x91B9
+#define GL_TEXTURE_BUFFER_EXT 0x8c2a
 
+#define GL_COMPUTE_SHADER     0x91B9
+#define GL_DYNAMIC_COPY       0x88ea
+
+#define GL_READ_ONLY          0x88B8
+#define GL_WRITE_ONLY         0x88B9
+
+#define GL_MAP_READ_BIT       0x0001
+
+typedef unsigned int  GLbitfield;
+typedef ptrdiff_t GLintptr;
+
+typedef void (*PFNGLTEXBUFFEREXTPROC) (GLenum target, GLenum internalformat, GLuint buffer);
+typedef void (*PFNGLBINDIMAGETEXTUREPROC) (GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format);
+typedef void (*PFNGLMEMORYBARRIERPROC) (GLbitfield barriers);
+typedef void *(*PFNGLMAPBUFFERRANGEPROC) (GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
+typedef void (*PFNGLDISPATCHCOMPUTEPROC) (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z);
 
 #endif  // MINI_OPENGL_H

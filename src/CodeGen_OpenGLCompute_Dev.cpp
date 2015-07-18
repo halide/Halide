@@ -250,7 +250,8 @@ void CodeGen_OpenGLCompute_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
 
-    const int workgroupSize = 128;
+     // TODO(aam): Figure out why this maximum supported size is a good idea.
+    const int workgroupSize = 1024;
 
     src_stream << R"(#version 310 es
 #define LOCAL_SIZE )" << workgroupSize << R"EOF(
@@ -264,9 +265,27 @@ float float_from_bits(int x) { return intBitsToFloat(x); }
     cur_kernel_name = "";
 }
 
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
+    debug(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
+
+    do_indent();
+    stream << "// Got allocation " << op->name << ".\n";
+    allocations.push(op->name, op->type);
+
+    op->body.accept(this);
+}
+
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
+    debug(2) << "OpenGLCompute: Free on device for " << op->name << "\n";
+
+    allocations.pop(op->name);
+    do_indent();
+    stream << "// Lost allocation " << (op->name) << "\n";
+}
+
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "GLSL source:\n" << str << '\n';
+    debug(1) << "GLSL Compute source:\n" << str << '\n';
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

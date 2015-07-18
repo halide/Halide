@@ -1075,7 +1075,10 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
                         << blocksZ << ", "
                         << "threads: " << threadsX << "x" << threadsY << "x"
                         << threadsZ << ", "
-                        << "shmem: " << shared_mem_bytes << "\n";
+                        << "shmem: " << shared_mem_bytes << ", "
+                        << "num_attributes: " << num_attributes << ", "
+                        << "num_coords_dim0: " << num_coords_dim0 << ", "
+                        << "num_coords_dim1: " << num_coords_dim1 << "\n";
 
     Context ctx(user_context);
     if (ctx.error != RS_SUCCESS) {
