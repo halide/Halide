@@ -218,7 +218,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     string id_index = print_expr(quarter_index);
 
     ostringstream oss;
-    oss << "imageLoad(" << print_name(op->name) << ", " << id_index << ")";
+    oss << print_name(op->name) << ".data[" << id_index << "]";
     print_assignment(op->type, oss.str());
 }
 
@@ -238,7 +238,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     string id_value = print_expr(op->value);
 
     do_indent();
-    stream << "imageStore(" << print_name(op->name) << ", " << id_index << ", vec4(" << id_value << "));\n";
+    stream << print_name(op->name) << ".data[" << id_index << "] = " << id_value << ";\n";
 }
 
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
@@ -251,19 +251,6 @@ void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
     glc.add_kernel(s, name, args);
 }
 
-namespace {
-string print_image_buffer_type(Type type) {
-    if (type.is_float()) {
-        switch(type.width) {
-            case 1: return "r32f";
-            case 4: return "rgba32f";
-        }
-    }
-    user_error << "OpenGLCompute: Images of type " << type << " are not supported.\n";
-    return "";
-}
-}
-
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                       const string &name,
                                                       const vector<GPU_Argument> &args) {
@@ -272,9 +259,14 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << "layout(binding=" << i << ", " << print_image_buffer_type(args[i].type) << ")"
-                << " uniform mediump " << (args[i].write? "writeonly": "readonly")
-                << " imageBuffer " << print_name(args[i].name) << ";\n";
+            //
+            // layout(binding = 10) buffer buffer10 {
+            //     vec3 data[];
+            // } inBuffer;
+            //
+            stream << "layout(binding=" << i << ")"
+                << " buffer buffer" << i << " { "
+                << print_type(args[i].type) << " data[]; } " << print_name(args[i].name) << ";\n";
         } else {
             stream << "uniform " << print_type(args[i].type) << " " << print_name(args[i].name) << ";\n";
         }

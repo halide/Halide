@@ -17,6 +17,7 @@
 #define USED_GL_FUNCTIONS                                               \
     GLFUNC(PFNGLATTACHSHADERPROC, AttachShader); \
     GLFUNC(PFNGLBINDBUFFERPROC, BindBuffer); \
+    GLFUNC(PFNGLBINDBUFFERBASEPROC, BindBufferBase); \
     GLFUNC(PFNGLBINDIMAGETEXTUREPROC, BindImageTexture); \
     GLFUNC(PFNGLBINDTEXTUREPROC, BindTexture); \
     GLFUNC(PFNGLBUFFERDATAPROC, BufferData); \
@@ -215,20 +216,6 @@ size_t buf_size(void *user_context, buffer_t *buf) {
 };
 }
 
-// Halide device handle is 64-bit word, so we pack both 32-bit TBO and Buffer
-// into that single handle.
-union tbo_and_buffer_packed_t {
-    int64_t packed;
-    struct {
-        GLuint the_tbo;
-        GLuint the_buffer;
-    };
-
-    tbo_and_buffer_packed_t(GLuint the_tbo_, GLuint the_buffer_):
-        the_tbo(the_tbo_), the_buffer(the_buffer_) {}
-    tbo_and_buffer_packed_t(int64_t packed_) : packed(packed_) {}
-};
-
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
 WEAK int halide_openglcompute_device_malloc(void *user_context, buffer_t *buf) {
@@ -279,29 +266,15 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, buffer_t *buf) {
     GLuint the_buffer;
     global_state.GenBuffers(1, &the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: GenBuffers")) { return 1; }
-    global_state.BindBuffer(GL_TEXTURE_BUFFER_EXT, the_buffer);
+    global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
-
     size_t sizeInBytes = buf_size(user_context, buf);
-    global_state.BufferData(GL_TEXTURE_BUFFER_EXT, sizeInBytes, NULL, GL_DYNAMIC_COPY);
+    global_state.BufferData(GL_ARRAY_BUFFER, sizeInBytes, NULL, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
 
-    GLuint the_tbo;
-    global_state.GenTextures(1, &the_tbo);
-    if (global_state.CheckAndReportError(user_context, "oglc: GenTextures")) { return 1; }
-    global_state.BindTexture(GL_TEXTURE_BUFFER_EXT, the_tbo);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindTexture")) { return 1; }
-    // TODO(aam): Support formats other than RGBA32F
-    global_state.TexBufferEXT(GL_TEXTURE_BUFFER_EXT, GL_RGBA32F, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: TexBufferEXT")) { return 1; }
-    global_state.BindTexture(GL_TEXTURE_BUFFER_EXT, 0);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindTexture")) { return 1; }
+    buf->dev = halide_new_device_wrapper(the_buffer, &openglcompute_device_interface);
 
-    buf->dev = halide_new_device_wrapper(
-        tbo_and_buffer_packed_t(the_tbo, the_buffer).packed,
-        &openglcompute_device_interface);
-
-    debug(user_context) << "Allocated dev_buffer(i.e. tbo) " << the_tbo << "\n";
+    debug(user_context) << "Allocated dev_buffer(i.e. vbo) " << the_buffer << "\n";
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -326,14 +299,11 @@ WEAK int halide_openglcompute_device_free(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    tbo_and_buffer_packed_t packed(halide_get_device_handle(buf->dev));
-    GLuint the_tbo = packed.the_tbo;
-    GLuint the_buffer = packed.the_buffer;
+    GLuint the_buffer = halide_get_device_handle(buf->dev);
     debug(user_context) << "OGLC: halide_openglcompute_device_free ("
                         << "user_context: " << user_context
-                        << ", buf: " << buf
-                        << ", the_tbo:" << the_tbo
-                        << ", the_buffer:" << the_buffer << ")\n";
+                        << ", the_buffer:" << the_buffer
+                        << ")\n";
 
     // TODO(aam): implement this
     debug(user_context) << "not implemented halide_openglcompute_device_free\n";
@@ -358,20 +328,17 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, buffer_t *buf) 
         return 1;
     }
 
-    tbo_and_buffer_packed_t packed(halide_get_device_handle(buf->dev));
-    GLuint the_tbo = packed.the_tbo;
-    GLuint the_buffer = packed.the_buffer;
+    GLuint the_buffer = halide_get_device_handle(buf->dev);
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_device ("
                         << "user_context: " << user_context
                         << ", buf: " << buf
-                        << ", the_tbo:" << the_tbo
                         << ", the_buffer:" << the_buffer << ")\n";
 
-    global_state.BindBuffer(GL_TEXTURE_BUFFER_EXT, the_buffer);
+    global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
 
     size_t size = buf_size(user_context, buf);
-    global_state.BufferData(GL_TEXTURE_BUFFER_EXT, size, buf->host, GL_DYNAMIC_COPY);
+    global_state.BufferData(GL_ARRAY_BUFFER, size, buf->host, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
 
     debug(user_context) << "  copied " << ((unsigned)size) << " bytes from " << buf->host << " to the device.\n";
@@ -395,27 +362,24 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, buffer_t *buf) {
         return 1;
     }
 
-    tbo_and_buffer_packed_t packed(halide_get_device_handle(buf->dev));
-    GLuint the_tbo = packed.the_tbo;
-    GLuint the_buffer = packed.the_buffer;
+    GLuint the_buffer = halide_get_device_handle(buf->dev);
     size_t size = buf_size(user_context, buf);
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_host ("
                         << "user_context: " << user_context
                         << ", buf: " << buf
-                        << ", the_tbo:" << the_tbo
                         << ", the_buffer:" << the_buffer
                         << ", size=" << (unsigned)size << ")\n";
 
-    global_state.BindBuffer(GL_TEXTURE_BUFFER_EXT, the_buffer);
+    global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
 
-    void* device_data = global_state.MapBufferRange(GL_TEXTURE_BUFFER_EXT,
+    void* device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
                                                     0,
                                                     size,
                                                     GL_MAP_READ_BIT);
     if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) { return 1; }
     memcpy(buf->host, device_data, size);
-    global_state.UnmapBuffer(GL_TEXTURE_BUFFER_EXT);
+    global_state.UnmapBuffer(GL_ARRAY_BUFFER);
 
     debug(user_context) << "  copied " << (unsigned)size << " bytes to the host.\n";
 
@@ -495,10 +459,9 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         } else {
             uint64_t arg_value = *(uint64_t *)args[i];
 
-            bool isThisTheLastArgument = arg_sizes[i+1] == 0;
-            GLuint the_tbo = (GLuint)halide_get_device_handle(arg_value);
-            global_state.BindImageTexture(i, the_tbo, 0, false, 0, isThisTheLastArgument? GL_WRITE_ONLY: GL_READ_ONLY, GL_RGBA32F);
-            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run BindImageTexture")) { return 1; }
+            GLuint the_buffer = halide_get_device_handle(arg_value);
+            global_state.BindBufferBase(GL_SHADER_STORAGE_BUFFER, i, the_buffer);
+            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run BindBufferBase")) { return 1; }
         }
         i++;
     }
@@ -507,7 +470,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
     const int workgroups_x = 1024;
     global_state.DispatchCompute(workgroups_x, 1, 1);
     if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run DispatchCompute")) { return 1; }
-    global_state.MemoryBarrier(GL_ALL_BARRIER_BITS);
+    global_state.MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
     if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run MemoryBarrier")) { return 1; }
 
 #ifdef DEBUG_RUNTIME

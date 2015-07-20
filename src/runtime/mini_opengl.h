@@ -181,6 +181,9 @@ typedef void (*PFNDRAWBUFFERS)(GLsizei n, const GLenum *bufs);
 
 #define GL_MAP_READ_BIT       0x0001
 
+#define GL_SHADER_STORAGE_BUFFER 0x90D2
+
+#define GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT 0x00000001
 #define GL_BUFFER_UPDATE_BARRIER_BIT      0x00000200
 #define GL_ALL_BARRIER_BITS               0xFFFFFFFF
 
@@ -193,5 +196,6 @@ typedef void (*PFNGLMEMORYBARRIERPROC) (GLbitfield barriers);
 typedef void *(*PFNGLMAPBUFFERRANGEPROC) (GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
 typedef void (*PFNGLDISPATCHCOMPUTEPROC) (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z);
 typedef void (*PFNGLUNMAPBUFFERPROC) (GLenum target);
+typedef void (*PFNGLBINDBUFFERBASEPROC) (GLenum target, GLuint index, GLuint buffer);
 
 #endif  // MINI_OPENGL_H
