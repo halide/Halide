@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
      .reorder(c, x)
      .vectorize(c);
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, 64);
+        f.gpu_tile(x, 1024);
     } else {
         // f.parallel(x, 64);
     }

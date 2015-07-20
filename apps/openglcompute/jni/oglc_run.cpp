@@ -22,7 +22,7 @@ buffer_t make_image(int width, int depth, float host[]) {
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
 void print(buffer_t bt) {
-    for (int i = 0; i < std::min(bt.extent[0], 1024*1024*1024); i+=256) {
+    for (int i = 0; i < std::min(bt.extent[0], 1024*1024*1024); i+=256*1024) {
         std::stringstream oss;
         oss << "@" << i << " [";
         for (int j = 0; j < std::min(bt.extent[1], 100); j++) {
@@ -91,7 +91,7 @@ float avg(buffer_t bt, int i, int j) {
 }
 
 int main(int argc, char** argv) {
-    int width = 63*1024;
+    int width = 1024*1024;
     int depth = CHANNELS;
     float *input = (float*)malloc(sizeof(float) * width * depth);
     float *output = (float*)malloc(sizeof(float) * width * depth);
