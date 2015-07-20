@@ -3,85 +3,46 @@
 #include "HalideRuntimeOpenGLCompute.h"
 #include "mini_opengl.h"
 
-// This constant is used to indicate that the application will take
-// responsibility for binding the output render target before calling the
-// Halide function.
-#define HALIDE_OPENGLCOMPUTE_RENDER_TARGET ((uint64_t)-1)
-
 // Implementation note: all function that directly or indirectly access the
 // runtime state in halide_openglcompute_state must be declared as WEAK, otherwise
 // the behavior at runtime is undefined.
 
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
+//
+// grep "global_state." ../../src/runtime/openglcompute.cpp | sed -n "s/^\(.*\)global_state\.\([^(]*\).*/\2/p" | sort | uniq
+//  +GetError, GetString
+//  -CheckAndReportError
+//
 #define USED_GL_FUNCTIONS                                               \
-    GLFUNC(PFNGLDELETETEXTURESPROC, DeleteTextures);                    \
-    GLFUNC(PFNGLGENTEXTURESPROC, GenTextures);                          \
-    GLFUNC(PFNGLBINDTEXTUREPROC, BindTexture);                          \
-    GLFUNC(PFNGLGETERRORPROC, GetError);                                \
-    GLFUNC(PFNGLVIEWPORTPROC, Viewport);                                \
-    GLFUNC(PFNGLGENBUFFERSPROC, GenBuffers);                            \
-    GLFUNC(PFNGLDELETEBUFFERSPROC, DeleteBuffers);                      \
-    GLFUNC(PFNGLBINDBUFFERPROC, BindBuffer);                            \
-    GLFUNC(PFNGLBUFFERDATAPROC, BufferData);                            \
-    GLFUNC(PFNGLTEXPARAMETERIPROC, TexParameteri);                      \
-    GLFUNC(PFNGLTEXIMAGE2DPROC, TexImage2D);                            \
-    GLFUNC(PFNGLTEXSUBIMAGE2DPROC, TexSubImage2D);                      \
-    GLFUNC(PFNGLDISABLEPROC, Disable);                                  \
-    GLFUNC(PFNGLCREATESHADERPROC, CreateShader);                        \
-    GLFUNC(PFNGLACTIVETEXTUREPROC, ActiveTexture);                      \
-    GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource);                        \
-    GLFUNC(PFNGLCOMPILESHADERPROC, CompileShader);                      \
-    GLFUNC(PFNGLGETSHADERIVPROC, GetShaderiv);                          \
-    GLFUNC(PFNGLGETSHADERINFOLOGPROC, GetShaderInfoLog);                \
-    GLFUNC(PFNGLDELETESHADERPROC, DeleteShader);                        \
-    GLFUNC(PFNGLCREATEPROGRAMPROC, CreateProgram);                      \
-    GLFUNC(PFNGLATTACHSHADERPROC, AttachShader);                        \
-    GLFUNC(PFNGLLINKPROGRAMPROC, LinkProgram);                          \
-    GLFUNC(PFNGLGETPROGRAMIVPROC, GetProgramiv);                        \
-    GLFUNC(PFNGLGETPROGRAMINFOLOGPROC, GetProgramInfoLog);              \
-    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram);                            \
-    GLFUNC(PFNGLDELETEPROGRAMPROC, DeleteProgram);                      \
-    GLFUNC(PFNGLGETUNIFORMLOCATIONPROC, GetUniformLocation);            \
-    GLFUNC(PFNGLUNIFORM1FPROC, Uniform1f);                              \
-    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1i);                              \
-    GLFUNC(PFNGLUNIFORM1IVPROC, Uniform1iv);                            \
-    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform2iv);                            \
-    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform4iv);                            \
-    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform1fv);                            \
-    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform4fv);                            \
-    GLFUNC(PFNGLGENFRAMEBUFFERSPROC, GenFramebuffers);                  \
-    GLFUNC(PFNGLDELETEFRAMEBUFFERSPROC, DeleteFramebuffers);            \
-    GLFUNC(PFNGLCHECKFRAMEBUFFERSTATUSPROC, CheckFramebufferStatus);    \
-    GLFUNC(PFNGLBINDFRAMEBUFFERPROC, BindFramebuffer);                  \
-    GLFUNC(PFNGLFRAMEBUFFERTEXTURE2DPROC, FramebufferTexture2D);        \
-    GLFUNC(PFNGLGETATTRIBLOCATIONPROC, GetAttribLocation);              \
-    GLFUNC(PFNGLVERTEXATTRIBPOINTERPROC, VertexAttribPointer);          \
-    GLFUNC(PFNGLDRAWELEMENTSPROC, DrawElements);                        \
-    GLFUNC(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray);  \
-    GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
-    GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
-    GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
-    GLFUNC(PFNGLGETSTRINGPROC, GetString);                              \
-    GLFUNC(PFNGLGETINTEGERV, GetIntegerv);                              \
-    GLFUNC(PFNGLFINISHPROC, Finish);
-
-// List of all OpenGL functions used by the runtime, which may not
-// exist due to an older or less capable version of GL. In using any
-// of these functions, code must test if they are NULL.
-#define OPTIONAL_GL_FUNCTIONS                                           \
-    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);                      \
-    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);                      \
-    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays);                \
-    GLFUNC(PFNDRAWBUFFERS, DrawBuffers);                                \
-    \
-    GLFUNC(PFNGLTEXBUFFEREXTPROC, TexBufferEXT);                        \
-    GLFUNC(PFNGLBINDIMAGETEXTUREPROC, BindImageTexture);                \
-    GLFUNC(PFNGLMEMORYBARRIERPROC, MemoryBarrier);                      \
-    GLFUNC(PFNGLMAPBUFFERRANGEPROC, MapBufferRange);                    \
-    GLFUNC(PFNGLDISPATCHCOMPUTEPROC, DispatchCompute);
-
-// ---------- Types ----------
+    GLFUNC(PFNGLATTACHSHADERPROC, AttachShader); \
+    GLFUNC(PFNGLBINDBUFFERPROC, BindBuffer); \
+    GLFUNC(PFNGLBINDIMAGETEXTUREPROC, BindImageTexture); \
+    GLFUNC(PFNGLBINDTEXTUREPROC, BindTexture); \
+    GLFUNC(PFNGLBUFFERDATAPROC, BufferData); \
+    GLFUNC(PFNGLCREATEPROGRAMPROC, CreateProgram); \
+    GLFUNC(PFNGLCOMPILESHADERPROC, CompileShader); \
+    GLFUNC(PFNGLCREATESHADERPROC, CreateShader); \
+    GLFUNC(PFNGLDELETEPROGRAMPROC, DeleteProgram); \
+    GLFUNC(PFNGLDELETESHADERPROC, DeleteShader); \
+    GLFUNC(PFNGLDISPATCHCOMPUTEPROC, DispatchCompute); \
+    GLFUNC(PFNGLFINISHPROC, Finish); \
+    GLFUNC(PFNGLGENBUFFERSPROC, GenBuffers); \
+    GLFUNC(PFNGLGENTEXTURESPROC, GenTextures); \
+    GLFUNC(PFNGLGETERRORPROC, GetError); \
+    GLFUNC(PFNGLMAPBUFFERRANGEPROC, MapBufferRange); \
+    GLFUNC(PFNGLMEMORYBARRIERPROC,  MemoryBarrier); \
+    GLFUNC(PFNGLGETPROGRAMINFOLOGPROC, GetProgramInfoLog); \
+    GLFUNC(PFNGLGETPROGRAMIVPROC, GetProgramiv); \
+    GLFUNC(PFNGLGETSHADERINFOLOGPROC, GetShaderInfoLog); \
+    GLFUNC(PFNGLGETSHADERIVPROC, GetShaderiv); \
+    GLFUNC(PFNGLGETSTRINGPROC, GetString); \
+    GLFUNC(PFNGLLINKPROGRAMPROC, LinkProgram); \
+    GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource); \
+    GLFUNC(PFNGLTEXBUFFEREXTPROC, TexBufferEXT); \
+    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1i); \
+    GLFUNC(PFNGLUNMAPBUFFERPROC, UnmapBuffer); \
+    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram);
 
 using namespace Halide::Runtime::Internal;
 
@@ -135,14 +96,13 @@ struct GlobalState {
     // Declare pointers used OpenGL functions
 #define GLFUNC(PTYPE,VAR) PTYPE VAR
     USED_GL_FUNCTIONS;
-    OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
 };
 
 WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *location) {
     GLenum err = GetError();
     if (err != GL_NO_ERROR) {
-        error(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")" <<
+        debug(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")" <<
             " at " << location << ".\n" ;
         return true;
     }
@@ -176,7 +136,6 @@ WEAK void GlobalState::init() {
     initialized = false;
 #define GLFUNC(type, name) name = NULL;
     USED_GL_FUNCTIONS;
-    OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
 }
 
@@ -204,18 +163,15 @@ WEAK int halide_openglcompute_init(void *user_context) {
         return -1;
     }
 
-    // Initialize pointers to core and optional OpenGL functions.
+    // Initialize pointers to OpenGL functions.
 #define GLFUNC(TYPE, VAR)                                                             \
     if (load_gl_func(user_context, "gl" #VAR, (void**)&global_state.VAR, true) < 0) { \
         return -1;                                                                    \
     }
     USED_GL_FUNCTIONS;
-    OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
 
-    const char *version = (const char *)global_state.GetString(GL_VERSION);
-
-    debug(user_context) << "Halide running on OpenGL " << version << "\n";
+    debug(user_context) << "Halide running on "<< global_state.GetString(GL_VERSION) << "\n";
 
     global_state.initialized = true;
     return 0;
@@ -226,19 +182,26 @@ WEAK int halide_openglcompute_init(void *user_context) {
 // The OpenGL context itself is generally managed by the host application, so
 // we leave it untouched.
 WEAK int halide_openglcompute_device_release(void *user_context) {
-    if (!global_state.initialized) {
-        return 0;
-    }
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
 
     //TODO(aam): implement this.
     debug(user_context) << "halide_openglcompute_release not implemented\n";
 
     global_state = GlobalState();
 
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
+                        << " ms\n";
+#endif
+
     return 0;
 }
 
-WEAK size_t buf_size(void *user_context, buffer_t *buf) {
+namespace {
+size_t buf_size(void *user_context, buffer_t *buf) {
     size_t size = buf->elem_size;
     for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
         size_t total_dim_size =
@@ -249,18 +212,30 @@ WEAK size_t buf_size(void *user_context, buffer_t *buf) {
     }
     halide_assert(user_context, size);
     return size;
+};
 }
 
-// Keep texture buffer object and buffer in single 64-bit word.
-uint64_t pack_tbo_and_buffer(GLuint the_tbo, GLuint the_buffer) {
-    return (((uint64_t)the_tbo) << 32) | the_buffer;
-}
-GLuint unpack_tbo(uint64_t packed) { return packed >> 32; }
-GLuint unpack_buffer(uint64_t packed) { return packed & 0xffffffff; }
+// Halide device handle is 64-bit word, so we pack both 32-bit TBO and Buffer
+// into that single handle.
+union tbo_and_buffer_packed_t {
+    int64_t packed;
+    struct {
+        GLuint the_tbo;
+        GLuint the_buffer;
+    };
+
+    tbo_and_buffer_packed_t(GLuint the_tbo_, GLuint the_buffer_):
+        the_tbo(the_tbo_), the_buffer(the_buffer_) {}
+    tbo_and_buffer_packed_t(int64_t packed_) : packed(packed_) {}
+};
 
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
 WEAK int halide_openglcompute_device_malloc(void *user_context, buffer_t *buf) {
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
     debug(user_context) << "OpenGLCompute: halide_openglcompute_device_malloc (user_context: "
                         << user_context << ", buf: " << buf << ")\n";
 
@@ -290,10 +265,6 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, buffer_t *buf) {
                         << buf->stride[1] << "x" << buf->stride[2] << "x"
                         << buf->stride[3] << " "
                         << "(" << buf->elem_size << " bytes per element)\n";
-
-#ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-#endif
 
     if (int error = halide_openglcompute_init(user_context)) {
         return error;
@@ -327,7 +298,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, buffer_t *buf) {
     if (global_state.CheckAndReportError(user_context, "oglc: BindTexture")) { return 1; }
 
     buf->dev = halide_new_device_wrapper(
-        pack_tbo_and_buffer(the_tbo, the_buffer),
+        tbo_and_buffer_packed_t(the_tbo, the_buffer).packed,
         &openglcompute_device_interface);
 
     debug(user_context) << "Allocated dev_buffer(i.e. tbo) " << the_tbo << "\n";
@@ -335,16 +306,17 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, buffer_t *buf) {
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
-                        << " ms\n";
+                        << " ms for malloc\n";
 #endif
 
     return 0;
 }
 
-// Delete all texture information associated with a buffer. The OpenGL texture
-// itself is only deleted if it was actually allocated by Halide and not
-// provided by the host application.
 WEAK int halide_openglcompute_device_free(void *user_context, buffer_t *buf) {
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized in call to halide_openglcompute_device_free.";
         return 1;
@@ -354,9 +326,9 @@ WEAK int halide_openglcompute_device_free(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    int64_t packed = halide_get_device_handle(buf->dev);
-    GLuint the_tbo = unpack_tbo(packed);
-    GLuint the_buffer = unpack_buffer(packed);
+    tbo_and_buffer_packed_t packed(halide_get_device_handle(buf->dev));
+    GLuint the_tbo = packed.the_tbo;
+    GLuint the_buffer = packed.the_buffer;
     debug(user_context) << "OGLC: halide_openglcompute_device_free ("
                         << "user_context: " << user_context
                         << ", buf: " << buf
@@ -366,19 +338,29 @@ WEAK int halide_openglcompute_device_free(void *user_context, buffer_t *buf) {
     // TODO(aam): implement this
     debug(user_context) << "not implemented halide_openglcompute_device_free\n";
 
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
+                        << " ms for free\n";
+#endif
+
     return 0;
 }
 
 // Copy image data from host memory to texture.
 WEAK int halide_openglcompute_copy_to_device(void *user_context, buffer_t *buf) {
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_copy_to_device).";
         return 1;
     }
 
-    int64_t packed = halide_get_device_handle(buf->dev);
-    GLuint the_tbo = unpack_tbo(packed);
-    GLuint the_buffer = unpack_buffer(packed);
+    tbo_and_buffer_packed_t packed(halide_get_device_handle(buf->dev));
+    GLuint the_tbo = packed.the_tbo;
+    GLuint the_buffer = packed.the_buffer;
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_device ("
                         << "user_context: " << user_context
                         << ", buf: " << buf
@@ -393,36 +375,55 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, buffer_t *buf) 
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
 
     debug(user_context) << "  copied " << ((unsigned)size) << " bytes from " << buf->host << " to the device.\n";
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
+                        << " ms for copy to dev\n";
+#endif
     return 0;
 }
 
 // Copy image data from texture back to host memory.
 WEAK int halide_openglcompute_copy_to_host(void *user_context, buffer_t *buf) {
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_copy_to_host).";
         return 1;
     }
 
-    int64_t packed = halide_get_device_handle(buf->dev);
-    GLuint the_tbo = unpack_tbo(packed);
-    GLuint the_buffer = unpack_buffer(packed);
+    tbo_and_buffer_packed_t packed(halide_get_device_handle(buf->dev));
+    GLuint the_tbo = packed.the_tbo;
+    GLuint the_buffer = packed.the_buffer;
+    size_t size = buf_size(user_context, buf);
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_host ("
                         << "user_context: " << user_context
                         << ", buf: " << buf
                         << ", the_tbo:" << the_tbo
-                        << ", the_buffer:" << the_buffer << ")\n";
-
-    size_t size = buf_size(user_context, buf);
+                        << ", the_buffer:" << the_buffer
+                        << ", size=" << (unsigned)size << ")\n";
 
     global_state.BindBuffer(GL_TEXTURE_BUFFER_EXT, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
-    void* device_data = global_state.MapBufferRange(
-        GL_TEXTURE_BUFFER_EXT, 0, size, GL_MAP_READ_BIT);
+
+    void* device_data = global_state.MapBufferRange(GL_TEXTURE_BUFFER_EXT,
+                                                    0,
+                                                    size,
+                                                    GL_MAP_READ_BIT);
     if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) { return 1; }
-
     memcpy(buf->host, device_data, size);
+    global_state.UnmapBuffer(GL_TEXTURE_BUFFER_EXT);
 
-    debug(user_context) << "  copied " << (unsigned)size << " to the host.\n";
+    debug(user_context) << "  copied " << (unsigned)size << " bytes to the host.\n";
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
+                        << " ms for copy to host\n";
+#endif
 
     return 0;
 }
@@ -442,6 +443,9 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                        int8_t arg_is_buffer[], int num_attributes,
                        float *vertex_buffer, int num_coords_dim0,
                        int num_coords_dim1) {
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
 
     debug(user_context)
         << "OpenGLCompute: halide_openglcompute_run (user_context: " << user_context << ", "
@@ -499,20 +503,37 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         i++;
     }
     // TODO(aam): support multi-dimensional dispatches
-    // TODO(aam): why this value makes sense?
+    // TODO(aam): why does this value make sense?
     const int workgroups_x = 1024;
     global_state.DispatchCompute(workgroups_x, 1, 1);
     if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run DispatchCompute")) { return 1; }
+    global_state.MemoryBarrier(GL_ALL_BARRIER_BITS);
+    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run MemoryBarrier")) { return 1; }
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
+                        << " ms for run\n";
+#endif
 
     return 0;
 }
 
 WEAK int halide_openglcompute_device_sync(void *user_context, struct buffer_t *) {
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
     if (!global_state.initialized) {
         error(user_context) << "OpenGL Compute runtime not initialized (halide_openglcompute_device_sync).";
         return 1;
     }
     global_state.Finish();
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
+                        << " ms for sync\n";
+#endif
     return 0;
 }
 
@@ -521,6 +542,10 @@ WEAK int halide_openglcompute_device_sync(void *user_context, struct buffer_t *)
 // code into a fragment shader.
 WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **state_ptr,
                                           const char *src, int size) {
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
     if (int error = halide_openglcompute_init(user_context)) {
         return error;
     }
@@ -593,7 +618,13 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         }
         kernel->program_id = program;
     }
-    return 0;
+ #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
+                        << " ms\n";
+#endif
+
+   return 0;
 }
 
 WEAK const struct halide_device_interface *halide_openglcompute_device_interface() {

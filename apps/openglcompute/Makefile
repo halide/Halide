@@ -11,11 +11,15 @@ test_%: test_%.cpp
 	g++ -std=c++11 -I ../../include/ $< -L ../../bin/ -lHalide -o $@ -g
 
 avg_filter.o avg_filter.h: test_oglc_avg $(HALIDE_LIB)
-	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-openglcompute-debug ./$<
+	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-openglcompute ./$<
+
+avg_filter_arm.o avg_filter_arm.h: test_oglc_avg $(HALIDE_LIB)
+	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s ./$< "_arm"
 
 libs/armeabi-v7a/oglc_run: $(HALIDE_LIB) \
                          jni/oglc_run.cpp \
-                         avg_filter.o avg_filter.h
+                         avg_filter.o avg_filter.h \
+                         avg_filter_arm.o avg_filter_arm.h
 	ndk-build libs/armeabi-v7a/oglc_run libs/armeabi-v7a/libstlport_shared.so
 
 deploy: libs/armeabi-v7a/oglc_run
@@ -39,13 +43,14 @@ export RUN_STEPS
 run: deploy
 	adb logcat -c
 	sh -c 'echo "$$RUN_STEPS" | adb shell'
-	adb logcat -d | grep "^I/halide"
+	adb logcat -d | grep "^I/oglc"
 	echo "Done"
 
 clean:
 	rm -f test_oglc_avg
 	rm -rf test_oglc_avg.dSYM/
 	rm -f avg_filter.*
+	rm -f avg_filter_arm.*
 	rm -rf libs/
 	rm -rf obj/
 

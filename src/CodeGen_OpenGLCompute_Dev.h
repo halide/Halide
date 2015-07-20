@@ -62,6 +62,9 @@ protected:
         // void visit(const Cast *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
+
+    public:
+        int workgroup_size;
     };
 
     std::ostringstream src_stream;
