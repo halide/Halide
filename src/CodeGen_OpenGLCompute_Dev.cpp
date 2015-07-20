@@ -114,6 +114,13 @@ string simt_intrinsic(const string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
+
+bool is_thread_loop(const string &name) {
+    return ends_with(name, ".__thread_id_x")
+        || ends_with(name, ".__thread_id_y")
+        || ends_with(name, ".__thread_id_z")
+        || ends_with(name, ".__thread_id_w");
+}
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Div *op) {
@@ -128,6 +135,21 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
     if (is_gpu_var(loop->name)) {
         internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
         internal_assert(is_zero(loop->min));
+
+        debug(4) << "loop extent is " << loop->extent << "\n";
+        //
+        //  Need to extract workgroup size.
+        //
+        if (is_thread_loop(loop->name)) {
+            const IntImm *int_limit = loop->extent.as<IntImm>();
+            user_assert(int_limit != NULL) << "For OpenGLCompute workgroup size must be an constant integer.\n";
+            int new_workgroup_size = int_limit->value;
+            user_assert(workgroup_size == 0 || workgroup_size == new_workgroup_size) <<
+                "OpenGLCompute requires all gpu kernels have same workgroup size, "
+                "but two different ones were encountered " << workgroup_size << " and " << new_workgroup_size << ".\n";
+            workgroup_size = new_workgroup_size;
+            debug(4) << "Workgroup size is " << workgroup_size << "\n";
+        }
 
         do_indent();
         stream << print_type(Int(32)) << " " << print_name(loop->name)
@@ -165,6 +187,23 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
     print_assignment(op->type.vector_of(op->width), oss.str());
 }
 
+namespace {
+
+Expr strip_mul_by_4(Expr base) {
+    const Mul *mul = base.as<Mul>();
+    const IntImm *factor = mul->b.as<IntImm>();
+    Expr index = mul->a;
+    if (factor == NULL) {
+        factor = mul->a.as<IntImm>();
+        index = mul->b;
+    }
+    user_assert(factor != NULL && factor->value == 4) <<
+        "Only fully vectorized access is supported by OpenGLCompute(base is not multiple of 4)";
+
+    return index;
+}
+}
+
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     if (!ramp) {
@@ -175,8 +214,11 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     user_assert(stride && stride->value == 1 && ramp->width == 4) <<
         "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
+    Expr quarter_index = strip_mul_by_4(ramp->base);
+    string id_index = print_expr(quarter_index);
+
     ostringstream oss;
-    oss << "imageLoad(" << print_name(op->name) << ", " << print_expr(ramp->base) << ")";
+    oss << "imageLoad(" << print_name(op->name) << ", " << id_index << ")";
     print_assignment(op->type, oss.str());
 }
 
@@ -190,11 +232,13 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     user_assert(stride && stride->value == 1 && ramp->width == 4) <<
         "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
-    string id_index = print_expr(ramp->base);
+    Expr quarter_index = strip_mul_by_4(ramp->base);
+    string id_index = print_expr(quarter_index);
+
     string id_value = print_expr(op->value);
 
     do_indent();
-    stream << "imageStore(" << print_name(op->name) << ", " << id_index << ", " << id_value << ");\n";
+    stream << "imageStore(" << print_name(op->name) << ", " << id_index << ", vec4(" << id_value << "));\n";
 }
 
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
@@ -244,25 +288,23 @@ void main()
     print(s);
     indent -= 2;
     stream << "}\n";
+
+    indent += 2;
+    stream << "layout(local_size_x = " << workgroup_size << ") in;\n";
 }
 
 void CodeGen_OpenGLCompute_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
 
-     // TODO(aam): Figure out why this maximum supported size is a good idea.
-    const int workgroupSize = 1024;
-
-    src_stream << R"(#version 310 es
-#define LOCAL_SIZE )" << workgroupSize << R"EOF(
+    src_stream << R"EOF(#version 310 es
 #extension GL_ANDROID_extension_pack_es31a : require
-
-layout(local_size_x = LOCAL_SIZE) in;
 
 float float_from_bits(int x) { return intBitsToFloat(x); }
 )EOF";
 
     cur_kernel_name = "";
+    glc.workgroup_size = 0;
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
