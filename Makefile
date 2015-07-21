@@ -649,7 +649,6 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
-OPENGLCOMPUTE_TESTS := $(shell ls test/openglcompute/*.cpp)
 RENDERSCRIPT_TESTS := $(shell ls test/renderscript/*.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
@@ -665,7 +664,6 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
-test_openglcompute: $(OPENGLCOMPUTE_TESTS:test/openglcompute/%.cpp=openglcompute_%)
 test_renderscript: $(RENDERSCRIPT_TESTS:test/renderscript/%.cpp=renderscript_%)
 
 # There are two types of tests for generators:
@@ -682,7 +680,6 @@ ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warni
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
-time_compilation_openglcompute: init_time_compilation_openglcompute $(OPENGLCOMPUTE_TESTS:test/openglcompute/%.cpp=time_compilation_openglcompute_%)
 time_compilation_renderscript: init_time_compilation_renderscript $(RENDERSCRIPT_TESTS:test/renderscript/%.cpp=time_compilation_renderscript_%)
 time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=time_compilation_generator_%)
 
@@ -717,9 +714,6 @@ $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/opengl_%: test/opengl/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
-
-$(BIN_DIR)/openglcompute_%: test/openglcompute/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/renderscript_%: test/renderscript/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
@@ -879,12 +873,6 @@ opengl_%: $(BIN_DIR)/opengl_%
 	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
 	@-echo
 
-openglcompute_%: HL_JIT_TARGET ?= host-opengcomputel
-openglcompute_%: $(BIN_DIR)/openglcompute_%
-	@-mkdir -p tmp
-	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
-	@-echo
-
 renderscript_jit_%: HL_JIT_TARGET = host-renderscript
 renderscript_jit_%: HL_TARGET =
 renderscript_aot_%: HL_TARGET = arm-32-android-armv7s-renderscript
@@ -920,9 +908,6 @@ time_compilation_performance_%: $(BIN_DIR)/performance_%
 
 time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 	$(TIME_COMPILATION) compile_times_opengl.csv make $(@:time_compilation_opengl_%=opengl_%)
-
-time_compilation_openglcompute_%: $(BIN_DIR)/openglcompute_%
-	$(TIME_COMPILATION) compile_times_openglcompute.csv make $(@:time_compilation_openglcompute_%=openglcompute_%)
 
 time_compilation_renderscript_%: $(BIN_DIR)/renderscript_%
 	$(TIME_COMPILATION) compile_times_renderscript.csv make $(@:time_compilation_renderscript_%=renderscript_%)
