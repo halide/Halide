@@ -10,17 +10,19 @@ $(HALIDE_LIB): $(TOP)
 test_%: test_%.cpp
 	g++ -std=c++11 -I ../../include/ $< -L ../../bin/ -lHalide -o $@ -g
 
-avg_filter.o avg_filter.h: test_oglc_avg $(HALIDE_LIB)
+avg_filter_uint32t.o avg_filter_uint32t.h avg_filter_float.o avg_filter_float.h: test_oglc_avg $(HALIDE_LIB)
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-openglcompute ./$<
 
-avg_filter_arm.o avg_filter_arm.h: test_oglc_avg $(HALIDE_LIB)
+avg_filter_uint32t_arm.o avg_filter_uint32t_arm.h avg_filter_float_arm.o avg_filter_float_arm.h: test_oglc_avg $(HALIDE_LIB)
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s ./$< "_arm"
 
-libs/armeabi-v7a/oglc_run: $(HALIDE_LIB) \
+libs/armeabi-v7a/oglc_run libs/armeabi-v7a/oglc_lib: $(HALIDE_LIB) \
                          jni/oglc_run.cpp \
-                         avg_filter.o avg_filter.h \
-                         avg_filter_arm.o avg_filter_arm.h
-	ndk-build libs/armeabi-v7a/oglc_run libs/armeabi-v7a/libstlport_shared.so
+                         avg_filter_uint32t.o avg_filter_uint32t.h \
+                         avg_filter_uint32t_arm.o avg_filter_uint32t_arm.h \
+                         avg_filter_float.o avg_filter_float.h \
+                         avg_filter_float_arm.o avg_filter_float_arm.h
+	ndk-build libs/armeabi-v7a/oglc_run libs/armeabi-v7a/liboglc.so libs/armeabi-v7a/libstlport_shared.so
 
 deploy: libs/armeabi-v7a/oglc_run
 	adb push libs/armeabi-v7a/oglc_run /mnt/sdcard/
@@ -49,8 +51,9 @@ run: deploy
 clean:
 	rm -f test_oglc_avg
 	rm -rf test_oglc_avg.dSYM/
-	rm -f avg_filter.*
-	rm -f avg_filter_arm.*
+	rm -f avg_*
 	rm -rf libs/
 	rm -rf obj/
+	rm -rf bin/
+	rm -rf gen/
 

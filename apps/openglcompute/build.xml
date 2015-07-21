@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="HelloHalideRenderscript" default="help">
+<project name="HelloHalideOpenGLCompute" default="help">
 
     <property file="local.properties" />
 

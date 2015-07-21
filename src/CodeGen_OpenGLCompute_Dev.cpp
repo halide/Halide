@@ -78,6 +78,8 @@ string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type)
             oss << "b";
         } else if (type.is_int()) {
             oss << "i";
+        } else if (type.is_uint()) {
+            oss << "u";
         } else {
             internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
         }
@@ -115,11 +117,15 @@ string simt_intrinsic(const string &name) {
     return "";
 }
 
-bool is_thread_loop(const string &name) {
-    return ends_with(name, ".__thread_id_x")
-        || ends_with(name, ".__thread_id_y")
-        || ends_with(name, ".__thread_id_z")
-        || ends_with(name, ".__thread_id_w");
+int thread_loop_workgroup_index(const string &name) {
+    string ids[] = {".__thread_id_x",
+                    ".__thread_id_y",
+                    ".__thread_id_z",
+                    ".__thread_id_w"};
+     for (size_t i = 0; i < sizeof(ids) / sizeof(string); i++) {
+        if (ends_with(name, ids[i])) { return i; }
+     }
+     return -1;
 }
 }
 
@@ -131,6 +137,31 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Mod *op) {
     visit_binop(op->type, op->a, op->b, "%");
 }
 
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
+    Type value_type = op->value.type();
+    // If both types are represented by the same GLSL type, no explicit cast
+    // is necessary.
+    if (map_type(op->type) == map_type(value_type)) {
+        Expr value = op->value;
+        if (value_type.code == Type::Float) {
+            // float->int conversions may need explicit truncation if the
+            // integer types is embedded into floats.  (Note: overflows are
+            // considered undefined behavior, so we do nothing about values
+            // that are out of range of the target type.)
+            if (op->type.code == Type::UInt) {
+                value = simplify(floor(value));
+            } else if (op->type.code == Type::Int) {
+                value = simplify(trunc(value));
+            }
+        }
+        value.accept(this);
+        return;
+    } else {
+        Type target_type = map_type(op->type);
+        print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
+    }
+}
+
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
@@ -140,15 +171,16 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
         //
         //  Need to extract workgroup size.
         //
-        if (is_thread_loop(loop->name)) {
+        int index = thread_loop_workgroup_index(loop->name);
+        if (index >= 0) {
             const IntImm *int_limit = loop->extent.as<IntImm>();
             user_assert(int_limit != NULL) << "For OpenGLCompute workgroup size must be an constant integer.\n";
             int new_workgroup_size = int_limit->value;
-            user_assert(workgroup_size == 0 || workgroup_size == new_workgroup_size) <<
+            user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_workgroup_size) <<
                 "OpenGLCompute requires all gpu kernels have same workgroup size, "
                 "but two different ones were encountered " << workgroup_size << " and " << new_workgroup_size << ".\n";
-            workgroup_size = new_workgroup_size;
-            debug(4) << "Workgroup size is " << workgroup_size << "\n";
+            workgroup_size[index] = new_workgroup_size;
+            debug(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
         }
 
         do_indent();
@@ -177,7 +209,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     }
 
     rhs << ")";
-    print_assignment(op->type, rhs.str());
+    print_assignment(op->base.type(), rhs.str());
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
@@ -187,35 +219,38 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
     print_assignment(op->type.vector_of(op->width), oss.str());
 }
 
-namespace {
+// namespace {
 
-Expr strip_mul_by_4(Expr base) {
-    const Mul *mul = base.as<Mul>();
-    const IntImm *factor = mul->b.as<IntImm>();
-    Expr index = mul->a;
-    if (factor == NULL) {
-        factor = mul->a.as<IntImm>();
-        index = mul->b;
-    }
-    user_assert(factor != NULL && factor->value == 4) <<
-        "Only fully vectorized access is supported by OpenGLCompute(base is not multiple of 4)";
+// Expr strip_mul_by_4(Expr base) {
+//     const Mul *mul = base.as<Mul>();
+//     user_assert(mul != NULL) << "OpenGLCompute expects multipication for the index. Got " << base << "instead.\n";
+//     const IntImm *factor = mul->b.as<IntImm>();
+//     Expr index = mul->a;
+//     if (factor == NULL) {
+//         factor = mul->a.as<IntImm>();
+//         index = mul->b;
+//     }
+//     user_assert(factor != NULL && factor->value == 4) <<
+//         "Only fully vectorized access is supported by OpenGLCompute(base is not multiple of 4)";
 
-    return index;
-}
-}
+//     return index;
+// }
+// }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
+    string id_index;
     const Ramp *ramp = op->index.as<Ramp>();
-    if (!ramp) {
-        user_error << "Only vectorized images are supported by OpenGLCompute.\n";
-        return;
-    }
-    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-    user_assert(stride && stride->value == 1 && ramp->width == 4) <<
-        "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
+    if (ramp) {
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+        user_assert(stride && stride->value == 1 && ramp->width == 4) <<
+            "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
-    Expr quarter_index = strip_mul_by_4(ramp->base);
-    string id_index = print_expr(quarter_index);
+        // Expr quarter_index = strip_mul_by_4(ramp->base);
+        // id_index = print_expr(quarter_index);
+        id_index = print_expr(Div::make(ramp->base, IntImm::make(4)));
+    } else {
+        id_index = print_expr(op->index);
+    }
 
     ostringstream oss;
     oss << print_name(op->name) << ".data[" << id_index << "]";
@@ -223,17 +258,19 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
+    string id_index;
     const Ramp *ramp = op->index.as<Ramp>();
-    if (!ramp) {
-        user_error << "Only vectorized images are supported by OpenGLCompute.\n";
-        return;
-    }
-    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-    user_assert(stride && stride->value == 1 && ramp->width == 4) <<
-        "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
+    if (ramp) {
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+        user_assert(stride && stride->value == 1 && ramp->width == 4) <<
+            "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
-    Expr quarter_index = strip_mul_by_4(ramp->base);
-    string id_index = print_expr(quarter_index);
+        // Expr quarter_index = strip_mul_by_4(ramp->base);
+        // id_index = print_expr(quarter_index);
+        id_index = print_expr(Div::make(ramp->base, IntImm::make(4)));
+    } else {
+        id_index = print_expr(op->index);
+    }
 
     string id_value = print_expr(op->value);
 
@@ -282,7 +319,10 @@ void main()
     stream << "}\n";
 
     indent += 2;
-    stream << "layout(local_size_x = " << workgroup_size << ") in;\n";
+    stream << "layout(local_size_x = " << workgroup_size[0];
+    if (workgroup_size[1] > 1) { stream << ", local_size_y = " << workgroup_size[1]; }
+    if (workgroup_size[2] > 1) { stream << ", local_size_z = " << workgroup_size[2]; }
+    stream << ") in;\n";
 }
 
 void CodeGen_OpenGLCompute_Dev::init_module() {
@@ -296,7 +336,9 @@ float float_from_bits(int x) { return intBitsToFloat(x); }
 )EOF";
 
     cur_kernel_name = "";
-    glc.workgroup_size = 0;
+    glc.workgroup_size[0] = 0;
+    glc.workgroup_size[1] = 0;
+    glc.workgroup_size[2] = 0;
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
