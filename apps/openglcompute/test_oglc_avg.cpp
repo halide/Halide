@@ -3,29 +3,58 @@
 using namespace Halide;
 
 const int CHANNELS = 4;
-int main(int argc, char** argv) {
-    ImageParam input(Float(32), 2, "input");
-    input.set_bounds(1, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(1, 1);
 
-    Func clamped = BoundaryConditions::repeat_edge(input);
+void blur(std::string suffix, ImageParam input) {
+    input.set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
 
-    Var x("x"), c("c");
-    Func f("f");
-    f(x, c) = (clamped(x - 1, c) + clamped(x, c) + clamped(x + 1, c)) / 3.0f;
+    Var x("x"), y("y"), c("c");
 
-    f.output_buffer().set_bounds(1, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(1, 1);
+    Func clamped("clamped");
+    clamped(x, y, c) = input(clamp(x, input.left(), input.right()),
+                             clamp(y, input.top(), input.bottom()), c);
+
+
+    Func blur_x("blur_x");
+    blur_x(x, y, c) = (clamped(x, y, c) +
+        clamped(x + 1, y, c) +
+        clamped(x + 2, y, c)) / 3;
+
+    Func result("result");
+    result(x, y, c) = (blur_x(x, y, c) +
+        blur_x(x, y + 1, c) +
+        blur_x(x, y + 2, c)) / 3;
+
+    result.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
 
     Target target = get_target_from_environment();
-    f.bound(c, 0, CHANNELS)
-     .reorder_storage(c, x)
-     .reorder(c, x)
-     .vectorize(c);
+    result.bound(c, 0, CHANNELS)
+          .reorder_storage(c, x, y)
+          .reorder(c, x, y);
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, 1024);
+        result.vectorize(c, 4)
+              .gpu_tile(x, y, 64, 64);
     } else {
-        // f.parallel(x, 64);
+        Var yi("yi");
+        result
+            .unroll(c)
+            .split(y, y, yi, 32)
+            .parallel(y)
+            .vectorize(x, 4);
+        blur_x.store_at(result, y)
+            .compute_at(result, yi)
+            .reorder(c, x, y)
+            .unroll(c)
+            .vectorize(x, 4);
     }
 
     std::string filename("avg_filter");
-    f.compile_to_file(filename + (argc > 1? argv[1]: ""), {input});
+    result.compile_to_file(filename + suffix, {input});
+}
+
+int main(int argc, char** argv) {
+    ImageParam input_uint32(UInt(32), 3, "input");
+    blur(std::string("_uint32t") + (argc > 1? argv[1]: ""), input_uint32);
+
+    ImageParam input_float(Float(32), 3, "input");
+    blur(std::string("_float") + (argc > 1? argv[1]: ""), input_float);
 }

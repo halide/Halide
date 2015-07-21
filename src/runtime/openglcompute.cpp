@@ -465,10 +465,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         }
         i++;
     }
-    // TODO(aam): support multi-dimensional dispatches
-    // TODO(aam): why does this value make sense?
-    const int workgroups_x = 1024;
-    global_state.DispatchCompute(workgroups_x, 1, 1);
+    global_state.DispatchCompute(blocksX, blocksY, blocksZ);
     if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run DispatchCompute")) { return 1; }
     global_state.MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
     if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run MemoryBarrier")) { return 1; }

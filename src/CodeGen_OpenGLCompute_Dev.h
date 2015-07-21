@@ -59,12 +59,12 @@ protected:
         void visit(const Broadcast *op);
         void visit(const Load *op);
         void visit(const Store *op);
-        // void visit(const Cast *op);
+        void visit(const Cast *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
 
     public:
-        int workgroup_size;
+        int workgroup_size[3];
     };
 
     std::ostringstream src_stream;
