@@ -490,10 +490,6 @@ if (TARGET_OPENGL)
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
 endif()
 
-if (TARGET_OPENGLCOMPUTE)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGLCOMPUTE")
-endif()
-
 if (TARGET_MIPS)
   target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
   list(APPEND LLVM_COMPONENTS mips)

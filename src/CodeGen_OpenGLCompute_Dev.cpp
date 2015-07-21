@@ -36,10 +36,6 @@ Type map_type(const Type &type) {
             result = Bool();
         } else if (type == Int(32) || type == UInt(32)) {
             // Keep unchanged
-        } else if (type.bits <= 16) {
-            // Embed all other ints in a GLSL float. Probably not actually
-            // valid for uint16 on systems with low float precision.
-            result = Float(32);
         } else {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
@@ -141,22 +137,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
     // is necessary.
-    if (map_type(op->type) == map_type(value_type)) {
-        Expr value = op->value;
-        if (value_type.code == Type::Float) {
-            // float->int conversions may need explicit truncation if the
-            // integer types is embedded into floats.  (Note: overflows are
-            // considered undefined behavior, so we do nothing about values
-            // that are out of range of the target type.)
-            if (op->type.code == Type::UInt) {
-                value = simplify(floor(value));
-            } else if (op->type.code == Type::Int) {
-                value = simplify(trunc(value));
-            }
-        }
-        value.accept(this);
-        return;
-    } else {
+    if (map_type(op->type) != map_type(value_type)) {
         Type target_type = map_type(op->type);
         print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
@@ -174,11 +155,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
         int index = thread_loop_workgroup_index(loop->name);
         if (index >= 0) {
             const IntImm *int_limit = loop->extent.as<IntImm>();
-            user_assert(int_limit != NULL) << "For OpenGLCompute workgroup size must be an constant integer.\n";
+            user_assert(int_limit != NULL) << "For OpenGLCompute workgroup size must be a constant integer.\n";
             int new_workgroup_size = int_limit->value;
             user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_workgroup_size) <<
                 "OpenGLCompute requires all gpu kernels have same workgroup size, "
-                "but two different ones were encountered " << workgroup_size << " and " << new_workgroup_size << ".\n";
+                "but two different ones were encountered " << workgroup_size << " and " << new_workgroup_size <<
+                " in dimension " << index << ".\n";
             workgroup_size[index] = new_workgroup_size;
             debug(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
         }
@@ -219,24 +201,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
     print_assignment(op->type.vector_of(op->width), oss.str());
 }
 
-// namespace {
-
-// Expr strip_mul_by_4(Expr base) {
-//     const Mul *mul = base.as<Mul>();
-//     user_assert(mul != NULL) << "OpenGLCompute expects multipication for the index. Got " << base << "instead.\n";
-//     const IntImm *factor = mul->b.as<IntImm>();
-//     Expr index = mul->a;
-//     if (factor == NULL) {
-//         factor = mul->a.as<IntImm>();
-//         index = mul->b;
-//     }
-//     user_assert(factor != NULL && factor->value == 4) <<
-//         "Only fully vectorized access is supported by OpenGLCompute(base is not multiple of 4)";
-
-//     return index;
-// }
-// }
-
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     string id_index;
     const Ramp *ramp = op->index.as<Ramp>();
@@ -245,9 +209,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
         user_assert(stride && stride->value == 1 && ramp->width == 4) <<
             "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
-        // Expr quarter_index = strip_mul_by_4(ramp->base);
-        // id_index = print_expr(quarter_index);
-        id_index = print_expr(Div::make(ramp->base, IntImm::make(4)));
+        // Buffer type is 4-elements wide, that's why we divide by ramp->width.
+        id_index = print_expr(Div::make(ramp->base, IntImm::make(ramp->width)));
     } else {
         id_index = print_expr(op->index);
     }
@@ -265,9 +228,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
         user_assert(stride && stride->value == 1 && ramp->width == 4) <<
             "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
-        // Expr quarter_index = strip_mul_by_4(ramp->base);
-        // id_index = print_expr(quarter_index);
-        id_index = print_expr(Div::make(ramp->base, IntImm::make(4)));
+        // Buffer type is 4-elements wide, that's why we divide by ramp->width.
+        id_index = print_expr(Div::make(ramp->base, IntImm::make(ramp->width)));
     } else {
         id_index = print_expr(op->index);
     }
