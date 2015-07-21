@@ -10,19 +10,17 @@ void blur(std::string suffix, ImageParam input) {
     Var x("x"), y("y"), c("c");
 
     Func clamped("clamped");
-    clamped(x, y, c) = input(clamp(x, input.left(), input.right()),
-                             clamp(y, input.top(), input.bottom()), c);
-
+    clamped = BoundaryConditions::repeat_edge(input);
 
     Func blur_x("blur_x");
-    blur_x(x, y, c) = (clamped(x, y, c) +
-        clamped(x + 1, y, c) +
-        clamped(x + 2, y, c)) / 3;
+    blur_x(x, y, c) = (clamped(x - 1, y, c) +
+                       clamped(x, y, c) +
+                       clamped(x + 1, y, c)) / 3;
 
     Func result("result");
-    result(x, y, c) = (blur_x(x, y, c) +
-        blur_x(x, y + 1, c) +
-        blur_x(x, y + 2, c)) / 3;
+    result(x, y, c) = (blur_x(x, y - 1, c) +
+                       blur_x(x, y, c) +
+                       blur_x(x, y + 1, c)) / 3;
 
     result.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
 

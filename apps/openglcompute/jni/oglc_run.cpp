@@ -14,10 +14,10 @@
 extern "C" int halide_copy_to_host(void *, buffer_t *);
 extern "C" int halide_device_sync(void *, buffer_t *);
 
-typedef int (filter_t) (buffer_t *, buffer_t *);
+typedef int (*filter_t) (buffer_t *, buffer_t *);
 
 struct timing {
-    filter_t *filter;
+    filter_t filter;
     buffer_t *bt_input;
     buffer_t *bt_output;
     double worst_t = 0;
