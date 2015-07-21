@@ -124,11 +124,11 @@ void IRPrinter::test() {
         "  out[x] = (buf((x % 3)) + 1)\n"
         "}\n";
 
-    // if (source.str() != correct_source) {
-    //     internal_error << "Correct output:\n" << correct_source
-    //                    << "Actual output:\n" << source.str();
-    //
-    // }
+    if (source.str() != correct_source) {
+        internal_error << "Correct output:\n" << correct_source
+                       << "Actual output:\n" << source.str();
+
+    }
     std::cout << "IRPrinter test passed\n";
 }
 
@@ -428,31 +428,21 @@ void IRPrinter::visit(const Call *op) {
     }
 
     stream << op->name << "(";
-    indent += 2;
-     for (size_t i = 0; i < op->args.size(); i++) {
-        stream << "\n";
-        do_indent();
-         print(op->args[i]);
-         if (i < op->args.size() - 1) {
-             stream << ", ";
-         }
-     }
-    indent -= 2;
-    stream << "\n";
-    do_indent();
+    for (size_t i = 0; i < op->args.size(); i++) {
+        print(op->args[i]);
+        if (i < op->args.size() - 1) {
+            stream << ", ";
+        }
+    }
     stream << ")";
 }
 
 void IRPrinter::visit(const Let *op) {
     stream << "(let " << op->name << " = ";
     print(op->value);
-    stream << " in";
-    stream << "\n";
-    indent += 2;
-    do_indent();
+    stream << " in ";
     print(op->body);
     stream << ")";
-    indent -= 2;
 }
 
 void IRPrinter::visit(const LetStmt *op) {
