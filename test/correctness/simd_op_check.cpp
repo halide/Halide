@@ -40,7 +40,7 @@ void check(const char *op, int vector_width, Expr e) {
     }
     Func f(name);
     f(x, y) = e;
-    f.vectorize(x, vector_width);
+    f.bound(x, f.output_buffer().min(0), vector_width*1000).vectorize(x, vector_width);
 
     vector<Argument> arg_types;
     arg_types.push_back(Argument("in_f32", Argument::InputBuffer, Int(1), 1));
@@ -69,7 +69,7 @@ void do_job(job &j) {
 
     char cmd[1024];
     snprintf(cmd, 1024,
-             "sed -n '/for /,/end for test_/p' < %s | "
+             "sed -n '/for .*y/,/end for test_.*.x.x/p' < %s | "
              "sed 's/@.*//' > %s.s && "
              "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null",
              module, module, op, module);
@@ -576,61 +576,62 @@ void check_neon_all() {
     // to peephole match any with vector, so we just try 64-bits, 128
     // bits, 192 bits, and 256 bits for everything.
 
+    bool arm32 = (target.bits == 32);
+
     for (int w = 1; w <= 4; w++) {
         // VABA     I       -       Absolute Difference and Accumulate
-        check("vaba.s8", 8*w, i8_1 + absd(i8_2, i8_3));
-        check("vaba.u8", 8*w, u8_1 + absd(u8_2, u8_3));
-        check("vaba.s16", 4*w, i16_1 + absd(i16_2, i16_3));
-        check("vaba.u16", 4*w, u16_1 + absd(u16_2, u16_3));
-        check("vaba.s32", 2*w, i32_1 + absd(i32_2, i32_3));
-        check("vaba.u32", 2*w, u32_1 + absd(u32_2, u32_3));
+        check(arm32 ? "vaba.s8"  : "saba", 8*w, i8_1 + absd(i8_2, i8_3));
+        check(arm32 ? "vaba.u8"  : "uaba", 8*w, u8_1 + absd(u8_2, u8_3));
+        check(arm32 ? "vaba.s16" : "saba", 4*w, i16_1 + absd(i16_2, i16_3));
+        check(arm32 ? "vaba.u16" : "uaba", 4*w, u16_1 + absd(u16_2, u16_3));
+        check(arm32 ? "vaba.s32" : "saba", 2*w, i32_1 + absd(i32_2, i32_3));
+        check(arm32 ? "vaba.u32" : "uaba", 2*w, u32_1 + absd(u32_2, u32_3));
 
         // VABAL    I       -       Absolute Difference and Accumulate Long
-        check("vabal.s8", 8*w, i16_1 + absd(i8_2, i8_3));
-        check("vabal.u8", 8*w, u16_1 + absd(u8_2, u8_3));
-        check("vabal.s16", 4*w, i32_1 + absd(i16_2, i16_3));
-        check("vabal.u16", 4*w, u32_1 + absd(u16_2, u16_3));
-        check("vabal.s32", 2*w, i64_1 + absd(i32_2, i32_3));
-        check("vabal.u32", 2*w, u64_1 + absd(u32_2, u32_3));
+        check(arm32 ? "vabal.s8"  : "sabal", 8*w, i16_1 + absd(i8_2, i8_3));
+        check(arm32 ? "vabal.u8"  : "uabal", 8*w, u16_1 + absd(u8_2, u8_3));
+        check(arm32 ? "vabal.s16" : "sabal", 4*w, i32_1 + absd(i16_2, i16_3));
+        check(arm32 ? "vabal.u16" : "uabal", 4*w, u32_1 + absd(u16_2, u16_3));
+        check(arm32 ? "vabal.s32" : "sabal", 2*w, i64_1 + absd(i32_2, i32_3));
+        check(arm32 ? "vabal.u32" : "uabal", 2*w, u64_1 + absd(u32_2, u32_3));
 
         // VABD     I, F    -       Absolute Difference
-        check("vabd.s8", 8*w, absd(i8_2, i8_3));
-        check("vabd.u8", 8*w, absd(u8_2, u8_3));
-        check("vabd.s16", 4*w, absd(i16_2, i16_3));
-        check("vabd.u16", 4*w, absd(u16_2, u16_3));
-        check("vabd.s32", 2*w, absd(i32_2, i32_3));
-        check("vabd.u32", 2*w, absd(u32_2, u32_3));
+        check(arm32 ? "vabd.s8"  : "sabd", 8*w, absd(i8_2, i8_3));
+        check(arm32 ? "vabd.u8"  : "uabd", 8*w, absd(u8_2, u8_3));
+        check(arm32 ? "vabd.s16" : "sabd", 4*w, absd(i16_2, i16_3));
+        check(arm32 ? "vabd.u16" : "uabd", 4*w, absd(u16_2, u16_3));
+        check(arm32 ? "vabd.s32" : "sabd", 2*w, absd(i32_2, i32_3));
+        check(arm32 ? "vabd.u32" : "uabd", 2*w, absd(u32_2, u32_3));
 
         // Via widening, taking abs, then narrowing
-        check("vabd.s8", 8*w, u8(abs(i16(i8_2) - i8_3)));
-        check("vabd.u8", 8*w, u8(abs(i16(u8_2) - u8_3)));
-        check("vabd.s16", 4*w, u16(abs(i32(i16_2) - i16_3)));
-        check("vabd.u16", 4*w, u16(abs(i32(u16_2) - u16_3)));
-        check("vabd.s32", 2*w, u32(abs(i64(i32_2) - i32_3)));
-        check("vabd.u32", 2*w, u32(abs(i64(u32_2) - u32_3)));
+        check(arm32 ? "vabd.s8"  : "sabd", 8*w, u8(abs(i16(i8_2) - i8_3)));
+        check(arm32 ? "vabd.u8"  : "uabd", 8*w, u8(abs(i16(u8_2) - u8_3)));
+        check(arm32 ? "vabd.s16" : "sabd", 4*w, u16(abs(i32(i16_2) - i16_3)));
+        check(arm32 ? "vabd.u16" : "uabd", 4*w, u16(abs(i32(u16_2) - u16_3)));
+        check(arm32 ? "vabd.s32" : "sabd", 2*w, u32(abs(i64(i32_2) - i32_3)));
+        check(arm32 ? "vabd.u32" : "uabd", 2*w, u32(abs(i64(u32_2) - u32_3)));
 
         // VABDL    I       -       Absolute Difference Long
-
-        check("vabdl.s8", 8*w, i16(absd(i8_2, i8_3)));
-        check("vabdl.u8", 8*w, u16(absd(u8_2, u8_3)));
-        check("vabdl.s16", 4*w, i32(absd(i16_2, i16_3)));
-        check("vabdl.u16", 4*w, u32(absd(u16_2, u16_3)));
-        check("vabdl.s32", 2*w, i64(absd(i32_2, i32_3)));
-        check("vabdl.u32", 2*w, u64(absd(u32_2, u32_3)));
+        check(arm32 ? "vabdl.s8"  : "sabdl", 8*w, i16(absd(i8_2, i8_3)));
+        check(arm32 ? "vabdl.u8"  : "uabdl", 8*w, u16(absd(u8_2, u8_3)));
+        check(arm32 ? "vabdl.s16" : "sabdl", 4*w, i32(absd(i16_2, i16_3)));
+        check(arm32 ? "vabdl.u16" : "uabdl", 4*w, u32(absd(u16_2, u16_3)));
+        check(arm32 ? "vabdl.s32" : "sabdl", 2*w, i64(absd(i32_2, i32_3)));
+        check(arm32 ? "vabdl.u32" : "uabdl", 2*w, u64(absd(u32_2, u32_3)));
 
         // Via widening then taking an abs
-        check("vabdl.s8", 8*w, abs(i16(i8_2) - i16(i8_3)));
-        check("vabdl.u8", 8*w, abs(i16(u8_2) - i16(u8_3)));
-        check("vabdl.s16", 4*w, abs(i32(i16_2) - i32(i16_3)));
-        check("vabdl.u16", 4*w, abs(i32(u16_2) - i32(u16_3)));
-        check("vabdl.s32", 2*w, abs(i64(i32_2) - i64(i32_3)));
-        check("vabdl.u32", 2*w, abs(i64(u32_2) - i64(u32_3)));
+        check(arm32 ? "vabdl.s8"  : "sabdl", 8*w, abs(i16(i8_2) - i16(i8_3)));
+        check(arm32 ? "vabdl.u8"  : "uabdl", 8*w, abs(i16(u8_2) - i16(u8_3)));
+        check(arm32 ? "vabdl.s16" : "sabdl", 4*w, abs(i32(i16_2) - i32(i16_3)));
+        check(arm32 ? "vabdl.u16" : "uabdl", 4*w, abs(i32(u16_2) - i32(u16_3)));
+        check(arm32 ? "vabdl.s32" : "sabdl", 2*w, abs(i64(i32_2) - i64(i32_3)));
+        check(arm32 ? "vabdl.u32" : "uabdl", 2*w, abs(i64(u32_2) - i64(u32_3)));
 
         // VABS     I, F    F, D    Absolute
-        check("vabs.f32", 2*w, abs(f32_1));
-        check("vabs.s32", 2*w, abs(i32_1));
-        check("vabs.s16", 4*w, abs(i16_1));
-        check("vabs.s8", 8*w, abs(i8_1));
+        check(arm32 ? "vabs.f32" : "fabs", 2*w, abs(f32_1));
+        check(arm32 ? "vabs.s32" : "abs", 2*w, abs(i32_1));
+        check(arm32 ? "vabs.s16" : "abs", 4*w, abs(i16_1));
+        check(arm32 ? "vabs.s8"  : "abs", 8*w, abs(i8_1));
 
         // VACGE    F       -       Absolute Compare Greater Than or Equal
         // VACGT    F       -       Absolute Compare Greater Than
@@ -638,37 +639,37 @@ void check_neon_all() {
         // VACLT    F       -       Absolute Compare Less Than
 
         // VADD     I, F    F, D    Add
-        check("vadd.i8", 8*w, i8_1 + i8_2);
-        check("vadd.i8", 8*w, u8_1 + u8_2);
-        check("vadd.i16", 4*w, i16_1 + i16_2);
-        check("vadd.i16", 4*w, u16_1 + u16_2);
-        check("vadd.i32", 2*w, i32_1 + i32_2);
-        check("vadd.i32", 2*w, u32_1 + u32_2);
-        check("vadd.f32", 2*w, f32_1 + f32_2);
-        check("vadd.i64", 2*w, i64_1 + i64_2);
-        check("vadd.i64", 2*w, u64_1 + u64_2);
+        check(arm32 ? "vadd.i8"  : "add", 8*w, i8_1 + i8_2);
+        check(arm32 ? "vadd.i8"  : "add", 8*w, u8_1 + u8_2);
+        check(arm32 ? "vadd.i16" : "add", 4*w, i16_1 + i16_2);
+        check(arm32 ? "vadd.i16" : "add", 4*w, u16_1 + u16_2);
+        check(arm32 ? "vadd.i32" : "add", 2*w, i32_1 + i32_2);
+        check(arm32 ? "vadd.i32" : "add", 2*w, u32_1 + u32_2);
+        check(arm32 ? "vadd.f32" : "fadd", 2*w, f32_1 + f32_2);
+        check(arm32 ? "vadd.i64" : "add", 2*w, i64_1 + i64_2);
+        check(arm32 ? "vadd.i64" : "add", 2*w, u64_1 + u64_2);
 
         // VADDHN   I       -       Add and Narrow Returning High Half
-        check("vaddhn.i16", 8*w, i8((i16_1 + i16_2)/256));
-        check("vaddhn.i16", 8*w, u8((u16_1 + u16_2)/256));
-        check("vaddhn.i32", 4*w, i16((i32_1 + i32_2)/65536));
-        check("vaddhn.i32", 4*w, u16((u32_1 + u32_2)/65536));
+        check(arm32 ? "vaddhn.i16" : "addhn", 8*w, i8((i16_1 + i16_2)/256));
+        check(arm32 ? "vaddhn.i16" : "addhn", 8*w, u8((u16_1 + u16_2)/256));
+        check(arm32 ? "vaddhn.i32" : "addhn", 4*w, i16((i32_1 + i32_2)/65536));
+        check(arm32 ? "vaddhn.i32" : "addhn", 4*w, u16((u32_1 + u32_2)/65536));
 
         // VADDL    I       -       Add Long
-        check("vaddl.s8", 8*w, i16(i8_1) + i16(i8_2));
-        check("vaddl.u8", 8*w, u16(u8_1) + u16(u8_2));
-        check("vaddl.s16", 4*w, i32(i16_1) + i32(i16_2));
-        check("vaddl.u16", 4*w, u32(u16_1) + u32(u16_2));
-        check("vaddl.s32", 2*w, i64(i32_1) + i64(i32_2));
-        check("vaddl.u32", 2*w, u64(u32_1) + u64(u32_2));
+        check(arm32 ? "vaddl.s8"  : "saddl", 8*w, i16(i8_1) + i16(i8_2));
+        check(arm32 ? "vaddl.u8"  : "uaddl", 8*w, u16(u8_1) + u16(u8_2));
+        check(arm32 ? "vaddl.s16" : "saddl", 4*w, i32(i16_1) + i32(i16_2));
+        check(arm32 ? "vaddl.u16" : "uaddl", 4*w, u32(u16_1) + u32(u16_2));
+        check(arm32 ? "vaddl.s32" : "saddl", 2*w, i64(i32_1) + i64(i32_2));
+        check(arm32 ? "vaddl.u32" : "uaddl", 2*w, u64(u32_1) + u64(u32_2));
 
         // VADDW    I       -       Add Wide
-        check("vaddw.s8", 8*w, i8_1 + i16_1);
-        check("vaddw.u8", 8*w, u8_1 + u16_1);
-        check("vaddw.s16", 4*w, i16_1 + i32_1);
-        check("vaddw.u16", 4*w, u16_1 + u32_1);
-        check("vaddw.s32", 2*w, i32_1 + i64_1);
-        check("vaddw.u32", 2*w, u32_1 + u64_1);
+        check(arm32 ? "vaddw.s8"  : "saddw", 8*w, i8_1 + i16_1);
+        check(arm32 ? "vaddw.u8"  : "uaddw", 8*w, u8_1 + u16_1);
+        check(arm32 ? "vaddw.s16" : "saddw", 4*w, i16_1 + i32_1);
+        check(arm32 ? "vaddw.u16" : "uaddw", 4*w, u16_1 + u32_1);
+        check(arm32 ? "vaddw.s32" : "saddw", 2*w, i32_1 + i64_1);
+        check(arm32 ? "vaddw.u32" : "uaddw", 2*w, u32_1 + u64_1);
 
         // VAND     X       -       Bitwise AND
         // Not implemented in front-end yet
@@ -681,16 +682,16 @@ void check_neon_all() {
         // skip these ones
 
         // VBSL     X       -       Bitwise Select
-        check("vbsl", 2*w, select(f32_1 > f32_2, 1.0f, 2.0f));
+        check(arm32 ? "vbsl" : "bsl", 2*w, select(f32_1 > f32_2, 1.0f, 2.0f));
 
         // VCEQ     I, F    -       Compare Equal
-        check("vceq.i8", 8*w, select(i8_1 == i8_2, i8(1), i8(2)));
-        check("vceq.i8", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
-        check("vceq.i16", 4*w, select(i16_1 == i16_2, i16(1), i16(2)));
-        check("vceq.i16", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
-        check("vceq.i32", 2*w, select(i32_1 == i32_2, i32(1), i32(2)));
-        check("vceq.i32", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
-        check("vceq.f32", 2*w, select(f32_1 == f32_2, 1.0f, 2.0f));
+        check(arm32 ? "vceq.i8"  : "cmeq", 8*w, select(i8_1 == i8_2, i8(1), i8(2)));
+        check(arm32 ? "vceq.i8"  : "cmeq", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
+        check(arm32 ? "vceq.i16" : "cmeq", 4*w, select(i16_1 == i16_2, i16(1), i16(2)));
+        check(arm32 ? "vceq.i16" : "cmeq", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
+        check(arm32 ? "vceq.i32" : "cmeq", 2*w, select(i32_1 == i32_2, i32(1), i32(2)));
+        check(arm32 ? "vceq.i32" : "cmeq", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
+        check(arm32 ? "vceq.f32" : "fcmeq", 2*w, select(f32_1 == f32_2, 1.0f, 2.0f));
 
 
         // VCGE     I, F    -       Compare Greater Than or Equal
@@ -712,13 +713,13 @@ void check_neon_all() {
         */
 
         // VCGT     I, F    -       Compare Greater Than
-        check("vcgt.s8", 8*w, select(i8_1 > i8_2, i8(1), i8(2)));
-        check("vcgt.u8", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
-        check("vcgt.s16", 4*w, select(i16_1 > i16_2, i16(1), i16(2)));
-        check("vcgt.u16", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
-        check("vcgt.s32", 2*w, select(i32_1 > i32_2, i32(1), i32(2)));
-        check("vcgt.u32", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
-        check("vcgt.f32", 2*w, select(f32_1 > f32_2, 1.0f, 2.0f));
+        check(arm32 ? "vcgt.s8"  : "cmgt", 8*w, select(i8_1 > i8_2, i8(1), i8(2)));
+        check(arm32 ? "vcgt.u8"  : "cmhi", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
+        check(arm32 ? "vcgt.s16" : "cmgt", 4*w, select(i16_1 > i16_2, i16(1), i16(2)));
+        check(arm32 ? "vcgt.u16" : "cmhi", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
+        check(arm32 ? "vcgt.s32" : "cmgt", 2*w, select(i32_1 > i32_2, i32(1), i32(2)));
+        check(arm32 ? "vcgt.u32" : "cmhi", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
+        check(arm32 ? "vcgt.f32" : "fcmgt", 2*w, select(f32_1 > f32_2, 1.0f, 2.0f));
 
         // VCLS     I       -       Count Leading Sign Bits
         // VCLZ     I       -       Count Leading Zeros
@@ -727,25 +728,25 @@ void check_neon_all() {
         // We skip these ones
 
         // VCVT     I, F, H I, F, D, H      Convert Between Floating-Point and 32-bit Integer Types
-        check("vcvt.f32.u32", 2*w, f32(u32_1));
-        check("vcvt.f32.s32", 2*w, f32(i32_1));
-        check("vcvt.u32.f32", 2*w, u32(f32_1));
-        check("vcvt.s32.f32", 2*w, i32(f32_1));
+        check(arm32 ? "vcvt.f32.u32" : "ucvtf", 2*w, f32(u32_1));
+        check(arm32 ? "vcvt.f32.s32" : "scvtf", 2*w, f32(i32_1));
+        check(arm32 ? "vcvt.u32.f32" : "fcvtzu", 2*w, u32(f32_1));
+        check(arm32 ? "vcvt.s32.f32" : "fcvtzs", 2*w, i32(f32_1));
         // skip the fixed point conversions for now
 
         // VDIV     -       F, D    Divide
-        // This doesn't actually get vectorized. Not sure cortex processors can do vectorized division.
-        check("vdiv.f32", 2*w, f32_1/f32_2);
-        check("vdiv.f64", 2*w, f64_1/f64_2);
+        // This doesn't actually get vectorized in 32-bit. Not sure cortex processors can do vectorized division.
+        check(arm32 ? "vdiv.f32" : "fdiv", 2*w, f32_1/f32_2);
+        check(arm32 ? "vdiv.f64" : "fdiv", 2*w, f64_1/f64_2);
 
         // VDUP     X       -       Duplicate
-        check("vdup.8", 16*w, i8(y));
-        check("vdup.8", 16*w, u8(y));
-        check("vdup.16", 8*w, i16(y));
-        check("vdup.16", 8*w, u16(y));
-        check("vdup.32", 4*w, i32(y));
-        check("vdup.32", 4*w, u32(y));
-        check("vdup.32", 4*w, f32(y));
+        check(arm32 ? "vdup.8"  : "dup", 16*w, i8(y));
+        check(arm32 ? "vdup.8"  : "dup", 16*w, u8(y));
+        check(arm32 ? "vdup.16" : "dup", 8*w, i16(y));
+        check(arm32 ? "vdup.16" : "dup", 8*w, u16(y));
+        check(arm32 ? "vdup.32" : "dup", 4*w, i32(y));
+        check(arm32 ? "vdup.32" : "dup", 4*w, u32(y));
+        check(arm32 ? "vdup.32" : "dup", 4*w, f32(y));
 
         // VEOR     X       -       Bitwise Exclusive OR
         // check("veor", 4, bool1 ^ bool2);
@@ -759,199 +760,194 @@ void check_neon_all() {
         */
 
         // VHADD    I       -       Halving Add
-        check("vhadd.s8", 8*w, i8((i16(i8_1) + i16(i8_2))/2));
-        check("vhadd.u8", 8*w, u8((u16(u8_1) + u16(u8_2))/2));
-        check("vhadd.s16", 4*w, i16((i32(i16_1) + i32(i16_2))/2));
-        check("vhadd.u16", 4*w, u16((u32(u16_1) + u32(u16_2))/2));
-        check("vhadd.s32", 2*w, i32((i64(i32_1) + i64(i32_2))/2));
-        check("vhadd.u32", 2*w, u32((u64(u32_1) + u64(u32_2))/2));
+        check(arm32 ? "vhadd.s8"  : "shadd", 8*w, i8((i16(i8_1) + i16(i8_2))/2));
+        check(arm32 ? "vhadd.u8"  : "uhadd", 8*w, u8((u16(u8_1) + u16(u8_2))/2));
+        check(arm32 ? "vhadd.s16" : "shadd", 4*w, i16((i32(i16_1) + i32(i16_2))/2));
+        check(arm32 ? "vhadd.u16" : "uhadd", 4*w, u16((u32(u16_1) + u32(u16_2))/2));
+        check(arm32 ? "vhadd.s32" : "shadd", 2*w, i32((i64(i32_1) + i64(i32_2))/2));
+        check(arm32 ? "vhadd.u32" : "uhadd", 2*w, u32((u64(u32_1) + u64(u32_2))/2));
 
         // Halide doesn't define overflow behavior for i32 so we
         // can use vhadd instruction. We can't use it for unsigned u8,i16,u16,u32.
-        check("vhadd.s32", 2*w, (i32_1 + i32_2)/2);
+        check(arm32 ? "vhadd.s32" : "shadd", 2*w, (i32_1 + i32_2)/2);
 
         // VHSUB    I       -       Halving Subtract
-        check("vhsub.s8", 8*w, i8((i16(i8_1) - i16(i8_2))/2));
-        check("vhsub.u8", 8*w, u8((u16(u8_1) - u16(u8_2))/2));
-        check("vhsub.s16", 4*w, i16((i32(i16_1) - i32(i16_2))/2));
-        check("vhsub.u16", 4*w, u16((u32(u16_1) - u32(u16_2))/2));
-        check("vhsub.s32", 2*w, i32((i64(i32_1) - i64(i32_2))/2));
-        check("vhsub.u32", 2*w, u32((u64(u32_1) - u64(u32_2))/2));
+        check(arm32 ? "vhsub.s8"  : "shsub", 8*w, i8((i16(i8_1) - i16(i8_2))/2));
+        check(arm32 ? "vhsub.u8"  : "uhsub", 8*w, u8((u16(u8_1) - u16(u8_2))/2));
+        check(arm32 ? "vhsub.s16" : "shsub", 4*w, i16((i32(i16_1) - i32(i16_2))/2));
+        check(arm32 ? "vhsub.u16" : "uhsub", 4*w, u16((u32(u16_1) - u32(u16_2))/2));
+        check(arm32 ? "vhsub.s32" : "shsub", 2*w, i32((i64(i32_1) - i64(i32_2))/2));
+        check(arm32 ? "vhsub.u32" : "uhsub", 2*w, u32((u64(u32_1) - u64(u32_2))/2));
 
-        // This is common enough that we also allow a version that ignores overflow issues
-        check("vhsub.s8", 8*w, (i8_1 - i8_2)/i8(2));
-        check("vhsub.u8", 8*w, (u8_1 - u8_2)/2);
-        check("vhsub.s16", 4*w, (i16_1 - i16_2)/2);
-        check("vhsub.u16", 4*w, (u16_1 - u16_2)/2);
-        check("vhsub.s32", 2*w, (i32_1 - i32_2)/2);
-        check("vhsub.u32", 2*w, (u32_1 - u32_2)/2);
+        check(arm32 ? "vhsub.s32" : "shsub", 2*w, (i32_1 - i32_2)/2);
 
         // VLD1     X       -       Load Single-Element Structures
         // dense loads with unknown alignments should use vld1 variants
-        check("vld1.8",  8*w, in_i8(x+y));
-        check("vld1.8",  8*w, in_u8(x+y));
-        check("vld1.16", 4*w, in_i16(x+y));
-        check("vld1.16", 4*w, in_u16(x+y));
+        check(arm32 ? "vld1.8"  : "ldr", 8*w, in_i8(x+y));
+        check(arm32 ? "vld1.8"  : "ldr", 8*w, in_u8(x+y));
+        check(arm32 ? "vld1.16" : "ldr", 4*w, in_i16(x+y));
+        check(arm32 ? "vld1.16" : "ldr", 4*w, in_u16(x+y));
         if (w > 1) {
             // When w == 1, llvm emits vldr instead
-            check("vld1.32", 2*w, in_i32(x+y));
-            check("vld1.32", 2*w, in_u32(x+y));
-            check("vld1.32", 2*w, in_f32(x+y));
+            check(arm32 ? "vld1.32" : "ldr", 2*w, in_i32(x+y));
+            check(arm32 ? "vld1.32" : "ldr", 2*w, in_u32(x+y));
+            check(arm32 ? "vld1.32" : "ldr", 2*w, in_f32(x+y));
         }
 
         // VLD2     X       -       Load Two-Element Structures
-        check("vld2.32", 4*w, in_i32(x*2) + in_i32(x*2+1));
-        check("vld2.32", 4*w, in_u32(x*2) + in_u32(x*2+1));
-        check("vld2.32", 4*w, in_f32(x*2) + in_f32(x*2+1));
-        check("vld2.8",  8*w, in_i8(x*2) + in_i8(x*2+1));
-        check("vld2.8",  8*w, in_u8(x*2) + in_u8(x*2+1));
-        check("vld2.16", 4*w, in_i16(x*2) + in_i16(x*2+1));
-        check("vld2.16", 4*w, in_u16(x*2) + in_u16(x*2+1));
+        check(arm32 ? "vld2.32" : "ld2", 4*w, in_i32(x*2) + in_i32(x*2+1));
+        check(arm32 ? "vld2.32" : "ld2", 4*w, in_u32(x*2) + in_u32(x*2+1));
+        check(arm32 ? "vld2.32" : "ld2", 4*w, in_f32(x*2) + in_f32(x*2+1));
+        check(arm32 ? "vld2.8"  : "ld2", 8*w, in_i8(x*2) + in_i8(x*2+1));
+        check(arm32 ? "vld2.8"  : "ld2", 8*w, in_u8(x*2) + in_u8(x*2+1));
+        check(arm32 ? "vld2.16" : "ld2", 4*w, in_i16(x*2) + in_i16(x*2+1));
+        check(arm32 ? "vld2.16" : "ld2", 4*w, in_u16(x*2) + in_u16(x*2+1));
 
 
         // VLD3     X       -       Load Three-Element Structures
-        check("vld3.32", 4*w, in_i32(x*3+y));
-        check("vld3.32", 4*w, in_u32(x*3+y));
-        check("vld3.32", 4*w, in_f32(x*3+y));
-        check("vld3.8",  8*w, in_i8(x*3+y));
-        check("vld3.8",  8*w, in_u8(x*3+y));
-        check("vld3.16", 4*w, in_i16(x*3+y));
-        check("vld3.16", 4*w, in_u16(x*3+y));
+        check(arm32 ? "vld3.32" : "ld3", 4*w, in_i32(x*3+y));
+        check(arm32 ? "vld3.32" : "ld3", 4*w, in_u32(x*3+y));
+        check(arm32 ? "vld3.32" : "ld3", 4*w, in_f32(x*3+y));
+        check(arm32 ? "vld3.8"  : "ld3", 8*w, in_i8(x*3+y));
+        check(arm32 ? "vld3.8"  : "ld3", 8*w, in_u8(x*3+y));
+        check(arm32 ? "vld3.16" : "ld3", 4*w, in_i16(x*3+y));
+        check(arm32 ? "vld3.16" : "ld3", 4*w, in_u16(x*3+y));
 
         // VLD4     X       -       Load Four-Element Structures
-        check("vld4.32", 4*w, in_i32(x*4+y));
-        check("vld4.32", 4*w, in_u32(x*4+y));
-        check("vld4.32", 4*w, in_f32(x*4+y));
-        check("vld4.8",  8*w, in_i8(x*4+y));
-        check("vld4.8",  8*w, in_u8(x*4+y));
-        check("vld4.16", 4*w, in_i16(x*4+y));
-        check("vld4.16", 4*w, in_u16(x*4+y));
+        check(arm32 ? "vld4.32" : "ld4", 4*w, in_i32(x*4+y));
+        check(arm32 ? "vld4.32" : "ld4", 4*w, in_u32(x*4+y));
+        check(arm32 ? "vld4.32" : "ld4", 4*w, in_f32(x*4+y));
+        check(arm32 ? "vld4.8"  : "ld4", 8*w, in_i8(x*4+y));
+        check(arm32 ? "vld4.8"  : "ld4", 8*w, in_u8(x*4+y));
+        check(arm32 ? "vld4.16" : "ld4", 4*w, in_i16(x*4+y));
+        check(arm32 ? "vld4.16" : "ld4", 4*w, in_u16(x*4+y));
 
         // VLDM     X       F, D    Load Multiple Registers
         // VLDR     X       F, D    Load Single Register
         // We generally generate vld instead
 
         // VMAX     I, F    -       Maximum
-        check("vmax.s8", 8*w, max(i8_1, i8_2));
-        check("vmax.u8", 8*w, max(u8_1, u8_2));
-        check("vmax.s16", 4*w, max(i16_1, i16_2));
-        check("vmax.u16", 4*w, max(u16_1, u16_2));
-        check("vmax.s32", 2*w, max(i32_1, i32_2));
-        check("vmax.u32", 2*w, max(u32_1, u32_2));
-        check("vmax.f32", 2*w, max(f32_1, f32_2));
+        check(arm32 ? "vmax.s8" : "smax", 8*w, max(i8_1, i8_2));
+        check(arm32 ? "vmax.u8" : "umax", 8*w, max(u8_1, u8_2));
+        check(arm32 ? "vmax.s16" : "smax", 4*w, max(i16_1, i16_2));
+        check(arm32 ? "vmax.u16" : "umax", 4*w, max(u16_1, u16_2));
+        check(arm32 ? "vmax.s32" : "smax", 2*w, max(i32_1, i32_2));
+        check(arm32 ? "vmax.u32" : "umax", 2*w, max(u32_1, u32_2));
+        check(arm32 ? "vmax.f32" : "fmax", 2*w, max(f32_1, f32_2));
 
         // VMIN     I, F    -       Minimum
-        check("vmin.s8", 8*w, min(i8_1, i8_2));
-        check("vmin.u8", 8*w, min(u8_1, u8_2));
-        check("vmin.s16", 4*w, min(i16_1, i16_2));
-        check("vmin.u16", 4*w, min(u16_1, u16_2));
-        check("vmin.s32", 2*w, min(i32_1, i32_2));
-        check("vmin.u32", 2*w, min(u32_1, u32_2));
-        check("vmin.f32", 2*w, min(f32_1, f32_2));
+        check(arm32 ? "vmin.s8" : "smin", 8*w, min(i8_1, i8_2));
+        check(arm32 ? "vmin.u8" : "umin", 8*w, min(u8_1, u8_2));
+        check(arm32 ? "vmin.s16" : "smin", 4*w, min(i16_1, i16_2));
+        check(arm32 ? "vmin.u16" : "umin", 4*w, min(u16_1, u16_2));
+        check(arm32 ? "vmin.s32" : "smin", 2*w, min(i32_1, i32_2));
+        check(arm32 ? "vmin.u32" : "umin", 2*w, min(u32_1, u32_2));
+        check(arm32 ? "vmin.f32" : "fmin", 2*w, min(f32_1, f32_2));
 
         // VMLA     I, F    F, D    Multiply Accumulate
-        check("vmla.i8",  8*w, i8_1 + i8_2*i8_3);
-        check("vmla.i8",  8*w, u8_1 + u8_2*u8_3);
-        check("vmla.i16", 4*w, i16_1 + i16_2*i16_3);
-        check("vmla.i16", 4*w, u16_1 + u16_2*u16_3);
-        check("vmla.i32", 2*w, i32_1 + i32_2*i32_3);
-        check("vmla.i32", 2*w, u32_1 + u32_2*u32_3);
+        check(arm32 ? "vmla.i8"  : "mla", 8*w, i8_1 + i8_2*i8_3);
+        check(arm32 ? "vmla.i8"  : "mla", 8*w, u8_1 + u8_2*u8_3);
+        check(arm32 ? "vmla.i16" : "mla", 4*w, i16_1 + i16_2*i16_3);
+        check(arm32 ? "vmla.i16" : "mla", 4*w, u16_1 + u16_2*u16_3);
+        check(arm32 ? "vmla.i32" : "mla", 2*w, i32_1 + i32_2*i32_3);
+        check(arm32 ? "vmla.i32" : "mla", 2*w, u32_1 + u32_2*u32_3);
         if (w == 1 || w == 2) {
             // Older llvms don't always fuse this at non-native widths
-            check("vmla.f32", 2*w, f32_1 + f32_2*f32_3);
+            check(arm32 ? "vmla.f32" : "fmla", 2*w, f32_1 + f32_2*f32_3);
         }
 
         // VMLS     I, F    F, D    Multiply Subtract
-        check("vmls.i8",  8*w, i8_1 - i8_2*i8_3);
-        check("vmls.i8",  8*w, u8_1 - u8_2*u8_3);
-        check("vmls.i16", 4*w, i16_1 - i16_2*i16_3);
-        check("vmls.i16", 4*w, u16_1 - u16_2*u16_3);
-        check("vmls.i32", 2*w, i32_1 - i32_2*i32_3);
-        check("vmls.i32", 2*w, u32_1 - u32_2*u32_3);
+        check(arm32 ? "vmls.i8"  : "mls", 8*w, i8_1 - i8_2*i8_3);
+        check(arm32 ? "vmls.i8"  : "mls", 8*w, u8_1 - u8_2*u8_3);
+        check(arm32 ? "vmls.i16" : "mls", 4*w, i16_1 - i16_2*i16_3);
+        check(arm32 ? "vmls.i16" : "mls", 4*w, u16_1 - u16_2*u16_3);
+        check(arm32 ? "vmls.i32" : "mls", 2*w, i32_1 - i32_2*i32_3);
+        check(arm32 ? "vmls.i32" : "mls", 2*w, u32_1 - u32_2*u32_3);
         if (w == 1 || w == 2) {
             // Older llvms don't always fuse this at non-native widths
-            check("vmls.f32", 2*w, f32_1 - f32_2*f32_3);
+            check(arm32 ? "vmls.f32" : "fmls", 2*w, f32_1 - f32_2*f32_3);
         }
 
         // VMLAL    I       -       Multiply Accumulate Long
-        check("vmlal.s8",  8*w, i16_1 + i16(i8_2)*i8_3);
-        check("vmlal.u8",  8*w, u16_1 + u16(u8_2)*u8_3);
-        check("vmlal.s16", 4*w, i32_1 + i32(i16_2)*i16_3);
-        check("vmlal.u16", 4*w, u32_1 + u32(u16_2)*u16_3);
-        check("vmlal.s32", 2*w, i64_1 + i64(i32_2)*i32_3);
-        check("vmlal.u32", 2*w, u64_1 + u64(u32_2)*u32_3);
+        check(arm32 ? "vmlal.s8"  : "smlal", 8*w, i16_1 + i16(i8_2)*i8_3);
+        check(arm32 ? "vmlal.u8"  : "umlal", 8*w, u16_1 + u16(u8_2)*u8_3);
+        check(arm32 ? "vmlal.s16" : "smlal", 4*w, i32_1 + i32(i16_2)*i16_3);
+        check(arm32 ? "vmlal.u16" : "umlal", 4*w, u32_1 + u32(u16_2)*u16_3);
+        check(arm32 ? "vmlal.s32" : "smlal", 2*w, i64_1 + i64(i32_2)*i32_3);
+        check(arm32 ? "vmlal.u32" : "umlal", 2*w, u64_1 + u64(u32_2)*u32_3);
 
         // VMLSL    I       -       Multiply Subtract Long
-        check("vmlsl.s8",  8*w, i16_1 - i16(i8_2)*i8_3);
-        check("vmlsl.u8",  8*w, u16_1 - u16(u8_2)*u8_3);
-        check("vmlsl.s16", 4*w, i32_1 - i32(i16_2)*i16_3);
-        check("vmlsl.u16", 4*w, u32_1 - u32(u16_2)*u16_3);
-        check("vmlsl.s32", 2*w, i64_1 - i64(i32_2)*i32_3);
-        check("vmlsl.u32", 2*w, u64_1 - u64(u32_2)*u32_3);
+        check(arm32 ? "vmlsl.s8"  : "smlsl", 8*w, i16_1 - i16(i8_2)*i8_3);
+        check(arm32 ? "vmlsl.u8"  : "umlsl", 8*w, u16_1 - u16(u8_2)*u8_3);
+        check(arm32 ? "vmlsl.s16" : "smlsl", 4*w, i32_1 - i32(i16_2)*i16_3);
+        check(arm32 ? "vmlsl.u16" : "umlsl", 4*w, u32_1 - u32(u16_2)*u16_3);
+        check(arm32 ? "vmlsl.s32" : "smlsl", 2*w, i64_1 - i64(i32_2)*i32_3);
+        check(arm32 ? "vmlsl.u32" : "umlsl", 2*w, u64_1 - u64(u32_2)*u32_3);
 
         // VMOV     X       F, D    Move Register or Immediate
         // This is for loading immediates, which we won't do in the inner loop anyway
 
         // VMOVL    I       -       Move Long
-        check("vmovl.s8", 8*w, i16(i8_1));
-        check("vmovl.u8", 8*w, u16(u8_1));
-        check("vmovl.u8", 8*w, i16(u8_1));
-        check("vmovl.s16", 4*w, i32(i16_1));
-        check("vmovl.u16", 4*w, u32(u16_1));
-        check("vmovl.u16", 4*w, i32(u16_1));
-        check("vmovl.s32", 2*w, i64(i32_1));
-        check("vmovl.u32", 2*w, u64(u32_1));
-        check("vmovl.u32", 2*w, i64(u32_1));
+        // For aarch64, llvm does a widening shift by 0 instead of using the sxtl instruction.
+        check(arm32 ? "vmovl.s8"  : "sshll", 8*w, i16(i8_1));
+        check(arm32 ? "vmovl.u8"  : "ushll", 8*w, u16(u8_1));
+        check(arm32 ? "vmovl.u8"  : "ushll", 8*w, i16(u8_1));
+        check(arm32 ? "vmovl.s16" : "sshll", 4*w, i32(i16_1));
+        check(arm32 ? "vmovl.u16" : "ushll", 4*w, u32(u16_1));
+        check(arm32 ? "vmovl.u16" : "ushll", 4*w, i32(u16_1));
+        check(arm32 ? "vmovl.s32" : "sshll", 2*w, i64(i32_1));
+        check(arm32 ? "vmovl.u32" : "ushll", 2*w, u64(u32_1));
+        check(arm32 ? "vmovl.u32" : "ushll", 2*w, i64(u32_1));
 
         // VMOVN    I       -       Move and Narrow
-        check("vmovn.i16", 8*w, i8(i16_1));
-        check("vmovn.i16", 8*w, u8(u16_1));
-        check("vmovn.i32", 4*w, i16(i32_1));
-        check("vmovn.i32", 4*w, u16(u32_1));
-        check("vmovn.i64", 2*w, i32(i64_1));
-        check("vmovn.i64", 2*w, u32(u64_1));
+        check(arm32 ? "vmovn.i16" : "xtn", 8*w, i8(i16_1));
+        check(arm32 ? "vmovn.i16" : "xtn", 8*w, u8(u16_1));
+        check(arm32 ? "vmovn.i32" : "xtn", 4*w, i16(i32_1));
+        check(arm32 ? "vmovn.i32" : "xtn", 4*w, u16(u32_1));
+        check(arm32 ? "vmovn.i64" : "xtn", 2*w, i32(i64_1));
+        check(arm32 ? "vmovn.i64" : "xtn", 2*w, u32(u64_1));
 
         // VMRS     X       F, D    Move Advanced SIMD or VFP Register to ARM compute Engine
         // VMSR     X       F, D    Move ARM Core Register to Advanced SIMD or VFP
         // trust llvm to use this correctly
 
         // VMUL     I, F, P F, D    Multiply
-        check("vmul.f64", 2*w, f64_2*f64_1);
-        check("vmul.i8",  8*w, i8_2*i8_1);
-        check("vmul.i8",  8*w, u8_2*u8_1);
-        check("vmul.i16", 4*w, i16_2*i16_1);
-        check("vmul.i16", 4*w, u16_2*u16_1);
-        check("vmul.i32", 2*w, i32_2*i32_1);
-        check("vmul.i32", 2*w, u32_2*u32_1);
-        check("vmul.f32", 2*w, f32_2*f32_1);
+        check(arm32 ? "vmul.f64" : "fmul", 2*w, f64_2*f64_1);
+        check(arm32 ? "vmul.i8"  : "mul",  8*w, i8_2*i8_1);
+        check(arm32 ? "vmul.i8"  : "mul",  8*w, u8_2*u8_1);
+        check(arm32 ? "vmul.i16" : "mul",  4*w, i16_2*i16_1);
+        check(arm32 ? "vmul.i16" : "mul",  4*w, u16_2*u16_1);
+        check(arm32 ? "vmul.i32" : "mul",  2*w, i32_2*i32_1);
+        check(arm32 ? "vmul.i32" : "mul",  2*w, u32_2*u32_1);
+        check(arm32 ? "vmul.f32" : "fmul", 2*w, f32_2*f32_1);
 
         // VMULL    I, F, P -       Multiply Long
-        check("vmull.s8",  8*w, i16(i8_1)*i8_2);
-        check("vmull.u8",  8*w, u16(u8_1)*u8_2);
-        check("vmull.s16", 4*w, i32(i16_1)*i16_2);
-        check("vmull.u16", 4*w, u32(u16_1)*u16_2);
-        check("vmull.s32", 2*w, i64(i32_1)*i32_2);
-        check("vmull.u32", 2*w, u64(u32_1)*u32_2);
+        check(arm32 ? "vmull.s8"  : "smull", 8*w, i16(i8_1)*i8_2);
+        check(arm32 ? "vmull.u8"  : "umull", 8*w, u16(u8_1)*u8_2);
+        check(arm32 ? "vmull.s16" : "smull", 4*w, i32(i16_1)*i16_2);
+        check(arm32 ? "vmull.u16" : "umull", 4*w, u32(u16_1)*u16_2);
+        check(arm32 ? "vmull.s32" : "smull", 2*w, i64(i32_1)*i32_2);
+        check(arm32 ? "vmull.u32" : "umull", 2*w, u64(u32_1)*u32_2);
 
         // integer division by a constant should use fixed point unsigned
         // multiplication, which is done by using a widening multiply
         // followed by a narrowing
-        check("vmull.u8",  8*w, i8_1/37);
-        check("vmull.u8",  8*w, u8_1/37);
-        check("vmull.u16", 4*w, i16_1/37);
-        check("vmull.u16", 4*w, u16_1/37);
-        check("vmull.u32", 2*w, i32_1/37);
-        check("vmull.u32", 2*w, u32_1/37);
+        check(arm32 ? "vmull.u8"  : "umull", 8*w, i8_1/37);
+        check(arm32 ? "vmull.u8"  : "umull", 8*w, u8_1/37);
+        check(arm32 ? "vmull.u16" : "umull", 4*w, i16_1/37);
+        check(arm32 ? "vmull.u16" : "umull", 4*w, u16_1/37);
+        check(arm32 ? "vmull.u32" : "umull", 2*w, i32_1/37);
+        check(arm32 ? "vmull.u32" : "umull", 2*w, u32_1/37);
 
         // VMVN     X       -       Bitwise NOT
         // check("vmvn", ~bool1);
 
         // VNEG     I, F    F, D    Negate
-        check("vneg.s8", 8*w, -i8_1);
-        check("vneg.s16", 4*w, -i16_1);
-        check("vneg.s32", 2*w, -i32_1);
-        check("vneg.f32", 4*w, -f32_1);
-        check("vneg.f64", 2*w, -f64_1);
+        check(arm32 ? "vneg.s8"  : "neg", 8*w, -i8_1);
+        check(arm32 ? "vneg.s16" : "neg", 4*w, -i16_1);
+        check(arm32 ? "vneg.s32" : "neg", 2*w, -i32_1);
+        check(arm32 ? "vneg.f32" : "fneg", 4*w, -f32_1);
+        check(arm32 ? "vneg.f64" : "fneg", 2*w, -f64_1);
 
         // VNMLA    -       F, D    Negative Multiply Accumulate
         // VNMLS    -       F, D    Negative Multiply Subtract
@@ -996,16 +992,16 @@ void check_neon_all() {
         */
 
         // VQADD    I       -       Saturating Add
-        check("vqadd.s8",  8*w,  i8(clamp(i16(i8_1)  + i16(i8_2),  min_i8,  max_i8)));
-        check("vqadd.s16", 4*w, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
-        check("vqadd.s32", 2*w, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
+        check(arm32 ? "vqadd.s8"  : "sqadd", 8*w,  i8(clamp(i16(i8_1)  + i16(i8_2),  min_i8,  max_i8)));
+        check(arm32 ? "vqadd.s16" : "sqadd", 4*w, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
+        check(arm32 ? "vqadd.s32" : "sqadd", 2*w, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
 
-        check("vqadd.u8",  8*w,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
-        check("vqadd.u16", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+        check(arm32 ? "vqadd.u8"  : "uqadd", 8*w,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
+        check(arm32 ? "vqadd.u16" : "uqadd", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
 
         // Check the case where we add a constant that could be narrowed
-        check("vqadd.u8",  8*w,  u8(min(u16(u8_1)  + 17,  max_u8)));
-        check("vqadd.u16", 4*w, u16(min(u32(u16_1) + 17, max_u16)));
+        check(arm32 ? "vqadd.u8"  : "uqadd", 8*w,  u8(min(u16(u8_1)  + 17,  max_u8)));
+        check(arm32 ? "vqadd.u16" : "uqadd", 4*w, u16(min(u32(u16_1) + 17, max_u16)));
 
         // Can't do larger ones because we only have i32 constants
 
@@ -1016,22 +1012,22 @@ void check_neon_all() {
         // Not sure why I'd use these
 
         // VQMOVN   I       -       Saturating Move and Narrow
-        check("vqmovn.s16", 8*w,  i8(clamp(i16_1, min_i8,  max_i8)));
-        check("vqmovn.s32", 4*w, i16(clamp(i32_1, min_i16, max_i16)));
-        check("vqmovn.s64", 2*w, i32(clamp(i64_1, min_i32, max_i32)));
-        check("vqmovn.u16", 8*w,  u8(min(u16_1, max_u8)));
-        check("vqmovn.u32", 4*w, u16(min(u32_1, max_u16)));
-        check("vqmovn.u64", 2*w, u32(min(u64_1, max_u32)));
+        check(arm32 ? "vqmovn.s16" : "sqxtn", 8*w,  i8(clamp(i16_1, min_i8,  max_i8)));
+        check(arm32 ? "vqmovn.s32" : "sqxtn", 4*w, i16(clamp(i32_1, min_i16, max_i16)));
+        check(arm32 ? "vqmovn.s64" : "sqxtn", 2*w, i32(clamp(i64_1, min_i32, max_i32)));
+        check(arm32 ? "vqmovn.u16" : "uqxtn", 8*w,  u8(min(u16_1, max_u8)));
+        check(arm32 ? "vqmovn.u32" : "uqxtn", 4*w, u16(min(u32_1, max_u16)));
+        check(arm32 ? "vqmovn.u64" : "uqxtn", 2*w, u32(min(u64_1, max_u32)));
 
         // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
-        check("vqmovun.s16", 8*w, u8(clamp(i16_1, 0, max_u8)));
-        check("vqmovun.s32", 4*w, u16(clamp(i32_1, 0, max_u16)));
-        check("vqmovun.s64", 2*w, u32(clamp(i64_1, 0, max_u32)));
+        check(arm32 ? "vqmovun.s16" : "sqxtun", 8*w, u8(clamp(i16_1, 0, max_u8)));
+        check(arm32 ? "vqmovun.s32" : "sqxtun", 4*w, u16(clamp(i32_1, 0, max_u16)));
+        check(arm32 ? "vqmovun.s64" : "sqxtun", 2*w, u32(clamp(i64_1, 0, max_u32)));
 
         // VQNEG    I       -       Saturating Negate
-        check("vqneg.s8",  8*w, -max(i8_1,  -max_i8));
-        check("vqneg.s16", 4*w, -max(i16_1, -max_i16));
-        check("vqneg.s32", 2*w, -max(i32_1, -max_i32));
+        check(arm32 ? "vqneg.s8" : "sqneg",  8*w, -max(i8_1,  -max_i8));
+        check(arm32 ? "vqneg.s16" : "sqneg", 4*w, -max(i16_1, -max_i16));
+        check(arm32 ? "vqneg.s32" : "sqneg", 2*w, -max(i32_1, -max_i32));
 
         // VQRDMULH I       -       Saturating Rounding Doubling Multiply Returning High Half
         // VQRSHL   I       -       Saturating Rounding Shift Left
@@ -1040,36 +1036,36 @@ void check_neon_all() {
         // We use the non-rounding form of these (at worst we do an extra add)
 
         // VQSHL    I       -       Saturating Shift Left
-        check("vqshl.s8",  8*w,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
-        check("vqshl.s16", 4*w, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
-        check("vqshl.s32", 2*w, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
-        check("vqshl.u8",  8*w,  u8(min(u16(u8_1 )*16, max_u8)));
-        check("vqshl.u16", 4*w, u16(min(u32(u16_1)*16, max_u16)));
-        check("vqshl.u32", 2*w, u32(min(u64(u32_1)*16, max_u32)));
+        check(arm32 ? "vqshl.s8"  : "sqshl", 8*w,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
+        check(arm32 ? "vqshl.s16" : "sqshl", 4*w, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
+        check(arm32 ? "vqshl.s32" : "sqshl", 2*w, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
+        check(arm32 ? "vqshl.u8"  : "uqshl",  8*w,  u8(min(u16(u8_1 )*16, max_u8)));
+        check(arm32 ? "vqshl.u16" : "uqshl", 4*w, u16(min(u32(u16_1)*16, max_u16)));
+        check(arm32 ? "vqshl.u32" : "uqshl", 2*w, u32(min(u64(u32_1)*16, max_u32)));
 
         // VQSHLU   I       -       Saturating Shift Left Unsigned
-        check("vqshlu.s8",  8*w,  u8(clamp(i16(i8_1)*16,  0,  max_u8)));
-        check("vqshlu.s16", 4*w, u16(clamp(i32(i16_1)*16, 0, max_u16)));
-        check("vqshlu.s32", 2*w, u32(clamp(i64(i32_1)*16, 0, max_u32)));
+        check(arm32 ? "vqshlu.s8"  : "sqshlu", 8*w,  u8(clamp(i16(i8_1)*16,  0,  max_u8)));
+        check(arm32 ? "vqshlu.s16" : "sqshlu", 4*w, u16(clamp(i32(i16_1)*16, 0, max_u16)));
+        check(arm32 ? "vqshlu.s32" : "sqshlu", 2*w, u32(clamp(i64(i32_1)*16, 0, max_u32)));
 
 
         // VQSHRN   I       -       Saturating Shift Right Narrow
         // VQSHRUN  I       -       Saturating Shift Right Unsigned Narrow
-        check("vqshrn.s64", 2*w, i32(clamp(i64_1/16, min_i32, max_i32)));
-        check("vqshrun.s64", 2*w, u32(clamp(i64_1/16, 0, max_u32)));
-        check("vqshrn.u16", 8*w,  u8(min(u16_1/16, max_u8)));
-        check("vqshrn.u32", 4*w, u16(min(u32_1/16, max_u16)));
-        check("vqshrn.u64", 2*w, u32(min(u64_1/16, max_u32)));
+        check(arm32 ? "vqshrn.s64"  : "sqshrn",  2*w, i32(clamp(i64_1/16, min_i32, max_i32)));
+        check(arm32 ? "vqshrun.s64" : "sqshrun", 2*w, u32(clamp(i64_1/16, 0, max_u32)));
+        check(arm32 ? "vqshrn.u16"  : "uqshrn", 8*w,  u8(min(u16_1/16, max_u8)));
+        check(arm32 ? "vqshrn.u32"  : "uqshrn", 4*w, u16(min(u32_1/16, max_u16)));
+        check(arm32 ? "vqshrn.u64"  : "uqshrn", 2*w, u32(min(u64_1/16, max_u32)));
 
         // VQSUB    I       -       Saturating Subtract
-        check("vqsub.s8",  8*w,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
-        check("vqsub.s16", 4*w, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
-        check("vqsub.s32", 2*w, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
+        check(arm32 ? "vqsub.s8"  : "sqsub", 8*w,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
+        check(arm32 ? "vqsub.s16" : "sqsub", 4*w, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
+        check(arm32 ? "vqsub.s32" : "sqsub", 2*w, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
 
         // N.B. Saturating subtracts are expressed by widening to a *signed* type
-        check("vqsub.u8",  8*w,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
-        check("vqsub.u16", 4*w, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));
-        check("vqsub.u32", 2*w, u32(clamp(i64(u32_1) - i64(u32_2), 0, max_u32)));
+        check(arm32 ? "vqsub.u8"  : "uqsub",  8*w,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
+        check(arm32 ? "vqsub.u16" : "uqsub", 4*w, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));
+        check(arm32 ? "vqsub.u32" : "uqsub", 2*w, u32(clamp(i64(u32_1) - i64(u32_2), 0, max_u32)));
 
         // VRADDHN  I       -       Rounding Add and Narrow Returning High Half
         /* No rounding ops
@@ -1080,28 +1076,26 @@ void check_neon_all() {
         */
 
         // VRECPE   I, F    -       Reciprocal Estimate
-        check("vrecpe.f32", 2*w, fast_inverse(f32_1));
+        check(arm32 ? "vrecpe.f32" : "frecpe", 2*w, fast_inverse(f32_1));
 
         // VRECPS   F       -       Reciprocal Step
-        // This does one newton-rhapson iteration for finding the reciprocal. Skip it.
+        check(arm32 ? "vrecps.f32" : "frecps", 2*w, fast_inverse(f32_1));
 
         // VREV16   X       -       Reverse in Halfwords
         // VREV32   X       -       Reverse in Words
         // VREV64   X       -       Reverse in Doublewords
-        // A reverse dense load should trigger vrev
-        check("vrev64.16", 4*w, in_i16(100-x));
 
         // These reverse within each halfword, word, and doubleword
-        // respectively. We don't use them. Instead we use vtbl for vector
-        // shuffles.
+        // respectively. Sometimes llvm generates them, and sometimes
+        // it generates vtbl instructions.
 
         // VRHADD   I       -       Rounding Halving Add
-        check("vrhadd.s8",  8*w,  i8((i16(i8_1 ) + i16(i8_2 ) + 1)/2));
-        check("vrhadd.u8",  8*w,  u8((u16(u8_1 ) + u16(u8_2 ) + 1)/2));
-        check("vrhadd.s16", 4*w, i16((i32(i16_1) + i32(i16_2) + 1)/2));
-        check("vrhadd.u16", 4*w, u16((u32(u16_1) + u32(u16_2) + 1)/2));
-        check("vrhadd.s32", 2*w, i32((i64(i32_1) + i64(i32_2) + 1)/2));
-        check("vrhadd.u32", 2*w, u32((u64(u32_1) + u64(u32_2) + 1)/2));
+        check(arm32 ? "vrhadd.s8"  : "srhadd", 8*w,  i8((i16(i8_1 ) + i16(i8_2 ) + 1)/2));
+        check(arm32 ? "vrhadd.u8"  : "urhadd", 8*w,  u8((u16(u8_1 ) + u16(u8_2 ) + 1)/2));
+        check(arm32 ? "vrhadd.s16" : "srhadd", 4*w, i16((i32(i16_1) + i32(i16_2) + 1)/2));
+        check(arm32 ? "vrhadd.u16" : "urhadd", 4*w, u16((u32(u16_1) + u32(u16_2) + 1)/2));
+        check(arm32 ? "vrhadd.s32" : "srhadd", 2*w, i32((i64(i32_1) + i64(i32_2) + 1)/2));
+        check(arm32 ? "vrhadd.u32" : "urhadd", 2*w, u32((u64(u32_1) + u64(u32_2) + 1)/2));
 
         // VRSHL    I       -       Rounding Shift Left
         // VRSHR    I       -       Rounding Shift Right
@@ -1109,111 +1103,111 @@ void check_neon_all() {
         // We use the non-rounding forms of these
 
         // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
-        check("vrsqrte.f32", 4*w, fast_inverse_sqrt(f32_1));
+        check(arm32 ? "vrsqrte.f32" : "frsqrte", 4*w, fast_inverse_sqrt(f32_1));
 
         // VRSQRTS  F       -       Reciprocal Square Root Step
-        // One newtown rhapson iteration of 1/sqrt(x). Skip it.
+        check(arm32 ? "vrsqrts.f32" : "frsqrts", 4*w, fast_inverse_sqrt(f32_1));
 
         // VRSRA    I       -       Rounding Shift Right and Accumulate
         // VRSUBHN  I       -       Rounding Subtract and Narrow Returning High Half
         // Boo rounding ops
 
         // VSHL     I       -       Shift Left
-        check("vshl.i64", 2*w, i64_1*16);
-        check("vshl.i8",  8*w,  i8_1*16);
-        check("vshl.i16", 4*w, i16_1*16);
-        check("vshl.i32", 2*w, i32_1*16);
-        check("vshl.i64", 2*w, u64_1*16);
-        check("vshl.i8",  8*w,  u8_1*16);
-        check("vshl.i16", 4*w, u16_1*16);
-        check("vshl.i32", 2*w, u32_1*16);
+        check(arm32 ? "vshl.i64" : "shl", 2*w, i64_1*16);
+        check(arm32 ? "vshl.i8"  : "shl", 8*w,  i8_1*16);
+        check(arm32 ? "vshl.i16" : "shl", 4*w, i16_1*16);
+        check(arm32 ? "vshl.i32" : "shl", 2*w, i32_1*16);
+        check(arm32 ? "vshl.i64" : "shl", 2*w, u64_1*16);
+        check(arm32 ? "vshl.i8"  : "shl", 8*w,  u8_1*16);
+        check(arm32 ? "vshl.i16" : "shl", 4*w, u16_1*16);
+        check(arm32 ? "vshl.i32" : "shl", 2*w, u32_1*16);
 
 
         // VSHLL    I       -       Shift Left Long
-        check("vshll.s8",  8*w, i16(i8_1)*16);
-        check("vshll.s16", 4*w, i32(i16_1)*16);
-        check("vshll.s32", 2*w, i64(i32_1)*16);
-        check("vshll.u8",  8*w, u16(u8_1)*16);
-        check("vshll.u16", 4*w, u32(u16_1)*16);
-        check("vshll.u32", 2*w, u64(u32_1)*16);
+        check(arm32 ? "vshll.s8"  : "sshll", 8*w, i16(i8_1)*16);
+        check(arm32 ? "vshll.s16" : "sshll", 4*w, i32(i16_1)*16);
+        check(arm32 ? "vshll.s32" : "sshll", 2*w, i64(i32_1)*16);
+        check(arm32 ? "vshll.u8"  : "ushll", 8*w, u16(u8_1)*16);
+        check(arm32 ? "vshll.u16" : "ushll", 4*w, u32(u16_1)*16);
+        check(arm32 ? "vshll.u32" : "ushll", 2*w, u64(u32_1)*16);
 
         // VSHR     I	-	Shift Right
-        check("vshr.s64", 2*w, i64_1/16);
-        check("vshr.s8",  8*w,  i8_1/16);
-        check("vshr.s16", 4*w, i16_1/16);
-        check("vshr.s32", 2*w, i32_1/16);
-        check("vshr.u64", 2*w, u64_1/16);
-        check("vshr.u8",  8*w,  u8_1/16);
-        check("vshr.u16", 4*w, u16_1/16);
-        check("vshr.u32", 2*w, u32_1/16);
+        check(arm32 ? "vshr.s64" : "sshr", 2*w, i64_1/16);
+        check(arm32 ? "vshr.s8"  : "sshr", 8*w,  i8_1/16);
+        check(arm32 ? "vshr.s16" : "sshr", 4*w, i16_1/16);
+        check(arm32 ? "vshr.s32" : "sshr", 2*w, i32_1/16);
+        check(arm32 ? "vshr.u64" : "ushr", 2*w, u64_1/16);
+        check(arm32 ? "vshr.u8"  : "ushr", 8*w,  u8_1/16);
+        check(arm32 ? "vshr.u16" : "ushr", 4*w, u16_1/16);
+        check(arm32 ? "vshr.u32" : "ushr", 2*w, u32_1/16);
 
         // VSHRN	I	-	Shift Right Narrow
-        check("vshrn.i16", 8*w,  i8(i16_1/256));
-        check("vshrn.i32", 4*w, i16(i32_1/65536));
-        check("vshrn.i16",  8*w,  u8(u16_1/256));
-        check("vshrn.i32",  4*w, u16(u32_1/65536));
-        check("vshrn.i16", 8*w,  i8(i16_1/16));
-        check("vshrn.i32", 4*w, i16(i32_1/16));
-        check("vshrn.i16",  8*w,  u8(u16_1/16));
-        check("vshrn.i32",  4*w, u16(u32_1/16));
+        check(arm32 ? "vshrn.i16" : "shrn", 8*w,  i8(i16_1/256));
+        check(arm32 ? "vshrn.i32" : "shrn", 4*w, i16(i32_1/65536));
+        check(arm32 ? "vshrn.i16" : "shrn", 8*w,  u8(u16_1/256));
+        check(arm32 ? "vshrn.i32" : "shrn", 4*w, u16(u32_1/65536));
+        check(arm32 ? "vshrn.i16" : "shrn", 8*w,  i8(i16_1/16));
+        check(arm32 ? "vshrn.i32" : "shrn", 4*w, i16(i32_1/16));
+        check(arm32 ? "vshrn.i16" : "shrn", 8*w,  u8(u16_1/16));
+        check(arm32 ? "vshrn.i32" : "shrn", 4*w, u16(u32_1/16));
 
         // VSLI	X	-	Shift Left and Insert
         // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
 
         // VSQRT	-	F, D	Square Root
-        check("vsqrt.f32", 4*w, sqrt(f32_1));
-        check("vsqrt.f64", 2*w, sqrt(f64_1));
+        check(arm32 ? "vsqrt.f32" : "fsqrt", 4*w, sqrt(f32_1));
+        check(arm32 ? "vsqrt.f64" : "fsqrt", 2*w, sqrt(f64_1));
 
         // VSRA	I	-	Shift Right and Accumulate
-        check("vsra.s64", 2*w, i64_2 + i64_1/16);
-        check("vsra.s8",  8*w,  i8_2 + i8_1/16);
-        check("vsra.s16", 4*w, i16_2 + i16_1/16);
-        check("vsra.s32", 2*w, i32_2 + i32_1/16);
-        check("vsra.u64", 2*w, u64_2 + u64_1/16);
-        check("vsra.u8",  8*w,  u8_2 + u8_1/16);
-        check("vsra.u16", 4*w, u16_2 + u16_1/16);
-        check("vsra.u32", 2*w, u32_2 + u32_1/16);
+        check(arm32 ? "vsra.s64" : "ssra", 2*w, i64_2 + i64_1/16);
+        check(arm32 ? "vsra.s8"  : "ssra", 8*w,  i8_2 + i8_1/16);
+        check(arm32 ? "vsra.s16" : "ssra", 4*w, i16_2 + i16_1/16);
+        check(arm32 ? "vsra.s32" : "ssra", 2*w, i32_2 + i32_1/16);
+        check(arm32 ? "vsra.u64" : "usra", 2*w, u64_2 + u64_1/16);
+        check(arm32 ? "vsra.u8"  : "usra", 8*w,  u8_2 + u8_1/16);
+        check(arm32 ? "vsra.u16" : "usra", 4*w, u16_2 + u16_1/16);
+        check(arm32 ? "vsra.u32" : "usra", 2*w, u32_2 + u32_1/16);
 
         // VSRI	X	-	Shift Right and Insert
         // See VSLI
 
 
         // VSUB	I, F	F, D	Subtract
-        check("vsub.i64", 2*w, i64_1 - i64_2);
-        check("vsub.i64", 2*w, u64_1 - u64_2);
-        check("vsub.f32", 4*w, f32_1 - f32_2);
-        check("vsub.i8",  8*w,  i8_1 - i8_2);
-        check("vsub.i8",  8*w,  u8_1 - u8_2);
-        check("vsub.i16", 4*w, i16_1 - i16_2);
-        check("vsub.i16", 4*w, u16_1 - u16_2);
-        check("vsub.i32", 2*w, i32_1 - i32_2);
-        check("vsub.i32", 2*w, u32_1 - u32_2);
-        check("vsub.f32", 2*w, f32_1 - f32_2);
+        check(arm32 ? "vsub.i64" : "sub",  2*w, i64_1 - i64_2);
+        check(arm32 ? "vsub.i64" : "sub",  2*w, u64_1 - u64_2);
+        check(arm32 ? "vsub.f32" : "fsub", 4*w, f32_1 - f32_2);
+        check(arm32 ? "vsub.i8"  : "sub",  8*w,  i8_1 - i8_2);
+        check(arm32 ? "vsub.i8"  : "sub",  8*w,  u8_1 - u8_2);
+        check(arm32 ? "vsub.i16" : "sub",  4*w, i16_1 - i16_2);
+        check(arm32 ? "vsub.i16" : "sub",  4*w, u16_1 - u16_2);
+        check(arm32 ? "vsub.i32" : "sub",  2*w, i32_1 - i32_2);
+        check(arm32 ? "vsub.i32" : "sub",  2*w, u32_1 - u32_2);
+        check(arm32 ? "vsub.f32" : "fsub", 2*w, f32_1 - f32_2);
 
         // VSUBHN	I	-	Subtract and Narrow
-        check("vsubhn.i16", 8*w,  i8((i16_1 - i16_2)/256));
-        check("vsubhn.i16", 8*w,  u8((u16_1 - u16_2)/256));
-        check("vsubhn.i32", 4*w, i16((i32_1 - i32_2)/65536));
-        check("vsubhn.i32", 4*w, u16((u32_1 - u32_2)/65536));
+        check(arm32 ? "vsubhn.i16" : "subhn", 8*w,  i8((i16_1 - i16_2)/256));
+        check(arm32 ? "vsubhn.i16" : "subhn", 8*w,  u8((u16_1 - u16_2)/256));
+        check(arm32 ? "vsubhn.i32" : "subhn", 4*w, i16((i32_1 - i32_2)/65536));
+        check(arm32 ? "vsubhn.i32" : "subhn", 4*w, u16((u32_1 - u32_2)/65536));
 
         // VSUBL	I	-	Subtract Long
-        check("vsubl.s8",  8*w, i16(i8_1)  - i16(i8_2));
-        check("vsubl.u8",  8*w, u16(u8_1)  - u16(u8_2));
-        check("vsubl.s16", 4*w, i32(i16_1) - i32(i16_2));
-        check("vsubl.u16", 4*w, u32(u16_1) - u32(u16_2));
-        check("vsubl.s32", 2*w, i64(i32_1) - i64(i32_2));
-        check("vsubl.u32", 2*w, u64(u32_1) - u64(u32_2));
+        check(arm32 ? "vsubl.s8"  : "ssubl", 8*w, i16(i8_1)  - i16(i8_2));
+        check(arm32 ? "vsubl.u8"  : "usubl", 8*w, u16(u8_1)  - u16(u8_2));
+        check(arm32 ? "vsubl.s16" : "ssubl", 4*w, i32(i16_1) - i32(i16_2));
+        check(arm32 ? "vsubl.u16" : "usubl", 4*w, u32(u16_1) - u32(u16_2));
+        check(arm32 ? "vsubl.s32" : "ssubl", 2*w, i64(i32_1) - i64(i32_2));
+        check(arm32 ? "vsubl.u32" : "usubl", 2*w, u64(u32_1) - u64(u32_2));
 
         // VSUBW	I	-	Subtract Wide
-        check("vsubw.s8",  8*w, i16_1 - i8_1);
-        check("vsubw.u8",  8*w, u16_1 - u8_1);
-        check("vsubw.s16", 4*w, i32_1 - i16_1);
-        check("vsubw.u16", 4*w, u32_1 - u16_1);
-        check("vsubw.s32", 2*w, i64_1 - i32_1);
-        check("vsubw.u32", 2*w, u64_1 - u32_1);
+        check(arm32 ? "vsubw.s8"  : "ssubw", 8*w, i16_1 - i8_1);
+        check(arm32 ? "vsubw.u8"  : "usubw", 8*w, u16_1 - u8_1);
+        check(arm32 ? "vsubw.s16" : "ssubw", 4*w, i32_1 - i16_1);
+        check(arm32 ? "vsubw.u16" : "usubw", 4*w, u32_1 - u16_1);
+        check(arm32 ? "vsubw.s32" : "ssubw", 2*w, i64_1 - i32_1);
+        check(arm32 ? "vsubw.u32" : "usubw", 2*w, u64_1 - u32_1);
 
         // VST1	X	-	Store single-element structures
-        check("vst1.8", 8*w, i8_1);
+        check(arm32 ? "vst1.8" : "st", 8*w, i8_1);
 
     }
 
@@ -1229,7 +1223,7 @@ void check_neon_all() {
                 tmp2.compute_root().vectorize(x, width/bits);
                 char *op = (char *)malloc(32);
                 snprintf(op, 32, "vst2.%d", bits);
-                check(op, width/bits, tmp2(0, 0) + tmp2(0, 63));
+                check(arm32 ? op : "st2", width/bits, tmp2(0, 0) + tmp2(0, 63));
             }
         }
     }
@@ -1248,7 +1242,7 @@ void check_neon_all() {
                 tmp2.compute_root().vectorize(x, width/bits);
                 char *op = (char *)malloc(32);
                 snprintf(op, 32, "vst2.%d", bits);
-                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
+                check(arm32 ? op : "st2", width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
@@ -1267,7 +1261,7 @@ void check_neon_all() {
                 tmp2.compute_root().vectorize(x, width/bits);
                 char *op = (char *)malloc(32);
                 snprintf(op, 32, "vst3.%d", bits);
-                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
+                check(arm32 ? op : "st3", width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
@@ -1287,7 +1281,7 @@ void check_neon_all() {
                 tmp2.compute_root().vectorize(x, width/bits);
                 char *op = (char *)malloc(32);
                 snprintf(op, 32, "vst4.%d", bits);
-                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
+                check(arm32 ? op : "st4", width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
