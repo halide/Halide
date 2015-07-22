@@ -808,7 +808,7 @@ void CodeGen_ARM::visit(const Max *op) {
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
         } else {
-            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.smax.v2f32", {a_wide, b_wide});
+            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmax.v2f32", {a_wide, b_wide});
         }
         value = builder->CreateExtractElement(wide_result, zero);
         return;
