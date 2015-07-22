@@ -735,7 +735,7 @@ void CodeGen_ARM::visit(const Min *op) {
         if (target.bits == 32) {
             wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
         } else {
-            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.smin.v2f32", {a_wide, b_wide});
+            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmin.v2f32", {a_wide, b_wide});
         }
         value = builder->CreateExtractElement(wide_result, zero);
         return;
