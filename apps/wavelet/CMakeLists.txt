@@ -18,10 +18,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 include_directories ("${CMAKE_CURRENT_LIST_DIR}/../support")
 include_directories("${CMAKE_CURRENT_LIST_DIR}/../../include")
 
-add_definitions("-std=c++11")
-add_definitions("-fno-rtti")
-
 add_executable(wavelet "${CMAKE_CURRENT_SOURCE_DIR}/wavelet.cpp")
+target_compile_options(wavelet PRIVATE "-std=c++11" "-fno-rtti")
 
 find_package(PNG)
 target_link_libraries(wavelet ${PNG_LIBRARIES})
@@ -37,6 +35,7 @@ foreach(GEN_SRC ${GENS})
     # GEN_EXECUTABLE := *.generator
     string(REPLACE "_generator.cpp" "" GEN_EXECUTABLE "${GEN_SRC}.generator")
     add_executable("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/GenGen.cpp" "${GEN_SRC}")
+    target_compile_options("${GEN_EXECUTABLE}" PRIVATE "-std=c++11" "-fno-rtti")
     target_link_libraries("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../bin/libHalide.a" z)
 
     halide_add_generator_dependency(TARGET wavelet
