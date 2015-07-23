@@ -1,38 +1,49 @@
-# Generator
-halide_project(wavelet "apps" wavelet.cpp)
+#
+# NOTE: Unlike all other CMakeLists.txt in the apps/ folder, this 
+# is deliberately intended to be standalone (not included from the toplevel)
+# in order to show the minimum scaffolding necessary to use ahead-of-time 
+# Generators in a simple app.
+#
+# To use:
+# mkdir build_cmake && cd build_cmake && cmake .. && make -j8 && ./bin/wavelet ../../images/gray.png .
 
-set(_HL_MODULES daubechies_x.o inverse_daubechies_x.o haar_x.o inverse_haar_x.o)
-set(HL_MODULES "")
-set(_HL_HEADER_FILES daubechies_x.h inverse_daubechies_x.h haar_x.h inverse_haar_x.h)
-set(HL_HEADER_FILES "")
-set(HALIDE_RUNTIME_OBJ "${CMAKE_CURRENT_BINARY_DIR}/halide_runtime.o")
+project(wavelet)
+cmake_minimum_required(VERSION 2.8.12)
 
-foreach(object_file ${_HL_MODULES})
-  list(APPEND HL_MODULES "${CMAKE_CURRENT_BINARY_DIR}/${object_file}")
+include(../../HalideGenerator.cmake)
+
+# HalideGenerator.cmake makes this assumptions
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+include_directories ("${CMAKE_CURRENT_LIST_DIR}/../support")
+include_directories("${CMAKE_CURRENT_LIST_DIR}/../../include")
+
+add_definitions("-std=c++11")
+add_definitions("-fno-rtti")
+
+add_executable(wavelet "${CMAKE_CURRENT_SOURCE_DIR}/wavelet.cpp")
+
+find_package(PNG)
+target_link_libraries(wavelet ${PNG_LIBRARIES})
+target_include_directories(wavelet PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" ${PNG_INCLUDE_DIRS})
+target_compile_definitions(wavelet PRIVATE ${PNG_DEFINITIONS})
+
+# GENS := *_generator.cpp
+file(GLOB GENS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*_generator.cpp")
+
+foreach(GEN_SRC ${GENS})
+    # GEN_NAME := *.generator
+    string(REPLACE "_generator.cpp" "" GEN_NAME "${GEN_SRC}")
+    # GEN_EXECUTABLE := *.generator
+    string(REPLACE "_generator.cpp" "" GEN_EXECUTABLE "${GEN_SRC}.generator")
+    add_executable("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/GenGen.cpp" "${GEN_SRC}")
+    target_link_libraries("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../bin/libHalide.a" z)
+
+    halide_add_generator_dependency(TARGET wavelet
+                           GENERATOR_TARGET "${GEN_EXECUTABLE}"
+                           GENERATOR_NAME "${GEN_NAME}"
+                           GENERATED_FUNCTION "${GEN_NAME}"
+                           GENERATOR_ARGS "target=host")
 endforeach()
-foreach(header_file ${_HL_HEADER_FILES})
-  list(APPEND HL_HEADER_FILES "${CMAKE_CURRENT_BINARY_DIR}/${header_file}")
-endforeach()
-
-# Final executable
-add_executable(wavelet_filter filter.cpp ${HL_HEADER_FILES})
-target_link_libraries(wavelet_filter PRIVATE ${HL_MODULES} "${HALIDE_RUNTIME_OBJ}" ${PNG_LIBRARIES})
-target_include_directories(wavelet_filter PRIVATE "${CMAKE_CURRENT_BINARY_DIR}"
-                           ${PNG_INCLUDE_DIRS})
-target_compile_definitions(wavelet_filter PRIVATE ${PNG_DEFINITIONS})
-
-if (NOT WIN32)
-  target_link_libraries(wavelet_filter PRIVATE dl pthread)
-endif()
-set_target_properties(wavelet_filter wavelet PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                      "${CMAKE_CURRENT_BINARY_DIR}")
 
 
-# FIXME: Can't use halide_add_generator_dependency() becuase it does not
-# support a seperate halide_runtime object. It also passes command line
-# parameters to the generator which "wavelet" doesn't explicitly support.
-add_custom_command(OUTPUT ${HL_MODULES} ${HL_HEADER_FILES} "${HALIDE_RUNTIME_OBJ}"
- COMMAND wavelet
- COMMENT "Generating wavelet object files"
- WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-)
