@@ -15,8 +15,9 @@ include(../../HalideGenerator.cmake)
 # HalideGenerator.cmake makes this assumptions
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-include_directories ("${CMAKE_CURRENT_LIST_DIR}/../support")
-include_directories("${CMAKE_CURRENT_LIST_DIR}/../../include")
+SET(HALIDE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../" CACHE PATH "Root of Halide source Tree")
+include_directories ("${HALIDE_SRC_DIR}/apps/support")
+include_directories("${HALIDE_SRC_DIR}/include")
 
 add_executable(wavelet "${CMAKE_CURRENT_SOURCE_DIR}/wavelet.cpp")
 target_compile_options(wavelet PRIVATE "-std=c++11" "-fno-rtti")
