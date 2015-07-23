@@ -17,7 +17,6 @@ all: driver-host driver-arm-64-android driver-arm-32-android
 	cd $*; for f in test_*.h; do n=$${f/.h/}; echo '{"'$${n}'", &'$${n}'},'; done >> filters.h
 	echo '{NULL, NULL}};' >> $*/filters.h
 
-#driver-host driver-arm-32-android driver-arm-64-android : driver-%: driver.cpp %/filters.h
 driver-%: driver.cpp %/filters.h
 	$(CXX-$*) $(CXXFLAGS-$*) -I $* driver.cpp $*/test_*.o $*/simd_op_check_runtime.o -o driver-$* -ldl
 
