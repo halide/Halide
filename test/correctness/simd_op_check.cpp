@@ -1,138 +1,120 @@
 #include "Halide.h"
+#include <regex>
+#include <fstream>
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 using namespace Halide;
 
 // This tests that we can correctly generate all the simd ops
-
 using std::vector;
+using std::string;
 
 bool failed = false;
 Var x, y;
 
 bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2;
 
-char *filter = NULL;
-
-struct job {
-    const char *op;
-    const char *module;
-    Func f;
-    char *result;
-};
-
-vector<job> jobs;
+std::regex filter(".*");
 
 Target target;
 
-void check(const char *op, int vector_width, Expr e) {
-    if (filter) {
-        if (strncmp(op, filter, strlen(filter)) != 0) return;
-    }
+int num_processes = 16;
+int my_process_id = 0;
 
-    // printf("%s %d\n", op, vector_width);
+void check(string op, int vector_width, Expr e) {
+    static int counter = 0;
+    counter++;
 
+    // Come up with a name for this test
     std::string name = std::string("test_") + op + Internal::unique_name('_');
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.') name[i] = '_';
     }
+
+    // Bail out after generating the unique_name, so that names are
+    // unique across different processes and don't depend on filter
+    // settings.
+    if (!regex_match(op, filter)) return;
+    if (counter % num_processes != my_process_id) return;
+
+    // Define a vectorized Func that uses the pattern.
     Func f(name);
     f(x, y) = e;
-    f.bound(x, f.output_buffer().min(0), vector_width*1000).vectorize(x, vector_width);
+    f.bound(x, 0, vector_width*100).vectorize(x, vector_width);
+    f.compute_root();
+
+    // Include a scalar version
+    Func f_scalar("scalar_" + name);
+    f_scalar(x, y) = e;
+    f_scalar.bound(x, 0, vector_width*100);
+    f_scalar.compute_root();
+
+    // The output to the pipeline is the L1 difference as a double.
+    RDom r(0, vector_width*100, 0, 100);
+    Func error("error_" + name);
+    error() = sum(abs(cast<double>(f(r.x, r.y)) - f_scalar(r.x, r.y)));
 
     vector<Argument> arg_types;
-    arg_types.push_back(Argument("in_f32", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_f64", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i8", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u8", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i16", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u16", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i32", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u32", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_i64", Argument::InputBuffer, Int(1), 1));
-    arg_types.push_back(Argument("in_u64", Argument::InputBuffer, Int(1), 1));
+    arg_types.push_back(Argument("in_f32", Argument::InputBuffer, Float(32), 1));
+    arg_types.push_back(Argument("in_f64", Argument::InputBuffer, Float(64), 1));
+    arg_types.push_back(Argument("in_i8",  Argument::InputBuffer, Int(8),    1));
+    arg_types.push_back(Argument("in_u8",  Argument::InputBuffer, UInt(8),   1));
+    arg_types.push_back(Argument("in_i16", Argument::InputBuffer, Int(16),   1));
+    arg_types.push_back(Argument("in_u16", Argument::InputBuffer, UInt(16),  1));
+    arg_types.push_back(Argument("in_i32", Argument::InputBuffer, Int(32),   1));
+    arg_types.push_back(Argument("in_u32", Argument::InputBuffer, UInt(32),  1));
+    arg_types.push_back(Argument("in_i64", Argument::InputBuffer, Int(64),   1));
+    arg_types.push_back(Argument("in_u64", Argument::InputBuffer, UInt(64),  1));
 
-    char *module = new char[1024];
-    snprintf(module, 1024, "test_%s_%s", op, f.name().c_str());
-    f.compile_to_assembly(module, arg_types, target);
 
-    job j = {op, module, f, NULL};
-    jobs.push_back(j);
-}
+    {
+        // Compile just the vector Func to assembly
+        string asm_filename = "check_" + f.name() + ".s";
+        f.compile_to_assembly(asm_filename, arg_types, target);
 
-void do_job(job &j) {
-    const char *op = j.op;
-    const char *module = j.module;
-    Func f = j.f;
+        vector<string> lines;
 
-    char cmd[1024];
-    snprintf(cmd, 1024,
-             "sed -n '/for .*y/,/end for test_.*.x.x/p' < %s | "
-             "sed 's/@.*//' > %s.s && "
-             "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null",
-             module, module, op, module);
+        std::ifstream asm_file;
+        asm_file.open(asm_filename);
 
-    if (system(cmd) != 0) {
-        j.result = new char[4099*2];
-        snprintf(j.result, 1024, "%s did not generate. Instead we got:\n", op);
-        char asmfile[1024];
-        snprintf(asmfile, 1024, "%s.s", module);
-        FILE *f = fopen(asmfile, "r");
-        const int max_size = 4096;
-        char *buf = j.result + strlen(j.result);
-        memset(buf, 0, max_size);
-        size_t bytes_in = fread(buf, 1, max_size, f);
-        if (bytes_in > max_size-1) {
-            buf[max_size-6] = ' ';
-            buf[max_size-5] = '.';
-            buf[max_size-4] = '.';
-            buf[max_size-3] = '.';
-            buf[max_size-2] = '\n';
-            buf[max_size-1] = 0;
-        } else {
-            buf[bytes_in] = 0;
+        // Skip lines until we hit "for test_*y"
+        std::regex start("for .*.s0.y"), end("end for.*x.x"), the_op("[^_]" + op);
+        string line;
+        while (getline(asm_file, line)) {
+            if (regex_search(line, start)) break;
         }
-        fclose(f);
-        failed = 1;
-    } else {
-    }
-}
 
-const int nThreads = 16;
+        bool found_it = false;
 
-void *worker(void *arg) {
-    int n = *((int *)arg);
-    for (size_t i = n; i < jobs.size(); i += nThreads) {
-        do_job(jobs[i]);
-    }
-    return NULL;
-}
+        // Accumulate lines until we hit "end for*x.x"
+        while (getline(asm_file, line)) {
+            if (regex_search(line, end)) break;
+            lines.push_back(line);
+            // Check for the op in question
+            found_it |= regex_search(line, the_op);
+        }
 
-void do_all_jobs() {
-    pthread_t threads[nThreads];
-    int indices[nThreads];
-    for (int i = 0; i < nThreads; i++) {
-        indices[i] = i;
-        pthread_create(threads + i, NULL, worker, indices + i);
+        if (!found_it) {
+            std::ostringstream msg;
+            msg << op << " did not generate. Instead we got:\n";
+            for (string l : lines) {
+                msg << l << "\n";
+            }
+            failed = true;
+            std::cerr << msg.str();
+        }
+        asm_file.close();
     }
-    for (int i = 0; i < nThreads; i++) {
-        pthread_join(threads[i], NULL);
-    }
-}
 
-void print_results() {
-    for (size_t i = 0; i < jobs.size(); i++) {
-        if (jobs[i].result)
-            printf("%s\n", jobs[i].result);
-    }
-    printf("Successfully generated: ");
-    for (size_t i = 0; i < jobs.size(); i++) {
-        if (!jobs[i].result)
-            printf("%s ", jobs[i].op);
-    }
-    printf("\n");
+    // Also compile the error checking Func
+    error.compile_to_file(std::string("test_") + f.name(), arg_types, target);
+
+    // Add some code to the test driver.
+    // ...
 }
 
 Expr i64(Expr e) {
@@ -1221,9 +1203,8 @@ void check_neon_all() {
                 tmp1.compute_root();
                 tmp2(x, y) = select(x%2 == 0, tmp1(x/2), tmp1(x/2 + 16));
                 tmp2.compute_root().vectorize(x, width/bits);
-                char *op = (char *)malloc(32);
-                snprintf(op, 32, "vst2.%d", bits);
-                check(arm32 ? op : "st2", width/bits, tmp2(0, 0) + tmp2(0, 63));
+                string op = "vst2." + std::to_string(bits);
+                check(arm32 ? op : string("st2"), width/bits, tmp2(0, 0) + tmp2(0, 63));
             }
         }
     }
@@ -1240,9 +1221,8 @@ void check_neon_all() {
                 Expr e = (tmp1(x/2)*2 + 7)/4;
                 tmp2(x, y) = select(x%2 == 0, e*3, e + 17);
                 tmp2.compute_root().vectorize(x, width/bits);
-                char *op = (char *)malloc(32);
-                snprintf(op, 32, "vst2.%d", bits);
-                check(arm32 ? op : "st2", width/bits, tmp2(0, 0) + tmp2(0, 127));
+                string op = "vst2." + std::to_string(bits);
+                check(arm32 ? op : string("st2"), width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
@@ -1259,9 +1239,8 @@ void check_neon_all() {
                                     x%3 == 1, tmp1(x/3 + 16),
                                     tmp1(x/3 + 32));
                 tmp2.compute_root().vectorize(x, width/bits);
-                char *op = (char *)malloc(32);
-                snprintf(op, 32, "vst3.%d", bits);
-                check(arm32 ? op : "st3", width/bits, tmp2(0, 0) + tmp2(0, 127));
+                string op = "vst3." + std::to_string(bits);
+                check(arm32 ? op : string("st3"), width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
@@ -1279,9 +1258,8 @@ void check_neon_all() {
                                     x%4 == 2, tmp1(x/4 + 32),
                                     tmp1(x/4 + 48));
                 tmp2.compute_root().vectorize(x, width/bits);
-                char *op = (char *)malloc(32);
-                snprintf(op, 32, "vst4.%d", bits);
-                check(arm32 ? op : "st4", width/bits, tmp2(0, 0) + tmp2(0, 127));
+                string op = "vst4." + std::to_string(bits);
+                check(arm32 ? op : string("st4"), width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
@@ -1315,12 +1293,26 @@ void check_neon_all() {
     // halide.
 }
 
-using std::string;
-
 int main(int argc, char **argv) {
+    if (argc > 1) {
+        num_processes = 1;
+        filter = std::regex(argv[1]);
+    }
 
-    if (argc > 1) filter = argv[1];
-    else filter = NULL;
+    // If we're testing everything, fork into many processes
+    vector<int> children;
+    for (int i = 1; i < num_processes; i++) {
+        int pid = fork();
+        if (!pid) {
+            // I'm a worker
+            my_process_id = i;
+            children.clear();
+            break;
+        } else {
+            // I'm the master
+            children.push_back(pid);
+        }
+    }
 
     target = get_target_from_environment();
     target.set_features({Target::NoAsserts, Target::NoBoundsQuery, Target::JIT});
@@ -1341,9 +1333,17 @@ int main(int argc, char **argv) {
         check_neon_all();
     }
 
-    do_all_jobs();
+    // Wait for any children to terminate
+    for (int child : children) {
+        int child_status = 0;
+        waitpid(child, &child_status, 0);
+        if (child_status) failed = true;
+    }
 
-    print_results();
+    if (!children.empty() && !failed) {
+        printf("Success!\n");
+    }
 
     return failed ? -1 : 0;
+
 }
