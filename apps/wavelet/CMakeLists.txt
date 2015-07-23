@@ -5,7 +5,7 @@
 # Generators in a simple app.
 #
 # To use:
-# mkdir build_cmake && cd build_cmake && cmake .. && make -j8
+# mkdir build_cmake && cd build_cmake && cmake .. && make -j8 && ./bin/wavelet ../../images/gray.png .
 
 project(wavelet)
 cmake_minimum_required(VERSION 2.8.12)
