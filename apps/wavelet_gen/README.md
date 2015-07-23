@@ -1,1 +1,0 @@
-wavelet_gen is a trivial rewrite of the "wavelet" app, showing Generator use instead of direct compilation steps. It also demonstrates basic use of ahead-of-time Generator usage with both Make and CMake.
