@@ -1,6 +1,7 @@
-#include "Halide.h"
-#include <regex>
 #include <fstream>
+
+#include "Halide.h"
+
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
@@ -18,7 +19,7 @@ Var x, y;
 
 bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2;
 
-std::regex filter(".*");
+string filter = "";
 
 Target target;
 
@@ -30,7 +31,7 @@ void check(string op, int vector_width, Expr e) {
     counter++;
 
     // Come up with a name for this test
-    std::string name = std::string("test_") + op + Internal::unique_name('_');
+    std::string name = op + Internal::unique_name('_');
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.') name[i] = '_';
     }
@@ -38,23 +39,25 @@ void check(string op, int vector_width, Expr e) {
     // Bail out after generating the unique_name, so that names are
     // unique across different processes and don't depend on filter
     // settings.
-    if (!regex_match(op, filter)) return;
+    if ((!filter.empty()) && (op.find(filter) == string::npos)) return;
     if (counter % num_processes != my_process_id) return;
+
+    const int W = 256*3, H = 100;
 
     // Define a vectorized Func that uses the pattern.
     Func f(name);
     f(x, y) = e;
-    f.bound(x, 0, vector_width*100).vectorize(x, vector_width);
+    f.bound(x, 0, W).vectorize(x, vector_width);
     f.compute_root();
 
     // Include a scalar version
     Func f_scalar("scalar_" + name);
     f_scalar(x, y) = e;
-    f_scalar.bound(x, 0, vector_width*100);
+    f_scalar.bound(x, 0, W);
     f_scalar.compute_root();
 
     // The output to the pipeline is the L1 difference as a double.
-    RDom r(0, vector_width*100, 0, 100);
+    RDom r(0, W, 0, H);
     Func error("error_" + name);
     error() = sum(abs(cast<double>(f(r.x, r.y)) - f_scalar(r.x, r.y)));
 
@@ -70,51 +73,53 @@ void check(string op, int vector_width, Expr e) {
     arg_types.push_back(Argument("in_i64", Argument::InputBuffer, Int(64),   1));
     arg_types.push_back(Argument("in_u64", Argument::InputBuffer, UInt(64),  1));
 
-
     {
         // Compile just the vector Func to assembly
         string asm_filename = "check_" + f.name() + ".s";
         f.compile_to_assembly(asm_filename, arg_types, target);
 
-        vector<string> lines;
-
         std::ifstream asm_file;
         asm_file.open(asm_filename);
 
         // Skip lines until we hit "for test_*y"
-        std::regex start("for .*.s0.y"), end("end for.*x.x"), the_op("[^_]" + op);
+
+        string end("end for*x.x");
+        string the_op("^_" + op);
         string line;
         while (getline(asm_file, line)) {
-            if (regex_search(line, start)) break;
+            if (line.find("for ") != string::npos &&
+                line.find("s0.y") != string::npos &&
+                line.find("preheader") == string::npos) break;
         }
 
         bool found_it = false;
 
+        std::ostringstream msg;
+        msg << op << " did not generate. Instead we got:\n";
+
         // Accumulate lines until we hit "end for*x.x"
         while (getline(asm_file, line)) {
-            if (regex_search(line, end)) break;
-            lines.push_back(line);
+            if (line.find("end for") != string::npos &&
+                Halide::Internal::ends_with(line, ".x.x")) break;
+
+            msg << line << "\n";
+
             // Check for the op in question
-            found_it |= regex_search(line, the_op);
+            found_it |= (line.find(op) != string::npos &&
+                         line.find("_" + op) == string::npos);
         }
 
         if (!found_it) {
-            std::ostringstream msg;
-            msg << op << " did not generate. Instead we got:\n";
-            for (string l : lines) {
-                msg << l << "\n";
-            }
             failed = true;
             std::cerr << msg.str();
         }
+
         asm_file.close();
     }
 
     // Also compile the error checking Func
     error.compile_to_file(std::string("test_") + f.name(), arg_types, target);
 
-    // Add some code to the test driver.
-    // ...
 }
 
 Expr i64(Expr e) {
@@ -1296,7 +1301,7 @@ void check_neon_all() {
 int main(int argc, char **argv) {
     if (argc > 1) {
         num_processes = 1;
-        filter = std::regex(argv[1]);
+        filter = argv[1];
     }
 
     // If we're testing everything, fork into many processes
@@ -1315,7 +1320,7 @@ int main(int argc, char **argv) {
     }
 
     target = get_target_from_environment();
-    target.set_features({Target::NoAsserts, Target::NoBoundsQuery, Target::JIT});
+    target.set_features({Target::NoAsserts, Target::NoBoundsQuery, Target::NoRuntime});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
@@ -1332,6 +1337,9 @@ int main(int argc, char **argv) {
     } else {
         check_neon_all();
     }
+
+    // Compile a runtime for this target, for use in the static test.
+    compile_standalone_runtime("simd_op_check_runtime.o", target);
 
     // Wait for any children to terminate
     for (int child : children) {
