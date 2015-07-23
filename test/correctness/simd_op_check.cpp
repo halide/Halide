@@ -30,11 +30,12 @@ void check(string op, int vector_width, Expr e) {
     static int counter = 0;
     counter++;
 
-    // Come up with a name for this test
-    std::string name = op + Internal::unique_name('_');
+    // Make a name for the test by uniquing then sanitizing the op name
+    string name = op;
     for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.') name[i] = '_';
+        if (!isalnum(name[i])) name[i] = '_';
     }
+    name += "_" + std::to_string(counter);
 
     // Bail out after generating the unique_name, so that names are
     // unique across different processes and don't depend on filter
@@ -56,10 +57,10 @@ void check(string op, int vector_width, Expr e) {
     f_scalar.bound(x, 0, W);
     f_scalar.compute_root();
 
-    // The output to the pipeline is the L1 difference as a double.
+    // The output to the pipeline is the maximum absolute difference as a double.
     RDom r(0, W, 0, H);
     Func error("error_" + name);
-    error() = sum(abs(cast<double>(f(r.x, r.y)) - f_scalar(r.x, r.y)));
+    error() = maximum(abs(cast<double>(f(r.x, r.y)) - f_scalar(r.x, r.y)));
 
     vector<Argument> arg_types;
     arg_types.push_back(Argument("in_f32", Argument::InputBuffer, Float(32), 1));
@@ -75,7 +76,7 @@ void check(string op, int vector_width, Expr e) {
 
     {
         // Compile just the vector Func to assembly
-        string asm_filename = "check_" + f.name() + ".s";
+        string asm_filename = "check_" + name + ".s";
         f.compile_to_assembly(asm_filename, arg_types, target);
 
         std::ifstream asm_file;
@@ -118,7 +119,7 @@ void check(string op, int vector_width, Expr e) {
     }
 
     // Also compile the error checking Func
-    error.compile_to_file(std::string("test_") + f.name(), arg_types, target);
+    error.compile_to_file("test_" + name, arg_types, target);
 
 }
 
@@ -1320,7 +1321,7 @@ int main(int argc, char **argv) {
     }
 
     target = get_target_from_environment();
-    target.set_features({Target::NoAsserts, Target::NoBoundsQuery, Target::NoRuntime});
+    target.set_features({Target::NoBoundsQuery, Target::NoRuntime});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
@@ -1353,5 +1354,4 @@ int main(int argc, char **argv) {
     }
 
     return failed ? -1 : 0;
-
 }
