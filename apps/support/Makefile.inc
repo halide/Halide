@@ -10,6 +10,8 @@ else
 LIB_HALIDE = bin/libHalide.a
 endif
 
+GENERATOR_DEPS ?= ../../bin/libHalide.a ../../include/Halide.h ../../tools/GenGen.cpp
+
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
