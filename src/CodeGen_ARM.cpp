@@ -424,7 +424,8 @@ void CodeGen_ARM::visit(const Cast *op) {
     // optimization recognizes logical shift right but not arithemtic
     // shift right for this pattern. This matters for vaddhn of signed
     // integers.
-    if ((t.is_int() || t.is_uint()) &&
+    if (t.is_vector() &&
+        (t.is_int() || t.is_uint()) &&
         op->value.type().is_int() &&
         t.bits == op->value.type().bits / 2) {
         const Div *d = op->value.as<Div>();
@@ -439,7 +440,8 @@ void CodeGen_ARM::visit(const Cast *op) {
     }
 
     // Catch widening of absolute difference
-    if ((t.is_int() || t.is_uint()) &&
+    if (t.is_vector() &&
+        (t.is_int() || t.is_uint()) &&
         (op->value.type().is_int() || op->value.type().is_uint()) &&
         t.bits == op->value.type().bits * 2) {
         Expr a, b;
