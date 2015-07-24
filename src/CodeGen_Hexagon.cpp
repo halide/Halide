@@ -1676,8 +1676,6 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     if (value)
       return;
   }
-
-  value = emitBinaryOp(op, multiplies);
   if (!value) {
     // There is a good chance we are dealing with
     // vector by scalar kind of multiply instructions.
@@ -1739,22 +1737,22 @@ void CodeGen_Hexagon::visit(const Mul *op) {
           }
           if (Imm) {
             int ImmValue = Imm->value;
-            int ScalarValue = 0;
+            unsigned int ScalarValue = 0;
             Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
             if (Vec.type().bits == 16
-                && ImmValue <= UInt(8).imax()) {
-              int A = ImmValue & 0xFF;
-              int B = A | (A << 8);
+                && ImmValue <= Int(8).imax()) {
+              unsigned int A = ImmValue & 0xFF;
+              unsigned int B = A | (A << 8);
               ScalarValue = B | (B << 16);
               IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyihb);
             } else if (Vec.type().bits == 32) {
-              if (ImmValue <= UInt(8).imax()) {
-                int A = ImmValue & 0xFF;
-                int B = A | (A << 8);
+              if (ImmValue <= Int(8).imax()) {
+                unsigned int A = ImmValue & 0xFF;
+                unsigned int B = A | (A << 8);
                 ScalarValue = B | (B << 16);
                 IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwb);
-              } else if (ImmValue <= UInt(16).imax()) {
-                int A = ImmValue & 0xFFFF;
+              } else if (ImmValue <= Int(16).imax()) {
+                unsigned int A = ImmValue & 0xFFFF;
                 ScalarValue = (A << 16) | A;
                 IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwh);
               } else
@@ -1803,6 +1801,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
       }
     }
   }
+  value = emitBinaryOp(op, multiplies);
   if (!value) {
     CodeGen_Posix::visit(op);
     return;
