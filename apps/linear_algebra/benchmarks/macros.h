@@ -17,6 +17,7 @@
 #define L1Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \
+        (void) alpha;                                                   \
         Vector x(random_vector(N));                                     \
         Vector y(random_vector(N));                                     \
                                                                         \
@@ -35,6 +36,8 @@
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \
         Scalar beta = random_scalar();                                  \
+        (void) alpha;                                                   \
+        (void) beta;                                                    \
         Vector x(random_vector(N));                                     \
         Vector y(random_vector(N));                                     \
         Matrix A(random_matrix(N));                                     \
