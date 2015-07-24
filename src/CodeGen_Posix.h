@@ -41,6 +41,9 @@ protected:
         /** Destructor stack slot for this allocation. */
         llvm::Value *destructor;
 
+        /** Function to accomplish the destruction. */
+        llvm::Function *destructor_function;
+
         /** How many bytes this allocation is, or 0 if not
          * constant. */
         int constant_bytes;
@@ -82,7 +85,7 @@ private:
      * when it goes out of scope call 'destroy_allocation'. */
     Allocation create_allocation(const std::string &name, Type type,
                                  const std::vector<Expr> &extents,
-                                 Expr condition, Expr new_expr);
+                                 Expr condition, Expr new_expr, Stmt delete_stmt);
 
     /** Free the memory backing an allocation and pop it from the
      * symbol table and the allocations map. For heap allocations it

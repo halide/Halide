@@ -242,7 +242,7 @@ void IRMutator::visit(const Allocate *op) {
     Expr condition = mutate(op->condition);
     Expr new_expr;
     if (op->new_expr.defined()) {
-        mutate(op->new_expr);
+        new_expr = mutate(op->new_expr);
     }
     Stmt delete_stmt;
     if (op->delete_stmt.defined()) {

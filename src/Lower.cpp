@@ -75,7 +75,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     debug(1) << "Injecting memoization...\n";
-    s = inject_memoization(s, env, pipeline_name);
+    s = inject_memoization(s, env, pipeline_name, outputs);
     debug(2) << "Lowering after injecting memoization:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";

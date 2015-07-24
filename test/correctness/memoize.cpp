@@ -86,9 +86,11 @@ int main(int argc, char **argv) {
         Func count_calls;
         count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
-        Func f;
-        f() = count_calls(0, 0);
-        f.compute_root().memoize();
+        Func f, f_memoized;
+        f_memoized() = count_calls(0, 0);
+        f_memoized.compute_root().memoize();
+        f() = f_memoized();
+        f_memoized.compute_root().memoize();
 
         Image<uint8_t> result1 = f.realize();
         Image<uint8_t> result2 = f.realize();
@@ -519,8 +521,10 @@ int main(int argc, char **argv) {
           stage[i].compute_root();
         }
         stage[3].compute_root().memoize();
+        Func output;
+        output(_) = stage[3](_);
         val.set(23.0f);
-        Image<uint8_t> result = stage[3].realize(128, 128);
+        Image<uint8_t> result = output.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
@@ -532,7 +536,7 @@ int main(int argc, char **argv) {
           fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
-        result = stage[3].realize(128, 128);
+        result = output.realize(128, 128);
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
               assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));

@@ -51,8 +51,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition,
-                                                           Expr new_expr) {
-
+                                                           Expr new_expr, Stmt delete_stmt) {
     Value *llvm_size = NULL;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = 0;
@@ -83,11 +82,76 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
     Allocation allocation;
     allocation.constant_bytes = constant_bytes;
-    allocation.stack_bytes = stack_bytes;
+    allocation.stack_bytes = new_expr.defined() ? 0 : stack_bytes;
     allocation.ptr = NULL;
     allocation.destructor = NULL;
+    allocation.destructor_function = NULL;
 
-    if (stack_bytes != 0) {
+    if (new_expr.defined()) {
+        allocation.ptr = codegen(new_expr);
+
+        // Assert that the allocation worked.
+        Value *check = builder->CreateIsNotNull(allocation.ptr);
+        // If size is variable, check against 0
+        if (llvm_size != NULL) {
+            Value *zero_size = builder->CreateIsNull(llvm_size);
+            check = builder->CreateOr(check, zero_size);
+        }
+
+        // TODO: Consider custom error here, or insist error check in new_expr?
+        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+                                           std::vector<Expr>(), Call::Extern));
+
+        if (delete_stmt.defined()) {
+            Closure destructor_closure(delete_stmt, "", buffer_t_type);
+
+            // Allocate a closure
+            StructType *closure_t = destructor_closure.build_type(context);
+            Value *closure_ptr = create_alloca_at_entry(closure_t, 1);
+
+            // Fill in the closure
+            destructor_closure.pack_struct(closure_t, closure_ptr, symbol_table, builder);
+
+            llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
+            llvm::Type *args_t[] = {voidPointerType, voidPointerType};
+            FunctionType *func_t = FunctionType::get(void_t, args_t, false);
+            llvm::Function *closure_function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
+                                                                      "destructor for " + name, module);
+            closure_function->setDoesNotAlias(1);
+
+            IRBuilderBase::InsertPoint call_site = builder->saveIP();
+
+            {
+                SaveFunctionBuildState saved_state(this, closure_function);
+
+                // Get the function arguments
+
+                // The user context is first argument of the function; it's
+                // important that we override the name to be "__user_context",
+                // since the LLVM function has a random auto-generated name for
+                // this argument.
+                llvm::Function::arg_iterator iter = function->arg_begin();
+                sym_push("__user_context", iter);
+
+                // The closure pointer is the second and last argument.
+                ++iter;
+                iter->setName("destructor_closure");
+                Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
+                // Load everything from the closure into the new scope
+                destructor_closure.unpack_struct(symbol_table, closure_t, closure_handle, builder);
+
+                // Generate the new function body
+                codegen(delete_stmt);
+
+                builder->CreateRetVoid();
+            }
+            builder->restoreIP(call_site);
+
+            // Register the destructor
+            allocation.destructor = register_destructor(closure_function, closure_ptr, OnError);
+            allocation.destructor_function = closure_function;
+        }
+    } else if (stack_bytes != 0) {
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
         for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
@@ -151,6 +215,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         llvm::Function *free_fn = module->getFunction("halide_free");
         internal_assert(free_fn) << "Could not find halide_free in module.\n";
         allocation.destructor = register_destructor(free_fn, allocation.ptr, OnError);
+        allocation.destructor_function = free_fn;
     }
 
     // Push the allocation base pointer onto the symbol table
@@ -168,12 +233,9 @@ void CodeGen_Posix::free_allocation(const std::string &name, Stmt delete_stmt) {
         // Remember this allocation so it can be re-used by a later allocation.
         free_stack_allocs.push_back(alloc);
     } else {
-        internal_assert(alloc.destructor);
-
-        // Trigger the destructor
-        // TODO: make this execute the delete stmt
-        llvm::Function *free_fn = module->getFunction("halide_free");
-        trigger_destructor(free_fn, alloc.destructor);
+        if (alloc.destructor != NULL) {
+            trigger_destructor(alloc.destructor_function, alloc.destructor);
+        }
     }
 
     allocations.pop(name);
@@ -187,7 +249,8 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     }
 
     Allocation allocation = create_allocation(alloc->name, alloc->type,
-                                              alloc->extents, alloc->condition, alloc->new_expr);
+                                              alloc->extents, alloc->condition,
+                                              alloc->new_expr, alloc->delete_stmt);
     sym_push(alloc->name + ".host", allocation.ptr);
 
     codegen(alloc->body);

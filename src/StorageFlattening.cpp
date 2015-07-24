@@ -41,12 +41,14 @@ inline bool uses_extern_image(Stmt s) {
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e)
-        : outputs(outputs), env(e) {}
+        : outputs(outputs), env(e), innermost_memoized_realize(NULL), release_node(NULL) {}
     Scope<int> scope;
 private:
     const vector<Function> &outputs;
     const map<string, Function> &env;
     Scope<int> realizations;
+    Stmt innermost_memoized_realize;
+    Stmt release_node;
 
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       bool internal) {
@@ -96,25 +98,16 @@ private:
     using IRMutator::visit;
 
     void visit(const Realize *realize) {
-        realizations.push(realize->name, 1);
-
-        Stmt body = mutate(realize->body);
-
-        // Compute the size
-        std::vector<Expr> extents;
-        for (size_t i = 0; i < realize->bounds.size(); i++) {
-          extents.push_back(realize->bounds[i].extent);
-          extents[i] = mutate(extents[i]);
-        }
-        Expr condition = mutate(realize->condition);
-
-        realizations.pop(realize->name);
-
         vector<int> storage_permutation;
+        const Stmt old_memoized_realize = innermost_memoized_realize;
+        innermost_memoized_realize = Stmt();
         {
             map<string, Function>::const_iterator iter = env.find(realize->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             const vector<string> &storage_dims = iter->second.schedule().storage_dims();
+            if (iter->second.schedule().memoized()) {
+                innermost_memoized_realize = realize;
+            }
             const vector<string> &args = iter->second.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
@@ -127,6 +120,20 @@ private:
         }
 
         internal_assert(storage_permutation.size() == realize->bounds.size());
+
+        realizations.push(realize->name, 1);
+
+        Stmt body = mutate(realize->body);
+
+        // Compute the size
+        std::vector<Expr> extents;
+        for (size_t i = 0; i < realize->bounds.size(); i++) {
+            extents.push_back(realize->bounds[i].extent);
+            extents[i] = mutate(extents[i]);
+        }
+        Expr condition = mutate(realize->condition);
+
+        realizations.pop(realize->name);
 
         stmt = body;
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
@@ -159,7 +166,11 @@ private:
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            if (innermost_memoized_realize.defined()) {
+                args[0] = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
+            } else {
+                args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            }
             args[1] = realize->types[idx].bytes();
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];
@@ -172,8 +183,16 @@ private:
                                  buf,
                                  stmt);
 
-            // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
+            if (!innermost_memoized_realize.defined()) {
+                // Make the allocation node
+                stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
+            } else {
+                // Save information on LetStmts for Allocation made inside cache lookup block.
+                // TODO: This should not introduce a LetStmt for each element of the tuple
+                // as they are redundant
+                stmt = LetStmt::make(buffer_name + ".allocation_condition", condition, stmt);
+
+            }
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
@@ -194,6 +213,8 @@ private:
                 stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
             }
         }
+
+        innermost_memoized_realize = old_memoized_realize;
     }
 
     struct ProvideValue {
@@ -356,16 +377,59 @@ private:
     }
 
     void visit(const LetStmt *let) {
-        // Discover constrained versions of things.
-        bool constrained_version_exists = ends_with(let->name, ".constrained");
-        if (constrained_version_exists) {
-            scope.push(let->name, 0);
+        const Realize *memoized_realize = NULL;
+        if (innermost_memoized_realize.defined()) {
+            memoized_realize = innermost_memoized_realize.as<Realize>();
         }
+        if (memoized_realize != NULL &&
+            let->name == memoized_realize->name + ".release_stmt_wrapper") {
+            const Evaluate *eval = let->body.as<Evaluate>();
+            internal_assert(eval != NULL) << "Logic error: body of " << memoized_realize->name <<
+                ".release_stmt_wrapper is not an Evaluate Stmt.\n";
+            release_node = eval;
+            stmt = Stmt();
+        } else if (memoized_realize != NULL &&
+            let->name == memoized_realize->name + ".cache_miss") {
+            Expr value = mutate(let->value);
+            Stmt body = mutate(let->body);
 
-        IRMutator::visit(let);
+            for (size_t idx = memoized_realize->types.size(); idx > 0; idx--) {
+                string buffer_name = memoized_realize->name;
+                if (memoized_realize->types.size() > 1) {
+                    buffer_name = buffer_name + '.' + std::to_string(idx - 1);
+                }
 
-        if (constrained_version_exists) {
-            scope.pop(let->name);
+                // Promote the type to be a multiple of 8 bits
+                Type t = memoized_realize->types[idx - 1];
+                t.bits = t.bytes() * 8;
+
+                std::vector<Expr> extents;
+                for (size_t i = 0; i < memoized_realize->bounds.size(); i++) {
+                    extents.push_back(Variable::make(Int(32), buffer_name + ".extent." + std::to_string(i)));
+                }
+                Expr condition = Variable::make(Bool(), buffer_name + ".allocation_condition");
+
+                // Make the allocation node
+                body = Allocate::make(buffer_name, t, extents, condition, body,
+                                      Call::make(Handle(), Call::extract_buffer_host,
+                                                 { Variable::make(Handle(), buffer_name + ".buffer") }, Call::Intrinsic),
+                                      release_node);
+                release_node = Stmt();
+            }
+
+            stmt = LetStmt::make(let->name, value, body);
+        } else {
+            // Discover constrained versions of things.
+            bool constrained_version_exists = ends_with(let->name, ".constrained");
+            if (constrained_version_exists) {
+                scope.push(let->name, 0);
+            }
+
+            IRMutator::visit(let);
+
+            if (constrained_version_exists) {
+                scope.pop(let->name);
+            }
         }
     }
 };
