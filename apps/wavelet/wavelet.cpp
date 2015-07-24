@@ -1,77 +1,61 @@
-#include "Halide.h"
+#include <stdio.h>
 
-using namespace Halide;
+#include "haar_x.h"
+#include "inverse_haar_x.h"
+#include "daubechies_x.h"
+#include "inverse_daubechies_x.h"
 
-Var x, y, c;
+#include "static_image.h"
+#include "image_io.h"
 
-Func haar_x(Func in) {
-    Func out;
-    out(x, y, c) = select(c == 0,
-                          (in(2*x, y) + in(2*x+1, y)),
-                          (in(2*x, y) - in(2*x+1, y)))/2;
-    out.unroll(c, 2);
-    return out;
+template<typename T>
+T clamp(T x, T min, T max) {
+    if (x < min) return min;
+    if (x > max) return max;
+    return x;
 }
 
-Func inverse_haar_x(Func in) {
-    Func out;
-    out(x, y) = select(x%2 == 0,
-                       in(x/2, y, 0) + in(x/2, y, 1),
-                       in(x/2, y, 0) - in(x/2, y, 1));
-    out.unroll(x, 2);
-    return out;
+template<typename T>
+void save_untransformed(Image<T> t, const std::string& filename) {
+    save(t, filename);
+    printf("Saved %s\n", filename.c_str());
 }
 
-
-const float D0 = 0.4829629131445341f;
-const float D1 = 0.83651630373780772f;
-const float D2 = 0.22414386804201339f;
-const float D3 = -0.12940952255126034f;
-
-Func daubechies_x(Func in) {
-    Func out;
-    out(x, y, c) = select(c == 0,
-                          D0*in(2*x-1, y) + D1*in(2*x, y) + D2*in(2*x+1, y) + D3*in(2*x+2, y),
-                          D3*in(2*x-1, y) - D2*in(2*x, y) + D1*in(2*x+1, y) - D0*in(2*x+2, y));
-    out.unroll(c, 2);
-    return out;
-}
-
-Func inverse_daubechies_x(Func in) {
-    Func out;
-    out(x, y) = select(x%2 == 0,
-                       D2*in(x/2, y, 0) + D1*in(x/2, y, 1) + D0*in(x/2+1, y, 0) + D3*in(x/2+1, y, 1),
-                       D3*in(x/2, y, 0) - D0*in(x/2, y, 1) + D1*in(x/2+1, y, 0) - D2*in(x/2+1, y, 1));
-    out.unroll(x, 2);
-    return out;
+template<typename T>
+void save_transformed(Image<T> t, const std::string& filename) {
+    Image<T> rearranged(t.width()*2, t.height(), 1);
+    for (int y = 0; y < t.height(); y++) {
+        for (int x = 0; x < t.width(); x++) {
+            rearranged(x, y, 0) = clamp(t(x, y, 0), 0.0f, 1.0f);
+            rearranged(x + t.width(), y, 0) = clamp(t(x, y, 1)*4.f + 0.5f, 0.0f, 1.0f);
+        }
+    }
+    save(rearranged, filename);
+    printf("Saved %s\n", filename.c_str());
 }
 
 int main(int argc, char **argv) {
+    _assert(argc == 3, "Usage: main <src_image> <output-dir>\n");
 
-    ImageParam image(Float(32), 2);
-    ImageParam wavelet(Float(32), 3);
+    const std::string src_image = argv[1];
+    const std::string dirname = argv[2];
 
-    // Add a boundary condition for daubechies
-    Func clamped = BoundaryConditions::repeat_edge(image);
+    Image<float> input = load<float>(src_image);
+    Image<float> transformed(input.width()/2, input.height(), 2);
+    Image<float> inverse_transformed(input.width(), input.height(), 1);
 
-    Func wavelet_clamped = BoundaryConditions::repeat_edge(wavelet);
+    _assert(haar_x(input, transformed) == 0, "haar_x failed");
+    save_transformed(transformed, dirname + "/haar_x.png");
 
-    Target t = get_target_from_environment();
-    t.set_feature(Target::NoRuntime);
+    _assert(inverse_haar_x(transformed, inverse_transformed) == 0, "inverse_haar_x failed");
+    save_untransformed(inverse_transformed, dirname + "/inverse_haar_x.png");
 
-    Func inv_haar_x = inverse_haar_x(wavelet_clamped);
-    inv_haar_x.compile_to_file("inverse_haar_x", {wavelet}, t);
+    _assert(daubechies_x(input, transformed) == 0, "daubechies_x failed");
+    save_transformed(transformed, dirname + "/daubechies_x.png");
 
-    Func for_haar_x = haar_x(clamped);
-    for_haar_x.compile_to_file("haar_x", {image}, t);
+    _assert(inverse_daubechies_x(transformed, inverse_transformed) == 0, "inverse_daubechies_x failed");
+    save_untransformed(inverse_transformed, dirname + "/inverse_daubechies_x.png");
 
-    Func inv_daub_x = inverse_daubechies_x(wavelet_clamped);
-    inv_daub_x.compile_to_file("inverse_daubechies_x", {wavelet}, t);
-
-    Func for_daub_x = daubechies_x(clamped);
-    for_daub_x.compile_to_file("daubechies_x", {image}, t);
-
-    compile_standalone_runtime("halide_runtime.o", t);
-
+    printf("Done.\n");
     return 0;
 }
