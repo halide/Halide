@@ -48,9 +48,6 @@ protected:
     protected:
         using CodeGen_C::visit;
         std::string print_type(Type type);
-        // std::string print_reinterpret(Type type, Expr e);
-
-        // std::string get_memory_space(const std::string &);
 
         void visit(const Div *);
         void visit(const Mod *);

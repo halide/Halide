@@ -23,6 +23,7 @@ CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
     : glc(src_stream), target(target) {
 }
 
+namespace {
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
 Type map_type(const Type &type) {
@@ -50,6 +51,7 @@ Type map_type(const Type &type) {
         result.width = type.width;
     }
     return result;
+}
 }
 
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
@@ -83,12 +85,6 @@ string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type)
     }
     return oss.str();
 }
-
-// string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_reinterpret(Type type, Expr e) {
-//     ostringstream oss;
-//     oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
-//     return oss.str();
-// }
 
 namespace {
 string simt_intrinsic(const string &name) {
