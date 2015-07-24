@@ -197,5 +197,6 @@ typedef void *(*PFNGLMAPBUFFERRANGEPROC) (GLenum target, GLintptr offset, GLsize
 typedef void (*PFNGLDISPATCHCOMPUTEPROC) (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z);
 typedef void (*PFNGLUNMAPBUFFERPROC) (GLenum target);
 typedef void (*PFNGLBINDBUFFERBASEPROC) (GLenum target, GLuint index, GLuint buffer);
+typedef void (*PFNGLDELETEBUFFERSPROC) (GLsizei n, const GLuint* buffers);
 
 #endif  // MINI_OPENGL_H
