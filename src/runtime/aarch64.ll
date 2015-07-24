@@ -188,22 +188,6 @@ declare <2 x float> @llvm.aarch64.neon.frecps.v2f32(<2 x float> %x, <2 x float> 
 declare <4 x float> @llvm.aarch64.neon.frsqrts.v4f32(<4 x float> %x, <4 x float> %y) nounwind readnone;
 declare <2 x float> @llvm.aarch64.neon.frsqrts.v2f32(<2 x float> %x, <2 x float> %y) nounwind readnone;
 
-
-define weak_odr <4 x float> @fast_inverse_f32x4(<4 x float> %x) nounwind alwaysinline {
-       %approx = tail call <4 x float> @llvm.aarch64.neon.frecpe.v4f32(<4 x float> %x)
-       %correction = tail call <4 x float> @llvm.aarch64.neon.frecps.v4f32(<4 x float> %approx, <4 x float> %x)
-       %result = fmul <4 x float> %approx, %correction
-       ret <4 x float> %result
-}
-
-define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind alwaysinline {
-       %approx = tail call <4 x float> @llvm.aarch64.neon.frsqrte.v4f32(<4 x float> %x)
-       %approx2 = fmul <4 x float> %approx, %approx
-       %correction = tail call <4 x float> @llvm.aarch64.neon.frsqrts.v4f32(<4 x float> %approx2, <4 x float> %x)
-       %result = fmul <4 x float> %approx, %correction
-       ret <4 x float> %result
-}
-
 define weak_odr float @fast_inverse_f32(float %x) nounwind alwaysinline {
        %vec = insertelement <2 x float> undef, float %x, i32 0
        %approx = tail call <2 x float> @fast_inverse_f32x2(<2 x float> %vec)
@@ -218,6 +202,20 @@ define weak_odr <2 x float> @fast_inverse_f32x2(<2 x float> %x) nounwind alwaysi
        ret <2 x float> %result
 }
 
+define weak_odr <4 x float> @fast_inverse_f32x4(<4 x float> %x) nounwind alwaysinline {
+       %approx = tail call <4 x float> @llvm.aarch64.neon.frecpe.v4f32(<4 x float> %x)
+       %correction = tail call <4 x float> @llvm.aarch64.neon.frecps.v4f32(<4 x float> %approx, <4 x float> %x)
+       %result = fmul <4 x float> %approx, %correction
+       ret <4 x float> %result
+}
+
+define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind alwaysinline {
+       %vec = insertelement <2 x float> undef, float %x, i32 0
+       %approx = tail call <2 x float> @fast_inverse_sqrt_f32x2(<2 x float> %vec)
+       %result = extractelement <2 x float> %approx, i32 0
+       ret float %result
+}
+
 define weak_odr <2 x float> @fast_inverse_sqrt_f32x2(<2 x float> %x) nounwind alwaysinline {
        %approx = tail call <2 x float> @llvm.aarch64.neon.frsqrte.v2f32(<2 x float> %x)
        %approx2 = fmul <2 x float> %approx, %approx
@@ -226,11 +224,12 @@ define weak_odr <2 x float> @fast_inverse_sqrt_f32x2(<2 x float> %x) nounwind al
        ret <2 x float> %result
 }
 
-define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind alwaysinline {
-       %vec = insertelement <2 x float> undef, float %x, i32 0
-       %approx = tail call <2 x float> @fast_inverse_sqrt_f32x2(<2 x float> %vec)
-       %result = extractelement <2 x float> %approx, i32 0
-       ret float %result
+define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind alwaysinline {
+       %approx = tail call <4 x float> @llvm.aarch64.neon.frsqrte.v4f32(<4 x float> %x)
+       %approx2 = fmul <4 x float> %approx, %approx
+       %correction = tail call <4 x float> @llvm.aarch64.neon.frsqrts.v4f32(<4 x float> %approx2, <4 x float> %x)
+       %result = fmul <4 x float> %approx, %correction
+       ret <4 x float> %result
 }
 
 ; Declare all the vlds and vsts. Declaring them here simplifies the codegen class.
