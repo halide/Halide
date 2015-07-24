@@ -612,7 +612,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             load_opengl();
             break;
         case OpenGLCompute:
-            internal_assert(false) << "opengl compute is not supported\n";
+            // one_gpu.set_feature(Target::OpenGLCompute);
+            // load_opengl();
+            user_error << "Using OpenGL compute shaders from a JIT-compiled Halide pipeline is not yet supported\n";
             break;
         default:
             break;
@@ -717,6 +719,11 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::OpenGL)) {
         JITModule m = make_module(for_module, target, OpenGL, result, create);
+        if (m.compiled())
+            result.push_back(m);
+    }
+    if (target.has_feature(Target::OpenGLCompute)) {
+        JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
         if (m.compiled())
             result.push_back(m);
     }
