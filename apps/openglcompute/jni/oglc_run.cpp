@@ -8,11 +8,15 @@
 #include "avg_filter_float_arm.h"
 #include <sstream>
 
+#include "HalideRuntimeOpenGLCompute.h"
+
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
 extern "C" int halide_copy_to_host(void *, buffer_t *);
 extern "C" int halide_device_sync(void *, buffer_t *);
+extern "C" int halide_device_free(void *, buffer_t* buf);
+extern "C" void halide_device_release(void *, const halide_device_interface *interface);
 
 typedef int (*filter_t) (buffer_t *, buffer_t *);
 
@@ -190,6 +194,10 @@ template<class T> class Tester {
 
         bool matches = validate(bt_output, bt_output_arm);
         LOGI(matches? "Test passed.\n": "Test failed.\n");
+
+        halide_device_free(NULL, &bt_input);
+        halide_device_free(NULL, &bt_output);
+        halide_device_free(NULL, &bt_output_arm);
         return matches;
     }
 
@@ -246,6 +254,9 @@ int main(int argc, char** argv) {
     LOGI("---- ---- ----");
     LOGI("\nTesting float...\n");
     (new Tester<float>())->runTest();
+
+    halide_device_release(NULL, halide_openglcompute_device_interface());
+
     LOGI("^^^^ ^^^^ ^^^^\n");
 }
 
