@@ -15,7 +15,7 @@ using std::vector;
 using std::string;
 
 bool failed = false;
-Var x, y;
+Var x("x"), y("y");
 
 bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2;
 
