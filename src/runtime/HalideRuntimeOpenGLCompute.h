@@ -44,18 +44,18 @@ extern int halide_openglcompute_run(void *user_context,
                              int num_coords_dim1);
 // @}
 
-/** This functions MUST be provided by the host environment to retrieve pointers
- *  to OpenGL API functions.
+/** This function retrieves pointers to OpenGL API functions.
  *
- *  This function looks up OpenGL function by given function name.
+ *  You may have to implement this yourself. Halide only provides implementations
+ *  for some platforms."
  */
 void *halide_opengl_get_proc_address(void *user_context, const char *name);
 
 
-/** This functions MUST be provided by the host environment to create an OpenGL
- *  context for use by the OpenGL backend.
+/** This function creates an OpenGL context for use by the OpenGL backend.
  *
- *  This function creates OpenGL context using platform specific API.
+ *  You may have to implement this yourself as well. Halide only provides
+*   implementations for some platforms."
  */
 int halide_opengl_create_context(void *user_context);
 
