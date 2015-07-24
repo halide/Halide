@@ -326,7 +326,8 @@ public:
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
-        return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_release", args, Call::Extern));
+        return LetStmt::make(storage_base_name + ".release_stmt_wrapper", true,
+                             Evaluate::make(Call::make(Bool(), "halide_memoization_cache_release", args, Call::Extern)));
     }
 };
 
@@ -335,11 +336,13 @@ public:
 // Inject caching structure around memoized realizations.
 class InjectMemoization : public IRMutator {
 public:
-  const std::map<std::string, Function> &env;
-  const std::string &top_level_name;
+    const std::map<std::string, Function> &env;
+    const std::string &top_level_name;
+    const std::vector<Function> &outputs;
 
-  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name) :
-      env(e), top_level_name(name) {}
+  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name,
+                    const std::vector<Function> &outputs) :
+    env(e), top_level_name(name), outputs(outputs) {}
 private:
 
     using IRMutator::visit;
@@ -350,6 +353,13 @@ private:
             iter->second.schedule().memoized()) {
 
             const Function f(iter->second);
+
+            for (const Function &o : outputs) {
+                if (f.same_as(o)) {
+                    user_error << "Function " << f.name() << " cannot be memoized because "
+                               << "it an output of pipeline " << top_level_name << ".\n";
+                }
+            }
 
             // There are currently problems with the cache key
             // construction getting moved above the scope of use if
@@ -419,8 +429,9 @@ private:
 };
 
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
-                        const std::string &name) {
-    InjectMemoization injector(env, name);
+                        const std::string &name,
+                        const std::vector<Function> &outputs) {
+    InjectMemoization injector(env, name, outputs);
 
     return injector.mutate(s);
 }

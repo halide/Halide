@@ -610,6 +610,7 @@ Call::ConstString Call::random = "random";
 Call::ConstString Call::rewrite_buffer = "rewrite_buffer";
 Call::ConstString Call::create_buffer_t = "create_buffer_t";
 Call::ConstString Call::copy_buffer_t = "copy_buffer_t";
+Call::ConstString Call::extract_buffer_host = "extract_buffer_host";
 Call::ConstString Call::extract_buffer_min = "extract_buffer_min";
 Call::ConstString Call::extract_buffer_max = "extract_buffer_max";
 Call::ConstString Call::set_host_dirty = "set_host_dirty";

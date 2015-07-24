@@ -11,7 +11,7 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-#define CACHE_DEBUGGING 1
+#define CACHE_DEBUGGING 0
 
 #if CACHE_DEBUGGING
 WEAK void debug_print_buffer(void *user_context, const char *buf_name, const buffer_t &buf) {
@@ -409,10 +409,8 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 
     debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
-    debug(user_context) << "Printing allocation bounds for " << tuple_count << " buffers.\n";
     {
         for (int32_t i = 0; i < tuple_count; i++) {
-	  debug(user_context) << "Printing allocation bounds for buffer " << i << " " << tuple_buffers[i] << "\n";
             buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
@@ -498,7 +496,7 @@ WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *ca
     debug(user_context) << "Printing allocation bounds for " << tuple_count << " buffers.\n";
     {
         for (int32_t i = 0; i < tuple_count; i++) {
-	  debug(user_context) << "Printing allocation bounds for buffer " << i << " " << tuple_buffers[i] << "\n";
+          debug(user_context) << "Printing allocation bounds for buffer " << i << " " << tuple_buffers[i] << "\n";
             buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }

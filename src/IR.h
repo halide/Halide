@@ -271,11 +271,11 @@ struct Allocate : public StmtNode<Allocate> {
     Type type;
     std::vector<Expr> extents;
     Expr condition;
-    // Both new_expr and delete_stmt must both be defined or undefined, though
-    // after the EarlyFree pass runs, the delete_stmt may be set to undefined
-    // in the Allocate node as it has moved to the Free node.
-    // These override the code generator dependent malloc and free equivalents
+
+    // These override the code generator dependent malloc and freeequivalents
     // if provided. If the new succeeds, the delete is guaranteed to be called.
+    // It is allowed for the delete_stmt to be undefined even if
+    // new_expr is defined.
     Expr new_expr;
     Stmt delete_stmt;
     Stmt body;
@@ -382,6 +382,7 @@ struct Call : public ExprNode<Call> {
         copy_buffer_t,
         extract_buffer_min,
         extract_buffer_max,
+        extract_buffer_host,
         set_host_dirty,
         set_dev_dirty,
         popcount,

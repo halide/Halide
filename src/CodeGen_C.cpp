@@ -942,6 +942,10 @@ void CodeGen_C::visit(const Call *op) {
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+        } else if (op->name == Call::extract_buffer_host) {
+            internal_assert(op->args.size() == 1);
+            string a0 = print_expr(op->args[0]);
+            rhs << "((buffer_t *)(" << a0 << "))->host";
         } else if (op->name == Call::set_host_dirty) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
@@ -1272,18 +1276,18 @@ void CodeGen_C::visit(const Allocate *op) {
                 }
                 size_id = print_assignment(Int(64), new_size_id_rhs);
             }
-	    do_indent();
-	    stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
-	      " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
-	    open_scope();
-	    do_indent();
-	    stream << "halide_error("
-		   << (have_user_context ? "__user_context_" : "NULL")
-		   << ", \"32-bit signed overflow computing size of allocation "
-		   << op->name << "\\n\");\n";
-	    do_indent();
-	    stream << "return -1;\n";
-	    close_scope("overflow test " + op->name);
+            do_indent();
+            stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
+              " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
+            open_scope();
+            do_indent();
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "NULL")
+                   << ", \"32-bit signed overflow computing size of allocation "
+                   << op->name << "\\n\");\n";
+            do_indent();
+            stream << "return -1;\n";
+            close_scope("overflow test " + op->name);
         }
 
         // Check the condition to see if this allocation should actually be created.
