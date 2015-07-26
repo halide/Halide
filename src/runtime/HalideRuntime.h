@@ -288,8 +288,7 @@ extern void halide_memoization_cache_store(void *user_context, const uint8_t *ca
                                            buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
 /** TODO: docs. */
-extern void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size,
-                                             buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+extern void halide_memoization_cache_release(void *user_context, void *host);
 
 /** Free all memory and resources associated with the memoization cache.
  * Must be called at a time when no other threads are accessing the cache.

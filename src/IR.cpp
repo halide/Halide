@@ -391,7 +391,7 @@ Stmt Provide::make(std::string name, const std::vector<Expr> &values, const std:
 
 Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extents,
                     Expr condition, Stmt body,
-                    Expr new_expr, Stmt delete_stmt) {
+                    Expr new_expr, std::string free_function) {
     for (size_t i = 0; i < extents.size(); i++) {
         internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
         internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -405,16 +405,15 @@ Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extent
     node->type = type;
     node->extents = extents;
     node->new_expr = new_expr;
-    node->delete_stmt = delete_stmt;
+    node->free_function = free_function;
     node->condition = condition;
     node->body = body;
     return node;
 }
 
-Stmt Free::make(std::string name, Stmt delete_stmt) {
+Stmt Free::make(std::string name) {
     Free *node = new Free;
     node->name = name;
-    node->delete_stmt = delete_stmt;
     return node;
 }
 

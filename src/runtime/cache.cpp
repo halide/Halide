@@ -75,23 +75,12 @@ WEAK void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
         halide_assert(user_context, from.extent[i] == to.extent[i]);
         halide_assert(user_context, from.stride[i] == to.stride[i]);
     }
-#if 0
-    size_t buffer_size = full_extent(from);;
-    memcpy(to.host, from.host, buffer_size * from.elem_size);
-#else
     to.host = from.host;
-#endif
 }
 
 WEAK buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
     buffer_t result = buf;
-#if 0
-    size_t buffer_size = full_extent(result);
-    // TODO: ERROR RETURN
-    result.host = (uint8_t *)halide_malloc(user_context, buffer_size * result.elem_size);
-#else   
     copy_from_to(user_context, buf, result);
-#endif
     return result;
 }
 
@@ -162,7 +151,7 @@ WEAK void CacheEntry::destroy() {
     halide_free(NULL, key);
     for (int32_t i = 0; i < tuple_count; i++) {
         halide_device_free(NULL, &buffer(i));
-        halide_free(NULL, buffer(i).host);
+        halide_free(NULL, buffer(i).host - 16);
     }
 }
 
@@ -374,7 +363,7 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
                     *buf = entry->buffer(i);
                 }
 
-                entry->in_use_count++;
+                entry->in_use_count += tuple_count;
 
                 return false;
             }
@@ -386,7 +375,14 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
         buffer_t *buf = tuple_buffers[i];
         size_t buffer_size = full_extent(*buf);
         // TODO: ERROR RETURN
-        buf->host = (uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size);
+
+        // Each buffer has 16 bytes to store extra information just before the contents.
+        // 16 is chosen to keep that alignment. For a buffer between the frist lookup and store,
+        // this holds the cache key hash. For buffers where the lookup succeeded or the store
+        // has occurred, this holds a pointer to the hash entry.
+        // This is just for optimization the number of cycles it takes for the cache to operate.
+        buf->host = ((uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size + 16)) + 16;
+        *(uint32_t *)(buf->host - 16) = h;
     }
 
 #if CACHE_DEBUGGING
@@ -398,8 +394,9 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
 
 WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                          buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
-  debug(user_context) << "halide_memoization_cache_store\n";
-    uint32_t h = djb_hash(cache_key, size);
+    debug(user_context) << "halide_memoization_cache_store\n";
+
+    uint32_t h = *(uint32_t *)(tuple_buffers[0]->host - 16);
     uint32_t index = h % kHashTableSize;
 
     ScopedMutexLock lock(&memoization_lock);
@@ -437,10 +434,11 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
             }
             if (all_bounds_equal) {
                 halide_assert(user_context, no_host_pointers_equal);
+                // This entry is still in use by the caller. Mark it as having no cache entry
+                // so halide_memoization_cache_release can free the buffer.
                 for (int32_t i = 0; i < tuple_count; i++) {
-                    halide_device_free(user_context, tuple_buffers[i]);
-                    halide_free(user_context, tuple_buffers[i]->host);
-                }               
+                    *(CacheEntry **)(tuple_buffers[i]->host - 16) = NULL;
+                }
                 return;
             }
         }
@@ -473,7 +471,11 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     }
     cache_entries[index] = new_entry;
 
-    new_entry->in_use_count = 1;
+    new_entry->in_use_count = tuple_count;
+
+    for (int32_t i = 0; i < tuple_count; i++) {
+        *(CacheEntry **)(tuple_buffers[i]->host - 16) = new_entry;
+    }
 
 #if CACHE_DEBUGGING
     validate_cache();
@@ -481,52 +483,23 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     debug(user_context) << "Exiting halide_memoization_cache_store\n";
 }
 
-WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
-  debug(user_context) << "halide_memoization_cache_release\n";
-    uint32_t h = djb_hash(cache_key, size);
-    uint32_t index = h % kHashTableSize;
+WEAK void halide_memoization_cache_release(void *user_context, void *host) {
+    uint8_t *base = (uint8_t *)host - 16;
+    debug(user_context) << "halide_memoization_cache_release\n";
+    CacheEntry *entry = *(CacheEntry **)(base);
 
-    ScopedMutexLock lock(&memoization_lock);
+    if (entry == NULL) {
+        halide_free(user_context, base);
+    } else {
+        ScopedMutexLock lock(&memoization_lock);
 
+        halide_assert(user_context, entry->in_use_count > 0);
+        entry->in_use_count--;
 #if CACHE_DEBUGGING
-    debug_print_key(user_context, "halide_memoization_cache_release", cache_key, size);
-
-    debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
-
-    debug(user_context) << "Printing allocation bounds for " << tuple_count << " buffers.\n";
-    {
-        for (int32_t i = 0; i < tuple_count; i++) {
-          debug(user_context) << "Printing allocation bounds for buffer " << i << " " << tuple_buffers[i] << "\n";
-            buffer_t *buf = tuple_buffers[i];
-            debug_print_buffer(user_context, "Allocation bounds", *buf);
-        }
-    }
+    validate_cache();
 #endif
-
-    CacheEntry *entry = cache_entries[index];
-    while (entry != NULL) {
-        if (entry->hash == h && entry->key_size == size &&
-            keys_equal(entry->key, cache_key, size) && 
-            bounds_equal(entry->computed_bounds, *computed_bounds) &&
-            entry->tuple_count == tuple_count) {
-            
-            bool all_bounds_equal = true;
-
-            {
-                for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
-                    buffer_t *buf = tuple_buffers[i];
-                    all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
-                }
-            }
-            if (all_bounds_equal) {
-                halide_assert(user_context, entry->in_use_count > 0);
-                entry->in_use_count--;
-                return;
-            }
-        }
-        entry = entry->next;
     }
-    // TODO: Was an assert false here.
+
     debug(user_context) << "Exited halide_memoization_cache_release.\n";
 }
 

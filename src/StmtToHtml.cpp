@@ -460,10 +460,9 @@ private:
             print(op->new_expr);
             stream << matched("}");
         }
-        if (op->delete_stmt.defined()) {
+        if (!op->free_function.empty()) {
             stream << open_span("Matched");
-            stream << keyword("custom_delete") << "{";
-            print(op->delete_stmt);
+            stream << keyword("custom_delete") << "{ " << op->free_function << "(); ";
             stream << matched("}");
         }
 
@@ -478,12 +477,6 @@ private:
         stream << open_div("Free WrapLine");
         stream << keyword("free") << " ";
         stream << var(op->name);
-        if (op->delete_stmt.defined()) {
-            stream << open_span("Matched");
-            stream << keyword("custom_delete") << "{";
-            print(op->delete_stmt);
-            stream << matched("}");
-        }
         stream << close_div();
     }
     void visit(const Realize *op) {

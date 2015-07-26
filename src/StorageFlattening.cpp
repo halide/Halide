@@ -41,14 +41,13 @@ inline bool uses_extern_image(Stmt s) {
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e)
-        : outputs(outputs), env(e), innermost_memoized_realize(NULL), release_node(NULL) {}
+        : outputs(outputs), env(e), innermost_memoized_realize(NULL) {}
     Scope<int> scope;
 private:
     const vector<Function> &outputs;
     const map<string, Function> &env;
     Scope<int> realizations;
     Stmt innermost_memoized_realize;
-    Stmt release_node;
 
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       bool internal) {
@@ -382,13 +381,6 @@ private:
             memoized_realize = innermost_memoized_realize.as<Realize>();
         }
         if (memoized_realize != NULL &&
-            let->name == memoized_realize->name + ".release_stmt_wrapper") {
-            const Evaluate *eval = let->body.as<Evaluate>();
-            internal_assert(eval != NULL) << "Logic error: body of " << memoized_realize->name <<
-                ".release_stmt_wrapper is not an Evaluate Stmt.\n";
-            release_node = eval;
-            stmt = Stmt();
-        } else if (memoized_realize != NULL &&
             let->name == memoized_realize->name + ".cache_miss") {
             Expr value = mutate(let->value);
             Stmt body = mutate(let->body);
@@ -413,8 +405,7 @@ private:
                 body = Allocate::make(buffer_name, t, extents, condition, body,
                                       Call::make(Handle(), Call::extract_buffer_host,
                                                  { Variable::make(Handle(), buffer_name + ".buffer") }, Call::Intrinsic),
-                                      release_node);
-                release_node = Stmt();
+                                      "halide_memoization_cache_release");
             }
 
             stmt = LetStmt::make(let->name, value, body);

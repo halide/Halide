@@ -92,6 +92,8 @@ int main(int argc, char **argv) {
         f() = f_memoized();
         f_memoized.compute_root().memoize();
 
+	f.compile_to_assembly("/tmp/foo.s", { }, "f");
+
         Image<uint8_t> result1 = f.realize();
         Image<uint8_t> result2 = f.realize();
 

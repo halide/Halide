@@ -214,8 +214,6 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 }
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
-    user_assert(!f->delete_stmt.defined()) << "Free node inside PTX kernel has custom delete statment.\n" <<
-        "(Memoization is not supported inside GPU kernels at present.)\n";
     sym_pop(f->name + ".host");
 }
 

@@ -304,31 +304,6 @@ public:
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
         return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_store", args, Call::Extern));
     }
-
-    // Returns a statement which will store the result of a computation under this key
-    Stmt release_cache_entry(std::string key_allocation_name, std::string computed_bounds_name,
-                             int32_t tuple_count, std::string storage_base_name) {
-        std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
-                                  Call::Intrinsic));
-        args.push_back(key_size());
-        args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
-        args.push_back(tuple_count);
-        std::vector<Expr> buffers;
-        if (tuple_count == 1) {
-            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
-        } else {
-            for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
-            }
-        }
-        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
-
-        // This is actually a void call. How to indicate that? Look at Extern_ stuff.
-        return LetStmt::make(storage_base_name + ".release_stmt_wrapper", true,
-                             Evaluate::make(Call::make(Bool(), "halide_memoization_cache_release", args, Call::Extern)));
-    }
 };
 
 }
@@ -386,14 +361,12 @@ private:
 
             Stmt cache_store_back =
                 IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
-            Stmt cache_release = key_info.release_cache_entry(cache_key_name, computed_bounds_name, f.outputs(), op->name);
 
             Stmt mutated_produce = IfThenElse::make(cache_miss, produce);
             Stmt mutated_update =
                 update.defined() ? IfThenElse::make(cache_miss, update) :
                                        update;
-            Stmt mutated_consume = Block::make(consume, cache_release);
-            mutated_consume = Block::make(cache_store_back, mutated_consume);
+            Stmt mutated_consume = Block::make(cache_store_back, consume);
 
             Stmt mutated_pipeline = ProducerConsumer::make(op->name, mutated_produce, mutated_update, mutated_consume);
             Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name), mutated_pipeline);
