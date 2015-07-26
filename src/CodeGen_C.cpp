@@ -517,7 +517,9 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
            << " *)("
            << buf_name
            << "->host);\n";
-    allocations.push(buffer_name, t);
+    Allocation alloc;
+    alloc.type = t;
+    allocations.push(buffer_name, alloc);
     do_indent();
     stream << "(void)" << name << ";\n";
 
@@ -1090,7 +1092,7 @@ void CodeGen_C::visit(const Load *op) {
     Type t = op->type;
     bool type_cast_needed =
         !allocations.contains(op->name) ||
-        allocations.get(op->name) != t;
+        allocations.get(op->name).type != t;
 
     ostringstream rhs;
     if (type_cast_needed) {
@@ -1116,7 +1118,7 @@ void CodeGen_C::visit(const Store *op) {
     bool type_cast_needed =
         t.is_handle() ||
         !allocations.contains(op->name) ||
-        allocations.get(op->name) != t;
+        allocations.get(op->name).type != t;
 
     string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
@@ -1243,7 +1245,11 @@ void CodeGen_C::visit(const Allocate *op) {
     int32_t constant_size;
     string size_id;
     if (op->new_expr.defined()) {
-        allocations.push(op->name, op->type);
+        Allocation alloc;
+        alloc.type = op->type;
+        alloc.free_function = op->free_function;
+        allocations.push(op->name, alloc);
+        heap_allocations.push(op->name, 0);
         stream << print_type(op->type) << "*" << print_name(op->name) << " = (" << print_expr(op->new_expr) << ");\n";
     } else {
         if (constant_allocation_size(op->extents, op->name, constant_size)) {
@@ -1302,7 +1308,9 @@ void CodeGen_C::visit(const Allocate *op) {
             size_id = print_assignment(Int(64), print_expr(conditional_size));
         }
 
-        allocations.push(op->name, op->type);
+        Allocation alloc;
+        alloc.type = op->type;
+        allocations.push(op->name, alloc);
 
         do_indent();
         stream << print_type(op->type) << ' ';
@@ -1333,11 +1341,14 @@ void CodeGen_C::visit(const Allocate *op) {
 }
 
 void CodeGen_C::visit(const Free *op) {
-    if (op->delete_stmt.defined()) {
-        print_stmt(op->delete_stmt);
-    } else if (heap_allocations.contains(op->name)) {
+    if (heap_allocations.contains(op->name)) {
+        string free_function = allocations.get(op->name).free_function;
+        if (free_function.empty()) {
+            free_function = "halide_free";
+        }
+
         do_indent();
-        stream << "halide_free("
+        stream << free_function << "("
                << (have_user_context ? "__user_context_, " : "NULL, ")
                << print_name(op->name)
                << ");\n";

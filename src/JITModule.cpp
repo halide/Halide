@@ -257,19 +257,19 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     engine_builder.setMAttrs(mattrs_array);
 
     #if LLVM_VERSION >= 37
-	TargetMachine *tm = engine_builder.selectTarget();
-	if (m->getDataLayout() != *tm->getDataLayout()) {
-		debug(0) << "Warning: data layout mismatch between module (" 
-			     << m->getDataLayout().getStringRepresentation()
-				 << ") and what the execution engine expects (" 
-				 << tm->getDataLayout()->getStringRepresentation() << ")\n";
-		m->setDataLayout(*tm->getDataLayout());
-	}
+        TargetMachine *tm = engine_builder.selectTarget();
+        if (m->getDataLayout() != *tm->getDataLayout()) {
+                debug(0) << "Warning: data layout mismatch between module (" 
+                             << m->getDataLayout().getStringRepresentation()
+                                 << ") and what the execution engine expects (" 
+                                 << tm->getDataLayout()->getStringRepresentation() << ")\n";
+                m->setDataLayout(*tm->getDataLayout());
+        }
     ExecutionEngine *ee = engine_builder.create(tm);
     #else
     ExecutionEngine *ee = engine_builder.create();
     #endif
-	
+        
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 

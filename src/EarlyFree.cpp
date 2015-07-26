@@ -116,7 +116,6 @@ class InjectMarker : public IRMutator {
 public:
     string func;
     Stmt last_use;
-    Stmt delete_stmt;
 
     InjectMarker() : injected(false) {}
 private:
@@ -129,7 +128,7 @@ private:
         if (injected) return s;
         if (s.same_as(last_use)) {
             injected = true;
-            return Block::make(s, Free::make(func, delete_stmt));
+            return Block::make(s, Free::make(func));
         } else {
             return mutate(s);
         }
@@ -182,11 +181,10 @@ class InjectEarlyFrees : public IRMutator {
             InjectMarker inject_marker;
             inject_marker.func = alloc->name;
             inject_marker.last_use = last_use.last_use;
-            inject_marker.delete_stmt = alloc->delete_stmt;
             stmt = inject_marker.mutate(stmt);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
-                                  Block::make(alloc->body, Free::make(alloc->name, alloc->delete_stmt)), alloc->new_expr);
+                                  Block::make(alloc->body, Free::make(alloc->name)), alloc->new_expr);
         }
 
     }

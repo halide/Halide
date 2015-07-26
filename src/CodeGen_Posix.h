@@ -85,13 +85,7 @@ private:
      * when it goes out of scope call 'destroy_allocation'. */
     Allocation create_allocation(const std::string &name, Type type,
                                  const std::vector<Expr> &extents,
-                                 Expr condition, Expr new_expr, Stmt delete_stmt);
-
-    /** Free the memory backing an allocation and pop it from the
-     * symbol table and the allocations map. For heap allocations it
-     * calls halide_free in the runtime, for stack allocations it
-     * marks the block as free so it can be reused. */
-    void free_allocation(const std::string &name, Stmt delete_stmt);
+                                 Expr condition, Expr new_expr, std::string free_function);
 };
 
 }}

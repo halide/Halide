@@ -277,20 +277,19 @@ struct Allocate : public StmtNode<Allocate> {
     // It is allowed for the delete_stmt to be undefined even if
     // new_expr is defined.
     Expr new_expr;
-    Stmt delete_stmt;
+    std::string free_function;
     Stmt body;
 
     EXPORT static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
                             Expr condition, Stmt body,
-                            Expr new_expr = Expr(), Stmt delete_stmt = Stmt());
+                            Expr new_expr = Expr(), std::string free_function = std::string());
 };
 
 /** Free the resources associated with the given buffer. */
 struct Free : public StmtNode<Free> {
     std::string name;
-    Stmt delete_stmt;
 
-    EXPORT static Stmt make(std::string name, Stmt delete_stmt = Stmt());
+    EXPORT static Stmt make(std::string name);
 };
 
 /** A single-dimensional span. Includes all numbers between min and

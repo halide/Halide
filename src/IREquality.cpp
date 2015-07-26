@@ -383,7 +383,7 @@ void IRComparer::visit(const Allocate *op) {
     compare_stmt(s->body, op->body);
     compare_expr(s->condition, op->condition);
     compare_expr(s->new_expr, op->new_expr);
-    compare_stmt(s->delete_stmt, op->delete_stmt);
+    compare_names(s->free_function, op->free_function);
 }
 
 void IRComparer::visit(const Realize *op) {
@@ -414,7 +414,6 @@ void IRComparer::visit(const Free *op) {
     const Free *s = stmt.as<Free>();
 
     compare_names(s->name, op->name);
-    compare_stmt(s->delete_stmt, op->delete_stmt);
 }
 
 void IRComparer::visit(const IfThenElse *op) {
