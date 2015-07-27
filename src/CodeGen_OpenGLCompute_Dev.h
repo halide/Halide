@@ -42,12 +42,14 @@ protected:
     public:
         CodeGen_OpenGLCompute_C(std::ostream &s) : CodeGen_C(s) {}
         void add_kernel(Stmt stmt,
+                        Target target,
                         const std::string &name,
                         const std::vector<GPU_Argument> &args);
 
     protected:
         using CodeGen_C::visit;
         std::string print_type(Type type);
+        std::string print_name(const std::string &);
 
         void visit(const Div *);
         void visit(const Mod *);
