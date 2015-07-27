@@ -93,9 +93,8 @@ clean:
 	rm -f test_oglc_avg
 	rm -rf test_oglc_avg.dSYM/
 	rm -f avg_filter*
-	rm -f two_kernels
+	rm -f test_two_kernels
 	rm -rf test_two_kernels.dSYM/
-	rm -f two_kernels_filter*
 	rm -rf libs/
 	rm -rf obj/
 	rm -rf bin/

@@ -162,7 +162,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
             int new_workgroup_size = int_limit->value;
             user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_workgroup_size) <<
                 "OpenGLCompute requires all gpu kernels have same workgroup size, "
-                "but two different ones were encountered " << workgroup_size << " and " << new_workgroup_size <<
+                "but two different ones were encountered " << workgroup_size[index] << " and " << new_workgroup_size <<
                 " in dimension " << index << ".\n";
             workgroup_size[index] = new_workgroup_size;
             debug(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
@@ -242,6 +242,19 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
 
     do_indent();
     stream << print_name(op->name) << ".data[" << id_index << "] = " << id_value << ";\n";
+}
+
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op) {
+    ostringstream rhs;
+    string true_val = print_expr(op->true_value);
+    string false_val = print_expr(op->false_value);
+    string cond = print_expr(op->condition);
+    rhs << print_type(op->type)
+        << "(" << cond
+        << " ? " << true_val
+        << " : " << false_val
+        << ")";
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
