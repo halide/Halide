@@ -82,7 +82,10 @@ public:
     /** Get the extent of this buffer in the given dimension. */
     EXPORT int extent(int dim) const;
 
-    /** Get the number of bytes between adjacent elements of this buffer along the given dimension. */
+    /** Get the distance in memory (measured in the type of the buffer
+     * elements, not bytes) between adjacent elements of this buffer
+     * along the given dimension. For the innermost dimension, this
+     * will usually be one. */
     EXPORT int stride(int dim) const;
 
     /** Get the coordinate in the function that this buffer represents

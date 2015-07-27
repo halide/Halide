@@ -654,8 +654,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
         if (!sym_exists(destructor_name)) {
             llvm::Value *buf = sym_get(buf_name);
             // Register a destructor that frees the device allocation.
-            llvm::Instruction *destructor =
-                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf);
+            llvm::Value *destructor =
+                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf, CodeGen_LLVM::OnError);
             sym_push(destructor_name, destructor);
         }
     }
@@ -669,9 +669,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
     string destructor_name = op->name + ".buffer_gpu_destructor";
     if (sym_exists(destructor_name)) {
         Value *d = sym_get(destructor_name);
-        Instruction *inst = llvm::dyn_cast<Instruction>(d);
-        internal_assert(inst);
-        builder->Insert(inst->clone());
+        CodeGen_LLVM::trigger_destructor(module->getFunction("halide_device_free_as_destructor"), d);
         sym_pop(destructor_name);
     }
 }

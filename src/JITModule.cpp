@@ -31,100 +31,6 @@ using std::string;
 
 namespace {
 
-llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_type) {
-    llvm::LLVMContext &context(to_module->getContext());
-    if (&from_type->getContext() == &context) {
-        return from_type;
-    }
-
-    switch (from_type->getTypeID()) {
-    case llvm::Type::VoidTyID:
-        return llvm::Type::getVoidTy(context);
-        break;
-    case llvm::Type::HalfTyID:
-        return llvm::Type::getHalfTy(context);
-        break;
-    case llvm::Type::FloatTyID:
-        return llvm::Type::getFloatTy(context);
-        break;
-    case llvm::Type::DoubleTyID:
-        return llvm::Type::getDoubleTy(context);
-        break;
-    case llvm::Type::X86_FP80TyID:
-        return llvm::Type::getX86_FP80Ty(context);
-        break;
-    case llvm::Type::FP128TyID:
-        return llvm::Type::getFP128Ty(context);
-        break;
-    case llvm::Type::PPC_FP128TyID:
-        return llvm::Type::getPPC_FP128Ty(context);
-        break;
-    case llvm::Type::LabelTyID:
-        return llvm::Type::getLabelTy(context);
-        break;
-    case llvm::Type::MetadataTyID:
-        return llvm::Type::getMetadataTy(context);
-        break;
-    case llvm::Type::X86_MMXTyID:
-        return llvm::Type::getX86_MMXTy(context);
-        break;
-    case llvm::Type::IntegerTyID:
-        return llvm::Type::getIntNTy(context, from_type->getIntegerBitWidth());
-        break;
-    case llvm::Type::FunctionTyID: {
-        llvm::FunctionType *f = llvm::cast<llvm::FunctionType>(from_type);
-        llvm::Type *return_type = copy_llvm_type_to_module(to_module, f->getReturnType());
-        std::vector<llvm::Type *> arg_types;
-        for (size_t i = 0; i < f->getNumParams(); i++) {
-            arg_types.push_back(copy_llvm_type_to_module(to_module, f->getParamType(i)));
-        }
-        return llvm::FunctionType::get(return_type, arg_types, f->isVarArg());
-    } break;
-    case llvm::Type::StructTyID: {
-        llvm::StructType *result;
-        llvm::StructType *s = llvm::cast<llvm::StructType>(from_type);
-        std::vector<llvm::Type *> element_types;
-        for (size_t i = 0; i < s->getNumElements(); i++) {
-            element_types.push_back(copy_llvm_type_to_module(to_module, s->getElementType(i)));
-        }
-        if (s->isLiteral()) {
-            result = llvm::StructType::get(context, element_types, s->isPacked());
-        } else {
-            result = to_module->getTypeByName(s->getName());
-            if (result == NULL) {
-                result = llvm::StructType::create(context, s->getName());
-                if (!element_types.empty()) {
-                    result->setBody(element_types, s->isPacked());
-                }
-            } else {
-                if (result->isOpaque() &&
-                    !element_types.empty()) {
-                    result->setBody(element_types, s->isPacked());
-                }
-            }
-        }
-        return result;
-    } break;
-    case llvm::Type::ArrayTyID: {
-        llvm::ArrayType *a = llvm::cast<llvm::ArrayType>(from_type);
-        return llvm::ArrayType::get(copy_llvm_type_to_module(to_module, a->getElementType()), a->getNumElements());
-    } break;
-    case llvm::Type::PointerTyID: {
-        llvm::PointerType *p = llvm::cast<llvm::PointerType>(from_type);
-        return llvm::PointerType::get(copy_llvm_type_to_module(to_module, p->getElementType()), p->getAddressSpace());
-    } break;
-    case llvm::Type::VectorTyID: {
-        llvm::VectorType *v = llvm::cast<llvm::VectorType>(from_type);
-        return llvm::VectorType::get(copy_llvm_type_to_module(to_module, v->getElementType()), v->getNumElements());
-    } break;
-    default: {
-        internal_error << "Unhandled LLVM type\n";
-        return NULL;
-    }
-    }
-
-}
-
 typedef struct CUctx_st *CUcontext;
 
 struct SharedCudaContext {
@@ -331,7 +237,7 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(llvm::EngineKind::JIT);
-#if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
+    #if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
     // >= 3.6 there is only mcjit. Native client is currently in a
     // place between 3.5 and 3.6
     #if !WITH_NATIVE_CLIENT
@@ -341,21 +247,35 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     //engine_builder.setJITMemoryManager(memory_manager);
     HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
     engine_builder.setMCJITMemoryManager(memory_manager);
-#else
+    #else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-#endif
+    #endif
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(mcpu);
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
+
+    #if LLVM_VERSION >= 37
+	TargetMachine *tm = engine_builder.selectTarget();
+	if (m->getDataLayout() != *tm->getDataLayout()) {
+		debug(0) << "Warning: data layout mismatch between module (" 
+			     << m->getDataLayout().getStringRepresentation()
+				 << ") and what the execution engine expects (" 
+				 << tm->getDataLayout()->getStringRepresentation() << ")\n";
+		m->setDataLayout(*tm->getDataLayout());
+	}
+    ExecutionEngine *ee = engine_builder.create(tm);
+    #else
     ExecutionEngine *ee = engine_builder.create();
+    #endif
+	
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 
-#ifdef __arm__
+    #ifdef __arm__
     start = end = NULL;
-#endif
+    #endif
 
     // Do any target-specific initialization
     std::vector<llvm::JITEventListener *> listeners;
@@ -368,25 +288,6 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->RegisterJITEventListener(listeners[i]);
-    }
-
-    // Add exported symbols for all dependencies.
-    std::set<std::string> provided_symbols;
-    for (const JITModule &dep : dependencies) {
-        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
-            const std::string &name = i.first;
-            const Symbol &s = i.second;
-            if (provided_symbols.find(i.first) == provided_symbols.end()) {
-                llvm::Type *llvm_type = copy_llvm_type_to_module(m, s.llvm_type);
-                if (llvm_type->isFunctionTy()) {
-                    m->getOrInsertFunction(name, cast<FunctionType>(llvm_type));
-                } else {
-                    m->getOrInsertGlobal(name, llvm_type);
-                }
-                debug(3) << "Global value " << name << " is at address " << s.address << "\n";
-                provided_symbols.insert(name);
-            }
-        }
     }
 
     // Retrieve function pointers from the compiled module (which also
@@ -450,21 +351,16 @@ const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module.ptr->exports;
 }
 
-void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *module) {
-    for (const JITModule &dep : deps) {
-        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
-            const std::string &name = i.first;
-            const Symbol &s = i.second;
-            GlobalValue *gv;
-            llvm::Type *llvm_type = copy_llvm_type_to_module(module, s.llvm_type);
-            if (llvm_type->isFunctionTy()) {
-                gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)llvm_type);
-            } else {
-                gv = (GlobalValue *)module->getOrInsertGlobal(name, llvm_type);
-            }
-            gv->setLinkage(GlobalValue::ExternalWeakLinkage);
-        }
+JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const {
+    std::map<std::string, JITModule::Symbol>::iterator it = jit_module.ptr->exports.find(name);
+    if (it != jit_module.ptr->exports.end()) {
+        return it->second;
     }
+    for (const JITModule &dep : jit_module.ptr->dependencies) {
+        JITModule::Symbol s = dep.find_symbol_by_name(name);
+        if (s.address) return s;
+    }
+    return JITModule::Symbol();
 }
 
 void *JITModule::main_function() const {
@@ -515,7 +411,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     symbol.address = address;
 
     // Struct types are uniqued on the context, but the lookup API is only available
-    // ont he Module, not hte Context.
+    // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module.ptr->context);
     llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
     if (buffer_t == NULL) {

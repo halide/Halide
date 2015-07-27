@@ -99,6 +99,7 @@ struct Packet {
         }
         assert(read_stdin(payload, payload_bytes()) &&
                "Unexpected EOF mid-packet");
+        name[16] = 0;
         return true;
     }
 
@@ -235,6 +236,10 @@ void usage() {
             "\n"
             " -t timestep: How many Halide computations should be covered by each\n"
             "    frame. Defaults to 10000.\n"
+            " -d decay factor: How quickly should the yellow and blue highlights \n"
+            "    decay over time\n"
+            " -h hold frames: How many frames to output after the end of the trace. \n"
+            "    Defaults to 250.\n"
             " -l func label x y: When func is first touched, the label appears at\n"
             "    the given coordinates.\n"
             "\n"
@@ -272,13 +277,15 @@ void usage() {
 }
 
 int run(int argc, char **argv) {
-    assert(sizeof(Packet) == 4096);
+    static_assert(sizeof(Packet) == 4096, "");
 
     // State that determines how different funcs get drawn
     int frame_width = 1920, frame_height = 1080;
+    int decay_factor = 2;
     map<string, FuncDrawInfo> draw_info;
 
     int timestep = 10000;
+    int hold_frames = 250;
 
     // Parse command line args
     int i = 1;
@@ -333,6 +340,20 @@ int run(int argc, char **argv) {
             }
             assert(i + 1 < argc);
             timestep = atoi(argv[++i]);
+        } else if (next == "-d") {
+            if (i + 1 >= argc) {
+                usage();
+                return -1;
+            }
+            assert(i + 1 < argc);
+            decay_factor = atoi(argv[++i]);
+        } else if (next == "-h") {
+            if (i + 1 >= argc) {
+                usage();
+                return -1;
+            }
+            assert(i + 1 < argc);
+            hold_frames = atoi(argv[++i]);
         } else {
             usage();
             return -1;
@@ -366,16 +387,15 @@ int run(int argc, char **argv) {
 
     size_t end_counter = 0;
     while (1) {
-        // Hold for 500 frames once the trace has finished.
+        // Hold for some number of frames once the trace has finished.
         if (end_counter) {
             halide_clock += timestep;
-            end_counter++;
-            if (end_counter == 500) {
+            if (end_counter == hold_frames) {
                 return 0;
             }
         }
 
-        if (halide_clock >= video_clock) {
+        while (halide_clock >= video_clock) {
             // Composite text over anim over image
             for (int i = 0; i < frame_width * frame_height; i++) {
                 uint8_t *anim_px  = (uint8_t *)(anim + i);
@@ -401,7 +421,7 @@ int run(int argc, char **argv) {
                 uint32_t color = anim[i];
                 uint32_t rgb = color & 0x00ffffff;
                 uint8_t alpha = (color >> 24);
-                alpha /= 2;
+                alpha /= decay_factor;
                 anim[i] = (alpha << 24) | rgb;
             }
         }

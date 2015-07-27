@@ -118,6 +118,9 @@ DECLARE_CPP_INITMOD(posix_get_symbol)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(renderscript)
+DECLARE_CPP_INITMOD(profiler)
+DECLARE_CPP_INITMOD(profiler_inlined)
+DECLARE_CPP_INITMOD(runtime_api)
 DECLARE_CPP_INITMOD(metal)
 #ifdef WITH_ARM
 DECLARE_CPP_INITMOD(metal_objc_arm)
@@ -176,6 +179,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 #else
                 return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
                 #endif
+            } else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
             } else {
                 // Linux/Android/NaCl
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
@@ -187,6 +192,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
                 return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::Windows) {
+               return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
             } else {
                 return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
             }
@@ -522,6 +529,7 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
     enum InitialModuleType {
         ModuleAOT,
+        ModuleAOTNoRuntime,
         ModuleJITShared,
         ModuleJITInlined,
         ModuleGPU
@@ -535,6 +543,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         } else {
             module_type = ModuleJITInlined;
         }
+    } else if (t.has_feature(Target::NoRuntime)) {
+        module_type = ModuleAOTNoRuntime;
     } else {
         module_type = ModuleAOT;
     }
@@ -551,7 +561,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
     vector<llvm::Module *> modules;
 
     if (module_type != ModuleGPU) {
-        if (module_type != ModuleJITInlined) {
+        if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
             if (t.os == Target::Linux) {
                 modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
@@ -604,7 +614,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_destructors(c, bits_64, debug));
         }
 
-        if (module_type != ModuleJITInlined) {
+        if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
             modules.push_back(get_initmod_tracing(c, bits_64, debug));
@@ -616,6 +626,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
+            modules.push_back(get_initmod_profiler(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
@@ -642,6 +653,9 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             }
             if (t.has_feature(Target::AVX)) {
                 modules.push_back(get_initmod_x86_avx_ll(c));
+            }
+            if (t.has_feature(Target::Profile)) {
+                modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
             }
         }
     }
@@ -692,6 +706,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
 
     if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
         modules.push_back(get_initmod_matlab(c, bits_64, debug));
+    }
+
+    if (module_type == ModuleAOTNoRuntime ||
+        module_type == ModuleJITInlined) {
+        modules.push_back(get_initmod_runtime_api(c, bits_64, debug));
     }
 
     link_modules(modules, t);

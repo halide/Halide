@@ -35,8 +35,8 @@ protected:
         /** The memory */
         llvm::Value *ptr;
 
-        /** Cleanup code for this allocation. */
-        llvm::Instruction *destructor;
+        /** Destructor stack slot for this allocation. */
+        llvm::Value *destructor;
 
         /** How many bytes this allocation is, or 0 if not
          * constant. */

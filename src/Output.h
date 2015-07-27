@@ -55,6 +55,10 @@ EXPORT void compile_module_to_html(const Module &module, std::string filename = 
  * is the name of the module with the extension .stmt. */
 EXPORT void compile_module_to_text(const Module &module, std::string filename = "");
 
+/** Create an object file containing the Halide runtime for a given
+ * target. For use with Target::NoRuntime. */
+EXPORT void compile_standalone_runtime(std::string object_filename, Target t);
+
 }
 
 #endif
