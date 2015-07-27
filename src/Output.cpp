@@ -4,6 +4,7 @@
 #include "Output.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "LLVM_Runtime_Linker.h"
 
 #include <fstream>
 
@@ -105,6 +106,11 @@ void compile_module_to_c(const Module &module,
               std::string c_filename) {
     compile_module_to_c_header(module, h_filename);
     compile_module_to_c_source(module, c_filename);
+}
+
+void compile_standalone_runtime(std::string object_filename, Target t) {
+    Module empty("standalone_runtime", t.without_feature(Target::NoRuntime));
+    compile_module_to_object(empty, object_filename);
 }
 
 void compile_module_to_javascript_source(const Module &module, std::string filename) {

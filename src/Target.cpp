@@ -308,6 +308,10 @@ bool Target::merge_string(const std::string &target) {
             set_features({Target::F16C, Target::SSE41, Target::AVX});
         } else if (tok == "matlab") {
             set_feature(Target::Matlab);
+        } else if (tok == "profile") {
+            set_feature(Target::Profile);
+        } else if (tok == "no_runtime") {
+            set_feature(Target::NoRuntime);
         } else {
             return false;
         }
@@ -369,6 +373,8 @@ std::string Target::to_string() const {
       "user_context",
       "register_metadata",
       "matlab",
+      "profile",
+      "no_runtime",
       "javascript", "v8", "spider_monkey"
   };
   internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);

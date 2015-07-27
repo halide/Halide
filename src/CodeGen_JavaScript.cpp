@@ -888,11 +888,6 @@ void CodeGen_JavaScript::visit(const Call *op) {
                 }
             }
             rhs << ")";
-        } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 0);
-            rhs << "halide_profiling_timer(";
-            rhs << (have_user_context ? "__user_context" : "null");
-            rhs << ")";
         } else if (op->name == Call::null_handle) {
             rhs << "null";
         } else if (op->name == Call::address_of) {

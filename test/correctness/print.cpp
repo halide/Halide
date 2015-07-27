@@ -18,7 +18,17 @@ extern "C" void halide_print(void *user_context, const char *message) {
 #endif
 
 int main(int argc, char **argv) {
+<<<<<<< HEAD
     Target target = get_jit_target_from_environment();
+=======
+    if (get_jit_target_from_environment().has_feature(Target::Profile)) {
+        // The profiler adds lots of extra prints, so counting the
+        // number of prints is not useful.
+        printf("Skipping test because profiler is active\n");
+        return 0;
+    }
+
+>>>>>>> master
     Var x;
 
     {

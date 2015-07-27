@@ -168,10 +168,10 @@ endif
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
 ifneq ($(TEST_PTX), )
-STATIC_TEST_LIBS ?= -L/usr/lib/nvidia-current -lcuda
+CUDA_LDFLAGS ?= -L/usr/lib/nvidia-current -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
-STATIC_TEST_LIBS ?= -lOpenCL
+OPENCL_LDFLAGS ?= -lOpenCL
 endif
 HOST_OS=linux
 endif
@@ -179,10 +179,10 @@ endif
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
 ifneq ($(TEST_PTX), )
-STATIC_TEST_LIBS ?= -L/usr/local/cuda/lib -lcuda
+CUDA_LDFLAGS ?= -L/usr/local/cuda/lib -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
-STATIC_TEST_LIBS ?= -framework OpenCL
+OPENCL_LDFLAGS ?= -framework OpenCL
 endif
 HOST_OS=os_x
 endif
@@ -205,8 +205,6 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
-
-STATIC_TEST_LIBS += -ldl
 
 ifdef BUILD_PREFIX
 BUILD_DIR = build/$(BUILD_PREFIX)
@@ -484,7 +482,10 @@ RUNTIME_CPP_COMPONENTS = \
   posix_math \
   posix_print \
   posix_thread_pool \
+  profiler \
+  profiler_inlined \
   renderscript \
+  runtime_api \
   ssp \
   to_string \
   tracing \
@@ -782,17 +783,24 @@ $(FILTERS_DIR)/tiled_blur.generator: test/generator/tiled_blur_blur_generator.cp
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
 $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
 
-# Usually, it's considered best practice to have one Generator per .cpp file,
-# with the generator-name and filename matching; nested_externs_generators.cpp
-# is a counterexample, and thus requires some special casing to get right.
-# First, make a special rule to build each of the Generators in nested_externs_generator.cpp
-# (which all have the form nested_externs_*)
+# Usually, it's considered best practice to have one Generator per
+# .cpp file, with the generator-name and filename matching;
+# nested_externs_generators.cpp is a counterexample, and thus requires
+# some special casing to get right.  First, make a special rule to
+# build each of the Generators in nested_externs_generator.cpp (which
+# all have the form nested_externs_*). We'll build them without
+# including the Halide runtime in each, to also test that
+# functionality.
 $(FILTERS_DIR)/nested_externs_%.o $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_DIR)/nested_externs.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -g nested_externs_$* -o ../$(FILTERS_DIR) target=$(HL_TARGET)
+	cd tmp; $(LD_PATH_SETUP) ../$< -g nested_externs_$* -o ../$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
+
+$(FILTERS_DIR)/nested_externs_runtime.o: $(FILTERS_DIR)/nested_externs.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -r nested_externs_runtime.o -o ../$(FILTERS_DIR) target=$(HL_TARGET)
 
 # Synthesize 'nested_externs.o' based on the four generator products we need:
-$(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o
+$(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o $(FILTERS_DIR)/nested_externs_runtime.o
 	$(LD) -r $(FILTERS_DIR)/nested_externs_*.o -o $(FILTERS_DIR)/nested_externs.o
 
 # Synthesize 'nested_externs.h' based on the four generator products we need:
@@ -801,7 +809,11 @@ $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h (but not libHalide).
 $(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h include/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread $(STATIC_TEST_LIBS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -ldl -o $@
+
+# acquire_release is the only test that explicitly uses CUDA/OpenCL APIs, so link only those here.
+$(BIN_DIR)/generator_aot_acquire_release: test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.o $(FILTERS_DIR)/acquire_release.h include/HalideRuntime.h
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -ldl $(OPENCL_LDFLAGS) $(CUDA_LDFLAGS) -o $@
 
 # By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
 $(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
@@ -818,10 +830,10 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) $(STATIC_TEST_LIBS) -o $@; \
+		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-Iinclude -L$(BIN_DIR) -lHalide $(STATIC_TEST_LIBS) $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
+		-Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
 
 test_%: $(BIN_DIR)/test_%
@@ -942,6 +954,10 @@ ifneq (,$(findstring clang version 3.7,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 3.8,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -966,7 +982,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38))
 LLVM_OK=yes
 endif
 
@@ -985,15 +1001,23 @@ endif
 
 .PHONY: doc
 docs: doc
-doc: src test
+doc: src Doxyfile
 	doxygen
 
+Doxyfile: Doxyfile.in
+	@echo "Generating $@"
+	@sed -e "s#@CMAKE_BINARY_DIR@#$(shell pwd)#g" \
+	     -e "s#@CMAKE_SOURCE_DIR@#$(shell pwd)#g" \
+	    $< > $@
+
 $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
-	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools
+	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools $(DISTRIB_DIR)/tutorial/figures
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
 	cp include/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
+	cp tutorial/figures/*.gif $(DISTRIB_DIR)/tutorial/figures
+	cp tutorial/figures/*.mp4 $(DISTRIB_DIR)/tutorial/figures
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp tools/mex_halide.m $(DISTRIB_DIR)/tools
 	cp README.md $(DISTRIB_DIR)

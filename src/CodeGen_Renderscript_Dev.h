@@ -40,6 +40,8 @@ public:
 
     std::string api_unique_name() { return "renderscript"; }
 
+    virtual size_t slots_taken() const;
+
 protected:
     using CodeGen_LLVM::visit;
 
@@ -47,9 +49,6 @@ protected:
      * a Renderscript device module will often have many kernels compiled into it for
      * a single pipeline. */
     /* override */ virtual void init_module();
-
-    /* override */ virtual llvm::Triple get_target_triple() const;
-    /* override */ virtual llvm::DataLayout get_data_layout() const;
 
     /** We hold onto the basic block at the start of the device
      * function in order to inject allocas */

@@ -36,6 +36,7 @@ bool have_symbol(const char *s) {
     return get_symbol_address(s) != NULL;
 }
 
+#if 0
 llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_type) {
     llvm::LLVMContext &context(to_module->getContext());
     if (&from_type->getContext() == &context) {
@@ -129,6 +130,7 @@ llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_t
     }
 
 }
+#endif
 
 typedef struct CUctx_st *CUcontext;
 
@@ -161,51 +163,6 @@ struct SharedOpenCLContext {
 
     // We never free the context, for the same reason as above.
 } cl_ctx;
-
-void load_libcuda() {
-    // Make sure extern cuda calls inside the module point to the
-    // right things. If cuda is already linked in we should be
-    // fine. If not we need to tell llvm to load it.
-    if (have_symbol("cuInit")) {
-        debug(1) << "This program was linked to cuda already\n";
-    } else {
-        debug(1) << "Looking for cuda shared library...\n";
-        string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
-        }
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
-        }
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
-        }
-        user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
-    }
-}
-
-void load_libopencl() {
-    if (have_symbol("clCreateContext")) {
-        debug(1) << "This program was linked to OpenCL already\n";
-    } else {
-        debug(1) << "Looking for OpenCL shared library...\n";
-        string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
-        }
-        if (!error.empty()) {
-            error.clear();
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
-        }
-        user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
-    }
-}
 
 void load_opengl() {
 #if defined(__linux__)
@@ -381,7 +338,7 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(llvm::EngineKind::JIT);
-#if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
+    #if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
     // >= 3.6 there is only mcjit. Native client is currently in a
     // place between 3.5 and 3.6
     #if !WITH_NATIVE_CLIENT
@@ -391,21 +348,35 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     //engine_builder.setJITMemoryManager(memory_manager);
     HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
     engine_builder.setMCJITMemoryManager(memory_manager);
-#else
+    #else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-#endif
+    #endif
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(mcpu);
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
+
+    #if LLVM_VERSION >= 37
+	TargetMachine *tm = engine_builder.selectTarget();
+	if (m->getDataLayout() != *tm->getDataLayout()) {
+		debug(0) << "Warning: data layout mismatch between module (" 
+			     << m->getDataLayout().getStringRepresentation()
+				 << ") and what the execution engine expects (" 
+				 << tm->getDataLayout()->getStringRepresentation() << ")\n";
+		m->setDataLayout(*tm->getDataLayout());
+	}
+    ExecutionEngine *ee = engine_builder.create(tm);
+    #else
     ExecutionEngine *ee = engine_builder.create();
+    #endif
+	
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 
-#ifdef __arm__
+    #ifdef __arm__
     start = end = NULL;
-#endif
+    #endif
 
     // Do any target-specific initialization
     std::vector<llvm::JITEventListener *> listeners;
@@ -418,25 +389,6 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->RegisterJITEventListener(listeners[i]);
-    }
-
-    // Add exported symbols for all dependencies.
-    std::set<std::string> provided_symbols;
-    for (const JITModule &dep : dependencies) {
-        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
-            const std::string &name = i.first;
-            const Symbol &s = i.second;
-            if (provided_symbols.find(i.first) == provided_symbols.end()) {
-                llvm::Type *llvm_type = copy_llvm_type_to_module(m, s.llvm_type);
-                if (llvm_type->isFunctionTy()) {
-                    m->getOrInsertFunction(name, cast<FunctionType>(llvm_type));
-                } else {
-                    m->getOrInsertGlobal(name, llvm_type);
-                }
-                debug(3) << "Global value " << name << " is at address " << s.address << "\n";
-                provided_symbols.insert(name);
-            }
-        }
     }
 
     // Retrieve function pointers from the compiled module (which also
@@ -504,7 +456,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg, const std
 
     JITModule result; 
     CodeGen_LLVM *codegen = CodeGen_LLVM::new_for_target(target, result.jit_module.ptr->context);
-    codegen->init_for_codegen();
+    codegen->init_for_codegen("trampolines");
     std::vector<std::string> requested_exports;
     for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
         Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second.signature, extern_entry.second.c_function);
@@ -522,21 +474,16 @@ const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module.ptr->exports;
 }
 
-void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *module) {
-    for (const JITModule &dep : deps) {
-        for (const std::pair<std::string, Symbol> &i : dep.exports()) {
-            const std::string &name = i.first;
-            const Symbol &s = i.second;
-            GlobalValue *gv;
-            llvm::Type *llvm_type = copy_llvm_type_to_module(module, s.llvm_type);
-            if (llvm_type->isFunctionTy()) {
-                gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)llvm_type);
-            } else {
-                gv = (GlobalValue *)module->getOrInsertGlobal(name, llvm_type);
-            }
-            gv->setLinkage(GlobalValue::ExternalWeakLinkage);
-        }
+JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const {
+    std::map<std::string, JITModule::Symbol>::iterator it = jit_module.ptr->exports.find(name);
+    if (it != jit_module.ptr->exports.end()) {
+        return it->second;
     }
+    for (const JITModule &dep : jit_module.ptr->dependencies) {
+        JITModule::Symbol s = dep.find_symbol_by_name(name);
+        if (s.address) return s;
+    }
+    return JITModule::Symbol();
 }
 
 void *JITModule::main_function() const {
@@ -794,11 +741,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         switch (runtime_kind) {
         case OpenCL:
             one_gpu.set_feature(Target::OpenCL);
-            load_libopencl();
             break;
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
-            load_libcuda();
             break;
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);

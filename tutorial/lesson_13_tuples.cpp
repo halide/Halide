@@ -1,12 +1,7 @@
-// Halide tutorial lesson 13.
+// Halide tutorial lesson 13: Tuples
 
 // This lesson describes how to write Funcs that evaluate to multiple
 // values.
-
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_13_tuples
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_13*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_13 -std=c++11
@@ -16,12 +11,19 @@
 // g++ lesson_13*.cpp -g -I ../include -L ../bin -lHalide -o lesson_13 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_13
 
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_13_tuples
+// in a shell with the current directory at the top of the halide
+// source tree.
+
 #include "Halide.h"
 #include <stdio.h>
+#include <algorithm>
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    
+
     // So far Funcs (such as the one below) have evaluated to a single
     // scalar value for each point in their domain.
     Func single_valued;
@@ -50,7 +52,7 @@ int main(int argc, char **argv) {
     // 1) Funcs are defined over an infinite domain, so users of this
     // Func can for example access color_image(x, y, -17), which is
     // not a meaningful value and is probably indicative of a bug.
-    // 
+    //
     // 2) It requires a select, which can impact performance if not
     // bounded and unrolled:
     // brighter.bound(c, 0, 3).unroll(c);
@@ -59,7 +61,7 @@ int main(int argc, char **argv) {
     // same type. While the above two issues are merely inconvenient,
     // this one is a hard limitation that makes it impossible to
     // express certain things in this way.
-    
+
     // It is also possible to represent a collection of values as a
     // collection of Funcs:
     Func func_array[3];
@@ -71,7 +73,7 @@ int main(int argc, char **argv) {
     // new annoyance. Because these are separate Funcs, it is
     // difficult to schedule them so that they are all computed
     // together inside a single loop over x, y.
-    
+
     // A third alternative is to define a Func as evaluating to a
     // Tuple instead of an Expr. A Tuple is a fixed-size collection of
     // Exprs which may have different type. The following function
@@ -91,7 +93,7 @@ int main(int argc, char **argv) {
         assert(im1(30, 40) == 30 + 40);
         assert(im2(30, 40) == sinf(30 * 40));
     }
-    
+
     // All Tuple elements are evaluated together over the same domain
     // in the same loop nest, but stored in distinct allocations. The
     // equivalent C++ code to the above is:
@@ -110,7 +112,7 @@ int main(int argc, char **argv) {
     // into multiple distinct output buffer_t structs. These appear in
     // order at the end of the function signature:
     // int multi_valued(...input buffers and params..., buffer_t *output_1, buffer_t *output_2);
-    
+
     // You can construct a Tuple by passing multiple Exprs to the
     // Tuple constructor as we did above. Perhaps more elegantly, you
     // can also take advantage of C++11 initializer lists and just
@@ -135,19 +137,19 @@ int main(int argc, char **argv) {
         // Tuples are particularly useful in reductions, as they allow
         // the reduction to maintain complex state as it walks along
         // its domain. The simplest example is an argmax.
-        
+
         // First we create an Image to take the argmax over.
         Func input_func;
         input_func(x) = sin(x);
         Image<float> input = input_func.realize(100);
-        
+
         // Then we defined a 2-valued Tuple which tracks the maximum value
         // its index.
         Func arg_max;
-        
+
         // Pure definition.
         arg_max() = {0, input(0)};
-        
+
         // Update definition.
         RDom r(1, 99);
         Expr old_index = arg_max()[0];
@@ -155,7 +157,7 @@ int main(int argc, char **argv) {
         Expr new_index = select(old_max > input(r), r, old_index);
         Expr new_max   = max(input(r), old_max);
         arg_max() = {new_index, new_max};
-        
+
         // The equivalent C++ is:
         int arg_max_0 = 0;
         float arg_max_1 = input(0);
@@ -171,7 +173,7 @@ int main(int argc, char **argv) {
             arg_max_0 = new_index;
             arg_max_1 = new_max;
         }
-        
+
         // Let's verify that the Halide and C++ found the same maximum
         // value and index.
         {
@@ -181,7 +183,7 @@ int main(int argc, char **argv) {
             assert(arg_max_0 == r0(0));
             assert(arg_max_1 == r1(0));
         }
-        
+
         // Halide provides argmax and argmin as built-in reductions
         // similar to sum, product, maximum, and minimum. They return
         // a Tuple consisting of the point in the reduction domain
@@ -198,7 +200,7 @@ int main(int argc, char **argv) {
         // Halide's type system with user-defined types.
         struct Complex {
             Expr real, imag;
-            
+
             // Construct from a Tuple
             Complex(Tuple t) : real(t[0]), imag(t[1]) {}
 
@@ -208,17 +210,17 @@ int main(int argc, char **argv) {
             // Construct from a call to a Func by treating it as a Tuple
             Complex(FuncRefExpr t) : Complex(Tuple(t)) {}
             Complex(FuncRefVar t) : Complex(Tuple(t)) {}
-            
+
             // Convert to a Tuple
             operator Tuple() const {
                 return {real, imag};
             }
-            
+
             // Complex addition
             Complex operator+(const Complex &other) const {
                 return {real + other.real, imag + other.imag};
             }
-            
+
             // Complex multiplication
             Complex operator*(const Complex &other) const {
                 return {real * other.real - imag * other.imag,
@@ -227,31 +229,31 @@ int main(int argc, char **argv) {
 
             // Complex magnitude
             Expr magnitude() const {
-                return real * real + imag * imag;                
+                return real * real + imag * imag;
             }
-            
+
             // Other complex operators would go here. The above are
             // sufficient for this example.
         };
-        
+
         // Let's use the Complex struct to compute a Mandelbrot set.
         Func mandelbrot;
-        
+
         // The initial complex value corresponding to an x, y coordinate
         // in our Func.
         Complex initial(x/15.0f - 2.5f, y/6.0f - 2.0f);
-        
+
         // Pure definition.
         Var t;
         mandelbrot(x, y, t) = Complex(0.0f, 0.0f);
-        
+
         // We'll use an update definition to take 12 steps.
         RDom r(1, 12);
         Complex current = mandelbrot(x, y, r-1);
-        
+
         // The following line uses the complex multiplication and
         // addition we defined above.
-        mandelbrot(x, y, r) = current*current + initial; 
+        mandelbrot(x, y, r) = current*current + initial;
 
         // We'll use another tuple reduction to compute the iteration
         // number where the value first escapes a circle of radius 4.
@@ -263,7 +265,7 @@ int main(int argc, char **argv) {
 
         Expr escape_condition = Complex(mandelbrot(x, y, r)).magnitude() < 16.0f;
         Tuple first_escape = argmin(escape_condition);
-        
+
         // We only want the index, not the value, but argmin returns
         // both, so we'll index the argmin Tuple expression using
         // square brackets to get the Expr representing the index.
@@ -280,10 +282,9 @@ int main(int argc, char **argv) {
             printf("\n");
         }
     }
-    
-    
+
+
     printf("Success!\n");
 
     return 0;
 }
-

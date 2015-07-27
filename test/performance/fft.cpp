@@ -344,7 +344,7 @@ Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, f
 
     Var n0 = xT.args()[0];
     Var n1 = xT.args()[1];
-    xT.compute_at(dft, outermost(dft)).vectorize(n0).unroll(n1);
+    xT.compute_at(dft, outermost(dft)).vectorize(n1).unroll(n0);
 
     dft1T.compute_at(dft, outermost(dft));
     dft.compute_root();

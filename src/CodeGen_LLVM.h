@@ -69,7 +69,7 @@ public:
 
     /** Setup state for ad-hoc codegen. Used in JIT outside of compiling an entire Halide module.
      * TODO: This probably shouldn't exist. */
-    void init_for_codegen();
+    void init_for_codegen(const std::string &name);
 
     /** Compile all functions included in codegen and return llvm
      * module. Cannot add more code after calling this routine. */
@@ -108,8 +108,6 @@ protected:
      * compilation. The architecture-specific code generator should
      * define these. */
     // @{
-    virtual llvm::Triple get_target_triple() const = 0;
-    virtual llvm::DataLayout get_data_layout() const = 0;
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
@@ -230,16 +228,24 @@ protected:
     void push_buffer(const std::string &name, llvm::Value *buffer);
     void pop_buffer(const std::string &name);
 
+    /** Some destructors should always be called. Others should only
+     * be called if the pipeline is exiting with an error code. */
+    enum DestructorType {Always, OnError};
+
     /* Call this at the location of object creation to register how an
      * object should be destroyed. This does three things:
      * 1) Emits code here that puts the object in a unique
      * null-initialized stack slot
-     * 2) Adds an instruction to the error handling block that calls the
+     * 2) Adds an instruction to the destructor block that calls the
      * destructor on that stack slot if it's not null.
-     * 3) Returns that instruction, so that you can also insert a
-     * clone of it where you actually want to delete the object in the
-     * non-error case. */
-    llvm::Instruction *register_destructor(llvm::Function *destructor_fn, llvm::Value *obj);
+     * 3) Returns that stack slot, so you can neuter the destructor
+     * (by storing null to the stack slot) or destroy the object early
+     * (by calling trigger_destructor).
+     */
+    llvm::Value *register_destructor(llvm::Function *destructor_fn, llvm::Value *obj, DestructorType when);
+
+    /** Call a destructor early. Pass in the value returned by register destructor. */
+    void trigger_destructor(llvm::Function *destructor_fn, llvm::Value *stack_slot);
 
     /** Retrieves the block containing the error handling
      * code. Creates it if it doesn't already exist for this
@@ -251,8 +257,11 @@ protected:
      * Int(32) expression. */
     // @{
     void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = NULL);
-
     // @}
+
+    /** Return the the pipeline with the given error code. Will run
+     * the destructor block. */
+    void return_with_error_code(llvm::Value *error_code);
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
     llvm::Constant *create_string_constant(const std::string &str);

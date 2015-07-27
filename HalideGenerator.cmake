@@ -30,7 +30,8 @@ endfunction(halide_generator_output_path)
 #                                   GENERATOR_NAME <string>
 #                                   GENERATED_FUNCTION <string>
 #                                   GENERATOR_ARGS <arg> <arg> ...
-#                                   [OUTPUT_LIB_VAR <var>])
+#                                   [OUTPUT_LIB_VAR <var>]
+#                                   [OUTPUT_TARGET_VAR <var>])
 #
 #   TARGET is the name of the app or test target that the generator
 #     invocation target should be added to. Can either be a ordinary or Utility
@@ -75,7 +76,8 @@ function(halide_add_generator_dependency)
   # Add a custom target to invoke the GENERATOR_TARGET and output the Halide
   # generated library
   if (WIN32)
-    add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
+    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+                              "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
       DEPENDS "${args_GENERATOR_TARGET}"
       COMMAND "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${generator_exec}" ${invoke_args}
       COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${SCRATCH_DIR}\\${args_GENERATED_FUNCTION}.o"
@@ -83,7 +85,8 @@ function(halide_add_generator_dependency)
       )
   elseif(XCODE)
     if (NOT target_is_pnacl)
-      add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
+      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+                                "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
         DEPENDS "${args_GENERATOR_TARGET}"
 
         # The generator executable will be placed in a configuration specific
@@ -98,7 +101,7 @@ function(halide_add_generator_dependency)
         )
     else()
       # For pnacl targets, there is no libtool step
-      add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
+      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
         DEPENDS "${args_GENERATOR_TARGET}"
         COMMAND "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${generator_exec}" ${invoke_args}
         WORKING_DIRECTORY "${SCRATCH_DIR}"
@@ -107,7 +110,8 @@ function(halide_add_generator_dependency)
 
   else()
     if (NOT target_is_pnacl)
-      add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
+      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+                                "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
         DEPENDS "${args_GENERATOR_TARGET}"
         COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
         # Create an archive using ar (or similar)
@@ -116,7 +120,7 @@ function(halide_add_generator_dependency)
         )
     else()
       # No archive step for pnacl targets
-      add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
+      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
         DEPENDS "${args_GENERATOR_TARGET}"
         COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
         WORKING_DIRECTORY "${SCRATCH_DIR}"
@@ -129,7 +133,7 @@ function(halide_add_generator_dependency)
   #  "exec_generator_"
   set(exec_generator_target "exec_generator_${args_GENERATOR_NAME}_${args_GENERATED_FUNCTION}")
   add_custom_target(${exec_generator_target}
-                    DEPENDS "${FILTER_LIB}" "${FILTER_HDR}"
+                    DEPENDS "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
                     )
 
   # Place the target in a special folder in IDEs

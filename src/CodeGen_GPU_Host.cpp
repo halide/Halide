@@ -383,6 +383,10 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
 
+        if (target.has_feature(Target::Renderscript)) {
+            closure_args.insert(closure_args.begin(), GPU_Argument(".rs_slot_offset", false, Int(32), 0));
+        }
+
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
         if (target.has_feature(Target::OpenGL)) {
@@ -415,6 +419,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         }
 
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
+        int slots_taken = 0;
+        if (target.has_feature(Target::Renderscript)) {
+            slots_taken = gpu_codegen->slots_taken();
+            debug(4) << "Slots taken = " << slots_taken << "\n";
+        }
+
         user_assert(gpu_codegen != NULL)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
@@ -469,6 +479,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 // to keep it in sync with the argument names encoded in the
                 // shader header
                 val = ConstantInt::get(target_size_t_type, 1);
+            } else if (name.compare(".rs_slot_offset") == 0) {
+                user_assert(target.has_feature(Target::Renderscript)) <<
+                    ".rs_slot_offset variable is used by Renderscript only.";
+                // First argument for Renderscript _run method is slot offset.
+                val = ConstantInt::get(target_size_t_type, slots_taken);
             } else {
                 // Otherwise just look up the symbol
                 val = sym_get(name);
@@ -630,8 +645,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
         if (!sym_exists(destructor_name)) {
             llvm::Value *buf = sym_get(buf_name);
             // Register a destructor that frees the device allocation.
-            llvm::Instruction *destructor =
-                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf);
+            llvm::Value *destructor =
+                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf, CodeGen_LLVM::OnError);
             sym_push(destructor_name, destructor);
         }
     }
@@ -645,9 +660,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
     string destructor_name = op->name + ".buffer_gpu_destructor";
     if (sym_exists(destructor_name)) {
         Value *d = sym_get(destructor_name);
-        Instruction *inst = llvm::dyn_cast<Instruction>(d);
-        internal_assert(inst);
-        builder->Insert(inst->clone());
+        CodeGen_LLVM::trigger_destructor(module->getFunction("halide_device_free_as_destructor"), d);
         sym_pop(destructor_name);
     }
 }

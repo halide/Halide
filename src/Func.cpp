@@ -1559,7 +1559,7 @@ OutputImageParam Func::output_buffer() const {
     user_assert(func.output_buffers().size() == 1)
         << "Can't call Func::output_buffer on Func \"" << name()
         << "\" because it returns a Tuple.\n";
-    return OutputImageParam(func.output_buffers()[0]);
+    return OutputImageParam(func.output_buffers()[0], Argument::OutputBuffer);
 }
 
 vector<OutputImageParam> Func::output_buffers() const {
@@ -1568,7 +1568,7 @@ vector<OutputImageParam> Func::output_buffers() const {
 
     vector<OutputImageParam> bufs(func.output_buffers().size());
     for (size_t i = 0; i < bufs.size(); i++) {
-        bufs[i] = OutputImageParam(func.output_buffers()[i]);
+        bufs[i] = OutputImageParam(func.output_buffers()[i], Argument::OutputBuffer);
     }
     return bufs;
 }

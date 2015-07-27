@@ -63,7 +63,7 @@ const string globals =
     "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
     "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
-    "uint64_t halide_profiling_timer(void *ctx);\n"
+    "void halide_profiler_pipeline_end(void *, void *);\n"
     "}\n"
     "\n"
 
@@ -848,11 +848,6 @@ void CodeGen_C::visit(const Call *op) {
                 }
             }
             rhs << ")";
-        } else if (op->name == Call::profiling_timer) {
-            internal_assert(op->args.size() == 1);
-            rhs << "halide_profiling_timer(";
-            rhs << (have_user_context ? "__user_context_" : "NULL");
-            rhs << ")";
         } else if (op->name == Call::lerp) {
             internal_assert(op->args.size() == 3);
             Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -1038,6 +1033,27 @@ void CodeGen_C::visit(const Call *op) {
             stream << ");\n";
             rhs << buf_name;
 
+        } else if (op->name == Call::register_destructor) {
+            internal_assert(op->args.size() == 2);
+            const StringImm *fn = op->args[0].as<StringImm>();
+            internal_assert(fn);
+            string arg = print_expr(op->args[1]);
+
+            string call =
+                fn->value + "(" +
+                (have_user_context ? "__user_context_, " : "NULL, ")
+                + "arg);";
+
+            do_indent();
+            // Make a struct on the stack that calls the given function as a destructor
+            string struct_name = unique_name('s');
+            string instance_name = unique_name('d');
+            stream << "struct " << struct_name << "{ "
+                   << "void *arg; "
+                   << struct_name << "(void *a) : arg((void *)a) {} "
+                   << "~" << struct_name << "() {" << call << "}"
+                   << "} " << instance_name << "(" << arg << ");\n";
+            rhs << print_expr(0);
         } else {
             // TODO: other intrinsics
             internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
@@ -1066,8 +1082,12 @@ void CodeGen_C::visit(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name) == op->type);
+
+    Type t = op->type;
+    bool type_cast_needed =
+        !allocations.contains(op->name) ||
+        allocations.get(op->name) != t;
+
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "(("
@@ -1089,15 +1109,17 @@ void CodeGen_C::visit(const Store *op) {
 
     Type t = op->value.type();
 
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name) == t);
+    bool type_cast_needed =
+        t.is_handle() ||
+        !allocations.contains(op->name) ||
+        allocations.get(op->name) != t;
 
     string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
     do_indent();
 
     if (type_cast_needed) {
-        stream << "(("
+        stream << "((const "
                << print_type(t)
                << " *)"
                << print_name(op->name)

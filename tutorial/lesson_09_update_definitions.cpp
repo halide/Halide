@@ -1,11 +1,4 @@
-// Halide tutorial lesson 9
-
-// This lesson demonstrates how to define a Func in multiple passes, including scattering.
-
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_09_update_definitions
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
+// Halide tutorial lesson 9: Multi-pass Funcs, update definitions, and reductions
 
 // On linux, you can compile and run it like so:
 // g++ lesson_09*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09
@@ -14,6 +7,12 @@
 // On os x (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
 // g++ lesson_09*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
+
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_09_update_definitions
+// in a shell with the current directory at the top of the halide
+// source tree.
 
 #include "Halide.h"
 #include <stdio.h>

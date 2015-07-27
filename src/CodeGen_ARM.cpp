@@ -365,77 +365,6 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
 }
 
 
-llvm::Triple CodeGen_ARM::get_target_triple() const {
-    llvm::Triple triple;
-
-    if (target.bits == 32) {
-        if (target.has_feature(Target::ARMv7s)) {
-            triple.setArchName("armv7s");
-        } else {
-            triple.setArch(llvm::Triple::arm);
-        }
-    } else {
-        user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
-        #if (WITH_AARCH64)
-        triple.setArch(llvm::Triple::aarch64);
-        #else
-        user_error << "AArch64 llvm target not enabled in this build of Halide\n";
-        #endif
-    }
-
-    if (target.os == Target::Android) {
-        triple.setOS(llvm::Triple::Linux);
-        triple.setEnvironment(llvm::Triple::EABI);
-    } else if (target.os == Target::IOS) {
-        triple.setOS(llvm::Triple::IOS);
-        triple.setVendor(llvm::Triple::Apple);
-    } else if (target.os == Target::NaCl) {
-        user_assert(target.bits == 32) << "ARM NaCl must be 32-bit\n";
-        #ifdef WITH_NATIVE_CLIENT
-        triple.setOS(llvm::Triple::NaCl);
-        triple.setEnvironment(llvm::Triple::EABI);
-        // The ARM Nacl backend relies on global switches being set to do
-        // the sandboxing, so set them here.
-        #if LLVM_VERSION < 34
-        llvm::FlagSfiData = true;
-        llvm::FlagSfiLoad = true;
-        llvm::FlagSfiStore = true;
-        llvm::FlagSfiStack = true;
-        llvm::FlagSfiBranch = true;
-        llvm::FlagSfiDisableCP = true;
-        llvm::FlagSfiZeroMask = false;
-        ReserveR9 = true;
-        #endif
-        #else
-        user_error << "This version of Halide was compiled without nacl support\b";
-        #endif
-    } else if (target.os == Target::Linux) {
-        triple.setOS(llvm::Triple::Linux);
-        triple.setEnvironment(llvm::Triple::GNUEABIHF);
-    } else {
-        user_error << "No arm support for this OS\n";
-    }
-
-    return triple;
-}
-
-
-llvm::DataLayout CodeGen_ARM::get_data_layout() const {
-    if (target.bits == 32) {
-        if (target.os == Target::IOS) {
-            return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
-        } else {
-            return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
-        }
-    } else { // 64-bit
-        if (target.os == Target::IOS) {
-            return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
-        } else {
-            return llvm::DataLayout("e-m:e-i64:64-i128:128-n32:64-S128");
-        }
-    }
-}
-
 namespace {
 
 // Try to losslessly narrow an integer expression to the target type
@@ -1055,7 +984,7 @@ void CodeGen_ARM::visit(const Store *op) {
         internal_assert(slices >= 1);
         for (int i = 0; i < t.width; i += intrin_type.width) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.width);
+            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.width * num_vecs);
             Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
             ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
 
@@ -1244,15 +1173,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
 void CodeGen_ARM::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::profiling_timer) {
-            // Android devices generally have read-cycle-counter
-            // disabled in user mode; fall back to calling
-            // halide_current_time_ns().
-            internal_assert(op->args.size() == 1);
-            Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
-            e.accept(this);
-            return;
-        } else if (op->name == Call::abs && op->type.is_uint()) {
+        if (op->name == Call::abs && op->type.is_uint()) {
             internal_assert(op->args.size() == 1);
             // If the arg is a subtract with narrowable args, we can use vabdl.
             const Sub *sub = op->args[0].as<Sub>();
