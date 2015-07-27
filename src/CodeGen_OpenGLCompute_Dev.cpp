@@ -54,6 +54,13 @@ Type map_type(const Type &type) {
 }
 }
 
+// Identifiers containing double underscores '__' are reserved in GLSL, so we
+// have to use a different name mangling scheme than in the C code generator.
+string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_name(const string &name) {
+    string mangled = CodeGen_C::print_name(name);
+    return replace_all(mangled, "__", "XX");
+}
+
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
     ostringstream oss;
     type = map_type(type);
@@ -244,21 +251,24 @@ void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
-    glc.add_kernel(s, name, args);
+    glc.add_kernel(s, target, name, args);
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
-                                                      const string &name,
-                                                      const vector<GPU_Argument> &args) {
+                                                                    Target target,
+                                                                    const string &name,
+                                                                    const vector<GPU_Argument> &args) {
 
     debug(2) << "Adding OpenGLCompute kernel " << name << "\n";
     cache.clear();
 
-    stream << R"EOF(#version 310 es
-#extension GL_ANDROID_extension_pack_es31a : require
-
-float float_from_bits(int x) { return intBitsToFloat(x); }
-)EOF";
+    if (target.os == Target::Android) {
+        stream << "#version 310 es\n"
+               << "#extension GL_ANDROID_extension_pack_es31a : require\n";
+    } else {
+        stream << "#version 430\n";
+    }
+    stream << "float float_from_bits(int x) { return intBitsToFloat(x); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
@@ -268,17 +278,16 @@ float float_from_bits(int x) { return intBitsToFloat(x); }
             // } inBuffer;
             //
             stream << "layout(binding=" << i << ")"
-                << " buffer buffer" << i << " { "
-                << print_type(args[i].type) << " data[]; } " << print_name(args[i].name) << ";\n";
+                   << " buffer buffer" << i << " { "
+                   << print_type(args[i].type) << " data[]; } "
+                   << print_name(args[i].name) << ";\n";
         } else {
-            stream << "uniform " << print_type(args[i].type) << " " << print_name(args[i].name) << ";\n";
+            stream << "uniform " << print_type(args[i].type)
+                   << " " << print_name(args[i].name) << ";\n";
         }
     }
 
-    stream << R"EOF(
-void main()
-{
-)EOF";
+    stream << "void main()\n{\n";
     indent += 2;
     print(s);
     indent -= 2;

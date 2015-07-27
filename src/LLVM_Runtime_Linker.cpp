@@ -689,6 +689,10 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             if (t.os == Target::Android) {
                 // Only platform that supports OpenGL Compute for now.
                 modules.push_back(get_initmod_android_opengl_context(c, bits_64, debug));
+            } else if (t.os == Target::Linux) {
+                modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
+            } else if (t.os == Target::OSX) {
+                modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
