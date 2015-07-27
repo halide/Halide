@@ -36,9 +36,10 @@ protected:
 
     /** Various patterns to peephole match against */
     struct Pattern {
-        std::string intrin; ///< Name of the intrinsic
-        int intrin_width;   ///< The native vector width of the intrinsic
-        Expr pattern;       ///< The pattern to match against
+        std::string intrin32; ///< Name of the intrinsic for 32-bit arm
+        std::string intrin64; ///< Name of the intrinsic for 64-bit arm
+        int intrin_width;     ///< The native vector width of the intrinsic
+        Expr pattern;         ///< The pattern to match against
         enum PatternType {Simple = 0, ///< Just match the pattern
                           LeftShift,  ///< Match the pattern if the RHS is a const power of two
                           RightShift, ///< Match the pattern if the RHS is a const power of two
@@ -46,21 +47,28 @@ protected:
         };
         PatternType type;
         Pattern() {}
-        Pattern(const std::string &i, int w, Expr p, PatternType t = Simple) :
-            intrin("llvm.arm.neon." + i), intrin_width(w), pattern(p), type(t) {}
+        Pattern(const std::string &i32, const std::string &i64, int w, Expr p, PatternType t = Simple) :
+            intrin32("llvm.arm.neon." + i32),
+            intrin64("llvm.aarch64.neon." + i64),
+            intrin_width(w), pattern(p), type(t) {}
     };
     std::vector<Pattern> casts, left_shifts, averagings, negations;
+
+    // Call an intrinsic as defined by a pattern. Dispatches to the
+    // 32- or 64-bit name depending on the target's bit width.
+    // @{
+    llvm::Value *call_pattern(const Pattern &p, Type t, const std::vector<Expr> &args);
+    llvm::Value *call_pattern(const Pattern &p, llvm::Type *t, const std::vector<llvm::Value *> &args);
+    // @}
 
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
 
-    // On 64-bit ARM, the NEON instrinsics do not work as the syntax
-    // changed from 32-bit and this has not been updated.
-    // On 32-bit, NEON can be disabled for older processors.
+    // NEON can be disabled for older processors.
     bool neon_intrinsics_disabled() {
-        return target.bits == 64 || target.has_feature(Target::NoNEON);
+        return target.has_feature(Target::NoNEON);
     }
 };
 
