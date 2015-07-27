@@ -405,40 +405,12 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
 
-    void new_function_state(llvm::Function *&old_function,
-                            Scope<llvm::Value *> &old_symbol_table,
-                            llvm::BasicBlock *&old_destructor_block) {
-        old_function = function;
-        function = NULL;
-        symbol_table.swap(old_symbol_table);
-        old_destructor_block = destructor_block;
-        destructor_block = NULL;
-    }
+private:
 
-    void restore_function_state(llvm::Function *&old_function,
-                                Scope<llvm::Value *> &old_symbol_table,
-                                llvm::BasicBlock *&old_destructor_block) {
-        function = old_function;
-        symbol_table.swap(old_symbol_table);
-        destructor_block = old_destructor_block;
-    }
-
-    class SaveFunctionBuildState {
-        CodeGen_LLVM *cg;
-        llvm::Function *old_function;
-        Scope<llvm::Value *> old_symbol_table;
-        llvm::BasicBlock *old_destructor_block;
-    public:
-        SaveFunctionBuildState(CodeGen_LLVM *cg, llvm::Function *new_function);
-        ~SaveFunctionBuildState();
-    };
-
-   /** All the values in scope at the current code location during
+    /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
 
-private:
-       
     /** Alignment info for Int(32) variables in scope. */
     Scope<ModulusRemainder> alignment_info;
 

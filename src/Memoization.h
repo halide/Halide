@@ -24,6 +24,14 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs);
 
+/** This should be called after Storage Flattening has added Allocation
+ *  IR nodes. It connects the memoization cache lookups to the Allocations
+ *  so they point to the buffers from the memoization cache and those buffers
+ *  are released when no longer used.
+ *  Should not affect allocations for non-memoized Funcs.
+ */
+Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env);
+
 }
 }
 
