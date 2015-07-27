@@ -202,7 +202,7 @@ public:
 
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
-            size_so_far = (size_so_far + needed_alignment) & ~(needed_alignment - 1);
+            size_so_far = (size_so_far + needed_alignment - 1) & ~(needed_alignment - 1);
         }
         key_size_expr = (int32_t)size_so_far;
 
