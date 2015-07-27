@@ -202,9 +202,6 @@ public:
                 // 4)
                 s = do_bounds_query(s, in_pipeline);
 
-                // If we're at the outermost loop, we haven't made any
-                // outer promises about what the bounds will be, so we
-                // can bail out here.
 
                 if (!in_pipeline.empty()) {
                     // 3)
@@ -240,7 +237,31 @@ public:
                     // 1)
                     s = LetStmt::make(func.name() + ".outer_bounds_query",
                                       Variable::make(Handle(), func.name() + ".o0.bounds_query"), s);
+                } else {
+                    // If we're at the outermost loop, there is no
+                    // bounds query result from one level up, but we
+                    // still need to modify the region to be computed
+                    // based on the bounds query result and then do
+                    // another bounds query to ask for the required
+                    // input size given that.
+
+                    // 2)
+                    string inner_query_name = func.name() + ".o0.bounds_query";
+                    Expr inner_query = Variable::make(Handle(), inner_query_name);
+                    for (int i = 0; i < func.dimensions(); i++) {
+                        Expr new_min = Call::make(Int(32), Call::extract_buffer_min,
+                                                  {inner_query, i}, Call::Intrinsic);
+                        Expr new_max = Call::make(Int(32), Call::extract_buffer_max,
+                                                  {inner_query, i}, Call::Intrinsic);
+
+                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".max", new_max, s);
+                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".min", new_min, s);
+                    }
+
+                    s = do_bounds_query(s, in_pipeline);
+
                 }
+
             }
 
             if (in_pipeline.count(name) == 0) {

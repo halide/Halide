@@ -27,7 +27,7 @@ int count_interleaves(Func f) {
     t.set_feature(Target::NoBoundsQuery);
     t.set_feature(Target::NoAsserts);
     f.compute_root();
-    Stmt s = Internal::lower({f.function()}, t);
+    Stmt s = Internal::lower({f.function()}, f.name(), t);
     CountInterleaves i;
     s.accept(&i);
     return i.result;
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         Realization r3({buff3});
         interleaved.realize(r3);
 
-        check_interleave_count(interleaved, 2);
+        check_interleave_count(interleaved, 1);
 
         Image<float> result3 = r3[0];
         for (int x = 0; x < 16; x++) {

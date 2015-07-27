@@ -263,11 +263,23 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
         Expr extent = expand_expr(op->extent, scope);
-        if (is_monotonic(min, loop_var) != Constant ||
-            is_monotonic(extent, loop_var) != Constant) {
+        if (is_one(extent)) {
+            // Just treat it like a let
+            Stmt s = LetStmt::make(op->name, min, op->body);
+            s = mutate(s);
+            // Unpack it back into the for
+            const LetStmt *l = s.as<LetStmt>();
+            internal_assert(l);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, l->body);
+        } else if (is_monotonic(min, loop_var) != Constant ||
+                   is_monotonic(extent, loop_var) != Constant) {
+            debug(3) << "Not entering loop over " << op->name
+                     << " because the bounds depend on the var we're sliding over: "
+                     << min << ", " << extent << "\n";
             stmt = op;
         } else {
             IRMutator::visit(op);
+
         }
     }
 
@@ -299,6 +311,7 @@ public:
 class SlidingWindowOnFunction : public IRMutator {
     Function func;
 
+
     using IRMutator::visit;
 
     void visit(const For *op) {
@@ -308,7 +321,8 @@ class SlidingWindowOnFunction : public IRMutator {
 
         new_body = mutate(new_body);
 
-        if (op->for_type == ForType::Serial || op->for_type == ForType::Unrolled) {
+        if (op->for_type == ForType::Serial ||
+            op->for_type == ForType::Unrolled) {
             new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);
         }
 

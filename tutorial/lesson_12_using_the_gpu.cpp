@@ -1,11 +1,6 @@
-// Halide tutorial lesson 12.
+// Halide tutorial lesson 12: Using the GPU
 
-// This lesson demonstrates how to use Halide to run code on a GPU.
-
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_12_using_the_gpu
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
+// This lesson demonstrates how to use Halide to run code on a GPU using OpenCL.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
@@ -14,6 +9,12 @@
 // On os x:
 // g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
+
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_12_using_the_gpu
+// in a shell with the current directory at the top of the halide
+// source tree.
 
 #include "Halide.h"
 #include <stdio.h>

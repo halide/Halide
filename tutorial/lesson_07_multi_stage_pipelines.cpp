@@ -1,11 +1,4 @@
-// Halide tutorial lesson 7
-
-// This lesson demonstrates how express multi-stage pipelines.
-
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_07_multi_stage_pipelines
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
+// Halide tutorial lesson 7: Multi-stage pipelines
 
 // On linux, you can compile and run it like so:
 // g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
@@ -14,6 +7,12 @@
 // On os x:
 // g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
+
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_07_multi_stage_pipelines
+// in a shell with the current directory at the top of the halide
+// source tree.
 
 #include "Halide.h"
 #include <stdio.h>
@@ -101,7 +100,7 @@ int main(int argc, char **argv) {
         // reading out of bounds:
         Func clamped("clamped");
 
-        // Define an expression that clamps x to lie within the the
+        // Define an expression that clamps x to lie within the
         // range [0, input.width()-1].
         Expr clamped_x = clamp(x, 0, input.width()-1);
         // Similarly clamp y.

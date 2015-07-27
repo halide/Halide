@@ -1,11 +1,7 @@
-// Halide tutorial lesson 11.
+// Halide tutorial lesson 11: Cross-compilation
 
-// This lesson demonstrates how to use Halide as a cross-compiler.
-
-// This lesson can be built by invoking the command:
-//    make tutorial_lesson_11_cross_compilation
-// in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform-specific compiler invocations below.
+// This lesson demonstrates how to use Halide as a cross-compiler to
+// generate code for any platform from any platform.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_11*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_11
@@ -14,6 +10,12 @@
 // On os x:
 // g++ lesson_11*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -o lesson_11
 // DYLD_LIBRARY_PATH=../bin ./lesson_11
+
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_11_cross_compilation
+// in a shell with the current directory at the top of the halide
+// source tree.
 
 #include "Halide.h"
 #include <stdio.h>

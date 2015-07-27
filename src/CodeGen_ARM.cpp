@@ -984,7 +984,7 @@ void CodeGen_ARM::visit(const Store *op) {
         internal_assert(slices >= 1);
         for (int i = 0; i < t.width; i += intrin_type.width) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.width);
+            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.width * num_vecs);
             Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
             ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
 
@@ -1173,15 +1173,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
 void CodeGen_ARM::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::profiling_timer) {
-            // Android devices generally have read-cycle-counter
-            // disabled in user mode; fall back to calling
-            // halide_current_time_ns().
-            internal_assert(op->args.size() == 1);
-            Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
-            e.accept(this);
-            return;
-        } else if (op->name == Call::abs && op->type.is_uint()) {
+        if (op->name == Call::abs && op->type.is_uint()) {
             internal_assert(op->args.size() == 1);
             // If the arg is a subtract with narrowable args, we can use vabdl.
             const Sub *sub = op->args[0].as<Sub>();
