@@ -127,20 +127,6 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
 
 }
 
-CodeGen_LLVM::SaveFunctionBuildState::SaveFunctionBuildState(CodeGen_LLVM *cg, llvm::Function *new_function) : cg(cg) {
-    cg->new_function_state(old_function, old_symbol_table, old_destructor_block);
-    cg->function = new_function;
-
-    // Make the initial basic block and jump the builder into the new function
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(*cg->context, "entry", new_function);
-    cg->builder->SetInsertPoint(block);
-}
-
-CodeGen_LLVM::SaveFunctionBuildState::~SaveFunctionBuildState() {
-    // Move the builder back to the main function and call do_par_for
-    cg->restore_function_state(old_function, old_symbol_table, old_destructor_block);
-}
-
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
     module(NULL),
     function(NULL), context(NULL),
@@ -875,9 +861,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 }
 
 void CodeGen_LLVM::optimize_module() {
-    if (debug::debug_level >= 2) {
-        module->dump();
-    }
     debug(3) << "Optimizing module\n";
 
     #if LLVM_VERSION < 37
@@ -2939,63 +2922,76 @@ void CodeGen_LLVM::visit(const For *op) {
         // Fill in the closure
         closure.pack_struct(closure_t, ptr, symbol_table, builder);
 
-        // Get the user context value before swapping out the symbol table.
-        Value *user_context = get_user_context();
-
-        // Make a new function that does one iteration of the body of the loop.
+        // Make a new function that does one iteration of the body of the loop
         llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
         llvm::Type *args_t[] = {voidPointerType, i32, voidPointerType};
         FunctionType *func_t = FunctionType::get(i32, args_t, false);
-        llvm::Function *closure_function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
+        llvm::Function *containing_function = function;
+        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par for " + function->getName() + "_" + op->name, module);
-        closure_function->setDoesNotAlias(3);
+        function->setDoesNotAlias(3);
 
+        // Make the initial basic block and jump the builder into the new function
         IRBuilderBase::InsertPoint call_site = builder->saveIP();
+        BasicBlock *block = BasicBlock::Create(*context, "entry", function);
+        builder->SetInsertPoint(block);
 
-        // Push a new scope inside the closure functiona and generate
-        // code to dispatch parallel for.
-        {
-            SaveFunctionBuildState saved_state(this, closure_function);
+        // Get the user context value before swapping out the symbol table.
+        Value *user_context = get_user_context();
 
-            // Get the function arguments
+        // Save the destructor block
+        BasicBlock *parent_destructor_block = destructor_block;
+        destructor_block = NULL;
 
-            // The user context is first argument of the function; it's
-            // important that we override the name to be "__user_context",
-            // since the LLVM function has a random auto-generated name for
-            // this argument.
-            llvm::Function::arg_iterator iter = function->arg_begin();
-            sym_push("__user_context", iter);
+        // Make a new scope to use
+        Scope<Value *> saved_symbol_table;
+        symbol_table.swap(saved_symbol_table);
 
-            // Next is the loop variable.
-            ++iter;
-            sym_push(op->name, iter);
+        // Get the function arguments
 
-            // The closure pointer is the third and last argument.
-            ++iter;
-            iter->setName("closure");
-            Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
-            // Load everything from the closure into the new scope
-            closure.unpack_struct(symbol_table, closure_t, closure_handle, builder);
+        // The user context is first argument of the function; it's
+        // important that we override the name to be "__user_context",
+        // since the LLVM function has a random auto-generated name for
+        // this argument.
+        llvm::Function::arg_iterator iter = function->arg_begin();
+        sym_push("__user_context", iter);
 
-            // Generate the new function body
-            codegen(op->body);
+        // Next is the loop variable.
+        ++iter;
+        sym_push(op->name, iter);
 
-            // Return success
-            return_with_error_code(ConstantInt::get(i32, 0));
-        }
+        // The closure pointer is the third and last argument.
+        ++iter;
+        iter->setName("closure");
+        Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
+        // Load everything from the closure into the new scope
+        closure.unpack_struct(symbol_table, closure_t, closure_handle, builder);
 
+        // Generate the new function body
+        codegen(op->body);
+
+        // Return success
+        return_with_error_code(ConstantInt::get(i32, 0));
+
+        // Move the builder back to the main function and call do_par_for
         builder->restoreIP(call_site);
-
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
         internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
         do_par_for->setDoesNotAlias(5);
         //do_par_for->setDoesNotCapture(5);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-        Value *args[] = {user_context, closure_function, min, extent, ptr};
+        Value *args[] = {user_context, function, min, extent, ptr};
         debug(4) << "Creating call to do_par_for\n";
         Value *result = builder->CreateCall(do_par_for, args);
 
         debug(3) << "Leaving parallel for loop over " << op->name << "\n";
+
+        // Now restore the scope
+        symbol_table.swap(saved_symbol_table);
+        function = containing_function;
+
+        // Restore the destructor block
+        destructor_block = parent_destructor_block;
 
         // Check for success
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
