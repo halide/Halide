@@ -340,7 +340,7 @@ WEAK int halide_openglcompute_device_free(void *user_context, buffer_t *buf) {
                         << " ms for free\n";
 #endif
 
-    return (uintptr_t)the_buffer;
+    return 0;
 }
 
 // Copy image data from host memory to texture.
