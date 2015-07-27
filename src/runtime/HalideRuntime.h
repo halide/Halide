@@ -287,7 +287,19 @@ extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *c
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                            buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
-/** TODO: docs. */
+/** If halide_memoization_cache_lookup succeeds,
+ * halide_memoization_cache_release must be called to signal the
+ * storage is no longer being used by the caller. It will be passed
+ * the host pointer of one the buffers returned by
+ * halide_memoization_cache_lookup. That is
+ * halide_memoization_cache_release will be called multiple times for
+ * the case where halide_memoization_cache_lookup is handling multiple
+ * buffers.  (This corresponds to memoizing a Tuple in Halide.) Note
+ * that the host pointer must be sufficient to get to all information
+ * the relase operation needs. The default Halide cache impleemntation
+ * accomplishes this by storing extra data before the start of the user
+ * modifiable host storage.
+ */
 extern void halide_memoization_cache_release(void *user_context, void *host);
 
 /** Free all memory and resources associated with the memoization cache.
