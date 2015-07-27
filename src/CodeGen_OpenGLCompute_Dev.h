@@ -61,6 +61,7 @@ protected:
         void visit(const Cast *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
+        void visit(const Select *op);
 
     public:
         int workgroup_size[3];
