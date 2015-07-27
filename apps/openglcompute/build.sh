@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 android update project -p . --target android-21
-make deploy
+make jni-libs
 ant debug
 adb install -r bin/HelloHalideOpenGLCompute-debug.apk
 adb logcat -c

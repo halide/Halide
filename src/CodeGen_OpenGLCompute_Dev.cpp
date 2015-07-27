@@ -222,7 +222,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     if (ramp) {
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
         user_assert(stride && stride->value == 1 && ramp->width == 4) <<
-            "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
+            "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute."
+            " Got integer stride " << (stride? std::to_string(stride->value): "undefined") << " and width " << ramp->width << " instead.";
 
         // Buffer type is 4-elements wide, that's why we divide by ramp->width.
         id_index = print_expr(Div::make(ramp->base, IntImm::make(ramp->width)));
@@ -251,6 +252,13 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                       const vector<GPU_Argument> &args) {
 
     debug(2) << "Adding OpenGLCompute kernel " << name << "\n";
+    cache.clear();
+
+    stream << R"EOF(#version 310 es
+#extension GL_ANDROID_extension_pack_es31a : require
+
+float float_from_bits(int x) { return intBitsToFloat(x); }
+)EOF";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
@@ -280,18 +288,12 @@ void main()
     stream << "layout(local_size_x = " << workgroup_size[0];
     if (workgroup_size[1] > 1) { stream << ", local_size_y = " << workgroup_size[1]; }
     if (workgroup_size[2] > 1) { stream << ", local_size_z = " << workgroup_size[2]; }
-    stream << ") in;\n";
+    stream << ") in;\n// end of kernel " << name << "\n";
 }
 
 void CodeGen_OpenGLCompute_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
-
-    src_stream << R"EOF(#version 310 es
-#extension GL_ANDROID_extension_pack_es31a : require
-
-float float_from_bits(int x) { return intBitsToFloat(x); }
-)EOF";
 
     cur_kernel_name = "";
     glc.workgroup_size[0] = 0;

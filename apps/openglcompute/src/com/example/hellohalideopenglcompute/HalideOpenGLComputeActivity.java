@@ -12,14 +12,18 @@ public class HalideOpenGLComputeActivity extends Activity {
 
     static {
         System.loadLibrary("oglc");
+        System.loadLibrary("oglc_two_kernels");
     }
     private static native void runTest();
+    private static native void runTwoKernelsTest();
 
     @Override
     public void onCreate(Bundle b) {
         super.onCreate(b);
-        Log.d(TAG, "Starting the test:");
+        Log.d(TAG, "Starting the tests:");
         runTest();
+        Log.d(TAG, "Done with first test");
+        runTwoKernelsTest();
         Log.d(TAG, "Done");
         finish();
    }
