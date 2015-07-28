@@ -193,15 +193,14 @@ endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
 ifdef BUILD_PREFIX
-BUILD_DIR = build/$(BUILD_PREFIX)
 BIN_DIR = bin/$(BUILD_PREFIX)
 DISTRIB_DIR=distrib/$(BUILD_PREFIX)
 else
-BUILD_DIR = build
 BIN_DIR = bin
 DISTRIB_DIR=distrib
 endif
 
+BUILD_DIR = $(BIN_DIR)/build
 FILTERS_DIR = $(BUILD_DIR)/filters
 
 SOURCE_FILES = \

@@ -111,8 +111,8 @@ package, run 'make distrib'.
 
 If you wish to use cmake to build Halide, the build procedure is:
 
-    % mkdir build
-    % cd build
+    % mkdir cmake_build
+    % cd cmake_build
     % LLVM_ROOT=/path/to/llvm3.5
     % cmake -DLLVM_BIN=${LLVM_ROOT}/build/bin -DLLVM_INCLUDE="${LLVM_ROOT}/include;${LLVM_ROOT}/build/include" -DLLVM_LIB=${LLVM_ROOT}/build/lib -DLLVM_VERSION=35 ..
     % make -j8
