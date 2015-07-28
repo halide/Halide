@@ -1234,14 +1234,38 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    BoxesTouched b(consider_calls, consider_provides, fn, &scope, fb);
-    if (e.defined()) {
-        e.accept(&b);
+    // Do calls and provides separately, for better simplification.
+    BoxesTouched calls(consider_calls, false, fn, &scope, fb);
+    BoxesTouched provides(false, consider_provides, fn, &scope, fb);
+
+    if (consider_calls) {
+        if (e.defined()) {
+            e.accept(&calls);
+        }
+        if (s.defined()) {
+            s.accept(&calls);
+        }
     }
-    if (s.defined()) {
-        s.accept(&b);
+    if (consider_provides) {
+        if (e.defined()) {
+            e.accept(&provides);
+        }
+        if (s.defined()) {
+            s.accept(&provides);
+        }
     }
-    return b.boxes;
+    if (!consider_calls) {
+        return provides.boxes;
+    }
+    if (!consider_provides) {
+        return calls.boxes;
+    }
+
+    // Combine the two maps.
+    for (pair<const string, Box> &i : provides.boxes) {
+        merge_boxes(calls.boxes[i.first], i.second);
+    }
+    return calls.boxes;
 }
 
 Box box_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
