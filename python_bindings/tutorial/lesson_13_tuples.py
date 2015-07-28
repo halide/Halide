@@ -86,7 +86,7 @@ def main():
     # Exprs which may have different type. The following function
     # evaluates to an integer value (x+y), and a floating point value
     # (sin(x*y)).
-    multi_valued = Func()
+    multi_valued = Func("multi_valued")
     multi_valued[x, y] = Tuple(x + y, sin(x * y))
 
     # Realizing a tuple-valued Func returns a collection of
@@ -95,25 +95,25 @@ def main():
     if True:
         r = multi_valued.realize(80, 60)
         assert r.size() == 2
-        im1 = r[0]
-        im2 = r[1]
+        im1 = Image(Int(32), r[0])
+        im2 = Image(Float(32), r[1])
         assert type(im1) is Image_int32
         assert type(im2) is Image_float32
         assert im1(30, 40) == 30 + 40
-        assert im2(30, 40) == math.sin(30 * 40)
+        assert numpy.isclose(im2(30, 40), math.sin(30 * 40))
     
 
     # All Tuple elements are evaluated together over the same domain
     # in the same loop nest, but stored in distinct allocations. The
     # equivalent C++ code to the above is:
     if True:
-        multi_valued_0 = numpy.array((80*60), dtype=numpy.int32)
-        multi_valued_1 = numpy.array((80*60), dtype=numpy.int32)
+        multi_valued_0 = numpy.empty((80*60), dtype=numpy.int32)
+        multi_valued_1 = numpy.empty((80*60), dtype=numpy.int32)
 
-        for y in range(80):
-            for x in range(60):
-                multi_valued_0[x + 60*y] = x + y
-                multi_valued_1[x + 60*y] = math.sin(x*y)
+        for yy in range(80):
+            for xx in range(60):
+                multi_valued_0[xx + 60*yy] = xx + yy
+                multi_valued_1[xx + 60*yy] = math.sin(xx*yy)
 
 
     # When compiling ahead-of-time, a Tuple-valued Func evaluates
@@ -125,9 +125,9 @@ def main():
     # Tuple constructor as we did above. Perhaps more elegantly, you
     # can also take advantage of C++11 initializer lists and just
     # enclose your Exprs in braces:
-    multi_valued_2 = Func()
+    multi_valued_2 = Func("multi_valued_2")
     #multi_valued_2(x, y) = {x + y, sin(x*y)}
-    multi_valued_2[x, y] = Tuple(x + y, sin(x*y))
+    multi_valued_2[x, y] = Tuple(x + y, sin(x * y))
 
     # Calls to a multi-valued Func cannot be treated as Exprs. The
     # following is a syntax error:
@@ -153,7 +153,7 @@ def main():
         # First we create an Image to take the argmax over.
         input_func = Func()
         input_func[x] = sin(x)
-        input = input_func.realize(100)
+        input = Image(Float(32), input_func.realize(100))
         assert type(input) is Image_float32
 
         # Then we defined a 2-valued Tuple which tracks the maximum value
@@ -162,14 +162,15 @@ def main():
 
         # Pure definition.
         #arg_max() = Tuple(0, input(0))
+        # (using [None] is a convention of this python interface)
         arg_max[None] = Tuple(0, input(0))
 
         # Update definition.
         r = RDom(1, 99)
-        old_index = arg_max()[0]
-        old_max   = arg_max()[1]
-        new_index = select(old_max > input(r), r, old_index)
-        new_max   = max(input(r), old_max)
+        old_index = arg_max[None][0]
+        old_max   = arg_max[None][1]
+        new_index = select(old_max > input[r], r, old_index)
+        new_max   = max(input[r], old_max)
         arg_max[None] = Tuple(new_index, new_max)
 
         # The equivalent C++ is:
@@ -192,13 +193,13 @@ def main():
         # value and index.
         if True:
             r = arg_max.realize()
-            r0 = r[0]
-            r1 = r[1]
+            r0 = Image(Int(32), r[0])
+            r1 = Image(Float(32), r[1])
 
             assert type(r0) is Image_int32
             assert type(r1) is Image_float32
             assert arg_max_0 == r0(0)
-            assert arg_max_1 == r1(0)
+            assert numpy.isclose(arg_max_1, r1(0))
         
 
         # Halide provides argmax and argmin as built-in reductions
@@ -227,6 +228,9 @@ def main():
                     t = r
                     self.real = t[0]
                     self.imag = t[1]
+                elif type(r) is float and type(i) is float:
+                    self.real = Expr(r)
+                    self.imag = Expr(i)
                 elif i is not None:
                     self.real = r
                     self.imag = i
@@ -235,8 +239,8 @@ def main():
                     self.real = tt[0]
                     self.imag = tt[1]
 
-                assert type(self.real) is Expr
-                assert type(self.imag) is Expr
+                assert type(self.real) in [Expr, FuncRefExpr]
+                assert type(self.imag) in [Expr, FuncRefExpr]
                 return
 
 
@@ -274,7 +278,7 @@ def main():
 
         # Pure definition.
         t = Var("t")
-        mandelbrot[x, y, t] = Complex(0.0, 0.0)
+        mandelbrot[x, y, t] = Complex(0.0, 0.0).as_tuple()
 
         # We'll use an update definition to take 12 steps.
         r=RDom(1, 12)
@@ -282,7 +286,7 @@ def main():
 
         # The following line uses the complex multiplication and
         # addition we defined above.
-        mandelbrot[x, y, r] = (current*current + initial)
+        mandelbrot[x, y, r] = (Complex(current*current) + initial)
 
         # We'll use another tuple reduction to compute the iteration
         # number where the value first escapes a circle of radius 4.
@@ -302,12 +306,16 @@ def main():
         escape[x, y] = first_escape[0]
 
         # Realize the pipeline and print the result as ascii art.
-        result = escape.realize(61, 25)
+        result = Image(Int(32), escape.realize(61, 25))
         assert type(result) is Image_int32
         code = " .:-~*={&%#@"
-        for y in range(result.height):
-            for x in range(result.width):
-                print("%c" % code[result(x, y)], end="")
+        for yy in range(result.height()):
+            for xx in range(result.width()):
+                index = result(xx, yy)
+                if index < len(code):
+                    print("%c" % code[index], end="")
+                else:
+                    pass # is lesson 13 cpp version buggy ?
             print("\n")
         
 

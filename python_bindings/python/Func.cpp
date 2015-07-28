@@ -182,7 +182,7 @@ void tuple_to_var_expr_vector(
         }
 
 
-        if(expr_added == false)
+        if(expr_added == false and (args_len > 0))
         {
             for(size_t j=0; j < args_len; j+=1)
             {
@@ -247,6 +247,10 @@ p::object func_getitem_operator1(h::Func &that, p::object arg_passed)
     {
         args_passed = tuple_extract();
     }
+    else if(arg_passed.is_none())
+    {
+        // args_passed tuple is left empty
+    }
     else
     {
         args_passed = p::make_tuple(arg_passed);
@@ -290,6 +294,10 @@ h::Stage func_setitem_operator1(h::Func &that, p::object arg_passed, T right_han
     if(tuple_extract.check())
     {
         args_passed = tuple_extract();
+    }
+    else if(arg_passed.is_none())
+    {
+        // args_passed tuple is left empty
     }
     else
     {

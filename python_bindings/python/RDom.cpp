@@ -5,6 +5,7 @@
 #include "add_operators.h"
 
 #include "../../src/RDom.h"
+#include "../../src/IROperator.h" // for operations with RVar
 
 #include <string>
 
@@ -15,7 +16,7 @@ void defineRVar()
 {
     using Halide::RVar;
 
-    p::class_<RVar>("RVar",
+    auto rvar_class = p::class_<RVar>("RVar",
                     "A reduction variable represents a single dimension of a reduction "
                     "domain (RDom). Don't construct them directly, instead construct an "
                     "RDom, and use RDom::operator[] to get at the variables. For "
@@ -48,7 +49,9 @@ void defineRVar()
 
     p::implicitly_convertible<RVar, h::Expr>();
 
-    // FIXME need to define the operators with Expr and int
+    add_operators(rvar_class); // define operators with int, rvars, and exprs
+    add_operators_with<decltype(rvar_class), h::Expr>(rvar_class);
+
     return;
 }
 
@@ -152,7 +155,7 @@ void defineRDom()
     // only defined so that python knows what to do with it, not meant to be used by user
     p::class_<h::Internal::ReductionDomain>("_ReductionDomain", p::no_init);
 
-    p::class_<RDom>("RDom",
+    auto rdom_class = p::class_<RDom>("RDom",
                     "A multi-dimensional domain over which to iterate. "
                     "Used when defining functions with update definitions.\n"
                     "See apps/bilateral_grid.py for an example of a reduction.\n\n"
@@ -235,6 +238,9 @@ void defineRDom()
 
     p::implicitly_convertible<RDom, h::Expr>();
     p::implicitly_convertible<RDom, h::RVar>();
+
+    add_operators(rdom_class); // define operators with int, rdom and exprs
+    add_operators_with<decltype(rdom_class), h::Expr>(rdom_class);
 
     return;
 }
