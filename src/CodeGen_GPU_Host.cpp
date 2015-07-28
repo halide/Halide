@@ -195,48 +195,36 @@ void GPU_Host_Closure::visit(const For *loop) {
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
-    // For the default GPU, OpenCL is preferred, CUDA next, then OpenGL and finally OpenGLCompute.
-    // The code is in reverse order to allow later tests to override earlier ones.
-    DeviceAPI default_api = DeviceAPI::Default_GPU;
-    if (target.has_feature(Target::OpenGLCompute)) {
-        debug(1) << "Constructing OpenGL Compute device codegen\n";
-        cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
-        default_api = DeviceAPI::OpenGLCompute;
-    }
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
-        default_api = DeviceAPI::GLSL;
-    }
-    if (target.has_feature(Target::CUDA)) {
-        debug(1) << "Constructing CUDA device codegen\n";
-        cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
-        default_api = DeviceAPI::CUDA;
-    }
-    if (target.has_feature(Target::OpenCL)) {
-        debug(1) << "Constructing OpenCL device codegen\n";
-        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
-        default_api = DeviceAPI::OpenCL;
     }
     if (target.has_feature(Target::Renderscript)) {
         debug(1) << "Constructing Renderscript device codegen\n";
         cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
-        default_api = DeviceAPI::Renderscript;
+    }
+    if (target.has_feature(Target::OpenGLCompute)) {
+        debug(1) << "Constructing OpenGL Compute device codegen\n";
+        cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
+    }
+    if (target.has_feature(Target::CUDA)) {
+        debug(1) << "Constructing CUDA device codegen\n";
+        cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
+    }
+    if (target.has_feature(Target::OpenCL)) {
+        debug(1) << "Constructing OpenCL device codegen\n";
+        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
     }
 
     if (cgdev.empty()) {
         internal_error << "Requested unknown GPU target: " << target.to_string() << "\n";
-    } else {
-        cgdev[DeviceAPI::Default_GPU] = cgdev[default_api];
     }
 }
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
     for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-        if (i.first != DeviceAPI::Default_GPU) {
-            delete i.second;
-        }
+        delete i.second;
     }
 }
 
@@ -276,9 +264,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
     builder->SetInsertPoint(init_kernels_bb);
 
     for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-        if (i.first == DeviceAPI::Default_GPU) {
-            continue;
-        }
 
         CodeGen_GPU_Dev *gpu_codegen = i.second;
         std::string api_unique_name = gpu_codegen->api_unique_name();
@@ -332,6 +317,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         // We're in the loop over innermost thread dimension
         debug(2) << "Kernel launch: " << loop->name << "\n";
+
+        internal_assert(loop->device_api != DeviceAPI::Default_GPU)
+            << "A concrete device API should have been selected before codegen.";
 
         ExtractBounds bounds;
         loop->accept(&bounds);
@@ -389,13 +377,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
 
-        if (target.has_feature(Target::Renderscript)) {
+        if (loop->device_api == DeviceAPI::Renderscript) {
             closure_args.insert(closure_args.begin(), GPU_Argument(".rs_slot_offset", false, Int(32), 0));
         }
 
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
-        if (target.has_feature(Target::OpenGL)) {
+        if (loop->device_api == DeviceAPI::GLSL) {
 
             int num_uniform_floats = 0;
 
@@ -606,7 +594,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-        CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
+
+        CodeGen_CPU::create_assertion(did_succeed,
+                                      // Should have already called halide_error inside the gpu runtime
+                                      halide_error_code_device_run_failed,
+                                      result);
     } else {
         CodeGen_CPU::visit(loop);
     }
