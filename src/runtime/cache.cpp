@@ -69,21 +69,6 @@ WEAK size_t full_extent(const buffer_t &buf) {
     return result;
 }
 
-WEAK void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
-    halide_assert(user_context, from.elem_size == to.elem_size);
-    for (int i = 0; i < 4; i++) {
-        halide_assert(user_context, from.extent[i] == to.extent[i]);
-        halide_assert(user_context, from.stride[i] == to.stride[i]);
-    }
-    to.host = from.host;
-}
-
-WEAK buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
-    buffer_t result = buf;
-    copy_from_to(user_context, buf, result);
-    return result;
-}
-
 WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return memcmp(key1, key2, key_size) == 0;
 }
@@ -154,8 +139,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
         key[i] = cache_key[i];
     }
     for (int32_t i = 0; i < tuple_count; i++) {
-        buffer_t *buf = tuple_buffers[i];
-        buffer(i) = copy_of_buffer(NULL, *buf);
+        buffer(i) = *tuple_buffers[i];
     }
     return true;
 }
