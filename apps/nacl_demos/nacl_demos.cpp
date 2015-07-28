@@ -33,9 +33,9 @@
 #include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/cpp/input_event.h"
-#include <sys/time.h>
-#include <string.h>
+#include <cstring>
 #include <sstream>
+#include <chrono>
 
 #include "HalideRuntime.h"
 
@@ -263,8 +263,7 @@ public:
             return;
         }
 
-        timeval t1, t2;
-        gettimeofday(&t1, NULL);
+        auto t1 = std::chrono::system_clock::now();
         switch (demo) {
         case 0:
             game_of_life_update(&state_1, mouse_x, mouse_y, &state_2);
@@ -283,7 +282,7 @@ public:
             reaction_diffusion_2_render(&state_2, &render_target);
             break;
         }
-        gettimeofday(&t2, NULL);
+        auto t2 = std::chrono::system_clock::now();
         std::swap(state_1, state_2);
 
         mouse_x = mouse_y = -100;
@@ -292,8 +291,7 @@ public:
             return;
         }
 
-        int t = t2.tv_usec - t1.tv_usec;
-        t += (t2.tv_sec - t1.tv_sec)*1000000;
+        int t = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).value();
 
         // Smooth it out so we can see a rolling average
         t = (halide_last_t * halide_time_weight + t) / (halide_time_weight + 1);

@@ -2,25 +2,11 @@
 
 using namespace Halide;
 
-#include <image_io.h>
-
 #include <iostream>
 #include <limits>
 
-#include <sys/time.h>
-
-double now() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    static bool first_call = true;
-    static time_t first_sec = 0;
-    if (first_call) {
-        first_call = false;
-        first_sec = tv.tv_sec;
-    }
-    assert(tv.tv_sec >= first_sec);
-    return (tv.tv_sec - first_sec) + (tv.tv_usec / 1000000.0);
-}
+#include <image_io.h>
+#include <benchmark.h>
 
 enum InterpolationType {
     BOX, LINEAR, CUBIC, LANCZOS
@@ -202,20 +188,7 @@ int main(int argc, char **argv) {
            out_width, out_height,
            kernelInfo[interpolationType].name);
 
-    double min = std::numeric_limits<double>::infinity();
-    double avg = 0.0;
-    const unsigned int iters = 10;
-
-    for (unsigned int i = 0; i < iters; ++i) {
-        double before = now();
-        final.realize(out);
-        double after = now();
-        double timediff = after - before;
-
-        min = (timediff < min) ? timediff : min;
-        avg = avg + (timediff - avg) / (i + 1);
-        std::cout << "   " << timediff * 1000 << " (avg=" << avg * 1000 << ")\n";
-    }
+    double min = benchmark(10, 1, [&]() { final.realize(out); });
     std::cout << " took min=" << min * 1000 << ", avg=" << avg * 1000 << " msec." << std::endl;
 
     save(out, outfile);

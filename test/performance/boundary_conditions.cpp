@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 
-#include "clock.h"
+#include "benchmark.h"
 
 const int W = 1024, H = 768;
 
@@ -22,19 +22,10 @@ struct Test {
 
         Image<float> out = g.realize(W, H);
 
-        // Best of 5
-        for (int i = 0; i < 5; i++) {
-            double t1 = current_time();
-            // 10 runs
-            for (int j = 0; j < 10; j++) {
-                g.realize(out);
-            }
-            double t2 = current_time();
-            double delta = t2 - t1;
-            if (delta < time || i == 0) {
-                time = delta;
-            }
-        }
+        // best of 5 x 10 runs.
+        time = benchmark(5, 10, [&]() {
+            g.realize(out);
+        });
 
         printf("%s: %f\n", name, time);
     }

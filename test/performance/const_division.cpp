@@ -1,8 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
-#include <stdint.h>
-#include "clock.h"
-#include "time.h"
+#include <cstdio>
+#include <cstdint>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -58,18 +57,17 @@ bool test(int w) {
     g.compile_jit();
     h.compile_jit();
 
-    double t1 = current_time();
     Image<T> correct = g.realize(input.width(), num_vals);
-    for (int i = 0; i < 30; i++) g.realize(correct);
-    double t2 = current_time();
+    double t_correct = benchmark(1, 30, [&]() { g.realize(correct); });
+
     Image<T> fast = f.realize(input.width(), num_vals);
-    for (int i = 0; i < 30; i++) f.realize(fast);
-    double t3 = current_time();
+    double t_fast = benchmark(1, 30, [&]() { f.realize(fast); });
+
     Image<T> fast_dynamic = h.realize(input.width(), num_vals);
-    for (int i = 0; i < 30; i++) h.realize(fast_dynamic);
-    double t4 = current_time();
-    printf("compile-time-constant divisor path is %1.3f x faster \n", (t2-t1)/(t3-t2));
-    printf("fast_integer_divide path is           %1.3f x faster \n", (t4-t3)/(t3-t2));
+    double t_fast_dynamic = benchmark(1, 30, [&]() { h.realize(fast_dynamic); });
+
+    printf("compile-time-constant divisor path is %1.3f x faster \n", t_correct / t_fast);
+    printf("fast_integer_divide path is           %1.3f x faster \n", t_fast_dynamic / t_fast);
 
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
