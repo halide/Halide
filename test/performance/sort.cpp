@@ -181,10 +181,10 @@ int main(int argc, char **argv) {
     });
 
     printf("Times:\n"
-           "bitonic sort: %f \n"
-           "merge sort: %f \n"
-           "std::sort %f\n",
-           t_bitonic, t_merge, t_std);
+           "bitonic sort: %fms \n"
+           "merge sort: %fms \n"
+           "std::sort %fms\n",
+           t_bitonic * 1e3, t_merge * 1e3, t_std * 1e3);
 
     if (N <= 100) {
         for (int i = 0; i < N; i++) {

@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
         assert(c(0) == expected);
     });
 
-    printf("%g s per jit compilation\n", t);
+    printf("%g ms per jit compilation\n", t * 1e3);
 
     printf("Success!\n");
     return 0;
