@@ -38,11 +38,7 @@ print more detail.
 
 HL_TRACE_FILE=... specifies a binary target file to dump tracing data
 into. The output can be parsed programmatically by starting from the
-code in utils/HalideTrace.cpp
-
-HL_PROFILE=1 injects timing data collection code. The output can be
-parsed using utils/HalideProf.cpp
-
+code in utils/HalideTraceViz.cpp
 
 Using Halide on OSX
 ===================
