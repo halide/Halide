@@ -287,6 +287,7 @@ SOURCE_FILES = \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
+  SelectGPUAPI.cpp \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -408,6 +409,7 @@ HEADER_FILES = \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
+  SelectGPUAPI.h \
   Simplify.h \
   SkipStages.h \
   SlidingWindow.h \
