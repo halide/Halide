@@ -3165,7 +3165,9 @@ Value *CodeGen_LLVM::call_intrin(Type result_type, int intrin_vector_width,
 
 Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_vector_width,
                                  const string &name, vector<Value *> arg_values) {
-    int arg_vector_width = (int)result_type->getVectorNumElements();
+    internal_assert(result_type->isVectorTy()) << "call_intrin is for vector intrinsics only\n";
+
+    int arg_vector_width = (int)(result_type->getVectorNumElements());
 
     if (intrin_vector_width != arg_vector_width) {
         // Cut up each arg into appropriately-sized pieces, call the
