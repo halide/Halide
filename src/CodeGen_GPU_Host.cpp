@@ -114,51 +114,8 @@ public:
 
 protected:
     using Internal::Closure::visit;
-
-    void visit(const For *op);
-
-    void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::glsl_texture_load ||
-             op->name == Call::image_load ||
-             op->name == Call::glsl_texture_store ||
-             op->name == Call::image_store)) {
-
-            // The argument to the call is either a StringImm or a broadcasted
-            // StringImm if this is part of a vectorized expression
-
-            const StringImm *string_imm = op->args[0].as<StringImm>();
-            if (!string_imm) {
-                internal_assert(op->args[0].as<Broadcast>());
-                string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
-            }
-
-            internal_assert(string_imm);
-
-            string bufname = string_imm->value;
-            BufferRef &ref = buffers[bufname];
-            ref.type = op->type;
-            // TODO: do we need to set ref.dimensions?
-
-            if (op->name == Call::glsl_texture_load ||
-                op->name == Call::image_load) {
-                ref.read = true;
-            } else if (op->name == Call::glsl_texture_store ||
-                op->name == Call::image_store) {
-                ref.write = true;
-            }
-
-            // The Func's name and the associated .buffer are mentioned in the
-            // argument lists, but don't treat them as free variables.
-            ignore.push(bufname, 0);
-            ignore.push(bufname + ".buffer", 0);
-            Internal::Closure::visit(op);
-            ignore.pop(bufname + ".buffer");
-            ignore.pop(bufname);
-        } else {
-            Internal::Closure::visit(op);
-        }
-    }
+    void visit(const For *loop);
+    void visit(const Call *op);
 
     bool skip_gpu_loops;
 };
@@ -183,13 +140,59 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
     return res;
 }
 
+void GPU_Host_Closure::visit(const Call *op) {
+    if (op->call_type == Call::Intrinsic &&
+        (op->name == Call::glsl_texture_load ||
+         op->name == Call::image_load ||
+         op->name == Call::glsl_texture_store ||
+         op->name == Call::image_store)) {
+
+        // The argument to the call is either a StringImm or a broadcasted
+        // StringImm if this is part of a vectorized expression
+
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        if (!string_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+
+        internal_assert(string_imm);
+
+        string bufname = string_imm->value;
+        BufferRef &ref = buffers[bufname];
+        ref.type = op->type;
+        // TODO: do we need to set ref.dimensions?
+
+        if (op->name == Call::glsl_texture_load ||
+            op->name == Call::image_load) {
+            ref.read = true;
+        } else if (op->name == Call::glsl_texture_store ||
+                   op->name == Call::image_store) {
+            ref.write = true;
+        }
+
+        // The Func's name and the associated .buffer are mentioned in the
+        // argument lists, but don't treat them as free variables.
+        ignore.push(bufname, 0);
+        ignore.push(bufname + ".buffer", 0);
+        Internal::Closure::visit(op);
+        ignore.pop(bufname + ".buffer");
+        ignore.pop(bufname);
+    } else {
+        Internal::Closure::visit(op);
+    }
+}
 
 void GPU_Host_Closure::visit(const For *loop) {
-    if (skip_gpu_loops &&
-        CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-        return;
+    if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
+        if (skip_gpu_loops) return;
+        // The size of the threads and blocks is not part of the closure
+        ignore.push(loop->name, 0);
+        loop->body.accept(this);
+        ignore.pop(loop->name);
+    } else {
+        Internal::Closure::visit(loop);
     }
-    Internal::Closure::visit(loop);
 }
 
 
@@ -315,7 +318,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-        // We're in the loop over innermost thread dimension
+        // We're in the loop over outermost block dimension
         debug(2) << "Kernel launch: " << loop->name << "\n";
 
         internal_assert(loop->device_api != DeviceAPI::Default_GPU)
@@ -372,7 +375,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         }
 
         // compute a closure over the state passed into the kernel
-        GPU_Host_Closure c(loop, loop->name);
+        GPU_Host_Closure c(loop->body, loop->name);
+        debug(0) << "Computing closure over " << loop->body << "\n";
 
         // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
