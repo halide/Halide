@@ -262,6 +262,10 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
         stream << ".data";
     }
     stream << "[" << id_index << "] = " << print_type(op->value.type()) << "(" << id_value << ");\n";
+
+    // Need a cache clear on stores to avoid reusing stale loaded
+    // values from before the store.
+    cache.clear();
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op) {
