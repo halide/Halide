@@ -448,9 +448,11 @@ void defineFunc()
             .def("__setitem__", &func_setitem_operator0<h::FuncRefVar>)
             .def("__setitem__", &func_setitem_operator0<h::FuncRefExpr>)
             .def("__setitem__", &func_setitem_operator0<h::Expr>)
+            .def("__setitem__", &func_setitem_operator0<h::Tuple>)
             .def("__setitem__", &func_setitem_operator1<h::FuncRefVar>) // handles the case where a single index object is given
             .def("__setitem__", &func_setitem_operator1<h::FuncRefExpr>)
-            .def("__setitem__", &func_setitem_operator1<h::Expr>);
+            .def("__setitem__", &func_setitem_operator1<h::Expr>)
+            .def("__setitem__", &func_setitem_operator1<h::Tuple>);
 
     /*
     &Func::__getitem__(self, *args):

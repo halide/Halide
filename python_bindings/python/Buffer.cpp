@@ -84,8 +84,8 @@ void define_buffer_t()
 }
 
 
-h::Buffer *buffer_init0(h::Type t, int x_size, int y_size, int z_size, int w_size,
-                          const std::string name)
+h::Buffer *buffer_constructor0(h::Type t, int x_size, int y_size, int z_size, int w_size,
+                               const std::string name)
 {
     return new h::Buffer(t, x_size, y_size, z_size, w_size, NULL, name);
 }
@@ -131,10 +131,10 @@ void defineBuffer()
                       "wrapper on a buffer_t, which is the C-style type Halide uses for "
                       "passing buffers around.",
                       p::init<>(p::arg("self")))
-            .def("__init__", p::make_constructor(&buffer_init0, p::default_call_policies(),
-                     (/*p::arg("self"),*/ p::arg("type"),
-                      p::arg("x_size")=0, p::arg("y_size")=0, p::arg("z_size")=0, p::arg("w_size")=0,
-                      p::arg("name")="")))
+            .def("__init__", p::make_constructor(&buffer_constructor0, p::default_call_policies(),
+                                                 (/*p::arg("self"),*/ p::arg("type"),
+                                                  p::arg("x_size")=0, p::arg("y_size")=0, p::arg("z_size")=0, p::arg("w_size")=0,
+                                                  p::arg("name")="")))
             .def(p::init<h::Type, int, int, int, int, uint8_t*, std::string>(
                      (p::arg("self"), p::arg("type"),
                       p::arg("x_size")=0, p::arg("y_size")=0, p::arg("z_size")=0, p::arg("w_size")=0,

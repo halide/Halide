@@ -4,12 +4,45 @@
 #include <boost/python.hpp>
 
 #include "../../src/Tuple.h"
+#include "../../src/Expr.h"
 #include "../../src/Func.h" // for FuncRefVar, FuncRefExpr
 
 #include <vector>
 #include <string>
 
 namespace h = Halide;
+
+
+h::Tuple *tuple_constructor0(h::FuncRefVar x)
+{
+    return new h::Tuple(x);
+}
+
+h::Tuple *tuple_constructor1(h::FuncRefExpr x)
+{
+    return new h::Tuple(x);
+}
+
+h::Tuple *tuple_constructor2(h::Expr a, h::Expr b)
+{
+    return new h::Tuple(a, b);
+}
+
+h::Tuple *tuple_constructor3(h::Expr a, h::Expr b, h::Expr c)
+{
+    return new h::Tuple(a, b, c);
+}
+
+h::Tuple *tuple_constructor4(h::Expr a, h::Expr b, h::Expr c, h::Expr d)
+{
+    return new h::Tuple(a, b, c, d);
+}
+
+h::Tuple *tuple_constructor5(h::Expr a, h::Expr b, h::Expr c, h::Expr d, h::Expr e)
+{
+    return new h::Tuple(a, b, c, d, e);
+}
+
 
 h::Tuple tuple_select0(h::Tuple condition, const h::Tuple &true_value, const h::Tuple &false_value) {
 
@@ -96,10 +129,28 @@ void defineTuple()
             //    "Construct a Tuple from some Exprs."
             //    template<typename ...Args>
             //    Tuple(Expr a, Expr b, Args... args)
+            //            .def(p::init< h::Expr, h::Expr >(p::args("self", "a", "b"),
+            //                                             "Construct a Tuple from some Exprs."))
+            .def("__init__",
+                 p::make_constructor(&tuple_constructor2, p::default_call_policies(),
+                                     p::args("a", "b")), "Construct a Tuple from some Exprs.")
+            .def("__init__",
+                 p::make_constructor(&tuple_constructor3, p::default_call_policies(),
+                                     p::args("a", "b", "c")), "Construct a Tuple from some Exprs.")
+            .def("__init__",
+                 p::make_constructor(&tuple_constructor4, p::default_call_policies(),
+                                     p::args("a", "b", "c", "d")), "Construct a Tuple from some Exprs.")
+            .def("__init__",
+                 p::make_constructor(&tuple_constructor5, p::default_call_policies(),
+                                     p::args("a", "b", "c", "d", "e")), "Construct a Tuple from some Exprs.")
 
-            //            "Construct a Tuple from a function reference."
-            //            Tuple(const FuncRefVar &);
-            //            Tuple(const FuncRefExpr &);
+            .def("__init__",
+                 p::make_constructor(&tuple_constructor0, p::default_call_policies(),
+                                     p::arg("func_ref_var")), "Construct a Tuple from a function reference.")
+            .def("__init__",
+                 p::make_constructor(&tuple_constructor1, p::default_call_policies(),
+                                     p::arg("func_ref_expr")), "Construct a Tuple from a function reference.")
+
 
             .def("size", &Tuple::size, p::arg("self"),
                  "The number of elements in the tuple.")
