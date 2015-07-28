@@ -118,21 +118,19 @@ Image<uint16_t> blur_fast(Image<uint16_t> in) {
 Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
     Image<uint16_t> out(in.width()-8, in.height()-2);
 
+    int vw = in.width()/8;
+    if (vw > 1024) {
+        printf("Image too large for constant-sized stack allocation\n");
+        return out;
+    }
+
     t = benchmark(10, 1, [&]() {
         // multiplying by 21846 then taking the top 16 bits is equivalent to
         // dividing by three
         __m128i one_third = _mm_set1_epi16(21846);
 
-        int vw = in.width()/8;
-        if (vw > 1024) {
-            printf("Image too large for constant-sized stack allocation\n");
-            return out;
-        }
-
 #pragma omp parallel for
         for (int yTile = 0; yTile < in.height(); yTile += 128) {
-
-
             __m128i tmp[1024*4]; // four scanlines
             for (int y = -2; y < 128; y++) {
                 // to produce this scanline of the output
@@ -164,6 +162,7 @@ Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
                 }
             }
         }
+
     });
 
     return out;
