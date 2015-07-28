@@ -1002,9 +1002,10 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so includ
 	cp tutorial/figures/*.mp4 $(DISTRIB_DIR)/tutorial/figures
 	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
 	cp tools/mex_halide.m $(DISTRIB_DIR)/tools
+	cp tools/GenGen.cpp $(DISTRIB_DIR)/tools
 	cp README.md $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m
+	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp
 	rm halide
 
 distrib: $(DISTRIB_DIR)/halide.tgz
