@@ -372,7 +372,6 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
                 for (int32_t i = 0; i < tuple_count; i++) {
                     buffer_t *buf = tuple_buffers[i];
-                    //copy_from_to(user_context, entry->buffer(i), *buf);
                     *buf = entry->buffer(i);
                 }
 
