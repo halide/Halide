@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 #include <algorithm>
-#include "clock.h"
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -156,11 +156,9 @@ int main(int argc, char **argv) {
     printf("Running...\n");
     Image<int> bitonic_sorted(N);
     f.realize(bitonic_sorted);
-    double t1 = current_time();
-    for (int i = 0; i < 10; i++) {
+    double t_bitonic = benchmark(1, 10, [&]() {
         f.realize(bitonic_sorted);
-    }
-    double t2 = current_time();
+    });
 
     printf("Merge sort...\n");
     f = merge_sort(input, N);
@@ -169,26 +167,24 @@ int main(int argc, char **argv) {
     printf("Running...\n");
     Image<int> merge_sorted(N);
     f.realize(merge_sorted);
-    double t3 = current_time();
-    for (int i = 0; i < 10; i++) {
+    double t_merge = benchmark(1, 10, [&]() {
         f.realize(merge_sorted);
-    }
-    double t4 = current_time();
+    });
 
     Image<int> correct(N);
     for (int i = 0; i < N; i++) {
         correct(i) = data(i);
     }
     printf("std::sort...\n");
-    double t5 = current_time();
-    std::sort(&correct(0), &correct(N));
-    double t6 = current_time();
+    double t_std = benchmark(1, 1, [&]() {
+        std::sort(&correct(0), &correct(N));
+    });
 
     printf("Times:\n"
            "bitonic sort: %f \n"
            "merge sort: %f \n"
            "std::sort %f\n",
-           (t2-t1)/10, (t4-t3)/10, t6-t5);
+           t_bitonic, t_merge, t_std);
 
     if (N <= 100) {
         for (int i = 0; i < N; i++) {

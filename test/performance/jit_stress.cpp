@@ -1,6 +1,7 @@
-#include <stdio.h>
 #include "Halide.h"
-#include "clock.h"
+
+#include <cstdio>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -13,21 +14,16 @@ int main(int argc, char **argv) {
     c(0) = 0;
     a.set(c);
 
-
-    double t1, t2;
-    t1 = current_time();
-
-    for (int i = 0; i < 100; i++) {
+    int expected = 0;
+    double t = benchmark(1, 100, [&]() {
         Func f;
         f(x) = a(x) + b(x);
         f.realize(c);
-        assert(c(0) == (i+1)*17);
-    }
+        expected += 17;
+        assert(c(0) == expected);
+    });
 
-    t2 = current_time();
-    int elapsed = (int)(10.0 * (t2-t1));
-
-    printf("%d us per jit compilation\n", elapsed);
+    printf("%g s per jit compilation\n", t);
 
     printf("Success!\n");
     return 0;

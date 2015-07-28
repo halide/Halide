@@ -1,8 +1,8 @@
 #include "Halide.h"
-#include <stdio.h>
-#include "clock.h"
+#include <cstdio>
 #include <memory>
 #include <algorithm>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -35,17 +35,7 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
 
     f.realize(dst);
 
-    double t = 1e20;
-    for (int j = 0; j < 5; j++) {
-        double t1 = current_time();
-        for (int i = 0; i < 10; i++) {
-            f.realize(dst);
-        }
-        double t2 = current_time();
-        t = std::min(t, t2 - t1);
-    }
-
-    return t;
+    return benchmark(5, 10, [&]() { return f.realize(dst); });
 }
 
 Image<uint8_t> make_packed(uint8_t *host, int W, int H) {
