@@ -54,19 +54,19 @@ int main(int argc, char **argv) {
         curved(color_temp, gamma, contrast,
                input, matrix_3200, matrix_7000, output);
     });
-    fprintf(stderr, "Halide:\t%g\n", best * 1e3);
+    fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
     save(output, argv[6]);
 
     best = benchmark(timing_iterations, 1, [&]() {
         FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
     });
-    fprintf(stderr, "C++:\t%g\n", best * 1e3);
+    fprintf(stderr, "C++:\t%gus\n", best * 1e6);
     save(output, "fcam_c.png");
 
     best = benchmark(timing_iterations, 1, [&]() {;
         FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
     });
-    fprintf(stderr, "ASM:\t%g\n", best * 1e3);
+    fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
     save(output, "fcam_arm.png");
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)

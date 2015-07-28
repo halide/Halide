@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     double best = benchmark(timing, 1, [&]() {
         local_laplacian(levels, alpha/(levels-1), beta, input, output);
     });
-    printf("%g\n", best);
+    printf("%gus\n", best * 1e6);
 
 
     local_laplacian(levels, alpha/(levels-1), beta, input, output);
