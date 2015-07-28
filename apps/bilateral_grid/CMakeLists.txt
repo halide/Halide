@@ -14,8 +14,6 @@ target_compile_definitions(filter PRIVATE ${PNG_DEFINITIONS})
 if (NOT WIN32)
   target_link_libraries(filter PRIVATE dl pthread)
 endif()
-set_target_properties(filter bilateral_grid PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                      "${CMAKE_CURRENT_BINARY_DIR}")
 
 if (NOT MSVC)
   target_compile_options(filter PRIVATE "-std=c++11")
@@ -25,5 +23,6 @@ endif()
 # bilateral_grid doesn't handle the commandline args passed.
 add_custom_command(OUTPUT "${bilateral_grid_h}" "${bilateral_grid_obj}"
                    COMMAND bilateral_grid 8
+                   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
                    COMMENT "Generating bilateral_grid"
                   )

@@ -14,10 +14,6 @@ if (NOT WIN32)
 target_link_libraries(opengl_test PRIVATE pthread dl)
 endif()
 target_include_directories(opengl_test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-set_target_properties(glsl_halide_blur glsl_halide_ycc opengl_test
-                    PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                    "${CMAKE_CURRENT_BINARY_DIR}")
-
 
 # FIXME: The environment variable HL_TARGET needs setting
 add_custom_command(OUTPUT "${hb_header}" "${hb_obj}"
