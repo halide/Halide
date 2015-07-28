@@ -7,7 +7,12 @@
 #include <string>
 #include <queue>
 #include <iostream>
+#ifdef _MSC_VER
+#include <io.h>
+typedef int ssize_t;
+#else
 #include <unistd.h>
+#endif
 #include <string.h>
 
 #include "inconsolata.h"
@@ -108,7 +113,7 @@ private:
     bool read_stdin(void *d, ssize_t size) {
         uint8_t *dst = (uint8_t *)d;
         if (!size) return true;
-        while (1) {
+        for (;;) {
             ssize_t s = read(0, dst, size);
             if (s == 0) {
                 // EOF
@@ -394,7 +399,7 @@ int run(int argc, char **argv) {
     memset(blend, 0, 4 * frame_width * frame_height);
 
     size_t end_counter = 0;
-    while (1) {
+    for (;;) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
             halide_clock += timestep;
