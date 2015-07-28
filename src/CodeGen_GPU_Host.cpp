@@ -376,7 +376,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // compute a closure over the state passed into the kernel
         GPU_Host_Closure c(loop->body, loop->name);
-        debug(0) << "Computing closure over " << loop->body << "\n";
 
         // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
