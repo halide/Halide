@@ -292,7 +292,7 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling...\n";
+    debug(1) << "JIT compiling " << m->getName().str() << "\n";
 
     std::map<std::string, Symbol> exports;
 
@@ -614,29 +614,40 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         target.set_feature(Target::JIT);
 
         Target one_gpu(target);
+        one_gpu.set_feature(Target::OpenCL, false);
+        one_gpu.set_feature(Target::CUDA, false);
+        one_gpu.set_feature(Target::OpenGL, false);
+        one_gpu.set_feature(Target::OpenGLCompute, false);
+        string module_name;
         switch (runtime_kind) {
         case OpenCL:
             one_gpu.set_feature(Target::OpenCL);
+            module_name = "opencl";
             break;
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
+            module_name = "cuda";
             break;
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);
+            module_name = "opengl";
             load_opengl();
             break;
         case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
+            module_name = "openglcompute";
             load_opengl();
             break;
         default:
+            module_name = "shared runtime";
             break;
         }
 
         // This function is protected by a mutex so this is thread safe.
         llvm::Module *module =
-            get_initial_module_for_target(target, &runtime.jit_module.ptr->context, true, runtime_kind != MainShared);
+            get_initial_module_for_target(one_gpu, &runtime.jit_module.ptr->context, true, runtime_kind != MainShared);
         clone_target_options(for_module, module);
+        module->setModuleIdentifier(module_name);
 
         std::set<std::string> halide_exports_unique;
 

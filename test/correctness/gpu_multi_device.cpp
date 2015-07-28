@@ -30,19 +30,24 @@ struct MultiDevicePipeline {
             stage[current_stage].compute_root().bound(c, 0, 3).reorder(c, x, y).glsl(x, y, c).vectorize(c);
             current_stage++;
         }
+        if (jit_target.has_feature(Target::OpenGLCompute)) {
+            stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, DeviceAPI::OpenGLCompute);
+            current_stage++;
+        }
     }
 
-    void run(Image<uint8_t> &result) {
+    void run(Image<float> &result) {
         stage[current_stage - 1].realize(result);
     }
 
-    bool verify(const Image<uint8_t> &result, size_t stages, const char * test_case) {
+    bool verify(const Image<float> &result, size_t stages, const char * test_case) {
         for (int i = 0; i < 100; i++) {
             for (int j = 0; j < 100; j++) {
                 for (int k = 0; k < 3; k++) {
-                  int correct = (uint8_t)(42 + stages * 69);
+                    float correct = 42.0f + stages * 69;
                     if (result(i, j, k) != correct) {
-                        printf("result(%d, %d, %d) = %d instead of %d. (%s).\n", i, j, k, result(i, j, k), correct, test_case);
+                        printf("result(%d, %d, %d) = %f instead of %f. (%s).\n", i, j, k, result(i, j, k), correct, test_case);
                         return false;
                     }
                 }
@@ -55,7 +60,7 @@ struct MultiDevicePipeline {
 int main(int argc, char **argv) {
     Var x, y, c;
     Func const_input;
-    const_input(x, y, c) = cast<uint8_t>(42);
+    const_input(x, y, c) = 42.0f;
 
     {
         MultiDevicePipeline pipe1(const_input);
@@ -64,7 +69,7 @@ int main(int argc, char **argv) {
             return 0;
         }
 
-        Image<uint8_t> output1(100, 100, 3);
+        Image<float> output1(100, 100, 3);
         pipe1.run(output1);
 
         if (!pipe1.verify(output1, pipe1.current_stage - 1, "const input")) {
@@ -75,15 +80,16 @@ int main(int argc, char **argv) {
     {
         MultiDevicePipeline pipe2(const_input);
 
-        ImageParam gpu_buffer(UInt(8), 3);
+        ImageParam gpu_buffer(Float(32), 3);
+        gpu_buffer.set_bounds(2, 0, 3);
         Func buf_input;
         buf_input(x, y, c) = gpu_buffer(x, y, c);
         MultiDevicePipeline pipe3(buf_input);
 
-        Image<uint8_t> output2(100, 100, 3);
+        Image<float> output2(100, 100, 3);
         pipe2.run(output2);
 
-        Image<uint8_t> output3(100, 100, 3);
+        Image<float> output3(100, 100, 3);
         gpu_buffer.set(output2);
         pipe3.run(output3);
 
