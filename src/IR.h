@@ -272,10 +272,13 @@ struct Allocate : public StmtNode<Allocate> {
     std::vector<Expr> extents;
     Expr condition;
 
-    // These override the code generator dependent malloc and freeequivalents
-    // if provided. If the new succeeds, the delete is guaranteed to be called.
-    // It is allowed for the delete_stmt to be undefined even if
-    // new_expr is defined.
+    // These override the code generator dependent malloc and free
+    // equivalents if provided. If the new_expr succeeds, that is it
+    // returns non-NULL, the function named be free_function is
+    // guaranteed to be called. The free function signature must match
+    // that of the code generator dependent free (typically
+    // halide_free). If free_function is left empty, code generator
+    // default will be called.
     Expr new_expr;
     std::string free_function;
     Stmt body;
