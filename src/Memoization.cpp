@@ -163,15 +163,18 @@ class KeyInfo {
         return (size_t)(1 << i);
     }
 
-// This ifdef is temporary to discuss the tradeoff between the two
-// approaches in code review of the pull request.  Using the full
-// names in the key results in a (hopefulyl incredibly slight)
-// performance differnece based on how one names filters and
+// Using the full names in the key results in a (hopefully incredibly
+// slight) performance difference based on how one names filters and
 // functions. It is arguably a little easier to debug if something
-// goes wrong as one doesn't need to destructure the cache key. Also,
-// if a pointer is used, a counter must also be put in the cache key
-// to avoid aliasing on reuse of the address in JIT situations where
-// code is regenerated into the same region of memory.
+// goes wrong as one doesn't need to destructure the cache key by hand
+// in the debugger. Also, if a pointer is used, a counter must also be
+// put in the cache key to avoid aliasing on reuse of the address in
+// JIT situations where code is regenerated into the same region of
+// memory.
+//
+// There is a plan to change the hash function used in the cache and
+// after that happens, we'll measure performance again and maybe decide
+// to choose one path or the other here and remove the #ifdef.
 #define USE_FULL_NAMES_IN_KEY 0
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
