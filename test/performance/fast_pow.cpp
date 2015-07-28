@@ -57,8 +57,8 @@ int main(int argc, char **argv) {
     Image<double> fast_err = fast_error.realize();
     Image<double> faster_err = faster_error.realize();
 
-    int timing_N = timing_scratch.width() * timing_scratch.height() * iterations;
-    int correctness_N = fast_result.width() * fast_result.height() * iterations;
+    int timing_N = timing_scratch.width() * timing_scratch.height();
+    int correctness_N = fast_result.width() * fast_result.height();
     fast_err(0) = sqrt(fast_err(0)/correctness_N);
     faster_err(0) = sqrt(faster_err(0)/correctness_N);
 

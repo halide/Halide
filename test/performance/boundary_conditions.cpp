@@ -27,7 +27,7 @@ struct Test {
             g.realize(out);
         });
 
-        printf("%s: %f\n", name, time);
+        printf("%s: %f us\n", name, time * 1e6);
     }
 };
 
