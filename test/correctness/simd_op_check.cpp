@@ -31,7 +31,7 @@ void check(string op, int vector_width, Expr e) {
     counter++;
 
     // Make a name for the test by uniquing then sanitizing the op name
-    string name = op;
+    string name = "op_" + op;
     for (size_t i = 0; i < name.size(); i++) {
         if (!isalnum(name[i])) name[i] = '_';
     }
@@ -82,27 +82,13 @@ void check(string op, int vector_width, Expr e) {
         std::ifstream asm_file;
         asm_file.open(asm_filename);
 
-        // Skip lines until we hit "for test_*y"
-
-        string end("end for*x.x");
-        string the_op("^_" + op);
-        string line;
-        while (getline(asm_file, line)) {
-            if (line.find("for ") != string::npos &&
-                line.find("s0.y") != string::npos &&
-                line.find("preheader") == string::npos) break;
-        }
-
         bool found_it = false;
 
         std::ostringstream msg;
         msg << op << " did not generate. Instead we got:\n";
 
-        // Accumulate lines until we hit "end for*x.x"
+        string line;
         while (getline(asm_file, line)) {
-            if (line.find("end for") != string::npos &&
-                Halide::Internal::ends_with(line, ".x.x")) break;
-
             msg << line << "\n";
 
             // Check for the op in question

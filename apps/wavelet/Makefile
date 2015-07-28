@@ -1,10 +1,6 @@
 include ../support/Makefile.inc
 
-ifdef BUILD_PREFIX
-BUILD_DIR = build_make/$(BUILD_PREFIX)
-else
 BUILD_DIR = build_make
-endif
 
 # If HL_TARGET isn't set, use host
 HL_TARGET ?= host
