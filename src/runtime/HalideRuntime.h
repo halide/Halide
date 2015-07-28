@@ -385,6 +385,11 @@ enum halide_error_code_t {
 
     /** There is a bug in the Halide compiler. */
     halide_error_code_internal_error = -22,
+
+    /** The Halide runtime encountered an error while trying to launch
+     * a GPU kernel. Turn on -debug in your target string to see more
+     * details. */
+    halide_error_code_device_run_failed = -23,
 };
 
 /** Halide calls the functions below on various error conditions. The

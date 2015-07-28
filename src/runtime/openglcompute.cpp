@@ -64,9 +64,9 @@ WEAK const char *gl_error_name(int32_t err) {
 }
 
 struct HalideMalloc {
-     __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
+    __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
         : user_context(user_context), ptr(halide_malloc(user_context, size)) {}
-     __attribute__((always_inline)) ~HalideMalloc() {
+    __attribute__((always_inline)) ~HalideMalloc() {
         halide_free(user_context, ptr);
     }
     void * const user_context;
@@ -108,8 +108,10 @@ struct GlobalState {
 WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *location) {
     GLenum err = GetError();
     if (err != GL_NO_ERROR) {
-        debug(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")" <<
-            " at " << location << ".\n" ;
+        error(user_context)
+            << "OpenGL error " << gl_error_name(err)
+            << "(" << (int)err << ")"
+            << " at " << location << ".\n" ;
         return true;
     }
     return false;
@@ -449,7 +451,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
 
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_run).";
-        return 1;
+        return -1;
     }
 
     ModuleState *mod = (ModuleState *)state_ptr;
@@ -461,12 +463,12 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
     KernelInfo *kernel = find_kernel_by_name(entry_name, mod);
     if (!kernel) {
         error(user_context) << "Internal error: unknown kernel named '" << entry_name << "'";
-        return 1;
+        return -1;
     }
 
     global_state.UseProgram(kernel->program_id);
     if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run UseProgram")) {
-        return 1;
+        return -1;
     }
 
     // Populate uniforms with values passed in arguments.
@@ -481,20 +483,28 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
             // TODO(aam): Support types other than int
             int value = *((int *)args[i]);
             global_state.Uniform1i(i, value);
-            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i")) { return 1; }
+            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i")) {
+                return -1;
+            }
         } else {
             uint64_t arg_value = *(uint64_t *)args[i];
 
             GLuint the_buffer = halide_get_device_handle(arg_value);
             global_state.BindBufferBase(GL_SHADER_STORAGE_BUFFER, i, the_buffer);
-            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run BindBufferBase")) { return 1; }
+            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run BindBufferBase")) {
+                return -1;
+            }
         }
         i++;
     }
     global_state.DispatchCompute(blocksX, blocksY, blocksZ);
-    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run DispatchCompute")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run DispatchCompute")) {
+        return -1;
+    }
     global_state.MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run MemoryBarrier")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run MemoryBarrier")) {
+        return -1;
+    }
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -537,7 +547,7 @@ WEAK char *get_kernel_name(const char *start, const char *end) {
 // is responsible for setting up the OpenGL environment and compiling the GLSL
 // code into a compute shader.
 WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **state_ptr,
-                                          const char *src, int size) {
+                                                 const char *src, int size) {
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
