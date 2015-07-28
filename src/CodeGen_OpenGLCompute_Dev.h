@@ -45,12 +45,12 @@ protected:
                         Target target,
                         const std::string &name,
                         const std::vector<GPU_Argument> &args);
-
     protected:
-        using CodeGen_C::visit;
+
         std::string print_type(Type type);
         std::string print_name(const std::string &);
 
+        using CodeGen_C::visit;
         void visit(const Div *);
         void visit(const Mod *);
         void visit(const For *);
@@ -59,9 +59,12 @@ protected:
         void visit(const Load *op);
         void visit(const Store *op);
         void visit(const Cast *op);
+        void visit(const Call *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
         void visit(const Select *op);
+        void visit(const Evaluate *op);
+        void visit(const IntImm *op);
 
     public:
         int workgroup_size[3];

@@ -146,6 +146,16 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     }
 }
 
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
+    if (op->name == "halide_gpu_thread_barrier") {
+        do_indent();
+        stream << "barrier();\n";
+    } else {
+        CodeGen_C::visit(op);
+    }
+
+}
+
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
@@ -219,7 +229,11 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     }
 
     ostringstream oss;
-    oss << print_name(op->name) << ".data[" << id_index << "]";
+    oss << print_name(op->name);
+    if (!allocations.contains(op->name)) {
+        oss << ".data";
+    }
+    oss << "[" << id_index << "]";
     print_assignment(op->type, oss.str());
 }
 
@@ -228,9 +242,11 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp) {
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-        user_assert(stride && stride->value == 1 && ramp->width == 4) <<
-            "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute."
-            " Got integer stride " << (stride? std::to_string(stride->value): "undefined") << " and width " << ramp->width << " instead.";
+        user_assert(stride && stride->value == 1 && ramp->width == 4)
+            << "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute."
+            << " Got integer stride "
+            << (stride ? std::to_string(stride->value): "undefined")
+            << " and width " << ramp->width << " instead.";
 
         // Buffer type is 4-elements wide, that's why we divide by ramp->width.
         id_index = print_expr(Div::make(ramp->base, IntImm::make(ramp->width)));
@@ -241,7 +257,11 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     string id_value = print_expr(op->value);
 
     do_indent();
-    stream << print_name(op->name) << ".data[" << id_index << "] = " << id_value << ";\n";
+    stream << print_name(op->name);
+    if (!allocations.contains(op->name)) {
+        stream << ".data";
+    }
+    stream << "[" << id_index << "] = " << print_type(op->value.type()) << "(" << id_value << ");\n";
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op) {
@@ -267,6 +287,22 @@ void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
     glc.add_kernel(s, target, name, args);
 }
 
+namespace {
+class FindSharedAllocations : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Allocate *op) {
+        op->body.accept(this);
+        if (starts_with(op->name, "__shared_")) {
+            allocs.push_back(op);
+        }
+    }
+
+public:
+    vector<const Allocate *> allocs;
+};
+}
+
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                                     Target target,
                                                                     const string &name,
@@ -281,7 +317,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     } else {
         stream << "#version 430\n";
     }
-    stream << "float float_from_bits(int x) { return intBitsToFloat(x); }\n";
+    stream << "float float_from_bits(uint x) { return intBitsToFloat(int(x)); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
@@ -300,12 +336,29 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
         }
     }
 
+    // Find all the shared allocations and declare them at global scope.
+    FindSharedAllocations fsa;
+    s.accept(&fsa);
+    for (const Allocate *op : fsa.allocs) {
+        internal_assert(op->extents.size() == 1 && is_const(op->extents[0]));
+        stream << "shared "
+               << print_type(op->type) << " "
+               << print_name(op->name) << "["
+               << op->extents[0] << "];\n";
+    }
+
+    // We'll figure out the workgroup size while traversing the stmt
+    workgroup_size[0] = 0;
+    workgroup_size[1] = 0;
+    workgroup_size[2] = 0;
+
     stream << "void main()\n{\n";
     indent += 2;
     print(s);
     indent -= 2;
     stream << "}\n";
 
+    // Declare the workgroup size.
     indent += 2;
     stream << "layout(local_size_x = " << workgroup_size[0];
     if (workgroup_size[1] > 1) { stream << ", local_size_y = " << workgroup_size[1]; }
@@ -316,20 +369,29 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
 void CodeGen_OpenGLCompute_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
-
     cur_kernel_name = "";
-    glc.workgroup_size[0] = 0;
-    glc.workgroup_size[1] = 0;
-    glc.workgroup_size[2] = 0;
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
     debug(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
 
     do_indent();
-    stream << "// Got allocation " << op->name << ".\n";
     allocations.push(op->name, op->type);
 
+    internal_assert(op->extents.size() >= 1);
+    Expr extent = 1;
+    for (Expr e : op->extents) {
+        extent *= e;
+    }
+    extent = simplify(extent);
+    internal_assert(is_const(extent));
+
+    if (!starts_with(op->name, "__shared_")) {
+        // Shared allocations were already declared at global scope.
+        stream << print_type(op->type) << " "
+               << print_name(op->name) << "["
+               << op->extents[0] << "];\n";
+    }
     op->body.accept(this);
 }
 
@@ -337,8 +399,16 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
     debug(2) << "OpenGLCompute: Free on device for " << op->name << "\n";
 
     allocations.pop(op->name);
-    do_indent();
-    stream << "// Lost allocation " << (op->name) << "\n";
+}
+
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *op) {
+    if (is_const(op->value)) return;
+    print_expr(op->value);
+}
+
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op) {
+    // GL seems to interpret some large int immediates as uints.
+    id = "int(" + std::to_string(op->value) + ")";
 }
 
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {
