@@ -269,9 +269,14 @@ extern void halide_memoization_cache_set_size(int64_t size);
  *  represents the outputs of the memoized Func. If the Func does not
  *  return a Tuple, there will only be one buffer_t in the list. The
  *  tuple_count parameters determines the length of the list.
+ *
+ * The return values are:
+ * -1: Signals an error.
+ *  0: Success and cache hit.
+ *  1: Success and cache miss.
  */
-extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                            buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
+                                           buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
@@ -283,6 +288,9 @@ extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *c
  *  memoized Func. If the Func does not return a Tuple, there will
  *  only be one buffer_t in the list. The tuple_count parameters
  *  determines the length of the list.
+ *
+ * If there is a memory allocation failure, the store does not store
+ * the data into the cache.
  */
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                            buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
@@ -299,7 +307,9 @@ extern void halide_memoization_cache_store(void *user_context, const uint8_t *ca
  * the relase operation needs. The default Halide cache impleemntation
  * accomplishes this by storing extra data before the start of the user
  * modifiable host storage.
- */
+ *
+ * This call is like free and does not have a failure return.
+  */
 extern void halide_memoization_cache_release(void *user_context, void *host);
 
 /** Free all memory and resources associated with the memoization cache.
