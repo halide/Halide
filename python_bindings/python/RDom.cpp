@@ -48,6 +48,7 @@ void defineRVar()
 
     p::implicitly_convertible<RVar, h::Expr>();
 
+    // FIXME need to define the operators with Expr and int
     return;
 }
 
