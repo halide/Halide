@@ -109,6 +109,14 @@ check their output).
 There is no 'make install' yet. If you want to make an install
 package, run 'make distrib'.
 
+If you wish to build Halide in a separate directory, you can do that
+like so:
+
+    % cd ..
+    % mkdir halide_build
+    % cd halide_build
+    % make -f ../Halide/Makefile
+
 If you wish to use cmake to build Halide, the build procedure is:
 
     % mkdir cmake_build
