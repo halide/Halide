@@ -599,7 +599,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         const GLchar* sources = { src };
         const GLint sources_lengths = { src_len };
 
-        debug(user_context) << "Compute shader source:" << src << "\n";
+        debug(user_context) << "Compute shader source for " << kernel_name << " :" << src;
+        debug(user_context) << "\n";
 
         global_state.ShaderSource(shader, 1, &sources, &sources_lengths);
         if (global_state.CheckAndReportError(user_context, "shader source")) { return -1; }
