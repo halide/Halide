@@ -395,6 +395,7 @@ private:
             KeyInfo key_info(f, top_level_name);
 
             std::string cache_key_name = op->name + ".cache_key";
+            std::string cache_result_name = op->name + ".cache_result";
             std::string cache_miss_name = op->name + ".cache_miss";
             std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
 
@@ -410,7 +411,15 @@ private:
             Stmt mutated_consume = Block::make(cache_store_back, consume);
 
             Stmt mutated_pipeline = ProducerConsumer::make(op->name, mutated_produce, mutated_update, mutated_consume);
-            Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name), mutated_pipeline);
+            Stmt cache_miss_marker = LetStmt::make(cache_miss_name,
+                                                   Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
+                                                   mutated_pipeline);
+            Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), IntImm::make(-1)),
+                                                                   Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
+                                                  cache_miss_marker);
+            Stmt cache_lookup = LetStmt::make(cache_result_name,
+                                              key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
+                                              cache_lookup_check);
 
             std::vector<Expr> computed_bounds_args;
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
