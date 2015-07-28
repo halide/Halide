@@ -112,6 +112,10 @@ void defineType()
            (p::arg("width")=1),
            "Construct a boolean type");
 
+    p::def("Handle", h::Handle,
+           (p::arg("width")=1),
+           "Construct a handle type");
+
     return;
 }
 
