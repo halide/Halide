@@ -10,6 +10,7 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
 #include "Target.h"
 
 namespace Halide {
@@ -38,9 +39,9 @@ public:
 
 protected:
 
-    class CodeGen_OpenGLCompute_C : public CodeGen_C {
+    class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
     public:
-        CodeGen_OpenGLCompute_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_OpenGLCompute_C(std::ostream &s) : CodeGen_GLSLBase(s) {}
         void add_kernel(Stmt stmt,
                         Target target,
                         const std::string &name,
@@ -48,11 +49,8 @@ protected:
     protected:
 
         std::string print_type(Type type);
-        std::string print_name(const std::string &);
 
         using CodeGen_C::visit;
-        void visit(const Div *);
-        void visit(const Mod *);
         void visit(const For *);
         void visit(const Ramp *op);
         void visit(const Broadcast *op);

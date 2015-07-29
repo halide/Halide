@@ -28,7 +28,7 @@ void blur(std::string suffix, ImageParam input) {
     result.bound(c, 0, CHANNELS)
           .reorder_storage(c, x, y)
           .reorder(c, x, y);
-    if (target.has_gpu_feature()) {
+    if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
         result.vectorize(c, 4)
               .gpu_tile(x, y, 64, 64);
     } else {

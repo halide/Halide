@@ -54,43 +54,13 @@ Type map_type(const Type &type) {
 }
 }
 
-// Identifiers containing double underscores '__' are reserved in GLSL, so we
-// have to use a different name mangling scheme than in the C code generator.
-string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_name(const string &name) {
-    string mangled = CodeGen_C::print_name(name);
-    return replace_all(mangled, "__", "XX");
-}
-
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
-    ostringstream oss;
-    type = map_type(type);
-    if (type.is_scalar()) {
-        if (type.is_float()) {
-            oss << "float";
-        } else if (type.is_bool()) {
-            oss << "bool";
-        } else if (type.is_int()) {
-            oss << "int";
-        } else if (type.is_uint()) {
-            oss << "uint";
-        } else {
-            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
-        }
+    Type mapped_type = map_type(type);
+    if (mapped_type.is_uint()) {
+        return mapped_type.is_scalar()? "uint": "uvec"  + std::to_string(mapped_type.width);
     } else {
-        if (type.is_float()) {
-            // no prefix for float vectors
-        } else if (type.is_bool()) {
-            oss << "b";
-        } else if (type.is_int()) {
-            oss << "i";
-        } else if (type.is_uint()) {
-            oss << "u";
-        } else {
-            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
-        }
-        oss << "vec" << type.width;
+        return CodeGen_GLSLBase::print_type(type);
     }
-    return oss.str();
 }
 
 namespace {
@@ -128,14 +98,6 @@ int thread_loop_workgroup_index(const string &name) {
 }
 }
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Div *op) {
-    visit_binop(op->type, op->a, op->b, "/");
-}
-
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Mod *op) {
-    visit_binop(op->type, op->a, op->b, "%");
-}
-
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
@@ -151,7 +113,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
         do_indent();
         stream << "barrier();\n";
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GLSLBase::visit(op);
     }
 
 }
@@ -321,7 +283,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     } else {
         stream << "#version 430\n";
     }
-    stream << "float float_from_bits(uint x) { return intBitsToFloat(int(x)); }\n";
+    stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
