@@ -481,6 +481,7 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Allocate *op) {
             std::vector<Expr> new_extents;
+            Expr new_expr;
 
             // The new expanded dimension is innermost.
             new_extents.push_back(replacement.type().width);
@@ -494,12 +495,20 @@ class VectorizeLoops : public IRMutator {
                     << "Cannot vectorize an allocation with a varying size per vector lane.\n";
             }
 
+            if (op->new_expr.defined()) {
+                new_expr = mutate(op->new_expr);
+            }
+            if (op->new_expr.defined()) {
+                user_assert(new_expr.type().is_scalar())
+                    << "Cannot vectorize an allocation with a varying new_expr per vector lane.\n";
+            }
+
             // Rewrite loads and stores to this allocation like so (this works for scalars and vectors):
             // foo[x] -> foo[x*width + ramp(0, 1, width)]
             internal_allocations.push(op->name, 0);
             Stmt body = mutate(op->body);
             internal_allocations.pop(op->name);
-            stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
         }
 
         Stmt scalarize(Stmt s) {

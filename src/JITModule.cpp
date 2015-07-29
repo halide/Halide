@@ -258,6 +258,7 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     #if LLVM_VERSION >= 37
         TargetMachine *tm = engine_builder.selectTarget();
+    #ifdef NEWER
         DataLayout target_data_layout(tm->createDataLayout());
         if (m->getDataLayout() != target_data_layout) {
                 debug(0) << "Warning: data layout mismatch between module (" 
@@ -266,6 +267,15 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
                                  << target_data_layout.getStringRepresentation() << ")\n";
                 m->setDataLayout(target_data_layout);
         }
+    #else
+        if (m->getDataLayout() != tm->getDataLayout()) {
+                debug(0) << "Warning: data layout mismatch between module (" 
+                             << m->getDataLayout()->getStringRepresentation()
+                                 << ") and what the execution engine expects (" 
+                                 << tm->getDataLayout()->getStringRepresentation() << ")\n";
+                m->setDataLayout(tm->getDataLayout());
+        }
+    #endif
     ExecutionEngine *ee = engine_builder.create(tm);
     #else
     ExecutionEngine *ee = engine_builder.create();

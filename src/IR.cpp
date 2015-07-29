@@ -390,7 +390,8 @@ Stmt Provide::make(std::string name, const std::vector<Expr> &values, const std:
 }
 
 Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extents,
-                 Expr condition, Stmt body) {
+                    Expr condition, Stmt body,
+                    Expr new_expr, std::string free_function) {
     for (size_t i = 0; i < extents.size(); i++) {
         internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
         internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -403,6 +404,8 @@ Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extent
     node->name = name;
     node->type = type;
     node->extents = extents;
+    node->new_expr = new_expr;
+    node->free_function = free_function;
     node->condition = condition;
     node->body = body;
     return node;
@@ -606,6 +609,7 @@ Call::ConstString Call::random = "random";
 Call::ConstString Call::rewrite_buffer = "rewrite_buffer";
 Call::ConstString Call::create_buffer_t = "create_buffer_t";
 Call::ConstString Call::copy_buffer_t = "copy_buffer_t";
+Call::ConstString Call::extract_buffer_host = "extract_buffer_host";
 Call::ConstString Call::extract_buffer_min = "extract_buffer_min";
 Call::ConstString Call::extract_buffer_max = "extract_buffer_max";
 Call::ConstString Call::set_host_dirty = "set_host_dirty";
