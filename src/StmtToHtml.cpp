@@ -508,21 +508,18 @@ private:
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
-    void visit_block(Stmt first, Stmt rest) {
-        if (const Block *b_first = first.as<Block>()) {
-            visit_block(b_first->first, b_first->rest);
-        } else {
-            print(first);
-        }
-        if (const Block *b_rest = rest.as<Block>()) {
-            visit_block(b_rest->first, b_rest->rest);
-        } else if (rest.defined()) {
-            print(rest);
+    void visit_block_stmt(Stmt stmt) {
+        if (const Block *b = stmt.as<Block>()) {
+            visit_block_stmt(b->first);
+            visit_block_stmt(b->rest);
+        } else if (stmt.defined()) {
+            print(stmt);
         }
     }
     void visit(const Block *op) {
         stream << open_div("Block");
-        visit_block(op->first, op->rest);
+        visit_block_stmt(op->first);
+        visit_block_stmt(op->rest);
         stream << close_div();
     }
     void visit(const IfThenElse *op) {
