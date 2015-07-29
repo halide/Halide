@@ -171,7 +171,7 @@ inline Expr cast(Type t, Expr a) {
     } else if (a.type().is_handle() && !t.is_handle()) {
         user_error << "Can't cast handle \"" << a << "\" to type " << t << ". "
                    << "The only legal cast from handles to scalar types is: "
-                   << "reinterpret(UInt64(), " << a << ");\n";
+                   << "reinterpret(UInt(64), " << a << ");\n";
     }
 
     if (t.is_vector()) {
