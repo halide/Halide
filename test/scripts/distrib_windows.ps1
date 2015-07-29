@@ -91,26 +91,24 @@ foreach (${configuration} in "Release", "Debug") {
     mkdir build_64_trunk_${configuration}
   }
   cd build_64_trunk_${configuration}
-  cmake -D LLVM_BIN=$ROOT\llvm\build-64\Release\bin -D LLVM_INCLUDE="$ROOT\llvm\include;$ROOT\llvm\build-64\include" -D LLVM_LIB=$ROOT\llvm\build-64\${configuration}\lib -D LLVM_VERSION=37 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=OFF -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_MIPS=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=ON -D WITH_TEST_GENERATORS=ON -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12 Win64" ..
+  cmake -D LLVM_BIN=$ROOT\llvm\build-64\Release\bin -D LLVM_INCLUDE="$ROOT\llvm\include;$ROOT\llvm\build-64\include" -D LLVM_LIB=$ROOT\llvm\build-64\${configuration}\lib -D LLVM_VERSION=38 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=OFF -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_MIPS=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=ON -D WITH_TEST_GENERATORS=ON -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12 Win64" ..
   MSBuild.exe /m /t:Build /p:Configuration="${configuration}" .\All_BUILD.vcxproj
   if ($LastExitCode) {
     echo "Build failed!"
     exit $LastExitCode
   }
-
 
   cd $ROOT
   if (! (Test-Path build_32_trunk_${configuration})) {
     mkdir build_32_trunk_${configuration}
   }
   cd build_32_trunk_${configuration}
-  cmake -D LLVM_BIN=$ROOT\llvm\build-32\Release\bin -D LLVM_INCLUDE="$ROOT\llvm\include;$ROOT\llvm\build-32\include" -D LLVM_LIB=$ROOT\llvm\build-32\${configuration}\lib -D LLVM_VERSION=37 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=OFF -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_MIPS=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=ON -D WITH_TEST_GENERATORS=ON -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12" ..
+  cmake -D LLVM_BIN=$ROOT\llvm\build-32\Release\bin -D LLVM_INCLUDE="$ROOT\llvm\include;$ROOT\llvm\build-32\include" -D LLVM_LIB=$ROOT\llvm\build-32\${configuration}\lib -D LLVM_VERSION=38 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=OFF -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_MIPS=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=ON -D WITH_TEST_GENERATORS=ON -D HALIDE_SHARED_LIBRARY=ON -D BUILD_TYPE="${configuration}" -G "Visual Studio 12" ..
   MSBuild.exe /m /t:Build /p:Configuration="${configuration}" .\All_BUILD.vcxproj
   if ($LastExitCode) {
     echo "Build failed!"
     exit $LastExitCode
   }
-
 
   # Build Halide against pnacl
   cd $ROOT
@@ -167,6 +165,7 @@ foreach ($d in "32_trunk","64_trunk", "32_pnacl", "64_pnacl") {
   cp $ROOT\build_${d}_Debug\lib\Debug\Halide.lib Debug\
   cp $ROOT\build_${d}_Debug\bin\Debug\Halide.dll Debug\
   cp $ROOT\tools\mex_halide.m tools\
+  cp $ROOT\tools\GenGen.cpp tools\
   cp $ROOT\README.md .
   &7z a Halide_Windows_${d}_${COMMIT}_${DATE}.zip *
   mv Halide_Windows_${d}_${COMMIT}_${DATE}.zip ..

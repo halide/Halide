@@ -105,7 +105,7 @@ WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
-                                        const char **func_names);
+                                        const uint64_t *func_names);
 }
 
 // A convenient namespace for weak functions that are internal to the
