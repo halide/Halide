@@ -2,7 +2,7 @@
 halide_project(local_laplacian_gen "apps" local_laplacian_gen.cpp)
 
 set(ll_header "${CMAKE_CURRENT_BINARY_DIR}/local_laplacian.h")
-set(ll_obj "${CMAKE_CURRENT_BINARY_DIR}/local_laplacian.o")
+set(ll_obj "${CMAKE_CURRENT_BINARY_DIR}/local_laplacian${CMAKE_CXX_OUTPUT_EXTENSION}")
 
 # Final executable
 add_executable(ll_process process.cpp ${ll_header})
