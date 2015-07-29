@@ -2,7 +2,7 @@
 halide_project(camera_pipe "apps" camera_pipe.cpp)
 
 set(curved_h "${CMAKE_CURRENT_BINARY_DIR}/curved.h")
-set(curved_obj "${CMAKE_CURRENT_BINARY_DIR}/curved.o")
+set(curved_obj "${CMAKE_CURRENT_BINARY_DIR}/curved${CMAKE_CXX_OUTPUT_EXTENSION}")
 
 # FIXME: Set -O3 here
 add_library(fcam fcam/Demosaic.cpp fcam/Demosaic_ARM.cpp)
