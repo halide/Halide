@@ -16,7 +16,7 @@ WEAK halide_profiler_state *halide_profiler_get_state() {
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name, int num_funcs, const char **func_names) {
+WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name, int num_funcs, const uint64_t *func_names) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -46,7 +46,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     }
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].time = 0;
-        p->funcs[i].name = func_names[i];
+        p->funcs[i].name = (const char *)(func_names[i]);
     }
     s->first_free_id += num_funcs;
     s->pipelines = p;
@@ -95,7 +95,7 @@ WEAK void sampling_profiler_thread(void *) {
                 bill_func(s, func, t_now - t);
             }
             t = t_now;
-       
+
             // Release the lock, sleep, reacquire.
             int sleep_ms = s->sleep_time;
             halide_mutex_unlock(&s->lock);
@@ -117,7 +117,7 @@ extern "C" {
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
-                                        const char **func_names) {
+                                        const uint64_t *func_names) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     ScopedMutexLock lock(&s->lock);

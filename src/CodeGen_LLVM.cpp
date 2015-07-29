@@ -1514,7 +1514,12 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Ex
         index = promote_64(index);
     }
 
-    return codegen_buffer_pointer(buffer, type, codegen(index));
+    // Handles are always indexed as 64-bit.
+    if (type.is_handle()) {
+        return codegen_buffer_pointer(buffer, UInt(64, type.width), index);
+    } else {
+        return codegen_buffer_pointer(buffer, type, codegen(index));
+    }
 }
 
 
