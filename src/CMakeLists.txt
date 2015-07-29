@@ -525,7 +525,12 @@ else()
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
 
-target_link_libraries(Halide PUBLIC InitialModules ${LIBS})
+# When building a shared library the LLVM libraries will be
+# embedded in the Halide library. When building a static library
+# LLVM is not embedded but CMake knows that when building an executable
+# against the Halide static library that it needs to link LLVM too so
+# PRIVATE scope is the correct choice here.
+target_link_libraries(Halide PRIVATE InitialModules ${LIBS})
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
