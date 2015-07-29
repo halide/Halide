@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
-#include "clock.h"
+#include <cstdio>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -26,14 +26,11 @@ int main(int argc, char **argv) {
 
     Image<float> out_fast(8), out_slow(8);
 
-    double t1 = current_time();
-    slow.realize(out_slow);
-    double t2 = current_time();
-    fast.realize(out_fast);
-    double t3 = current_time();
+    double slow_time = benchmark(1, 1, [&]() { slow.realize(out_slow); });
+    double fast_time = benchmark(1, 1, [&]() { fast.realize(out_fast); });
 
-    double fast_time = 1e6 * (t3 - t2) / (out_fast.width() * N);
-    double slow_time = 1e6 * (t2 - t1) / (out_slow.width() * N);
+    slow_time *= 1e9 / (out_fast.width() * N);
+    fast_time *= 1e9 / (out_fast.width() * N);
 
     if (fabs(out_fast(0) - out_slow(0)) > 1e-5) {
         printf("Mismatched answers:\n"
