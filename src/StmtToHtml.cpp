@@ -272,7 +272,13 @@ private:
     void visit(const Call *op) {
         stream << open_span("Call");
         if (op->call_type == Call::Intrinsic) {
-            if (op->name == Call::extract_buffer_min) {
+            if (op->name == Call::extract_buffer_host) {
+                stream << open_span("Matched");
+                print(op->args[0]);
+                stream << ".host";
+                stream << close_span();
+                return;
+            } else if (op->name == Call::extract_buffer_min) {
                 stream << open_span("Matched");
                 print(op->args[0]);
                 stream << ".min[";
@@ -447,6 +453,17 @@ private:
         if (!is_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
+        }
+        if (op->new_expr.defined()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_new") << "{";
+            print(op->new_expr);
+            stream << matched("}");
+        }
+        if (!op->free_function.empty()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_delete") << "{ " << op->free_function << "(); ";
+            stream << matched("}");
         }
 
         stream << open_div("AllocateBody");
