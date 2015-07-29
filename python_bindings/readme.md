@@ -31,13 +31,15 @@ Build using:
 The Python API reflects directly the [C++ Halide API](http://halide-lang.org/docs).
 Consult the [module documentation](http://googledrive.com/host/0B6LzqcYZJN2cfnZKZno2MmI2TDFsWkh0M3pUOHNnaUdkV2l2dmR2eDlnV2JmeF9NeEI0cTA).
 
-Check out the code for the example applications in the apps/ and tutorial/ subdirectory.
+Check out the code for the example applications in the `apps/` and `tutorial/` subdirectory.
 
 You can run them as a batch via:
 ```bash
     run_apps.sh
     run_tutorial.sh
 ```
+
+To run these examples, make sure the `PYTHONPATH` environment variable points to your build directory (e.g. `export PYTHONPATH=halide_source/python_bindings/build:$PYTHONPATH`).
 
 ## License ##
 
