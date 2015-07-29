@@ -114,7 +114,6 @@
 /apps/nacl_demos/reaction_diffusion_update.h
 /apps/HelloNaCl/halide_game_of_life.h
 bin/*
-build/*
 build-ios/*
 build-osx/*
 cmake_build/*

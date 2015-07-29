@@ -98,7 +98,6 @@ foreach (${configuration} in "Release", "Debug") {
     exit $LastExitCode
   }
 
-
   cd $ROOT
   if (! (Test-Path build_32_trunk_${configuration})) {
     mkdir build_32_trunk_${configuration}
@@ -110,7 +109,6 @@ foreach (${configuration} in "Release", "Debug") {
     echo "Build failed!"
     exit $LastExitCode
   }
-
 
   # Build Halide against pnacl
   cd $ROOT
