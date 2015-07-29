@@ -271,17 +271,28 @@ struct Allocate : public StmtNode<Allocate> {
     Type type;
     std::vector<Expr> extents;
     Expr condition;
+
+    // These override the code generator dependent malloc and free
+    // equivalents if provided. If the new_expr succeeds, that is it
+    // returns non-NULL, the function named be free_function is
+    // guaranteed to be called. The free function signature must match
+    // that of the code generator dependent free (typically
+    // halide_free). If free_function is left empty, code generator
+    // default will be called.
+    Expr new_expr;
+    std::string free_function;
     Stmt body;
 
     EXPORT static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
-                            Expr condition, Stmt body);
+                            Expr condition, Stmt body,
+                            Expr new_expr = Expr(), std::string free_function = std::string());
 };
 
 /** Free the resources associated with the given buffer. */
 struct Free : public StmtNode<Free> {
     std::string name;
 
-    static Stmt make(std::string name);
+    EXPORT static Stmt make(std::string name);
 };
 
 /** A single-dimensional span. Includes all numbers between min and
@@ -373,6 +384,7 @@ struct Call : public ExprNode<Call> {
         copy_buffer_t,
         extract_buffer_min,
         extract_buffer_max,
+        extract_buffer_host,
         set_host_dirty,
         set_dev_dirty,
         popcount,

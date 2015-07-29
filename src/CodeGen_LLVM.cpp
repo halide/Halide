@@ -2216,6 +2216,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
 
             value = buffer;
+        } else if (op->name == Call::extract_buffer_host) {
+            internal_assert(op->args.size() == 1);
+            Value *buffer = codegen(op->args[0]);
+            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+            value = buffer_host(buffer);
         } else if (op->name == Call::extract_buffer_min) {
             internal_assert(op->args.size() == 2);
             const IntImm *idx = op->args[1].as<IntImm>();
