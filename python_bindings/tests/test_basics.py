@@ -275,6 +275,7 @@ def test_param_bug():
 
     p1 = Param(UInt(8), "p1", 0)
     p2 = Param(UInt(8), "p2")
+    p3 = Param(UInt(8), 42)
 
     return
 
