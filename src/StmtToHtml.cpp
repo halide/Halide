@@ -272,7 +272,13 @@ private:
     void visit(const Call *op) {
         stream << open_span("Call");
         if (op->call_type == Call::Intrinsic) {
-            if (op->name == Call::extract_buffer_min) {
+            if (op->name == Call::extract_buffer_host) {
+                stream << open_span("Matched");
+                print(op->args[0]);
+                stream << ".host";
+                stream << close_span();
+                return;
+            } else if (op->name == Call::extract_buffer_min) {
                 stream << open_span("Matched");
                 print(op->args[0]);
                 stream << ".min[";
@@ -448,6 +454,17 @@ private:
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
+        if (op->new_expr.defined()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_new") << "{";
+            print(op->new_expr);
+            stream << matched("}");
+        }
+        if (!op->free_function.empty()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_delete") << "{ " << op->free_function << "(); ";
+            stream << matched("}");
+        }
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -489,10 +506,20 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
+
+    // To avoid generating ridiculously deep DOMs, we flatten blocks here.
+    void visit_block_stmt(Stmt stmt) {
+        if (const Block *b = stmt.as<Block>()) {
+            visit_block_stmt(b->first);
+            visit_block_stmt(b->rest);
+        } else if (stmt.defined()) {
+            print(stmt);
+        }
+    }
     void visit(const Block *op) {
         stream << open_div("Block");
-        print(op->first);
-        if (op->rest.defined()) print(op->rest);
+        visit_block_stmt(op->first);
+        visit_block_stmt(op->rest);
         stream << close_div();
     }
     void visit(const IfThenElse *op) {
