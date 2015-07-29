@@ -356,12 +356,18 @@ private:
         Expr condition = mutate(op->condition);
         if (!condition.defined()) return;
 
+        Expr new_expr;
+        if (op->new_expr.defined()) {
+            new_expr = mutate(op->new_expr);
+        }
+
         if (all_extents_unmodified &&
             body.same_as(op->body) &&
-            condition.same_as(op->condition)) {
+            condition.same_as(op->condition) &&
+            new_expr.same_as(op->new_expr)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, condition, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
         }
     }
 
