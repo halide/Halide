@@ -64,6 +64,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_set_size,
     (void *)&halide_memoization_cache_store,
+    (void *)&halide_memoization_cache_release,
     (void *)&halide_mutex_cleanup,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
