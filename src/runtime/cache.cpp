@@ -69,25 +69,6 @@ WEAK size_t full_extent(const buffer_t &buf) {
     return result;
 }
 
-WEAK void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
-    size_t buffer_size = full_extent(from);
-    halide_assert(user_context, from.elem_size == to.elem_size);
-    for (int i = 0; i < 4; i++) {
-        halide_assert(user_context, from.extent[i] == to.extent[i]);
-        halide_assert(user_context, from.stride[i] == to.stride[i]);
-    }
-    memcpy(to.host, from.host, buffer_size * from.elem_size);
-}
-
-WEAK buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
-    buffer_t result = buf;
-    size_t buffer_size = full_extent(result);
-    // TODO: ERROR RETURN
-    result.host = (uint8_t *)halide_malloc(user_context, buffer_size * result.elem_size);
-    copy_from_to(user_context, buf, result);
-    return result;
-}
-
 WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return memcmp(key1, key2, key_size) == 0;
 }
@@ -105,6 +86,16 @@ WEAK bool bounds_equal(const buffer_t &buf1, const buffer_t &buf2) {
     return true;
 }
 
+// Each host block has extra space to store extra information just
+// before the contents.  16 is chosen to keep that alignment. For a
+// buffer between the first lookup and store, this holds the cache key
+// hash. For buffers where the lookup succeeded or the store has
+// occurred, this holds a pointer to the hash entry.
+//
+// This is an optimization the number of cycles it takes for the cache
+// to operate.
+const size_t extra_bytes_host_bytes = 16;
+
 struct CacheEntry {
     CacheEntry *next;
     CacheEntry *more_recent;
@@ -112,12 +103,13 @@ struct CacheEntry {
     size_t key_size;
     uint8_t *key;
     uint32_t hash;
+    uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
     uint32_t tuple_count;
     buffer_t computed_bounds;
     buffer_t buf[1];
     // ADDITIONAL buffer_t STRUCTS HERE
 
-    void init(const uint8_t *cache_key, size_t cache_key_size,
+    bool init(const uint8_t *cache_key, size_t cache_key_size,
               uint32_t key_hash, const buffer_t &computed_buf,
               int32_t tuples, buffer_t **tuple_buffers);
     void destroy();
@@ -125,7 +117,7 @@ struct CacheEntry {
 
 };
 
-WEAK void CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
+WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
                            uint32_t key_hash, const buffer_t &computed_buf,
                            int32_t tuples, buffer_t **tuple_buffers) {
     next = NULL;
@@ -133,10 +125,13 @@ WEAK void CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     less_recent = NULL;
     key_size = cache_key_size;
     hash = key_hash;
+    in_use_count = 0;
     tuple_count = tuples;
 
-    // TODO: ERROR RETURN
     key = (uint8_t *)halide_malloc(NULL, key_size);
+    if (key == NULL) {
+        return false;
+    }
     computed_bounds = computed_buf;
     computed_bounds.host = NULL;
     computed_bounds.dev = 0;
@@ -144,16 +139,16 @@ WEAK void CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
         key[i] = cache_key[i];
     }
     for (int32_t i = 0; i < tuple_count; i++) {
-        buffer_t *buf = tuple_buffers[i];
-        buffer(i) = copy_of_buffer(NULL, *buf);
+        buffer(i) = *tuple_buffers[i];
     }
+    return true;
 }
 
 WEAK void CacheEntry::destroy() {
     halide_free(NULL, key);
     for (int32_t i = 0; i < tuple_count; i++) {
         halide_device_free(NULL, &buffer(i));
-        halide_free(NULL, buffer(i).host);
+        halide_free(NULL, buffer(i).host - extra_bytes_host_bytes);
     }
 }
 
@@ -234,35 +229,54 @@ WEAK void prune_cache() {
 #if CACHE_DEBUGGING
     validate_cache();
 #endif
+    CacheEntry *prune_candidate = least_recently_used;
     while (current_cache_size > max_cache_size &&
-           least_recently_used != NULL) {
-        CacheEntry *lru_entry = least_recently_used;
-        uint32_t h = lru_entry->hash;
-        uint32_t index = h % kHashTableSize;
+           prune_candidate != NULL) {
+        CacheEntry *more_recent = prune_candidate->more_recent;
+        
+        if (prune_candidate->in_use_count == 0) {
+            uint32_t h = prune_candidate->hash;
+            uint32_t index = h % kHashTableSize;
 
-        CacheEntry *entry = cache_entries[index];
-        if (entry == lru_entry) {
-            cache_entries[index] = lru_entry->next;
-        } else {
-            while (entry != NULL && entry->next != lru_entry) {
-                entry = entry->next;
+            // Remove from hash table
+            CacheEntry *prev_hash_entry = cache_entries[index];
+            if (prev_hash_entry == prune_candidate) {
+                cache_entries[index] = prune_candidate->next;
+            } else {
+                while (prev_hash_entry != NULL && prev_hash_entry->next != prune_candidate) {
+                    prev_hash_entry = prev_hash_entry->next;
+                }
+                halide_assert(NULL, prev_hash_entry != NULL);
+                prev_hash_entry->next = prune_candidate->next;
             }
-            halide_assert(NULL, entry != NULL);
-            entry->next = lru_entry->next;
-        }
-        least_recently_used = lru_entry->more_recent;
-        if (least_recently_used != NULL) {
-            least_recently_used->less_recent = NULL;
-        }
-        if (most_recently_used == lru_entry) {
-            most_recently_used = NULL;
-        }
-        for (int32_t i = 0; i < lru_entry->tuple_count; i++) {
-            current_cache_size -= full_extent(lru_entry->buffer(i));
+
+            // Remove from less recent chain.
+            if (least_recently_used == prune_candidate) {
+                least_recently_used = more_recent;
+            }
+            if (more_recent != NULL) {
+                more_recent->less_recent = prune_candidate->less_recent;
+            }
+
+            // Remove from more recent chain.
+            if (most_recently_used == prune_candidate) {
+                most_recently_used = prune_candidate->less_recent;
+            }
+            if (prune_candidate->less_recent != NULL) {
+                prune_candidate->less_recent = more_recent;
+            }
+
+            // Decrease cache used amount.
+            for (int32_t i = 0; i < prune_candidate->tuple_count; i++) {
+                current_cache_size -= full_extent(prune_candidate->buffer(i));
+            }
+
+            // Deallocate the entry.
+            prune_candidate->destroy();
+            halide_free(NULL, prune_candidate);
         }
 
-        lru_entry->destroy();
-        halide_free(NULL, lru_entry);
+        prune_candidate = more_recent;
     }
 #if CACHE_DEBUGGING
     validate_cache();
@@ -284,8 +298,8 @@ WEAK void halide_memoization_cache_set_size(int64_t size) {
     prune_cache();
 }
 
-WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                          buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
+WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
+                                         buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -302,7 +316,6 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
     }
-    validate_cache();
 #endif
 
     CacheEntry *entry = cache_entries[index];
@@ -343,25 +356,46 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
 
                 for (int32_t i = 0; i < tuple_count; i++) {
                     buffer_t *buf = tuple_buffers[i];
-                    copy_from_to(user_context, entry->buffer(i), *buf);
+                    *buf = entry->buffer(i);
                 }
 
-                return false;
+                entry->in_use_count += tuple_count;
+
+                return 0;
             }
         }
         entry = entry->next;
+    }
+
+    for (int32_t i = 0; i < tuple_count; i++) {
+        buffer_t *buf = tuple_buffers[i];
+        size_t buffer_size = full_extent(*buf);
+
+        // See documentation on extra_bytes_host_bytes
+        buf->host = ((uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size + extra_bytes_host_bytes));
+        if (buf->host == NULL) {
+            for (int32_t j = i; j > 0; j--) {
+                halide_free(user_context, tuple_buffers[j - 1]->host  - extra_bytes_host_bytes);
+                tuple_buffers[j - 1]->host = NULL;
+            }
+            return -1;
+        }
+        buf->host += extra_bytes_host_bytes;
+        *(uint32_t *)(buf->host - extra_bytes_host_bytes) = h;
     }
 
 #if CACHE_DEBUGGING
     validate_cache();
 #endif
 
-    return true;
+    return 1;
 }
 
 WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                         buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
-    uint32_t h = djb_hash(cache_key, size);
+                                        buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
+    debug(user_context) << "halide_memoization_cache_store\n";
+
+    uint32_t h = *(uint32_t *)(tuple_buffers[0]->host - extra_bytes_host_bytes);
     uint32_t index = h % kHashTableSize;
 
     ScopedMutexLock lock(&memoization_lock);
@@ -377,7 +411,6 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
     }
-    validate_cache();
 #endif
 
     CacheEntry *entry = cache_entries[index];
@@ -388,14 +421,23 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
             entry->tuple_count == tuple_count) {
 
             bool all_bounds_equal = true;
-
+            bool no_host_pointers_equal = true;
             {
                 for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
                     buffer_t *buf = tuple_buffers[i];
                     all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
+                    if (entry->buffer(i).host == buf->host) {
+                        no_host_pointers_equal = false;
+                    }
                 }
             }
             if (all_bounds_equal) {
+                halide_assert(user_context, no_host_pointers_equal);
+                // This entry is still in use by the caller. Mark it as having no cache entry
+                // so halide_memoization_cache_release can free the buffer.
+                for (int32_t i = 0; i < tuple_count; i++) {
+                    *(CacheEntry **)(tuple_buffers[i]->host - extra_bytes_host_bytes) = NULL;
+                }
                 return;
             }
         }
@@ -413,9 +455,31 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     prune_cache();
 
     void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
+    if (entry_storage == NULL) {
+        current_cache_size -= added_size;
+
+        // This entry is still in use by the caller. Mark it as having no cache entry
+        // so halide_memoization_cache_release can free the buffer.
+        for (int32_t i = 0; i < tuple_count; i++) {
+            *(CacheEntry **)(tuple_buffers[i]->host - extra_bytes_host_bytes) = NULL;
+        }
+        return;
+    }
 
     CacheEntry *new_entry = (CacheEntry *)entry_storage;
-    new_entry->init(cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
+    bool inited = new_entry->init(cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
+    if (!inited) {
+        current_cache_size -= added_size;
+
+        // This entry is still in use by the caller. Mark it as having no cache entry
+        // so halide_memoization_cache_release can free the buffer.
+        for (int32_t i = 0; i < tuple_count; i++) {
+            *(CacheEntry **)(tuple_buffers[i]->host - extra_bytes_host_bytes) = NULL;
+        }
+
+        halide_free(user_context, new_entry);
+        return;
+    }
 
     new_entry->next = cache_entries[index];
     new_entry->less_recent = most_recently_used;
@@ -428,18 +492,40 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     }
     cache_entries[index] = new_entry;
 
+    new_entry->in_use_count = tuple_count;
+
+    for (int32_t i = 0; i < tuple_count; i++) {
+        *(CacheEntry **)(tuple_buffers[i]->host - extra_bytes_host_bytes) = new_entry;
+    }
+
 #if CACHE_DEBUGGING
     validate_cache();
 #endif
+    debug(user_context) << "Exiting halide_memoization_cache_store\n";
 }
 
-#if 0
-WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, buffer_t **) {
-}
+WEAK void halide_memoization_cache_release(void *user_context, void *host) {
+    uint8_t *base = (uint8_t *)host - extra_bytes_host_bytes;
+    debug(user_context) << "halide_memoization_cache_release\n";
+    CacheEntry *entry = *(CacheEntry **)(base);
+
+    if (entry == NULL) {
+        halide_free(user_context, base);
+    } else {
+        ScopedMutexLock lock(&memoization_lock);
+
+        halide_assert(user_context, entry->in_use_count > 0);
+        entry->in_use_count--;
+#if CACHE_DEBUGGING
+    validate_cache();
 #endif
+    }
 
+    debug(user_context) << "Exited halide_memoization_cache_release.\n";
+}
 
 WEAK void halide_memoization_cache_cleanup() {
+  debug(NULL) << "halide_memoization_cache_cleanup\n";
     for (int i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
         cache_entries[i] = NULL;
