@@ -71,13 +71,19 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
 
+    bool any_memoized = false;
+
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(outputs, order, env, !t.has_feature(Target::NoAsserts));
+    Stmt s = schedule_functions(outputs, order, env, any_memoized, !t.has_feature(Target::NoAsserts));
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
-    debug(1) << "Injecting memoization...\n";
-    s = inject_memoization(s, env, pipeline_name);
-    debug(2) << "Lowering after injecting memoization:\n" << s << '\n';
+    if (any_memoized) {
+        debug(1) << "Injecting memoization...\n";
+        s = inject_memoization(s, env, pipeline_name, outputs);
+        debug(2) << "Lowering after injecting memoization:\n" << s << '\n';
+    } else {
+        debug(1) << "Skipping injecting memoization...\n";
+    }
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, env, outputs);
@@ -155,6 +161,14 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
+
+    if (any_memoized) {
+        debug(1) << "Rewriting memoized allocations...\n";
+        s = rewrite_memoized_allocations(s, env);
+        debug(2) << "Lowering after rewriting memoized allocations:\n" << s << "\n\n";
+    } else {
+        debug(1) << "Skipping rewriting memoized allocations...\n";
+    }
 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||

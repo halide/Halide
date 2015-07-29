@@ -1615,6 +1615,12 @@ void CodeGen_LLVM::visit(const Load *op) {
 
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
 
+    // If it's a Handle, load it as a uint64_t and then cast
+    if (op->type.is_handle()) {
+        codegen(reinterpret(op->type, Load::make(UInt(64, op->type.width), op->name, op->index, op->image, op->param)));
+        return;
+    }
+
     // There are several cases. Different architectures may wish to override some.
     if (op->type.is_scalar()) {
         // Scalar loads
@@ -2078,7 +2084,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
 
             } else if (dst.is_handle() && !src.is_handle()) {
-                internal_assert(dst.is_uint() && dst.bits == 64);
+                internal_assert(src.is_uint() && src.bits == 64);
 
                 // UInt64 -> Handle
                 llvm::DataLayout d(module);
@@ -2211,6 +2217,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
 
             value = buffer;
+        } else if (op->name == Call::extract_buffer_host) {
+            internal_assert(op->args.size() == 1);
+            Value *buffer = codegen(op->args[0]);
+            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+            value = buffer_host(buffer);
         } else if (op->name == Call::extract_buffer_min) {
             internal_assert(op->args.size() == 2);
             const IntImm *idx = op->args[1].as<IntImm>();
@@ -2999,16 +3010,24 @@ void CodeGen_LLVM::visit(const For *op) {
 }
 
 void CodeGen_LLVM::visit(const Store *op) {
-    Value *val = codegen(op->value);
+    // Even on 32-bit systems, Handles are treated as 64-bit in
+    // memory, so convert stores of handles to stores of uint64_ts.
+    if (op->value.type().is_handle()) {
+        Expr v = reinterpret(UInt(64, op->value.type().width), op->value);
+        codegen(Store::make(op->name, v, op->index));
+        return;
+    }
+
     Halide::Type value_type = op->value.type();
+    Value *val = codegen(op->value);
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
-        StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bytes());
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
         add_tbaa_metadata(store, op->name, op->index);
     } else {
-        int alignment = op->value.type().bytes();
+        int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
         if (ramp && is_one(ramp->stride)) {
 
@@ -3028,8 +3047,8 @@ void CodeGen_LLVM::visit(const Store *op) {
 
             // For dense vector stores wider than the native vector
             // width, bust them up into native vectors.
-            int store_lanes = op->value.type().width;
-            int native_lanes = native_bits / op->value.type().bits;
+            int store_lanes = value_type.width;
+            int native_lanes = native_bits / value_type.bits;
 
             for (int i = 0; i < store_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, store_lanes - i);

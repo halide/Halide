@@ -293,6 +293,9 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
     void visit(const Allocate *op) {
+        user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
+            "(Memoization is not supported inside GPU kernels at present.)\n";
+
         if (in_threads) {
             IRMutator::visit(op);
             return;
