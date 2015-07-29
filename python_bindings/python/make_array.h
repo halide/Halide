@@ -5,7 +5,7 @@
 #include <typeinfo>
 #include <boost/python.hpp>
 #include <boost/python/suite/indexing/indexing_suite.hpp>
-
+#include <boost/array.hpp>
 
 /** Helper method for boost::python
  * from http://stackoverflow.com/questions/18882089/wrapping-arrays-in-boost-python
