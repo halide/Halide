@@ -279,12 +279,12 @@ void defineParam_impl(const std::string suffix, const h::Type type)
                                     p::arg("self"),
                                     "Construct a scalar parameter of type T with a unique auto-generated name"));
     param_class
-            .def(p::init<std::string>(
-                     p::args("self", "name"), "Construct a scalar parameter of type T with the given name."))
             .def(p::init<T>(
                      p::args("self", "val"),
                      "Construct a scalar parameter of type T an initial value of "
                      "'val'. Only triggers for scalar types."))
+            .def(p::init<std::string>(
+                     p::args("self", "name"), "Construct a scalar parameter of type T with the given name."))
             .def(p::init<std::string, T>(
                      p::args("self", "name", "val"),
                      "Construct a scalar parameter of type T with the given name "
@@ -617,22 +617,25 @@ void defineParam()
 
 
     // "Param" will look as a class, but instead it will be simply a factory method
-    p::def("Param", &ParamFactory::create_param0, p::args("type"),
-           "Construct a scalar parameter of type T with a unique auto-generated name");
-    p::def("Param", &ParamFactory::create_param1, p::args("type", "name"),
-           "Construct a scalar parameter of type T with the given name.");
-    p::def("Param", &ParamFactory::create_param2, p::args("type", "val"),
-           "Construct a scalar parameter of type T an initial value of "
-           "'val'. Only triggers for scalar types.");
-    p::def("Param", &ParamFactory::create_param3, p::args("type", "name", "val"),
-           "Construct a scalar parameter of type T with the given name "
-           "and an initial value of 'val'.");
-    p::def("Param", &ParamFactory::create_param4, p::args("type", "val", "min", "max"),
-           "Construct a scalar parameter of type T with an initial value of 'val' "
-           "and a given min and max.");
+    // Order of definitions matter, the last defined method is attempted first
+    // Here it is important to try "type, name" before "type, val"
     p::def("Param", &ParamFactory::create_param5, p::args("type", "name", "val", "min", "max"),
            "Construct a scalar parameter of type T with the given name "
            "and an initial value of 'val' and a given min and max.");
+    p::def("Param", &ParamFactory::create_param4, p::args("type", "val", "min", "max"),
+           "Construct a scalar parameter of type T with an initial value of 'val' "
+           "and a given min and max.");
+    p::def("Param", &ParamFactory::create_param3, p::args("type", "name", "val"),
+           "Construct a scalar parameter of type T with the given name "
+           "and an initial value of 'val'.");
+    p::def("Param", &ParamFactory::create_param2, p::args("type", "val"),
+           "Construct a scalar parameter of type T an initial value of "
+           "'val'. Only triggers for scalar types.");
+    p::def("Param", &ParamFactory::create_param1, p::args("type", "name"),
+           "Construct a scalar parameter of type T with the given name.");
+    p::def("Param", &ParamFactory::create_param0, p::args("type"),
+           "Construct a scalar parameter of type T with a unique auto-generated name");
+
     ;
 
 

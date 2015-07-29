@@ -28,6 +28,8 @@ tutorial/lesson_10_aot_compilation_generate.py
 #tutorial/lesson_10_aot_compilation_run.py 
 tutorial/lesson_11_cross_compilation.py
 tutorial/lesson_12_using_the_gpu.py
+tutorial/lesson_13_tuples.py
+tutorial/lesson_14_types.py
 )
 
 #for i in tutorial/*.py
