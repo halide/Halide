@@ -17,7 +17,9 @@ endif()
 set_target_properties(ll_process local_laplacian_gen
                       PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                       "${CMAKE_CURRENT_BINARY_DIR}")
-
+if (NOT MSVC)
+  target_compile_options(ll_process PRIVATE "-std=c++11")
+endif()
 
 add_custom_command(OUTPUT "${ll_header}" "${ll_obj}"
                    COMMAND local_laplacian_gen

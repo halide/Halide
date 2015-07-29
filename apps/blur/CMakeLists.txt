@@ -14,6 +14,10 @@ endif()
 set_target_properties(blur_test halide_blur PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                       "${CMAKE_CURRENT_BINARY_DIR}")
 
+if (NOT MSVC)
+  target_compile_options(blur_test PRIVATE "-std=c++11")
+endif()
+
 # FIXME: Cannot use halide_add_generator_dependency() because
 # halide_blur doesn't handle the commandline args passed.
 add_custom_command(OUTPUT "${halide_blur_h}" "${halide_blur_obj}"
