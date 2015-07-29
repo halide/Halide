@@ -2,10 +2,12 @@
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
+#include "no_compare_indexing_suite.h"
 
 #include "../../src/Type.h"
 #include "../../src/Expr.h"
 
+#include <vector>
 #include <string>
 #include <boost/format.hpp>
 
@@ -55,13 +57,18 @@ void defineType()
     namespace p = boost::python;
     
 
-    p::class_<Type>("Type", p::no_init)
-            .def_readonly("bits", &Type::bits,
-                          "The number of bits of precision of a single scalar value of this type.")
+    p::class_<Type>("Type",
+                    "Default constructor initializes everything to predictable-but-unlikely values",
+                    p::no_init)
+            .def(p::init<h::Type::TypeCode, int, int>(p::args("code", "bits", "width")))
+            .def(p::init<h::Type>(p::args("that"), "Copy constructor"))
+
+            .def_readwrite("bits", &Type::bits,
+                           "The number of bits of precision of a single scalar value of this type.")
             .def("bytes", &Type::bytes,
                  "The number of bytes required to store a single scalar value of this type. Ignores vector width.")
-            .def_readonly("width", &Type::width,
-                          "How many elements (if a vector type). Should be 1 for scalar types.")
+            .def_readwrite("width", &Type::width,
+                           "How many elements (if a vector type). Should be 1 for scalar types.")
             .def("is_bool", &Type::is_bool, p::arg("self"),
                  "Is this type boolean (represented as UInt(1))?")
             .def("is_vector", &Type::is_vector, p::arg("self"),
@@ -115,6 +122,9 @@ void defineType()
     p::def("Handle", h::Handle,
            (p::arg("width")=1),
            "Construct a handle type");
+
+    p::class_< std::vector<Type> >("TypesVector")
+            .def( no_compare_indexing_suite< std::vector<Type> >() );
 
     return;
 }

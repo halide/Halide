@@ -419,20 +419,32 @@ void defineFunc()
                        "Write out an internal representation of lowered code. Useful "
                        "for analyzing and debugging scheduling. Can emit html or plain text."));
 
-    func_class.def("print_loop_nest", &Func::print_loop_nest,
+    func_class.def("print_loop_nest", &Func::print_loop_nest, p::arg("self"),
                    "Write out the loop nests specified by the schedule for this "
                    "Function. Helpful for understanding what a schedule is doing.");
 
 
-    func_class.def("name", &Func::name,
+    func_class.def("name", &Func::name, p::arg("self"),
                    p::return_value_policy<p::copy_const_reference>(),
                    "The name of this function, either given during construction, or automatically generated.");
 
-    func_class.def("value", &Func::value,
+    func_class.def("value", &Func::value, p::arg("self"),
                    "The right-hand-side value of the pure definition of this "
                    "function. May be undefined if the function has no pure definition yet.");
 
-    func_class.def("dimensions", &Func::dimensions,
+    func_class.def("output_types", &Func::output_types, p::arg("self"),
+                   p::return_value_policy<p::copy_const_reference>(), // is this the right policy ?
+                   "Get the types of the outputs of this Func.");
+
+    func_class.def("outputs", &Func::outputs, p::arg("self"),
+                   "Get the number of outputs of this Func. Corresponds to the "
+                   "size of the Tuple this Func was defined to return.");
+
+    func_class.def("extern_function_name", &Func::extern_function_name, p::arg("self"),
+                   p::return_value_policy<p::copy_const_reference>(),
+                   "Get the name of the extern function called for an extern definition.");
+
+    func_class.def("dimensions", &Func::dimensions, p::arg("self"),
                    "The dimensionality (number of arguments) of this function. Zero if the function is not yet defined.");
 
 

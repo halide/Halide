@@ -6,6 +6,7 @@
 #include "no_compare_indexing_suite.h"
 
 #include "../../src/Expr.h"
+#include "../../src/Var.h"
 #include "../../src/IROperator.h"
 
 #include "Type.h"
@@ -26,6 +27,10 @@ std::string expr_repr(const h::Expr &expr)
     return repr;
 }
 
+h::Expr *expr_from_var_constructor(h::Var &var)
+{
+    return new h::Expr(var);
+}
 
 void defineExpr()
 {
@@ -54,10 +59,15 @@ void defineExpr()
             // constructor priority order is reverse from implicitly_convertible
             // it important to declare int after float, after double.
             .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self"))) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
-            .def(p::init<double>(p::arg("self"))) // Make an expression representing a const 32-bit float double. Also emits a warning due to truncation.
-            .def(p::init<float>(p::arg("self"))) // Make an expression representing a const 32-bit float (i.e. a FloatImm)
-            .def(p::init<int>(p::arg("self"))) // Make an expression representing a const 32-bit int (i.e. an IntImm)
-            .def(p::init<std::string>(p::arg("self"))) // Make an expression representing a const string (i.e. a StringImm)
+            .def(p::init<double>(p::arg("self"), "Make an expression representing a const 32-bit float double. "
+                                 "Also emits a warning due to truncation."))
+            .def(p::init<float>(p::arg("self"), "Make an expression representing a const 32-bit float (i.e. a FloatImm)"))
+            .def(p::init<int>(p::arg("self"), "Make an expression representing a const 32-bit int (i.e. an IntImm)"))
+            .def(p::init<std::string>(p::arg("self"), "Make an expression representing a const string (i.e. a StringImm)"))
+            .def("__init__",
+                 p::make_constructor(&expr_from_var_constructor, p::default_call_policies(),
+                                     p::arg("var")), "Cast a Var into an Expr")
+
 
             .def("type", &Expr::type, p::arg("self"),
                  "Get the type of this expression")

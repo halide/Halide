@@ -221,6 +221,14 @@ def main():
 
 
 def average(a, b):
+
+    if type(a) is not Expr:
+        a = Expr(a)
+
+    if type(b) is not Expr:
+        b = Expr(b)
+
+
     "Expr average(Expr a, Expr b)"
     # Types must match.
     assert a.type() == b.type()
