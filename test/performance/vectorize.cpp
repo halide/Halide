@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include "Halide.h"
-#include "clock.h"
+#include <cstdio>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -52,17 +52,12 @@ bool test(int vec_width) {
     Image<A> outputg = g.realize(W, H);
     Image<A> outputf = f.realize(W, H);
 
-    double t1 = current_time();
-    for (int i = 0; i < 10; i++) {
+    double t_g = benchmark(1, 10, [&]() {
         g.realize(outputg);
-    }
-    double t2 = current_time();
-    for (int i = 0; i < 10; i++) {
+    });
+    double t_f = benchmark(1, 10, [&]() {
         f.realize(outputf);
-    }
-    double t3 = current_time();
-
-    printf("%g %g %g\n", t1, t2, t3);
+    });
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -79,9 +74,9 @@ bool test(int vec_width) {
     }
 
     printf("Vectorized vs scalar (%s x %d): %1.3gms %1.3gms. Speedup = %1.3f\n",
-           string_of_type<A>(), vec_width, (t3-t2), (t2-t1), (t2-t1)/(t3-t2));
+           string_of_type<A>(), vec_width, t_f * 1e3, t_g * 1e3, t_g / t_f);
 
-    if ((t3 - t2) > (t2 - t1)) {
+    if (t_f > t_g) {
         return false;
     }
 

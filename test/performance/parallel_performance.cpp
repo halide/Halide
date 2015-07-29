@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include "Halide.h"
-#include "clock.h"
+#include <cstdio>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -20,21 +20,13 @@ int main(int argc, char **argv) {
 
     Image<float> imf = f.realize(W, H);
 
-    double t1, t2;
-
-    t1 = current_time();
-    f.realize(imf);
-    t2 = current_time();
-    double parallelTime = t2 - t1;
+    double parallelTime = benchmark(1, 1, [&]() { f.realize(imf); });
 
     printf("Realizing g\n");
     Image<float> img = g.realize(W, H);
     printf("Done realizing g\n");
 
-    t1 = current_time();
-    g.realize(img);
-    t2 = current_time();
-    double serialTime = t2 - t1;
+    double serialTime = benchmark(1, 1, [&]() { g.realize(img); });
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {

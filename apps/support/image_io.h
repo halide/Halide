@@ -9,11 +9,8 @@
 
 #include <png.h>
 #include <string>
-#include <stdio.h>
+#include <cstdio>
 #include <algorithm>
-#include <string.h>
-
-//#include <sys/time.h>
 
 #define _assert(condition, ...) if (!(condition)) {fprintf(stderr, __VA_ARGS__); exit(-1);}
 

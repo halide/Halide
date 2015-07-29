@@ -187,11 +187,6 @@ foreach (i ${RUNTIME_BC} )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 
-add_library(InitialModules STATIC
-  ${INITIAL_MODULES})
-
-add_dependencies(InitialModules
-  bitcode2cpp)
 
 set(HEADER_FILES
   AddImageChecks.h
@@ -439,6 +434,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
+  ${INITIAL_MODULES}
 )
 
 # List of LLVM Components required
@@ -531,7 +527,12 @@ else()
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
 
-target_link_libraries(Halide PUBLIC InitialModules ${LIBS})
+# When building a shared library the LLVM libraries will be
+# embedded in the Halide library. When building a static library
+# LLVM is not embedded but CMake knows that when building an executable
+# against the Halide static library that it needs to link LLVM too so
+# PRIVATE scope is the correct choice here.
+target_link_libraries(Halide PRIVATE ${LIBS})
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
@@ -547,6 +548,6 @@ if (NOT WIN32)
 endif()
 
 add_dependencies(Halide
-  InitialModules
+  bitcode2cpp
   build_halide_h
 )
