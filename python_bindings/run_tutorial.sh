@@ -40,7 +40,7 @@ do
   if [[ "$?" -ne "0" ]]; then
         echo "$Sa Lesson failed $Sb"
 	let FAILED=1
-	#break
+	break
   fi
 done
 
