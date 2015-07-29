@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
     f.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
 
     Target target = get_target_from_environment();
-    if (target.has_gpu_feature()) {
+    if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
         f.vectorize(c, 4)
          .gpu_tile(x, y, 64, 64);
     }
@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
     g.bound(c, 0, CHANNELS)
      .reorder_storage(c, x, y)
      .reorder(c, x, y);
-    if (target.has_gpu_feature()) {
+    if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
         g.vectorize(c, 4)
          .gpu_tile(x, y, 64, 64);
     }
