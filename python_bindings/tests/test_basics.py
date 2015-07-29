@@ -279,8 +279,20 @@ def test_param_bug():
 
     return
 
+def test_imageparam_bug():
+    "see https://github.com/rodrigob/Halide/issues/2"
+
+    x = Var("x")
+    y = Var("y")
+    fx = Func("fx")
+    input = ImageParam(UInt(8), 1, "input")
+    fx[x, y] = input[y]
+
+    return
+
 if __name__ == "__main__":
 
+    test_imageparam_bug()
     test_param_bug()
     test_float_or_int()
     test_ndarray_to_image()

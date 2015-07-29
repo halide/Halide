@@ -31,6 +31,14 @@ h::Expr imageparam_to_expr_operator0(h::ImageParam &that, p::tuple args_passed)
     return that(expr_args);
 }
 
+h::Expr imageparam_to_expr_operator1(h::ImageParam &that, h::Expr an_expr)
+{
+    std::vector<h::Expr> expr_args;
+    expr_args.push_back(an_expr);
+    // All ImageParam operator()(...) Expr and Var variants end up building a vector<Expr>
+    // all other variants are equivalent to this one
+    return that(expr_args);
+}
 
 std::string imageparam_repr(h::ImageParam &param) // non-const due to a Halide bug in master (to be fixed)
 {
@@ -102,6 +110,11 @@ void defineImageParam()
             .def("get", &ImageParam::get, p::arg("self"),
                  "Get the buffer bound to this ImageParam. Only relevant for jitting.")
             .def("__getitem__", &imageparam_to_expr_operator0, p::args("self", "tuple"),
+                 "Construct an expression which loads from this image. "
+                 "The location is extended with enough implicit variables to match "
+                 "the dimensionality of the image (see \\ref Var::implicit).\n\n"
+                 "Call with: [x], [x,y], [x,y,z], or [x,y,z,w]")
+            .def("__getitem__", &imageparam_to_expr_operator1, p::args("self", "expr"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
                  "the dimensionality of the image (see \\ref Var::implicit).\n\n"
