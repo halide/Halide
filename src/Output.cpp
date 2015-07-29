@@ -10,7 +10,13 @@
 namespace Halide {
 
 void compile_module_to_object(const Module &module, std::string filename) {
-    if (filename.empty()) filename = module.name() + ".o";
+    if (filename.empty()) {
+        if (module.target().os == Target::Windows) {
+            filename = module.name() + ".obj";
+        } else {
+            filename = module.name() + ".o";
+        }
+    }
 
     llvm::LLVMContext context;
     llvm::Module *llvm = compile_module_to_llvm_module(module, context);
@@ -30,8 +36,16 @@ void compile_module_to_assembly(const Module &module, std::string filename)  {
 void compile_module_to_native(const Module &module,
                    std::string object_filename,
                    std::string assembly_filename) {
-    if (object_filename.empty()) object_filename = module.name() + ".o";
-    if (assembly_filename.empty()) assembly_filename = module.name() + ".s";
+    if (object_filename.empty()) {
+        if (module.target().os == Target::Windows) {
+            object_filename = module.name() + ".obj";
+        } else {
+            object_filename = module.name() + ".o";
+        }
+    }
+    if (assembly_filename.empty()) {
+        assembly_filename = module.name() + ".s";
+    }
 
     llvm::LLVMContext context;
     llvm::Module *llvm = compile_module_to_llvm_module(module, context);

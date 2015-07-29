@@ -2,7 +2,7 @@
 halide_project(camera_pipe "apps" camera_pipe.cpp)
 
 set(curved_h "${CMAKE_CURRENT_BINARY_DIR}/curved.h")
-set(curved_obj "${CMAKE_CURRENT_BINARY_DIR}/curved.o")
+set(curved_obj "${CMAKE_CURRENT_BINARY_DIR}/curved${CMAKE_CXX_OUTPUT_EXTENSION}")
 
 # FIXME: Set -O3 here
 add_library(fcam fcam/Demosaic.cpp fcam/Demosaic_ARM.cpp)
@@ -21,6 +21,9 @@ if (NOT WIN32)
 endif()
 set_target_properties(process camera_pipe PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                       "${CMAKE_CURRENT_BINARY_DIR}")
+if (NOT MSVC)
+  target_compile_options(process PRIVATE "-std=c++11")
+endif()
 
 # FIXME: Cannot use halide_add_generator_dependency()
 add_custom_command(OUTPUT "${curved_h}" "${curved_obj}"

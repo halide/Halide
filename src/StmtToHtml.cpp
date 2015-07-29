@@ -506,10 +506,20 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
+
+    // To avoid generating ridiculously deep DOMs, we flatten blocks here.
+    void visit_block_stmt(Stmt stmt) {
+        if (const Block *b = stmt.as<Block>()) {
+            visit_block_stmt(b->first);
+            visit_block_stmt(b->rest);
+        } else if (stmt.defined()) {
+            print(stmt);
+        }
+    }
     void visit(const Block *op) {
         stream << open_div("Block");
-        print(op->first);
-        if (op->rest.defined()) print(op->rest);
+        visit_block_stmt(op->first);
+        visit_block_stmt(op->rest);
         stream << close_div();
     }
     void visit(const IfThenElse *op) {
