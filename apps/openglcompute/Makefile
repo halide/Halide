@@ -10,10 +10,10 @@ $(HALIDE_LIB): $(TOP)
 test_%: test_%.cpp
 	g++ -std=c++11 -I ../../include/ $< -L ../../bin/ -lHalide -o $@ -g
 
-avg_filter_uint32t.o avg_filter_uint32t.h avg_filter_float.o avg_filter_float.h: test_oglc_avg $(HALIDE_LIB)
+avg_filter_uint32t.o avg_filter_uint32t.h avg_filter_float.o avg_filter_float.h: test_oglc_avg
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-openglcompute ./$<
 
-avg_filter_uint32t_arm.o avg_filter_uint32t_arm.h avg_filter_float_arm.o avg_filter_float_arm.h: test_oglc_avg $(HALIDE_LIB)
+avg_filter_uint32t_arm.o avg_filter_uint32t_arm.h avg_filter_float_arm.o avg_filter_float_arm.h: test_oglc_avg
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s ./$< "_arm"
 
 AVG_FILTER_SRC = jni/oglc_run.cpp \
@@ -25,7 +25,7 @@ AVG_FILTER_SRC = jni/oglc_run.cpp \
 libs/armeabi-v7a/oglc_run: $(HALIDE_LIB) $(AVG_FILTER_SRC)
 	ndk-build libs/armeabi-v7a/oglc_run libs/armeabi-v7a/libstlport_shared.so
 
-two_kernels_filter.o two_kernels_filter.h: test_two_kernels $(HALIDE_LIB)
+two_kernels_filter.o two_kernels_filter.h: test_two_kernels
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-openglcompute ./$<
 
 TWO_KERNELS_SRC = jni/oglc_two_kernels_run.cpp \
@@ -34,7 +34,7 @@ TWO_KERNELS_SRC = jni/oglc_two_kernels_run.cpp \
 libs/armeabi-v7a/oglc_two_kernels_run: $(HALIDE_LIB) $(TWO_KERNELS_SRC)
 	ndk-build libs/armeabi-v7a/oglc_two_kernels_run libs/armeabi-v7a/liboglc_two_kernels.so
 
-libs/armeabi-v7a/libstlport_shared.so:
+libs/armeabi-v7a/libstlport_shared.so: $(HALIDE_LIB) $(AVG_FILTER_SRC)
 	ndk-build libs/armeabi-v7a/oglc_run libs/armeabi-v7a/libstlport_shared.so
 
 jni-libs: $(HALIDE_LIB) $(AVG_FILTER_SRC) $(TWO_KERNELS_SRC)
