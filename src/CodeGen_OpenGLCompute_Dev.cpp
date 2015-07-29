@@ -380,7 +380,10 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     debug(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
 
     do_indent();
-    allocations.push(op->name, op->type);
+    Allocation alloc;
+    alloc.type = op->type;
+    alloc.free_function = op->free_function;
+    allocations.push(op->name, alloc);
 
     internal_assert(op->extents.size() >= 1);
     Expr extent = 1;

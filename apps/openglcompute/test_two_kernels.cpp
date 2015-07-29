@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     }
 
     Func g("g");
-    g(x, y, c) = f(x, y, c) - 1 + arg_max_f();
+    g(x, y, c) = f(x, y, c) - 1;
     g.bound(c, 0, CHANNELS)
      .reorder_storage(c, x, y)
      .reorder(c, x, y);
