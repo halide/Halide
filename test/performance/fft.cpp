@@ -3,10 +3,10 @@
 // This algorithm is more well suited to Halide than in-place
 // algorithms.
 
-#include <stdio.h>
 #include "Halide.h"
+#include <cstdio>
 #include <vector>
-#include "clock.h"
+#include "benchmark.h"
 
 const float pi = 3.14159265f;
 
@@ -533,17 +533,6 @@ double log2(double x) {
     return log(x)/log(2.0);
 }
 
-double bench_realization(Func f, Realization R, int samples, Target target) {
-    double t = 1e6f;
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        f.realize(R, target);
-        double dt = current_time() - t1;
-        if (dt < t) t = dt;
-    }
-    return t;
-}
-
 int main(int argc, char **argv) {
     const int W = 32, H = 32;
 
@@ -658,7 +647,7 @@ int main(int argc, char **argv) {
     R_c2c[0].raw_buffer()->stride[2] = 0;
     R_c2c[1].raw_buffer()->stride[2] = 0;
 
-    double t = bench_realization(bench_c2c, R_c2c, samples, target)*1e3/reps;
+    double t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); })*1e6/reps;
     printf("c2c  time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
 
     Func r2c_in;
@@ -670,7 +659,7 @@ int main(int argc, char **argv) {
     R_r2c[0].raw_buffer()->stride[2] = 0;
     R_r2c[1].raw_buffer()->stride[2] = 0;
 
-    t = bench_realization(bench_r2c, R_r2c, samples, target)*1e3/reps;
+    t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); })*1e6/reps;
     printf("r2c time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     Func c2r_in;
@@ -681,7 +670,7 @@ int main(int argc, char **argv) {
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_c2r[0].raw_buffer()->stride[2] = 0;
 
-    t = bench_realization(bench_c2r, R_c2r, samples, target)*1e3/reps;
+    t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); })*1e6/reps;
     printf("c2r time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     twiddles.clear();
