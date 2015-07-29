@@ -270,9 +270,17 @@ def test_image_to_ndarray():
 
     return
 
+def test_param_bug():
+    "see https://github.com/rodrigob/Halide/issues/1"
+
+    p1 = Param(UInt(8), "p1", 0)
+    p2 = Param(UInt(8), "p2")
+
+    return
 
 if __name__ == "__main__":
 
+    test_param_bug()
     test_float_or_int()
     test_ndarray_to_image()
     test_image_to_ndarray()
