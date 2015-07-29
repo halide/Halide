@@ -83,6 +83,9 @@ private:
     }
 
     void visit(const Allocate *allocate) {
+        user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
+            "(Memoization is not supported inside GPU kernels at present.)\n";
+
         if (allocate->name == "__shared") {
             internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
             shared_mem_size = bounds_of_expr_in_scope(allocate->extents[0], scope).max;

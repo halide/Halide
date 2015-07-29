@@ -417,7 +417,11 @@ void IRPrinter::visit(const Broadcast *op) {
 void IRPrinter::visit(const Call *op) {
     // Special-case some intrinsics for readability
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::extract_buffer_min) {
+        if (op->name == Call::extract_buffer_host) {
+            print(op->args[0]);
+            stream << ".host";
+            return;
+        } else if (op->name == Call::extract_buffer_min) {
             print(op->args[0]);
             stream << ".min[" << op->args[1] << "]";
             return;
@@ -549,13 +553,20 @@ void IRPrinter::visit(const Allocate *op) {
         stream << " if ";
         print(op->condition);
     }
+    if (op->new_expr.defined()) {
+        stream << "\n custom_new { " << op->new_expr << " }";
+    }
+    if (!op->free_function.empty()) {
+        stream << "\n custom_delete { " << op->free_function << "(<args>); }";
+    }
     stream << "\n";
     print(op->body);
 }
 
 void IRPrinter::visit(const Free *op) {
     do_indent();
-    stream << "free " << op->name << '\n';
+    stream << "free " << op->name;
+    stream << '\n';
 }
 
 void IRPrinter::visit(const Realize *op) {

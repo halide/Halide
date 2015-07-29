@@ -84,8 +84,13 @@ protected:
     /** Pop a buffer from the stack. */
     void pop_buffer(const std::string &buffer_name);
 
+    struct Allocation {
+        Type type;
+        std::string free_function;
+    };
+
     /** Track the types of allocations to avoid unnecessary casts. */
-    Scope<Type> allocations;
+    Scope<Allocation> allocations;
 
     /** Track which allocations actually went on the heap. */
     Scope<int> heap_allocations;

@@ -205,7 +205,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 
     // Get the rhs just for the cache.
     bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name) == op->type);
+                              allocations.get(op->name).type == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "((" << get_memory_space(op->name) << " "
@@ -283,7 +283,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         }
     } else {
         bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name) == t);
+                                  allocations.get(op->name).type == t);
 
         string id_index = print_expr(op->index);
         string id_value = print_expr(op->value);
@@ -315,6 +315,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
+    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n" <<
+        "(Memoization is not supported inside GPU kernels at present.)\n";
 
     if (op->name == "__shared") {
         // Already handled
@@ -341,7 +343,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
         do_indent();
         stream << "#define " << get_memory_space(op->name) << " __private\n";
 
-        allocations.push(op->name, op->type);
+        Allocation alloc;
+        alloc.type = op->type;
+        allocations.push(op->name, alloc);
 
         op->body.accept(this);
 
@@ -455,7 +459,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
             if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
-            allocations.push(args[i].name, args[i].type);
+            Allocation alloc;
+            alloc.type = args[i].type;
+            allocations.push(args[i].name, alloc);
         } else {
             stream << " const "
                    << print_type(args[i].type)

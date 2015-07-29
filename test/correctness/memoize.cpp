@@ -79,6 +79,23 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t
     return 0;
 }
 
+void simple_free(void *user_context, void *ptr) {
+    free(ptr);
+}
+
+void *flakey_malloc(void */* user_context */, size_t x) {
+    if ((rand() % 4) == 0) {
+        return NULL;
+    } else {
+        return malloc(x);
+    }
+}
+
+bool error_occured = false;
+void record_error(void *user_context, const char *msg) {
+    error_occured = true;
+}
+
 int main(int argc, char **argv) {
 
     {
@@ -86,9 +103,11 @@ int main(int argc, char **argv) {
         Func count_calls;
         count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
-        Func f;
-        f() = count_calls(0, 0);
-        f.compute_root().memoize();
+        Func f, f_memoized;
+        f_memoized() = count_calls(0, 0);
+        f_memoized.compute_root().memoize();
+        f() = f_memoized();
+        f_memoized.compute_root().memoize();
 
         Image<uint8_t> result1 = f.realize();
         Image<uint8_t> result2 = f.realize();
@@ -519,8 +538,10 @@ int main(int argc, char **argv) {
           stage[i].compute_root();
         }
         stage[3].compute_root().memoize();
+        Func output;
+        output(_) = stage[3](_);
         val.set(23.0f);
-        Image<uint8_t> result = stage[3].realize(128, 128);
+        Image<uint8_t> result = output.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
@@ -532,7 +553,7 @@ int main(int argc, char **argv) {
           fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
-        result = stage[3].realize(128, 128);
+        result = output.realize(128, 128);
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
               assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
@@ -542,6 +563,72 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 4; i++) {
             fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
+
+    }
+
+    {
+        // Test out of memory handling.
+        Param<float> val;
+
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+
+        Func f;
+        Var x, y, xi, yi;
+        f(x, y) = Tuple(count_calls(x, y) + cast<uint8_t>(x), x);
+        count_calls.compute_root().memoize();
+        f.compute_root().memoize();
+
+        Func g;
+        g(x, y) = Tuple(f(x, y)[0] + f(x - 1, y)[0] + f(x + 1, y)[0], f(x, y)[1]);
+
+        Pipeline pipe(g);
+        pipe.set_error_handler(record_error);
+        pipe.set_custom_allocator(flakey_malloc, simple_free);
+
+        int total_errors = 0;
+        int completed = 0;
+        for (int trial = 0; trial < 100; trial++) {
+            call_count_with_arg = 0;
+            error_occured = false;
+
+            val.set(23.0f + trial);
+            Realization out = pipe.realize(16, 16);
+            if (error_occured) {
+                total_errors++;
+            } else {
+                Image<uint8_t> out0 = out[0];
+                Image<int32_t> out1 = out[1];
+
+                for (int32_t i = 0; i < 16; i++) {
+                    for (int32_t j = 0; j < 16; j++) {
+                      assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                        assert(out1(i, j) == i);
+                    }
+                }
+
+                error_occured = false;
+                out = pipe.realize(16, 16);
+                if (error_occured) {
+                    total_errors++;
+                } else {
+                    out0 = out[0];
+                    out1 = out[1];
+
+                    for (int32_t i = 0; i < 16; i++) {
+                        for (int32_t j = 0; j < 16; j++) {
+                          assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                            assert(out1(i, j) == i);
+                        }
+                    }
+                    assert(call_count_with_arg == 1);
+                    completed++;
+                }
+            }
+        }
+
+        fprintf(stderr, "In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
+
 
     }
 
