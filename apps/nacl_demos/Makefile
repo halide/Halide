@@ -1,8 +1,8 @@
-
+HALIDE_PATH ?= $(realpath ../..)
 NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_41
 
 WARNINGS := -Wall -Wswitch-enum
-CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I ../../include
+CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I $(HALIDE_PATH)/include
 
 UNAME = $(shell uname)
 
@@ -73,29 +73,29 @@ nacl_demos_pnacl.bc: nacl_demos.cpp $(DEMOS:%=build_pnacl/%.objects)
 
 build_64/%.objects: %.generate
 	@mkdir -p build_64
-	cd build_64; HL_TARGET=x86-64-sse41-nacl DYLD_LIBRARY_PATH=../../../bin LD_LIBRARY_PATH=../../../bin ../$<
+	cd build_64; HL_TARGET=x86-64-sse41-nacl DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ../$<
 	@touch build_64/$*.objects
 
 build_32/%.objects: %.generate
 	@mkdir -p build_32
-	cd build_32; HL_TARGET=x86-32-sse41-nacl DYLD_LIBRARY_PATH=../../../bin LD_LIBRARY_PATH=../../../bin ../$<
+	cd build_32; HL_TARGET=x86-32-sse41-nacl DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ../$<
 	@touch build_32/$*.objects
 
 build_arm/%.objects: %.generate
 	@mkdir -p build_arm
-	cd build_arm; HL_TARGET=arm-32-nacl DYLD_LIBRARY_PATH=../../../bin LD_LIBRARY_PATH=../../../bin ../$<
+	cd build_arm; HL_TARGET=arm-32-nacl DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ../$<
 	@touch build_arm/$*.objects
 
 build_pnacl/%.objects: %.generate
 	@mkdir -p build_pnacl
-	cd build_pnacl; HL_TARGET=pnacl-32-nacl DYLD_LIBRARY_PATH=../../../bin LD_LIBRARY_PATH=../../../bin ../$<
+	cd build_pnacl; HL_TARGET=pnacl-32-nacl DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ../$<
 	@mv build_pnacl/$*_init.o build_pnacl/$*_init.bc
 	@mv build_pnacl/$*_update.o build_pnacl/$*_update.bc
 	@mv build_pnacl/$*_render.o build_pnacl/$*_render.bc
 	@touch build_pnacl/$*.objects
 
 %.generate: %.cpp
-	$(CXX) $< -o $@ -I ../../include -L ../../bin -lHalide -lpthread -ldl -lz -std=c++11
+	$(CXX) $< -o $@ -I $(HALIDE_PATH)/include -L $(HALIDE_PATH)/bin -lHalide -lpthread -ldl -lz -std=c++11
 
 clean:
 	rm -f *.generate *.o *.nexe *.pexe *.bc *.ll *.s *.zip $(DEMOS:%=%.h) build_32/* build_64/* build_arm/* build_pnacl/*

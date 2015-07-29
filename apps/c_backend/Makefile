@@ -1,7 +1,7 @@
 include ../support/Makefile.inc
 
 pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) ../../$(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -g
+	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -g
 
 pipeline_c.c: pipeline
 	./pipeline
