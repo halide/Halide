@@ -1006,10 +1006,13 @@ public:
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
+                        bool &any_memoized,
                         bool inject_asserts) {
 
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
+
+    any_memoized = false;
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1032,6 +1035,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
+        any_memoized = any_memoized || f.schedule().memoized();
         debug(2) << s << '\n';
     }
 

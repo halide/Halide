@@ -35,8 +35,14 @@ protected:
         /** The memory */
         llvm::Value *ptr;
 
+        /** Code to generate for destructor. May be redundant now. */
+        Stmt delete_stmt;
+
         /** Destructor stack slot for this allocation. */
         llvm::Value *destructor;
+
+        /** Function to accomplish the destruction. */
+        llvm::Function *destructor_function;
 
         /** How many bytes this allocation is, or 0 if not
          * constant. */
@@ -79,8 +85,7 @@ private:
      * when it goes out of scope call 'destroy_allocation'. */
     Allocation create_allocation(const std::string &name, Type type,
                                  const std::vector<Expr> &extents,
-                                 Expr condition);
-
+                                 Expr condition, Expr new_expr, std::string free_function);
 };
 
 }}
