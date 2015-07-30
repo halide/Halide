@@ -150,6 +150,7 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s) : CodeGen_C(s) {
     builtin["mod"] = "mod";
     builtin["abs"] = "abs";
     builtin["isnan"] = "isnan";
+    builtin["round_f32"] = "roundEven";
     builtin["trunc_f32"] = "_trunc_f32";
 }
 
