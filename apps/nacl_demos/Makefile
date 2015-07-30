@@ -89,9 +89,6 @@ build_arm/%.objects: %.generate
 build_pnacl/%.objects: %.generate
 	@mkdir -p build_pnacl
 	cd build_pnacl; HL_TARGET=pnacl-32-nacl DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ../$<
-	@mv build_pnacl/$*_init.o build_pnacl/$*_init.bc
-	@mv build_pnacl/$*_update.o build_pnacl/$*_update.bc
-	@mv build_pnacl/$*_render.o build_pnacl/$*_render.bc
 	@touch build_pnacl/$*.objects
 
 %.generate: %.cpp
