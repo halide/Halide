@@ -1,3 +1,8 @@
+/tutorial/figures/tmp/trace.bin
+/apps/HelloMatlab/blurred.png
+/apps/HelloMatlab/iir_blur.mex
+/apps/local_laplacian/local_laplacian_gen
+/apps/local_laplacian/process_viz
 /apps/HelloAndroid/jni/halide.h
 /apps/HelloNaCl/build_32/halide_game_of_life.h
 /apps/HelloNaCl/build_32/halide_game_of_life.s
