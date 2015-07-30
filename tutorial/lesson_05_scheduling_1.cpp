@@ -286,7 +286,8 @@ int main(int argc, char **argv) {
                              x_vec[1] + y,
                              x_vec[2] + y,
                              x_vec[3] + y};
-                printf("Evaluating at <%d, %d, %d, %d>, <%d, %d, %d, %d>: <%d, %d, %d, %d>\n",
+                printf("Evaluating at <%d, %d, %d, %d>, <%d, %d, %d, %d>:"
+                       " <%d, %d, %d, %d>\n",
                        x_vec[0], x_vec[1], x_vec[2], x_vec[3],
                        y, y, y, y,
                        val[0], val[1], val[2], val[3]);
@@ -540,7 +541,8 @@ int main(int argc, char **argv) {
                         // Check the result.
                         for (int i = 0; i < 4; i++) {
                             if (result(x_vec[i], y_vec[i]) != val[i]) {
-                                printf("There was an error at %d %d!\n", x_vec[i], y_vec[i]);
+                                printf("There was an error at %d %d!\n",
+                                       x_vec[i], y_vec[i]);
                                 return -1;
                             }
                         }
@@ -557,7 +559,8 @@ int main(int argc, char **argv) {
                         // Check the result.
                         for (int i = 0; i < 4; i++) {
                             if (result(x_vec[i], y_vec[i]) != val[i]) {
-                                printf("There was an error at %d %d!\n", x_vec[i], y_vec[i]);
+                                printf("There was an error at %d %d!\n",
+                                       x_vec[i], y_vec[i]);
                                 return -1;
                             }
                         }
