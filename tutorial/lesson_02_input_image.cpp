@@ -33,6 +33,8 @@ int main(int argc, char **argv) {
     // First we'll load the input image we wish to brighten.
     Halide::Image<uint8_t> input = load<uint8_t>("images/rgb.png");
 
+    // See figures/lesson_02_input.jpg for a smaller version.
+
     // Next we define our Func object that represents our one pipeline
     // stage.
     Halide::Func brighter;
@@ -79,7 +81,7 @@ int main(int argc, char **argv) {
     // - I left the Halide:: off clamp. It's unnecessary due to Koenig
     //   lookup.
 
-    // Remember. All we've done so far is build a representation of a
+    // Remember, all we've done so far is build a representation of a
     // Halide program in memory. We haven't actually processed any
     // pixels yet. We haven't even compiled that Halide program yet.
 
@@ -93,6 +95,8 @@ int main(int argc, char **argv) {
 
     // Save the output for inspection. It should look like a bright parrot.
     save(output, "brighter.png");
+
+    // See figures/lesson_02_output.jpg for a small version of the output.
 
     printf("Success!\n");
     return 0;
