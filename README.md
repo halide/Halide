@@ -18,6 +18,16 @@ To see some example code, look in the tutorials directory.
 If you've acquired a full source distribution and want to build
 Halide, see the notes below.
 
+Build Status
+============
+
+| Linux                        |
+|------------------------------|
+| [![linux build status][1]][2]|
+
+[1]: https://travis-ci.org/halide/Halide.svg
+[2]: https://travis-ci.org/halide/Halide
+
 
 Some useful environment variables
 =================================
