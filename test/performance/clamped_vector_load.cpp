@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 #include <algorithm>
-#include "clock.h"
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -31,11 +31,7 @@ double test(Func f, bool test_correctness = true) {
         }
     }
 
-    double t1 = current_time();
-    for (int i = 0; i < 10; i++) {
-        f.realize(output);
-    }
-    return current_time() - t1;
+    return benchmark(1, 10, [&]() { f.realize(output); });
 }
 
 int main(int argc, char **argv) {

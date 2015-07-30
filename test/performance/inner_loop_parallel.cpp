@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
-#include "clock.h"
+#include <cstdio>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -26,15 +26,9 @@ int main(int argc, char **argv) {
         // Start the thread pool without giving any hints as to the
         // number of tasks we'll be using.
         f.realize(t, 1);
-        double min_time = 1e20;
-        for (int i = 0; i < 3; i++) {
-            double t1 = current_time();
-            f.realize(2, 1000000);
-            double t2 = current_time() - t1;
-            if (t2 < min_time) min_time = t2;
-        }
+        double min_time = benchmark(3, 1, [&]() { return f.realize(2, 1000000); });
 
-        printf("%d: %f ms\n", t, min_time);
+        printf("%d: %f ms\n", t, min_time * 1e3);
         if (t == 2) {
             correct_time = min_time;
         } else if (min_time > correct_time * 5) {
