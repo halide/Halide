@@ -4,6 +4,10 @@
 #PYTHON=echo
 PYTHON=python3
 
+BUILDPATH="./build" # adjust as needed
+export PYTHONPATH="$BUILDPATH:$PYTHONPATH"
+echo "PYTHONPATH ==" $PYTHONPATH
+
 FAILED=0
 
 # separator
