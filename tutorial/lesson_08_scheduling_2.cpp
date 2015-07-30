@@ -30,15 +30,15 @@ int main(int argc, char **argv) {
 
         // The first stage will be some simple pointwise math similar
         // to our familiar gradient function. The value at position x,
-        // y is the sqrt of product of x and y.
-        producer(x, y) = sqrt(x * y);
+        // y is the sin of product of x and y.
+        producer(x, y) = sin(x * y);
 
-        // Now we'll add a second stage which adds together multiple
+        // Now we'll add a second stage which averages together multiple
         // points in the first stage.
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
                           producer(x+1, y) +
-                          producer(x+1, y+1));
+                          producer(x+1, y+1))/4;
 
         // We'll turn on tracing for both functions.
         consumer.trace_stores();
@@ -53,10 +53,10 @@ int main(int argc, char **argv) {
         // inlines 'producer' into 'consumer'. It is as if we had
         // written the following code instead:
 
-        // consumer(x, y) = (sqrt(x * y) +
-        //                   sqrt(x * (y + 1)) +
-        //                   sqrt((x + 1) * y) +
-        //                   sqrt((x + 1) * (y + 1)));
+        // consumer(x, y) = (sin(x * y) +
+        //                   sin(x * (y + 1)) +
+        //                   sin((x + 1) * y) +
+        //                   sin((x + 1) * (y + 1)));
 
         // All calls to 'producer' have been replaced with the body of
         // 'producer', with the arguments subtituted in for the
@@ -66,10 +66,10 @@ int main(int argc, char **argv) {
         float result[4][4];
         for (int y = 0; y < 4; y++) {
             for (int x = 0; x < 4; x++) {
-                result[y][x] = (sqrt(x*y) +
-                                sqrt(x*(y+1)) +
-                                sqrt((x+1)*y) +
-                                sqrt((x+1)*(y+1)));
+                result[y][x] = (sin(x*y) +
+                                sin(x*(y+1)) +
+                                sin((x+1)*y) +
+                                sin((x+1)*(y+1)))/4;
             }
         }
         printf("\n");
@@ -87,11 +87,11 @@ int main(int argc, char **argv) {
     {
         // Start with the same function definitions:
         Func producer("producer_root"), consumer("consumer_root");
-        producer(x, y) = sqrt(x * y);
+        producer(x, y) = sin(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
                           producer(x+1, y) +
-                          producer(x+1, y+1));
+                          producer(x+1, y+1))/4;
 
         // Tell Halide to evaluate all of producer before any of consumer.
         producer.compute_root();
@@ -108,6 +108,10 @@ int main(int argc, char **argv) {
         // A) There were stores to producer.
         // B) They all happened before any stores to consumer.
 
+        // See figures/lesson_08_compute_root.gif for a visualization.
+        // The producer is on the left and the consumer is on the
+        // right. Stores are marked in orange and loads are marked in
+        // blue.
 
         // Equivalent C:
 
@@ -119,7 +123,7 @@ int main(int argc, char **argv) {
         // Compute the producer.
         for (int y = 0; y < 5; y++) {
             for (int x = 0; x < 5; x++) {
-                producer_storage[y][x] = sqrt(x * y);
+                producer_storage[y][x] = sin(x * y);
             }
         }
 
@@ -129,7 +133,7 @@ int main(int argc, char **argv) {
                 result[y][x] = (producer_storage[y][x] +
                                 producer_storage[y+1][x] +
                                 producer_storage[y][x+1] +
-                                producer_storage[y+1][x+1]);
+                                producer_storage[y+1][x+1])/4;
             }
         }
 
@@ -153,27 +157,27 @@ int main(int argc, char **argv) {
     // - Temporary memory allocated: 0
     // - Loads: 0
     // - Stores: 16
-    // - Calls to sqrt: 64
+    // - Calls to sin: 64
 
     // producer.compute_root():
     // - Temporary memory allocated: 25 floats
     // - Loads: 64
     // - Stores: 39
-    // - Calls to sqrt: 25
+    // - Calls to sin: 25
 
     // There's a trade-off here. Full inlining used minimal temporary
     // memory and memory bandwidth, but did a whole bunch of redundant
-    // expensive math (calling sqrt). It evaluated most points in
+    // expensive math (calling sin). It evaluated most points in
     // 'producer' four times. The second schedule,
     // producer.compute_root(), did the mimimum number of calls to
-    // sqrt, but used more temporary memory and more memory bandwidth.
+    // sin, but used more temporary memory and more memory bandwidth.
 
     // In any given situation the correct choice can be difficult to
     // make. If you're memory-bandwidth limited, or don't have much
     // memory (e.g. because you're running on an old cell-phone), then
-    // it can make sense to do redundant math. On the other hand, sqrt
+    // it can make sense to do redundant math. On the other hand, sin
     // is expensive, so if you're compute-limited then fewer calls to
-    // sqrt will make your program faster. Adding vectorization or
+    // sin will make your program faster. Adding vectorization or
     // multi-core parallelism tilts the scales in favor of doing
     // redundant work, because firing up multiple cpu cores increases
     // the amount of math you can do per second, but doesn't increase
@@ -185,11 +189,11 @@ int main(int argc, char **argv) {
     {
         // Start with the same function definitions:
         Func producer("producer_y"), consumer("consumer_y");
-        producer(x, y) = sqrt(x * y);
+        producer(x, y) = sin(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
                           producer(x+1, y) +
-                          producer(x+1, y+1));
+                          producer(x+1, y+1))/4;
 
         // Tell Halide to evaluate producer as needed per y coordinate
         // of the consumer:
@@ -207,9 +211,11 @@ int main(int argc, char **argv) {
         printf("\nEvaluating producer.compute_at(consumer, y)\n");
         consumer.realize(4, 4);
 
-        // Reading the log you should see that producer and consumer
-        // alternate on a per-scanline basis. Let's look at the
-        // equivalent C:
+        // See figures/lesson_08_compute_y.gif for a visualization.
+
+        // Reading the log or looking at the figure you should see
+        // that producer and consumer alternate on a per-scanline
+        // basis. Let's look at the equivalent C:
 
         float result[4][4];
 
@@ -222,7 +228,7 @@ int main(int argc, char **argv) {
             float producer_storage[2][5];
             for (int py = y; py < y + 2; py++) {
                 for (int px = 0; px < 5; px++) {
-                    producer_storage[py-y][px] = sqrt(px * py);
+                    producer_storage[py-y][px] = sin(px * py);
                 }
             }
 
@@ -231,7 +237,7 @@ int main(int argc, char **argv) {
                 result[y][x] = (producer_storage[0][x] +
                                 producer_storage[1][x] +
                                 producer_storage[0][x+1] +
-                                producer_storage[1][x+1]);
+                                producer_storage[1][x+1])/4;
             }
         }
 
@@ -252,7 +258,7 @@ int main(int argc, char **argv) {
         // - Temporary memory allocated: 10 floats
         // - Loads: 64
         // - Stores: 56
-        // - Calls to sqrt: 40
+        // - Calls to sin: 40
     }
 
     // We could also say producer.compute_at(consumer, x), but this
@@ -261,12 +267,12 @@ int main(int argc, char **argv) {
     // which we allocate storage for producer, and the loop level at
     // which we actually compute it. This unlocks a few optimizations.
     {
-        Func producer("producer_store_root_compute_y"), consumer("consumer_store_root_compute_y");
-        producer(x, y) = sqrt(x * y);
+        Func producer("producer_root_y"), consumer("consumer_root_y");
+        producer(x, y) = sin(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
                           producer(x+1, y) +
-                          producer(x+1, y+1));
+                          producer(x+1, y+1))/4;
 
 
         // Tell Halide to make a buffer to store all of producer at
@@ -282,11 +288,15 @@ int main(int argc, char **argv) {
         printf("\nEvaluating producer.store_root().compute_at(consumer, y)\n");
         consumer.realize(4, 4);
 
-        // Reading the log you should see that producer and consumer
-        // again alternate on a per-scanline basis. It computes a 5x2
-        // box of the producer to satisfy the first scanline of the
-        // consumer, but after that it only computes a 5x1 box of the
-        // output for each new scanline of the consumer!
+        // See figures/lesson_08_store_root_compute_y.gif for a
+        // visualization.
+
+        // Reading the log or looking at the figure you should see
+        // that producer and consumer again alternate on a
+        // per-scanline basis. It computes a 5x2 box of the producer
+        // to satisfy the first scanline of the consumer, but after
+        // that it only computes a 5x1 box of the output for each new
+        // scanline of the consumer!
         //
         // Halide has detected that for all scanlines except for the
         // first, it can reuse the values already sitting in the
@@ -310,7 +320,7 @@ int main(int argc, char **argv) {
                 if (y > 0 && py == y) continue;
 
                 for (int px = 0; px < 5; px++) {
-                    producer_storage[py][px] = sqrt(px * py);
+                    producer_storage[py][px] = sin(px * py);
                 }
             }
 
@@ -319,7 +329,7 @@ int main(int argc, char **argv) {
                 result[y][x] = (producer_storage[y][x] +
                                 producer_storage[y+1][x] +
                                 producer_storage[y][x+1] +
-                                producer_storage[y+1][x+1]);
+                                producer_storage[y+1][x+1])/4;
             }
         }
 
@@ -329,7 +339,7 @@ int main(int argc, char **argv) {
 
         // The performance characteristics of this strategy are pretty
         // good! The numbers are similar compute_root, except locality
-        // is better. We're doing the minimum number of sqrt calls,
+        // is better. We're doing the minimum number of sin calls,
         // and we load values soon after they are stored, so we're
         // probably making good use of the cache:
 
@@ -337,7 +347,7 @@ int main(int argc, char **argv) {
         // - Temporary memory allocated: 10 floats
         // - Loads: 64
         // - Stores: 39
-        // - Calls to sqrt: 25
+        // - Calls to sin: 25
 
         // Note that my claimed amount of memory allocated doesn't
         // match the reference C code. Halide is performing one more
@@ -353,7 +363,7 @@ int main(int argc, char **argv) {
                     if (y > 0 && py == y) continue;
                     for (int px = 0; px < 5; px++) {
                         // Stores to producer_storage have their y coordinate bit-masked.
-                        producer_storage[py & 1][px] = sqrt(px * py);
+                        producer_storage[py & 1][px] = sin(px * py);
                     }
                 }
 
@@ -363,7 +373,7 @@ int main(int argc, char **argv) {
                     result[y][x] = (producer_storage[y & 1][x] +
                                     producer_storage[(y+1) & 1][x] +
                                     producer_storage[y & 1][x+1] +
-                                    producer_storage[(y+1) & 1][x+1]);
+                                    producer_storage[(y+1) & 1][x+1])/4;
                 }
             }
         }
@@ -372,12 +382,12 @@ int main(int argc, char **argv) {
     // We can do even better, by leaving the storage outermost, but
     // moving the computation into the innermost loop:
     {
-        Func producer("producer_store_root_compute_x"), consumer("consumer_store_root_compute_x");
-        producer(x, y) = sqrt(x * y);
+        Func producer("producer_root_x"), consumer("consumer_root_x");
+        producer(x, y) = sin(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
                           producer(x+1, y) +
-                          producer(x+1, y+1));
+                          producer(x+1, y+1))/4;
 
 
         // Store outermost, compute innermost.
@@ -389,8 +399,11 @@ int main(int argc, char **argv) {
         printf("\nEvaluating producer.store_root().compute_at(consumer, x)\n");
         consumer.realize(4, 4);
 
-        // Reading the log, you should see that producer and consumer
-        // now alternate on a per-pixel basis. Here's the equivalent C:
+        // See figures/lesson_08_store_root_compute_x.gif for a
+        // visualization.
+
+        // You should see that producer and consumer now alternate on
+        // a per-pixel basis. Here's the equivalent C:
 
         float result[4][4];
 
@@ -407,17 +420,17 @@ int main(int argc, char **argv) {
                 // pixel of the consumer, but skip values that we've
                 // already computed:
                 if (y == 0 && x == 0)
-                    producer_storage[y & 1][x] = sqrt(x*y);
+                    producer_storage[y & 1][x] = sin(x*y);
                 if (y == 0)
-                    producer_storage[y & 1][x+1] = sqrt((x+1)*y);
+                    producer_storage[y & 1][x+1] = sin((x+1)*y);
                 if (x == 0)
-                    producer_storage[(y+1) & 1][x] = sqrt(x*(y+1));
-                producer_storage[(y+1) & 1][x+1] = sqrt((x+1)*(y+1));
+                    producer_storage[(y+1) & 1][x] = sin(x*(y+1));
+                producer_storage[(y+1) & 1][x+1] = sin((x+1)*(y+1));
 
                 result[y][x] = (producer_storage[y & 1][x] +
                                 producer_storage[(y+1) & 1][x] +
                                 producer_storage[y & 1][x+1] +
-                                producer_storage[(y+1) & 1][x+1]);
+                                producer_storage[(y+1) & 1][x+1])/4;
             }
         }
 
@@ -433,7 +446,7 @@ int main(int argc, char **argv) {
         // - Temporary memory allocated: 10 floats
         // - Loads: 48
         // - Stores: 56
-        // - Calls to sqrt: 40
+        // - Calls to sin: 40
     }
 
     // So what's the catch? Why not always do
@@ -458,16 +471,15 @@ int main(int argc, char **argv) {
     // respect to those. We'll use this to express fusion in tiles:
     {
         Func producer("producer_tile"), consumer("consumer_tile");
-        producer(x, y) = sqrt(x * y);
+        producer(x, y) = sin(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
                           producer(x+1, y) +
-                          producer(x+1, y+1));
+                          producer(x+1, y+1))/4;
 
-
-        // Tile the consumer using 2x2 tiles.
+        // We'll compute 8x8 of the consumer, in 4x4 tiles.
         Var x_outer, y_outer, x_inner, y_inner;
-        consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2);
+        consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);
 
         // Compute the producer per tile of the consumer
         producer.compute_at(consumer, x_outer);
@@ -483,41 +495,43 @@ int main(int argc, char **argv) {
         consumer.trace_stores();
 
         printf("\nEvaluating:\n"
-               "consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2);\n"
+               "consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);\n"
                "producer.compute_at(consumer, x_outer);\n");
-        consumer.realize(4, 4);
+        consumer.realize(8, 8);
 
-        // Reading the log, you should see that producer and consumer
-        // now alternate on a per-tile basis. Here's the equivalent C:
+        // See figures/lesson_08_tile.gif for a visualization.
 
-        float result[4][4];
+        // The producer and consumer now alternate on a per-tile
+        // basis. Here's the equivalent C:
+
+        float result[8][8];
 
         // For every tile of the consumer:
         for (int y_outer = 0; y_outer < 2; y_outer++) {
             for (int x_outer = 0; x_outer < 2; x_outer++) {
                 // Compute the x and y coords of the start of this tile.
-                int x_base = x_outer*2;
-                int y_base = y_outer*2;
+                int x_base = x_outer*4;
+                int y_base = y_outer*4;
 
                 // Compute enough of producer to satisfy this tile. A
-                // 2x2 tile of the consumer requires a 3x3 tile of the
+                // 4x4 tile of the consumer requires a 5x5 tile of the
                 // producer.
-                float producer_storage[3][3];
-                for (int py = y_base; py < y_base + 3; py++) {
-                    for (int px = x_base; px < x_base + 3; px++) {
-                        producer_storage[py-y_base][px-x_base] = sqrt(px * py);
+                float producer_storage[5][5];
+                for (int py = y_base; py < y_base + 5; py++) {
+                    for (int px = x_base; px < x_base + 5; px++) {
+                        producer_storage[py-y_base][px-x_base] = sin(px * py);
                     }
                 }
 
                 // Compute this tile of the consumer
-                for (int y_inner = 0; y_inner < 2; y_inner++) {
-                    for (int x_inner = 0; x_inner < 2; x_inner++) {
+                for (int y_inner = 0; y_inner < 4; y_inner++) {
+                    for (int x_inner = 0; x_inner < 4; x_inner++) {
                         int x = x_base + x_inner;
                         int y = y_base + y_inner;
                         result[y][x] = (producer_storage[y - y_base][x - x_base] +
                                         producer_storage[y - y_base + 1][x - x_base] +
                                         producer_storage[y - y_base][x - x_base + 1] +
-                                        producer_storage[y - y_base + 1][x - x_base + 1]);
+                                        producer_storage[y - y_base + 1][x - x_base + 1])/4;
                     }
                 }
             }
@@ -541,11 +555,11 @@ int main(int argc, char **argv) {
     // in Halide.
     {
         Func producer("producer_mixed"), consumer("consumer_mixed");
-        producer(x, y) = sqrt(x * y);
+        producer(x, y) = sin(x * y);
         consumer(x, y) = (producer(x, y) +
                           producer(x, y+1) +
                           producer(x+1, y) +
-                          producer(x+1, y+1));
+                          producer(x+1, y+1))/4;
 
         // Split the y coordinate of the consumer into strips of 16 scanlines:
         Var yo, yi;
@@ -562,7 +576,7 @@ int main(int argc, char **argv) {
         // Within each strip, compute the producer per scanline of the
         // consumer, skipping work done on previous scanlines.
         producer.compute_at(consumer, yi);
-        // Also vectorize the producer (because sqrt is vectorizable on x86 using SSE).
+        // Also vectorize the producer (because sin is vectorizable on x86 using SSE).
         producer.vectorize(x, 4);
 
         // Let's leave tracing off this time, because we're going to
@@ -570,21 +584,25 @@ int main(int argc, char **argv) {
         // consumer.trace_stores();
         // producer.trace_stores();
 
-        Image<float> halide_result = consumer.realize(800, 600);
+        Image<float> halide_result = consumer.realize(160, 160);
+
+        // See figures/lesson_08_mixed.mp4 for a visualization.
 
         // Here's the equivalent (serial) C:
 
-        float c_result[600][800];
+        float c_result[160][160];
 
-        // For every strip of 16 scanlines
-        for (int yo = 0; yo < 600/16 + 1; yo++) { // (this loop is parallel in the Halide version)
+        // For every strip of 16 scanlines (this loop is parallel in
+        // the Halide version)
+        for (int yo = 0; yo < 160/16 + 1; yo++) {
 
-            // 16 doesn't divide 600, so push the last slice upwards to fit within [0, 599] (see lesson 05).
+            // 16 doesn't divide 160, so push the last slice upwards
+            // to fit within [0, 159] (see lesson 05).
             int y_base = yo * 16;
-            if (y_base > 600-16) y_base = 600-16;
+            if (y_base > 160-16) y_base = 160-16;
 
             // Allocate a two-scanline circular buffer for the producer
-            float producer_storage[2][801];
+            float producer_storage[2][161];
 
             // For every scanline in the strip of 16:
             for (int yi = 0; yi < 16; yi++) {
@@ -595,13 +613,14 @@ int main(int argc, char **argv) {
                     if (yi > 0 && py == y) continue;
 
                     // Compute this scanline of the producer in 4-wide vectors
-                    for (int x_vec = 0; x_vec < 800/4 + 1; x_vec++) {
+                    for (int x_vec = 0; x_vec < 160/4 + 1; x_vec++) {
                         int x_base = x_vec*4;
-                        // 4 doesn't divide 801, so push the last vector left (see lesson 05).
-                        if (x_base > 801 - 4) x_base = 801 - 4;
+                        // 4 doesn't divide 161, so push the last vector left (see lesson 05).
+                        if (x_base > 161 - 4) x_base = 161 - 4;
                         // If you're on x86, Halide generates SSE code for this part:
                         int x[] = {x_base, x_base + 1, x_base + 2, x_base + 3};
-                        float vec[4] = {sqrtf(x[0] * py), sqrtf(x[1] * py), sqrtf(x[2] * py), sqrtf(x[3] * py)};
+                        float vec[4] = {sinf(x[0] * py), sinf(x[1] * py),
+                                        sinf(x[2] * py), sinf(x[3] * py)};
                         producer_storage[py & 1][x[0]] = vec[0];
                         producer_storage[py & 1][x[1]] = vec[1];
                         producer_storage[py & 1][x[2]] = vec[2];
@@ -610,7 +629,7 @@ int main(int argc, char **argv) {
                 }
 
                 // Now compute consumer for this scanline:
-                for (int x_vec = 0; x_vec < 800/4; x_vec++) {
+                for (int x_vec = 0; x_vec < 160/4; x_vec++) {
                     int x_base = x_vec * 4;
                     // Again, Halide's equivalent here uses SSE.
                     int x[] = {x_base, x_base + 1, x_base + 2, x_base + 3};
@@ -618,19 +637,19 @@ int main(int argc, char **argv) {
                         (producer_storage[y & 1][x[0]] +
                          producer_storage[(y+1) & 1][x[0]] +
                          producer_storage[y & 1][x[0]+1] +
-                         producer_storage[(y+1) & 1][x[0]+1]),
+                         producer_storage[(y+1) & 1][x[0]+1])/4,
                         (producer_storage[y & 1][x[1]] +
                          producer_storage[(y+1) & 1][x[1]] +
                          producer_storage[y & 1][x[1]+1] +
-                         producer_storage[(y+1) & 1][x[1]+1]),
+                         producer_storage[(y+1) & 1][x[1]+1])/4,
                         (producer_storage[y & 1][x[2]] +
                          producer_storage[(y+1) & 1][x[2]] +
                          producer_storage[y & 1][x[2]+1] +
-                         producer_storage[(y+1) & 1][x[2]+1]),
+                         producer_storage[(y+1) & 1][x[2]+1])/4,
                         (producer_storage[y & 1][x[3]] +
                          producer_storage[(y+1) & 1][x[3]] +
                          producer_storage[y & 1][x[3]+1] +
-                         producer_storage[(y+1) & 1][x[3]+1])};
+                         producer_storage[(y+1) & 1][x[3]+1])/4};
 
                     c_result[y][x[0]] = vec[0];
                     c_result[y][x[1]] = vec[1];
@@ -649,8 +668,8 @@ int main(int argc, char **argv) {
         // Let's check the C result against the Halide result. Doing
         // this I found several bugs in my C implementation, which
         // should tell you something.
-        for (int y = 0; y < 600; y++) {
-            for (int x = 0; x < 800; x++) {
+        for (int y = 0; y < 160; y++) {
+            for (int x = 0; x < 160; x++) {
                 float error = halide_result(x, y) - c_result[y][x];
                 // It's floating-point math, so we'll allow some slop:
                 if (error < -0.001f || error > 0.001f) {
