@@ -133,7 +133,7 @@ private:
 // A struct specifying a text label that will appear on the screen at some point.
 struct Label {
     const char *text;
-    int x, y;
+    int x, y, n;
 };
 
 // A struct specifying how a single Func will get visualized.
@@ -148,6 +148,7 @@ struct FuncDrawInfo {
     float min, max;
     vector<Label> labels;
     int first_draw_time;
+    bool blank_on_end_realization;
 
     FuncDrawInfo() {
         memset(this, 0, sizeof(FuncDrawInfo));
@@ -158,6 +159,7 @@ struct FuncDrawInfo {
                 "Func %s:\n"
                 " min: %f max: %f\n"
                 " color_dim: %d\n"
+                " blank: %d\n"
                 " dims: %d\n"
                 " zoom: %d\n"
                 " cost: %d\n"
@@ -167,6 +169,7 @@ struct FuncDrawInfo {
                 name,
                 min, max,
                 color_dim,
+                blank_on_end_realization,
                 dims,
                 zoom, cost, x, y,
                 x_stride[0], x_stride[1], x_stride[2], x_stride[3],
@@ -240,11 +243,11 @@ void usage() {
             "    decay over time\n"
             " -h hold frames: How many frames to output after the end of the trace. \n"
             "    Defaults to 250.\n"
-            " -l func label x y: When func is first touched, the label appears at\n"
-            "    the given coordinates.\n"
+            " -l func label x y n: When func is first touched, the label appears at\n"
+            "    the given coordinates and fades in over n frames.\n"
             "\n"
             " For each Func you want to visualize, also specify:\n"
-            " -f func_name min_value max_value color_dim zoom cost x y strides\n"
+            " -f func_name min_value max_value color_dim blank zoom cost x y strides\n"
             " where\n"
             "  func_name: The name of the func or input image\n"
             "\n"
@@ -257,6 +260,9 @@ void usage() {
             "  color_dim: Which dimension of the Func corresponds to color\n"
             "    channels. Usually 2. Set it to -1 if you want to visualize the Func\n"
             "    as grayscale\n"
+            "\n"
+            "  blank: Should the output occupied by the Func be set to black on end\n"
+            "    realization events. Zero for no, one for yes.\n"
             "\n"
             "  zoom: Each value of the Func will draw as a zoom x zoom box in the output\n"
             "\n"
@@ -299,7 +305,7 @@ int run(int argc, char **argv) {
             frame_width = atoi(argv[++i]);
             frame_height = atoi(argv[++i]);
         } else if (next == "-f") {
-            if (i + 8 >= argc) {
+            if (i + 9 >= argc) {
                 usage();
                 return -1;
             }
@@ -308,6 +314,7 @@ int run(int argc, char **argv) {
             fdi.min = atof(argv[++i]);
             fdi.max = atof(argv[++i]);
             fdi.color_dim = atoi(argv[++i]);
+            fdi.blank_on_end_realization = atoi(argv[++i]);
             fdi.zoom = atoi(argv[++i]);
             fdi.cost = atoi(argv[++i]);
             fdi.x = atoi(argv[++i]);
@@ -321,7 +328,7 @@ int run(int argc, char **argv) {
             fdi.dump(func);
 
         } else if (next == "-l") {
-            if (i + 4 >= argc) {
+            if (i + 5 >= argc) {
                 usage();
                 return -1;
             }
@@ -329,7 +336,8 @@ int run(int argc, char **argv) {
             char *text = argv[++i];
             int x = atoi(argv[++i]);
             int y = atoi(argv[++i]);
-            Label l = {text, x, y};
+            int n = atoi(argv[++i]);
+            Label l = {text, x, y, n};
             fprintf(stderr, "Adding label %s to func %s\n",
                     text, func);
             draw_info[func].labels.push_back(l);
@@ -449,12 +457,14 @@ int run(int argc, char **argv) {
         case 1: // store
         {
             int frames_since_first_draw = (halide_clock - di.first_draw_time) / timestep;
-            if (frames_since_first_draw <= 10) {
-                uint32_t color = frames_since_first_draw * 26;
-                if (color > 255) color = 255;
-                color *= 0x10101;
-                for (size_t i = 0; i < di.labels.size(); i++) {
-                    const Label &label = di.labels[i];
+
+            for (size_t i = 0; i < di.labels.size(); i++) {
+                const Label &label = di.labels[i];
+                if (frames_since_first_draw <= label.n) {
+                    uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
+                    if (color > 255) color = 255;
+                    color *= 0x10101;
+
                     draw_text(label.text, label.x, label.y, color, text, frame_width, frame_height);
                 }
             }
@@ -534,10 +544,26 @@ int run(int argc, char **argv) {
             break;
         }
         case 2: // begin realization
+            break;
         case 3: // end realization
-            // Add a time cost to the beginning and end of realizations
-            //halide_clock += 10000;
-            // TODO: draw a rectangle of some color?
+            if (di.blank_on_end_realization) {
+                assert(p.num_int_args >= 2 * di.dims);
+                int x_min = di.x, y_min = di.y;
+                int x_extent = 0, y_extent = 0;
+                for (int d = 0; d < di.dims; d++) {
+                    int m = p.get_int_arg(d * 2 + 0);
+                    int e = p.get_int_arg(d * 2 + 1);
+                    x_min += di.zoom * di.x_stride[d] * m;
+                    y_min += di.zoom * di.y_stride[d] * m;
+                    x_extent += di.zoom * di.x_stride[d] * e;
+                    y_extent += di.zoom * di.y_stride[d] * e;
+                }
+                for (int y = y_min; y < y_min + y_extent; y++) {
+                    for (int x = x_min; x < x_min + x_extent; x++) {
+                        image[y * frame_width + x] = 0;
+                    }
+                }
+            }
             break;
         case 4: // produce
         case 5: // update
