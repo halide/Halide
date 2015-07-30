@@ -69,16 +69,24 @@ int main(int argc, char **argv) {
         // definition in all references to the function on the left-
         // and right-hand sides. So the following definitions are
         // legal updates:
-        f(x, 17) = x + 8; // x is used, so all uses of f must have x as the first argument.
-        f(0, y) = y * 8;  // y is used, so all uses of f must have y as the second argument.
+        f(x, 17) = x + 8;
+        f(0, y) = y * 8;
         f(x, x + 1) = x + 8;
         f(y/2, y) = f(0, y) * 17;
 
         // But these ones would cause an error:
-        // f(x, 0) = f(x + 1, 0) <- First argument to f on the right-hand-side must be 'x', not 'x + 1'.
-        // f(y, y + 1) = y + 8   <- Second argument to f on the left-hand-side must be 'y', not 'y + 1'.
-        // f(y, x) = y - x;      <- Arguments to f on the left-hand-side are in the wrong places.
-        // f(3, 4) = x + y;      <- Free variables appear on the right-hand-side but not the left-hand-side.
+
+        // f(x, 0) = f(x + 1, 0);
+        // First argument to f on the right-hand-side must be 'x', not 'x + 1'.
+
+        // f(y, y + 1) = y + 8;
+        // Second argument to f on the left-hand-side must be 'y', not 'y + 1'.
+
+        // f(y, x) = y - x;
+        // Arguments to f on the left-hand-side are in the wrong places.
+
+        // f(3, 4) = x + y;
+        // Free variables appear on the right-hand-side but not the left-hand-side.
 
         // We'll realize this one just to make sure it compiles. The
         // second-to-last definition forces us to realize over a
@@ -586,7 +594,8 @@ int main(int argc, char **argv) {
             }
             // Update step for the consumer.
             for (int x = 0; x < 10; x++) {
-                for (int r = 0; r < 5; r++) { // The loop over the reduction domain is always the inner loop.
+                // The loop over the reduction domain is always the inner loop.
+                for (int r = 0; r < 5; r++) {
                     // We've schedule the storage and computation of
                     // the producer here. We just need a single value.
                     int producer_storage[1];

@@ -58,7 +58,8 @@ int main(int argc, char **argv) {
     target.bits = 32;            // The bit-width of the architecture
     std::vector<Target::Feature> arm_features; // A list of features to set
     target.set_features(arm_features);
-    brighter.compile_to_file("lesson_11_arm_32_android", args, target); // Pass the target as the last argument.
+    // We then pass the target as the last argument to compile_to_file.
+    brighter.compile_to_file("lesson_11_arm_32_android", args, target);
 
     // And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
     target.os = Target::Windows;
