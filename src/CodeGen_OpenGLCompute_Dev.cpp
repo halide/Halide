@@ -56,7 +56,7 @@ Type map_type(const Type &type) {
 
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
     Type mapped_type = map_type(type);
-    if (mapped_type.is_uint()) {
+    if (mapped_type.is_uint() && !mapped_type.is_bool()) {
         return mapped_type.is_scalar()? "uint": "uvec"  + std::to_string(mapped_type.width);
     } else {
         return CodeGen_GLSLBase::print_type(type);
