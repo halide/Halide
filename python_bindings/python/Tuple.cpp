@@ -167,10 +167,6 @@ void defineTuple()
             ;
 
 
-    p::implicitly_convertible<h::FuncRefVar, Tuple>();
-    p::implicitly_convertible<h::FuncRefExpr, Tuple>();
-
-
     defineRealization();
 
     p::def("tuple_select", &tuple_select0, p::args("condition", "true_value", "false_value"),
