@@ -1,11 +1,11 @@
 // Halide tutorial lesson 7: Multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
 // LD_LIBRARY_PATH=../bin ./lesson_07
 
 // On os x:
-// g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
 
 // If you have the entire Halide source tree, you can also build it by
@@ -20,7 +20,8 @@
 using namespace Halide;
 
 // Support code for loading pngs.
-#include "image_io.h"
+#include "halide_image_io.h"
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.
@@ -30,7 +31,7 @@ int main(int argc, char **argv) {
     // first horizontally, and then vertically.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<uint8_t>("images/rgb.png");
+        Image<uint8_t> input = load<Image<uint8_t>>("images/rgb.png");
 
         // Upgrade it to 16-bit, so we can do math without it overflowing.
         Func input_16("input_16");
@@ -98,7 +99,7 @@ int main(int argc, char **argv) {
     // The same pipeline, with a boundary condition on the input.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<uint8_t>("images/rgb.png");
+        Image<uint8_t> input = load<Image<uint8_t>>("images/rgb.png");
 
         // This time, we'll wrap the input in a Func that prevents
         // reading out of bounds:

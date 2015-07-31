@@ -1,11 +1,11 @@
 // Halide tutorial lesson 9: Multi-pass Funcs, update definitions, and reductions
 
 // On linux, you can compile and run it like so:
-// g++ lesson_09*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09
 // LD_LIBRARY_PATH=../bin ./lesson_09
 
 // On os x (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
-// g++ lesson_09*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
 
 // If you have the entire Halide source tree, you can also build it by
@@ -28,14 +28,15 @@
 using namespace Halide;
 
 // Support code for loading pngs.
-#include "image_io.h"
+#include "halide_image_io.h"
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     // Declare some Vars to use below.
     Var x("x"), y("y");
 
     // Load a grayscale image to use as an input.
-    Image<uint8_t> input = load<uint8_t>("images/gray.png");
+    Image<uint8_t> input = load<Image<uint8_t>>("images/gray.png");
 
     // You can define a Func in multiple passes. Let's see a toy
     // example first.

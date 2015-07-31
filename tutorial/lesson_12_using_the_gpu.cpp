@@ -3,11 +3,11 @@
 // This lesson demonstrates how to use Halide to run code on a GPU using OpenCL.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
+// g++ lesson_12*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
 
 // If you have the entire Halide source tree, you can also build it by
@@ -21,7 +21,8 @@
 using namespace Halide;
 
 // Include some support code for loading pngs.
-#include "image_io.h"
+#include "halide_image_io.h"
+using namespace Halide::Tools;
 
 // Include a clock to do performance testing.
 #include "clock.h"
@@ -264,7 +265,7 @@ bool have_opencl();
 
 int main(int argc, char **argv) {
     // Load an input image.
-    Image<uint8_t> input = load<uint8_t>("images/rgb.png");
+    Image<uint8_t> input = load<Image<uint8_t>>("images/rgb.png");
 
     // Allocated an image that will store the correct output
     Image<uint8_t> reference_output(input.width(), input.height(), input.channels());

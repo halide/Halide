@@ -71,6 +71,8 @@ class Image {
     }
 
 public:
+    typedef T ElemType;
+
     Image() : contents(NULL) {
     }
 

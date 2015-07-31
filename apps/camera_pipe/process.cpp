@@ -5,15 +5,15 @@
 #include <cstdlib>
 #include <cassert>
 
-extern "C" {
-  #include "curved.h"
-}
-#include <static_image.h>
-#include <image_io.h>
-#include <benchmark.h>
+#include "benchmark.h"
+#include "curved.h"
+#include "halide_image_io.h"
+#include "static_image.h"
 
 #include "fcam/Demosaic.h"
 #include "fcam/Demosaic_ARM.h"
+
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc < 7) {
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Image<uint16_t> input = load<uint16_t>(argv[1]);
+    Image<uint16_t> input = load<Image<uint16_t>>(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 

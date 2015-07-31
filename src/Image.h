@@ -172,6 +172,8 @@ public:
 template<typename T>
 class Image : public ImageBase {
 public:
+    typedef T ElemType;
+
     /** Construct an undefined image handle */
     Image() : ImageBase() {}
 
