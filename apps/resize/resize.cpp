@@ -5,7 +5,7 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include <image_io.h>
+#include <halide_image_io.h>
 #include <benchmark.h>
 
 enum InterpolationType {
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
     final.compile_jit(target);
 
     printf("Loading '%s'\n", infile.c_str());
-    Image<float> in_png = load<float>(infile);
+    Image<float> in_png = load<Image<float>>(infile);
     int out_width = in_png.width() * scaleFactor;
     int out_height = in_png.height() * scaleFactor;
     Image<float> out(out_width, out_height, 3);
@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
            kernelInfo[interpolationType].name);
 
     double min = benchmark(10, 1, [&]() { final.realize(out); });
-    std::cout << " took min=" << min * 1000 << ", avg=" << avg * 1000 << " msec." << std::endl;
+    std::cout << " took min=" << min * 1000 << " msec." << std::endl;
 
     save(out, outfile);
 }

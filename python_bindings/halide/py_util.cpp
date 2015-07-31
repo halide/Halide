@@ -3,7 +3,7 @@
    ----------------------------------------------------------------------- */
 
 #include "py_util.h"
-#include "../../apps/support/image_io.h"
+#include "../../apps/support/halide_image_io.h"
 #include <signal.h>
 #include <string>
 #include "Python.h"

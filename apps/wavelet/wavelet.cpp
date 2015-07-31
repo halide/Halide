@@ -5,8 +5,23 @@
 #include "daubechies_x.h"
 #include "inverse_daubechies_x.h"
 
+#include "halide_image_io.h"
 #include "static_image.h"
-#include "image_io.h"
+
+using namespace Halide::Tools;
+
+namespace {
+
+void _assert(bool condition, const char* fmt, ...) {
+    if (!condition) {
+        char buffer[1024];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(buffer, sizeof(buffer), fmt, args);
+        va_end(args);
+        exit(-1);
+    }
+}
 
 template<typename T>
 T clamp(T x, T min, T max) {
@@ -34,13 +49,15 @@ void save_transformed(Image<T> t, const std::string& filename) {
     printf("Saved %s\n", filename.c_str());
 }
 
+}  // namespace
+
 int main(int argc, char **argv) {
     _assert(argc == 3, "Usage: main <src_image> <output-dir>\n");
 
     const std::string src_image = argv[1];
     const std::string dirname = argv[2];
 
-    Image<float> input = load<float>(src_image);
+    Image<float> input = load<Image<float>>(src_image);
     Image<float> transformed(input.width()/2, input.height(), 2);
     Image<float> inverse_transformed(input.width(), input.height(), 1);
 

@@ -1,6 +1,9 @@
 #include "pipeline.h"
+
+#include "halide_image_io.h"
 #include "static_image.h"
-#include "image_io.h"
+
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
 
@@ -9,7 +12,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Image<uint8_t> input = load<uint8_t>(argv[1]);
+    Image<uint8_t> input = load<Image<uint8_t>>(argv[1]);
     Image<uint8_t> output(input.width(), input.height(), 1);
 
     pipeline(input, output);
