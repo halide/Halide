@@ -75,11 +75,22 @@ inline bool ends_with_ignore_case(std::string a, std::string b) {
     return a.compare(a.length()-b.length(), b.length(), b) == 0;
 }
 
+inline bool is_little_endian() {
+    int value = 1;
+    return ((char *) &value)[0] == 1;
+}
+
+inline void swap_endian_16(bool little_endian, uint16_t &value) {
+    if (little_endian) {
+        value = ((value & 0xff)<<8)|((value & 0xff00)>>8);
+    }
+}
+
 }  // namespace Internal
 
 
 template<typename ImageType>
-ImageType load_png(std::string filename) {
+ImageType load_png(const std::string &filename) {
     png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
@@ -180,8 +191,9 @@ ImageType load_png(std::string filename) {
     return im;
 }
 
+// "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType>
-void save_png(ImageType im, std::string filename) {
+void save_png(ImageType &im, const std::string &filename) {
     png_structp png_ptr;
     png_infop info_ptr;
     png_bytep *row_pointers;
@@ -283,15 +295,6 @@ void save_png(ImageType im, std::string filename) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
 }
 
-
-
-inline int is_little_endian() {
-    int value = 1;
-    return ((char *) &value)[0] == 1;
-}
-
-#define SWAP_ENDIAN16(little_endian, value) if (little_endian) { (value) = (((value) & 0xff)<<8)|(((value) & 0xff00)>>8); }
-
 template<typename ImageType>
 ImageType load_ppm(std::string filename) {
 
@@ -335,7 +338,7 @@ ImageType load_ppm(std::string filename) {
         }
         delete[] data;
     } else if (bit_depth == 16) {
-        int little_endian = is_little_endian();
+        int little_endian = Internal::is_little_endian();
         uint16_t *data = new uint16_t[width*height*3];
         Internal::_assert(fread((void *) data, sizeof(uint16_t), width*height*3, f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n");
         fclose(f);
@@ -344,9 +347,9 @@ ImageType load_ppm(std::string filename) {
             uint16_t *row = (uint16_t *) (&data[(y*width)*3]);
             for (int x = 0; x < im.width(); x++) {
                 uint16_t value;
-                value = *row++; SWAP_ENDIAN16(little_endian, value); Internal::convert(value, im_data[(0*height+y)*width+x]);
-                value = *row++; SWAP_ENDIAN16(little_endian, value); Internal::convert(value, im_data[(1*height+y)*width+x]);
-                value = *row++; SWAP_ENDIAN16(little_endian, value); Internal::convert(value, im_data[(2*height+y)*width+x]);
+                value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(0*height+y)*width+x]);
+                value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(1*height+y)*width+x]);
+                value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(2*height+y)*width+x]);
             }
         }
         delete[] data;
@@ -378,7 +381,7 @@ void save_ppm(ImageType im, std::string filename) {
         Internal::_assert(fwrite((void *) data, sizeof(uint8_t), width*height*3, f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n");
         delete[] data;
     } else if (bit_depth == 16) {
-        int little_endian = is_little_endian();
+        int little_endian = Internal::is_little_endian();
         uint16_t *data = new uint16_t[width*height*3];
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
@@ -386,7 +389,7 @@ void save_ppm(ImageType im, std::string filename) {
                 for (int c = 0; c < im.channels(); c++) {
                     uint16_t value;
                     Internal::convert(im(x, y, c), value);
-                    SWAP_ENDIAN16(little_endian, value);
+                    Internal::swap_endian_16(little_endian, value);
                     p[c] = value;
                 }
             }
