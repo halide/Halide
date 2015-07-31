@@ -8,6 +8,7 @@
 #define HALIDE_IMAGE_IO_H
 
 #include <algorithm>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
