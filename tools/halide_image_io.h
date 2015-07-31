@@ -68,8 +68,9 @@ inline void convert(uint16_t in, float &out) {out = in/65535.0f;}
 inline void convert(uint16_t in, double &out) {out = in/65535.0f;}
 
 
-inline bool ends_with_ignore_case(std::string a, std::string b) {
-    if (a.length() < b.length()) { return false; }
+inline bool ends_with_ignore_case(const std::string &ac, const std::string &bc) {
+    if (ac.length() < bc.length()) { return false; }
+    std::string a = ac, b = bc;
     std::transform(a.begin(), a.end(), a.begin(), ::tolower);
     std::transform(b.begin(), b.end(), b.begin(), ::tolower);
     return a.compare(a.length()-b.length(), b.length(), b) == 0;
@@ -296,7 +297,7 @@ void save_png(ImageType &im, const std::string &filename) {
 }
 
 template<typename ImageType>
-ImageType load_ppm(std::string filename) {
+ImageType load_ppm(const std::string &filename) {
 
     /* open file and test for it being a ppm */
     FILE *f = fopen(filename.c_str(), "rb");
@@ -359,8 +360,11 @@ ImageType load_ppm(std::string filename) {
     return im;
 }
 
+// "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType>
-void save_ppm(ImageType im, std::string filename) {
+void save_ppm(ImageType &im, const std::string &filename) {
+    im.copy_to_host();
+
 	unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
 
     FILE *f = fopen(filename.c_str(), "wb");
@@ -401,7 +405,7 @@ void save_ppm(ImageType im, std::string filename) {
 }
 
 template<typename ImageType>
-ImageType load(std::string filename) {
+ImageType load(const std::string &filename) {
     if (Internal::ends_with_ignore_case(filename, ".png")) {
         return load_png<ImageType>(filename);
     } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
@@ -413,7 +417,7 @@ ImageType load(std::string filename) {
 }
 
 template<typename ImageType>
-void save(ImageType im, std::string filename) {
+void save(ImageType &im, const std::string &filename) {
     if (Internal::ends_with_ignore_case(filename, ".png")) {
         save_png<ImageType>(im, filename);
     } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
