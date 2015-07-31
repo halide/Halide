@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(x+1, y) + f(x-1, y);
 
     Target target = get_jit_target_from_environment();
-    if (target.has_gpu_feature()) {
+    if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
         Var xi, yi;
         g.gpu_tile(x, y, 8, 8);
         f.compute_at(g, Var::gpu_blocks()).gpu_threads(x, y);
