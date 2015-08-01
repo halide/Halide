@@ -42,6 +42,7 @@ set(RUNTIME_CPP
   nogpu
   opencl
   opengl
+  openglcompute
   osx_clock
   osx_get_symbol
   osx_host_cpu_count
@@ -207,6 +208,7 @@ set(HEADER_FILES
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
   CodeGen_OpenGL_Dev.h
+  CodeGen_OpenGLCompute_Dev.h
   CodeGen_PNaCl.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
@@ -274,6 +276,7 @@ set(HEADER_FILES
   Schedule.h
   ScheduleFunctions.h
   Scope.h
+  SelectGPUAPI.h
   Simplify.h
   SkipStages.h
   SlidingWindow.h
@@ -307,6 +310,7 @@ file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenGLCompute.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 
@@ -343,6 +347,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
+  CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PNaCl.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
@@ -407,6 +412,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
+  SelectGPUAPI.cpp
   Simplify.cpp
   SkipStages.cpp
   SlidingWindow.cpp

@@ -558,6 +558,8 @@ int run(int argc, char **argv) {
                     x_extent += di.zoom * di.x_stride[d] * e;
                     y_extent += di.zoom * di.y_stride[d] * e;
                 }
+                if (x_extent == 0) x_extent = di.zoom;
+                if (y_extent == 0) y_extent = di.zoom;
                 for (int y = y_min; y < y_min + y_extent; y++) {
                     for (int x = x_min; x < x_min + x_extent; x++) {
                         image[y * frame_width + x] = 0;

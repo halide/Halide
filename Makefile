@@ -232,6 +232,7 @@ SOURCE_FILES = \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
+  CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_PNaCl.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PTX_Dev.cpp \
@@ -296,6 +297,7 @@ SOURCE_FILES = \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
+  SelectGPUAPI.cpp \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -347,6 +349,7 @@ HEADER_FILES = \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_OpenGL_Dev.h \
+  CodeGen_OpenGLCompute_Dev.h \
   CodeGen_PNaCl.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
@@ -417,6 +420,7 @@ HEADER_FILES = \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
+  SelectGPUAPI.h \
   Simplify.h \
   SkipStages.h \
   SlidingWindow.h \
@@ -465,6 +469,7 @@ RUNTIME_CPP_COMPONENTS = \
   nogpu \
   opencl \
   opengl \
+  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
@@ -507,9 +512,18 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_sse41
 
-RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeCuda.h $(INCLUDE_DIR)/HalideRuntimeOpenCL.h $(INCLUDE_DIR)/HalideRuntimeOpenGL.h $(INCLUDE_DIR)/HalideRuntimeRenderscript.h
+RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
+                            $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
+                            $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
+                            $(INCLUDE_DIR)/HalideRuntimeRenderscript.h
 
-INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
+                  $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
+                  $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
 .PHONY: all
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal

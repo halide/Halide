@@ -78,6 +78,7 @@ private:
         if (op->call_type == Call::Halide) {
             Function f = op->func;
             bool inlined = f.schedule().compute_level().is_inline();
+            if (f.has_update_definition()) inlined = false;
             trace_it = f.is_tracing_loads() || (global_level > 2 && !inlined);
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
@@ -109,6 +110,7 @@ private:
         if (iter == env.end()) return;
         Function f = iter->second;
         bool inlined = f.schedule().compute_level().is_inline();
+        if (f.has_update_definition()) inlined = false;
 
         if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
             // Wrap each expr in a tracing call
