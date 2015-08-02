@@ -6,6 +6,7 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Func.h"
+#include "Function.h"
 #include "Image.h"
 #include "InlineReductions.h"
 #include "IROperator.h"
@@ -36,6 +37,7 @@ BOOST_PYTHON_MODULE(halide)
     defineBuffer();
     defineError();
     defineExpr();
+    defineExternFuncArgument();
     defineFunc();
     defineImage();
     defineInlineReductions();
