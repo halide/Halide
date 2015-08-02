@@ -317,6 +317,21 @@ std::string func_repr(const h::Func &func)
 }
 
 
+void func_define_extern0(h::Func &that,const std::string &function_name,
+                         const std::vector<h::ExternFuncArgument> &params,
+                         h::Type t,
+                         int dimensionality) {
+    return that.define_extern(function_name, params, t, dimensionality);
+}
+
+void func_define_extern1(h::Func &that,const std::string &function_name,
+                         const std::vector<h::ExternFuncArgument> &params,
+                         const std::vector<h::Type> &types,
+                         int dimensionality) {
+    return that.define_extern(function_name, params, types, dimensionality);
+}
+
+
 void defineFunc()
 {
     using Halide::Func;
@@ -428,12 +443,65 @@ void defineFunc()
                    p::return_value_policy<p::copy_const_reference>(),
                    "The name of this function, either given during construction, or automatically generated.");
 
+    func_class.def("args", &Func::args, p::arg("self"),
+                   "Get the pure arguments.");
+
     func_class.def("value", &Func::value, p::arg("self"),
                    "The right-hand-side value of the pure definition of this "
-                   "function. May be undefined if the function has no pure definition yet.");
+                   "function. Causes an error if there's no pure definition, or if "
+                   "the function is defined to return multiple values.");
+
+    func_class.def("values", &Func::values, p::arg("self"),
+                   "The values returned by this function. An error if the function "
+                   "has not been been defined. Returns a Tuple with one element for "
+                   "functions defined to return a single value.");
+
+    func_class.def("defined", &Func::defined, p::arg("self"),
+                   "Does this function have at least a pure definition.");
+
+    func_class.def("update_args", &Func::update_args, (p::arg("self"), p::arg("idx") = 0),
+                   p::return_value_policy<p::copy_const_reference>(),
+                   "Get the left-hand-side of the update definition. An empty "
+                   "vector if there's no update definition. If there are "
+                   "multiple update definitions for this function, use the "
+                   "argument to select which one you want.");
+
+    func_class.def("update_value", &Func::update_value, (p::arg("self"), p::arg("idx") = 0),
+                   "Get the right-hand-side of an update definition. An error if "
+                   "there's no update definition. If there are multiple "
+                   "update definitions for this function, use the argument to "
+                   "select which one you want.");
+
+    func_class.def("update_values", &Func::update_values, (p::arg("self"), p::arg("idx") = 0),
+                   "Get the right-hand-side of an update definition for "
+                   "functions that returns multiple values. An error if there's no "
+                   "update definition. Returns a Tuple with one element for "
+                   "functions that return a single value.");
+
+    func_class.def("reduction_domain", &Func::reduction_domain, (p::arg("self"), p::arg("idx") = 0),
+                   "Get the reduction domain for an update definition, if there is one.");
+
+    func_class
+            .def("has_update_definition", &Func::has_update_definition, p::arg("self"),
+                 "Does this function have at least one update definition?")
+            .def("num_update_definitions", &Func::num_update_definitions, p::arg("self"),
+                 "How many update definitions does this function have?");
+
+    func_class.def("is_extern", &Func::is_extern, p::arg("self"),
+                   "Is this function an external stage? That is, was it defined "
+                   "using define_extern?");
+
+    func_class.def("define_extern", &func_define_extern0,
+                   p::args("self", "function_name", "params", "type", "dimensionality"),
+                   "Add an extern definition for this Func. This lets you define a "
+                   "Func that represents an external pipeline stage. You can, for "
+                   "example, use it to wrap a call to an extern library such as "
+                   "fftw.")
+            .def("define_extern", &func_define_extern1,
+                 p::args("self", "function_name", "params", "types", "dimensionality"));
 
     func_class.def("output_types", &Func::output_types, p::arg("self"),
-                   p::return_value_policy<p::copy_const_reference>(), // is this the right policy ?
+                   p::return_value_policy<p::copy_const_reference>(),
                    "Get the types of the outputs of this Func.");
 
     func_class.def("outputs", &Func::outputs, p::arg("self"),
