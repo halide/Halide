@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
     // (presumably referring to x86-64)
     uint8_t win_64_magic[] = {0x64, 0x86};
 
-    f = fopen("lesson_11_x86_64_windows.o", "rb");
+    f = fopen("lesson_11_x86_64_windows.obj", "rb");
     if (!f || fread(header, 32, 1, f) != 1) {
         printf("Object file not generated\n");
         return -1;
