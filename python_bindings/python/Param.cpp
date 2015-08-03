@@ -126,6 +126,9 @@ void defineImageParam()
     p::implicitly_convertible<ImageParam, h::Argument>();
     p::implicitly_convertible<ImageParam, h::Expr>();
 
+    // "Using a param as the argument to an external stage treats it as an Expr"
+    //p::implicitly_convertible<ImageParam, h::ExternFuncArgument>();
+
     return;
 }
 

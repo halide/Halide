@@ -319,16 +319,16 @@ std::string func_repr(const h::Func &func)
 
 void func_define_extern0(h::Func &that,const std::string &function_name,
                          const std::vector<h::ExternFuncArgument> &params,
-                         h::Type t,
+                         h::Type output_type,
                          int dimensionality) {
-    return that.define_extern(function_name, params, t, dimensionality);
+    return that.define_extern(function_name, params, output_type, dimensionality);
 }
 
 void func_define_extern1(h::Func &that,const std::string &function_name,
                          const std::vector<h::ExternFuncArgument> &params,
-                         const std::vector<h::Type> &types,
+                         const std::vector<h::Type> &output_types,
                          int dimensionality) {
-    return that.define_extern(function_name, params, types, dimensionality);
+    return that.define_extern(function_name, params, output_types, dimensionality);
 }
 
 
@@ -492,13 +492,13 @@ void defineFunc()
                    "using define_extern?");
 
     func_class.def("define_extern", &func_define_extern0,
-                   p::args("self", "function_name", "params", "type", "dimensionality"),
+                   p::args("self", "function_name", "params", "output_type", "dimensionality"),
                    "Add an extern definition for this Func. This lets you define a "
                    "Func that represents an external pipeline stage. You can, for "
                    "example, use it to wrap a call to an extern library such as "
                    "fftw.")
             .def("define_extern", &func_define_extern1,
-                 p::args("self", "function_name", "params", "types", "dimensionality"));
+                 p::args("self", "function_name", "params", "output_types", "dimensionality"));
 
     func_class.def("output_types", &Func::output_types, p::arg("self"),
                    p::return_value_policy<p::copy_const_reference>(),
