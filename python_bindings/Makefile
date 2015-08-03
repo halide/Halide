@@ -34,3 +34,7 @@ build/halide.so: $(PY_SRCS) $(PY_OBJS) $(NUMPY_SRCS) $(NUMPY_OBJS)
 
 clean:
 	rm -rf build
+
+test: build/halide.so
+	./run_apps.sh && ./run_tutorial.sh
+
