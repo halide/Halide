@@ -257,7 +257,7 @@ int main(int argc, char **argv) {
 
     // We want different fuzz tests every time, to increase coverage.
     // We also report the seed to enable reproducing failures.
-    int fuzz_seed = time(NULL);
+    int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(NULL);
     srand(fuzz_seed);
     std::cout << "Simplify fuzz test seed: " << fuzz_seed << '\n';
 

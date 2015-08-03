@@ -56,6 +56,7 @@ struct Target {
         CLDoubles,  ///< Enable double support on OpenCL targets
 
         OpenGL,  ///< Enable the OpenGL runtime.
+        OpenGLCompute, ///< Enable OpenGL Compute runtime.
 
         Renderscript, ///< Enable the Renderscript runtime.
 
@@ -140,9 +141,8 @@ struct Target {
     }
 
     /** Is OpenCL or CUDA enabled in this target? I.e. is
-     * Func::gpu_tile and similar going to work? We do not include
-     * OpenGL, because it is not capable of gpgpu, and is not
-     * scheduled via Func::gpu_tile. */
+     * Func::gpu_tile and similar going to work in a way that supports the full range of Halide types.
+     */
     bool has_gpu_feature() const {
         return has_feature(CUDA) || has_feature(OpenCL);
     }

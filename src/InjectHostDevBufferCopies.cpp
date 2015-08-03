@@ -21,6 +21,8 @@ DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
             return DeviceAPI::OpenCL;
         } else if (target.has_feature(Target::CUDA)) {
             return DeviceAPI::CUDA;
+        } else if (target.has_feature(Target::OpenGLCompute)) {
+            return DeviceAPI::OpenGLCompute;
         } else {
             user_error << "Schedule uses Default_GPU without a valid GPU (OpenCL or CUDA) specified in target.\n";
         }
@@ -161,6 +163,9 @@ class InjectBufferCopies : public IRMutator {
             break;
           case DeviceAPI::GLSL:
             interface_name = "halide_opengl_device_interface";
+            break;
+          case DeviceAPI::OpenGLCompute:
+            interface_name = "halide_openglcompute_device_interface";
             break;
           case DeviceAPI::Renderscript:
             interface_name = "halide_renderscript_device_interface";
