@@ -32,7 +32,9 @@ T clamp(T x, T min, T max) {
 
 template<typename T>
 void save_untransformed(Image<T> t, const std::string& filename) {
-    save_image(t, filename);
+    if (!save(t, filename)) {
+        _assert(false, "Unable to save image\n");
+    }
     printf("Saved %s\n", filename.c_str());
 }
 
@@ -45,7 +47,9 @@ void save_transformed(Image<T> t, const std::string& filename) {
             rearranged(x + t.width(), y, 0) = clamp(t(x, y, 1)*4.f + 0.5f, 0.0f, 1.0f);
         }
     }
-    save_image(rearranged, filename);
+    if (!save(rearranged, filename)) {
+        _assert(false, "Unable to save image\n");
+    }
     printf("Saved %s\n", filename.c_str());
 }
 
