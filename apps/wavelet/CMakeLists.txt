@@ -1,7 +1,7 @@
 #
-# NOTE: Unlike all other CMakeLists.txt in the apps/ folder, this 
+# NOTE: Unlike all other CMakeLists.txt in the apps/ folder, this
 # is deliberately intended to be standalone (not included from the toplevel)
-# in order to show the minimum scaffolding necessary to use ahead-of-time 
+# in order to show the minimum scaffolding necessary to use ahead-of-time
 # Generators in a simple app.
 #
 # To use:
@@ -44,6 +44,7 @@ foreach(GEN_SRC ${GENS})
                            GENERATOR_NAME "${GEN_NAME}"
                            GENERATED_FUNCTION "${GEN_NAME}"
                            GENERATOR_ARGS "target=host")
+
 endforeach()
 
 

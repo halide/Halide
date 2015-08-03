@@ -2,7 +2,7 @@
 halide_project(bilateral_grid "apps" bilateral_grid.cpp)
 
 set(bilateral_grid_h "${CMAKE_CURRENT_BINARY_DIR}/bilateral_grid.h")
-set(bilateral_grid_obj "${CMAKE_CURRENT_BINARY_DIR}/bilateral_grid.o")
+set(bilateral_grid_obj "${CMAKE_CURRENT_BINARY_DIR}/bilateral_grid${CMAKE_CXX_OUTPUT_EXTENSION}")
 
 # Final executable
 add_executable(filter filter.cpp ${bilateral_grid_h})
@@ -16,6 +16,10 @@ if (NOT WIN32)
 endif()
 set_target_properties(filter bilateral_grid PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                       "${CMAKE_CURRENT_BINARY_DIR}")
+
+if (NOT MSVC)
+  target_compile_options(filter PRIVATE "-std=c++11")
+endif()
 
 # FIXME: Cannot use halide_add_generator_dependency() because
 # bilateral_grid doesn't handle the commandline args passed.

@@ -56,6 +56,7 @@ struct Target {
         CLDoubles,  ///< Enable double support on OpenCL targets
 
         OpenGL,  ///< Enable the OpenGL runtime.
+        OpenGLCompute, ///< Enable OpenGL Compute runtime.
 
         Renderscript, ///< Enable the Renderscript runtime.
 
@@ -145,7 +146,8 @@ struct Target {
      * Func::gpu_tile and similar going to work? Currently includes
      * CUDA, OpenCL, and Metal. We do not include OpenGL, because it
      * is not capable of gpgpu, and is not scheduled via
-     * Func::gpu_tile. */
+     * Func::gpu_tile.
+     * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
       return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }

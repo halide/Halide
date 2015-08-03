@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
-#include "clock.h"
+#include <cstdio>
 #include <memory>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -77,14 +77,11 @@ void test_deinterleave() {
     // Warm up caches, etc.
     dst.realize(dst_image);
 
-    double t1 = current_time();
-
-    for (int i = 0; i < iterations; i++)
+    double t1 = benchmark(1, iterations, [&]() {
         dst.realize(dst_image);
+    });
 
-    double t2 = current_time();
-
-    printf("Interleaved to planar bandwidth %.3e byte/s.\n", (buffer_size / (t2 - t1)) * 1000 * iterations);
+    printf("Interleaved to planar bandwidth %.3e byte/s.\n", buffer_size / t1);
 
     for (int32_t x = 0; x < buffer_side_length; x++) {
         for (int32_t y = 0; y < buffer_side_length; y++) {
@@ -107,12 +104,9 @@ void test_deinterleave() {
 
     memset(dst_storage, 0, buffer_size);
 
-    double t3 = current_time();
-
-    for (int i = 0; i < iterations; i++)
+    double t2 = benchmark(1, iterations, [&]() {
         dst.realize(dst_image);
-
-    double t4 = current_time();
+    });
 
     for (int32_t x = 0; x < buffer_side_length; x++) {
         for (int32_t y = 0; y < buffer_side_length; y++) {
@@ -122,7 +116,7 @@ void test_deinterleave() {
         }
     }
 
-    printf("Interleaved to semi-planar bandwidth %.3e byte/s.\n", (buffer_size / (t4 - t3)) * 1000 * iterations);
+    printf("Interleaved to semi-planar bandwidth %.3e byte/s.\n", buffer_size / t2);
 
     delete[] src_storage;
     delete[] dst_storage;
@@ -210,14 +204,11 @@ void test_interleave(bool fast) {
     // Warm up caches, etc.
     dst.realize(dst_image);
 
-    double t1 = current_time();
-
-    for (int i = 0; i < iterations; i++)
+    double t = benchmark(1, iterations, [&]() {
         dst.realize(dst_image);
+    });
 
-    double t2 = current_time();
-
-    printf("Planar to interleaved bandwidth %.3e byte/s.\n", (buffer_size / (t2 - t1)) * 1000 * iterations);
+    printf("Planar to interleaved bandwidth %.3e byte/s.\n", buffer_size / t);
 
     for (int32_t x = 0; x < buffer_side_length; x++) {
         for (int32_t y = 0; y < buffer_side_length; y++) {

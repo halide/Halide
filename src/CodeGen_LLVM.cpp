@@ -256,6 +256,7 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     if (target.features_any_of({Target::CUDA,
                                 Target::OpenCL,
                                 Target::OpenGL,
+                                Target::OpenGLCompute,
                                 Target::Renderscript,
                                 Target::Metal})) {
 #ifdef WITH_X86

@@ -38,11 +38,15 @@ int main(int argc, char **argv) {
 
         // Blur it horizontally:
         Func blur_x("blur_x");
-        blur_x(x, y, c) = (input_16(x-1, y, c) + 2*input_16(x, y, c) + input_16(x+1, y, c))/4;
+        blur_x(x, y, c) = (input_16(x-1, y, c) +
+                           2 * input_16(x, y, c) +
+                           input_16(x+1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
-        blur_y(x, y, c) = (blur_x(x, y-1, c) + 2*blur_x(x, y, c) + blur_x(x, y+1, c))/4;
+        blur_y(x, y, c) = (blur_x(x, y-1, c) +
+                           2 * blur_x(x, y, c) +
+                           blur_x(x, y+1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");
@@ -133,11 +137,15 @@ int main(int argc, char **argv) {
 
         // Blur it horizontally:
         Func blur_x("blur_x");
-        blur_x(x, y, c) = (input_16(x-1, y, c) + 2*input_16(x, y, c) + input_16(x+1, y, c))/4;
+        blur_x(x, y, c) = (input_16(x-1, y, c) +
+                           2 * input_16(x, y, c) +
+                           input_16(x+1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
-        blur_y(x, y, c) = (blur_x(x, y-1, c) + 2*blur_x(x, y, c) + blur_x(x, y+1, c))/4;
+        blur_y(x, y, c) = (blur_x(x, y-1, c) +
+                           2 * blur_x(x, y, c) +
+                           blur_x(x, y+1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");

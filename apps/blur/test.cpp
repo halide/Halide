@@ -1,36 +1,32 @@
 #include <emmintrin.h>
-#include <math.h>
-#include <sys/time.h>
-#include <stdint.h>
-#include <stdio.h>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
 
-#include "static_image.h"
+#include <static_image.h>
+#include <benchmark.h>
 
 //#define cimg_display 0
 //#include "CImg.h"
 //using namespace cimg_library;
 
-timeval t1, t2;
-#define begin_timing gettimeofday(&t1, NULL); for (int i = 0; i < 10; i++) {
-#define end_timing } gettimeofday(&t2, NULL);
-
 // typedef CImg<uint16_t> Image;
+
+double t;
 
 Image<uint16_t> blur(Image<uint16_t> in) {
     Image<uint16_t> tmp(in.width()-8, in.height());
     Image<uint16_t> out(in.width()-8, in.height()-2);
 
-    begin_timing;
+    t = benchmark(10, 1, [&]() {
+        for (int y = 0; y < tmp.height(); y++)
+            for (int x = 0; x < tmp.width(); x++)
+                tmp(x, y) = (in(x, y) + in(x+1, y) + in(x+2, y))/3;
 
-    for (int y = 0; y < tmp.height(); y++)
-        for (int x = 0; x < tmp.width(); x++)
-            tmp(x, y) = (in(x, y) + in(x+1, y) + in(x+2, y))/3;
-
-    for (int y = 0; y < out.height(); y++)
-        for (int x = 0; x < out.width(); x++)
-            out(x, y) = (tmp(x, y) + tmp(x, y+1) + tmp(x, y+2))/3;
-
-    end_timing;
+        for (int y = 0; y < out.height(); y++)
+            for (int x = 0; x < out.width(); x++)
+                out(x, y) = (tmp(x, y) + tmp(x, y+1) + tmp(x, y+2))/3;
+    });
 
     return out;
 }
@@ -38,41 +34,43 @@ Image<uint16_t> blur(Image<uint16_t> in) {
 
 Image<uint16_t> blur_fast(Image<uint16_t> in) {
     Image<uint16_t> out(in.width()-8, in.height()-2);
-    begin_timing;
-    __m128i one_third = _mm_set1_epi16(21846);
+
+    t = benchmark(10, 1, [&]() {
+        __m128i one_third = _mm_set1_epi16(21846);
 #pragma omp parallel for
-    for (int yTile = 0; yTile < out.height(); yTile += 32) {
-        __m128i a, b, c, sum, avg;
-        __m128i tmp[(128/8) * (32 + 2)];
-        for (int xTile = 0; xTile < out.width(); xTile += 128) {
-            __m128i *tmpPtr = tmp;
-            for (int y = 0; y < 32+2; y++) {
-                const uint16_t *inPtr = &(in(xTile, yTile+y));
-                for (int x = 0; x < 128; x += 8) {
-                    a = _mm_load_si128((__m128i*)(inPtr));
-                    b = _mm_loadu_si128((__m128i*)(inPtr+1));
-                    c = _mm_loadu_si128((__m128i*)(inPtr+2));
-                    sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
-                    avg = _mm_mulhi_epi16(sum, one_third);
-                    _mm_store_si128(tmpPtr++, avg);
-                    inPtr+=8;
+        for (int yTile = 0; yTile < out.height(); yTile += 32) {
+            __m128i a, b, c, sum, avg;
+            __m128i tmp[(128/8) * (32 + 2)];
+            for (int xTile = 0; xTile < out.width(); xTile += 128) {
+                __m128i *tmpPtr = tmp;
+                for (int y = 0; y < 32+2; y++) {
+                    const uint16_t *inPtr = &(in(xTile, yTile+y));
+                    for (int x = 0; x < 128; x += 8) {
+                        a = _mm_load_si128((__m128i*)(inPtr));
+                        b = _mm_loadu_si128((__m128i*)(inPtr+1));
+                        c = _mm_loadu_si128((__m128i*)(inPtr+2));
+                        sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
+                        avg = _mm_mulhi_epi16(sum, one_third);
+                        _mm_store_si128(tmpPtr++, avg);
+                        inPtr+=8;
+                    }
                 }
-            }
-            tmpPtr = tmp;
-            for (int y = 0; y < 32; y++) {
-                __m128i *outPtr = (__m128i *)(&(out(xTile, yTile+y)));
-                for (int x = 0; x < 128; x += 8) {
-                    a = _mm_load_si128(tmpPtr+(2*128)/8);
-                    b = _mm_load_si128(tmpPtr+128/8);
-                    c = _mm_load_si128(tmpPtr++);
-                    sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
-                    avg = _mm_mulhi_epi16(sum, one_third);
-                    _mm_store_si128(outPtr++, avg);
+                tmpPtr = tmp;
+                for (int y = 0; y < 32; y++) {
+                    __m128i *outPtr = (__m128i *)(&(out(xTile, yTile+y)));
+                    for (int x = 0; x < 128; x += 8) {
+                        a = _mm_load_si128(tmpPtr+(2*128)/8);
+                        b = _mm_load_si128(tmpPtr+128/8);
+                        c = _mm_load_si128(tmpPtr++);
+                        sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
+                        avg = _mm_mulhi_epi16(sum, one_third);
+                        _mm_store_si128(outPtr++, avg);
+                    }
                 }
             }
         }
-    }
-    end_timing;
+    });
+
     return out;
 }
 
@@ -120,55 +118,52 @@ Image<uint16_t> blur_fast(Image<uint16_t> in) {
 Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
     Image<uint16_t> out(in.width()-8, in.height()-2);
 
-    begin_timing;
-
-    // multiplying by 21846 then taking the top 16 bits is equivalent to
-    // dividing by three
-    __m128i one_third = _mm_set1_epi16(21846);
-
     int vw = in.width()/8;
     if (vw > 1024) {
         printf("Image too large for constant-sized stack allocation\n");
         return out;
     }
 
+    t = benchmark(10, 1, [&]() {
+        // multiplying by 21846 then taking the top 16 bits is equivalent to
+        // dividing by three
+        __m128i one_third = _mm_set1_epi16(21846);
+
 #pragma omp parallel for
-    for (int yTile = 0; yTile < in.height(); yTile += 128) {
-
-
-        __m128i tmp[1024*4]; // four scanlines
-        for (int y = -2; y < 128; y++) {
-            // to produce this scanline of the output
-            __m128i *outPtr = (__m128i *)(&(out(0, yTile + y)));
-            // we use this scanline of the input
-            const uint16_t *inPtr = &(in(0, yTile + y + 2));
-            // and these scanlines of the intermediate result
-            // We start y at negative 2 to fill the tmp buffer
-            __m128i *tmpPtr0 = tmp + ((y+4) & 3) * vw;
-            __m128i *tmpPtr1 = tmp + ((y+3) & 3) * vw;
-            __m128i *tmpPtr2 = tmp + ((y+2) & 3) * vw;
-            for (int x = 0; x < vw; x++) {
-                // blur horizontally to produce next scanline of tmp
-                __m128i val = _mm_load_si128((__m128i *)(inPtr));
-                val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
-                val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+2)));
-                val = _mm_mulhi_epi16(val, one_third);
-                _mm_store_si128(tmpPtr0++, val);
-
-                // blur vertically using previous scanlines of tmp to produce output
-                if (y >= 0) {
-                    val = _mm_add_epi16(val, _mm_load_si128(tmpPtr1++));
-                    val = _mm_add_epi16(val, _mm_load_si128(tmpPtr2++));
+        for (int yTile = 0; yTile < in.height(); yTile += 128) {
+            __m128i tmp[1024*4]; // four scanlines
+            for (int y = -2; y < 128; y++) {
+                // to produce this scanline of the output
+                __m128i *outPtr = (__m128i *)(&(out(0, yTile + y)));
+                // we use this scanline of the input
+                const uint16_t *inPtr = &(in(0, yTile + y + 2));
+                // and these scanlines of the intermediate result
+                // We start y at negative 2 to fill the tmp buffer
+                __m128i *tmpPtr0 = tmp + ((y+4) & 3) * vw;
+                __m128i *tmpPtr1 = tmp + ((y+3) & 3) * vw;
+                __m128i *tmpPtr2 = tmp + ((y+2) & 3) * vw;
+                for (int x = 0; x < vw; x++) {
+                    // blur horizontally to produce next scanline of tmp
+                    __m128i val = _mm_load_si128((__m128i *)(inPtr));
+                    val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
+                    val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+2)));
                     val = _mm_mulhi_epi16(val, one_third);
-                    _mm_store_si128(outPtr++, val);
-                }
+                    _mm_store_si128(tmpPtr0++, val);
 
-                inPtr += 8;
+                    // blur vertically using previous scanlines of tmp to produce output
+                    if (y >= 0) {
+                        val = _mm_add_epi16(val, _mm_load_si128(tmpPtr1++));
+                        val = _mm_add_epi16(val, _mm_load_si128(tmpPtr2++));
+                        val = _mm_mulhi_epi16(val, one_third);
+                        _mm_store_si128(outPtr++, val);
+                    }
+
+                    inPtr += 8;
+                }
             }
         }
-    }
 
-    end_timing;
+    });
 
     return out;
 }
@@ -183,13 +178,11 @@ Image<uint16_t> blur_halide(Image<uint16_t> in) {
     // Call it once to initialize the halide runtime stuff
     halide_blur(in, out);
 
-    begin_timing;
-
-    // Compute the same region of the output as blur_fast (i.e., we're
-    // still being sloppy with boundary conditions)
-    halide_blur(in, out);
-
-    end_timing;
+    t = benchmark(10, 1, [&]() {
+        // Compute the same region of the output as blur_fast (i.e., we're
+        // still being sloppy with boundary conditions)
+        halide_blur(in, out);
+    });
 
     return out;
 }
@@ -205,16 +198,16 @@ int main(int argc, char **argv) {
     }
 
     Image<uint16_t> blurry = blur(input);
-    float slow_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
+    double slow_time = t;
 
     Image<uint16_t> speedy = blur_fast(input);
-    float fast_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
+    double fast_time = t;
 
     //Image<uint16_t> speedy2 = blur_fast2(input);
-    //float fast_time2 = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
+    //float fast_time2 = t;
 
     Image<uint16_t> halide = blur_halide(input);
-    float halide_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
+    double halide_time = t;
 
     // fast_time2 is always slower than fast_time, so skip printing it
     printf("times: %f %f %f\n", slow_time, fast_time, halide_time);

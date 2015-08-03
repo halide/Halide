@@ -244,6 +244,7 @@ SOURCE_FILES = \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
+  CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_PNaCl.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PTX_Dev.cpp \
@@ -308,6 +309,7 @@ SOURCE_FILES = \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
+  SelectGPUAPI.cpp \
   Simplify.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -359,6 +361,7 @@ HEADER_FILES = \
   CodeGen_OpenCL_Dev.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenGL_Dev.h \
+  CodeGen_OpenGLCompute_Dev.h \
   CodeGen_PNaCl.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
@@ -429,6 +432,7 @@ HEADER_FILES = \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
+  SelectGPUAPI.h \
   Simplify.h \
   SkipStages.h \
   SlidingWindow.h \
@@ -478,6 +482,7 @@ RUNTIME_CPP_COMPONENTS = \
   nacl_host_cpu_count \
   opencl \
   opengl \
+  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
@@ -519,9 +524,19 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_sse41
 
-RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeCuda.h $(INCLUDE_DIR)/HalideRuntimeOpenCL.h $(INCLUDE_DIR)/HalideRuntimeOpenGL.h $(INCLUDE_DIR)/HalideRuntimeRenderscript.h $(INCLUDE_DIR)/HalideRuntimeMetal.h
+RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
+                            $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
+                            $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
+                            $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
+                            $(INCLUDE_DIR)/HalideRuntimeRenderscript.h
 
-INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) \
+                  $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
+                  $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
+                  $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
 .PHONY: all
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
@@ -666,7 +681,7 @@ test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=test_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
 test_warnings: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
-test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
+test_tutorials: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
 test_renderscript: $(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=renderscript_%)
@@ -709,7 +724,7 @@ $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.so
 $(BIN_DIR)/test_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
-$(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/test/performance/clock.h
+$(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
@@ -945,6 +960,10 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.
 	make -C $(ROOT_DIR)/apps/modules out.png  HALIDE_PATH=$(CURDIR)
 	cd $(ROOT_DIR)/apps/HelloMatlab; HALIDE_PATH=$(CURDIR) ./run_blur.sh
 
+.PHONY: test_python
+test_python:
+	make -C python_bindings test
+
 # It's just for compiling the runtime, so Clang <3.5 *might* work,
 # but best to peg it to the minimum llvm version.
 ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))
@@ -1038,4 +1057,4 @@ $(BIN_DIR)/HalideProf: $(ROOT_DIR)/util/HalideProf.cpp
 	$(CXX) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -o $@
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp
-	$(CXX) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -o $@
+	$(CXX) $(OPTIMIZE) -std=c++11 $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -o $@

@@ -1,12 +1,12 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/time.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cassert>
 
 #include "bilateral_grid.h"
 
-#include <static_image.h>
-#include <image_io.h>
+#include "static_image.h"
+#include "image_io.h"
+#include "benchmark.h"
 
 int main(int argc, char **argv) {
 
@@ -24,21 +24,10 @@ int main(int argc, char **argv) {
     bilateral_grid(atof(argv[3]), input, output);
 
     // Timing code
-    timeval t1, t2;
-    double min_t = 1e10f;
-    for (int j = 0; j < timing_iterations; j++) {
-        gettimeofday(&t1, NULL);
-        for (int i = 0; i < 10; i++) {
-            bilateral_grid(atof(argv[3]), input, output);
-        }
-        gettimeofday(&t2, NULL);
-        double t = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
-        if (t < min_t) {
-            min_t = t;
-        }
-    }
-
-    printf("Time: %fms\n", min_t/10);
+    double min_t = benchmark(timing_iterations, 10, [&]() {
+        bilateral_grid(atof(argv[3]), input, output);
+    });
+    printf("Time: %gms\n", min_t * 1e3);
 
     save(output, argv[2]);
 
