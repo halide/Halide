@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include "png.h"
 
@@ -331,28 +332,27 @@ ImageType load_ppm(const std::string &filename) {
 
     // convert the data to ImageType::ElemType
     if (bit_depth == 8) {
-        uint8_t *data = new uint8_t[width*height*3];
-        Internal::_assert(fread((void *) data,
+        std::vector<uint8_t> data(width*height*3);
+        Internal::_assert(fread((void *) data.data(),
                       sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3),
                 "Could not read PPM 8-bit data\n");
 
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im.data();
         for (int y = 0; y < im.height(); y++) {
-            uint8_t *row = (uint8_t *)(&data[(y*width)*3]);
+            uint8_t *row = &data[(y*width)*3];
             for (int x = 0; x < im.width(); x++) {
                 Internal::convert(*row++, im_data[(0*height+y)*width+x]);
                 Internal::convert(*row++, im_data[(1*height+y)*width+x]);
                 Internal::convert(*row++, im_data[(2*height+y)*width+x]);
             }
         }
-        delete[] data;
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
-        uint16_t *data = new uint16_t[width*height*3];
-        Internal::_assert(fread((void *) data, sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n");
+        std::vector<uint16_t> data(width*height*3);
+        Internal::_assert(fread((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n");
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im.data();
         for (int y = 0; y < im.height(); y++) {
-            uint16_t *row = (uint16_t *) (&data[(y*width)*3]);
+            uint16_t *row = &data[(y*width)*3];
             for (int x = 0; x < im.width(); x++) {
                 uint16_t value;
                 value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(0*height+y)*width+x]);
@@ -360,7 +360,6 @@ ImageType load_ppm(const std::string &filename) {
                 value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(2*height+y)*width+x]);
             }
         }
-        delete[] data;
     }
     im(0,0,0) = im(0,0,0);      /* Mark dirty inside read/write functions. */
 
