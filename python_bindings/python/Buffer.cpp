@@ -33,7 +33,7 @@ std::string buffer_t_repr(const buffer_t &that)
     std::string repr =
             boost::str(format
                        % reinterpret_cast<size_t>(that.host) % that.host_dirty
-                       % reinterpret_cast<size_t>(that.dev) % that.dev_dirty
+                       % that.dev % that.dev_dirty
                        % that.elem_size
                        % that.extent[0] % that.extent[1] % that.extent[2] % that.extent[3]
             % that.min[0] % that.min[1] % that.min[2] % that.min[3]
