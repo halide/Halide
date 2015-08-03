@@ -88,15 +88,35 @@ inline void swap_endian_16(bool little_endian, uint16_t &value) {
 }
 
 struct FileOpener {
-    FileOpener(const char* filename, const char* mode) : f(nullptr) {
-        f = fopen(filename, mode);
+    FileOpener(const char* filename, const char* mode) : f(fopen(filename, mode)) {
+        // nothing
     }
     ~FileOpener() {
         if (f != nullptr) {
             fclose(f);
         }
     }
-    FILE *f;
+    FILE * const f;
+};
+
+struct PngRowPointers {
+    PngRowPointers(int height, int rowbytes) : p(new png_bytep[height]), height(height) {
+        if (p != nullptr) {
+            for (int y = 0; y < height; y++) {
+                p[y] = new png_byte[rowbytes];
+            }
+        }
+    }
+    ~PngRowPointers() {
+        if (p) {
+            for (int y = 0; y < height; y++) {
+                delete[] p[y];
+            }
+            delete[] p;
+        }
+    }
+    png_bytep* const p;
+    int const height;
 };
 
 }  // namespace Internal
@@ -107,7 +127,6 @@ ImageType load_png(const std::string &filename) {
     png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
-    png_bytep *row_pointers;
 
     /* open file and test for it being a png */
     Internal::FileOpener f(filename.c_str(), "rb");
@@ -153,12 +172,8 @@ ImageType load_png(const std::string &filename) {
     // read the file
     Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "Error during read_image\n");
 
-    row_pointers = new png_bytep[im.height()];
-    for (int y = 0; y < im.height(); y++) {
-        row_pointers[y] = new png_byte[png_get_rowbytes(png_ptr, info_ptr)];
-    }
-
-    png_read_image(png_ptr, row_pointers);
+    Internal::PngRowPointers row_pointers(im.height(), png_get_rowbytes(png_ptr, info_ptr));
+    png_read_image(png_ptr, row_pointers.p);
 
     Internal::_assert((bit_depth == 8) || (bit_depth == 16), "Can only handle 8-bit or 16-bit pngs\n");
 
@@ -168,7 +183,7 @@ ImageType load_png(const std::string &filename) {
     typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im.data();
     if (bit_depth == 8) {
         for (int y = 0; y < im.height(); y++) {
-            uint8_t *srcPtr = (uint8_t *)(row_pointers[y]);
+            uint8_t *srcPtr = (uint8_t *)(row_pointers.p[y]);
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < im.channels(); c++) {
                     Internal::convert(*srcPtr++, ptr[c*c_stride]);
@@ -178,7 +193,7 @@ ImageType load_png(const std::string &filename) {
         }
     } else if (bit_depth == 16) {
         for (int y = 0; y < im.height(); y++) {
-            uint8_t *srcPtr = (uint8_t *)(row_pointers[y]);
+            uint8_t *srcPtr = (uint8_t *)(row_pointers.p[y]);
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < im.channels(); c++) {
                     uint16_t hi = (*srcPtr++) << 8;
@@ -189,12 +204,6 @@ ImageType load_png(const std::string &filename) {
             }
         }
     }
-
-    // clean up
-    for (int y = 0; y < im.height(); y++) {
-        delete[] row_pointers[y];
-    }
-    delete[] row_pointers;
 
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 
@@ -207,7 +216,6 @@ template<typename ImageType>
 void save_png(ImageType &im, const std::string &filename) {
     png_structp png_ptr;
     png_infop info_ptr;
-    png_bytep *row_pointers;
     png_byte color_type;
 
     im.copy_to_host();
@@ -249,7 +257,7 @@ void save_png(ImageType &im, const std::string &filename) {
 
     png_write_info(png_ptr, info_ptr);
 
-    row_pointers = new png_bytep[im.height()];
+    Internal::PngRowPointers row_pointers(im.height(), png_get_rowbytes(png_ptr, info_ptr));
 
     // im.copyToHost(); // in case the image is on the gpu
 
@@ -257,8 +265,7 @@ void save_png(ImageType &im, const std::string &filename) {
     typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
 
     for (int y = 0; y < im.height(); y++) {
-        row_pointers[y] = new png_byte[png_get_rowbytes(png_ptr, info_ptr)];
-        uint8_t *dstPtr = (uint8_t *)(row_pointers[y]);
+        uint8_t *dstPtr = (uint8_t *)(row_pointers.p[y]);
         if (bit_depth == 16) {
             // convert to uint16_t
             for (int x = 0; x < im.width(); x++) {
@@ -288,18 +295,12 @@ void save_png(ImageType &im, const std::string &filename) {
     // write data
     Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing bytes");
 
-    png_write_image(png_ptr, row_pointers);
+    png_write_image(png_ptr, row_pointers.p);
 
     // finish write
     Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during end of write");
 
     png_write_end(png_ptr, NULL);
-
-    // clean up
-    for (int y = 0; y < im.height(); y++) {
-        delete[] row_pointers[y];
-    }
-    delete[] row_pointers;
 
     png_destroy_write_struct(&png_ptr, &info_ptr);
 }
