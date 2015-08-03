@@ -4,7 +4,10 @@
 #PYTHON=echo
 PYTHON=python3
 
-BUILDPATH="./build" # adjust as needed
+# Operate in the build directory, so that output files don't pollute the top-level directory.
+cd build
+
+BUILDPATH="." # adjust as needed
 export PYTHONPATH="$BUILDPATH:$PYTHONPATH"
 echo "PYTHONPATH ==" $PYTHONPATH
 
@@ -20,7 +23,7 @@ Sb=" <<<<<<<< "
 for i in apps/*.py
 do
   echo $S $PYTHON $i $S
-  $PYTHON $i
+  $PYTHON ../$i
   if [[ "$?" -ne "0" ]]; then
         echo "$Sa App failed $Sb"
 	let FAILED=1

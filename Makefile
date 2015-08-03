@@ -935,6 +935,10 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.
 	make -C $(ROOT_DIR)/apps/modules out.png  HALIDE_PATH=$(CURDIR)
 	cd $(ROOT_DIR)/apps/HelloMatlab; HALIDE_PATH=$(CURDIR) ./run_blur.sh
 
+.PHONY: test_python
+test_python:
+	make -C python_bindings test
+
 # It's just for compiling the runtime, so Clang <3.5 *might* work,
 # but best to peg it to the minimum llvm version.
 ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))

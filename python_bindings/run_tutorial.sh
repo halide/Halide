@@ -4,7 +4,10 @@
 #PYTHON=echo
 PYTHON=python3
 
-BUILDPATH="./build" # adjust as needed
+# Operate in the build directory, so that output files don't pollute the top-level directory.
+cd build
+
+BUILDPATH="." # Relative to the build dir. Adjust as needed.
 export PYTHONPATH="$BUILDPATH:$PYTHONPATH"
 echo "PYTHONPATH ==" $PYTHONPATH
 
@@ -29,7 +32,7 @@ tutorial/lesson_07_multi_stage_pipelines.py
 tutorial/lesson_08_scheduling_2.py
 tutorial/lesson_09_update_definitions.py
 tutorial/lesson_10_aot_compilation_generate.py
-#tutorial/lesson_10_aot_compilation_run.py 
+#tutorial/lesson_10_aot_compilation_run.py
 tutorial/lesson_11_cross_compilation.py
 tutorial/lesson_12_using_the_gpu.py
 tutorial/lesson_13_tuples.py
@@ -40,7 +43,7 @@ tutorial/lesson_14_types.py
 for i in ${TUTORIALS[*]}
 do
   echo $S $PYTHON $i $S
-  $PYTHON $i
+  $PYTHON ../$i
   if [[ "$?" -ne "0" ]]; then
         echo "$Sa Lesson failed $Sb"
 	let FAILED=1
