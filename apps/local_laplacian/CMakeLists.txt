@@ -2,7 +2,7 @@
 halide_project(local_laplacian_gen "apps" local_laplacian_gen.cpp)
 
 set(ll_header "${CMAKE_CURRENT_BINARY_DIR}/local_laplacian.h")
-set(ll_obj "${CMAKE_CURRENT_BINARY_DIR}/local_laplacian.o")
+set(ll_obj "${CMAKE_CURRENT_BINARY_DIR}/local_laplacian${CMAKE_CXX_OUTPUT_EXTENSION}")
 
 # Final executable
 add_executable(ll_process process.cpp ${ll_header})
@@ -17,7 +17,9 @@ endif()
 set_target_properties(ll_process local_laplacian_gen
                       PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                       "${CMAKE_CURRENT_BINARY_DIR}")
-
+if (NOT MSVC)
+  target_compile_options(ll_process PRIVATE "-std=c++11")
+endif()
 
 add_custom_command(OUTPUT "${ll_header}" "${ll_obj}"
                    COMMAND local_laplacian_gen

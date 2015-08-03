@@ -1,8 +1,13 @@
 #include "Halide.h"
-#include <stdio.h>
-#include "clock.h"
+#include <cstdio>
+#include <chrono>
 
 using namespace Halide;
+
+double current_time() {
+    auto now = std::chrono::system_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::microseconds>(now).count() / 1e3;
+}
 
 int main(int argc, char **argv) {
     ImageParam src(UInt(8), 1);

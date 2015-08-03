@@ -1,16 +1,16 @@
 #include <arpa/inet.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/time.h>
 #include <unistd.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cassert>
 
 extern "C" {
   #include "curved.h"
 }
 #include <static_image.h>
 #include <image_io.h>
+#include <benchmark.h>
 
 #include "fcam/Demosaic.h"
 #include "fcam/Demosaic_ARM.h"
@@ -48,42 +48,25 @@ int main(int argc, char **argv) {
     float contrast = atof(argv[4]);
     int timing_iterations = atoi(argv[5]);
 
-    timeval t1, t2;
-    unsigned int bestT = 0xffffffff;
-    for (int i = 0; i < timing_iterations; i++) {
-        gettimeofday(&t1, NULL);
+    double best;
+
+    best = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast,
                input, matrix_3200, matrix_7000, output);
-        gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        if (t < bestT) bestT = t;
-        if (i % 5 == 0) sleep(1);
-    }
-    fprintf(stderr, "Halide:\t%u\n", bestT);
+    });
+    fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
     save(output, argv[6]);
 
-    bestT = 0xffffffff;
-    for (int i = 0; i < timing_iterations; i++) {
-        gettimeofday(&t1, NULL);
+    best = benchmark(timing_iterations, 1, [&]() {
         FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
-        gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        if (t < bestT) bestT = t;
-        if (i % 5 == 0) sleep(1);
-    }
-    fprintf(stderr, "C++:\t%u\n", bestT);
+    });
+    fprintf(stderr, "C++:\t%gus\n", best * 1e6);
     save(output, "fcam_c.png");
 
-    bestT = 0xffffffff;
-    for (int i = 0; i < timing_iterations; i++) {
-        gettimeofday(&t1, NULL);
+    best = benchmark(timing_iterations, 1, [&]() {;
         FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
-        gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        if (t < bestT) bestT = t;
-        if (i % 5 == 0) sleep(1);
-    }
-    fprintf(stderr, "ASM:\t%u\n", bestT);
+    });
+    fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
     save(output, "fcam_arm.png");
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)

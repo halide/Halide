@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
-#include "clock.h"
+#include <cstdio>
 #include <algorithm>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -40,36 +40,12 @@ int main(int argc, char **argv) {
     const int trials = 5;
     const int iterations = 5;
 
-    double t1 = 1e10;
-    double t2 = 1e10;
-    double t3 = 1e10;
-
     // All profiling runs are done into the same buffer, to avoid
     // cache weirdness.
     Image<float> timing_scratch(400, 400);
-    for (int i = 0; i < trials; i++) {
-        double start = current_time();
-        for (int j = 0; j < iterations; j++) {
-            f.realize(timing_scratch);
-        }
-        double end = current_time();
-        t1 = std::min(end - start, t1);
-
-        start = current_time();
-        for (int j = 0; j < iterations; j++) {
-            g.realize(timing_scratch);
-        }
-        end = current_time();
-        t2 = std::min(end - start, t2);
-
-        start = current_time();
-        for (int j = 0; j < iterations; j++) {
-            h.realize(timing_scratch);
-        }
-        end = current_time();
-        t3 = std::min(end - start, t3);
-    }
-
+    double t1 = 1e3 * benchmark(trials, iterations, [&]() { f.realize(timing_scratch); });
+    double t2 = 1e3 * benchmark(trials, iterations, [&]() { g.realize(timing_scratch); });
+    double t3 = 1e3 * benchmark(trials, iterations, [&]() { h.realize(timing_scratch); });
 
     RDom r(correct_result);
     Func fast_error, faster_error;
@@ -81,8 +57,8 @@ int main(int argc, char **argv) {
     Image<double> fast_err = fast_error.realize();
     Image<double> faster_err = faster_error.realize();
 
-    int timing_N = timing_scratch.width() * timing_scratch.height() * iterations;
-    int correctness_N = fast_result.width() * fast_result.height() * iterations;
+    int timing_N = timing_scratch.width() * timing_scratch.height();
+    int correctness_N = fast_result.width() * fast_result.height();
     fast_err(0) = sqrt(fast_err(0)/correctness_N);
     faster_err(0) = sqrt(faster_err(0)/correctness_N);
 

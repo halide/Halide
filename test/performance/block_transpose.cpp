@@ -1,6 +1,6 @@
 #include "Halide.h"
 #include <stdio.h>
-#include "clock.h"
+#include "benchmark.h"
 #include <memory>
 
 using namespace Halide;
@@ -53,13 +53,11 @@ void test_transpose(int mode) {
 
     output.realize(result);
 
-    double t1 = current_time();
-    for (int i = 0; i < 10; i++) {
+    double t = benchmark(1, 10, [&]() {
         output.realize(result);
-    }
-    double t2 = current_time();
+    });
 
-    std::cout << algorithm << " bandwidth " << ((1024*1024 / (t2 - t1)) * 1000 * 10) << " byte/s.\n";
+    std::cout << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
 }
 
 int main(int argc, char **argv) {

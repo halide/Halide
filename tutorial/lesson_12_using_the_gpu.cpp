@@ -238,7 +238,8 @@ public:
     }
 
     void test_correctness(Image<uint8_t> reference_output) {
-        Image<uint8_t> output = curved.realize(input.width(), input.height(), input.channels());
+        Image<uint8_t> output =
+            curved.realize(input.width(), input.height(), input.channels());
 
         // Check against the reference output.
         for (int c = 0; c < input.channels(); c++) {
@@ -281,7 +282,8 @@ int main(int argc, char **argv) {
         p2.test_performance();
         p2.test_correctness(reference_output);
     } else {
-        printf("Not testing performance on GPU, because I can't find the opencl library\n");
+        printf("Not testing performance on GPU, "
+               "because I can't find the opencl library\n");
     }
 
     return 0;

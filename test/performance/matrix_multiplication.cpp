@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
-#include "clock.h"
+#include <cstdio>
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -67,14 +67,9 @@ int main(int argc, char **argv) {
 
     matrix_mul.realize(output);
 
-    double t = 0;
-    for (int i = 0; i < iterations; i++) {
-        double t3 = current_time();
+    double t = benchmark(1, iterations, [&]() {
         matrix_mul.realize(output);
-        double t4 = current_time();
-        t += t4 - t3;
-    }
-
+    });
 
     // check results
     Image<float> output_ref(matrix_size, matrix_size);
@@ -106,9 +101,9 @@ int main(int argc, char **argv) {
     }
     */
 
-    float flops = 2.0f * matrix_size * matrix_size * matrix_size;
+    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e6;
 
-    printf("Halide: %fms, %f GFLOP/s\n\n", t, (flops / t) * iterations / 1000000);
+    printf("Halide: %fms, %f GFLOP/s\n\n", t * 1e3, (gflops / t));
 
     printf("Success!\n");
     return 0;

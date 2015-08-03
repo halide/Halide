@@ -1,7 +1,7 @@
 # Generator
 halide_project(halide_blur "apps" halide_blur.cpp)
 set(halide_blur_h "${CMAKE_CURRENT_BINARY_DIR}/halide_blur.h")
-set(halide_blur_obj "${CMAKE_CURRENT_BINARY_DIR}/halide_blur.o")
+set(halide_blur_obj "${CMAKE_CURRENT_BINARY_DIR}/halide_blur${CMAKE_CXX_OUTPUT_EXTENSION}")
 
 # Final executable
 # FIXME: Need to mimic the OpenMP, -O2 and -msse2 flags in the Makefile
@@ -13,6 +13,10 @@ if (NOT WIN32)
 endif()
 set_target_properties(blur_test halide_blur PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                       "${CMAKE_CURRENT_BINARY_DIR}")
+
+if (NOT MSVC)
+  target_compile_options(blur_test PRIVATE "-std=c++11")
+endif()
 
 # FIXME: Cannot use halide_add_generator_dependency() because
 # halide_blur doesn't handle the commandline args passed.

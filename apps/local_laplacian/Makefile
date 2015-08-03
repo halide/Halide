@@ -23,8 +23,8 @@ local_laplacian_viz.o: local_laplacian_gen
 	HL_TRACE=3 ./local_laplacian_gen 6
 	mv local_laplacian.o local_laplacian_viz.o
 
-local_laplacian.avi: $(HALIDE_PATH)/bin/HalideTraceViz process_viz
+local_laplacian.mp4: $(HALIDE_PATH)/bin/HalideTraceViz process_viz
 	bash viz.sh
 
 clean:
-	rm -f process local_laplacian.o process_viz local_laplacian_viz.o local_laplacian_gen local_laplacian.avi
+	rm -f process local_laplacian.o process_viz local_laplacian_viz.o local_laplacian_gen local_laplacian.mp4

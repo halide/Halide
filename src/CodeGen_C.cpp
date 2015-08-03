@@ -719,9 +719,7 @@ void CodeGen_C::visit(const Not *op) {
 }
 
 void CodeGen_C::visit(const IntImm *op) {
-    ostringstream oss;
-    oss << op->value;
-    id = oss.str();
+    id = std::to_string(op->value);
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -1380,11 +1378,8 @@ void CodeGen_C::visit(const IfThenElse *op) {
 }
 
 void CodeGen_C::visit(const Evaluate *op) {
+    if (is_const(op->value)) return;
     string id = print_expr(op->value);
-    if (id == "0") {
-        // Skip evaluate(0) nodes. They're how we represent no-ops.
-        return;
-    }
     do_indent();
     stream << "(void)" << id << ";\n";
 }

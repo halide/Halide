@@ -241,7 +241,9 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     compile_module_to_c_header(m, filename_prefix + ".h");
 
     if (target.arch == Target::PNaCl) {
-        compile_module_to_llvm_bitcode(m, filename_prefix + ".o");
+        compile_module_to_llvm_bitcode(m, filename_prefix + ".bc");
+    } else if (target.os == Target::Windows) {
+        compile_module_to_object(m, filename_prefix + ".obj");
     } else {
         compile_module_to_object(m, filename_prefix + ".o");
     }

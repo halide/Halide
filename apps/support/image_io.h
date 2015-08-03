@@ -9,11 +9,8 @@
 
 #include <png.h>
 #include <string>
-#include <stdio.h>
+#include <cstdio>
 #include <algorithm>
-#include <string.h>
-
-//#include <sys/time.h>
 
 #define _assert(condition, ...) if (!(condition)) {fprintf(stderr, __VA_ARGS__); exit(-1);}
 
@@ -294,7 +291,7 @@ Image<T> load_ppm(std::string filename) {
     else if (maxval == 65535) { bit_depth = 16; }
     else { _assert(false, "Invalid bit depth in PPM\n"); }
 
-    _assert(strcmp(header, "P6") == 0 || strcmp(header, "p6") == 0, "Input is not binary PPM\n");
+    _assert(header == std::string("P6") || header == std::string("p6"), "Input is not binary PPM\n");
 
     int channels = 3;
     Image<T> im(width, height, channels);
