@@ -122,6 +122,7 @@ bin/*
 build-ios/*
 build-osx/*
 cmake_build/*
+*/build/*
 tmp/*
 doc/*
 include/*
@@ -134,6 +135,7 @@ msvc/*/x64/*
 *~
 *.o
 *.a
+*.so
 *.dot
 .DS_Store
 *.log
@@ -160,6 +162,9 @@ src/test_*.s
 *.dSYM
 .*.swp
 Doxyfile
+
+*.txt.user*
+.idea
 
 # jrk editor settings
 .tm_properties
@@ -211,6 +216,9 @@ apps/HelloAndroid*/libs
 apps/HelloAndroidGL/jni/halide_gl_filter.h
 apps/HelloAndroid*/local.properties
 apps/HelloAndroid*/proguard-project.txt
+
+# tutorial intermediates
+tutorial/lesson_10_halide.h
 
 # test intermediates
 log.txt
