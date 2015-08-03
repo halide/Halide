@@ -265,7 +265,7 @@ bool have_opencl();
 
 int main(int argc, char **argv) {
     // Load an input image.
-    Image<uint8_t> input = load<Image<uint8_t>>("images/rgb.png");
+    Image<uint8_t> input = load_image("images/rgb.png");
 
     // Allocated an image that will store the correct output
     Image<uint8_t> reference_output(input.width(), input.height(), input.channels());

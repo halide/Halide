@@ -21,15 +21,23 @@ namespace Tools {
 
 namespace Internal {
 
-inline void _assert(bool condition, const char* fmt, ...) {
+typedef bool (*CheckFunc)(bool condition, const char* fmt, ...);
+
+inline bool CheckFail(bool condition, const char* fmt, ...) {
     if (!condition) {
         char buffer[1024];
         va_list args;
         va_start(args, fmt);
         vsnprintf(buffer, sizeof(buffer), fmt, args);
         va_end(args);
+        fprintf(stderr, "%s", buffer);
         exit(-1);
     }
+    return condition;
+}
+
+inline bool CheckReturn(bool condition, const char* fmt, ...) {
+    return condition;
 }
 
 // Convert to u8
@@ -123,27 +131,27 @@ struct PngRowPointers {
 }  // namespace Internal
 
 
-template<typename ImageType>
-ImageType load_png(const std::string &filename) {
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_png(const std::string &filename, ImageType *im) {
     png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
 
     /* open file and test for it being a png */
     Internal::FileOpener f(filename.c_str(), "rb");
-    Internal::_assert(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str());
-    Internal::_assert(fread(header, 1, 8, f.f) == 8, "File ended before end of header\n");
-    Internal::_assert(!png_sig_cmp(header, 0, 8), "File %s is not recognized as a PNG file\n", filename.c_str());
+    if (!check(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str())) return false;
+    if (!check(fread(header, 1, 8, f.f) == 8, "File ended before end of header\n")) return false;
+    if (!check(!png_sig_cmp(header, 0, 8), "File %s is not recognized as a PNG file\n", filename.c_str())) return false;
 
     /* initialize stuff */
     png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 
-    Internal::_assert(png_ptr, "png_create_read_struct failed\n");
+    if (!check(png_ptr != NULL, "png_create_read_struct failed\n")) return false;
 
     info_ptr = png_create_info_struct(png_ptr);
-    Internal::_assert(info_ptr, "png_create_info_struct failed\n");
+    if (!check(info_ptr, "png_create_info_struct failed\n")) return false;
 
-    Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "Error during init_io\n");
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "Error during init_io\n")) return false;
 
     png_init_io(png_ptr, f.f);
     png_set_sig_bytes(png_ptr, 8);
@@ -160,43 +168,42 @@ ImageType load_png(const std::string &filename) {
         png_set_packing(png_ptr);
     }
 
-    ImageType im(1);
     if (channels != 1) {
-        im = ImageType(width, height, channels);
+        *im = ImageType(width, height, channels);
     } else {
-        im = ImageType(width, height);
+        *im = ImageType(width, height);
     }
 
     png_set_interlace_handling(png_ptr);
     png_read_update_info(png_ptr, info_ptr);
 
     // read the file
-    Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "Error during read_image\n");
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "Error during read_image\n")) return false;
 
-    Internal::PngRowPointers row_pointers(im.height(), png_get_rowbytes(png_ptr, info_ptr));
+    Internal::PngRowPointers row_pointers(im->height(), png_get_rowbytes(png_ptr, info_ptr));
     png_read_image(png_ptr, row_pointers.p);
 
-    Internal::_assert((bit_depth == 8) || (bit_depth == 16), "Can only handle 8-bit or 16-bit pngs\n");
+    if (!check((bit_depth == 8) || (bit_depth == 16), "Can only handle 8-bit or 16-bit pngs\n")) return false;
 
     // convert the data to ImageType::ElemType
 
-    int c_stride = (im.channels() == 1) ? 0 : im.stride(2);
-    typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im.data();
+    int c_stride = (im->channels() == 1) ? 0 : im->stride(2);
+    typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im->data();
     if (bit_depth == 8) {
-        for (int y = 0; y < im.height(); y++) {
+        for (int y = 0; y < im->height(); y++) {
             uint8_t *srcPtr = (uint8_t *)(row_pointers.p[y]);
-            for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {
+            for (int x = 0; x < im->width(); x++) {
+                for (int c = 0; c < im->channels(); c++) {
                     Internal::convert(*srcPtr++, ptr[c*c_stride]);
                 }
                 ptr++;
             }
         }
     } else if (bit_depth == 16) {
-        for (int y = 0; y < im.height(); y++) {
+        for (int y = 0; y < im->height(); y++) {
             uint8_t *srcPtr = (uint8_t *)(row_pointers.p[y]);
-            for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {
+            for (int x = 0; x < im->width(); x++) {
+                for (int c = 0; c < im->channels(); c++) {
                     uint16_t hi = (*srcPtr++) << 8;
                     uint16_t lo = hi | (*srcPtr++);
                     Internal::convert(lo, ptr[c*c_stride]);
@@ -208,21 +215,21 @@ ImageType load_png(const std::string &filename) {
 
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 
-    im.set_host_dirty();
-    return im;
+    im->set_host_dirty();
+    return true;
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
-template<typename ImageType>
-void save_png(ImageType &im, const std::string &filename) {
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_png(ImageType &im, const std::string &filename) {
     png_structp png_ptr;
     png_infop info_ptr;
     png_byte color_type;
 
     im.copy_to_host();
 
-    Internal::_assert(im.channels() > 0 && im.channels() < 5,
-           "Can't write PNG files that have other than 1, 2, 3, or 4 channels\n");
+    if (!check(im.channels() > 0 && im.channels() < 5,
+           "Can't write PNG files that have other than 1, 2, 3, or 4 channels\n")) return false;
 
     png_byte color_types[4] = {PNG_COLOR_TYPE_GRAY, PNG_COLOR_TYPE_GRAY_ALPHA,
                                PNG_COLOR_TYPE_RGB,  PNG_COLOR_TYPE_RGB_ALPHA
@@ -231,16 +238,16 @@ void save_png(ImageType &im, const std::string &filename) {
 
     // open file
     Internal::FileOpener f(filename.c_str(), "wb");
-    Internal::_assert(f.f != nullptr, "[write_png_file] File %s could not be opened for writing\n", filename.c_str());
+    if (!check(f.f != nullptr, "[write_png_file] File %s could not be opened for writing\n", filename.c_str())) return false;
 
     // initialize stuff
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    Internal::_assert(png_ptr, "[write_png_file] png_create_write_struct failed\n");
+    if (!check(png_ptr, "[write_png_file] png_create_write_struct failed\n")) return false;
 
     info_ptr = png_create_info_struct(png_ptr);
-    Internal::_assert(info_ptr, "[write_png_file] png_create_info_struct failed\n");
+    if (!check(info_ptr, "[write_png_file] png_create_info_struct failed\n")) return false;
 
-    Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during init_io\n");
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during init_io\n")) return false;
 
     png_init_io(png_ptr, f.f);
 
@@ -250,7 +257,7 @@ void save_png(ImageType &im, const std::string &filename) {
     }
 
     // write header
-    Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing header\n");
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing header\n")) return false;
 
     png_set_IHDR(png_ptr, info_ptr, im.width(), im.height(),
                  bit_depth, color_type, PNG_INTERLACE_NONE,
@@ -289,58 +296,57 @@ void save_png(ImageType &im, const std::string &filename) {
                 srcPtr++;
             }
         } else {
-            Internal::_assert(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.");
+            if (!check(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.")) return false;
         }
     }
 
     // write data
-    Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing bytes");
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing bytes")) return false;
 
     png_write_image(png_ptr, row_pointers.p);
 
     // finish write
-    Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during end of write");
+    if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during end of write")) return false;
 
     png_write_end(png_ptr, NULL);
 
     png_destroy_write_struct(&png_ptr, &info_ptr);
+
+    return true;
 }
 
-template<typename ImageType>
-ImageType load_ppm(const std::string &filename) {
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_ppm(const std::string &filename, ImageType *im) {
 
     /* open file and test for it being a ppm */
     Internal::FileOpener f(filename.c_str(), "rb");
-    Internal::_assert(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str());
+    if (!check(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str())) return false;
 
     int width, height, maxval;
     char header[256];
-    Internal::_assert(fscanf(f.f, "%255s", header) == 1, "Could not read PPM header\n");
-    Internal::_assert(fscanf(f.f, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n");
-    Internal::_assert(fscanf(f.f, "%d", &maxval) == 1, "Could not read PPM max value\n");
-    Internal::_assert(fgetc(f.f) != EOF, "Could not read char from PPM\n");
+    if (!check(fscanf(f.f, "%255s", header) == 1, "Could not read PPM header\n")) return false;
+    if (!check(fscanf(f.f, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n")) return false;
+    if (!check(fscanf(f.f, "%d", &maxval) == 1, "Could not read PPM max value\n")) return false;
+    if (!check(fgetc(f.f) != EOF, "Could not read char from PPM\n")) return false;
 
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
     else if (maxval == 65535) { bit_depth = 16; }
-    else { Internal::_assert(false, "Invalid bit depth in PPM\n"); }
+    else { if (!check(false, "Invalid bit depth in PPM\n")) return false; }
 
-    Internal::_assert(header == std::string("P6") || header == std::string("p6"), "Input is not binary PPM\n");
+    if (!check(header == std::string("P6") || header == std::string("p6"), "Input is not binary PPM\n")) return false;
 
     int channels = 3;
-    ImageType im(width, height, channels);
+    *im = ImageType(width, height, channels);
 
     // convert the data to ImageType::ElemType
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height*3);
-        Internal::_assert(fread((void *) data.data(),
-                      sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3),
-                "Could not read PPM 8-bit data\n");
-
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im.data();
-        for (int y = 0; y < im.height(); y++) {
+        if (!check(fread((void *) data.data(), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
+        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        for (int y = 0; y < im->height(); y++) {
             uint8_t *row = &data[(y*width)*3];
-            for (int x = 0; x < im.width(); x++) {
+            for (int x = 0; x < im->width(); x++) {
                 Internal::convert(*row++, im_data[(0*height+y)*width+x]);
                 Internal::convert(*row++, im_data[(1*height+y)*width+x]);
                 Internal::convert(*row++, im_data[(2*height+y)*width+x]);
@@ -349,11 +355,11 @@ ImageType load_ppm(const std::string &filename) {
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
-        Internal::_assert(fread((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n");
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im.data();
-        for (int y = 0; y < im.height(); y++) {
+        if (!check(fread((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
+        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        for (int y = 0; y < im->height(); y++) {
             uint16_t *row = &data[(y*width)*3];
-            for (int x = 0; x < im.width(); x++) {
+            for (int x = 0; x < im->width(); x++) {
                 uint16_t value;
                 value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(0*height+y)*width+x]);
                 value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(1*height+y)*width+x]);
@@ -361,20 +367,20 @@ ImageType load_ppm(const std::string &filename) {
             }
         }
     }
-    im(0,0,0) = im(0,0,0);      /* Mark dirty inside read/write functions. */
+    (*im)(0,0,0) = (*im)(0,0,0);      /* Mark dirty inside read/write functions. */
 
-    return im;
+    return true;
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
-template<typename ImageType>
-void save_ppm(ImageType &im, const std::string &filename) {
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_ppm(ImageType &im, const std::string &filename) {
     im.copy_to_host();
 
 	unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
 
     Internal::FileOpener f(filename.c_str(), "wb");
-    Internal::_assert(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str());
+    if (!check(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str())) return false;
     fprintf(f.f, "P6\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
     int width = im.width(), height = im.height();
 
@@ -388,7 +394,7 @@ void save_ppm(ImageType &im, const std::string &filename) {
                 }
             }
         }
-        Internal::_assert(fwrite((void *) data.data(), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n");
+        if (!check(fwrite((void *) data.data(), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
@@ -403,31 +409,64 @@ void save_ppm(ImageType &im, const std::string &filename) {
                 }
             }
         }
-        Internal::_assert(fwrite((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n");
+        if (!check(fwrite((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n")) return false;
+    } else {
+        return check(false, "We only support saving 8- and 16-bit images.");
+    }
+    return true;
+}
+
+// Returns false upon failure.
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load(const std::string &filename, ImageType *im) {
+    if (Internal::ends_with_ignore_case(filename, ".png")) {
+        return load_png<ImageType, check>(filename, im);
+    } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
+        return load_ppm<ImageType, check>(filename, im);
+    } else {
+        return check(false, "[load] unsupported file extension (png|ppm supported)");
     }
 }
 
-template<typename ImageType>
-ImageType load(const std::string &filename) {
+// Returns false upon failure.
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save(ImageType &im, const std::string &filename) {
     if (Internal::ends_with_ignore_case(filename, ".png")) {
-        return load_png<ImageType>(filename);
+        return save_png<ImageType, check>(im, filename);
     } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
-        return load_ppm<ImageType>(filename);
+        return save_ppm<ImageType, check>(im, filename);
     } else {
-        Internal::_assert(false, "[load] unsupported file extension (png|ppm supported)");
-        return ImageType();
+        return check(false, "[save] unsupported file extension (png|ppm supported)");
     }
 }
 
-template<typename ImageType>
-void save(ImageType &im, const std::string &filename) {
-    if (Internal::ends_with_ignore_case(filename, ".png")) {
-        save_png<ImageType>(im, filename);
-    } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
-        save_ppm<ImageType>(im, filename);
-    } else {
-        Internal::_assert(false, "[save] unsupported file extension (png|ppm supported)");
+// Fancy wrapper to call load() with CheckFail, inferring the return type;
+// this allows you to simply use
+//
+//    Image im = load_image("filename");
+//
+// without bothering to check error results (all errors simply abort).
+class load_image {
+public:
+    load_image(const std::string &f) : filename(f) {}
+    template<typename ImageType>
+    inline operator ImageType() {
+        ImageType im;
+        (void) load<ImageType, Internal::CheckFail>(filename, &im);
+        return im;
     }
+private:
+  const std::string filename;
+};
+
+// Fancy wrapper to call save() with CheckFail; this allows you to simply use
+//
+//    save_image(im, "filename");
+//
+// without bothering to check error results (all errors simply abort).
+template<typename ImageType>
+void save_image(ImageType &im, const std::string &filename) {
+    (void) save<ImageType, Internal::CheckFail>(im, filename);
 }
 
 }  // namespace Tools
