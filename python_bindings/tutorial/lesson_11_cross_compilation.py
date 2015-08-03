@@ -133,7 +133,7 @@ def main():
         # uint8_t  []
         win_64_magic = [0x64, 0x86]
 
-        f = open("lesson_11_x86_64_windows.o", "rb")
+        f = open("lesson_11_x86_64_windows.obj", "rb")
         try:
             header_bytes = f.read(2)
         except:

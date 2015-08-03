@@ -3,6 +3,7 @@
 
 #include <string>
 #include <typeinfo>
+#include <boost/format.hpp>
 #include <boost/python.hpp>
 #include <boost/python/suite/indexing/indexing_suite.hpp>
 #include <boost/array.hpp>

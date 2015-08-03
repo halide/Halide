@@ -1,6 +1,7 @@
 #include "Type.h"
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
+#include <boost/format.hpp>
 #include <boost/python.hpp>
 #include "no_compare_indexing_suite.h"
 
@@ -9,7 +10,6 @@
 
 #include <vector>
 #include <string>
-#include <boost/format.hpp>
 
 namespace h = Halide;
 

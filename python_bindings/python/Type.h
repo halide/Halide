@@ -4,7 +4,7 @@
 #include <string>
 
 namespace Halide {
-class Type; // forward declaration
+struct Type; // forward declaration
 }
 
 void defineType();
