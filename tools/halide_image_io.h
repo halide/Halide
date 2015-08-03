@@ -379,23 +379,22 @@ void save_ppm(ImageType &im, const std::string &filename) {
     int width = im.width(), height = im.height();
 
     if (bit_depth == 8) {
-        uint8_t *data = new uint8_t[width*height*3];
+        std::vector<uint8_t> data(width*height*3);
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
-                uint8_t *p = (uint8_t *)(&data[(y*width+x)*3]);
+                uint8_t *p = &data[(y*width+x)*3];
                 for (int c = 0; c < im.channels(); c++) {
                     Internal::convert(im(x, y, c), p[c]);
                 }
             }
         }
-        Internal::_assert(fwrite((void *) data, sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n");
-        delete[] data;
+        Internal::_assert(fwrite((void *) data.data(), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n");
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
-        uint16_t *data = new uint16_t[width*height*3];
+        std::vector<uint16_t> data(width*height*3);
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
-                uint16_t *p = (uint16_t *)(&data[(y*width+x)*3]);
+                uint16_t *p = &data[(y*width+x)*3];
                 for (int c = 0; c < im.channels(); c++) {
                     uint16_t value;
                     Internal::convert(im(x, y, c), value);
@@ -404,8 +403,7 @@ void save_ppm(ImageType &im, const std::string &filename) {
                 }
             }
         }
-        Internal::_assert(fwrite((void *) data, sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n");
-        delete[] data;
+        Internal::_assert(fwrite((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n");
     }
 }
 
