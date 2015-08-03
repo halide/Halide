@@ -5,7 +5,7 @@
 The bindings (and demonstration applications) should work well both for python2.7 and python3.4 (or higher),
 and across platforms.
 
-(Currently only been tested on Ubuntu 14.04, python3.4, a Halide source build).
+(Currently only tested on Ubuntu 14.04 and OS X 10.10 with python3.4 and a Halide source build).
 
 #### Python requirements:
  See requirements.txt (to be used with `pip`: `pip install --user requirements.txt`)
