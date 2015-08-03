@@ -75,7 +75,11 @@ public:
     /*
     Expr mutate(Expr e) {
         Expr new_e = IRMutator::mutate(e);
-        debug(0) << e << " -> " << new_e << "\n";
+        if (!new_e.same_as(e)) {
+            debug(1)
+                << "Before: " << e << "\n"
+                << "After:  " << new_e << "\n";
+        }
         return new_e;
     }
     using IRMutator::mutate;

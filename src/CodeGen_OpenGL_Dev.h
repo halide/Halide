@@ -47,23 +47,42 @@ private:
     Target target;
 };
 
+/**
+  * This class handles GLSL arithmetic, shared by CodeGen_GLSL and CodeGen_OpenGLCompute_C.
+  */
+class CodeGen_GLSLBase : public CodeGen_C {
+public:
+    CodeGen_GLSLBase(std::ostream &s);
+
+    std::string print_name(const std::string &name);
+
+protected:
+    using CodeGen_C::visit;
+    void visit(const Max *op);
+    void visit(const Min *op);
+    void visit(const Div *op);
+    void visit(const Mod *op);
+    void visit(const Call *op);
+
+    std::string print_type(Type type);
+private:
+    std::map<std::string, std::string> builtin;
+};
+
 
 /** Compile one statement into GLSL. */
-class CodeGen_GLSL : public CodeGen_C {
+class CodeGen_GLSL : public CodeGen_GLSLBase {
 public:
-    CodeGen_GLSL(std::ostream &s, const Target &target);
+    CodeGen_GLSL(std::ostream &s, const Target &target) : CodeGen_GLSLBase(s), target(target) {}
+
     void add_kernel(Stmt stmt,
                     std::string name,
                     const std::vector<GPU_Argument> &args);
 
     EXPORT static void test();
 
-
-    std::string print_name(const std::string &);
-
 protected:
     using CodeGen_C::visit;
-    std::string print_type(Type type);
 
     void visit(const FloatImm *);
 
@@ -71,11 +90,6 @@ protected:
     void visit(const Let *);
     void visit(const For *);
     void visit(const Select *);
-
-    void visit(const Max *);
-    void visit(const Min *);
-    void visit(const Div *);
-    void visit(const Mod *);
 
     void visit(const Load *);
     void visit(const Store *);
@@ -90,7 +104,6 @@ protected:
 private:
     std::string get_vector_suffix(Expr e);
 
-    std::map<std::string, std::string> builtin;
     const Target target;
 };
 

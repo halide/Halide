@@ -34,6 +34,7 @@
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
 #include "ScheduleFunctions.h"
+#include "SelectGPUAPI.h"
 #include "SkipStages.h"
 #include "SlidingWindow.h"
 #include "Simplify.h"
@@ -169,7 +170,14 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(1) << "Skipping rewriting memoized allocations...\n";
     }
 
-    if (t.has_gpu_feature() || t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute) ||
+        t.has_feature(Target::OpenGL) ||
+        t.has_feature(Target::Renderscript)) {
+        debug(1) << "Selecting a GPU API for GPU loops...\n";
+        s = select_gpu_api(s, t);
+        debug(2) << "Lowering after selecting a GPU API:\n" << s << "\n\n";
+
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
@@ -181,7 +189,9 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
-    if (t.has_gpu_feature() || t.has_feature(Target::Renderscript)) {
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute) ||
+        t.has_feature(Target::Renderscript)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";

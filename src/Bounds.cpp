@@ -459,16 +459,23 @@ private:
             min = max = Mod::make(min_a, min_b);
         } else {
             // Only consider B (so A can be undefined)
-            min = make_zero(op->type);
-            if (max_b.type().is_uint()) {
-                max = max_b;
+            if (max_b.type().is_uint() || (max_b.type().is_int() && is_positive_const(min_b))) {
+                // If the RHS is a positive integer, the result is in [0, max_b-1]
+                min = make_zero(op->type);
+                max = max_b - make_one(op->type);
+            } else if (max_b.type().is_int()) {
+                // mod takes the sign of the second arg
+                // x % [4,10] -> [0,9]
+                // x % [-8,-3] -> [-7,0]
+                // x % [-8, 10] -> [-7,9]
+                min = Min::make(min_b + make_one(op->type), make_zero(op->type));
+                max = Max::make(max_b - make_one(op->type), make_zero(op->type));
             } else {
-                max = cast(op->type, abs(max_b));
-            }
-            if (!max.type().is_float()) {
-                // Integer modulo returns at most one less than the
-                // second arg.
-                max = max - make_one(op->type);
+                // The floating point version has the same sign rules,
+                // but can reach all the way up to the original value,
+                // so there's no -1.
+                min = Min::make(min_b, make_zero(op->type));
+                max = Max::make(max_b, make_zero(op->type));
             }
         }
     }
@@ -1234,14 +1241,38 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    BoxesTouched b(consider_calls, consider_provides, fn, &scope, fb);
-    if (e.defined()) {
-        e.accept(&b);
+    // Do calls and provides separately, for better simplification.
+    BoxesTouched calls(consider_calls, false, fn, &scope, fb);
+    BoxesTouched provides(false, consider_provides, fn, &scope, fb);
+
+    if (consider_calls) {
+        if (e.defined()) {
+            e.accept(&calls);
+        }
+        if (s.defined()) {
+            s.accept(&calls);
+        }
     }
-    if (s.defined()) {
-        s.accept(&b);
+    if (consider_provides) {
+        if (e.defined()) {
+            e.accept(&provides);
+        }
+        if (s.defined()) {
+            s.accept(&provides);
+        }
     }
-    return b.boxes;
+    if (!consider_calls) {
+        return provides.boxes;
+    }
+    if (!consider_provides) {
+        return calls.boxes;
+    }
+
+    // Combine the two maps.
+    for (pair<const string, Box> &i : provides.boxes) {
+        merge_boxes(calls.boxes[i.first], i.second);
+    }
+    return calls.boxes;
 }
 
 Box box_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
