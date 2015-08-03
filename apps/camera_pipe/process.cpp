@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Image<uint16_t> input = load<Image<uint16_t>>(argv[1]);
+    Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
@@ -55,19 +55,19 @@ int main(int argc, char **argv) {
                input, matrix_3200, matrix_7000, output);
     });
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
-    save(output, argv[6]);
+    save_image(output, argv[6]);
 
     best = benchmark(timing_iterations, 1, [&]() {
         FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
     });
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
-    save(output, "fcam_c.png");
+    save_image(output, "fcam_c.png");
 
     best = benchmark(timing_iterations, 1, [&]() {;
         FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    save(output, "fcam_arm.png");
+    save_image(output, "fcam_arm.png");
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms

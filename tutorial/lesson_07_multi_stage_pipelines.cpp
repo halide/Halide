@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     // first horizontally, and then vertically.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<Image<uint8_t>>("images/rgb.png");
+        Image<uint8_t> input = load_image("images/rgb.png");
 
         // Upgrade it to 16-bit, so we can do math without it overflowing.
         Func input_16("input_16");
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
         // Save the result. It should look like a slightly blurry
         // parrot, and it should be two pixels narrower and two pixels
         // shorter than the input image.
-        save(result, "blurry_parrot_1.png");
+        save_image(result, "blurry_parrot_1.png");
 
         // This is usually the fastest way to deal with boundaries:
         // don't write code that reads out of bounds :) The more
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     // The same pipeline, with a boundary condition on the input.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<Image<uint8_t>>("images/rgb.png");
+        Image<uint8_t> input = load_image("images/rgb.png");
 
         // This time, we'll wrap the input in a Func that prevents
         // reading out of bounds:
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         // Save the result. It should look like a slightly blurry
         // parrot, but this time it will be the same size as the
         // input.
-        save(result, "blurry_parrot_2.png");
+        save_image(result, "blurry_parrot_2.png");
     }
 
     printf("Success!\n");

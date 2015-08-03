@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y");
 
     // Load a grayscale image to use as an input.
-    Image<uint8_t> input = load<Image<uint8_t>>("images/gray.png");
+    Image<uint8_t> input = load_image("images/gray.png");
 
     // You can define a Func in multiple passes. Let's see a toy
     // example first.

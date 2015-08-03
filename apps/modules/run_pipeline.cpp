@@ -12,12 +12,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Image<uint8_t> input = load<Image<uint8_t>>(argv[1]);
+    Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> output(input.width(), input.height(), 1);
 
     pipeline(input, output);
 
-    save(output, argv[2]);
+    save_image(output, argv[2]);
 
     printf("Success!\n");
 
