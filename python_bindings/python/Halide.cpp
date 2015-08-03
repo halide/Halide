@@ -18,6 +18,8 @@
 #include "Type.h"
 #include "Var.h"
 
+#include "llvm-3.5/llvm/Support/DynamicLibrary.h"
+
 #include <stdexcept>
 #include <vector>
 
@@ -25,6 +27,22 @@ char const* greet()
 {
     return "hello, world from Halide python bindings";
 }
+
+bool load_library_into_llvm(std::string name)
+{
+    return llvm::sys::DynamicLibrary::LoadLibraryPermanently(name.c_str());
+}
+
+void defineLlvmHelpers()
+{
+    using namespace boost::python;
+    def("load_library_into_llvm", load_library_into_llvm,
+        "This function permanently loads the dynamic library at the given path. "
+        "It is safe to call this function multiple times for the same library.");
+
+    return;
+}
+
 
 BOOST_PYTHON_MODULE(halide)
 {
@@ -50,4 +68,6 @@ BOOST_PYTHON_MODULE(halide)
     defineType();
     defineVar();
 
+    // not part of the C++ Halide API
+    defineLlvmHelpers();
 }
