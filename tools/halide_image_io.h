@@ -87,6 +87,18 @@ inline void swap_endian_16(bool little_endian, uint16_t &value) {
     }
 }
 
+struct FileOpener {
+    FileOpener(const char* filename, const char* mode) : f(nullptr) {
+        f = fopen(filename, mode);
+    }
+    ~FileOpener() {
+        if (f != nullptr) {
+            fclose(f);
+        }
+    }
+    FILE *f;
+};
+
 }  // namespace Internal
 
 
@@ -98,9 +110,9 @@ ImageType load_png(const std::string &filename) {
     png_bytep *row_pointers;
 
     /* open file and test for it being a png */
-    FILE *f = fopen(filename.c_str(), "rb");
-    Internal::_assert(f, "File %s could not be opened for reading\n", filename.c_str());
-    Internal::_assert(fread(header, 1, 8, f) == 8, "File ended before end of header\n");
+    Internal::FileOpener f(filename.c_str(), "rb");
+    Internal::_assert(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str());
+    Internal::_assert(fread(header, 1, 8, f.f) == 8, "File ended before end of header\n");
     Internal::_assert(!png_sig_cmp(header, 0, 8), "File %s is not recognized as a PNG file\n", filename.c_str());
 
     /* initialize stuff */
@@ -113,7 +125,7 @@ ImageType load_png(const std::string &filename) {
 
     Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "Error during init_io\n");
 
-    png_init_io(png_ptr, f);
+    png_init_io(png_ptr, f.f);
     png_set_sig_bytes(png_ptr, 8);
 
     png_read_info(png_ptr, info_ptr);
@@ -147,8 +159,6 @@ ImageType load_png(const std::string &filename) {
     }
 
     png_read_image(png_ptr, row_pointers);
-
-    fclose(f);
 
     Internal::_assert((bit_depth == 8) || (bit_depth == 16), "Can only handle 8-bit or 16-bit pngs\n");
 
@@ -211,8 +221,8 @@ void save_png(ImageType &im, const std::string &filename) {
     color_type = color_types[im.channels() - 1];
 
     // open file
-    FILE *f = fopen(filename.c_str(), "wb");
-    Internal::_assert(f, "[write_png_file] File %s could not be opened for writing\n", filename.c_str());
+    Internal::FileOpener f(filename.c_str(), "wb");
+    Internal::_assert(f.f != nullptr, "[write_png_file] File %s could not be opened for writing\n", filename.c_str());
 
     // initialize stuff
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -223,7 +233,7 @@ void save_png(ImageType &im, const std::string &filename) {
 
     Internal::_assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during init_io\n");
 
-    png_init_io(png_ptr, f);
+    png_init_io(png_ptr, f.f);
 
     unsigned int bit_depth = 16;
     if (sizeof(typename ImageType::ElemType) == 1) {
@@ -291,8 +301,6 @@ void save_png(ImageType &im, const std::string &filename) {
     }
     delete[] row_pointers;
 
-    fclose(f);
-
     png_destroy_write_struct(&png_ptr, &info_ptr);
 }
 
@@ -300,15 +308,15 @@ template<typename ImageType>
 ImageType load_ppm(const std::string &filename) {
 
     /* open file and test for it being a ppm */
-    FILE *f = fopen(filename.c_str(), "rb");
-    Internal::_assert(f, "File %s could not be opened for reading\n", filename.c_str());
+    Internal::FileOpener f(filename.c_str(), "rb");
+    Internal::_assert(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str());
 
     int width, height, maxval;
     char header[256];
-    Internal::_assert(fscanf(f, "%255s", header) == 1, "Could not read PPM header\n");
-    Internal::_assert(fscanf(f, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n");
-    Internal::_assert(fscanf(f, "%d", &maxval) == 1, "Could not read PPM max value\n");
-    Internal::_assert(fgetc(f) != EOF, "Could not read char from PPM\n");
+    Internal::_assert(fscanf(f.f, "%255s", header) == 1, "Could not read PPM header\n");
+    Internal::_assert(fscanf(f.f, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n");
+    Internal::_assert(fscanf(f.f, "%d", &maxval) == 1, "Could not read PPM max value\n");
+    Internal::_assert(fgetc(f.f) != EOF, "Could not read char from PPM\n");
 
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
@@ -324,9 +332,8 @@ ImageType load_ppm(const std::string &filename) {
     if (bit_depth == 8) {
         uint8_t *data = new uint8_t[width*height*3];
         Internal::_assert(fread((void *) data,
-                      sizeof(uint8_t), width*height*3, f) == (size_t) (width*height*3),
+                      sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3),
                 "Could not read PPM 8-bit data\n");
-        fclose(f);
 
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im.data();
         for (int y = 0; y < im.height(); y++) {
@@ -341,8 +348,7 @@ ImageType load_ppm(const std::string &filename) {
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         uint16_t *data = new uint16_t[width*height*3];
-        Internal::_assert(fread((void *) data, sizeof(uint16_t), width*height*3, f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n");
-        fclose(f);
+        Internal::_assert(fread((void *) data, sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n");
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im.data();
         for (int y = 0; y < im.height(); y++) {
             uint16_t *row = (uint16_t *) (&data[(y*width)*3]);
@@ -367,9 +373,9 @@ void save_ppm(ImageType &im, const std::string &filename) {
 
 	unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
 
-    FILE *f = fopen(filename.c_str(), "wb");
-    Internal::_assert(f, "File %s could not be opened for writing\n", filename.c_str());
-    fprintf(f, "P6\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
+    Internal::FileOpener f(filename.c_str(), "wb");
+    Internal::_assert(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str());
+    fprintf(f.f, "P6\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
     int width = im.width(), height = im.height();
 
     if (bit_depth == 8) {
@@ -382,7 +388,7 @@ void save_ppm(ImageType &im, const std::string &filename) {
                 }
             }
         }
-        Internal::_assert(fwrite((void *) data, sizeof(uint8_t), width*height*3, f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n");
+        Internal::_assert(fwrite((void *) data, sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n");
         delete[] data;
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
@@ -398,10 +404,9 @@ void save_ppm(ImageType &im, const std::string &filename) {
                 }
             }
         }
-        Internal::_assert(fwrite((void *) data, sizeof(uint16_t), width*height*3, f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n");
+        Internal::_assert(fwrite((void *) data, sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n");
         delete[] data;
     }
-    fclose(f);
 }
 
 template<typename ImageType>
