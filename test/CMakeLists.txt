@@ -47,7 +47,7 @@ if (WITH_TEST_GENERATORS)
   # and make an executable target for it named 'generator_foo'
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_jittest.cpp")
   foreach(test ${TESTS})
-    string(REPLACE "_jittest.cpp" "" name "generator_jit_${test}")
+    string(REPLACE "_jittest.cpp" "" name "generator_exec_jit_test_${test}")
     halide_project(${name} "generator" "generator/${test}")
   endforeach()
 
@@ -85,7 +85,7 @@ if (WITH_TEST_GENERATORS)
     string(REPLACE "_aottest.cpp" "" GEN_NAME "${TEST_SRC}")
     string(REPLACE "_aottest.cpp" "" FUNC_NAME "${TEST_SRC}")
 
-    string(REPLACE ".cpp" "" TEST_RUNNER "exec_test_${TEST_SRC}")
+    set(TEST_RUNNER "generator_exec_aot_test_${GEN_NAME}")
 
     file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/" NATIVE_INT_DIR)
     set(SCRATCH_DIR "${NATIVE_INT_DIR}scratch_${GEN_NAME}")
