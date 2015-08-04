@@ -1,4 +1,4 @@
-// Halide tutorial lesson 15: AOT compilation with Halide::Generator part 1
+// Halide tutorial lesson 15: Generators part 1
 
 // This lesson demonstrates how to encapsulate Halide pipelines into
 // resuable components called generators.
