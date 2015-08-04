@@ -1,7 +1,7 @@
-# Halide tutorial lesson 15: AOT compilation with Halide::Generator part 2
+# Halide tutorial lesson 15: Generators part 2
 
 # This shell script demonstrates how to use a binary containing
-# Generators from the command-line. Normally you'd call these binaries
+# Generators from the command line. Normally you'd call these binaries
 # from your build system of choice rather than running them manually
 # like we do here.
 
@@ -27,7 +27,9 @@ check_symbol()
 {
     FILE=$1
     SYM=$2
-    nm $FILE | grep $SYM > /dev/null || (echo "$SYM not found in $FILE" && exit -1)
+    nm $FILE | grep $SYM > /dev/null || (
+        echo "$SYM not found in $FILE" && exit -1
+    )
 }
 
 # Set up LD_LIBRARY_PATH so that we can find libHalide.so
@@ -57,7 +59,11 @@ check_symbol my_first_generator.o my_first_generator
 # target. Let's cross-compile a windows 32-bit object file and header
 # for the first generator:
 
-./lesson_15_generate -g my_first_generator -f my_first_generator_win32 -o . target=x86-32-windows
+./lesson_15_generate \
+    -g my_first_generator \
+    -f my_first_generator_win32 \
+    -o . \
+    target=x86-32-windows
 
 # This generates a file called "my_first_generator_win32.obj" in the
 # current directory, along with a matching header. The function
@@ -139,12 +145,16 @@ nm my_second_generator_1.o | grep "W halide_"
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime()
 {
-    nm $1 | grep "W halide_" > /dev/null || (echo "Halide runtime not found in $1" && exit -1)
+    nm $1 | grep "W halide_" > /dev/null || (
+        echo "Halide runtime not found in $1" && exit -1
+    )
 }
 
 check_no_runtime()
 {
-    nm $1 | grep "W halide_" > /dev/null && (echo "Halide runtime found in $1" && exit -1)
+    nm $1 | grep "W halide_" > /dev/null && (
+        echo "Halide runtime found in $1" && exit -1
+    )
 }
 
 # Declarations and documentation for these runtime functions are in
@@ -161,9 +171,23 @@ check_no_runtime()
 # with the no_runtime target flag. Let's generate and link several
 # different versions of the first pipeline for different x86 variants:
 
-./lesson_15_generate -g my_first_generator -f my_first_generator_basic -o . target=x86-64-no_runtime
-./lesson_15_generate -g my_first_generator -f my_first_generator_sse41 -o . target=x86-64-sse41-no_runtime
-./lesson_15_generate -g my_first_generator -f my_first_generator_avx -o . target=x86-64-avx-no_runtime
+./lesson_15_generate \
+    -g my_first_generator \
+    -f my_first_generator_basic \
+    -o . \
+    target=x86-64-no_runtime
+
+./lesson_15_generate \
+    -g my_first_generator \
+    -f my_first_generator_sse41 \
+    -o . \
+    target=x86-64-sse41-no_runtime
+
+./lesson_15_generate \
+    -g my_first_generator \
+    -f my_first_generator_avx \
+    -o . \
+    target=x86-64-avx-no_runtime
 
 # These files don't contain the runtime
 check_no_runtime my_first_generator_basic.o
@@ -181,7 +205,11 @@ check_runtime halide_runtime_x86.o
 # gives us three versions of the pipeline for varying levels of x86,
 # combined with a single runtime that will work on nearly all x86
 # processors.
-ar q my_first_generator_multi.a my_first_generator_basic.o my_first_generator_sse41.o my_first_generator_avx.o halide_runtime_x86.o
+ar q my_first_generator_multi.a \
+    my_first_generator_basic.o \
+    my_first_generator_sse41.o \
+    my_first_generator_avx.o \
+    halide_runtime_x86.o
 
 check_runtime my_first_generator_multi.a
 check_symbol  my_first_generator_multi.a my_first_generator_basic
