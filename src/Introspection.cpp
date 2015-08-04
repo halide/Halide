@@ -307,6 +307,10 @@ public:
             idx--;
         }
 
+        if ((uint64_t)global_pointer != global_variables[idx].addr) {
+            return -1;
+        }
+
         return (int)idx;
     }
 
