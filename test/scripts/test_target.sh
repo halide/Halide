@@ -66,5 +66,6 @@ else
     make test_performance &&
     make test_apps &&
     make test_generators &&
+    if [[ $HL_TARGET == *64* ]]; then make test_python; fi &&
     echo "All tests pass"
 fi

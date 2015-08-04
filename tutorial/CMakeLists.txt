@@ -1,3 +1,4 @@
+include_directories("${CMAKE_BINARY_DIR}/tools")
 macro(use_libpng TARGET)
   target_compile_definitions(${TARGET} PRIVATE ${PNG_DEFINITIONS})
   target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})
@@ -6,6 +7,7 @@ endmacro()
 macro(add_tutorial source_file)
   string(REPLACE ".cpp" "" name ${source_file})
   halide_project(${name} "tutorials" ${source_file})
+  target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
 endmacro()
 
 # Declare tutorials

@@ -258,8 +258,16 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     #if LLVM_VERSION >= 37
         TargetMachine *tm = engine_builder.selectTarget();
+        #if LLVM_VERSION == 37
+        #ifdef NEWER
+            DataLayout target_data_layout(tm->createDataLayout());
+        #else
+            DataLayout target_data_layout(*(tm->getDataLayout()));
+        #endif
+        #else
+            DataLayout target_data_layout(tm->createDataLayout());
+        #endif
     #ifdef NEWER
-        DataLayout target_data_layout(tm->createDataLayout());
         if (m->getDataLayout() != target_data_layout) {
                 debug(0) << "Warning: data layout mismatch between module ("
                              << m->getDataLayout().getStringRepresentation()
@@ -303,11 +311,8 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-#if LLVM_VERSION > 35
-    debug(1) << "JIT compiling " << m->getName().str() << "\n";
-#else
     debug(1) << "JIT compiling " << m->getModuleIdentifier() << "\n";
-#endif
+
     std::map<std::string, Symbol> exports;
 
     Symbol entrypoint;

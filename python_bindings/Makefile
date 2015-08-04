@@ -1,39 +1,40 @@
-all: halide/cHalide_wrap.cxx halide/_cHalide.so
+UNAME = $(shell uname)
 
-HALIDE_BUILD_PATH = ../build2
-PYTHON = python3
-#PYTHON = python
+ifeq ($(UNAME), Linux)
+CCFLAGS=$(shell python3-config --cflags) -std=c++11 -fPIC
+LDFLAGS=$(shell python3-config --ldflags) -lboost_python-py34 -lz
+endif
 
-halide/_cHalide.so: halide/cHalide_wrap.cxx halide/*.py halide/cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h $(HALIDE_BUILD_PATH)/include/*.h halide/py_util.cpp halide/py_util.h halide/expand_types.h setup.py
-	HALIDE_ROOT=$(HALIDE_BUILD_PATH) BUILD_PREFIX=../lib $(PYTHON) setup.py build_ext --inplace
+ifeq ($(UNAME), Darwin)
+# The /opt includes are in case this is a macports install of python and boost python
+CCFLAGS=$(shell python-config --cflags) -I /opt/local/include -std=c++11
+LDFLAGS=$(shell python-config --ldflags) -L /opt/local/lib -lboost_python3-mt -lz
+endif
 
-halide/cHalide_wrap.cxx: halide/cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h $(HALIDE_BUILD_PATH)/include/*.h halide/py_util.cpp halide/py_util.h halide/expand_types.h setup.py
-#make -C ..
-	swig -c++ -python -w362,325,314,389,381,382,361,401,503,509 -I$(HALIDE_BUILD_PATH)/include halide/cHalide.i
+NUMPY_PATH=$(shell python3 -c "import numpy; print(numpy.__path__[0] + '/core/include')")
 
-install: all
-	HALIDE_ROOT=$(HALIDE_BUILD_PATH) BUILD_PREFIX=../lib $(PYTHON) setup.py install
+PY_SRCS=$(shell ls python/*.cpp)
+PY_OBJS=$(PY_SRCS:python/%.cpp=build/py_%.o)
+NUMPY_SRCS=$(shell ls numpy/*.cpp)
+NUMPY_OBJS=$(NUMPY_SRCS:numpy/%.cpp=build/numpy_%.o)
+
+
+
+build/py_%.o: python/%.cpp
+	mkdir -p build
+	$(CXX) $(CCFLAGS) -c $< -o $@
+
+build/numpy_%.o: numpy/%.cpp
+	mkdir -p build
+	$(CXX) $(CCFLAGS) -I $(NUMPY_PATH) -c $< -o $@
+
+build/halide.so: $(PY_SRCS) $(PY_OBJS) $(NUMPY_SRCS) $(NUMPY_OBJS)
+	mkdir -p build
+	$(CXX) $(PY_OBJS) $(NUMPY_OBJS) $(LDFLAGS) ../bin/libHalide.a -shared -o $@
 
 clean:
 	rm -rf build
-	rm -f halide/cHalide_wrap.cxx
-	rm -f halide/halide.so
-	rm -f halide/_cHalide.so
-	rm -f halide/cHalide.py halide/*.pyc
 
-run_apps:
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/local_laplacian.py
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/interpolate.py
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/bilateral_grid.py
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/erode.py
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/blur.py
+test: build/halide.so
+	./run_apps.sh && ./run_tutorial.sh
 
-run_apps_headless:
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/local_laplacian.py apps/out_local_laplacian.png
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/interpolate.py apps/out_interpolate.png
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/bilateral_grid.py apps/out_bilateral_grid.png
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/erode.py apps/out_erode.png
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) apps/blur.py apps/out_blur.png
-
-test:
-	PYTHONPATH=.:$(PYTHONPATH) $(PYTHON) test_halide.py
