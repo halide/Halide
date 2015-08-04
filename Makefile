@@ -653,7 +653,7 @@ else
 LD_PATH_SETUP = LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(CURDIR)/$(BIN_DIR)
 endif
 
-test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=test_%)
+test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
 test_warnings: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
@@ -666,8 +666,8 @@ test_renderscript: $(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=rend
 # 1) Externally-written aot-based tests
 # 2) Externally-written JIT-based tests
 test_generators:  \
-  $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=generator_aot_%)  \
-  $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=generator_jit_%)
+  $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=generator_exec_aot_test_%)  \
+  $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=generator_exec_jit_test_%)
 
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
 
@@ -687,17 +687,22 @@ TIME_COMPILATION ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
 run_tests: $(ALL_TESTS)
 	make -f $(THIS_MAKEFILE) test_performance
 
-build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/test_%) \
+build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/error_%) \
-	$(WARNING_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/warning_%)
+	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
+	$(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BIN_DIR)/opengl_%) \
+	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/generator_exec_aot_test_%) \
+	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_exec_jit_test_%)
+# FIXME: Enable once building renderscript tests is fixed
+#   $(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=$(BIN_DIR)/renderscript_%)
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
 
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -I$(SRC_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
-$(BIN_DIR)/test_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
+$(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
@@ -755,7 +760,7 @@ $(FILTERS_DIR)/metadata_tester_ucon.o $(FILTERS_DIR)/metadata_tester_ucon.h: $(F
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata
 
-$(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.o
+$(BIN_DIR)/generator_exec_aot_test_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.o
 
 # user_context needs to be generated with user_context as the first argument to its calls
 $(FILTERS_DIR)/user_context.o $(FILTERS_DIR)/user_context.h: $(FILTERS_DIR)/user_context.generator
@@ -776,8 +781,8 @@ $(FILTERS_DIR)/user_context_insanity.o $(FILTERS_DIR)/user_context_insanity.h: $
 $(FILTERS_DIR)/tiled_blur.generator: $(ROOT_DIR)/test/generator/tiled_blur_blur_generator.cpp
 # TODO(srj): we really want to say "anything that depends on tiled_blur.o also depends on tiled_blur_blur.o";
 # is there a way to specify that in Make?
-$(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
-$(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
+$(BIN_DIR)/generator_exec_aot_test_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
+$(BIN_DIR)/generator_exec_aot_test_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -804,15 +809,15 @@ $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 	cat $(FILTERS_DIR)/nested_externs_*.h > $(FILTERS_DIR)/nested_externs.h
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h (but not libHalide).
-$(BIN_DIR)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h $(INCLUDE_DIR)/HalideRuntime.h
+$(BIN_DIR)/generator_exec_aot_test_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -lpthread -ldl -o $@
 
 # acquire_release is the only test that explicitly uses CUDA/OpenCL APIs, so link only those here.
-$(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.o $(FILTERS_DIR)/acquire_release.h $(INCLUDE_DIR)/HalideRuntime.h
+$(BIN_DIR)/generator_exec_aot_test_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.o $(FILTERS_DIR)/acquire_release.h $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -lpthread -ldl $(OPENCL_LDFLAGS) $(CUDA_LDFLAGS) -o $@
 
 # By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
-$(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
+$(BIN_DIR)/generator_exec_jit_test_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.so,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 # nested externs doesn't actually contain a generator named
@@ -832,20 +837,25 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Hal
 		-I$(INCLUDE_DIR) -I$(TOOLS_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
 
-test_%: $(BIN_DIR)/test_%
+test_internal: $(BIN_DIR)/test_internal
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$<
 	@-echo
 
-valgrind_%: $(BIN_DIR)/test_%
+correctness_%: $(BIN_DIR)/correctness_%
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$<
+	@-echo
+
+valgrind_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(LD_PATH_SETUP) valgrind --error-exitcode=-1 $(CURDIR)/$<
 	@-echo
 
 # This test is *supposed* to do an out-of-bounds read, so skip it when testing under valgrind
-valgrind_tracing_stack: $(BIN_DIR)/test_tracing_stack
+valgrind_tracing_stack: $(BIN_DIR)/correctness_tracing_stack
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$(BIN_DIR)/test_tracing_stack
+	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$(BIN_DIR)/correctness_tracing_stack
 	@-echo
 
 performance_%: $(BIN_DIR)/performance_%
