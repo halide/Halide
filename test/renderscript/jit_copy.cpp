@@ -31,6 +31,8 @@ class ValidateInterleavedPipeline: public IRMutator {
 //   }
 // }
 //
+    using IRMutator::visit;
+
     virtual void visit(const Call *call) {
         if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
             assert(for_nest_level == 4);
@@ -94,7 +96,7 @@ class ValidateInterleavedPipeline: public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Pipeline* op) {
+    void visit(const ProducerConsumer *op) {
         assert(!in_pipeline); // There should be only one pipeline in the test.
         for_nest_level = 0;
         in_pipeline = true;
