@@ -307,7 +307,17 @@ public:
             idx--;
         }
 
-        if ((uint64_t)global_pointer != global_variables[idx].addr) {
+        // Check the address is indeed inside the object found
+        uint64_t end_ptr = global_variables[idx].addr;
+        TypeInfo *t = global_variables[idx].type;
+        uint64_t size = t->size;
+        while (t->type == TypeInfo::Array) {
+            t = t->members[0].type;
+            size *= t->size;
+        }
+        end_ptr += size;
+        if (address < global_variables[idx].addr ||
+            address >= end_ptr) {
             return -1;
         }
 
