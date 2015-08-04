@@ -27,10 +27,14 @@ check_symbol()
 {
     FILE=$1
     SYM=$2
-    nm $FILE | grep $SYM > /dev/null || (
-        echo "$SYM not found in $FILE" && exit -1
-    )
+    if !(nm $FILE | grep $SYM > /dev/null); then
+        echo "$SYM not found in $FILE"
+	exit -1
+    fi
 }
+
+# Bail out on error
+#set -e
 
 # Set up LD_LIBRARY_PATH so that we can find libHalide.so
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../bin
@@ -140,21 +144,23 @@ check_symbol      my_second_generator_3.o my_second_generator_3
 # files.
 
 echo "The halide runtime:"
-nm my_second_generator_1.o | grep "W halide_"
+nm my_second_generator_1.o | grep "[SW] _\?halide_"
 
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime()
 {
-    nm $1 | grep "W halide_" > /dev/null || (
-        echo "Halide runtime not found in $1" && exit -1
-    )
+    if !(nm $1 | grep "[SW] _\?halide_" > /dev/null); then
+        echo "Halide runtime not found in $1"
+	exit -1
+    fi
 }
 
 check_no_runtime()
 {
-    nm $1 | grep "W halide_" > /dev/null && (
-        echo "Halide runtime found in $1" && exit -1
-    )
+    if nm $1 | grep "[SW] _\?halide_" > /dev/null; then
+        echo "Halide runtime found in $1"
+	exit -1
+    fi
 }
 
 # Declarations and documentation for these runtime functions are in
