@@ -1419,6 +1419,10 @@ private:
                             type_info.members.push_back(m);
                             type_info.type = TypeInfo::Array;
                         } else if (attr == attr_byte_size) {
+                            // According to the dwarf spec, this
+                            // should be the number of bytes the array
+                            // occupies, but compilers seem to emit
+                            // the number of array entries instead.
                             type_info.size = val;
                         }
                     } else if (fmt.tag == tag_variable) {
