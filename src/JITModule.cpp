@@ -258,7 +258,11 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     #if LLVM_VERSION >= 37
         TargetMachine *tm = engine_builder.selectTarget();
-        DataLayout target_data_layout(tm->createDataLayout());
+        #if LLVM_VERSION == 37
+            DataLayout target_data_layout(*(tm->getDataLayout()));
+        #else
+            DataLayout target_data_layout(tm->createDataLayout());
+        #endif
         if (m->getDataLayout() != target_data_layout) {
                 debug(0) << "Warning: data layout mismatch between module ("
                              << m->getDataLayout().getStringRepresentation()
