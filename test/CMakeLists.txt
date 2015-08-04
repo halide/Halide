@@ -1,3 +1,4 @@
+option(WITH_TEST_INTERNAL "Build and run internal tests" ON)
 option(WITH_TEST_CORRECTNESS "Build correctness tests" ON)
 option(WITH_TEST_ERROR "Build error tests" ON)
 option(WITH_TEST_WARNING "Build warning tests" ON)
@@ -11,6 +12,20 @@ else()
   # so we'll give the same courtesy to tests
   add_definitions("-std=c++11")
   add_definitions("-fno-rtti")
+endif()
+
+if (WITH_TEST_INTERNAL)
+  message(STATUS "Internal tests enabled")
+  halide_project(test_internal internal internal.cpp)
+  # Run internal tests by default. Unforunately we can't have these
+  # tests only rerun when the Halide target is rebuilt due to a bug in
+  # CMake's handling of add_custom_command(TARGET ...) where the Halide
+  # target is not visible to the command (http://www.cmake.org/Bug/view.php?id=15681)
+  add_custom_target(run_test_internal ALL
+                    COMMAND test_internal
+                    COMMENT "Running internal tests")
+else()
+  message(WARNING "Internal tests disabled")
 endif()
 
 function(tests folder)
