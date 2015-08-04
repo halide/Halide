@@ -119,7 +119,7 @@ public:
         // the time (e.g. with scale above).
 
         Func rotated;
-        switch((Rotation)rotation) {
+        switch ((Rotation)rotation) {
         case Rotation::None:
             rotated(x, y) = brighter(x, y);
             break;
@@ -135,7 +135,8 @@ public:
         Func output;
         output(x, y) = cast(output_type, rotated(x, y));
 
-        // The schedule will also depend on the generator params.
+        // The structure of the pipeline depended on the generator
+        // params. So will the schedule.
 
         // Let's start by vectorizing the output. We don't know the
         // type though, so it's hard to pick a good factor. Generators
