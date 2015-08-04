@@ -100,12 +100,12 @@ Expr shiftLeft(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_left, {A, B},
                               Internal::Call::Intrinsic);
 }
-#endif
 
 Expr shiftRight(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_right, {A, B},
                               Internal::Call::Intrinsic);
 }
+#endif
 
 Expr u8_(Expr E) {
   return cast (UInt(8, E.type().width), E);
