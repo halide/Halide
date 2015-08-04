@@ -819,7 +819,7 @@ $(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/
 test_generator_nested_externs:
 	@echo "Skipping"
 
-$(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
+$(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
 	@ if [[ $@ == *_run ]]; then \
 		export TUTORIAL=$* ;\
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
@@ -830,6 +830,17 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Hal
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 		-I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
+
+$(BIN_DIR)/tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
+	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(ROOT_DIR)/tools/GenGen.cpp \
+	-I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
+
+tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh $(BIN_DIR)/tutorial_lesson_15_generators_generate
+	@-mkdir -p $(TMP_DIR)
+	cp $(BIN_DIR)/tutorial_lesson_15_generators_generate $(TMP_DIR)/lesson_15_generate; \
+	cd $(TMP_DIR); \
+	$(LD_PATH_SETUP) bash $(CURDIR)/tutorial/lesson_15_generators_usage.sh
+	@-echo
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p $(TMP_DIR)
