@@ -3,8 +3,8 @@ HALIDE_PATH ?= ../..
 CXX ?= g++
 GXX ?= g++
 
-CFLAGS += -I $(HALIDE_PATH)/include/ -I../support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_PATH)/include/ -I../support/
+CFLAGS += -I $(HALIDE_PATH)/include/ -I $(HALIDE_PATH)/tools/ -I../support/
+CXXFLAGS += -std=c++11 -I $(HALIDE_PATH)/include/ -I $(HALIDE_PATH)/tools/ -I../support/
 
 LIB_HALIDE = $(HALIDE_PATH)/bin/libHalide.a
 
