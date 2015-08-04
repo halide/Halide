@@ -1,14 +1,15 @@
-HALIDE_TOP = `pwd`/../../../..
-CURR_DIR = `pwd`
+CURR_DIR = $(shell pwd)
+HALIDE_TOP = ${CURR_DIR}/../../../..
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS="--std=c++11"
-CLANG=hexagon-clang++
-CURR_DIR = `pwd`
-
+HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
+CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
+LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
+INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 
 gaussian3x3.o gaussian3x3.h: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DRUN -I ${HALIDE_TOP}/test/hexagon/include -v ${CXXFLAGS}
-	./gaussian3x3.generate.out
+	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DRUN -O0 ${INCLUDES} ${LDFLAGS}
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 
 gaussian3x3_run.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
@@ -25,13 +26,13 @@ clean:
 .PHONY: assembly
 
 assembly: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DASSEMBLY -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
+	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DASSEMBLY -O0 ${INCLUDES} ${LDFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: bitcode
 
 bitcode: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DBITCODE -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
+	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DBITCODE -O0 ${INCLUDES} ${LDFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: all
@@ -64,13 +65,13 @@ run: gaussian3x3.out
 .PHONY: stmt
 
 stmt: gaussian3x3.cpp
-	${CC} gaussian3x3.cpp -g -I ${HALIDE_TOP}/include -L ${HALIDE_TOP}/bin -lHalide -lpthread -ldl -o gaussian3x3.generate.out -O0 -DSTMT -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
+	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: synthetic
 
 gaussian3x3_run.synthetic.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
-	${CLANG} -c gaussian3x3_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o gaussian3x3_run.synthetic.o
+	${HEXAGON_CLANG} -c gaussian3x3_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o gaussian3x3_run.synthetic.o
 
 
 gaussian3x3.synthetic.out: gaussian3x3_run.synthetic.o gaussian3x3.o gaussian3x3.h
