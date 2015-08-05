@@ -45,6 +45,8 @@ public:
             default_api = DeviceAPI::CUDA;
         } else if (target.has_feature(Target::OpenCL)) {
             default_api = DeviceAPI::OpenCL;
+        } else if (target.has_feature(Target::Metal)) {
+            default_api = DeviceAPI::Metal;
         } else {
             default_api = DeviceAPI::Host;
         }
