@@ -1027,8 +1027,11 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCL
 	cp $(INCLUDE_DIR)/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp $(ROOT_DIR)/tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp $(ROOT_DIR)/tutorial/figures/*.gif $(DISTRIB_DIR)/tutorial/figures
+	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(DISTRIB_DIR)/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/figures/*.mp4 $(DISTRIB_DIR)/tutorial/figures
-	cp $(ROOT_DIR)/tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
+	cp $(ROOT_DIR)/tutorial/*.cpp $(DISTRIB_DIR)/tutorial
+	cp $(ROOT_DIR)/tutorial/*.h $(DISTRIB_DIR)/tutorial
+	cp $(ROOT_DIR)/tutorial/*.sh $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tools/mex_halide.m $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README.md $(DISTRIB_DIR)
