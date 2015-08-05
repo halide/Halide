@@ -4,6 +4,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 class ValidateInterleavedPipeline: public IRMutator {
+protected:
 //
 // This is roughly the structure that we are trying to validate in this custom pass:
 //
@@ -108,7 +109,7 @@ class ValidateInterleavedPipeline: public IRMutator {
         IRMutator::visit(op);
         stmt = Stmt();
     }
-protected:
+
     int for_nest_level = -1;
     bool in_pipeline = false;
     int channels;
