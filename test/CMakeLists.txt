@@ -17,13 +17,11 @@ endif()
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
   halide_project(test_internal internal internal.cpp)
-  # Run internal tests by default. Unforunately we can't have these
-  # tests only rerun when the Halide target is rebuilt due to a bug in
-  # CMake's handling of add_custom_command(TARGET ...) where the Halide
-  # target is not visible to the command (http://www.cmake.org/Bug/view.php?id=15681)
-  add_custom_target(run_test_internal ALL
-                    COMMAND test_internal
-                    COMMENT "Running internal tests")
+  # Run internal tests after building
+  add_custom_command(TARGET test_internal
+                     POST_BUILD
+                     COMMAND test_internal
+                     COMMENT "Running internal tests")
 else()
   message(WARNING "Internal tests disabled")
 endif()
