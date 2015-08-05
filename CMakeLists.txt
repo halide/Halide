@@ -87,6 +87,28 @@ function(halide_project name folder)
   endif()
 endfunction(halide_project)
 
+# Set warnings globally
+option(WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
+if (WARNINGS_AS_ERRORS)
+    message(STATUS "WARNINGS_AS_ERRORS enabled")
+else()
+    message(STATUS "WARNINGS_AS_ERRORS disabled")
+endif()
+
+if (NOT MSVC)
+  add_compile_options(-Wall -Wno-unused-function -Wcast-qual -Woverloaded-virtual)
+  if (WARNINGS_AS_ERRORS)
+    add_compile_options(-Werror)
+  endif()
+else()
+  add_compile_options(/W3)
+  message(WARNING "WARNINGS_AS_ERROR is currently ignored for MSVC")
+  # TODO: Uncomment below and remove above warning once we can build without warnings
+  #if (WARNINGS_AS_ERRORS)
+  #  add_compile_options(/WX)
+  #endif()
+endif()
+
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
