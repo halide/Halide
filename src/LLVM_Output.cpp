@@ -211,7 +211,11 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     llvm::TargetMachine *target_machine = get_target_machine(module);
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
-    llvm::DataLayout target_data_layout(target_machine->createDataLayout());
+    #if LLVM_VERSION == 37
+        llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
+    #else
+        llvm::DataLayout target_data_layout(target_machine->createDataLayout());
+    #endif
     if (!(target_data_layout == module->getDataLayout())) {
         // This *might* be indicative on a bug elsewhere, but might
         // also be fine. It depends on what the differences are
