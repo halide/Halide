@@ -32,8 +32,8 @@ public:
     // member variables. We'll give the parameters explicit names this
     // time. They'll appear in the signature of our generated function
     // in the same order as we declare them.
-    Param<uint8_t> offset {"offset"};
-    ImageParam input {UInt(8), 2, "input"};
+    Param<uint8_t> offset{"offset"};
+    ImageParam input{UInt(8), 2, "input"};
 
     // Typically you declare your Vars at this scope as well, so that
     // they can be used in any helper methods you add later.
@@ -71,10 +71,10 @@ public:
     // too. These let you compile multiple variants of a Halide
     // pipeline. We'll define one that tells us whether or not to
     // parallelize in our schedule:
-    GeneratorParam<bool> parallel {"parallel", true /* default value */};
+    GeneratorParam<bool> parallel{"parallel", /* default value */ true};
 
     // ... and another representing a constant scale factor to use:
-    GeneratorParam<float> scale {"scale",
+    GeneratorParam<float> scale{"scale",
             1.0f /* default value */,
             0.0f /* minimum value */,
             100.0f /* maximum value */};
@@ -87,7 +87,7 @@ public:
     // work you must provide a mapping from strings to your enum
     // values.
     enum class Rotation { None, Clockwise, CounterClockwise };
-    GeneratorParam<Rotation> rotation{ "rotation",
+    GeneratorParam<Rotation> rotation{"rotation",
             /* default value */
             Rotation::None,
             /* map from names to values */
@@ -98,11 +98,11 @@ public:
     // Halide::Type is supported as though it was an enum. It's most
     // useful for customizing the type of input or output image
     // params.
-    GeneratorParam<Halide::Type> output_type{ "output_type", Int(32) };
+    GeneratorParam<Halide::Type> output_type{"output_type", Int(32)};
 
     // We'll use the same Param and ImageParam as before:
-    Param<uint8_t> offset {"offset"};
-    ImageParam input {UInt(8), 2, "input"};
+    Param<uint8_t> offset{"offset"};
+    ImageParam input{UInt(8), 2, "input"};
 
     // And we'll declare our Vars here as before.
     Var x, y;
