@@ -37,7 +37,7 @@ export CXX11=true
 echo Testing target $HL_TARGET with llvm $LLVM compiled with $COMPILER
 echo Using LD = $LD
 echo Using CXX = $CXX
-#make clean &&
+make clean &&
 make -j16 build_tests || exit 1
 make distrib || exit 1
 DATE=`date +%Y_%m_%d`
