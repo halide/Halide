@@ -352,38 +352,38 @@ bool Target::merge_string(const std::string &target) {
 }
 
 std::string Target::to_string() const {
-  const char* const arch_names[] = {
-      "arch_unknown", "x86", "arm", "pnacl", "mips", "hexagon"
-  };
-  const char* const os_names[] = {
-      "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
-  };
-  // The contents of this array must match Target::Features.
-  const char* const feature_names[] = {
-      "jit", "debug", "no_asserts", "no_bounds_query",
-      "sse41", "avx", "avx2", "fma", "fma4", "f16c",
-      "armv7s", "no_neon",
-      "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
-      "opencl", "cl_doubles",
-      "opengl", "openglcompute", "rs",
-      "user_context",
-      "hvx",
-      "hvx-double",
-      "register_metadata",
-      "matlab",
-      "profile",
-      "no_runtime"
-  };
-  internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
-  string result = string(arch_names[arch])
-      + "-" + std::to_string(bits)
-      + "-" + string(os_names[os]);
-  for (size_t i = 0; i < FeatureEnd; ++i) {
-      if (has_feature(static_cast<Feature>(i))) {
-          result += "-" + string(feature_names[i]);
-      }
-  }
-  return result;
+    const char* const arch_names[] = {
+        "arch_unknown", "x86", "arm", "pnacl", "mips", "hexagon"
+    };
+    const char* const os_names[] = {
+        "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
+    };
+    // The contents of this array must match Target::Features.
+    const char* const feature_names[] = {
+        "jit", "debug", "no_asserts", "no_bounds_query",
+        "sse41", "avx", "avx2", "fma", "fma4", "f16c",
+        "armv7s", "no_neon",
+        "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
+        "opencl", "cl_doubles",
+        "opengl", "openglcompute", "renderscript",
+        "user_context",
+        "hvx",
+        "hvx-double",
+        "register_metadata",
+        "matlab",
+        "profile",
+        "no_runtime"
+    };
+    internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
+    string result = string(arch_names[arch])
+        + "-" + std::to_string(bits)
+        + "-" + string(os_names[os]);
+    for (size_t i = 0; i < FeatureEnd; ++i) {
+        if (has_feature(static_cast<Feature>(i))) {
+            result += "-" + string(feature_names[i]);
+        }
+    }
+    return result;
 }
 
 }
