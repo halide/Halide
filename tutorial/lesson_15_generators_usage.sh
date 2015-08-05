@@ -82,13 +82,15 @@ check_file_exists my_first_generator_win32.h
 
 # The full set of command-line arguments to the generator binary are:
 
-# -g generator_name : Selects which generator to run.
+# -g generator_name : Selects which generator to run. If you only have
+# one generator in your binary you can omit this.
 
 # -o directory : Specifies which directory to create the outputs
 # in. Usually a build directory.
 
 # -f name : Specifies the name of the generated function, and also the
-# name of the object file.
+# name of the object file. If you omit this, it defaults to the
+# generator name.
 
 # -e assembly,bitcode,stmt,html: A list of comma separated values
 # specifying additional outputs to create. "assembly" generates
