@@ -26,7 +26,7 @@ class Image {
         uint8_t *alloc;
 
         void dev_free() {
-            halide_device_free(nullptr, &buf);
+            halide_device_free(NULL, &buf);
         }
 
         ~Contents() {
@@ -76,7 +76,7 @@ class Image {
 public:
     typedef T ElemType;
 
-    Image() : contents(nullptr) {
+    Image() : contents(NULL) {
     }
 
     Image(int x, int y = 0, int z = 0, int w = 0, bool interleaved = false) {
@@ -94,7 +94,7 @@ public:
             contents->ref_count--;
             if (contents->ref_count == 0) {
                 delete contents;
-                contents = nullptr;
+                contents = NULL;
             }
         }
     }
@@ -108,7 +108,7 @@ public:
             contents->ref_count--;
             if (contents->ref_count == 0) {
                 delete contents;
-                contents = nullptr;
+                contents = NULL;
             }
         }
         contents = p;
@@ -127,7 +127,7 @@ public:
 
     void copy_to_host() {
         if (contents->buf.dev_dirty) {
-            halide_copy_to_host(nullptr, &contents->buf);
+            halide_copy_to_host(NULL, &contents->buf);
             contents->buf.dev_dirty = false;
         }
     }
@@ -135,7 +135,7 @@ public:
     void copy_to_device(const struct halide_device_interface *device_interface) {
         if (contents->buf.host_dirty) {
             // If host
-            halide_copy_to_device(nullptr, &contents->buf, device_interface);
+            halide_copy_to_device(NULL, &contents->buf, device_interface);
             contents->buf.host_dirty = false;
         }
     }
