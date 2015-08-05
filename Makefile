@@ -669,7 +669,7 @@ test_generators:  \
   $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=generator_aot_%)  \
   $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=generator_jit_%)
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
+ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators test_renderscript
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For static and generator tests they time the compile time only. The times are recorded in CSV files.
