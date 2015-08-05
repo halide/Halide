@@ -3,7 +3,9 @@
 #include <stdio.h>
 
 #include "mandelbrot.h"
-#include "static_image.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Image<int> output(100, 30);
