@@ -67,6 +67,15 @@ without overriding the parallel runtime entirely.
 Building Halide
 ===============
 
+TL;DR
+-----
+
+Have llvm-3.5 or greater installed and run 'make' in the root
+directory of the repository (where this README is).
+
+Acquiring LLVM
+-------------
+
 Building halide requires at least llvm 3.5, along with the matching
 version of clang. llvm-config and clang must be somewhere in the
 path. If your OS does not have packages for llvm-3.5, you can find
@@ -78,6 +87,9 @@ If you want to build it yourself, first check it out from subversion:
 
     % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_35 llvm3.5
     % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_35 llvm3.5/tools/clang
+
+Building LLVM with make
+-----------------------
 
 Then build it like so:
 
@@ -93,6 +105,9 @@ Then finally tell Halide's Makefile about it like so:
     % export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
     % export CLANG=<path to llvm>/Release+Asserts/bin/clang
 
+Building LLVM with cmake
+------------------------
+
 If you wish to use cmake to build llvm, the build procedure is:
 
     % cd llvm3.5
@@ -106,14 +121,20 @@ then to point Halide to it:
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
     export CLANG=<path to llvm>/build/bin/clang
 
-With LLVM_CONFIG and CLANG set (or the appropriate llvm-config and
-clang in your path), you should be able to just run 'make' in this
-directory. 'make run_tests' will run the JIT test suite, and 'make
-test_apps' will make sure all the apps compile and run (but won't
-check their output).
+Building Halide with make
+-------------------------
+
+With LLVM_CONFIG and CLANG set (or llvm-config and clang in your
+path), you should be able to just run 'make' in the root directory of
+the Halide source tree. 'make run_tests' will run the JIT test suite,
+and 'make test_apps' will make sure all the apps compile and run (but
+won't check their output).
 
 There is no 'make install' yet. If you want to make an install
 package, run 'make distrib'.
+
+Building Halide out-of-tree with make
+-------------------------------------
 
 If you wish to build Halide in a separate directory, you can do that
 like so:
@@ -123,12 +144,15 @@ like so:
     % cd halide_build
     % make -f ../Halide/Makefile
 
+Building Halide with cmake
+--------------------------
+
 If you wish to use cmake to build Halide, the build procedure is:
 
     % mkdir cmake_build
     % cd cmake_build
-    % LLVM_ROOT=/path/to/llvm3.5
-    % cmake -DLLVM_BIN=${LLVM_ROOT}/build/bin -DLLVM_INCLUDE="${LLVM_ROOT}/include;${LLVM_ROOT}/build/include" -DLLVM_LIB=${LLVM_ROOT}/build/lib -DLLVM_VERSION=35 ..
+    % export LLVM_ROOT=/path/to/llvm3.5/build
+    % cmake -DLLVM_BIN=${LLVM_ROOT}/bin -DLLVM_INCLUDE="${LLVM_ROOT}/../include;${LLVM_ROOT}/include" -DLLVM_LIB=${LLVM_ROOT}/lib -DLLVM_VERSION=35 ..
     % make -j8
 
 Building Halide and llvm as 32-bit on 64-bit linux
