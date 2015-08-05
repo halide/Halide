@@ -2,10 +2,11 @@
 #include <stdio.h>
 
 #include "pyramid.h"
-#include "static_image.h"
+#include "halide_image.h"
 
 #include <vector>
 using std::vector;
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Image<float> input(1024, 1024);

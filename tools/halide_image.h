@@ -3,27 +3,30 @@
 // Func::compile_to_file, when you do not want to link your processing program
 // against Halide.h/libHalide.a.
 
-#ifndef _STATIC_IMAGE_H
-#define _STATIC_IMAGE_H
+#ifndef HALIDE_IMAGE_H
+#define HALIDE_IMAGE_H
 
-#include <stdint.h>
-#include <memory>
-#include <limits>
-#include <stdlib.h>
 #include <cassert>
+#include <cstdint>
+#include <cstdlib>
+#include <limits>
+#include <memory>
 
 #include "HalideRuntime.h"
+
+namespace Halide {
+namespace Tools {
 
 template<typename T>
 class Image {
     struct Contents {
-        Contents(buffer_t b, uint8_t* a) : buf(b), ref_count(1), alloc(a) {}
+        Contents(const buffer_t &b, uint8_t *a) : buf(b), ref_count(1), alloc(a) {}
         buffer_t buf;
         int ref_count;
         uint8_t *alloc;
 
         void dev_free() {
-            halide_device_free(NULL, &buf);
+            halide_device_free(nullptr, &buf);
         }
 
         ~Contents() {
@@ -73,7 +76,7 @@ class Image {
 public:
     typedef T ElemType;
 
-    Image() : contents(NULL) {
+    Image() : contents(nullptr) {
     }
 
     Image(int x, int y = 0, int z = 0, int w = 0, bool interleaved = false) {
@@ -91,7 +94,7 @@ public:
             contents->ref_count--;
             if (contents->ref_count == 0) {
                 delete contents;
-                contents = NULL;
+                contents = nullptr;
             }
         }
     }
@@ -105,14 +108,16 @@ public:
             contents->ref_count--;
             if (contents->ref_count == 0) {
                 delete contents;
-                contents = NULL;
+                contents = nullptr;
             }
         }
         contents = p;
         return *this;
     }
 
-    T *data() const {return (T*)contents->buf.host;}
+    T *data() { return (T*)contents->buf.host; }
+
+    const T *data() const { return (T*)contents->buf.host; }
 
     void set_host_dirty(bool dirty = true) {
         // If you use data directly, you must also call this so that
@@ -122,7 +127,7 @@ public:
 
     void copy_to_host() {
         if (contents->buf.dev_dirty) {
-            halide_copy_to_host(NULL, &contents->buf);
+            halide_copy_to_host(nullptr, &contents->buf);
             contents->buf.dev_dirty = false;
         }
     }
@@ -130,7 +135,7 @@ public:
     void copy_to_device(const struct halide_device_interface *device_interface) {
         if (contents->buf.host_dirty) {
             // If host
-            halide_copy_to_device(NULL, &contents->buf, device_interface);
+            halide_copy_to_device(nullptr, &contents->buf, device_interface);
             contents->buf.host_dirty = false;
         }
     }
@@ -218,7 +223,9 @@ public:
         contents->buf.min[2] = z;
         contents->buf.min[3] = w;
     }
-
 };
 
-#endif //_STATIC_IMAGE_H
+}  // namespace Tools
+}  // namespace Halide
+
+#endif  // HALIDE_IMAGE_H
