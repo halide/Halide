@@ -109,6 +109,12 @@ else()
   #endif()
 endif()
 
+# Look for OpenMP
+find_package(OpenMP QUIET)
+if (OPENMP_FOUND)
+  message(STATUS "Found OpenMP")
+endif()
+
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
