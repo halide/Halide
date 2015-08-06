@@ -19,6 +19,7 @@ for f in ../lesson_*.cpp; do
     rm -f stderr.txt
     touch gdb_script.txt
     echo "set args -s 2> stderr.txt > stdout.txt" >> gdb_script.txt
+    echo "set height 0" >> gdb_script.txt
     echo "start" >> gdb_script.txt
     for l in $LINES; do
         echo advance ${FILENAME}:${l} >> gdb_script.txt
@@ -29,7 +30,7 @@ for f in ../lesson_*.cpp; do
         echo call "fflush(stdout)" >> gdb_script.txt
         echo call "fflush(stderr)" >> gdb_script.txt
         echo next >> gdb_script.txt
-        echo call "usleep(10000)" >> gdb_script.txt
+        echo call "usleep(1000)" >> gdb_script.txt
         echo call "fprintf(stderr, \"END_REALIZE_${l}_\\n\")" >> gdb_script.txt
         echo call "fprintf(stdout, \"END_REALIZE_${l}_\\n\")" >> gdb_script.txt
         echo call "fflush(stdout)" >> gdb_script.txt
