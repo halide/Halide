@@ -7,10 +7,10 @@
 #define HALIDE_IMAGE_H
 
 #include <cassert>
-#include <cstdint>
 #include <cstdlib>
 #include <limits>
 #include <memory>
+#include <stdint.h>  // <cstdint> requires C++11
 
 #include "HalideRuntime.h"
 
