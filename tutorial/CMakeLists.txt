@@ -4,10 +4,19 @@ macro(use_libpng TARGET)
   target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(${TARGET} PRIVATE ${PNG_LIBRARIES})
 endmacro()
+
+# Detect if we need supress -Wunused-but-set-variable warning.  This warning
+# might be emitted by gcc for the tutorials as they don't always use a result
+# when showing a demonstration of a computation in C code.
+check_cxx_compiler_flag("-Wno-unused-but-set-variable" SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
+
 macro(add_tutorial source_file)
   string(REPLACE ".cpp" "" name ${source_file})
   halide_project(${name} "tutorials" ${source_file})
   target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
+  if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
+    target_compile_options(${name} PRIVATE "-Wno-unused-but-set-variable")
+  endif()
 endmacro()
 
 # Declare tutorials
