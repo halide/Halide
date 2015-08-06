@@ -16,6 +16,10 @@ set_target_properties(blur_test halide_blur PROPERTIES RUNTIME_OUTPUT_DIRECTORY
 
 if (NOT MSVC)
   target_compile_options(blur_test PRIVATE "-std=c++11")
+  check_cxx_compiler_flag("-Wno-cast-qual" SUPPORTS_NO_CAST_QUAL)
+  if (SUPPORTS_NO_CAST_QUAL)
+    target_compile_options(blur_test PRIVATE "-Wno-cast-qual")
+  endif()
 endif()
 
 # FIXME: Cannot use halide_add_generator_dependency() because
