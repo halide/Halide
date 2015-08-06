@@ -307,6 +307,20 @@ public:
             idx--;
         }
 
+        // Check the address is indeed inside the object found
+        uint64_t end_ptr = global_variables[idx].addr;
+        TypeInfo *t = global_variables[idx].type;
+        uint64_t size = t->size;
+        while (t->type == TypeInfo::Array) {
+            t = t->members[0].type;
+            size *= t->size;
+        }
+        end_ptr += size;
+        if (address < global_variables[idx].addr ||
+            address >= end_ptr) {
+            return -1;
+        }
+
         return (int)idx;
     }
 
@@ -1405,6 +1419,10 @@ private:
                             type_info.members.push_back(m);
                             type_info.type = TypeInfo::Array;
                         } else if (attr == attr_byte_size) {
+                            // According to the dwarf spec, this
+                            // should be the number of bytes the array
+                            // occupies, but compilers seem to emit
+                            // the number of array entries instead.
                             type_info.size = val;
                         }
                     } else if (fmt.tag == tag_variable) {
