@@ -71,8 +71,11 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         }
 
 
-        size_t written = write(fd, &buffer[0], total_bytes);
-        halide_assert(user_context, written == total_bytes && "Can't write to trace file");
+        {
+            ScopedSpinLock lock(&halide_trace_file_lock);
+            size_t written = write(fd, &buffer[0], total_bytes);
+            halide_assert(user_context, written == total_bytes && "Can't write to trace file");
+        }
 
     } else {
         stringstream ss(user_context);
