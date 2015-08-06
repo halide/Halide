@@ -55,7 +55,14 @@ for f in ../lesson_*.cpp; do
     done
 done
 
+# For lesson 3, we have two special cases for things we want to insert:
 
+# We want the HL_DEBUG_CODEGEN output for the first mention of that
+L=$(grep -n HL_DEBUG_CODEGEN ../lesson_03_*.cpp | head -n1 | cut -d':' -f1)
+HL_DEBUG_CODEGEN=1 make -C ../.. tutorial_lesson_03* OPTIMIZE=-g 2> lesson_03_output_${L}.txt
 
+# and we want gradient.cpp
+L=$(grep -n compile_to_c ../lesson_03_*.cpp | head -n1 | cut -d':' -f1)
+cp ../../bin/build/tmp/gradient.cpp lesson_03_output_${L}.txt
 
 #rm stderr.txt gdb_script.txt
