@@ -3,8 +3,8 @@
 // Func::compile_to_file, when you do not want to link your processing program
 // against Halide.h/libHalide.a.
 
-#ifndef HALIDE_IMAGE_H
-#define HALIDE_IMAGE_H
+#ifndef HALIDE_TOOLS_IMAGE_H
+#define HALIDE_TOOLS_IMAGE_H
 
 #include <cassert>
 #include <cstdlib>
@@ -228,4 +228,4 @@ public:
 }  // namespace Tools
 }  // namespace Halide
 
-#endif  // HALIDE_IMAGE_H
+#endif  // HALIDE_TOOLS_IMAGE_H
