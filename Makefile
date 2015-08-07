@@ -198,14 +198,14 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 SRC_DIR  = $(ROOT_DIR)/src
 
+# The following directories are all relative to the output directory (i.e. $(CURDIR), not $(SRC_DIR))
 BIN_DIR     = bin
 DISTRIB_DIR = distrib
+INCLUDE_DIR = include
+DOC_DIR     = doc
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BUILD_DIR)/filters
 TMP_DIR     = $(BUILD_DIR)/tmp
-INCLUDE_DIR = include
-DOC_DIR     = doc
-TOOLS_DIR   = tools
 
 SOURCE_FILES = \
   AddImageChecks.cpp \
@@ -805,11 +805,11 @@ $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h (but not libHalide).
 $(BIN_DIR)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h $(INCLUDE_DIR)/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(TOOLS_DIR) -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread -ldl -o $@
 
 # acquire_release is the only test that explicitly uses CUDA/OpenCL APIs, so link only those here.
 $(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.o $(FILTERS_DIR)/acquire_release.h $(INCLUDE_DIR)/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(TOOLS_DIR) -lpthread -ldl $(OPENCL_LDFLAGS) $(CUDA_LDFLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread -ldl $(OPENCL_LDFLAGS) $(CUDA_LDFLAGS) -o $@
 
 # By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
 $(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
@@ -829,7 +829,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.so $(INCL
 		-I$(TMP_DIR) $(TMP_DIR)/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-I$(INCLUDE_DIR) -I$(TOOLS_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
+		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
 
 $(BIN_DIR)/tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
@@ -947,7 +947,7 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.
 	        $(ROOT_DIR)/apps/support \
                 apps; \
 	  mkdir -p tools; \
-	  cp $(ROOT_DIR)/$(TOOLS_DIR)/* tools/; \
+	  cp $(ROOT_DIR)/tools/* tools/; \
         fi
 	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/bilateral_grid out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
