@@ -165,7 +165,10 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         }
         ss << "\n";
 
-        halide_print(user_context, ss.str());
+        {
+            ScopedSpinLock lock(&halide_trace_file_lock);
+            halide_print(user_context, ss.str());
+        }
     }
 
     return my_id;
