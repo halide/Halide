@@ -840,7 +840,7 @@ tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.s
 	@-mkdir -p $(TMP_DIR)
 	cp $(BIN_DIR)/tutorial_lesson_15_generators $(TMP_DIR)/lesson_15_generate; \
 	cd $(TMP_DIR); \
-	$(LD_PATH_SETUP) bash $(CURDIR)/tutorial/lesson_15_generators_usage.sh
+	$(LD_PATH_SETUP) bash $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh
 	@-echo
 
 test_%: $(BIN_DIR)/test_%
@@ -898,7 +898,7 @@ generator_%: $(BIN_DIR)/generator_%
 	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$<
 	@-echo
 
-$(TMP_DIR)/images/%.png: tutorial/images/%.png
+$(TMP_DIR)/images/%.png: $(ROOT_DIR)/tutorial/images/%.png
 	@-mkdir -p $(TMP_DIR)/images
 	cp $< $(TMP_DIR)/images/
 
@@ -930,22 +930,41 @@ time_compilation_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.gen
 
 .PHONY: test_apps
 test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
-	make -C $(ROOT_DIR)/apps/bilateral_grid clean  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/bilateral_grid out.png  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/local_laplacian clean  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/local_laplacian out.png  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/interpolate clean  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/interpolate out.png  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/blur clean  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/blur test  HALIDE_PATH=$(CURDIR)
-	$(ROOT_DIR)/apps/blur/test
-	make -C $(ROOT_DIR)/apps/wavelet clean  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/wavelet test  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/c_backend clean  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/c_backend test  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/modules clean  HALIDE_PATH=$(CURDIR)
-	make -C $(ROOT_DIR)/apps/modules out.png  HALIDE_PATH=$(CURDIR)
-	cd $(ROOT_DIR)/apps/HelloMatlab; HALIDE_PATH=$(CURDIR) ./run_blur.sh
+	mkdir -p apps
+	# Make a local copy of the apps if we're building out-of-tree,
+	# because the app Makefiles are written to build in-tree
+	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
+	  echo "Building out-of-tree, so making local copy of apps"; \
+	  cp -r $(ROOT_DIR)/apps/bilateral_grid \
+	        $(ROOT_DIR)/apps/local_laplacian \
+	        $(ROOT_DIR)/apps/interpolate \
+	        $(ROOT_DIR)/apps/blur \
+	        $(ROOT_DIR)/apps/wavelet \
+	        $(ROOT_DIR)/apps/c_backend \
+	        $(ROOT_DIR)/apps/modules \
+	        $(ROOT_DIR)/apps/HelloMatlab \
+	        $(ROOT_DIR)/apps/images \
+	        $(ROOT_DIR)/apps/support \
+                apps; \
+	  mkdir -p tools; \
+	  cp $(ROOT_DIR)/$(TOOLS_DIR)/* tools/; \
+        fi
+	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/bilateral_grid out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/local_laplacian clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/local_laplacian out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/interpolate clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/interpolate out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/blur clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/blur test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	apps/blur/test
+	make -C apps/wavelet clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/wavelet test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/c_backend clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/c_backend test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/modules clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/modules out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	cd apps/HelloMatlab; HALIDE_PATH=$(CURDIR) ./run_blur.sh
 
 .PHONY: test_python
 test_python: $(BIN_DIR)/libHalide.a
