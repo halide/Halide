@@ -226,6 +226,8 @@ set(HEADER_FILES
   FastIntegerDivide.h
   FindCalls.h
   Float16.h
+  # Float16Literal.h is deliberately not here because clients must
+  # include it manually if they need it.
   Func.h
   Function.h
   Generator.h
@@ -312,6 +314,7 @@ file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGLCompute.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY Float16Literal.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 
 IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
@@ -365,6 +368,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   FastIntegerDivide.cpp
   FindCalls.cpp
   Float16.cpp
+  Float16Literal.cpp
   Func.cpp
   Function.cpp
   FuseGPUThreadLoops.cpp
