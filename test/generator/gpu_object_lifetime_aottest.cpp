@@ -10,8 +10,10 @@
 #endif
 
 #include "gpu_object_lifetime.h"
-#include "static_image.h"
+#include "halide_image.h"
 #include "../common/gpu_object_lifetime.h"
+
+using namespace Halide::Tools;
 
 extern "C" void halide_print(void *user_context, const char *str) {
     printf("%s", str);

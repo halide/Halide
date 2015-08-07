@@ -7,8 +7,8 @@
 
 #include "benchmark.h"
 #include "curved.h"
+#include "halide_image.h"
 #include "halide_image_io.h"
-#include "static_image.h"
 
 #include "fcam/Demosaic.h"
 #include "fcam/Demosaic_ARM.h"

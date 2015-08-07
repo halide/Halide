@@ -3,7 +3,9 @@
 
 #include "extended_buffer_t_common.h"
 #include "extended_buffer_t.h"
-#include "static_image.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Image<float> input(10, 10);

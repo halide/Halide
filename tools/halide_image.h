@@ -3,21 +3,24 @@
 // Func::compile_to_file, when you do not want to link your processing program
 // against Halide.h/libHalide.a.
 
-#ifndef _STATIC_IMAGE_H
-#define _STATIC_IMAGE_H
+#ifndef HALIDE_TOOLS_IMAGE_H
+#define HALIDE_TOOLS_IMAGE_H
 
-#include <stdint.h>
-#include <memory>
-#include <limits>
-#include <stdlib.h>
 #include <cassert>
+#include <cstdlib>
+#include <limits>
+#include <memory>
+#include <stdint.h>  // <cstdint> requires C++11
 
 #include "HalideRuntime.h"
+
+namespace Halide {
+namespace Tools {
 
 template<typename T>
 class Image {
     struct Contents {
-        Contents(buffer_t b, uint8_t* a) : buf(b), ref_count(1), alloc(a) {}
+        Contents(const buffer_t &b, uint8_t *a) : buf(b), ref_count(1), alloc(a) {}
         buffer_t buf;
         int ref_count;
         uint8_t *alloc;
@@ -112,7 +115,9 @@ public:
         return *this;
     }
 
-    T *data() const {return (T*)contents->buf.host;}
+    T *data() { return (T*)contents->buf.host; }
+
+    const T *data() const { return (T*)contents->buf.host; }
 
     void set_host_dirty(bool dirty = true) {
         // If you use data directly, you must also call this so that
@@ -218,7 +223,9 @@ public:
         contents->buf.min[2] = z;
         contents->buf.min[3] = w;
     }
-
 };
 
-#endif //_STATIC_IMAGE_H
+}  // namespace Tools
+}  // namespace Halide
+
+#endif  // HALIDE_TOOLS_IMAGE_H

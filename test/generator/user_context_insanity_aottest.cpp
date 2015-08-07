@@ -3,8 +3,10 @@
 #include <assert.h>
 
 #include "HalideRuntime.h"
-#include "static_image.h"
+#include "halide_image.h"
 #include "user_context_insanity.h"
+
+using namespace Halide::Tools;
 
 const int num_launcher_tasks = 1000;
 
