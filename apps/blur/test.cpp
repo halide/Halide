@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <cstdio>
 
-#include <static_image.h>
-#include <benchmark.h>
+#include "benchmark.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 //#define cimg_display 0
 //#include "CImg.h"
