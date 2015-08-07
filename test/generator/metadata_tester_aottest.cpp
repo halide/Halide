@@ -8,7 +8,9 @@
 
 #include "metadata_tester.h"
 #include "metadata_tester_ucon.h"
-#include "static_image.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 const int kSize = 32;
 

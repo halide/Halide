@@ -3,8 +3,10 @@
 #include <assert.h>
 
 #include "HalideRuntime.h"
-#include "static_image.h"
+#include "halide_image.h"
 #include "user_context.h"
+
+using namespace Halide::Tools;
 
 static const void *context_pointer = (void *)0xf00dd00d;
 
