@@ -5,8 +5,8 @@
 #include "daubechies_x.h"
 #include "inverse_daubechies_x.h"
 
+#include "halide_image.h"
 #include "halide_image_io.h"
-#include "static_image.h"
 
 using namespace Halide::Tools;
 

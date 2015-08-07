@@ -5,7 +5,9 @@
 #include <string.h>
 
 #include "acquire_release.h"
-#include "static_image.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 const int W = 256, H = 256;
 
