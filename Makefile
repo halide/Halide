@@ -948,8 +948,9 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.
 	cd $(ROOT_DIR)/apps/HelloMatlab; HALIDE_PATH=$(CURDIR) ./run_blur.sh
 
 .PHONY: test_python
-test_python:
-	make -C python_bindings test
+test_python: $(BIN_DIR)/libHalide.a
+	mkdir -p python_bindings
+	make -C python_bindings -f $(ROOT_DIR)/python_bindings/Makefile test
 
 # It's just for compiling the runtime, so Clang <3.5 *might* work,
 # but best to peg it to the minimum llvm version.

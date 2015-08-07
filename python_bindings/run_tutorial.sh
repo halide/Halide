@@ -32,18 +32,18 @@ tutorial/lesson_07_multi_stage_pipelines.py
 tutorial/lesson_08_scheduling_2.py
 tutorial/lesson_09_update_definitions.py
 tutorial/lesson_10_aot_compilation_generate.py
-#tutorial/lesson_10_aot_compilation_run.py
 tutorial/lesson_11_cross_compilation.py
 tutorial/lesson_12_using_the_gpu.py
 tutorial/lesson_13_tuples.py
 tutorial/lesson_14_types.py
 )
 
-#for i in tutorial/*.py
+if [ -z "$ROOT_DIR" ]; then ROOT_DIR=$(dirname $0); fi
+
 for i in ${TUTORIALS[*]}
 do
   echo $S $PYTHON $i $S
-  $PYTHON ../$i
+  $PYTHON ${ROOT_DIR}/$i
   if [[ "$?" -ne "0" ]]; then
         echo "$Sa Lesson failed $Sb"
 	let FAILED=1
@@ -56,4 +56,3 @@ if [[ "$FAILED" -ne "0" ]]; then
 else
   echo "$S (all lessons ran, (skipped lesson_10b)) $S"
 fi
-
