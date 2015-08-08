@@ -2,7 +2,9 @@
 #include <stdio.h>
 
 #include "embed_image.h"
-#include "static_image.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Image<float> input(10, 10, 3);

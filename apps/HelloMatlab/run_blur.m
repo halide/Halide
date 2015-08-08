@@ -1,5 +1,5 @@
 % Add the path to mex_halide.m.
-addpath(fullfile(pwd, '..', '..', 'tools'));
+addpath(fullfile(getenv('HALIDE_PATH'), 'tools'));
 
 % Build the mex library from the blur generator.
 mex_halide('iir_blur.cpp');

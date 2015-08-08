@@ -18,12 +18,12 @@ S=" --------- "
 Sa=" >>>>>>>> "
 Sb=" <<<<<<<< "
 
+if [ -z "$ROOT_DIR" ]; then ROOT_DIR=$(dirname $0); fi
 
-
-for i in apps/*.py
+for i in ${ROOT_DIR}/apps/*.py
 do
   echo $S $PYTHON $i $S
-  $PYTHON ../$i
+  $PYTHON $i
   if [[ "$?" -ne "0" ]]; then
         echo "$Sa App failed $Sb"
 	let FAILED=1
@@ -36,4 +36,3 @@ if [[ "$FAILED" -ne "0" ]]; then
 else
   echo "$S (all applications ran) $S"
 fi
-
