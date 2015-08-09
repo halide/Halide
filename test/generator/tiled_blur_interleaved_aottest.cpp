@@ -4,7 +4,9 @@
 #include <assert.h>
 
 #include "tiled_blur_interleaved.h"
-#include "static_image.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 const int W = 80, H = 80;
 

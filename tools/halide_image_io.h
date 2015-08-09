@@ -1,8 +1,5 @@
 // This simple PNG IO library works with *both* the Halide::Image<T> type *and*
-// the simple static_image.h version. Also now includes PPM support for faster load/save.
-// If you want the static_image.h version, to use in a program statically
-// linking against a Halide pipeline pre-compiled with Func::compile_to_file, you
-// need to explicitly #include static_image.h first.
+// the simple halide_image.h version. Also now includes PPM support for faster load/save.
 
 #ifndef HALIDE_IMAGE_IO_H
 #define HALIDE_IMAGE_IO_H

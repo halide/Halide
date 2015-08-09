@@ -57,7 +57,7 @@ void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut) {
 // From the Halide camera_pipe's color_correct
 void makeColorMatrix(float colorMatrix[], float colorTemp) {
     float alpha = (1.0 / colorTemp - 1.0/3200) / (1.0/7000 - 1.0/3200);
-        
+
     colorMatrix[0] = alpha*1.6697f     + (1-alpha)*2.2997f;
     colorMatrix[1] = alpha*-0.2693f    + (1-alpha)*-0.4478f;
     colorMatrix[2] = alpha*-0.4004f    + (1-alpha)*0.1706f;
@@ -79,7 +79,7 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
+void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
 #if 0
     if (!src.image().valid()) {
         error(Event::DemosaicError, "Cannot demosaic an invalid image");
