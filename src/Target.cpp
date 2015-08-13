@@ -373,7 +373,7 @@ std::string Target::to_string() const {
         "matlab",
         "profile",
         "no_runtime",
-	"metal"
+        "metal"
     };
     internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
     string result = string(arch_names[arch])
