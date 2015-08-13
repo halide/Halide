@@ -219,8 +219,8 @@ private:
     }
 
     Expr make_not(Expr a) {
-        if (is_one(a)) return const_false();
-        if (is_zero(a)) return const_true();
+        if (is_one(a)) return const_false(a.type().width);
+        if (is_zero(a)) return const_true(a.type().width);
         return !a;
     }
 
