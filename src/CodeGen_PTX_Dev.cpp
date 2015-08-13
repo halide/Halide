@@ -422,7 +422,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     PM.run(*module);
 
+    #if LLVM_VERSION < 38
     ostream.flush();
+    #endif
 
     if (debug::debug_level >= 2) {
         module->dump();
