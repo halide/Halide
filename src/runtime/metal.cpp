@@ -710,6 +710,11 @@ WEAK int halide_metal_run(void *user_context,
     debug(user_context) << "Setting shared memory length to " << shared_mem_bytes << "\n";
     set_threadgroup_memory_length(encoder, shared_mem_bytes, 0);
 
+    static int32_t total_dispatches = 0;
+    debug(user_context) << "Dispatching threadgroups (number " << total_dispatches++ <<
+        ") blocks(" << blocksX << ", " << blocksY << ", " << blocksZ <<
+        ") threads(" << threadsX << ", " << threadsY << ", " << threadsZ << ")\n";
+
     dispatch_threadgroups(encoder,
                           blocksX, blocksY, blocksZ,
                           threadsX, threadsY, threadsZ);
