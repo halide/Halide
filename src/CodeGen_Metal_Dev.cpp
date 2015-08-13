@@ -110,7 +110,7 @@ string simt_intrinsic(const string &name) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
     if (op->type.is_int()) {
-      print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), { op->a, op->b }, Call::Extern));
+        print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), { op->a, op->b }, Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -118,7 +118,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
     if (op->type.is_int()) {
-      print_expr(Call::make(op->type, "smod_" + print_type(op->type), { op->a, op->b }, Call::Extern));
+        print_expr(Call::make(op->type, "smod_" + print_type(op->type), { op->a, op->b }, Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
@@ -230,7 +230,10 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(op->type.is_vector());
 
-        id = unique_name('V');
+        // This has to be underscore as print_name prepends and
+        // underscore to names without one and that results in a name
+        // mismatch of a Load appears as the value of a Let.
+        id = unique_name('_');
         cache[rhs.str()] = id;
 
         do_indent();
