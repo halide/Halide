@@ -562,7 +562,10 @@ vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
     std::string str;
     llvm::raw_string_ostream OS(str);
     llvm_3_2::WriteBitcodeToFile(module, OS);
+
+    #if LLVM_VERSION < 38
     OS.flush();
+    #endif
 
     //
     // Values below are to accomodate Android Renderscript bitcode reader.

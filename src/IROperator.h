@@ -339,11 +339,13 @@ inline Expr operator!=(Expr a, Expr b) {
 
 /** Returns the logical and of the two arguments */
 inline Expr operator&&(Expr a, Expr b) {
+    Internal::match_types(a, b);
     return Internal::And::make(a, b);
 }
 
 /** Returns the logical or of the two arguments */
 inline Expr operator||(Expr a, Expr b) {
+    Internal::match_types(a, b);
     return Internal::Or::make(a, b);
 }
 

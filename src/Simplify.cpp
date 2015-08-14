@@ -2462,8 +2462,8 @@ private:
 
         const AssertStmt *a = stmt.as<AssertStmt>();
         if (a && is_zero(a->condition)) {
-            user_error << "This pipeline is guaranteed to fail an assertion at runtime: \n"
-                       << stmt << "\n";
+            user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
+                         << stmt << "\n";
         } else if (a && is_one(a->condition)) {
             stmt = Evaluate::make(0);
         }

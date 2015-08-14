@@ -209,7 +209,8 @@ Expr And::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "And of undefined\n";
     internal_assert(a.type().is_bool()) << "lhs of And is not a bool\n";
     internal_assert(b.type().is_bool()) << "rhs of And is not a bool\n";
-
+    internal_assert(a.type() == b.type()) << "And of mismatched types\n";
+    
     And *node = new And;
     node->type = Bool(a.type().width);
     node->a = a;
@@ -222,7 +223,8 @@ Expr Or::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Or of undefined\n";
     internal_assert(a.type().is_bool()) << "lhs of Or is not a bool\n";
     internal_assert(b.type().is_bool()) << "rhs of Or is not a bool\n";
-
+    internal_assert(a.type() == b.type()) << "Or of mismatched types\n";
+    
     Or *node = new Or;
     node->type = Bool(a.type().width);
     node->a = a;
