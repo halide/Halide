@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     // for now (dev, host_dirty, dev_dirty).
 
     // Let's make some input data to test with:
-    uint8_t input[640 * 480];
+    uint8_t input[640 * 480 * 3];
     for (int y = 0; y < 480; y++) {
         for (int x = 0; x < 640; x++) {
             input[y * 640 + x] = x ^ (y + 1);
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     }
 
     // And the memory where we want to write our output:
-    uint8_t output[640 * 480];
+    uint8_t output[640 * 480 * 3];
 
     // In AOT-compiled mode, Halide doesn't manage this memory for
     // you. You should use whatever image data type makes sense for
@@ -75,10 +75,12 @@ int main(int argc, char **argv) {
     // adjacent in y are separated by a scanline's worth of pixels in
     // memory.
     input_buf.stride[1] = output_buf.stride[1] = 640;
+    input_buf.stride[2] = output_buf.stride[2] = 640 * 480;
 
     // The extent tells us how large the image is in each dimension.
     input_buf.extent[0] = output_buf.extent[0] = 640;
     input_buf.extent[1] = output_buf.extent[1] = 480;
+    input_buf.extent[2] = output_buf.extent[2] = 3;
 
     // We'll leave the mins as zero. This is what they typically
     // are. The host pointer points to the memory location of the min
@@ -100,27 +102,12 @@ int main(int argc, char **argv) {
 
     // The return value is an error code. It's zero on success.
 
-    int offset = 5;
-    int error = lesson_10_halide(&input_buf, offset, &output_buf);
+    int width = 7;
+    int error = lesson_10_halide(&input_buf, width, &output_buf);
 
     if (error) {
         printf("Halide returned an error: %d\n", error);
         return -1;
-    }
-
-    // Now let's check the filter performed as advertised. It was
-    // supposed to add the offset to every input pixel.
-    for (int y = 0; y < 480; y++) {
-        for (int x = 0; x < 640; x++) {
-            uint8_t input_val = input[y * 640 + 480];
-            uint8_t output_val = output[y * 640 + 480];
-            uint8_t correct_val = input_val + offset;
-            if (output_val != correct_val) {
-                printf("output(%d, %d) was %d instead of %d\n",
-                       x, y, output_val, correct_val);
-                return -1;
-            }
-        }
     }
 
     // Everything worked!

@@ -36,46 +36,38 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+	Var x, y, c;
+	ImageParam ip(type_of<uint8_t>(), 3);
 
-    // We'll define a simple one-stage pipeline:
-    Func brighter;
-    Var x, y;
+	Func result;
+	Func bcip;
+	// causes an internal assert if combined with vectorize in schedule...
+	bcip = BoundaryConditions::constant_exterior(ip, 0);
 
-    // The pipeline will depend on one scalar parameter.
-    Param<uint8_t> offset;
+	// totally works.
+	// bcip = BoundaryConditions::repeat_edge(ip);
 
-    // And take one grayscale 8-bit input buffer. The first
-    // constructor argument gives the type of a pixel, and the second
-    // specifies the number of dimensions (not the number of
-    // channels!). For a grayscale image this is two; for a color
-    // image it's three. Currently, four dimensions is the maximum for
-    // inputs and outputs.
-    ImageParam input(type_of<uint8_t>(), 2);
+	// compiles, correctly errors out due to out of bounds indexing
+	// bcip(x, y, c) = ip(x, y, c);
 
-    // If we were jit-compiling, these would just be an int and an
-    // Image, but because we want to compile the pipeline once and
-    // have it work for any value of the parameter, we need to make a
-    // Param object, which can be used like an Expr, and an ImageParam
-    // object, which can be used like an Image.
+	Param<int> width(7, 1, 40);
 
-    // Define the Func.
-    brighter(x, y) = input(x, y) + offset;
+	RDom r(0, width, 0, width);
 
-    // Schedule it.
-    brighter.vectorize(x, 16).parallel(y);
+	result(x, y, c) = cast<uint8_t>(
+		sum(cast<float>(bcip(
+		  (x / width) * width + r.x,
+		  (y / width) * width + r.y,
+		  c
+		))) / (width * width)
+	);
 
-    // This time, instead of calling brighter.realize(...), which
-    // would compile and run the pipeline immediately, we'll call a
-    // method that compiles the pipeline to an object file and header.
-    //
-    // For AOT-compiled code, we need to explicitly declare the
-    // arguments to the routine. This routine takes two. Arguments are
-    // usually Params or ImageParams.
-    std::vector<Argument> args = {input, offset};
-    brighter.compile_to_file("lesson_10_halide", args);
+	// the schedule should really be in width x width tiles and compute
+	// the answer for each one only once (since they're all the same)
+	result.parallel(y, 4).vectorize(x, 4);
 
-    // If you're using C++11, you can just say:
-    // brighter.compile_to_file("lesson_10_halide", {input, offset});
+    std::vector<Argument> args = {ip, width};
+    result.compile_to_file("lesson_10_halide", args);
 
     printf("Halide pipeline compiled, but not yet run.\n");
 
