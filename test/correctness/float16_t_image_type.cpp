@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "Float16Literal.h"
 #include <stdio.h>
 #include <cmath>
 
@@ -26,16 +25,18 @@ int main() {
   h_assert(simple.channels() == 1, "invalid channels");
   h_assert(simple.dimensions() == 2, "invalid number of dimensions");
 
+  const float16_t zeroPointTwoFive = float16_t("0.25", float16_t::RoundingMode::ToNearestTiesToEven);
+
   // Write a constant value and check we can read it back
   for (int x=simple.min(0); x < simple.extent(0); ++x) {
     for (int y = simple.min(1); y < simple.extent(1); ++y) {
-      simple(x, y) = 0.25_fp16;
+      simple(x, y) = zeroPointTwoFive;
     }
   }
 
   for (int x=simple.min(0); x < simple.extent(0); ++x) {
     for (int y = simple.min(1); y < simple.extent(1); ++y) {
-      h_assert(simple(x, y) == 0.25_fp16, "Invalid value read back");
+      h_assert(simple(x, y) == zeroPointTwoFive, "Invalid value read back");
       h_assert(simple(x, y).to_bits() == 0x3400, "Bit pattern incorrect");
     }
   }
@@ -48,7 +49,7 @@ int main() {
                      sizeof(float16_t)*((x - rawImage->min[0])*rawImage->stride[0] +
                                      (y - rawImage->min[1])*rawImage->stride[1]);
       float16_t* pixel = (float16_t*) loc;
-      h_assert(*pixel == 0.25_fp16, "Failed to read value back via buffer_t");
+      h_assert(*pixel == zeroPointTwoFive, "Failed to read value back via buffer_t");
       h_assert(pixel->to_bits() == 0x3400, "Bit pattern incorrect via buffer_t");
     }
   }
