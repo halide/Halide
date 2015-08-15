@@ -36,7 +36,7 @@ struct float16_t {
      *  \param roundingMode The rounding mode to use
      *
      */
-    float16_t(float value, RoundingMode roundingMode);
+    explicit float16_t(float value, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
 
     /** Construct from a double using a particular rounding mode.
      *  A warning will be emitted if the result cannot be represented exactly
@@ -46,7 +46,7 @@ struct float16_t {
      *  \param roundingMode The rounding mode to use
      *
      */
-    float16_t(double value, RoundingMode roundingMode);
+    explicit float16_t(double value, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
 
     /** Construct by parsing a string using a particular rounding mode.
      *  A warning will be emitted if the result cannot be represented exactly
@@ -58,17 +58,19 @@ struct float16_t {
      *  \param roundingMode The rounding mode to use
      *
      */
-    float16_t(const char *stringRepr, RoundingMode roundingMode);
+    explicit float16_t(const char *stringRepr, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
 
     /** Construct a float16_t with the bits initialised to 0. This represents
      * positive zero.*/
     float16_t();
 
-    /** Construct using raw bits
+    /** Construct using raw bits. Note this is marked ``explicit`` so that
+     *  it is not implicitly called if someone tries to do ``float16_t f = 0.5f``
+     *  which should be a compile error.
      *
      * \param rawBits The bits conformant to IEEE754 binary16
      */
-    float16_t(uint16_t rawBits);
+    explicit float16_t(uint16_t rawBits);
     /// @}
 
     // Use explicit to avoid accidently raising the precision
@@ -77,12 +79,8 @@ struct float16_t {
     /** Cast to double */
     explicit operator double();
 
+    // Be explicit about how the copy constructor is expected to behave
     float16_t(const float16_t&) = default;
-    // Do not allow implicit or explicit casting from a float or double. It allows
-    // to confusing behavior where float16_t(uint16_t) gets called.  Clients should
-    // use the constructor that specifies the rounding mode instead.
-    float16_t(float value) = delete;
-    float16_t(double value) = delete;
 
     // Be explicit about how assignment is expected to behave
     float16_t& operator=(const float16_t&) = default;

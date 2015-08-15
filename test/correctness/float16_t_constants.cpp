@@ -165,6 +165,20 @@ int main() {
     h_assert(noughtPointOneRNE.to_bits() == noughtPointOneRZ.to_bits(), "incorrect rounding");
     h_assert(noughtPointOneRNA.to_bits() == noughtPointOneRZ.to_bits(), "incorrect rounding");
     h_assert(noughtPointOneRD.to_bits() == noughtPointOneRZ.to_bits(), "incorrect rounding");
+    // Technically 0.1 is rounded twice (once when compiled and once by
+    // float16_t) when using a float or double literal but for this particular
+    // example rounding twice does not cause any issues.
+    float16_t noughtPointOneFCast = (float16_t) 0.1f; // Implicitly RNE
+    float16_t noughtPointOneDCast = (float16_t) 0.1; // Implicitly RNE
+    float16_t noughtPointOneExplicitConstructor(0.1f); // Implicitly RNE
+    float16_t noughtPointOneExplicitConstructorStr("0.1"); // Implicitly RNE
+    float16_t noughtPointOneExplicitConstructorBits((uint16_t) 0x2e66); // Implicitly RNE
+    h_assert(noughtPointOneFCast.to_bits() == noughtPointOneRNE.to_bits(), "cast from float failed");
+    h_assert(noughtPointOneDCast.to_bits() == noughtPointOneRNE.to_bits(), "cast from double failed");
+    h_assert(noughtPointOneExplicitConstructor.to_bits() == noughtPointOneRNE.to_bits(), "Use of explicit consturctor produced bad value");
+    h_assert(noughtPointOneExplicitConstructorStr.to_bits() == noughtPointOneRNE.to_bits(), "Use of explicit consturctor produced bad value");
+    h_assert(noughtPointOneExplicitConstructorBits.to_bits() == noughtPointOneRNE.to_bits(), "Use of explicit consturctor produced bad value");
+
 
     // Try rounding up
     float16_t noughtPointOneRU("0.1", float16_t::RoundingMode::TowardPositiveInfinity);
