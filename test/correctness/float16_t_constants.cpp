@@ -158,6 +158,74 @@ int main() {
     h_assert(*reinterpret_cast<uint16_t*>(&nanValue) == nanValue.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
   }
 
+  // Largest +ve
+  {
+    float16_t largestNorm("65504");
+    h_assert(largestNorm.to_bits() == 0x7bff, "65504 as float_16t has wrong bits");
+    h_assert(largestNorm.to_hex_string() == "0x1.ffcp15", "65504 as float_16t has wrong hex repr");
+    h_assert(largestNorm.to_decimal_string() == "6.5504E+4", "65504 as float_16t has wrong decimal repr");
+
+    // Try converting to native float types
+    float largestNormf = (float) largestNorm;
+    double largestNormd = (double) largestNorm;
+    h_assert(largestNormf == 65504.0f, "Conversion to float failed");
+    h_assert(largestNormd == 65504.0, "Conversion to double failed");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&largestNorm) == largestNorm.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
+  }
+
+  // Largest -ve
+  {
+    float16_t largestNorm("-65504");
+    h_assert(largestNorm.to_bits() == 0xfbff, "65504 as float_16t has wrong bits");
+    h_assert(largestNorm.to_hex_string() == "-0x1.ffcp15", "65504 as float_16t has wrong hex repr");
+    h_assert(largestNorm.to_decimal_string() == "-6.5504E+4", "65504 as float_16t has wrong decimal repr");
+
+    // Try converting to native float types
+    float largestNormf = (float) largestNorm;
+    double largestNormd = (double) largestNorm;
+    h_assert(largestNormf == -65504.0f, "Conversion to float failed");
+    h_assert(largestNormd == -65504.0, "Conversion to double failed");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&largestNorm) == largestNorm.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
+  }
+
+  // Smallest +ve
+  {
+    float16_t smallestSubNorm("0x0.004p-14");
+    h_assert(smallestSubNorm.to_bits() == 0x0001, "smallest number has wrong bits");
+    h_assert(smallestSubNorm.to_hex_string() == "0x0.004p-14", "smallest number has wrong hex string");
+    h_assert(smallestSubNorm.to_decimal_string() == "5.9605E-8", "smallest number has wrong decimal string");
+
+    // Try converting to native float types
+    float smallestSubNormf = (float) smallestSubNorm;
+    double smallestSubNormd = (double) smallestSubNorm;
+    h_assert(smallestSubNormf == 0x1.0000p-24, "conversion to float failed");
+    h_assert(smallestSubNormd == 0x1.000000p-24, "conversion to double failed");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&smallestSubNorm) == smallestSubNorm.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
+  }
+
+  // Smallest -ve
+  {
+    float16_t smallestSubNorm("-0x0.004p-14");
+    h_assert(smallestSubNorm.to_bits() == 0x8001, "smallest number has wrong bits");
+    h_assert(smallestSubNorm.to_hex_string() == "-0x0.004p-14", "smallest number has wrong hex string");
+    h_assert(smallestSubNorm.to_decimal_string() == "-5.9605E-8", "smallest number has wrong decimal string");
+
+    // Try converting to native float types
+    float smallestSubNormf = (float) smallestSubNorm;
+    double smallestSubNormd = (double) smallestSubNorm;
+    h_assert(smallestSubNormf == -0x1.0000p-24, "conversion to float failed");
+    h_assert(smallestSubNormd == -0x1.000000p-24, "conversion to double failed");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&smallestSubNorm) == smallestSubNorm.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
+  }
+
   // Test the rounding of a few constants
 
   // 0.1 Cannot be represented exactly in binary
