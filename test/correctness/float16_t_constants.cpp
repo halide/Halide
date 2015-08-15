@@ -40,6 +40,9 @@ int main() {
     // Try converting to native float types
     h_assert( ((float) zeroP) == 0.0f, "+ve zero conversion to float invalid");
     h_assert( ((double) zeroP) == 0.0, "+ve zero conversion to double invalid");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&zeroP) == 0x0000, "Casting float16_t to uint16_t failed to give right bits");
   }
 
   // -ve Zero
@@ -65,6 +68,9 @@ int main() {
     // Try converting to native float types
     h_assert( ((float) zeroN) == -0.0f, "-ve zero conversion to float invalid");
     h_assert( ((double) zeroN) == -0.0, "-ve zero conversion to double invalid");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&zeroN) == 0x8000, "Casting float16_t to uint16_t failed to give right bits");
   }
 
   // +ve infinity
@@ -90,6 +96,9 @@ int main() {
              "+ve infinity conversion to float invalid");
     h_assert(std::isinf(infinityPd) & !std::signbit(infinityPd),
              "+ve infinity conversion to double invalid");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&infinityP) == 0x7c00, "Casting float16_t to uint16_t failed to give right bits");
   }
 
   // -ve infinity
@@ -115,6 +124,9 @@ int main() {
              "-ve infinity conversion to float invalid");
     h_assert(std::isinf(infinityNd) & std::signbit(infinityNd),
              "-ve infinity conversion to double invalid");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&infinityN) == 0xfc00, "Casting float16_t to uint16_t failed to give right bits");
   }
 
   // NaN
@@ -141,6 +153,9 @@ int main() {
     double nanValued = (double) nanValue;
     h_assert(std::isnan(nanValuef), "NaN conversion to float invalid");
     h_assert(std::isnan(nanValued), "NaN conversion to float invalid");
+
+    // Check that directly accessing the bits of the type is correct
+    h_assert(*reinterpret_cast<uint16_t*>(&nanValue) == nanValue.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
   }
 
   // Test the rounding of a few constants
