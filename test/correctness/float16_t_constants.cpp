@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "Float16Literal.h"
 #include <stdio.h>
 #include <cmath>
 
@@ -26,13 +25,11 @@ int main() {
     float16_t zeroPStringConstructorHex("0x0p0", float16_t::RoundingMode::ToNearestTiesToEven);
     float16_t zeroPFromFloat(0.0f, float16_t::RoundingMode::ToNearestTiesToEven);
     float16_t zeroPFromDouble(0.0,float16_t::RoundingMode::ToNearestTiesToEven);
-    float16_t zeroPLiteral = 0.0_fp16;
     h_assert(zeroDefaultConstructor.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
     h_assert(zeroPStringConstructorDecimal.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
     h_assert(zeroPStringConstructorHex.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
     h_assert(zeroPFromFloat.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
     h_assert(zeroPFromDouble.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
-    h_assert(zeroPLiteral.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
 
     // Check the representation
     h_assert(zeroP.is_zero() && !zeroP.is_negative(), "+ve zero invalid");
@@ -54,12 +51,10 @@ int main() {
     float16_t zeroNStringConstructorHex("-0x0p0", float16_t::RoundingMode::ToNearestTiesToEven);
     float16_t zeroNFromFloat(-0.0f, float16_t::RoundingMode::ToNearestTiesToEven);
     float16_t zeroNFromDouble(-0.0, float16_t::RoundingMode::ToNearestTiesToEven);
-    float16_t zeroNLiteral = -0.0_fp16;
     h_assert(zeroNStringConstructorDecimal.to_bits() == zeroN.to_bits(), "Mismatch between constructors");
     h_assert(zeroNStringConstructorHex.to_bits() == zeroN.to_bits(), "Mismatch between constructors");
     h_assert(zeroNFromFloat.to_bits() == zeroN.to_bits(), "Mismatch between constructors");
     h_assert(zeroNFromDouble.to_bits() == zeroN.to_bits(), "Mismatch between constructors");
-    h_assert(zeroNLiteral.to_bits() == zeroN.to_bits(), "Mistmatch between constructors");
 
     // Check the representation
     h_assert(zeroN.is_zero() && zeroN.is_negative(), "-ve zero invalid");
