@@ -2,6 +2,7 @@
 #define HALIDE_FLOAT16_H
 #include <stdint.h>
 #include <string>
+#include "RoundingMode.h"
 
 namespace Halide {
 
@@ -13,15 +14,6 @@ namespace Halide {
  *  to code that checks a type's size and used for buffer_t allocation.
  * */
 struct float16_t {
-    /** Rounding modes (IEEE754 2008 4.3 Rounding-direction attributes) */
-    enum class RoundingMode {
-        TowardZero, ///< Round towards zero (IEEE754 2008 4.3.2)
-        ToNearestTiesToEven, ///< Round to nearest, when there is a tie pick even integral significand (IEEE754 2008 4.3.1)
-        ToNearestTiesToAway, ///< Round to nearest, when there is a tie pick value furthest away from zero (IEEE754 2008 4.3.1)
-        TowardPositiveInfinity, ///< Round towards positive infinity (IEEE754 2008 4.3.2)
-        TowardNegativeInfinity ///< Round towards negative infinity (IEEE754 2008 4.3.2)
-    };
-
     // NOTE: Do not use virtual methods here
     // it will change the size of this data type.
 

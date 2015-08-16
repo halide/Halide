@@ -28,7 +28,7 @@ int main() {
   // and the actual result returned (distinct from the result described above)
   // is not exact (i.e. rounding occurred when using the finite exponenet)
   // then underflow should be flagged.
-  float16_t warning(verySmallNum, float16_t::RoundingMode::ToNearestTiesToAway);
+  float16_t warning(verySmallNum, RoundingMode::ToNearestTiesToAway);
   h_assert(warning.to_bits() == 0x0001, "bits incorrect");
 
   // Supress GCC's -Wunused-but-set-variable

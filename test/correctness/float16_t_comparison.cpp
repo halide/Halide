@@ -13,8 +13,8 @@ void h_assert(bool condition, const char* msg) {
 }
 
 int main() {
-  float16_t one("1.0", float16_t::RoundingMode::ToNearestTiesToEven);
-  float16_t onePointTwoFive("1.25", float16_t::RoundingMode::ToNearestTiesToEven);
+  float16_t one("1.0", RoundingMode::ToNearestTiesToEven);
+  float16_t onePointTwoFive("1.25", RoundingMode::ToNearestTiesToEven);
 
   // Check the bits are how we expect before using
   // comparision operators
