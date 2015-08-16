@@ -16,6 +16,7 @@ using namespace Halide::Tools;
 
 double t;
 
+
 Image<uint16_t> blur(Image<uint16_t> in) {
     Image<uint16_t> tmp(in.width()-8, in.height());
     Image<uint16_t> out(in.width()-8, in.height()-2);

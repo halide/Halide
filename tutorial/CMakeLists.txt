@@ -4,10 +4,33 @@ macro(use_libpng TARGET)
   target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(${TARGET} PRIVATE ${PNG_LIBRARIES})
 endmacro()
+
+# Detect if we need supress -Wunused-but-set-variable warning.  This warning
+# might be emitted by gcc for the tutorials as they don't always use a result
+# when showing a demonstration of a computation in C code.
+check_cxx_compiler_flag("-Wno-unused-but-set-variable" SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
+
 macro(add_tutorial source_file)
   string(REPLACE ".cpp" "" name ${source_file})
   halide_project(${name} "tutorials" ${source_file})
   target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
+  if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
+    target_compile_options(${name} PRIVATE "-Wno-unused-but-set-variable")
+  endif()
+endmacro()
+
+macro(use_openmp TARGET)
+  if (NOT MSVC)
+    if (OPENMP_FOUND)
+      target_compile_options(${TARGET} PRIVATE ${OpenMP_CXX_FLAGS})
+      target_link_libraries(${TARGET} PRIVATE ${OpenMP_CXX_FLAGS})
+    else()
+      # Compile anyway but supress warnings about unrecognised pragmas
+      target_compile_options(${TARGET} PRIVATE -Wno-unknown-pragmas)
+    endif()
+  else()
+    message(STATUS "TODO: Implement OpenMP support for MSVC")
+  endif()
 endmacro()
 
 # Declare tutorials
@@ -26,8 +49,10 @@ if (PNG_FOUND)
   use_libpng(lesson_07_multi_stage_pipelines)
   add_tutorial(lesson_08_scheduling_2.cpp)
   use_libpng(lesson_08_scheduling_2)
+  use_openmp(lesson_08_scheduling_2)
   add_tutorial(lesson_09_update_definitions.cpp)
   use_libpng(lesson_09_update_definitions)
+  use_openmp(lesson_09_update_definitions)
   add_tutorial(lesson_12_using_the_gpu.cpp)
   use_libpng(lesson_12_using_the_gpu)
 else()
