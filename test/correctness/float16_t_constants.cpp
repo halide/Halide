@@ -202,8 +202,8 @@ int main() {
     // Try converting to native float types
     float smallestSubNormf = (float) smallestSubNorm;
     double smallestSubNormd = (double) smallestSubNorm;
-    h_assert(smallestSubNormf == 0x1.0000p-24, "conversion to float failed");
-    h_assert(smallestSubNormd == 0x1.000000p-24, "conversion to double failed");
+    h_assert(smallestSubNormf == (1.0f)/(1<<24), "conversion to float failed");
+    h_assert(smallestSubNormd == (1.0)/(1<<24), "conversion to double failed");
 
     // Check that directly accessing the bits of the type is correct
     h_assert(*reinterpret_cast<uint16_t*>(&smallestSubNorm) == smallestSubNorm.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
@@ -219,8 +219,8 @@ int main() {
     // Try converting to native float types
     float smallestSubNormf = (float) smallestSubNorm;
     double smallestSubNormd = (double) smallestSubNorm;
-    h_assert(smallestSubNormf == -0x1.0000p-24, "conversion to float failed");
-    h_assert(smallestSubNormd == -0x1.000000p-24, "conversion to double failed");
+    h_assert(smallestSubNormf == (-1.0f)/(1<<24), "conversion to float failed");
+    h_assert(smallestSubNormd == (-1.0)/(1<<24), "conversion to double failed");
 
     // Check that directly accessing the bits of the type is correct
     h_assert(*reinterpret_cast<uint16_t*>(&smallestSubNorm) == smallestSubNorm.to_bits(), "Casting float16_t to uint16_t failed to give right bits");
