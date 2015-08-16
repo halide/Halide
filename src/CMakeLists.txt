@@ -226,6 +226,7 @@ set(HEADER_FILES
   Extern.h
   FastIntegerDivide.h
   FindCalls.h
+  Float16.h
   Func.h
   Function.h
   Generator.h
@@ -364,6 +365,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ExprUsesVar.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
+  Float16.cpp
   Func.cpp
   Function.cpp
   FuseGPUThreadLoops.cpp

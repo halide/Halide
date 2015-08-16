@@ -250,6 +250,7 @@ SOURCE_FILES = \
   ExprUsesVar.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  Float16.cpp \
   Func.cpp \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
@@ -369,6 +370,7 @@ HEADER_FILES = \
   Extern.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  Float16.h \
   Func.h \
   Function.h \
   FuseGPUThreadLoops.h \
