@@ -115,6 +115,37 @@ if (OPENMP_FOUND)
   message(STATUS "Found OpenMP")
 endif()
 
+# -----------------------------------------------------------------------------
+# Option to enable/disable assertions
+# -----------------------------------------------------------------------------
+# Filter out definition of NDEBUG definition from the default build
+# configuration flags.  # We will add this ourselves if we want to disable
+# assertions.
+# FIXME: Perhaps our own default ``cxx_flags_overrides.cmake`` file would be better?
+foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
+  string(TOUPPER ${build_config} upper_case_build_config)
+  foreach (language CXX C)
+    set(VAR_TO_MODIFY "CMAKE_${language}_FLAGS_${upper_case_build_config}")
+    string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )"
+                         " "
+                         replacement
+                         "${${VAR_TO_MODIFY}}"
+          )
+    #message("Original (${VAR_TO_MODIFY}) is ${${VAR_TO_MODIFY}} replacement is ${replacement}")
+    set(${VAR_TO_MODIFY} "${replacement}" CACHE STRING "Default flags for ${build_config} configuration" FORCE)
+  endforeach()
+endforeach()
+
+option(WITH_ASSERTIONS "Build with assertions enabled" ON)
+if (WITH_ASSERTIONS)
+  # NDEBUG was already removed.
+  message(STATUS "Building with asserts")
+else()
+  # Note this definition doesn't appear in the cache variables.
+  add_definitions(-DNDEBUG)
+  message(STATUS "Building without asserts")
+endif()
+
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
