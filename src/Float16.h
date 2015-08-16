@@ -57,13 +57,6 @@ struct float16_t {
      * positive zero.*/
     EXPORT float16_t();
 
-    /** Construct using raw bits. Note this is marked ``explicit`` so that
-     *  it is not implicitly called if someone tries to do ``float16_t f = 0.5f``
-     *  which should be a compile error.
-     *
-     * \param rawBits The bits conformant to IEEE754 binary16
-     */
-    EXPORT explicit float16_t(uint16_t rawBits);
     /// @}
 
     // Use explicit to avoid accidently raising the precision
@@ -97,6 +90,12 @@ struct float16_t {
     /** Get a new float16_t that represents NaN (not a number) */
     EXPORT static float16_t make_nan();
 
+    /** Get a new float16_t with the given raw bits 
+     * 
+     * \param bits The bits conformant to IEEE754 binary16
+     */
+    EXPORT static float16_t make_from_bits(uint16_t bits);
+    
     /**@}*/
 
     /**\name Arithmetic operators

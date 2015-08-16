@@ -30,7 +30,7 @@ getLLVMAPFRoundingMode(Halide::RoundingMode mode) {
 float16_t toFP16(llvm::APFloat v) {
     uint64_t bits = v.bitcastToAPInt().getZExtValue();
     internal_assert(bits <= 0xFFFF) << "Invalid bits for float16_t\n";
-    return float16_t((uint16_t)bits);
+    return float16_t::make_from_bits(bits);
 }
 
 llvm::APFloat toLLVMAPF(float16_t v) {
@@ -119,9 +119,11 @@ float16_t::float16_t() {
     this->data = 0;
 }
 
-float16_t::float16_t(uint16_t rawBits) {
+float16_t float16_t::make_from_bits(uint16_t rawBits) {
     static_assert(sizeof(float16_t) == 2, "float16_t is wrong size");
-    this->data = rawBits;
+    float16_t val;
+    val.data = rawBits;
+    return val;
 }
 
 float16_t::operator float() {
