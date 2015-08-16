@@ -20,7 +20,7 @@ int main() {
   h_assert(!std::isinf(largeNum), "largeNum should not be inf");
 
   // This should fail as it triggers overflow
-  float16_t fail(largeNum, float16_t::RoundingMode::ToNearestTiesToEven);
+  float16_t fail(largeNum, RoundingMode::ToNearestTiesToEven);
 
   // Supress -Wunused-but-set-variable
   fail.is_infinity();

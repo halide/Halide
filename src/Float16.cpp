@@ -9,17 +9,17 @@ using namespace Halide;
 // it would expose the implementation
 namespace {
 llvm::APFloat::roundingMode
-getLLVMAPFRoundingMode(Halide::float16_t::RoundingMode mode) {
+getLLVMAPFRoundingMode(Halide::RoundingMode mode) {
     switch (mode) {
-    case float16_t::RoundingMode::TowardZero:
+    case RoundingMode::TowardZero:
         return llvm::APFloat::roundingMode::rmTowardZero;
-    case float16_t::RoundingMode::ToNearestTiesToEven:
+    case RoundingMode::ToNearestTiesToEven:
         return llvm::APFloat::roundingMode::rmNearestTiesToEven;
-    case float16_t::RoundingMode::ToNearestTiesToAway:
+    case RoundingMode::ToNearestTiesToAway:
         return llvm::APFloat::roundingMode::rmNearestTiesToAway;
-    case float16_t::RoundingMode::TowardPositiveInfinity:
+    case RoundingMode::TowardPositiveInfinity:
         return llvm::APFloat::roundingMode::rmTowardPositive;
-    case float16_t::RoundingMode::TowardNegativeInfinity:
+    case RoundingMode::TowardNegativeInfinity:
         return llvm::APFloat::roundingMode::rmTowardNegative;
     default:
         internal_error << "Invalid rounding mode :" << (int)mode << "\n";
@@ -71,7 +71,7 @@ void checkConversion(llvm::APFloat::opStatus status,
 }
 
 template <typename T>
-uint16_t getBitsFrom(T value, float16_t::RoundingMode roundingMode, const char *typeName) {
+uint16_t getBitsFrom(T value, RoundingMode roundingMode, const char *typeName) {
     llvm::APFloat convertedValue(value);
     bool losesInfo = false;
     llvm::APFloat::opStatus status = convertedValue.convert(
@@ -83,7 +83,7 @@ uint16_t getBitsFrom(T value, float16_t::RoundingMode roundingMode, const char *
 }
 
 template <>
-uint16_t getBitsFrom(const char *value, float16_t::RoundingMode roundingMode, const char *typeName) {
+uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *typeName) {
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
     // TODO: Sanitize value
     llvm::APFloat::opStatus status = convertedValue.convertFromString(value,

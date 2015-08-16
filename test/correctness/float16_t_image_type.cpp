@@ -25,7 +25,7 @@ int main() {
   h_assert(simple.channels() == 1, "invalid channels");
   h_assert(simple.dimensions() == 2, "invalid number of dimensions");
 
-  const float16_t zeroPointTwoFive = float16_t("0.25", float16_t::RoundingMode::ToNearestTiesToEven);
+  const float16_t zeroPointTwoFive = float16_t("0.25", RoundingMode::ToNearestTiesToEven);
 
   // Write a constant value and check we can read it back
   for (int x=simple.min(0); x < simple.extent(0); ++x) {
