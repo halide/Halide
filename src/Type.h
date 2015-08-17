@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "runtime/HalideRuntime.h"
 #include "Util.h"
+#include "Float16.h"
 
 /** \file
  * Defines halide types
@@ -162,6 +163,11 @@ struct type_of_helper<T *> {
     operator Type() {
         return Handle();
     }
+};
+
+template<>
+struct type_of_helper<Halide::float16_t> {
+    operator Type() {return Float(16);}
 };
 
 template<>

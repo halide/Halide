@@ -2,7 +2,7 @@
 halide_project(pipeline "apps" pipeline.cpp)
 
 set(pipeline_c_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.h")
-set(pipeline_c_src "${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.c")
+set(pipeline_c_src "${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.cpp")
 set(pipeline_native_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_native.h")
 set(pipeline_native_obj "${CMAKE_CURRENT_BINARY_DIR}/pipeline_native.o")
 

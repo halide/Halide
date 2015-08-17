@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <cstdio>
 
-#include <static_image.h>
-#include <benchmark.h>
+#include "benchmark.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 //#define cimg_display 0
 //#include "CImg.h"
@@ -13,6 +15,7 @@
 // typedef CImg<uint16_t> Image;
 
 double t;
+
 
 Image<uint16_t> blur(Image<uint16_t> in) {
     Image<uint16_t> tmp(in.width()-8, in.height());

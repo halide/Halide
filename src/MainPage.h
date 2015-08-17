@@ -69,4 +69,5 @@
  * \example tutorial/lesson_12_using_the_gpu.cpp
  * \example tutorial/lesson_13_tuples.cpp
  * \example tutorial/lesson_14_types.cpp
+ * \example tutorial/lesson_15_generators.cpp
  */

@@ -1,5 +1,8 @@
 UNAME = $(shell uname)
 
+THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
+ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
+
 ifeq ($(UNAME), Linux)
 CCFLAGS=$(shell python3-config --cflags) -std=c++11 -fPIC
 LDFLAGS=$(shell python3-config --ldflags) -lboost_python-py34 -lz
@@ -13,18 +16,18 @@ endif
 
 NUMPY_PATH=$(shell python3 -c "import numpy; print(numpy.__path__[0] + '/core/include')")
 
-PY_SRCS=$(shell ls python/*.cpp)
-PY_OBJS=$(PY_SRCS:python/%.cpp=build/py_%.o)
-NUMPY_SRCS=$(shell ls numpy/*.cpp)
-NUMPY_OBJS=$(NUMPY_SRCS:numpy/%.cpp=build/numpy_%.o)
+PY_SRCS=$(shell ls $(ROOT_DIR)/python/*.cpp)
+PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/python/%.cpp=build/py_%.o)
+NUMPY_SRCS=$(shell ls $(ROOT_DIR)/numpy/*.cpp)
+NUMPY_OBJS=$(NUMPY_SRCS:$(ROOT_DIR)/numpy/%.cpp=build/numpy_%.o)
 
 
 
-build/py_%.o: python/%.cpp
+build/py_%.o: $(ROOT_DIR)/python/%.cpp
 	mkdir -p build
 	$(CXX) $(CCFLAGS) -c $< -o $@
 
-build/numpy_%.o: numpy/%.cpp
+build/numpy_%.o: $(ROOT_DIR)/numpy/%.cpp
 	mkdir -p build
 	$(CXX) $(CCFLAGS) -I $(NUMPY_PATH) -c $< -o $@
 
@@ -36,5 +39,5 @@ clean:
 	rm -rf build
 
 test: build/halide.so
-	./run_apps.sh && ./run_tutorial.sh
-
+	$(ROOT_DIR)/run_apps.sh
+	$(ROOT_DIR)/run_tutorial.sh
