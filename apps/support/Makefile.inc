@@ -1,14 +1,15 @@
-HALIDE_PATH ?= ../..
+HALIDE_BIN_PATH ?= ../..
+HALIDE_SRC_PATH ?= ../..
 
 CXX ?= g++
 GXX ?= g++
 
-CFLAGS += -I $(HALIDE_PATH)/include/ -I $(HALIDE_PATH)/tools/ -I../support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_PATH)/include/ -I $(HALIDE_PATH)/tools/ -I../support/
+CFLAGS += -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
+CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
 
-LIB_HALIDE = $(HALIDE_PATH)/bin/libHalide.a
+LIB_HALIDE = $(HALIDE_BIN_PATH)/bin/libHalide.a
 
-GENERATOR_DEPS ?= $(HALIDE_PATH)/bin/libHalide.a $(HALIDE_PATH)/include/Halide.h ../../tools/GenGen.cpp
+GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/bin/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)

@@ -5,8 +5,8 @@
 #include "bilateral_grid.h"
 
 #include "benchmark.h"
+#include "halide_image.h"
 #include "halide_image_io.h"
-#include "static_image.h"
 
 using namespace Halide::Tools;
 

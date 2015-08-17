@@ -31,6 +31,7 @@ const string buffer_t_definition =
     "#endif\n"
     "#ifndef BUFFER_T_DEFINED\n"
     "#define BUFFER_T_DEFINED\n"
+    "#include <stdbool.h>\n"
     "#include <stdint.h>\n"
     "typedef struct buffer_t {\n"
     "    uint64_t dev;\n"
@@ -460,7 +461,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "int " << f.name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
         // And also the metadata.
-       stream << "extern const halide_filter_metadata_t " << f.name << "_metadata;\n";
+       stream << "extern const struct halide_filter_metadata_t " << f.name << "_metadata;\n";
     }
 }
 

@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <vector>
 
-#include "static_image.h"
+#include "halide_image.h"
 
 // Provide a simple mock implementation of matlab's API so we can test the mexFunction.
 

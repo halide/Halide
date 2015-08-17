@@ -8,7 +8,9 @@
 #include <stdlib.h>
 
 #include "cleanup_on_error.h"
-#include "static_image.h"
+#include "halide_image.h"
+
+using namespace Halide::Tools;
 
 const int size = 64;
 
