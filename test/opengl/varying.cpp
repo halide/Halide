@@ -40,6 +40,8 @@ HalideExtern_1(const Variable *, record_varying, const Variable *);
 
 // This visitor inserts the above function in the IR tree.
 class CountVarying : public IRMutator {
+    using IRMutator::visit;
+
     void visit(const Variable *op) {
         IRMutator::visit(op);
         if (ends_with(op->name, ".varying")) {
