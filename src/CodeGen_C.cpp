@@ -865,7 +865,7 @@ void CodeGen_C::visit(const Call *op) {
             const Load *l = op->args[0].as<Load>();
             internal_assert(op->args.size() == 1 && l);
             rhs << "(("
-                << print_type(l->type)
+                << print_type(l->type.element_of()) // index is in elements, not vectors.
                 << " *)"
                 << print_name(l->name)
                 << " + "
