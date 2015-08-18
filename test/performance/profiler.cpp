@@ -18,37 +18,39 @@ void my_print(void *, const char *msg) {
 int main(int argc, char **argv) {
     // Make a long chain of finely-interleaved Funcs, of which one is very expensive.
     Func f[30];
-    Var x;
+    Var c, x;
     for (int i = 0; i < 30; i++) {
         f[i] = Func("f" + std::to_string(i));
         if (i == 0) {
-            f[i](x) = cast<float>(x);
+            f[i](c, x) = cast<float>(x + c);
         } else if (i == 13) {
-            Expr e = f[i-1](x);
+            Expr e = f[i-1](c, x);
             for (int j = 0; j < 200; j++) {
                 e = sin(e);
             }
-            f[i](x) = e;
+            f[i](c, x) = e;
         } else {
-            f[i](x) = f[i-1](x)*2.0f;
+            f[i](c, x) = f[i-1](c, x)*2.0f;
         }
     }
 
     Func out;
-    out(x) = 0.0f;
-    const int iters = 1000;
+    out(c, x) = 0.0f;
+    const int iters = 100;
     RDom r(0, iters);
-    out(x) += r*f[29](x);
+    out(c, x) += r*f[29](c, x);
 
     out.set_custom_print(&my_print);
     out.compute_root();
-    out.update().reorder(x, r);
+    out.update().reorder(c, x, r);
     for (int i = 0; i < 30; i++) {
         f[i].compute_at(out, x);
     }
 
     Target t = get_jit_target_from_environment().with_feature(Target::Profile);
-    Image<float> im = out.realize(1000, t);
+    Image<float> im = out.realize(10, 1000, t);
+
+    //out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
 
     printf("Time spent in f13: %fms\n", ms);
 

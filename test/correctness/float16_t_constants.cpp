@@ -134,8 +134,8 @@ int main() {
         // Try constructing NaN in different ways and check they all
         // represent the same float16_t
         float16_t nanValue = float16_t::make_nan();
-        float16_t nanValueFromFloat( (float) NAN, RoundingMode::ToNearestTiesToEven);
-        float16_t nanValueFromDouble( (double) NAN, RoundingMode::ToNearestTiesToEven);
+        float16_t nanValueFromFloat(std::numeric_limits<float>::quiet_NaN(), RoundingMode::ToNearestTiesToEven);
+        float16_t nanValueFromDouble(std::numeric_limits<double>::quiet_NaN(), RoundingMode::ToNearestTiesToEven);
         h_assert(nanValueFromFloat.to_bits() == nanValue.to_bits(), "Mismatch between constructors");
         h_assert(nanValueFromDouble.to_bits() == nanValue.to_bits(), "Mismatch between constructors");
 
