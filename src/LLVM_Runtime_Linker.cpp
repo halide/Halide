@@ -173,7 +173,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
-                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
                 #if LLVM_VERSION >= 37
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
@@ -565,7 +565,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
             if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
+                if (t.arch == Target::X86) {
+                    modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
@@ -576,7 +580,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_android_clock(c, bits_64, debug));
+                if (t.arch == Target::ARM) {
+                    modules.push_back(get_initmod_android_clock(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
