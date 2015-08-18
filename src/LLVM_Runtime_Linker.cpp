@@ -558,7 +558,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
             if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
+                if (t.arch == Target::X86) {
+                    modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
@@ -569,7 +573,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_android_clock(c, bits_64, debug));
+                if (t.arch == Target::ARM) {
+                    modules.push_back(get_initmod_android_clock(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
