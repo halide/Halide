@@ -10,6 +10,7 @@
 
 #include "gpu_only.h"
 #include "halide_image.h"
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL) || defined(TEST_CUDA)
