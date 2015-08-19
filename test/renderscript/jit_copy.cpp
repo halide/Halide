@@ -119,6 +119,7 @@ public:
 };
 
 class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline {
+    using IRMutator::visit;
     using ValidateInterleavedPipeline::visit;
 
     virtual void visit(const Call *call) {
