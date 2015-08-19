@@ -203,7 +203,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n\n# xcode puts all sorts of junk in the environment which prevents building a binary for osx (instead of ios). sudo'ing to yourself gives a fresh environment.\nsudo -u ${USER} c++ reaction_diffusion_2.cpp -std=c++11 -I ${SRCROOT}/../../include -I ${SRCROOT}/../../build/include -arch x86_64 -L ${SRCROOT}/../../bin -lHalide -o ${DERIVED_FILE_DIR}/reaction_diffusion_2_generator\n\n(cd ${DERIVED_FILE_DIR}; HL_TARGET=arm-64-ios-metal DYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib ./reaction_diffusion_2_generator)";
+			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n\n# xcode puts all sorts of junk in the environment which prevents building a binary for osx (instead of ios). sudo'ing to yourself gives a fresh environment.\nsudo -u ${USER} c++ reaction_diffusion_2.cpp -std=c++11 -I ${SRCROOT}/../../include -I ${SRCROOT}/../../build/include -arch x86_64 -L ${SRCROOT}/../../bin -lHalide -o ${DERIVED_FILE_DIR}/reaction_diffusion_2_generator\n\n(cd ${DERIVED_FILE_DIR}; HL_TARGET=arm-64-ios DYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib ./reaction_diffusion_2_generator)";
 		};
 /* End PBXShellScriptBuildPhase section */
 
