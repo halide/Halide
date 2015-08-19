@@ -68,9 +68,10 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
-        // histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
+        //histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
+        //histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c);
         histogram.reorder(c, z, x, y).compute_at(blurz, Var::gpu_blocks()).gpu_threads(x, y);
-        histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c);
+        histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
         blurz.compute_root().reorder(c,z,x,y).gpu_tile(x, y, 16, 16);
         blurx.compute_root().gpu_tile(x, y, z, 16, 16, 1);
         blury.compute_root().gpu_tile(x, y, z, 16, 16, 1);
