@@ -154,7 +154,6 @@ int main(int argc, char **argv) {
         state.set_bounds(2, 0, 3);
         state.set_stride(2, 1);
         state.set_stride(0, 3);
-        state.set_extent(2, 3);
         render.gpu_tile(x, y, 32, 4);
 
         render.compile_to_file("reaction_diffusion_2_render", {state});
