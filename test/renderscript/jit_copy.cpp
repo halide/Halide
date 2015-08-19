@@ -119,6 +119,8 @@ public:
 };
 
 class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline {
+    using ValidateInterleavedPipeline::visit;
+
     virtual void visit(const Call *call) {
         if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
             assert(for_nest_level == 3); // Should be three nested for-loops before we get to the first call.
