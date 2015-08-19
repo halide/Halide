@@ -68,20 +68,33 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
-        //histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
-        //histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c);
+        // Schedule blurz in 8x8 tiles. This is a tile in
+        // grid-space, which means it represents something like
+        // 64x64 pixels in the input (if s_sigma is 8).
+        blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
+
+        // Schedule histogram to happen per-tile of blurz, with
+        // intermediate results in shared memory. This means histogram
+        // and blurz makes a three-stage kernel:
+        // 1) Zero out the 8x8 set of histograms
+        // 2) Compute those histogram by iterating over lots of the input image
+        // 3) Blur the set of histograms in z
         histogram.reorder(c, z, x, y).compute_at(blurz, Var::gpu_blocks()).gpu_threads(x, y);
         histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
-        blurz.compute_root().reorder(c,z,x,y).gpu_tile(x, y, 16, 16);
-        blurx.compute_root().gpu_tile(x, y, z, 16, 16, 1);
-        blury.compute_root().gpu_tile(x, y, z, 16, 16, 1);
+
+        // An alternative schedule for histogram that doesn't use shared memory:
+        // histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
+        // histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c);
+
+        // Schedule the remaining blurs and the sampling at the end similarly.
+        blurx.compute_root().gpu_tile(x, y, z, 8, 8, 1);
+        blury.compute_root().gpu_tile(x, y, z, 8, 8, 1);
         bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma);
     } else {
-
-        // CPU schedule
+        // The CPU schedule.
+        blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
         histogram.compute_at(blurz, y);
         histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
-        blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
         blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
         blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
         bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
