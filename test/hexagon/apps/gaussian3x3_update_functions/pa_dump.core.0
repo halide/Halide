@@ -1,0 +1,816 @@
+{
+	"version":"2.3",
+	"siminfo": {
+		"revid":"4060",
+		"core":"V60A_512",
+		"cache_config":"L1-I$ = 16 Kb, L1-D$ = 32 Kb, L2-$ = 512 Kb",
+		"command_line":"--quiet --magic_angel --ahb_base 1073741824 --ahb_size 117440512 --revid 16480 --l2tcm_base 3623878656 --subsystem_base 536870912 --etm_base 3624206336 --l2cfg_base 3624271872 --timing"
+	 },
+	"stats": {
+		"0x1": {
+			"Name":"COUNTER0_OVERFLOW",
+			"Value":0,
+			"Description":"Counter0 overflow. This can be used as the event detected by counter1 to build an effective 64-bit counter."
+		 },
+		"0x2": {
+			"Name":"COUNTER2_OVERFLOW",
+			"Value":0,
+			"Description":"Counter2 overflow. This can be used as the event detected by counter3 to build an effective 64-bit counter."
+		 },
+		"0x3": {
+			"Name":"COMMITTED_PKT_ANY",
+			"Value":331049,
+			"Description":"Thread committed a pkt. Packets executed"
+		 },
+		"0x4": {
+			"Name":"COMMITTED_PKT_BSB",
+			"Value":255520,
+			"Description":"Packet committed 2 cycles after previous packet in same thread."
+		 },
+		"0x5": {
+			"Name":"COUNTER4_OVERFLOW",
+			"Value":0,
+			"Description":"Counter4 overflow. This can be used as the event detected by counter5 to build an effective 64-bit counter."
+		 },
+		"0x6": {
+			"Name":"COUNTER6_OVERFLOW",
+			"Value":0,
+			"Description":"Counter6 overflow. This can be used as the event detected by counter7 to build an effective 64-bit counter."
+		 },
+		"0x7": {
+			"Name":"COMMITTED_PKT_B2B",
+			"Value":4530,
+			"Description":"Packet committed 1 cycle after previous packet in same thread."
+		 },
+		"0x8": {
+			"Name":"COMMITTED_PKT_SMT",
+			"Value":0,
+			"Description":"2 packets committed in the same cycle."
+		 },
+		"0x11": {
+			"Name":"ICACHE_DEMAND_MISS_CYCLES",
+			"Value":0,
+			"Description":"Cycles for the stall that event 18 creates. Each cycle, incrementes by the number of threads currently stalling on an I-cache miss."
+		 },
+		"0x12": {
+			"Name":"ICACHE_DEMAND_MISS",
+			"Value":89,
+			"Description":"Icache demand miss. Includes secondary miss."
+		 },
+		"0x13": {
+			"Name":"DCACHE_DEMAND_MISS",
+			"Value":2175,
+			"Description":"Dcache cacheable demand primary or secondary miss. Includes dczero stall. Excludes uncacheables, prefetches, and no allocate store misses."
+		 },
+		"0x18": {
+			"Name":"ARCH_LOCK_TVIEW_CYCLES",
+			"Value":0,
+			"Description":"Cycles thread could not dispatch due to kernel lock or TLB lock."
+		 },
+		"0x19": {
+			"Name":"IU_NO_PKT_TVIEW_CYCLES",
+			"Value":6950,
+			"Description":"Cycles thread could not dispatch due to IQ being empty."
+		 },
+		"0x1a": {
+			"Name":"IU_BRANCH_MISS_TVIEW_CYCLES",
+			"Value":222,
+			"Description":"Packets in flight killed due to branch mispredict and cycles thread could not dispatch due to IQ being empty because of branch mispredict."
+		 },
+		"0x1b": {
+			"Name":"DU_CACHE_MISS_TVIEW_CYCLES",
+			"Value":311379,
+			"Description":"Cycles thread could not dispatch due to D-cache miss or uncached access."
+		 },
+		"0x1c": {
+			"Name":"DU_BUSY_OTHER_TVIEW_CYCLES",
+			"Value":2813565,
+			"Description":"Packets in flight killed due to DU replay and cycles thread could not dispatch due to DU busy because of stall or replay."
+		 },
+		"0x1d": {
+			"Name":"CU_BUSY_TVIEW_CYCLES",
+			"Value":254328,
+			"Description":"Cycles thread could not dispatch due to register interlock, register port conflict, bubbles due to timing class such as tc_3stall, no B2B CVI, or CVI FIFO full."
+		 },
+		"0x1e": {
+			"Name":"SMT_DU_CONFLICT_TVIEW_CYCLES",
+			"Value":0,
+			"Description":"Cycles thread could not dispatch even though the thread was ready due to DU resource conflict."
+		 },
+		"0x1f": {
+			"Name":"SMT_XU_CONFLICT_TVIEW_CYCLES",
+			"Value":0,
+			"Description":"Cycles thread could not dispatch even though the thread was ready due to an XU resource conflict or other non-DU reason."
+		 },
+		"0x20": {
+			"Name":"ANY_IU_REPLAY",
+			"Value":0,
+			"Description":"Any IU stall other than icache miss. Includes jump register stall, fetchcross stall, itlb miss stall, etc. Excludes CU replay."
+		 },
+		"0x21": {
+			"Name":"ANY_DU_REPLAY",
+			"Value":9844,
+			"Description":"Any DU replay. Bank conflict, store buffer full, etc. Excludes stalls due to cache misses."
+		 },
+		"0x22": {
+			"Name":"CU_EARLY_CANCEL",
+			"Value":0,
+			"Description":"Any case where a packet was dispatched prematurely based on incomplete information and the packet must be rescheduled after two cycles. This includes incomplete bypass network and multiple producer scenarios."
+		 },
+		"0x25": {
+			"Name":"COMMITTED_PKT_1_THREAD_RUNNING",
+			"Value":331049,
+			"Description":"Committed pkts with 1 thread running. Not in stop/wait"
+		 },
+		"0x26": {
+			"Name":"COMMITTED_PKT_2_THREAD_RUNNING",
+			"Value":0,
+			"Description":"Committed pkts with 2 threads running. Not in stop/wait"
+		 },
+		"0x27": {
+			"Name":"COMMITTED_PKT_3_THREAD_RUNNING",
+			"Value":0,
+			"Description":"Committed pkts with 3 threads running. Not in stop/wait"
+		 },
+		"0x2a": {
+			"Name":"COMMITTED_INSTS",
+			"Value":995120,
+			"Description":"Committed instructions. Increments by up to 8 per cycle. Duplex counts as two instructions. Does not include endloops."
+		 },
+		"0x2b": {
+			"Name":"COMMITTED_TC1_INSTS",
+			"Value":647749,
+			"Description":"Committed tc1 class instructions. Increments by up to 8 per cycle. Duplex of two tc1 instructions counts as two tc1 instructions."
+		 },
+		"0x2c": {
+			"Name":"COMMITTED_PRIVATE_INSTS",
+			"Value":647749,
+			"Description":"Committed instructions that have per-cluster (private) execution resources. Increments by up to 8 per cycle. Duplex of two private instructions counts as two private instructions."
+		 },
+		"0x2f": {
+			"Name":"COMMITTED_PKT_4_THREAD_RUNNING",
+			"Value":0,
+			"Description":"Committed pkts with 4 threads running. Not in stop/wait"
+		 },
+		"0x30": {
+			"Name":"COMMITTED_LOADS",
+			"Value":17353,
+			"Description":"Committed load instructions. Includes cached and uncached. Increments by 2 for dual loads. Excludes prefetches, memops, and coprocessor loads."
+		 },
+		"0x31": {
+			"Name":"COMMITTED_STORES",
+			"Value":3280,
+			"Description":"Committed store instructions. Includes cached and uncached. Increments by 2 for dual stores. Excludes memops and coprocessor stores."
+		 },
+		"0x32": {
+			"Name":"COMMITTED_MEMOPS",
+			"Value":0,
+			"Description":"Committed memop instructions. Cached or uncached."
+		 },
+		"0x37": {
+			"Name":"COMMITTED_PROGRAM_FLOW_INSTS",
+			"Value":20581,
+			"Description":"Committed pkt contains program flow inst. Includes cr jumps, endloop, j, jr, dealloc_return, system/trap, superset of event 56. Dual jumps count as two."
+		 },
+		"0x38": {
+			"Name":"COMMITTED_PKT_CHANGED_FLOW",
+			"Value":18402,
+			"Description":"Committed pkt resulted in change-of-flow. Any taken jump. Includes endloop and dealloc_return."
+		 },
+		"0x39": {
+			"Name":"COMMITTED_PKT_ENDLOOP",
+			"Value":16221,
+			"Description":"Committed pkt contains an endloop which was taken"
+		 },
+		"0x3b": {
+			"Name":"CYCLES_1_THREAD_RUNNING",
+			"Value":3717494,
+			"Description":"Processor cycles that exactly 1 thread is running. Running means not in wait or stop"
+		 },
+		"0x3c": {
+			"Name":"CYCLES_2_THREAD_RUNNING",
+			"Value":0,
+			"Description":"Processor cycles that exactly 2 threads are running. Running means not in wait or stop"
+		 },
+		"0x3d": {
+			"Name":"CYCLES_3_THREAD_RUNNING",
+			"Value":0,
+			"Description":"Processor cycles that exactly 3 threads are running. Running means not in wait or stop"
+		 },
+		"0x3e": {
+			"Name":"CYCLES_4_THREAD_RUNNING",
+			"Value":0,
+			"Description":"Processor cycles that exactly 4 threads are running. Running means not in wait or stop"
+		 },
+		"0x40": {
+			"Name":"AXI_READ_REQUEST",
+			"Value":36359,
+			"Description":"All read requests issued by primary AXI master. Includes full line and partial line."
+		 },
+		"0x41": {
+			"Name":"AXI_LINE32_READ_REQUEST",
+			"Value":0,
+			"Description":"32-byte line read requests issued by primary AXI master"
+		 },
+		"0x42": {
+			"Name":"AXI_WRITE_REQUEST",
+			"Value":30413,
+			"Description":"All write requests issued by primary AXI master. Includes full line and partial line."
+		 },
+		"0x43": {
+			"Name":"AXI_LINE32_WRITE_REQUEST",
+			"Value":0,
+			"Description":"32-byte line write requests issued by primary AXI master, all bytes valid"
+		 },
+		"0x44": {
+			"Name":"AHB_READ_REQUEST",
+			"Value":0,
+			"Description":"Read requests issued by AHB master"
+		 },
+		"0x45": {
+			"Name":"AHB_WRITE_REQUEST",
+			"Value":0,
+			"Description":"Write requests issued by AHB master"
+		 },
+		"0x47": {
+			"Name":"AXI_SLAVE_MULTI_BEAT_ACCESS",
+			"Value":0,
+			"Description":"AXI slave multi-beat access"
+		 },
+		"0x48": {
+			"Name":"AXI_SLAVE_SINGLE_BEAT_ACCESS",
+			"Value":0,
+			"Description":"AXI slave single-beat access"
+		 },
+		"0x49": {
+			"Name":"AXI2_READ_REQUEST",
+			"Value":0,
+			"Description":"All read requests issued by secondary AXI master. Includes full line and partial line."
+		 },
+		"0x4a": {
+			"Name":"AXI2_LINE32_READ_REQUEST",
+			"Value":0,
+			"Description":"32-byte line read requests issued by secondary AXI master"
+		 },
+		"0x4b": {
+			"Name":"AXI2_WRITE_REQUEST",
+			"Value":0,
+			"Description":"All write requests issued by secondary AXI master. Includes full line and partial line."
+		 },
+		"0x4c": {
+			"Name":"AXI2_LINE32_WRITE_REQUEST",
+			"Value":0,
+			"Description":"32-byte line Write requests issued by secondary AXI master"
+		 },
+		"0x4d": {
+			"Name":"AXI2_CONGESTION",
+			"Value":0,
+			"Description":"Secondary AXI command or data queue is full and an operation is stuck at the head of the secondary AXI master command queue."
+		 },
+		"0x50": {
+			"Name":"COMMITTED_FPS",
+			"Value":0,
+			"Description":"Committed floating point instructions. Increments by 2 for dual fp ops. Excludes conversions"
+		 },
+		"0x51": {
+			"Name":"BRANCH_MISPREDICT_DIRECTION",
+			"Value":2,
+			"Description":"Branch mispredict direction. Includes new-predicate, old-predicate, low loop count, new-value, and dealloc_return direction mispredicts. Only counts once if both jumps in a dual jump mispredict. Excludes target mispredicts."
+		 },
+		"0x52": {
+			"Name":"BRANCH_MISPREDICT_TARGET",
+			"Value":0,
+			"Description":"Branch mispredict target. Includes RAS mispredict. Excludes indirect jumps and calls other than JUMPR R31 returns. Excludes direction mispredicts."
+		 },
+		"0x58": {
+			"Name":"JTLB_MISS",
+			"Value":2,
+			"Description":"Instruction or data address translation request missed in the JTLB."
+		 },
+		"0x5a": {
+			"Name":"COMMITTED_PKT_RETURN",
+			"Value":4,
+			"Description":"Committed a return instruction. Includes canceled returns."
+		 },
+		"0x5b": {
+			"Name":"COMMITTED_PKT_INDIRECT_JUMP",
+			"Value":0,
+			"Description":"Committed an indirect jump or call instruction. Includes canceled instructions. Does not include JUMPR R31 returns."
+		 },
+		"0x5c": {
+			"Name":"COMMITTED_BIMODAL_BRANCH_INSTS",
+			"Value":3258,
+			"Description":"Committed bimodal branch. Includes .old and .new. Increments by 2 for dual jumps."
+		 },
+		"0x5d": {
+			"Name":"BRANCH_QUEUE_FULL",
+			"Value":0,
+			"Description":"Bimodal branch ignored. If queue is full."
+		 },
+		"0x5e": {
+			"Name":"SMT_XU_CONFLICT",
+			"Value":0,
+			"Description":"The number of times an XU resource conflict was one of the reasons a packet could not dispatch."
+		 },
+		"0x66": {
+			"Name":"IU_LINE_FROM_LOOP_BUFFER",
+			"Value":0,
+			"Description":"IU line from loop buffer. Cacheline from loop cache"
+		 },
+		"0x68": {
+			"Name":"IU_1_PKT_AVAILABLE_TO_ISSUE",
+			"Value":72857,
+			"Description":"Fetch that could issue one packet independent of available packet queue entries."
+		 },
+		"0x6a": {
+			"Name":"IU_REQUESTS_TO_L2_REPLAYED",
+			"Value":0,
+			"Description":"IU requests to L2 replayed. Could be IU and DU collision to L2 or IU credit failure. Could fire multiple times for a single transaction."
+		 },
+		"0x6b": {
+			"Name":"IU_PREFETCHES_SENT_TO_L2",
+			"Value":65,
+			"Description":"IU prefetches sent to L2. Counts cachelines not dropped by L2. Excludes replayed prefetches and only counts ones L2 accepts."
+		 },
+		"0x6c": {
+			"Name":"ITLB_MISS",
+			"Value":0,
+			"Description":"ITLB miss which goes to JTLB."
+		 },
+		"0x6d": {
+			"Name":"IU_2_PKT_AVAILABLE_TO_ISSUE",
+			"Value":104952,
+			"Description":"Fetch that could issue two packets independent of available packet queue entries."
+		 },
+		"0x6e": {
+			"Name":"IU_3_PKT_AVAILABLE_TO_ISSUE",
+			"Value":16101,
+			"Description":"Fetch that could issue three packets independent of available packet queue entries."
+		 },
+		"0x6f": {
+			"Name":"IU_REQUEST_STALLED",
+			"Value":0,
+			"Description":"IU request stalled due to fill. Demand or prefetch fills from L2 to icache caused IU demand to stall."
+		 },
+		"0x70": {
+			"Name":"BIMODAL_UPDATE_DROPPED",
+			"Value":0,
+			"Description":"Bimodal update dropped. Cacheline way (in any set) got replaced before bimodal update so we drop."
+		 },
+		"0x71": {
+			"Name":"IU_0_PKT_AVAILABLE_TO_ISSUE",
+			"Value":0,
+			"Description":"Fetch which could only issue a partial packet due to a jump to a packet which crosses cachelines boundary."
+		 },
+		"0x72": {
+			"Name":"IU_LINE_FALL_THROUGH",
+			"Value":109275,
+			"Description":"Front end fall through to new line. Does not include fall through from loop cached line."
+		 },
+		"0x73": {
+			"Name":"IU_LEFTOVER_DROPPED",
+			"Value":0,
+			"Description":"Dropped leftover cache line contents because it exceeds IBUF size."
+		 },
+		"0x74": {
+			"Name":"L2FETCH_IU_ACCESS",
+			"Value":0,
+			"Description":"L2fetch access from IU. Any access to the L2 cache from the L2 prefetch engine that was initiated by the iu. Access must be L2 cacheable and target primary "
+		 },
+		"0x75": {
+			"Name":"L2FETCH_IU_MISS",
+			"Value":0,
+			"Description":"Of the events in 0x74, L2Fetch_IU_Access, the ones that miss in L2"
+		 },
+		"0x76": {
+			"Name":"L2_IU_ACCESS",
+			"Value":99,
+			"Description":"L2 cacheable access from IU. Any access to the L2 cache that was the result of an IU command, either demand or L1 prefetch access. Excludes any prefetch generated in the L2. Excludes L2Fetch, tcm accesses and uncacheables. Address must target primary AXI"
+		 },
+		"0x77": {
+			"Name":"L2_IU_MISS",
+			"Value":51,
+			"Description":"L2 misses from IU. Of the events qualified by 0x76, the ones that resulted in an L2 miss (demand miss or L1 prefetch miss). A L2 miss is any condition that prevents the immediate return of data to the IU, excluding pipeline conflicts."
+		 },
+		"0x78": {
+			"Name":"L2_IU_PREFETCH_ACCESS",
+			"Value":66,
+			"Description":"Pre-fetch from the IU to L2. Any IU pre-fetch access sent to the L2 cache. Access must be L2 cacheable and target primary AXI. This does not include L2Fetch generated accesses."
+		 },
+		"0x79": {
+			"Name":"L2_IU_PREFETCH_MISS",
+			"Value":33,
+			"Description":"L2 prefetch from IU miss . Of the events qualified by 0x78, the ones that resulted in an L2 miss."
+		 },
+		"0x7c": {
+			"Name":"L2_DU_READ_ACCESS",
+			"Value":2175,
+			"Description":"L2 cacheable read access from DU. Any read access from DU that may cause a lookup in the L2 cache. Includes loads, l1 prefetch, dcfetch. Excludes initial L2fetch command, uncacheables, tcm, and coprocessor loads. Must target AXI primary."
+		 },
+		"0x7d": {
+			"Name":"L2_DU_READ_MISS",
+			"Value":1963,
+			"Description":"L2 read miss from DU. Of the events qualified by 0x7C, any that resulted in L2 miss. i.e. the line was not previously allocated in the L2 cache and will be fetched from backing memory."
+		 },
+		"0x7e": {
+			"Name":"L2FETCH_ACCESS",
+			"Value":0,
+			"Description":"L2fetch access from DU. Any access to the L2 cache from the L2 prefetch engine that was initiated by programing the L2Fetch engine. Includes only the cache inquire and fetch if not present commands."
+		 },
+		"0x7f": {
+			"Name":"L2FETCH_MISS",
+			"Value":0,
+			"Description":"L2fetch miss from a programed inquiry. Of the events qualified by 0x7E, the ones that resulted in  L2 miss. i.e. the line was not previously allocated in the L2 cache and will be fetched from backing memory."
+		 },
+		"0x80": {
+			"Name":"L2_AXI_INTERLEAVE_DROP",
+			"Value":0,
+			"Description":"L2 drops a return or converts to uncacheable due to AXI interleave buffer overflow."
+		 },
+		"0x81": {
+			"Name":"L2_ACCESS",
+			"Value":426147,
+			"Description":"All requests to the L2. Does not include internally generated accesses like L2Fetch, however the programing of the L2Fetch engine would be counted. Accesses target Odd or Even interleave, and may be L2 cacheable or TCM"
+		 },
+		"0x82": {
+			"Name":"L2_PIPE_CONFLICT",
+			"Value":223106,
+			"Description":"Request not taken by the L2 due to a pipe conflict. The conflict may be a tag bank, data bank, or other pipeline conflict."
+		 },
+		"0x83": {
+			"Name":"L2_TAG_ARRAY_CONFLICT",
+			"Value":196338,
+			"Description":"Of the items in event 130, the ones caused by a conflict with the tag array"
+		 },
+		"0x84": {
+			"Name":"AXI_RD_CONGESTION",
+			"Value":0,
+			"Description":"Primary AXI read command queue is full and an operation is stuck at the head of the primary AXI master command queue."
+		 },
+		"0x85": {
+			"Name":"AHB_CONGESTION",
+			"Value":0,
+			"Description":"Ahb congestion. Triggers when ahb interface is full and an operation is stuck at the head of the command queue."
+		 },
+		"0x87": {
+			"Name":"TCM_DU_ACCESS",
+			"Value":0,
+			"Description":"TCM access from DU. DU access to the L2 tcm space. CVI requests are excluded"
+		 },
+		"0x88": {
+			"Name":"TCM_DU_READ_ACCESS",
+			"Value":0,
+			"Description":"TCM read access from DU. DU read access to the L2 tcm space. CVI requests are excluded"
+		 },
+		"0x89": {
+			"Name":"TCM_IU_ACCESS",
+			"Value":0,
+			"Description":"TCM access from IU. IU access to the L2 tcm space"
+		 },
+		"0x8a": {
+			"Name":"L2_CASTOUT",
+			"Value":30413,
+			"Description":"L2 castout. Triggers when L2 evicts a dirty line due to an allocation. not triggered on cache ops."
+		 },
+		"0x8b": {
+			"Name":"L2_DU_STORE_ACCESS",
+			"Value":3279,
+			"Description":"L2 cacheable store access from DU. Any store access from DU that may cause a lookup in the L2 cache. Excludes cache ops, uncacheables, tcm, and coprocessor stores. Must target primary AXI"
+		 },
+		"0x8c": {
+			"Name":"L2_DU_STORE_MISS",
+			"Value":1973,
+			"Description":"L2 miss from DU. Of the events qualified by 0x8B, the ones that resulted in a miss. Specifically the cases where the line is not in cache or a coalesce buffer"
+		 },
+		"0x8d": {
+			"Name":"L2_DU_PREFETCH_ACCESS",
+			"Value":0,
+			"Description":"L2 prefetch access from DU. Of the events qualified by 0x7C, the ones which are Dcfetch and dhwprefetch. These are L2 cacheable targeting AXI primary."
+		 },
+		"0x8e": {
+			"Name":"L2_DU_PREFETCH_MISS",
+			"Value":0,
+			"Description":"L2 prefetch miss from DU. Of the events qualified by 0x8D, which ones missed the L2"
+		 },
+		"0x8f": {
+			"Name":"L2_DU_RETURN_NOT_ACKED",
+			"Value":0,
+			"Description":"L2 return to DU not acknowledged. This is active for any DU return, prefetch or demand. This event was renamed. I was called L2_DU_PREFETCH_NOT_ACKED"
+		 },
+		"0x90": {
+			"Name":"L2_DU_LOAD_SECONDARY_MISS",
+			"Value":1,
+			"Description":"L2 load secondary miss from DU. Hit busy line in the scoreboard which prevented a return. Busy condition may include pipeline bubbles caused by back to back loads, as may be seen on L1UC loads."
+		 },
+		"0x91": {
+			"Name":"L2FETCH_COMMAND",
+			"Value":0,
+			"Description":"L2fetch command. Excludes stop command"
+		 },
+		"0x92": {
+			"Name":"L2FETCH_COMMAND_KILLED",
+			"Value":0,
+			"Description":"L2fetch command killed because a stop command was issued. Increments once for each L2fetch commands that is killed. If multiple commands are queued to the L2Fetch engine, the kill of each one will be recorded"
+		 },
+		"0x93": {
+			"Name":"L2FETCH_COMMAND_OVERWRITE",
+			"Value":0,
+			"Description":"L2fetch command overwrite. Kills old L2fetch and replaces with new one"
+		 },
+		"0x97": {
+			"Name":"L2_ACCESS_EVEN",
+			"Value":213070,
+			"Description":"Of the events in 0x81, the number of accesses made to the even L2 cache."
+		 },
+		"0xa0": {
+			"Name":"ANY_DU_STALL",
+			"Value":2176,
+			"Description":"Any DU stall. Increments once when the thread has any DU stall (dcache miss or dtlb miss)."
+		 },
+		"0xa1": {
+			"Name":"DU_BANK_CONFLICT_REPLAY",
+			"Value":1957,
+			"Description":"DU bank conflict replay. Dual mem access to same bank but different lines. Banks are determined by bits 11,5,4,3."
+		 },
+		"0xa3": {
+			"Name":"L2_FIFO_FULL_REPLAY",
+			"Value":0,
+			"Description":"Counts L2 even/odd FIFO full replays."
+		 },
+		"0xa4": {
+			"Name":"DU_STORE_BUFFER_FULL_REPLAY",
+			"Value":0,
+			"Description":"First packet puts access in DU store buffer (memop, store.new, load/store bank conflict, store/store bank conflict). Any later packet tries to use store buffer before the first one evicts, and so must replay so the store buffer can drain."
+		 },
+		"0xa8": {
+			"Name":"DU_FILL_REPLAY",
+			"Value":1014,
+			"Description":"A fill has a index conflict with an instruction from the same thread in pipeline. Fills and demands might be from different threads if (1) prefetch from deferral queue, (2) store from store buffer, or (3) fill has not be ack'ed for too long and forces itself in to the pipeline."
+		 },
+		"0xac": {
+			"Name":"DU_READ_TO_L2",
+			"Value":2175,
+			"Description":"DU read to L2. Total of everything that brings data from L2. Includes prefeches (dcfetch and hwprefetch). Excludes coprocessor loads."
+		 },
+		"0xad": {
+			"Name":"DU_WRITE_TO_L2",
+			"Value":3279,
+			"Description":"DU write to L2. Total of everything that is written out of DU to the L2 array. Includes dczeroa. Excludes dcclean, dccleaninv, tag writes, and coprocessor stores."
+		 },
+		"0xaf": {
+			"Name":"DCZERO_COMMITTED",
+			"Value":0,
+			"Description":"Commited a dczeroa instruction."
+		 },
+		"0xb3": {
+			"Name":"DTLB_MISS",
+			"Value":1,
+			"Description":"DTLB miss which goes to JTLB. When both slots miss to different pages, increments by 2. When both slots miss to the same page, only counts S1, since S1 goes first and fills for S0."
+		 },
+		"0xb6": {
+			"Name":"STORE_BUFFER_HIT_REPLAY",
+			"Value":1,
+			"Description":"Store buffer hit replay due to a packet with 2 stores going to the same bank but different cachelines, followed by a load from an address that was pushed into the store buffer."
+		 },
+		"0xb7": {
+			"Name":"STORE_BUFFER_FORCE_REPLAY",
+			"Value":0,
+			"Description":"The store buffer must drain, forcing the current packet to replay. This usually happens on an cache index match between the current packet and store buffer. Could also a store buffer timeout."
+		 },
+		"0xb9": {
+			"Name":"SMT_BANK_CONFLICT",
+			"Value":0,
+			"Description":"Counts inter-thread SMT bank conflicts."
+		 },
+		"0xba": {
+			"Name":"SMT_PORT_CONFLICT",
+			"Value":0,
+			"Description":"Counts inter-thread SMT port conflicts. This occurs when a packet on one cluster is replayed and goes to DU at the same time as a packet on the other cluster such that the total number of memory accesses in those two packets exceeds the number of DU ports."
+		 },
+		"0xbd": {
+			"Name":"PAGE_CROSS_REPLAY",
+			"Value":6872,
+			"Description":"Page cross replay. Page cross from valid packet that caused replay. Excludes pdkill packets. Counts twice if both slots cause a page cross."
+		 },
+		"0xbf": {
+			"Name":"DU_DEMAND_SECONDARY_MISS",
+			"Value":0,
+			"Description":"DU demand secondary miss. "
+		 },
+		"0xc3": {
+			"Name":"DCFETCH_COMMITTED",
+			"Value":0,
+			"Description":"Dcfetch committed. Includes hit and dropped. Does not include convert-to-prefetches."
+		 },
+		"0xc4": {
+			"Name":"DCFETCH_HIT",
+			"Value":0,
+			"Description":"Dcfetch hit in dcache. Includes hit valid or reserved line"
+		 },
+		"0xc5": {
+			"Name":"DCFETCH_MISS",
+			"Value":0,
+			"Description":"Dcfetch missed in L1. Counts the dcfetch issued to L2 FIFO."
+		 },
+		"0xc8": {
+			"Name":"DU_LOAD_UNCACHEABLE",
+			"Value":0,
+			"Description":"Uncacheable load in L1 cache. Counts twice for dual uncachable loads."
+		 },
+		"0xc9": {
+			"Name":"DU_DUAL_LOAD_UNCACHEABLE",
+			"Value":0,
+			"Description":"Dual uncacheable loads in L1 cache."
+		 },
+		"0xca": {
+			"Name":"DU_STORE_UNCACHEABLE",
+			"Value":0,
+			"Description":"Uncacheable store in L1 cache. Counts twice for dual uncachable stores. Excludes uncached memops."
+		 },
+		"0xcc": {
+			"Name":"MISS_TO_PREFETCH",
+			"Value":0,
+			"Description":"Dcache miss is converted to a prefetch. Could be the second load to miss in a packet, or a DMT subsequent packet on same thread. The normal dcache access will proceed when the first miss resolves. Includes converted prefetches into uncacheable space which will be cancelled later in the pipe."
+		 },
+		"0xce": {
+			"Name":"AXI_LINE64_READ_REQUEST",
+			"Value":36359,
+			"Description":"64-byte line read requests issued by primary AXI master"
+		 },
+		"0xcf": {
+			"Name":"AXI_LINE64_WRITE_REQUEST",
+			"Value":30413,
+			"Description":"64-byte line write requests issued by primary AXI master. All bytes valid"
+		 },
+		"0xd0": {
+			"Name":"AXI_WR_CONGESTION",
+			"Value":0,
+			"Description":"Primary AXI write command or data queue is full and an operation is stuck at the head of the primary AXI master command queue."
+		 },
+		"0xd1": {
+			"Name":"AHB_8_READ_REQUEST",
+			"Value":0,
+			"Description":"An 8 byte AHB read was made."
+		 },
+		"0xd2": {
+			"Name":"AXI_INCOMPLETE_WRITE_REQUEST",
+			"Value":0,
+			"Description":"A burst write was made by the primary AXI master, but not all of the bytes were valid."
+		 },
+		"0xd3": {
+			"Name":"L2FETCH_COMMAND_PAGE_TERMINATION",
+			"Value":0,
+			"Description":"L2fetch command terminated because it could not get a page translation from VA to PA. Includes termination dues to permission errors. i.e. address translation could fail because the VA to PA is not in the TLB, or the propertys in the translation are not acceptable and the command terminates. "
+		 },
+		"0xd4": {
+			"Name":"REQUEST_STALL_WRITE_BUFFER_EXHAUSTION",
+			"Value":0,
+			"Description":"Request to L2 stalled due to the lack of a write buffer. This is set for scalar and vectore stores."
+		 },
+		"0xd5": {
+			"Name":"L2_DU_STORE_COALESCE",
+			"Value":20,
+			"Description":"Events from 139 that were coalesced"
+		 },
+		"0xdc": {
+			"Name":"REQUEST_STALL_EVICTION_BUFFER_EXHAUSTION",
+			"Value":0,
+			"Description":"Request to L2 stalled due to the lack of an eviction buffer. This is set for scalar and vectore loads."
+		 },
+		"0xdd": {
+			"Name":"AHB_MULTI_BEAT_READ_REQUEST",
+			"Value":0,
+			"Description":"A 32 byte multi-beat  AHB read was made."
+		 },
+		"0xdf": {
+			"Name":"L2_DU_LOAD_SECONDARY_MISS_ON_SW_PREFETCH",
+			"Value":0,
+			"Description":"Of the events in 0x90, the ones where the primary miss was a DCFETCH or L2FETCH."
+		 },
+		"0xe6": {
+			"Name":"ARCH_LOCK_PVIEW_CYCLES",
+			"Value":0,
+			"Description":"Cycles cluster could not dispatch due to kernel lock or TLB lock."
+		 },
+		"0xe7": {
+			"Name":"IU_NO_PKT_PVIEW_CYCLES",
+			"Value":6950,
+			"Description":"Cycles cluster could not dispatch due to IQ being empty."
+		 },
+		"0xe8": {
+			"Name":"IU_BRANCH_MISS_PVIEW_CYCLES",
+			"Value":222,
+			"Description":"Packets in flight killed due to branch mispredict and cycles cluster could not dispatch due to IQ being empty because of branch mispredict."
+		 },
+		"0xe9": {
+			"Name":"DU_CACHE_MISS_PVIEW_CYCLES",
+			"Value":311379,
+			"Description":"Cycles cluster could not dispatch due to D-cache miss or uncached access."
+		 },
+		"0xea": {
+			"Name":"DU_BUSY_OTHER_PVIEW_CYCLES",
+			"Value":2813565,
+			"Description":"Packets in flight killed due to DU replay and cycles cluster could not dispatch due to DU busy because of stall or replay."
+		 },
+		"0xeb": {
+			"Name":"CU_BUSY_PVIEW_CYCLES",
+			"Value":254328,
+			"Description":"Cycles cluster could not dispatch due to register interlock, register port conflict, bubbles due to timing class such as tc_3stall, no B2B CVI, or CVI FIFO full."
+		 },
+		"0xec": {
+			"Name":"SMT_DU_CONFLICT_PVIEW_CYCLES",
+			"Value":0,
+			"Description":"Cycles cluster could not dispatch even though the thread was ready due to DU resource conflict."
+		 },
+		"0xed": {
+			"Name":"SMT_XU_CONFLICT_PVIEW_CYCLES",
+			"Value":0,
+			"Description":"Cycles cluster could not dispatch even though the cluster was ready due to an XU resource conflict or other non-DU reason."
+		 },
+		"0xef": {
+			"Name":"COPROC_L2_STORE_TO_LOAD_MISS",
+			"Value":0,
+			"Description":"Of the events in 0xFB, the ones where the load could not be returned due to the immediately prior access for the line being a pending coprocessor store"
+		 },
+		"0xf0": {
+			"Name":"COPROC_PKT_THREAD",
+			"Value":331046,
+			"Description":"Committed packets on a thread with the XE bit set, whether executed in Q6 or coprocessor"
+		 },
+		"0xf1": {
+			"Name":"COPROC_PKT_COUNT",
+			"Value":275764,
+			"Description":"Packets with CVI instructions"
+		 },
+		"0xf2": {
+			"Name":"COPROC_POWER_THROTTLING_STALL_CYCLES",
+			"Value":0,
+			"Description":"Stall cycles due to the CVI engine being throttled for power reasons"
+		 },
+		"0xf3": {
+			"Name":"COPROC_REGISTER_STALL_CYCLES",
+			"Value":2165,
+			"Description":"Stall cycles due to interlocks"
+		 },
+		"0xf4": {
+			"Name":"COPROC_LOAD_STALL_CYCLES",
+			"Value":1394939,
+			"Description":"Stall cycles due to load pending"
+		 },
+		"0xf5": {
+			"Name":"COPROC_STORE_STALL_CYCLES",
+			"Value":3,
+			"Description":"Stall cycles due to store not yet allocated in L2"
+		 },
+		"0xf6": {
+			"Name":"COPROC_BUSY_STALL_CYCLES",
+			"Value":0,
+			"Description":"Stall cycles due to multi-issue packet"
+		 },
+		"0xf7": {
+			"Name":"COPROC_FREEZE_STALL_CYCLES",
+			"Value":0,
+			"Description":"Stall cycles due to L2 vector store data FIFO full"
+		 },
+		"0xf8": {
+			"Name":"COPROC_CORE_VFIFO_FULL_STALL",
+			"Value":65010,
+			"Description":"Number of times a thread had to stall due to VFIFO being full"
+		 },
+		"0xf9": {
+			"Name":"COPROC_L2_STORE_ACCESS",
+			"Value":31380,
+			"Description":"L2 cacheable store access from CVI. Any store access from CVI that may cause a lookup in the L2 cache. Excludes cache ops, uncacheables, scalar stores"
+		 },
+		"0xfa": {
+			"Name":"COPROC_L2_STORE_MISS",
+			"Value":31320,
+			"Description":"L2 cacheable miss from CVI. Of the events qualified by 0xF9, the ones that resulted in a miss. Specifically the cases where the line is not in cache or a coalesce buffer. DCZero does not count as a miss, if it allocates without a backing store fetch "
+		 },
+		"0xfb": {
+			"Name":"COPROC_L2_LOAD_ACCESS",
+			"Value":389280,
+			"Description":"L2 cacheable load access from CVI. Any load access from CVI that may cause a lookup in the L2 cache. Excludes cache ops, uncacheables, scalars"
+		 },
+		"0xfc": {
+			"Name":"COPROC_L2_LOAD_MISS",
+			"Value":32372,
+			"Description":"L2 cacheable miss from CVI. Of the events qualified by 0xFB, the ones that resulted in a miss i.e. the line was not previously allocated in the L2 cache and will be fetched from backing memory."
+		 },
+		"0xfd": {
+			"Name":"COPROC_TCM_STORE_ACCESS",
+			"Value":0,
+			"Description":"TCM store access for CVI. CVI store to the L2 tcm space"
+		 },
+		"0xfe": {
+			"Name":"COPROC_TCM_LOAD_ACCESS",
+			"Value":0,
+			"Description":"TCM load access for CVI. CVI load from the L2 tcm space"
+		 },
+		"0xff": {
+			"Name":"COPROC_L2_LOAD_SECONDARY_MISS",
+			"Value":192232,
+			"Description":"Of the events in 0xFB, the ones where the load could not be returned due to the immediatately prior access for the line being a pending load or pending L2Fetch"
+		 }
+	 }
+}

@@ -1,0 +1,44 @@
+BUILD := ASM
+CC = ${HEX_TOOLS}/bin/hexagon-clang
+CLANG = ${HEX_TOOLS}/bin/hexagon-clang++
+CURR_DIR = $(shell pwd)
+SOURCES = $(wildcard  *.c)
+OBJS = $(addsuffix .o, $(basename $(SOURCES)))
+LLVM_MC = ${HEX_TOOLS}/bin/hexagon-llvm-mc
+CFLAGS =-mhvx-double -mv60
+CFLAGS.ASM = -DASM_HVX
+CFLAGS.INT = -DINT_HVX
+CFLAGS += ${CFLAGS.${BUILD}} 
+%.o: %.c
+	${CC}  ${CFLAGS} -c -O2 -o $@ $<
+%.s: %.S
+	${CC} ${CFLAGS} -E -O2 -o $@ $<
+
+gaussian_asm.o: gaussian_asm.s
+	${LLVM_MC} -filetype=obj -mhvx -mv60 gaussian_asm.s -o gaussian_asm.o
+
+gaussian: $(OBJS) gaussian_asm.o
+	${CC} -mv60 -mhvx -o $@ $(OBJS)  gaussian_asm.o -lhexagon
+
+.PHONY: clean hvx
+clean:
+	rm -rf *.s *.i *.o gaussian *.txt pa_dump.core.0 stats_dump.v60.iss.0 run.std* out.bin result
+
+all: gaussian
+	${HEX_TOOLS}/bin/hexagon-sim gaussian --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1> ${CURR_DIR}/run.stdout 2> ${CURR_DIR}/run.stderr
+	RUN_STATUS=$$?; \
+	FAIL=0; \
+	if [ $$RUN_STATUS -ne 0 ]; then \
+	  FAIL=1; \
+        fi; \
+        if ! cmp out.bin ${CURR_DIR}/golden_out.bin; then \
+          FAIL=1; \
+        fi; \
+	if [ $$FAIL -eq 0 ]; then \
+          echo PASS > ${CURR_DIR}/result; \
+	  echo PASS; \
+	  grep "cycles/pixel" ${CURR_DIR}/run.stdout | awk '{print "**** " $$1,$$4,$$7 " cycles/pixel ****"}'; \
+        else \
+          echo FAIL > ${CURR_DIR}/result; \
+	  echo FAIL;\
+	fi;
