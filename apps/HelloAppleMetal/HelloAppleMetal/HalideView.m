@@ -76,7 +76,6 @@
     {
         [self initCommon];
     }
-    
     return self;
 }
 
