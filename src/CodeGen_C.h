@@ -31,7 +31,7 @@ public:
     /** Emit the declarations contained in the module as C code. */
     void compile(const Module &module);
 
-    static void test();
+    EXPORT static void test();
 
 protected:
     /** Emit a declaration. */
