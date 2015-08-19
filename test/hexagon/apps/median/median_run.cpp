@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
   // uses. For the 8-bit image we use in this test it's one.
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
-  while (!SIM_ACQUIRE_HVX);
+  SIM_ACQUIRE_HVX
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif
@@ -114,9 +114,10 @@ int main(int argc, char **argv) {
       uint8_t mid_x[3];
       uint8_t i00, i01, i02;
       for (i = 0; i < 3; ++i) {
-        i00 = (y + i) > 7 ? 0 :input[y+i][x];
-        i01 = (x > 126) || ((y+i) > 7) ? 0 : input[y+i][x+1];
-        i02 = (x > 125) || ((y+i) > 7) ? 0 : input[y+i][x+2];
+        int row = y - 1 + i;
+        i00 = (x-1 < 0) || (row < 0) || (row > 7) ? 0 :input[row][x-1];
+        i01 = (row < 0) || (row > 7) ? 0 : input[row][x];
+        i02 = (x == 127) || (row < 0) || (row > 7) ? 0 : input[row][x+1];
         max_x[i] = max(max(i00, i01), i02);
         min_x[i] = min(min(i00, i01), i02);
         mid_x[i] = mid(i00, i01, i02);
@@ -242,7 +243,7 @@ int main(int argc, char **argv) {
   // uses. For the 8-bit image we use in this test it's one.
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
-  while (!SIM_ACQUIRE_HVX);
+  SIM_ACQUIRE_HVX
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif
