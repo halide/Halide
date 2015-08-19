@@ -23,8 +23,8 @@ void copy_interleaved(bool vectorize, int channels) {
         .set_stride(1, Halide::Expr())
         .set_stride(2, 1)
         .set_bounds(2, 0, channels);  // expecting interleaved image
-    uint8_t in_buf[128 * 128 * channels];
-    uint8_t out_buf[128 * 128 * channels];
+    uint8_t *in_buf = new uint8_t[128 * 128 * channels];
+    uint8_t *out_buf = new uint8_t[128 * 128 * channels];
     Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, channels);
     Image<uint8_t> out = make_interleaved_image(out_buf, 128, 128, channels);
     input8.set(in);
@@ -46,6 +46,8 @@ void copy_interleaved(bool vectorize, int channels) {
     args.push_back(input8);
 
     result.compile_to_file("aot_copy_error", args);
+    delete[] in_buf;
+    delete[] out_buf;
 }
 
 int main(int argc, char **argv) {

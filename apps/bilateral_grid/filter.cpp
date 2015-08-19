@@ -25,7 +25,8 @@ int main(int argc, char **argv) {
 
     bilateral_grid(atof(argv[3]), input, output);
 
-    // Timing code
+    // Timing code. Timing doesn't include copying the input data to
+    // the gpu or copying the output back.
     double min_t = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid(atof(argv[3]), input, output);
     });

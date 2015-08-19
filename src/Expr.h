@@ -140,7 +140,7 @@ struct IntImm : public ExprNode<IntImm> {
 
 private:
     /** ints from -8 to 8 */
-    static IntImm small_int_cache[17];
+    EXPORT static IntImm small_int_cache[17];
 };
 
 /** Floating point constants */
