@@ -20,8 +20,13 @@ CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
     metal_c(src_stream), target(t) {
 }
 
-string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
+static string print_type_maybe_storage(Type type, bool storage) {
     ostringstream oss;
+    
+    // Storage uses packed vector types.
+    if (storage && type.width != 1) {
+        oss << "packed_";
+    }
     if (type.is_float()) {
         if (type.bits == 16) {
             oss << "half";
@@ -69,6 +74,14 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
         }
     }
     return oss.str();
+}
+
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
+    return print_type_maybe_storage(type, false);
+}
+
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_storage_type(Type type) {
+    return print_type_maybe_storage(type, true);
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) {
@@ -146,13 +159,13 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Ramp *op) {
     string id_stride = print_expr(op->stride);
 
     ostringstream rhs;
-    rhs << id_base << " + " << id_stride << " * ("
+    rhs << id_base << " + " << id_stride << " * "
         << print_type(op->type.vector_of(op->width)) << "(0";
     // Note 0 written above.
     for (int i = 1; i < op->width; ++i) {
         rhs << ", " << i;
     }
-    rhs << "))";
+    rhs << ")";
     print_assignment(op->type.vector_of(op->width), rhs.str());
 }
 
@@ -196,7 +209,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
-        rhs << "*(" << get_memory_space(op->name) << " " << print_type(op->type) << " *)(("
+        rhs << "*(" << get_memory_space(op->name) << " " << print_storage_type(op->type) << " *)(("
             << get_memory_space(op->name) << " " << print_type(op->type.element_of()) << " *)" << print_name(op->name)
             << " + " << id_ramp_base << ")";
         print_assignment(op->type, rhs.str());
@@ -212,7 +225,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "((" << get_memory_space(op->name) << " "
-            << print_type(op->type) << " *)"
+            << print_storage_type(op->type) << " *)"
             << print_name(op->name)
             << ")";
     } else {
@@ -255,6 +268,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
+  debug(0) << "Generating code for Store op " << Stmt(op) << "\n";
     string id_value = print_expr(op->value);
     Type t = op->value.type();
 
@@ -265,7 +279,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
         string id_ramp_base = print_expr(ramp_base);
 
         do_indent();
-        stream << "*(" << get_memory_space(op->name) << " " << print_type(t) << " *)(("
+        stream << "*(" << get_memory_space(op->name) << " " << print_storage_type(t) << " *)(("
                << get_memory_space(op->name) << " " << print_type(t.element_of()) << " *)" << print_name(op->name)
                << " + " << id_ramp_base << ") = " << id_value << ";\n";
     } else if (op->index.type().is_vector()) {
@@ -277,7 +291,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
         for (int i = 0; i < t.width; ++i) {
             do_indent();
             stream << "((" << get_memory_space(op->name) << " "
-                   << print_type(t.element_of()) << " *)"
+                   << print_storage_type(t.element_of()) << " *)"
                    << print_name(op->name)
                    << ")["
                    << id_index << "[" << i << "]] = "
@@ -294,7 +308,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
         if (type_cast_needed) {
             stream << "(("
                    << get_memory_space(op->name) << " "
-                   << print_type(t)
+                   << print_storage_type(t)
                    << " *)"
                    << print_name(op->name)
                    << ")";
@@ -343,7 +357,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
             << "Try storing into shared memory instead.";
 
         do_indent();
-        stream << print_type(op->type) << ' '
+        stream << print_storage_type(op->type) << ' '
                << print_name(op->name) << "[" << size << "];\n";
         do_indent();
         stream << "#define " << get_memory_space(op->name) << " thread\n";
@@ -373,6 +387,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Free *op) {
     }
 }
 
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Cast *op) {
+    print_assignment(op->type, print_type(op->type) + "(" + print_expr(op->value) + ")");
+}
 
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
@@ -489,7 +506,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
             stream << ",\n";
             stream << " " << get_memory_space(args[i].name) << " ";
             if (!args[i].write) stream << "const ";
-            stream << print_type(args[i].type) << " *"
+            stream << print_storage_type(args[i].type) << " *"
                    << print_name(args[i].name) << " [[ buffer(" << buffer_index++ << ") ]]";
             Allocation alloc;
             alloc.type = args[i].type;
@@ -564,12 +581,12 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream << "#include <metal_stdlib>\n"
                << "using namespace metal;\n" // Seems like the right way to go.
                << "namespace {\n"
-               << "float float_from_bits(unsigned int x) {return *reinterpret_cast<float thread *>(&x);}\n"
-               << "float maxval_f32() {return FLT_MAX;}\n"
-               << "float minval_f32() {return -FLT_MAX;}\n"
-               << "float nan_f32() { return float_from_bits(0x7fc00000); }\n" // Quiet NaN with minimum fractional value.
-               << "float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
-               << "float inf_f32() { return float_from_bits(0x7f800000); }\n"
+               << "constexpr float float_from_bits(unsigned int x) {return as_type<float>(x);}\n"
+               << "constexpr float maxval_f32() {return FLT_MAX;}\n"
+               << "constexpr float minval_f32() {return -FLT_MAX;}\n"
+               << "constexpr float nan_f32() { return as_type<float>(0x7fc00000); }\n" // Quiet NaN with minimum fractional value.
+               << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
+               << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
                << "bool is_nan_f32(float x) {return isnan(x); }\n"
                << "float fast_inverse_f32(float x) { return 1.0f / x; } \n"
                << smod_def("char") << "\n"
@@ -609,12 +626,6 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream << "#define __address_space___shared threadgroup\n";
 
     src_stream << '\n';
-
-#if 0
-    // Add at least one kernel to avoid errors on some implementations for functions
-    // without any GPU schedules.
-    src_stream << "__kernel void _at_least_one_kernel(int x) { }\n";
-#endif
 
     cur_kernel_name = "";
 }
