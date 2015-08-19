@@ -40,13 +40,13 @@ ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope)
  * to remainder if an answer could be found. */
 bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
 
-void modulus_remainder_test();
+EXPORT void modulus_remainder_test();
 
 /** The greatest common divisor of two integers */
-int gcd(int, int);
+EXPORT int gcd(int, int);
 
 /** The least common multiple of two integers */
-int lcm(int, int);
+EXPORT int lcm(int, int);
 
 }
 }

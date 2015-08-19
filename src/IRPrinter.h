@@ -62,7 +62,7 @@ public:
     /** emit a statement on the output stream */
     void print(Stmt);
 
-    static void test();
+    EXPORT static void test();
 
 protected:
     /** The stream we're outputting on */

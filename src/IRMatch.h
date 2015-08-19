@@ -43,7 +43,7 @@ bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
  */
 bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
 
-void expr_match_test();
+EXPORT void expr_match_test();
 
 }
 }
