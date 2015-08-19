@@ -15,7 +15,7 @@ void h_assert(bool condition, const char* msg) {
 int main() {
     // Number is larger than can be represented in half
     // but should be representable in single precision
-    float largeNum = (float)(1<<16);
+    const float largeNum = (float)(1<<16);
     h_assert(!std::isnan(largeNum), "largeNum should not be NaN");
     h_assert(!std::isinf(largeNum), "largeNum should not be inf");
     
