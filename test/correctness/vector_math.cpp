@@ -506,27 +506,32 @@ bool test(int vec_width) {
                 worst_log_mantissa = std::max(worst_log_mantissa, log_mantissa_error);
                 worst_exp_mantissa = std::max(worst_exp_mantissa, exp_mantissa_error);
 
-                if (a >= 0)
+                if (a >= 0) {
                     worst_pow_mantissa = std::max(worst_pow_mantissa, pow_mantissa_error);
+                }
 
-                if (is_finite(correct_log))
+                if (is_finite(correct_log)) {
                     worst_fast_log_mantissa = std::max(worst_fast_log_mantissa, fast_log_mantissa_error);
+                }
 
-                if (is_finite(correct_exp))
+                if (is_finite(correct_exp)) {
                     worst_fast_exp_mantissa = std::max(worst_fast_exp_mantissa, fast_exp_mantissa_error);
+                }
 
-                if (is_finite(correct_pow) && a > 0)
+                if (is_finite(correct_pow) && a > 0) {
                     worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
+                }
 
                 if (log_mantissa_error > 8) {
                     printf("log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, im15(x, y), correct_log, correct_log_mantissa, log_mantissa);
                 }
-                if (exp_mantissa_error > 2) {
+                if (exp_mantissa_error > 32) {
+                    // Actually good to the last 2 bits of the mantissa with sse4.1 / avx
                     printf("exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            b, im16(x, y), correct_exp, correct_exp_mantissa, exp_mantissa);
                 }
-                if (a >= 0 && pow_mantissa_error > 32) {
+                if (a >= 0 && pow_mantissa_error > 64) {
                     printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
