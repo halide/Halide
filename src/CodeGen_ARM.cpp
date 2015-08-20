@@ -1241,7 +1241,11 @@ string CodeGen_ARM::mattrs() const {
             return "-neon";
         }
     } else {
-        return "";
+        if (target.os == Target::IOS || target.os == Target::OSX) {
+            return "+reserve-x18";
+        } else {
+            return "";
+        }
     }
 }
 

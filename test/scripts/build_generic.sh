@@ -42,7 +42,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         -G "Unix Makefiles" \
         ../
 
-  # Build
+  # Build and run internal tests
   make -j ${NUM_JOBS}
   # Build docs
   make doc
@@ -87,9 +87,7 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   if [ ${INCREMENTAL_BUILD} = '0' ]; then
     make clean
   fi
-  # Build
-  # Note this runs the internal tests too
-  # FIXME: The CMake build system doesn't do this
+  # Build and run internal tests
   make_build -j ${NUM_JOBS}
 
   # Build the docs

@@ -685,7 +685,7 @@ else
 LD_PATH_SETUP = LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(CURDIR)/$(BIN_DIR)
 endif
 
-test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=test_%)
+test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
 test_warnings: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
@@ -719,17 +719,21 @@ TIME_COMPILATION ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
 run_tests: $(ALL_TESTS)
 	make -f $(THIS_MAKEFILE) test_performance
 
-build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/test_%) \
+build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/error_%) \
-	$(WARNING_TESTS:$(ROOT_DIR)/test/error/%.cpp=$(BIN_DIR)/warning_%)
+	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
+	$(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BIN_DIR)/opengl_%) \
+	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/generator_aot_%) \
+	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
+	$(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=$(BIN_DIR)/renderscript_%)
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
 
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -I$(SRC_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
-$(BIN_DIR)/test_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
+$(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
@@ -875,20 +879,25 @@ tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.s
 	$(LD_PATH_SETUP) bash $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh
 	@-echo
 
-test_%: $(BIN_DIR)/test_%
+test_internal: $(BIN_DIR)/test_internal
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$<
 	@-echo
 
-valgrind_%: $(BIN_DIR)/test_%
+correctness_%: $(BIN_DIR)/correctness_%
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$<
+	@-echo
+
+valgrind_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(LD_PATH_SETUP) valgrind --error-exitcode=-1 $(CURDIR)/$<
 	@-echo
 
 # This test is *supposed* to do an out-of-bounds read, so skip it when testing under valgrind
-valgrind_tracing_stack: $(BIN_DIR)/test_tracing_stack
+valgrind_tracing_stack: $(BIN_DIR)/correctness_tracing_stack
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$(BIN_DIR)/test_tracing_stack
+	cd $(TMP_DIR) ; $(LD_PATH_SETUP) $(CURDIR)/$(BIN_DIR)/correctness_tracing_stack
 	@-echo
 
 performance_%: $(BIN_DIR)/performance_%

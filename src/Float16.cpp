@@ -126,7 +126,7 @@ float16_t float16_t::make_from_bits(uint16_t rawBits) {
     return val;
 }
 
-float16_t::operator float() {
+float16_t::operator float() const {
     llvm::APFloat convertedValue = toLLVMAPF(*this);
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
@@ -136,7 +136,7 @@ float16_t::operator float() {
     return convertedValue.convertToFloat();
 }
 
-float16_t::operator double() {
+float16_t::operator double() const {
     llvm::APFloat convertedValue = toLLVMAPF(*this);
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so

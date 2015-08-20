@@ -61,9 +61,9 @@ struct float16_t {
 
     // Use explicit to avoid accidently raising the precision
     /** Cast to float */
-    EXPORT explicit operator float();
+    EXPORT explicit operator float() const;
     /** Cast to double */
-    EXPORT explicit operator double();
+    EXPORT explicit operator double() const;
 
     // Be explicit about how the copy constructor is expected to behave
     EXPORT float16_t(const float16_t&) = default;

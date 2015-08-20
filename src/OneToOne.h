@@ -18,7 +18,7 @@ namespace Internal {
  * strictly negative. */
 bool is_one_to_one(Expr expr);
 
-void is_one_to_one_test();
+EXPORT void is_one_to_one_test();
 
 }
 }

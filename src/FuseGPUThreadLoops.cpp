@@ -18,6 +18,7 @@ using std::set;
 
 namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
+string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
 string shared_mem_name = "__shared";
 }
 
@@ -549,12 +550,57 @@ public:
     ZeroGPULoopMins() : in_non_glsl_gpu(false) { }
 };
 
+class ValidateGPULoopNesting : public IRVisitor {
+    int gpu_block_depth = 0, gpu_thread_depth = 0;
+    string innermost_block_var, innermost_thread_var;
+
+    using IRVisitor::visit;
+
+    void visit(const For *op) {
+        string old_innermost_block_var  = innermost_block_var;
+        string old_innermost_thread_var = innermost_thread_var;
+        int old_gpu_block_depth  = gpu_block_depth;
+        int old_gpu_thread_depth = gpu_thread_depth;
+
+        for (int i = 1; i <= 4; i++) {
+            if (ends_with(op->name, block_names[4-i])) {
+                user_assert(i > gpu_block_depth)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " cannot be inside of loop over " << innermost_block_var << "\n";
+                user_assert(gpu_thread_depth == 0)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " cannot be inside of loop over " << innermost_thread_var << "\n";
+                innermost_block_var = op->name;
+                gpu_block_depth = i;
+            }
+            if (ends_with(op->name, thread_names[4-i])) {
+                user_assert(i > gpu_thread_depth)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " cannot be inside of loop over " << innermost_thread_var << "\n";
+                user_assert(gpu_block_depth > 0)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " must be inside a loop over gpu blocks\n";
+                innermost_thread_var = op->name;
+                gpu_thread_depth = i;
+            }
+        }
+        IRVisitor::visit(op);
+
+        innermost_block_var  = old_innermost_block_var;
+        innermost_thread_var = old_innermost_thread_var;
+        gpu_block_depth  = old_gpu_block_depth;
+        gpu_thread_depth = old_gpu_thread_depth;
+    }
+};
+
 // Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(Stmt s) {
     return ZeroGPULoopMins().mutate(s);
 }
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
+    ValidateGPULoopNesting validate;
+    s.accept(&validate);
     s = ZeroGPULoopMins().mutate(s);
     s = FuseGPUThreadLoops().mutate(s);
     return s;
