@@ -358,19 +358,24 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     engine_builder.setMAttrs(mattrs_array);
 
     #if LLVM_VERSION >= 37
-	TargetMachine *tm = engine_builder.selectTarget();
-	if (m->getDataLayout() != *tm->getDataLayout()) {
-		debug(0) << "Warning: data layout mismatch between module (" 
-			     << m->getDataLayout().getStringRepresentation()
-				 << ") and what the execution engine expects (" 
-				 << tm->getDataLayout()->getStringRepresentation() << ")\n";
-		m->setDataLayout(*tm->getDataLayout());
-	}
+        TargetMachine *tm = engine_builder.selectTarget();
+        #if LLVM_VERSION == 37
+            DataLayout target_data_layout(*(tm->getDataLayout()));
+        #else
+            DataLayout target_data_layout(tm->createDataLayout());
+        #endif
+        if (m->getDataLayout() != target_data_layout) {
+                debug(0) << "Warning: data layout mismatch between module ("
+                             << m->getDataLayout().getStringRepresentation()
+                                 << ") and what the execution engine expects ("
+                                 << target_data_layout.getStringRepresentation() << ")\n";
+                m->setDataLayout(target_data_layout);
+        }
     ExecutionEngine *ee = engine_builder.create(tm);
     #else
     ExecutionEngine *ee = engine_builder.create();
     #endif
-	
+
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 
@@ -393,7 +398,7 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling...\n";
+    debug(1) << "JIT compiling " << m->getModuleIdentifier() << "\n";
 
     std::map<std::string, Symbol> exports;
 
@@ -711,6 +716,7 @@ enum RuntimeKind {
     OpenCL,
     CUDA,
     OpenGL,
+    OpenGLCompute,
     MaxRuntimeKind
 };
 
@@ -738,25 +744,40 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         target.set_feature(Target::JIT);
 
         Target one_gpu(target);
+        one_gpu.set_feature(Target::OpenCL, false);
+        one_gpu.set_feature(Target::CUDA, false);
+        one_gpu.set_feature(Target::OpenGL, false);
+        one_gpu.set_feature(Target::OpenGLCompute, false);
+        string module_name;
         switch (runtime_kind) {
         case OpenCL:
             one_gpu.set_feature(Target::OpenCL);
+            module_name = "opencl";
             break;
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
+            module_name = "cuda";
             break;
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);
+            module_name = "opengl";
+            load_opengl();
+            break;
+        case OpenGLCompute:
+            one_gpu.set_feature(Target::OpenGLCompute);
+            module_name = "openglcompute";
             load_opengl();
             break;
         default:
+            module_name = "shared runtime";
             break;
         }
 
         // This function is protected by a mutex so this is thread safe.
         llvm::Module *module =
-            get_initial_module_for_target(target, &runtime.jit_module.ptr->context, true, runtime_kind != MainShared);
+            get_initial_module_for_target(one_gpu, &runtime.jit_module.ptr->context, true, runtime_kind != MainShared);
         clone_target_options(for_module, module);
+        module->setModuleIdentifier(module_name);
 
         std::set<std::string> halide_exports_unique;
 
@@ -852,6 +873,11 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::OpenGL)) {
         JITModule m = make_module(for_module, target, OpenGL, result, create);
+        if (m.compiled())
+            result.push_back(m);
+    }
+    if (target.has_feature(Target::OpenGLCompute)) {
+        JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
         if (m.compiled())
             result.push_back(m);
     }

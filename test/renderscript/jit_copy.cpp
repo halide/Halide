@@ -4,6 +4,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 class ValidateInterleavedPipeline: public IRMutator {
+protected:
 //
 // This is roughly the structure that we are trying to validate in this custom pass:
 //
@@ -31,6 +32,8 @@ class ValidateInterleavedPipeline: public IRMutator {
 //   }
 // }
 //
+    using IRMutator::visit;
+
     virtual void visit(const Call *call) {
         if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
             assert(for_nest_level == 4);
@@ -94,7 +97,7 @@ class ValidateInterleavedPipeline: public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Pipeline* op) {
+    void visit(const ProducerConsumer *op) {
         assert(!in_pipeline); // There should be only one pipeline in the test.
         for_nest_level = 0;
         in_pipeline = true;
@@ -106,7 +109,7 @@ class ValidateInterleavedPipeline: public IRMutator {
         IRMutator::visit(op);
         stmt = Stmt();
     }
-protected:
+
     int for_nest_level = -1;
     bool in_pipeline = false;
     int channels;
@@ -116,6 +119,9 @@ public:
 };
 
 class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline {
+    using IRMutator::visit;
+    using ValidateInterleavedPipeline::visit;
+
     virtual void visit(const Call *call) {
         if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
             assert(for_nest_level == 3); // Should be three nested for-loops before we get to the first call.
@@ -193,8 +199,8 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
         .set_stride(1, Halide::Expr())
         .set_stride(2, 1)
         .set_bounds(2, 0, channels);  // expecting interleaved image
-    uint8_t in_buf[128 * 128 * channels];
-    uint8_t out_buf[128 * 128 * channels];
+    uint8_t *in_buf = new uint8_t[128 * 128 * channels];
+    uint8_t *out_buf = new uint8_t[128 * 128 * channels];
     Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, channels);
     Image<uint8_t> out = make_interleaved_image(out_buf, 128, 128, channels);
     input8.set(in);
@@ -217,6 +223,9 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
             new ValidateInterleavedVectorizedPipeline(channels):
             new ValidateInterleavedPipeline(channels));
     result.realize(out);
+
+    delete[] in_buf;
+    delete[] out_buf;
 }
 
 int main(int argc, char **argv) {

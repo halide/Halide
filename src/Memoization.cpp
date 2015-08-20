@@ -3,6 +3,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Param.h"
+#include "Scope.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -162,6 +163,20 @@ class KeyInfo {
         return (size_t)(1 << i);
     }
 
+// Using the full names in the key results in a (hopefully incredibly
+// slight) performance difference based on how one names filters and
+// functions. It is arguably a little easier to debug if something
+// goes wrong as one doesn't need to destructure the cache key by hand
+// in the debugger. Also, if a pointer is used, a counter must also be
+// put in the cache key to avoid aliasing on reuse of the address in
+// JIT situations where code is regenerated into the same region of
+// memory.
+//
+// There is a plan to change the hash function used in the cache and
+// after that happens, we'll measure performance again and maybe decide
+// to choose one path or the other here and remove the #ifdef.
+#define USE_FULL_NAMES_IN_KEY 0
+#if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
                                {Load::make(UInt(8), key_name, index, Buffer(), Parameter())},
@@ -172,6 +187,7 @@ class KeyInfo {
         return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
                                          {dest, src, copy_size}, Call::Intrinsic));
     }
+#endif
 
 public:
   KeyInfo(const Function &function, const std::string &name)
@@ -180,12 +196,16 @@ public:
         dependencies.visit_function(function);
         size_t size_so_far = 0;
 
+#if USE_FULL_NAMES_IN_KEY
         size_so_far = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
         size_so_far += 4 + function_name.size();
+#else
+        size_so_far += Handle().bytes() + 4;
+#endif
 
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
-            size_so_far = (size_so_far + needed_alignment) & ~(needed_alignment - 1);
+            size_so_far = (size_so_far + needed_alignment - 1) & ~(needed_alignment - 1);
         }
         key_size_expr = (int32_t)size_so_far;
 
@@ -205,6 +225,7 @@ public:
         std::vector<Stmt> writes;
         Expr index = Expr(0);
 
+#if USE_FULL_NAMES_IN_KEY
         // In code below, casts to vec type is done because stores to
         // the buffer can be unaligned.
 
@@ -230,8 +251,31 @@ public:
         index += 4;
         writes.push_back(call_copy_memory(key_name, function_name, index));
         index += name_size;
-
         alignment += 4 + function_name.size();
+#else
+        // Store a pointer to a string identifying the filter and
+        // function. Assume this will be unique due to CSE. This can
+        // break with loading and unloading of code, though the name
+        // mechanism can also break in those conditions. For JIT, a
+        // counter is needed as the address may be reused. This isn't
+        // a problem when using full names as the function names
+        // already are uniquefied by a counter.
+        writes.push_back(Store::make(key_name,
+                                     StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
+                                                     std::to_string(function_name.size()) + ":" + function_name),
+                                     (index / Handle().bytes())));
+        size_t alignment = Handle().bytes();
+        index += Handle().bytes();
+
+        // Halide compilation is not threadsafe anyway...
+        static uint32_t memoize_instance = 0;
+        writes.push_back(Store::make(key_name,
+                                     IntImm::make(memoize_instance++), // Use and increment counter
+                                     (index / Int(32).bytes())));
+        alignment += 4;
+        index += 4;
+#endif
+
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
             while (alignment % needed_alignment) {
@@ -311,11 +355,13 @@ public:
 // Inject caching structure around memoized realizations.
 class InjectMemoization : public IRMutator {
 public:
-  const std::map<std::string, Function> &env;
-  const std::string &top_level_name;
+    const std::map<std::string, Function> &env;
+    const std::string &top_level_name;
+    const std::vector<Function> &outputs;
 
-  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name) :
-      env(e), top_level_name(name) {}
+  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name,
+                    const std::vector<Function> &outputs) :
+    env(e), top_level_name(name), outputs(outputs) {}
 private:
 
     using IRMutator::visit;
@@ -326,6 +372,13 @@ private:
             iter->second.schedule().memoized()) {
 
             const Function f(iter->second);
+
+            for (const Function &o : outputs) {
+                if (f.same_as(o)) {
+                    user_error << "Function " << f.name() << " cannot be memoized because "
+                               << "it an output of pipeline " << top_level_name << ".\n";
+                }
+            }
 
             // There are currently problems with the cache key
             // construction getting moved above the scope of use if
@@ -345,20 +398,31 @@ private:
             KeyInfo key_info(f, top_level_name);
 
             std::string cache_key_name = op->name + ".cache_key";
+            std::string cache_result_name = op->name + ".cache_result";
             std::string cache_miss_name = op->name + ".cache_miss";
             std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
 
             Expr cache_miss = Variable::make(Bool(), cache_miss_name);
+
+            Stmt cache_store_back =
+                IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
+
             Stmt mutated_produce = IfThenElse::make(cache_miss, produce);
             Stmt mutated_update =
                 update.defined() ? IfThenElse::make(cache_miss, update) :
                                        update;
-            Stmt cache_store_back =
-              IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
             Stmt mutated_consume = Block::make(cache_store_back, consume);
 
             Stmt mutated_pipeline = ProducerConsumer::make(op->name, mutated_produce, mutated_update, mutated_consume);
-            Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name), mutated_pipeline);
+            Stmt cache_miss_marker = LetStmt::make(cache_miss_name,
+                                                   Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
+                                                   mutated_pipeline);
+            Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), IntImm::make(-1)),
+                                                                   Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
+                                                  cache_miss_marker);
+            Stmt cache_lookup = LetStmt::make(cache_result_name,
+                                              key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
+                                              cache_lookup_check);
 
             std::vector<Expr> computed_bounds_args;
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
@@ -391,10 +455,116 @@ private:
 };
 
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
-                        const std::string &name) {
-    InjectMemoization injector(env, name);
+                        const std::string &name,
+                        const std::vector<Function> &outputs) {
+    InjectMemoization injector(env, name, outputs);
 
     return injector.mutate(s);
+}
+
+class RewriteMemoizedAllocations : public IRMutator {
+public:
+    RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
+        : env(e) {}
+
+private:
+    const std::map<std::string, Function> &env;
+    std::map<std::string, std::vector<const Allocate *>> pending_memoized_allocations;
+    std::string innermost_realization_name;
+
+    std::string get_realization_name(const std::string &allocation_name) {
+        std::string realization_name = allocation_name;
+        size_t off = realization_name.rfind('.');
+        if (off != std::string::npos) {
+            size_t i = off + 1;
+            while (i < realization_name.size() && isdigit(realization_name[i])) {
+                i++;
+            }
+            if (i == realization_name.size()) {
+                realization_name = realization_name.substr(0, off);
+            }
+        }
+        return realization_name;
+    }
+
+    using IRMutator::visit;
+
+    void visit(const Allocate *allocation) {
+        std::string realization_name = get_realization_name(allocation->name);
+        std::map<std::string, Function>::const_iterator iter = env.find(realization_name);
+
+        if (iter != env.end() && iter->second.schedule().memoized()) {
+            std::string old_innermost_realization_name = innermost_realization_name;
+            innermost_realization_name = realization_name;
+
+            pending_memoized_allocations[innermost_realization_name].push_back(allocation);
+            stmt = mutate(allocation->body);
+
+            innermost_realization_name = old_innermost_realization_name;
+        } else {
+            IRMutator::visit(allocation);
+        }
+    }
+
+    void visit(const Call *call) {
+        if (!innermost_realization_name.empty() &&
+            call->call_type == Call::Intrinsic &&
+            call->name == Call::create_buffer_t) {
+            internal_assert(call->args.size() > 0) << "RewriteMemoizedAllocations: create_buffer_t call with zero args.\n";
+
+            const Call *arg0 = call->args[0].as<Call>();
+            if (arg0 != NULL && arg0->call_type == Call::Intrinsic && arg0->name == Call::address_of) {
+                internal_assert(arg0->args.size() > 0) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
+                const Load *load = arg0->args[0].as<Load>();
+                if (load != NULL) {
+                    const IntImm *index = load->index.as<IntImm>();
+
+                    if (index != NULL && index->value == 0 &&
+                        get_realization_name(load->name) == innermost_realization_name) {
+                        // Everything matches, rewrite create_buffer_t to use a NULL handle for address.
+                        std::vector<Expr> args = call->args;
+                        args[0] = Call::make(Handle(), Call::null_handle, {}, Call::Intrinsic);
+                        expr = Call::make(Handle(), Call::create_buffer_t, args, Call::Intrinsic);
+                        return;
+                    }
+                }
+            }
+      }
+
+      // If any part of the match failed, do default mutator action.
+      IRMutator::visit(call);
+    }
+
+    void visit(const LetStmt *let) {
+        if (let->name == innermost_realization_name + ".cache_miss") {
+            Expr value = mutate(let->value);
+            Stmt body = mutate(let->body);
+
+            std::vector<const Allocate *> &allocations = pending_memoized_allocations[innermost_realization_name];
+
+            for (size_t i = allocations.size(); i > 0; i--) {
+                const Allocate *allocation = allocations[i - 1];
+
+                // Make the allocation node
+                body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
+                                      Call::make(Handle(), Call::extract_buffer_host,
+                                                 { Variable::make(Handle(), allocation->name + ".buffer") }, Call::Intrinsic),
+                                      "halide_memoization_cache_release");
+            }
+
+            pending_memoized_allocations.erase(innermost_realization_name);
+
+            stmt = LetStmt::make(let->name, value, body);
+        } else {
+            IRMutator::visit(let);
+        }
+    }
+};
+
+Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env) {
+    RewriteMemoizedAllocations rewriter(env);
+
+    return rewriter.mutate(s);
 }
 
 }

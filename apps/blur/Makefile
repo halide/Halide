@@ -2,9 +2,8 @@ include ../support/Makefile.inc
 
 all: test
 
-halide_blur: ../../ halide_blur.cpp
-	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) $(CXXFLAGS) halide_blur.cpp ../../$(LIB_HALIDE) -o halide_blur -ldl -lpthread -lz $(LDFLAGS)
+halide_blur: halide_blur.cpp
+	$(CXX) $(CXXFLAGS) halide_blur.cpp $(LIB_HALIDE) -o halide_blur -ldl -lpthread -lz $(LDFLAGS)
 
 halide_blur.o: halide_blur
 	./halide_blur

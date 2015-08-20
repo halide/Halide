@@ -74,17 +74,78 @@ option(TARGET_MIPS "Include MIPS target" ON)
 option(TARGET_PTX "Include PTX target" ON)
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
+option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   target_link_libraries("${name}" PRIVATE Halide)
+  target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (WIN32)
     set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
     target_link_libraries("${name}" PRIVATE Kernel32)
   endif()
 endfunction(halide_project)
+
+# Set warnings globally
+option(WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
+if (WARNINGS_AS_ERRORS)
+    message(STATUS "WARNINGS_AS_ERRORS enabled")
+else()
+    message(STATUS "WARNINGS_AS_ERRORS disabled")
+endif()
+
+if (NOT MSVC)
+  add_compile_options(-Wall -Wno-unused-function -Wcast-qual -Woverloaded-virtual)
+  if (WARNINGS_AS_ERRORS)
+    add_compile_options(-Werror)
+  endif()
+else()
+  add_compile_options(/W3)
+  message(WARNING "WARNINGS_AS_ERROR is currently ignored for MSVC")
+  # TODO: Uncomment below and remove above warning once we can build without warnings
+  #if (WARNINGS_AS_ERRORS)
+  #  add_compile_options(/WX)
+  #endif()
+endif()
+
+# Look for OpenMP
+find_package(OpenMP QUIET)
+if (OPENMP_FOUND)
+  message(STATUS "Found OpenMP")
+endif()
+
+# -----------------------------------------------------------------------------
+# Option to enable/disable assertions
+# -----------------------------------------------------------------------------
+# Filter out definition of NDEBUG definition from the default build
+# configuration flags.  # We will add this ourselves if we want to disable
+# assertions.
+# FIXME: Perhaps our own default ``cxx_flags_overrides.cmake`` file would be better?
+foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
+  string(TOUPPER ${build_config} upper_case_build_config)
+  foreach (language CXX C)
+    set(VAR_TO_MODIFY "CMAKE_${language}_FLAGS_${upper_case_build_config}")
+    string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )"
+                         " "
+                         replacement
+                         "${${VAR_TO_MODIFY}}"
+          )
+    #message("Original (${VAR_TO_MODIFY}) is ${${VAR_TO_MODIFY}} replacement is ${replacement}")
+    set(${VAR_TO_MODIFY} "${replacement}" CACHE STRING "Default flags for ${build_config} configuration" FORCE)
+  endforeach()
+endforeach()
+
+option(WITH_ASSERTIONS "Build with assertions enabled" ON)
+if (WITH_ASSERTIONS)
+  # NDEBUG was already removed.
+  message(STATUS "Building with asserts")
+else()
+  # Note this definition doesn't appear in the cache variables.
+  add_definitions(-DNDEBUG)
+  message(STATUS "Building without asserts")
+endif()
 
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)

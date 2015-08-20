@@ -1,6 +1,7 @@
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
 #include "HalideRuntimeOpenGL.h"
+#include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeRenderscript.h"
 #include "runtime_internal.h"
@@ -63,6 +64,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_set_size,
     (void *)&halide_memoization_cache_store,
+    (void *)&halide_memoization_cache_release,
     (void *)&halide_mutex_cleanup,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
@@ -86,6 +88,9 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_opengl_run,
     (void *)&halide_opengl_wrap_render_target,
     (void *)&halide_opengl_wrap_texture,
+    (void *)&halide_openglcompute_device_interface,
+    (void *)&halide_openglcompute_initialize_kernels,
+    (void *)&halide_openglcompute_run,
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
     (void *)&halide_profiler_pipeline_start,

@@ -178,6 +178,8 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 }
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
+    user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n" <<
+        "(Memoization is not supported inside GPU kernels at present.)\n";
 
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
@@ -420,7 +422,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     PM.run(*module);
 
+    #if LLVM_VERSION < 38
     ostream.flush();
+    #endif
 
     if (debug::debug_level >= 2) {
         module->dump();

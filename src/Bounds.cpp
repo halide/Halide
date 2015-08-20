@@ -459,16 +459,23 @@ private:
             min = max = Mod::make(min_a, min_b);
         } else {
             // Only consider B (so A can be undefined)
-            min = make_zero(op->type);
-            if (max_b.type().is_uint()) {
-                max = max_b;
+            if (max_b.type().is_uint() || (max_b.type().is_int() && is_positive_const(min_b))) {
+                // If the RHS is a positive integer, the result is in [0, max_b-1]
+                min = make_zero(op->type);
+                max = max_b - make_one(op->type);
+            } else if (max_b.type().is_int()) {
+                // mod takes the sign of the second arg
+                // x % [4,10] -> [0,9]
+                // x % [-8,-3] -> [-7,0]
+                // x % [-8, 10] -> [-7,9]
+                min = Min::make(min_b + make_one(op->type), make_zero(op->type));
+                max = Max::make(max_b - make_one(op->type), make_zero(op->type));
             } else {
-                max = cast(op->type, abs(max_b));
-            }
-            if (!max.type().is_float()) {
-                // Integer modulo returns at most one less than the
-                // second arg.
-                max = max - make_one(op->type);
+                // The floating point version has the same sign rules,
+                // but can reach all the way up to the original value,
+                // so there's no -1.
+                min = Min::make(min_b, make_zero(op->type));
+                max = Max::make(max_b, make_zero(op->type));
             }
         }
     }
@@ -747,9 +754,54 @@ private:
 
     void visit(const Let *op) {
         op->value.accept(this);
-        scope.push(op->name, Interval(min, max));
+        Expr min_val = min, max_val = max;
+
+        // We'll either substitute the values in directly, or pass
+        // them in as variables and add an outer let (to avoid
+        // combinatorial explosion).
+        Expr min_var, max_var;
+        string min_name = op->name + ".min";
+        string max_name = op->name + ".max";
+
+        if (min_val.defined()) {
+            if (is_const(min_val)) {
+                min_var = min_val;
+                min_val = Expr();
+            } else {
+                min_var = Variable::make(op->value.type(), min_name);
+            }
+        }
+
+        if (max_val.defined()) {
+            if (is_const(max_val)) {
+                max_var = max_val;
+                max_val = Expr();
+            } else {
+                max_var = Variable::make(op->value.type(), max_name);
+            }
+        }
+
+        scope.push(op->name, Interval(min_var, max_var));
         op->body.accept(this);
         scope.pop(op->name);
+
+        if (min.defined()) {
+            if (min_val.defined()) {
+                min = Let::make(min_name, min_val, min);
+            }
+            if (max_val.defined()) {
+                min = Let::make(max_name, max_val, min);
+            }
+        }
+
+        if (max.defined()) {
+            if (min_val.defined()) {
+                max = Let::make(min_name, min_val, max);
+            }
+            if (max_val.defined()) {
+                max = Let::make(max_name, max_val, max);
+            }
+        }
     }
 
     void visit(const LetStmt *) {
@@ -1011,16 +1063,6 @@ private:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Let *op) {
-        if (!consider_calls) return;
-
-        op->value.accept(this);
-        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
-        scope.push(op->name, value_bounds);
-        op->body.accept(this);
-        scope.pop(op->name);
-    }
-
     void visit(const Call *op) {
         if (!consider_calls) return;
 
@@ -1086,7 +1128,8 @@ private:
         return c.count < 10;
     }
 
-    void visit(const LetStmt *op) {
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op) {
         if (consider_calls) {
             op->value.accept(this);
         }
@@ -1122,6 +1165,14 @@ private:
                 }
             }
         }
+    }
+
+    void visit(const Let *op) {
+        visit_let(op);
+    }
+
+    void visit(const LetStmt *op) {
+        visit_let(op);
     }
 
     void visit(const IfThenElse *op) {
@@ -1234,14 +1285,38 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    BoxesTouched b(consider_calls, consider_provides, fn, &scope, fb);
-    if (e.defined()) {
-        e.accept(&b);
+    // Do calls and provides separately, for better simplification.
+    BoxesTouched calls(consider_calls, false, fn, &scope, fb);
+    BoxesTouched provides(false, consider_provides, fn, &scope, fb);
+
+    if (consider_calls) {
+        if (e.defined()) {
+            e.accept(&calls);
+        }
+        if (s.defined()) {
+            s.accept(&calls);
+        }
     }
-    if (s.defined()) {
-        s.accept(&b);
+    if (consider_provides) {
+        if (e.defined()) {
+            e.accept(&provides);
+        }
+        if (s.defined()) {
+            s.accept(&provides);
+        }
     }
-    return b.boxes;
+    if (!consider_calls) {
+        return provides.boxes;
+    }
+    if (!consider_provides) {
+        return calls.boxes;
+    }
+
+    // Combine the two maps.
+    for (pair<const string, Box> &i : provides.boxes) {
+        merge_boxes(calls.boxes[i.first], i.second);
+    }
+    return calls.boxes;
 }
 
 Box box_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,

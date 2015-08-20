@@ -382,6 +382,8 @@ void IRComparer::visit(const Allocate *op) {
     compare_expr_vector(s->extents, op->extents);
     compare_stmt(s->body, op->body);
     compare_expr(s->condition, op->condition);
+    compare_expr(s->new_expr, op->new_expr);
+    compare_names(s->free_function, op->free_function);
 }
 
 void IRComparer::visit(const Realize *op) {

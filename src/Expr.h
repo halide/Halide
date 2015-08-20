@@ -10,6 +10,7 @@
 
 #include "Debug.h"
 #include "Error.h"
+#include "Float16.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Util.h"
@@ -139,7 +140,7 @@ struct IntImm : public ExprNode<IntImm> {
 
 private:
     /** ints from -8 to 8 */
-    static IntImm small_int_cache[17];
+    EXPORT static IntImm small_int_cache[17];
 };
 
 /** Floating point constants */
@@ -224,7 +225,8 @@ enum class DeviceAPI {
     CUDA,
     OpenCL,
     GLSL,
-    Renderscript
+    Renderscript,
+    OpenGLCompute
 };
 
 namespace Internal {

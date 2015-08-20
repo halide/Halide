@@ -1,11 +1,11 @@
 // Halide tutorial lesson 9: Multi-pass Funcs, update definitions, and reductions
 
 // On linux, you can compile and run it like so:
-// g++ lesson_09*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09
 // LD_LIBRARY_PATH=../bin ./lesson_09
 
 // On os x (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
-// g++ lesson_09*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
 
 // If you have the entire Halide source tree, you can also build it by
@@ -28,14 +28,15 @@
 using namespace Halide;
 
 // Support code for loading pngs.
-#include "image_io.h"
+#include "halide_image_io.h"
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     // Declare some Vars to use below.
     Var x("x"), y("y");
 
     // Load a grayscale image to use as an input.
-    Image<uint8_t> input = load<uint8_t>("images/gray.png");
+    Image<uint8_t> input = load_image("images/gray.png");
 
     // You can define a Func in multiple passes. Let's see a toy
     // example first.
@@ -69,16 +70,24 @@ int main(int argc, char **argv) {
         // definition in all references to the function on the left-
         // and right-hand sides. So the following definitions are
         // legal updates:
-        f(x, 17) = x + 8; // x is used, so all uses of f must have x as the first argument.
-        f(0, y) = y * 8;  // y is used, so all uses of f must have y as the second argument.
+        f(x, 17) = x + 8;
+        f(0, y) = y * 8;
         f(x, x + 1) = x + 8;
         f(y/2, y) = f(0, y) * 17;
 
         // But these ones would cause an error:
-        // f(x, 0) = f(x + 1, 0) <- First argument to f on the right-hand-side must be 'x', not 'x + 1'.
-        // f(y, y + 1) = y + 8   <- Second argument to f on the left-hand-side must be 'y', not 'y + 1'.
-        // f(y, x) = y - x;      <- Arguments to f on the left-hand-side are in the wrong places.
-        // f(3, 4) = x + y;      <- Free variables appear on the right-hand-side but not the left-hand-side.
+
+        // f(x, 0) = f(x + 1, 0);
+        // First argument to f on the right-hand-side must be 'x', not 'x + 1'.
+
+        // f(y, y + 1) = y + 8;
+        // Second argument to f on the left-hand-side must be 'y', not 'y + 1'.
+
+        // f(y, x) = y - x;
+        // Arguments to f on the left-hand-side are in the wrong places.
+
+        // f(3, 4) = x + y;
+        // Free variables appear on the right-hand-side but not the left-hand-side.
 
         // We'll realize this one just to make sure it compiles. The
         // second-to-last definition forces us to realize over a
@@ -98,7 +107,10 @@ int main(int argc, char **argv) {
 
         g.realize(4, 4);
 
-        // Reading the log, we see that each pass is applied in turn. The equivalent C is:
+        // See figures/lesson_09_update.gif for a visualization.
+
+        // Reading the log, we see that each pass is applied in
+        // turn. The equivalent C is:
         int result[4][4];
         // Pure definition
         for (int y = 0; y < 4; y++) {
@@ -118,7 +130,7 @@ int main(int argc, char **argv) {
     {
         // Starting with this pure definition:
         Func f;
-        f(x, y) = x + y;
+        f(x, y) = (x + y)/100.0f;
 
         // Say we want an update that squares the first fifty rows. We
         // could do this by adding 50 update definitions:
@@ -139,13 +151,15 @@ int main(int argc, char **argv) {
         // domain" and using it inside an update definition:
         RDom r(0, 50);
         f(x, r) = f(x, r) * f(x, r);
-        Image<int> halide_result = f.realize(100, 100);
+        Image<float> halide_result = f.realize(100, 100);
+
+        // See figures/lesson_09_update_rdom.mp4 for a visualization.
 
         // The equivalent C is:
-        int c_result[100][100];
+        float c_result[100][100];
         for (int y = 0; y < 100; y++) {
             for (int x = 0; x < 100; x++) {
-                c_result[y][x] = x + y;
+                c_result[y][x] = (x + y)/100.0f;
             }
         }
         for (int x = 0; x < 100; x++) {
@@ -160,8 +174,8 @@ int main(int argc, char **argv) {
         // Check the results match:
         for (int y = 0; y < 100; y++) {
             for (int x = 0; x < 100; x++) {
-                if (halide_result(x, y) != c_result[y][x]) {
-                    printf("halide_result(%d, %d) = %d instead of %d\n",
+                if (fabs(halide_result(x, y) - c_result[y][x]) > 0.01f) {
+                    printf("halide_result(%d, %d) = %f instead of %f\n",
                            x, y, halide_result(x, y), c_result[y][x]);
                     return -1;
                 }
@@ -226,10 +240,10 @@ int main(int argc, char **argv) {
         // Consider the definition:
         Func f;
         f(x, y) = x*y;
-        // Set the second row to equal the first row.
-        f(x, 1) = f(x, 0);
-        // Set the second column to equal the first column plus 2.
-        f(1, y) = f(0, y) + 2;
+        // Set row zero to each row 8
+        f(x, 0) = f(x, 8);
+        // Set column 1 equal to column 8 plus 2
+        f(0, y) = f(8, y) + 2;
 
         // The pure variables in each stage can be scheduled
         // independently. To control the pure definition, we schedule
@@ -251,6 +265,8 @@ int main(int argc, char **argv) {
 
         Image<int> halide_result = f.realize(16, 16);
 
+        // See figures/lesson_09_update_schedule.mp4 for a visualization.
+
         // Here's the equivalent (serial) C:
         int c_result[16][16];
 
@@ -268,17 +284,17 @@ int main(int argc, char **argv) {
         // First update. Vectorized in x.
         for (int x_vec = 0; x_vec < 4; x_vec++) {
             int x[] = {x_vec*4, x_vec*4+1, x_vec*4+2, x_vec*4+3};
-            c_result[1][x[0]] = c_result[0][x[0]];
-            c_result[1][x[1]] = c_result[0][x[1]];
-            c_result[1][x[2]] = c_result[0][x[2]];
-            c_result[1][x[3]] = c_result[0][x[3]];
+            c_result[0][x[0]] = c_result[8][x[0]];
+            c_result[0][x[1]] = c_result[8][x[1]];
+            c_result[0][x[2]] = c_result[8][x[2]];
+            c_result[0][x[3]] = c_result[8][x[3]];
         }
 
         // Second update. Parallelized in chunks of size 4 in y.
         for (int yo = 0; yo < 4; yo++) { // Should be a parallel for loop
             for (int yi = 0; yi < 4; yi++) {
                 int y = yo*4 + yi;
-                c_result[y][1] = c_result[y][0] + 2;
+                c_result[y][0] = c_result[y][8] + 2;
             }
         }
 
@@ -305,19 +321,21 @@ int main(int argc, char **argv) {
         // in the innermost loop of their consumer. Consider this
         // trivial example:
         Func producer, consumer;
-        producer(x) = x*17;
-        producer(x) += 1;
+        producer(x) = x*2;
+        producer(x) += 10;
         consumer(x) = 2 * producer(x);
         Image<int> halide_result = consumer.realize(10);
+
+        // See figures/lesson_09_inline_reduction.gif for a visualization.
 
         // The equivalent C is:
         int c_result[10];
         for (int x = 0; x < 10; x++)  {
             int producer_storage[1];
             // Pure step for producer
-            producer_storage[0] = x * 17;
+            producer_storage[0] = x * 2;
             // Update step for producer
-            producer_storage[0] = producer_storage[0] + 1;
+            producer_storage[0] = producer_storage[0] + 10;
             // Pure step for consumer
             c_result[x] = 2 * producer_storage[0];
         }
@@ -345,7 +363,7 @@ int main(int argc, char **argv) {
             // The producer is pure.
             producer(x) = x*17;
             consumer(x) = 2 * producer(x);
-            consumer(x) += 1;
+            consumer(x) += 50;
 
             // The valid schedules for the producer in this case are
             // the default schedule - inlined, and also:
@@ -367,6 +385,8 @@ int main(int argc, char **argv) {
 
             Image<int> halide_result = consumer.realize(10);
 
+            // See figures/lesson_09_compute_at_pure.gif for a visualization.
+
             // The equivalent C is:
             int c_result[10];
             // Pure step for the consumer
@@ -378,7 +398,7 @@ int main(int argc, char **argv) {
             }
             // Update step for the consumer
             for (int x = 0; x < 10; x++) {
-                c_result[x] += 1;
+                c_result[x] += 50;
             }
 
             // All of the pure step is evaluated before any of the
@@ -398,7 +418,7 @@ int main(int argc, char **argv) {
             // Case 2: The consumer references the producer in the update step only
             Func producer, consumer;
             producer(x) = x * 17;
-            consumer(x) = x;
+            consumer(x) = 100 - x * 10;
             consumer(x) += producer(x);
 
             // Again we compute the producer per x coordinate of the
@@ -417,11 +437,13 @@ int main(int argc, char **argv) {
 
             Image<int> halide_result = consumer.realize(10);
 
+            // See figures/lesson_09_compute_at_update.gif for a visualization.
+
             // The equivalent C is:
             int c_result[10];
             // Pure step for the consumer
             for (int x = 0; x < 10; x++)  {
-                c_result[x] = x;
+                c_result[x] = 100 - x * 10;
             }
             // Update step for the consumer
             for (int x = 0; x < 10; x++) {
@@ -447,17 +469,19 @@ int main(int argc, char **argv) {
             // multiple steps that share common variables
             Func producer, consumer;
             producer(x) = x * 17;
-            consumer(x) = producer(x) * x;
-            consumer(x) += producer(x);
+            consumer(x) = 170 - producer(x);
+            consumer(x) += producer(x)/2;
 
             // Again we compute the producer per x coordinate of the
             // consumer. This places producer code inside both the
-            // pure and the update step of the producer. So there ends
+            // pure and the update step of the producer. So there end
             // up being two separate realizations of the producer, and
             // redundant work occurs.
             producer.compute_at(consumer, x);
 
             Image<int> halide_result = consumer.realize(10);
+
+            // See figures/lesson_09_compute_at_pure_and_update.gif for a visualization.
 
             // The equivalent C is:
             int c_result[10];
@@ -466,14 +490,14 @@ int main(int argc, char **argv) {
                 // Pure step for producer
                 int producer_storage[1];
                 producer_storage[0] = x * 17;
-                c_result[x] = producer_storage[0] * x;
+                c_result[x] = 170 - producer_storage[0];
             }
             // Update step for the consumer
             for (int x = 0; x < 10; x++) {
                 // Another copy of the pure step for producer
                 int producer_storage[1];
                 producer_storage[0] = x * 17;
-                c_result[x] += producer_storage[0];
+                c_result[x] += producer_storage[0]/2;
             }
 
             // Check the results match
@@ -490,7 +514,7 @@ int main(int argc, char **argv) {
             // Case 4: The consumer references the producer in
             // multiple steps that do not share common variables
             Func producer, consumer;
-            producer(x, y) = x*y;
+            producer(x, y) = (x * y) / 10 + 8;
             consumer(x, y) = x + y;
             consumer(x, 0) = producer(x, x-1);
             consumer(0, y) = producer(y, y-1);
@@ -509,20 +533,22 @@ int main(int argc, char **argv) {
             // those instead:
 
             // Attempt 2:
-            Func producer_wrapper_1, producer_wrapper_2, consumer_2;
-            producer_wrapper_1(x, y) = producer(x, y);
-            producer_wrapper_2(x, y) = producer(x, y);
+            Func producer_1, producer_2, consumer_2;
+            producer_1(x, y) = producer(x, y);
+            producer_2(x, y) = producer(x, y);
 
             consumer_2(x, y) = x + y;
-            consumer_2(x, 0) += producer_wrapper_1(x, x-1);
-            consumer_2(0, y) += producer_wrapper_2(y, y-1);
+            consumer_2(x, 0) += producer_1(x, x);
+            consumer_2(0, y) += producer_2(y, 9-y);
 
             // The wrapper functions give us two separate handles on
             // the producer, so we can schedule them differently.
-            producer_wrapper_1.compute_at(consumer_2, x);
-            producer_wrapper_2.compute_at(consumer_2, y);
+            producer_1.compute_at(consumer_2, x);
+            producer_2.compute_at(consumer_2, y);
 
             Image<int> halide_result = consumer_2.realize(10, 10);
+
+            // See figures/lesson_09_compute_at_multiple_updates.mp4 for a visualization.
 
             // The equivalent C is:
             int c_result[10][10];
@@ -534,15 +560,15 @@ int main(int argc, char **argv) {
             }
             // First update step for consumer
             for (int x = 0; x < 10; x++) {
-                int producer_wrapper_1_storage[1];
-                producer_wrapper_1_storage[0] = x * (x-1);
-                c_result[0][x] += producer_wrapper_1_storage[0];
+                int producer_1_storage[1];
+                producer_1_storage[0] = (x * x) / 10 + 8;
+                c_result[0][x] += producer_1_storage[0];
             }
             // Second update step for consumer
             for (int y = 0; y < 10; y++) {
-                int producer_wrapper_2_storage[1];
-                producer_wrapper_2_storage[0] = y * (y-1);
-                c_result[y][0] += producer_wrapper_2_storage[0];
+                int producer_2_storage[1];
+                producer_2_storage[0] = (y * (9-y)) / 10 + 8;
+                c_result[y][0] += producer_2_storage[0];
             }
 
             // Check the results match
@@ -570,13 +596,15 @@ int main(int argc, char **argv) {
             Func producer, consumer;
 
             RDom r(0, 5);
-            producer(x) = x * 17;
+            producer(x) = x % 8;
             consumer(x) = x + 10;
             consumer(x) += r + producer(x + r);
 
             producer.compute_at(consumer, r);
 
             Image<int> halide_result = consumer.realize(10);
+
+            // See figures/lesson_09_compute_at_rvar.gif for a visualization.
 
             // The equivalent C is:
             int c_result[10];
@@ -586,12 +614,13 @@ int main(int argc, char **argv) {
             }
             // Update step for the consumer.
             for (int x = 0; x < 10; x++) {
-                for (int r = 0; r < 5; r++) { // The loop over the reduction domain is always the inner loop.
+                // The loop over the reduction domain is always the inner loop.
+                for (int r = 0; r < 5; r++) {
                     // We've schedule the storage and computation of
                     // the producer here. We just need a single value.
                     int producer_storage[1];
                     // Pure step of the producer.
-                    producer_storage[0] = (x + r) * 17;
+                    producer_storage[0] = (x + r) % 8;
 
                     // Now use it in the update step of the consumer.
                     c_result[x] += r + producer_storage[0];
@@ -610,7 +639,6 @@ int main(int argc, char **argv) {
 
         }
     }
-
 
     // A real-world example of a reduction inside a producer-consumer chain.
     {
@@ -725,7 +753,6 @@ int main(int argc, char **argv) {
         }
     }
 
-
     // A complex example that uses reduction helpers.
     {
         // Other reduction helpers include "product", "minimum",
@@ -803,7 +830,8 @@ int main(int argc, char **argv) {
                     for (int cy = min_y_clamped; cy <= max_y_clamped; cy++) {
                         // Figure out which row of the circular buffer
                         // we're filling in using bitmasking:
-                        uint8_t *clamped_row = clamped_storage + (cy & 7) * clamped_width;
+                        uint8_t *clamped_row =
+                            clamped_storage + (cy & 7) * clamped_width;
 
                         // Figure out which row of the input we're reading
                         // from by clamping the y coordinate:
@@ -830,9 +858,11 @@ int main(int argc, char **argv) {
 
                         // The update step for maximum
                         for (int max_y = y - 2; max_y <= y + 2; max_y++) {
-                            uint8_t *clamped_row = clamped_storage + (max_y & 7) * clamped_width;
+                            uint8_t *clamped_row =
+                                clamped_storage + (max_y & 7) * clamped_width;
                             for (int max_x = x_base - 2; max_x <= x_base + 2; max_x++) {
-                                __m128i v = _mm_loadu_si128((__m128i const *)(clamped_row + max_x + 2));
+                                __m128i v = _mm_loadu_si128(
+                                    (__m128i const *)(clamped_row + max_x + 2));
                                 maximum_storage = _mm_max_epu8(maximum_storage, v);
                             }
                         }
@@ -845,9 +875,11 @@ int main(int argc, char **argv) {
 
                         // The update step for minimum.
                         for (int min_y = y - 2; min_y <= y + 2; min_y++) {
-                            uint8_t *clamped_row = clamped_storage + (min_y & 7) * clamped_width;
+                            uint8_t *clamped_row =
+                                clamped_storage + (min_y & 7) * clamped_width;
                             for (int min_x = x_base - 2; min_x <= x_base + 2; min_x++) {
-                                __m128i v = _mm_loadu_si128((__m128i const *)(clamped_row + min_x + 2));
+                                __m128i v = _mm_loadu_si128(
+                                    (__m128i const *)(clamped_row + min_x + 2));
                                 minimum_storage = _mm_min_epu8(minimum_storage, v);
                             }
                         }

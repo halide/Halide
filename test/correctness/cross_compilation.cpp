@@ -32,10 +32,12 @@ int main(int argc, char **argv) {
     };
 
     for (const std::string &t : targets) {
-        f.compile_to_file("test_object_" + t, std::vector<Argument>(), parse_target_string(t));
+        Target target = parse_target_string(t);
+        f.compile_to_file("test_object_" + t, std::vector<Argument>(), target);
 
         #ifndef _MSC_VER
         std::string object_name = "test_object_" + t + ".o";
+        if (target.os == Target::Windows) object_name += "bj";
         assert(access(object_name.c_str(), F_OK) == 0 && "Output file not created.");
         #endif
     }

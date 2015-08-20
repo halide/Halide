@@ -2,27 +2,15 @@
 
 using namespace Halide;
 
-#include <image_io.h>
-
 #include <iostream>
 #include <limits>
 
-#include <sys/time.h>
+#include "benchmark.h"
+#include "halide_image_io.h"
+
+using namespace Halide::Tools;
 
 using std::vector;
-
-double now() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    static bool first_call = true;
-    static time_t first_sec = 0;
-    if (first_call) {
-        first_call = false;
-        first_sec = tv.tv_sec;
-    }
-    assert(tv.tv_sec >= first_sec);
-    return (tv.tv_sec - first_sec) + (tv.tv_usec / 1000000.0);
-}
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -179,31 +167,19 @@ int main(int argc, char **argv) {
     // JIT compile the pipeline eagerly, so we don't interfere with timing
     final.compile_jit(target);
 
-    Image<float> in_png = load<float>(argv[1]);
+    Image<float> in_png = load_image(argv[1]);
     Image<float> out(in_png.width(), in_png.height(), 3);
     assert(in_png.channels() == 4);
     input.set(in_png);
 
     std::cout << "Running... " << std::endl;
-    double min = std::numeric_limits<double>::infinity();
-    const int iters = 20;
-
-    for (int x = 0; x < iters; ++x) {
-        double before = now();
-        final.realize(out);
-        double after = now();
-        double amt = after - before;
-
-        std::cout << "   " << amt * 1000 << std::endl;
-        if (amt < min) min = amt;
-
-    }
-    std::cout << " took " << min * 1000 << " msec." << std::endl;
+    double best = benchmark(20, 1, [&]() { final.realize(out); });
+    std::cout << " took " << best * 1e3 << " msec." << std::endl;
 
     vector<Argument> args;
     args.push_back(input);
     final.compile_to_assembly("test.s", args, target);
 
-    save(out, argv[2]);
+    save_image(out, argv[2]);
 
 }

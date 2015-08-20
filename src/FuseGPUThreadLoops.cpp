@@ -7,6 +7,7 @@
 #include "Substitute.h"
 #include "IREquality.h"
 #include "Simplify.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
@@ -17,6 +18,7 @@ using std::set;
 
 namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
+string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
 string shared_mem_name = "__shared";
 }
 
@@ -273,6 +275,8 @@ class ExtractSharedAllocations : public IRMutator {
 
     bool in_threads;
 
+    const DeviceAPI device_api;
+
     void visit(const For *op) {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             bool old = in_threads;
@@ -290,6 +294,9 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
     void visit(const Allocate *op) {
+        user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
+            "(Memoization is not supported inside GPU kernels at present.)\n";
+
         if (in_threads) {
             IRMutator::visit(op);
             return;
@@ -315,10 +322,15 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
     void visit(const Load *op) {
+        Expr index = mutate(op->index);
         if (shared.count(op->name)) {
-            Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-            Expr index = mutate(op->index);
-            expr = Load::make(op->type, shared_mem_name, base + index, op->image, op->param);
+            if (device_api == DeviceAPI::OpenGLCompute) {
+                expr = Load::make(op->type, shared_mem_name + "_" + op->name, index, op->image, op->param);
+            } else {
+                Expr base = Variable::make(Int(32), op->name + ".shared_offset");
+                expr = Load::make(op->type, shared_mem_name, base + index, op->image, op->param);
+            }
+
         } else {
             IRMutator::visit(op);
         }
@@ -326,10 +338,14 @@ class ExtractSharedAllocations : public IRMutator {
 
     void visit(const Store *op) {
         if (shared.count(op->name)) {
-            Expr base = Variable::make(Int(32), op->name + ".shared_offset");
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
-            stmt = Store::make(shared_mem_name, value, base + index);
+            if (device_api == DeviceAPI::OpenGLCompute) {
+                stmt = Store::make(shared_mem_name + "_" + op->name, value, index);
+            } else {
+                Expr base = Variable::make(Int(32), op->name + ".shared_offset");
+                stmt = Store::make(shared_mem_name, value, base + index);
+            }
         } else {
             IRMutator::visit(op);
         }
@@ -358,54 +374,66 @@ class ExtractSharedAllocations : public IRMutator {
 
 public:
     Stmt rewrap(Stmt s) {
-        // Sort the allocations by size in bytes of the primitive
-        // type. Because the type sizes are then decreasing powers of
-        // two, doing this guarantees that all allocations are aligned
-        // to then element type as long as the original one is aligned
-        // to the widest type.
-        for (size_t i = 1; i < allocations.size(); i++) {
-            for (size_t j = i; j > 0; j--) {
-                if (allocations[j].type.bytes() > allocations[j - 1].type.bytes()) {
-                    std::swap(allocations[j], allocations[j - 1]);
-                }
+
+        if (device_api == DeviceAPI::OpenGLCompute) {
+
+            // Individual shared allocations.
+            for (SharedAllocation alloc : allocations) {
+                s = Allocate::make(shared_mem_name + "_" + alloc.name,
+                                   alloc.type, {alloc.size}, const_true(), s);
             }
-        }
+        } else {
+            // One big combined shared allocation.
 
-        // Add a dummy allocation at the end to get the total size
-        SharedAllocation sentinel;
-        sentinel.name = "sentinel";
-        sentinel.type = UInt(8);
-        sentinel.size = 0;
-        allocations.push_back(sentinel);
-
-        Expr total_size = Variable::make(Int(32), allocations.back().name + ".shared_offset");
-        s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
-
-        // Define an offset for each allocation. The offsets are in
-        // elements, not bytes, so that the stores and loads can use
-        // them directly.
-        for (int i = (int)(allocations.size()) - 1; i >= 0; i--) {
-            Expr offset = 0;
-            if (i > 0) {
-                offset = Variable::make(Int(32), allocations[i-1].name + ".shared_offset");
-                offset += allocations[i-1].size;
-                int old_elem_size = allocations[i-1].type.bytes();
-                int new_elem_size = allocations[i].type.bytes();
-                internal_assert(old_elem_size >= new_elem_size);
-                if (old_elem_size != new_elem_size) {
-                    // We only have power-of-two sized types.
-                    internal_assert(old_elem_size % new_elem_size == 0);
-                    offset *= (old_elem_size / new_elem_size);
+            // Sort the allocations by size in bytes of the primitive
+            // type. Because the type sizes are then decreasing powers of
+            // two, doing this guarantees that all allocations are aligned
+            // to then element type as long as the original one is aligned
+            // to the widest type.
+            for (size_t i = 1; i < allocations.size(); i++) {
+                for (size_t j = i; j > 0; j--) {
+                    if (allocations[j].type.bytes() > allocations[j - 1].type.bytes()) {
+                        std::swap(allocations[j], allocations[j - 1]);
+                    }
                 }
             }
 
-            s = LetStmt::make(allocations[i].name + ".shared_offset", offset, s);
+            // Add a dummy allocation at the end to get the total size
+            SharedAllocation sentinel;
+            sentinel.name = "sentinel";
+            sentinel.type = UInt(8);
+            sentinel.size = 0;
+            allocations.push_back(sentinel);
+
+            Expr total_size = Variable::make(Int(32), allocations.back().name + ".shared_offset");
+            s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
+
+            // Define an offset for each allocation. The offsets are in
+            // elements, not bytes, so that the stores and loads can use
+            // them directly.
+            for (int i = (int)(allocations.size()) - 1; i >= 0; i--) {
+                Expr offset = 0;
+                if (i > 0) {
+                    offset = Variable::make(Int(32), allocations[i-1].name + ".shared_offset");
+                    offset += allocations[i-1].size;
+                    int old_elem_size = allocations[i-1].type.bytes();
+                    int new_elem_size = allocations[i].type.bytes();
+                    internal_assert(old_elem_size >= new_elem_size);
+                    if (old_elem_size != new_elem_size) {
+                        // We only have power-of-two sized types.
+                        internal_assert(old_elem_size % new_elem_size == 0);
+                        offset *= (old_elem_size / new_elem_size);
+                    }
+                }
+
+                s = LetStmt::make(allocations[i].name + ".shared_offset", offset, s);
+            }
         }
 
         return s;
     }
 
-    ExtractSharedAllocations() : in_threads(false) {}
+    ExtractSharedAllocations(DeviceAPI d) : in_threads(false), device_api(d) {}
 };
 
 class FuseGPUThreadLoops : public IRMutator {
@@ -449,7 +477,7 @@ class FuseGPUThreadLoops : public IRMutator {
 
             debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
 
-            ExtractSharedAllocations h;
+            ExtractSharedAllocations h(op->device_api);
             body = h.mutate(body);
 
             debug(3) << "Pulled out shared allocations:\n" << body << "\n\n";
@@ -522,15 +550,59 @@ public:
     ZeroGPULoopMins() : in_non_glsl_gpu(false) { }
 };
 
+class ValidateGPULoopNesting : public IRVisitor {
+    int gpu_block_depth = 0, gpu_thread_depth = 0;
+    string innermost_block_var, innermost_thread_var;
+
+    using IRVisitor::visit;
+
+    void visit(const For *op) {
+        string old_innermost_block_var  = innermost_block_var;
+        string old_innermost_thread_var = innermost_thread_var;
+        int old_gpu_block_depth  = gpu_block_depth;
+        int old_gpu_thread_depth = gpu_thread_depth;
+
+        for (int i = 1; i <= 4; i++) {
+            if (ends_with(op->name, block_names[4-i])) {
+                user_assert(i > gpu_block_depth)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " cannot be inside of loop over " << innermost_block_var << "\n";
+                user_assert(gpu_thread_depth == 0)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " cannot be inside of loop over " << innermost_thread_var << "\n";
+                innermost_block_var = op->name;
+                gpu_block_depth = i;
+            }
+            if (ends_with(op->name, thread_names[4-i])) {
+                user_assert(i > gpu_thread_depth)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " cannot be inside of loop over " << innermost_thread_var << "\n";
+                user_assert(gpu_block_depth > 0)
+                    << "Invalid schedule: Loop over " << op->name
+                    << " must be inside a loop over gpu blocks\n";
+                innermost_thread_var = op->name;
+                gpu_thread_depth = i;
+            }
+        }
+        IRVisitor::visit(op);
+
+        innermost_block_var  = old_innermost_block_var;
+        innermost_thread_var = old_innermost_thread_var;
+        gpu_block_depth  = old_gpu_block_depth;
+        gpu_thread_depth = old_gpu_thread_depth;
+    }
+};
+
+// Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(Stmt s) {
-    ZeroGPULoopMins z;
-    return z.mutate(s);
+    return ZeroGPULoopMins().mutate(s);
 }
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
-    s = zero_gpu_loop_mins(s);
-    FuseGPUThreadLoops f;
-    s = f.mutate(s);
+    ValidateGPULoopNesting validate;
+    s.accept(&validate);
+    s = ZeroGPULoopMins().mutate(s);
+    s = FuseGPUThreadLoops().mutate(s);
     return s;
 }
 

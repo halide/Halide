@@ -58,7 +58,8 @@ int main(int argc, char **argv) {
     target.bits = 32;            // The bit-width of the architecture
     std::vector<Target::Feature> arm_features; // A list of features to set
     target.set_features(arm_features);
-    brighter.compile_to_file("lesson_11_arm_32_android", args, target); // Pass the target as the last argument.
+    // We then pass the target as the last argument to compile_to_file.
+    brighter.compile_to_file("lesson_11_arm_32_android", args, target);
 
     // And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
     target.os = Target::Windows;
@@ -116,7 +117,7 @@ int main(int argc, char **argv) {
     // (presumably referring to x86-64)
     uint8_t win_64_magic[] = {0x64, 0x86};
 
-    f = fopen("lesson_11_x86_64_windows.o", "rb");
+    f = fopen("lesson_11_x86_64_windows.obj", "rb");
     if (!f || fread(header, 32, 1, f) != 1) {
         printf("Object file not generated\n");
         return -1;

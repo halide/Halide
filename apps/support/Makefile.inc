@@ -1,16 +1,15 @@
+HALIDE_BIN_PATH ?= ../..
+HALIDE_SRC_PATH ?= ../..
+
 CXX ?= g++
 GXX ?= g++
 
-CFLAGS += -I../../include/ -I../support/
-CXXFLAGS += -std=c++11 -I../../include/ -I../support/
+CFLAGS += -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
+CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
 
-ifdef BUILD_PREFIX
-LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
-else
-LIB_HALIDE = bin/libHalide.a
-endif
+LIB_HALIDE = $(HALIDE_BIN_PATH)/bin/libHalide.a
 
-GENERATOR_DEPS ?= ../../bin/libHalide.a ../../include/Halide.h ../../tools/GenGen.cpp
+GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/bin/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -22,9 +21,9 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
 LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
-LLVM_SHARED_LIBS = 
-else 
-LLVM_STATIC_LIBS = 
+LLVM_SHARED_LIBS =
+else
+LLVM_STATIC_LIBS =
 LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
 endif
 

@@ -57,7 +57,7 @@ elif [[ "$HL_TARGET" == *nacl ]]; then
     make -C apps/nacl_demos &&
     echo "Halide builds but tests not run."
 elif [ "$QUICK_AND_DIRTY" ]; then
-    make test_argmax
+    make correctness_argmax
     echo "Everything built and test_argmax passed. Not running other tests because QUICK_AND_DIRTY is set."
 else
     make test_correctness -j16 &&
@@ -66,5 +66,6 @@ else
     make test_performance &&
     make test_apps &&
     make test_generators &&
+    if [[ $HL_TARGET == *64* ]]; then make test_python; fi &&
     echo "All tests pass"
 fi

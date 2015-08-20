@@ -184,7 +184,7 @@ class InjectEarlyFrees : public IRMutator {
             stmt = inject_marker.mutate(stmt);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
-                                Block::make(alloc->body, Free::make(alloc->name)));
+                                  Block::make(alloc->body, Free::make(alloc->name)), alloc->new_expr);
         }
 
     }

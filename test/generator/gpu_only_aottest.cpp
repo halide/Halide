@@ -9,7 +9,8 @@
 #endif
 
 #include "gpu_only.h"
-#include "static_image.h"
+#include "halide_image.h"
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL) || defined(TEST_CUDA)

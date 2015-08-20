@@ -307,7 +307,7 @@ struct spawn_thread_task {
     void *closure;
 };
 WEAK void *halide_spawn_thread_helper(void *arg) {
-	spawn_thread_task *t = (spawn_thread_task *)arg;
+        spawn_thread_task *t = (spawn_thread_task *)arg;
     t->f(t->closure);
     free(t);
     return NULL;
@@ -319,9 +319,9 @@ extern "C" {
 
 WEAK void halide_spawn_thread(void *user_context, void(*f)(void *), void *closure) {
     spawn_thread_task *t = (spawn_thread_task *)malloc(sizeof(spawn_thread_task));
-	t->f = f;
+        t->f = f;
     t->closure = closure;
-	CreateThread(NULL, 0, halide_spawn_thread_helper, t, 0, NULL);
+        CreateThread(NULL, 0, halide_spawn_thread_helper, t, 0, NULL);
 }
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {

@@ -16,7 +16,7 @@ WEAK halide_profiler_state *halide_profiler_get_state() {
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name, int num_funcs, const char **func_names) {
+WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name, int num_funcs, const uint64_t *func_names) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -30,7 +30,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     }
     // Create a new pipeline stats entry.
     halide_profiler_pipeline_stats *p =
-        (halide_profiler_pipeline_stats *)halide_malloc(NULL, sizeof(halide_profiler_pipeline_stats));
+        (halide_profiler_pipeline_stats *)malloc(sizeof(halide_profiler_pipeline_stats));
     if (!p) return NULL;
     p->next = s->pipelines;
     p->name = pipeline_name;
@@ -39,14 +39,14 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     p->runs = 0;
     p->time = 0;
     p->samples = 0;
-    p->funcs = (halide_profiler_func_stats *)halide_malloc(NULL, num_funcs * sizeof(halide_profiler_func_stats));
+    p->funcs = (halide_profiler_func_stats *)malloc(num_funcs * sizeof(halide_profiler_func_stats));
     if (!p->funcs) {
-        halide_free(NULL, p);
+        free(p);
         return NULL;
     }
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].time = 0;
-        p->funcs[i].name = func_names[i];
+        p->funcs[i].name = (const char *)(func_names[i]);
     }
     s->first_free_id += num_funcs;
     s->pipelines = p;
@@ -95,7 +95,7 @@ WEAK void sampling_profiler_thread(void *) {
                 bill_func(s, func, t_now - t);
             }
             t = t_now;
-       
+
             // Release the lock, sleep, reacquire.
             int sleep_ms = s->sleep_time;
             halide_mutex_unlock(&s->lock);
@@ -117,7 +117,7 @@ extern "C" {
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
-                                        const char **func_names) {
+                                        const uint64_t *func_names) {
     halide_profiler_state *s = halide_profiler_get_state();
 
     ScopedMutexLock lock(&s->lock);
@@ -195,8 +195,8 @@ WEAK void halide_profiler_reset() {
     while (s->pipelines) {
         halide_profiler_pipeline_stats *p = s->pipelines;
         s->pipelines = (halide_profiler_pipeline_stats *)(p->next);
-        halide_free(NULL, p->funcs);
-        halide_free(NULL, p);
+        free(p->funcs);
+        free(p);
     }
     s->first_free_id = 0;
 }
@@ -218,8 +218,8 @@ WEAK void halide_profiler_shutdown() {
     // down the thread.
     halide_profiler_report_unlocked(NULL, s);
 
-    // Leak the memory. Not all implementations of halide_free may be
-    // safe to call at static destruction time.
+    // Leak the memory. Not all implementations of ScopedMutexLock may
+    // be safe to use at static destruction time (windows).
     // halide_profiler_reset();
 }
 }

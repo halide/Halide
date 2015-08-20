@@ -777,19 +777,19 @@ private:
             found = true;
             sites_allowed = sites;
         } else {
-            // Take the common sites between loops and loops allowed
-            for (size_t i = 0; i < sites_allowed.size(); i++) {
-                bool ok = false;
-                for (size_t j = 0; j < sites.size(); j++) {
-                    if (sites_allowed[i].loop_level.match(sites[j].loop_level)) {
-                        ok = true;
+            vector<Site> common_sites;
+
+            // Take the common sites between sites and sites_allowed
+            for (const Site &s1 : sites) {
+                for (const Site &s2 : sites_allowed) {
+                    if (s1.loop_level.match(s2.loop_level)) {
+                        common_sites.push_back(s1);
+                        break;
                     }
                 }
-                if (!ok) {
-                    sites_allowed[i] = sites_allowed.back();
-                    sites_allowed.pop_back();
-                }
             }
+
+            sites_allowed.swap(common_sites);
         }
     }
 
@@ -1006,10 +1006,13 @@ public:
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
+                        bool &any_memoized,
                         bool inject_asserts) {
 
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
+
+    any_memoized = false;
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1032,6 +1035,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
+        any_memoized = any_memoized || f.schedule().memoized();
         debug(2) << s << '\n';
     }
 

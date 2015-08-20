@@ -1,3 +1,8 @@
+/tutorial/figures/tmp/trace.bin
+/apps/HelloMatlab/blurred.png
+/apps/HelloMatlab/iir_blur.mex
+/apps/local_laplacian/local_laplacian_gen
+/apps/local_laplacian/process_viz
 /apps/HelloAndroid/jni/halide.h
 /apps/HelloNaCl/build_32/halide_game_of_life.h
 /apps/HelloNaCl/build_32/halide_game_of_life.s
@@ -114,10 +119,10 @@
 /apps/nacl_demos/reaction_diffusion_update.h
 /apps/HelloNaCl/halide_game_of_life.h
 bin/*
-build/*
 build-ios/*
 build-osx/*
 cmake_build/*
+*/build/*
 tmp/*
 doc/*
 include/*
@@ -130,6 +135,7 @@ msvc/*/x64/*
 *~
 *.o
 *.a
+*.so
 *.dot
 .DS_Store
 *.log
@@ -156,6 +162,9 @@ src/test_*.s
 *.dSYM
 .*.swp
 Doxyfile
+
+*.txt.user*
+.idea
 
 # jrk editor settings
 .tm_properties
@@ -207,6 +216,9 @@ apps/HelloAndroid*/libs
 apps/HelloAndroidGL/jni/halide_gl_filter.h
 apps/HelloAndroid*/local.properties
 apps/HelloAndroid*/proguard-project.txt
+
+# tutorial intermediates
+tutorial/lesson_10_halide.h
 
 # test intermediates
 log.txt
