@@ -144,7 +144,18 @@ private:
     }
     void visit(const FloatImm *op){
         stream << open_span("FloatImm Imm");
-        stream << op->value << 'f';
+        // FIXME: Not sure if this is the syntax we want
+        if (const float16_t* asHalf = op->as<float16_t>()) {
+          stream << asHalf->to_decimal_string() << 'h';
+        } else if (const float* asFloat = op->as<float>()) {
+            stream << *asFloat << 'f';
+        }
+        else if (const double* asDouble = op->as<double>()) {
+            stream << *asDouble << 'd';
+        }
+        else {
+            internal_error << "Unsupported float type\n";
+        }
         stream << close_span();
     }
     void visit(const StringImm *op){

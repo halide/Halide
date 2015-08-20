@@ -1539,8 +1539,13 @@ inline bool extract_immediate(Expr e, T *value) {
 template<>
 inline bool extract_immediate(Expr e, float *value) {
     if (const FloatImm* f = e.as<FloatImm>()) {
-        *value = static_cast<float>(f->value);
-        return true;
+        if (const float* asFloat = f->as<float>()) {
+          *value = *asFloat;
+          return true;
+        }
+        else {
+            internal_error << "Unsupported float width\n";
+        }
     }
     if (const IntImm *i = e.as<IntImm>()) {
         *value = static_cast<float>(i->value);

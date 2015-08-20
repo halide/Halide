@@ -144,8 +144,22 @@ protected:
     }
 
     virtual void visit(const IntImm *op)    { visit_imm(op); }
-    virtual void visit(const FloatImm *op)  { visit_imm(op); }
     virtual void visit(const StringImm *op) { visit_imm(op); }
+    virtual void visit(const FloatImm *op) {
+        order = 0;
+        if (const float16_t* asHalf = op->as<float16_t>()) {
+            expr = FloatImm::make(*asHalf);
+        }
+        else if (const float* asFloat = op->as<float>()) {
+            expr = FloatImm::make(*asFloat);
+        }
+        else if (const double* asDouble = op->as<double>()) {
+            expr = FloatImm::make(*asDouble);
+        }
+        else {
+            internal_error << "Unsupported float type\n";
+        }
+    }
 
     virtual void visit(const Cast *op) {
 

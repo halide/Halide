@@ -234,7 +234,12 @@ void IRComparer::visit(const IntImm *op) {
 
 void IRComparer::visit(const FloatImm *op) {
     const FloatImm *e = expr.as<FloatImm>();
-    compare_scalar(e->value, op->value);
+    // FIXME: Should we check that the types match?
+
+    // FIXME: Why are there no ( e== nullptr) checks?
+
+    // Upcasting to more precise type always preserves ordering
+    compare_scalar(e->as_highest_precision_float(), op->as_highest_precision_float());
 }
 
 void IRComparer::visit(const StringImm *op) {

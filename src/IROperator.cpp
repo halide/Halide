@@ -67,7 +67,9 @@ bool is_const(Expr e) {
 
 bool is_const(Expr e, int value) {
     if (const IntImm *i = e.as<IntImm>()) return i->value == value;
-    if (const FloatImm *i = e.as<FloatImm>()) return i->value == value;
+    if (const FloatImm *i = e.as<FloatImm>()) {
+      return i->as_highest_precision_float() == value;
+    }
     if (const Cast *c = e.as<Cast>()) return is_const(c->value, value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_const(b->value, value);
     return false;
@@ -86,7 +88,12 @@ const int * as_const_int(Expr e) {
 
 const float * as_const_float(Expr e) {
     const FloatImm *f = e.as<FloatImm>();
-    return f ? &(f->value) : NULL;
+    if (f) {
+      if (const float* asFloat = f->as<float>()) {
+        return asFloat;
+      }
+    }
+    return nullptr;
 }
 
 bool is_const_power_of_two_integer(Expr e, int *bits) {
@@ -115,7 +122,9 @@ bool is_const_power_of_two_integer(Expr e, int *bits) {
 
 bool is_positive_const(Expr e) {
     if (const IntImm *i = e.as<IntImm>()) return i->value > 0;
-    if (const FloatImm *f = e.as<FloatImm>()) return f->value > 0.0f;
+    if (const FloatImm *f = e.as<FloatImm>()) {
+        return f->as_highest_precision_float() > 0.0;
+    }
     if (const Cast *c = e.as<Cast>()) {
         return is_positive_const(c->value);
     }
@@ -131,7 +140,9 @@ bool is_positive_const(Expr e) {
 
 bool is_negative_const(Expr e) {
     if (const IntImm *i = e.as<IntImm>()) return i->value < 0;
-    if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
+    if (const FloatImm *f = e.as<FloatImm>()) {
+        return f->as_highest_precision_float() < 0.0;
+    }
     if (const Cast *c = e.as<Cast>()) {
         return is_negative_const(c->value);
     }
@@ -150,7 +161,9 @@ bool is_negative_negatable_const(Expr e, Type T) {
         return i->value < 0 &&
                i->value != T.imin();
     }
-    if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
+    if (const FloatImm *f = e.as<FloatImm>()) {
+        return f->as_highest_precision_float() < 0.0;
+    }
     if (const Cast *c = e.as<Cast>()) {
         return is_negative_negatable_const(c->value, c->type);
     }
@@ -170,7 +183,9 @@ bool is_negative_negatable_const(Expr e) {
 
 bool is_zero(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0.0f;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) {
+        return float_imm->as_highest_precision_float() == 0.0;
+    }
     if (const Cast *c = e.as<Cast>()) return is_zero(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
     return false;
@@ -178,7 +193,9 @@ bool is_zero(Expr e) {
 
 bool is_one(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 1;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 1.0f;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) {
+        return float_imm->as_highest_precision_float() == 1.0;
+    }
     if (const Cast *c = e.as<Cast>()) return is_one(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_one(b->value);
     return false;
@@ -186,7 +203,9 @@ bool is_one(Expr e) {
 
 bool is_two(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 2;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 2.0f;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) {
+        return float_imm->as_highest_precision_float() == 2.0;
+    }
     if (const Cast *c = e.as<Cast>()) return is_two(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_two(b->value);
     return false;
@@ -213,7 +232,13 @@ int int_cast_constant(Type t, int val) {
 
 Expr make_const(Type t, int val) {
     if (t == Int(32)) return val;
+    if (t == Float(16)) {
+        // FIXME: We should probably change the float16_t API so we can decide
+        // ourselves how to handle overflow rather than exiting with an error.
+        return float16_t::make_from_signed_int(val);
+    }
     if (t == Float(32)) return (float)val;
+    if (t == Float(64)) return (double)val;
     if (t.is_vector()) {
         return Broadcast::make(make_const(t.element_of(), val), t.width);
     }

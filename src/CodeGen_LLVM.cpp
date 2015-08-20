@@ -1161,7 +1161,20 @@ void CodeGen_LLVM::visit(const IntImm *op) {
 }
 
 void CodeGen_LLVM::visit(const FloatImm *op) {
-    value = ConstantFP::get(*context, APFloat(op->value));
+    std::unique_ptr<APFloat> apf = nullptr;
+    if (const float16_t* asHalf = op->as<float16_t>()) {
+        APInt rawBits(/*numBits=*/16, asHalf->to_bits());
+        apf.reset(new APFloat(APFloat::IEEEhalf, rawBits));
+    } else if (const float* asFloat = op->as<float>()) {
+        apf.reset(new APFloat(*asFloat));
+    }
+    else if (const double* asDouble = op->as<double>()) {
+        apf.reset(new APFloat(*asDouble));
+    }
+    else {
+        internal_error << "Unsupported float type\n";
+    }
+    value = ConstantFP::get(*context, *apf);
 }
 
 void CodeGen_LLVM::visit(const StringImm *op) {

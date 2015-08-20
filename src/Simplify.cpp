@@ -99,17 +99,20 @@ private:
 
     using IRMutator::visit;
 
+    // FIXME: What semantics should this have now that we
+    // can have half and double floating point constants too???
     bool const_float(Expr e, float *f) {
         if (!e.defined()) {
             return false;
         }
         const FloatImm *c = e.as<FloatImm>();
         if (c) {
-            *f = c->value;
-            return true;
-        } else {
-            return false;
+            if (const float* asFloat = c->as<float>()) {
+                *f = *asFloat;
+                return true;
+            }
         }
+        return false;
     }
 
     bool const_int(Expr e, int *i) {
@@ -2223,7 +2226,7 @@ private:
                     }
                     changed = true;
                 } else if (last && float_imm) {
-                    snprintf(buf, sizeof(buf), "%f", float_imm->value);
+                    snprintf(buf, sizeof(buf), "%f", float_imm->as_highest_precision_float());
                     if (last) {
                         new_args.back() = last->value + buf;
                     } else {

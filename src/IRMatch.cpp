@@ -78,7 +78,8 @@ public:
 
     void visit(const FloatImm *op) {
         const FloatImm *e = expr.as<FloatImm>();
-        if (!e || e->value != op->value) {
+        // FIXME: Should we return false if types don't match but value is the same?
+        if (!e || e->as_highest_precision_float() != op->as_highest_precision_float()) {
             result = false;
         }
     }
