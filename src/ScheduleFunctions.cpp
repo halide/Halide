@@ -749,7 +749,7 @@ public:
 
     ComputeLegalSchedules(Function f) : func(f), found(false) {}
 
-private:
+protected:
     using IRVisitor::visit;
 
     vector<Site> sites;
@@ -772,7 +772,7 @@ private:
         sites.pop_back();
     }
 
-    void register_use() {
+    virtual void register_use() {
         if (!found) {
             found = true;
             sites_allowed = sites;
@@ -807,6 +807,32 @@ private:
             ends_with(v->name, ".buffer")) {
             register_use();
         }
+    }
+};
+
+// For a given function and compute location, find any invalid use of
+// the function.
+class PrintInvalidUses : public ComputeLegalSchedules {
+public:
+    PrintInvalidUses(std::ostream& s, Function f, const LoopLevel& compute_at)
+        : ComputeLegalSchedules(f), s(s), loop_level(compute_at) {}
+
+private:
+    std::ostream& s;
+    LoopLevel loop_level;
+
+    void register_use() {
+        ComputeLegalSchedules::register_use();
+
+        for (auto i : sites_allowed) {
+            if (loop_level.match(i.loop_level)) {
+                return;
+            }
+        }
+
+        // Found an illegal use here.
+        const LoopLevel& site = sites.back().loop_level;
+        s << site.func << ", " << site.var << "\n";
     }
 };
 
@@ -925,8 +951,13 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     if (!store_at_ok || !compute_at_ok) {
         err << "Function \"" << f.name() << "\" is computed and stored in the following invalid location:\n"
-            << schedule_to_source(f, store_at, compute_at) << "\n"
-            << "Legal locations for this function are:\n";
+            << schedule_to_source(f, store_at, compute_at) << "\n";
+
+        err << "Because it is used in the following loops:\n";
+        PrintInvalidUses invalid(err, f, compute_at);
+        s.accept(&invalid);
+
+        err << "Legal locations for this function are:\n";
         for (size_t i = 0; i < sites.size(); i++) {
             for (size_t j = i; j < sites.size(); j++) {
                 if (j > i && sites[j].is_parallel) break;
