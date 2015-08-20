@@ -93,6 +93,19 @@ uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *t
     return toFP16(convertedValue).to_bits();
 }
 
+template <>
+uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeName) {
+    llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
+    llvm::integerPart asIP = value;
+    llvm::APFloat::opStatus status = convertedValue.convertFromSignExtendedInteger(
+        &asIP,
+        /*srcCount=*/1, // All bits are contained within a single int64_t
+        /*isSigned=*/true,
+        getLLVMAPFRoundingMode(roundingMode));
+    checkConversion(status, value, typeName, convertedValue);
+    return toFP16(convertedValue).to_bits();
+}
+
 }  //end anonymous namespace
 // End helper functions
 
@@ -119,6 +132,13 @@ float16_t::float16_t() {
     this->data = 0;
 }
 
+float16_t float16_t::make_from_signed_int(int64_t value, RoundingMode roundingMode) {
+    static_assert(sizeof(float16_t) == 2, "float16_t is wrong size");
+    float16_t val;
+    val.data = getBitsFrom(value, roundingMode, "int64_t");
+    return val;
+}
+
 float16_t float16_t::make_from_bits(uint16_t rawBits) {
     static_assert(sizeof(float16_t) == 2, "float16_t is wrong size");
     float16_t val;
@@ -126,7 +146,7 @@ float16_t float16_t::make_from_bits(uint16_t rawBits) {
     return val;
 }
 
-float16_t::operator float() {
+float16_t::operator float() const {
     llvm::APFloat convertedValue = toLLVMAPF(*this);
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
@@ -136,7 +156,7 @@ float16_t::operator float() {
     return convertedValue.convertToFloat();
 }
 
-float16_t::operator double() {
+float16_t::operator double() const {
     llvm::APFloat convertedValue = toLLVMAPF(*this);
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so

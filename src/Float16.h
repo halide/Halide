@@ -61,9 +61,9 @@ struct float16_t {
 
     // Use explicit to avoid accidently raising the precision
     /** Cast to float */
-    EXPORT explicit operator float();
+    EXPORT explicit operator float() const;
     /** Cast to double */
-    EXPORT explicit operator double();
+    EXPORT explicit operator double() const;
 
     // Be explicit about how the copy constructor is expected to behave
     EXPORT float16_t(const float16_t&) = default;
@@ -96,6 +96,10 @@ struct float16_t {
      */
     EXPORT static float16_t make_from_bits(uint16_t bits);
     
+    /** Get a new float16_t from a signed integer.
+     *  It is not provided as a constructor to avoid call ambiguity
+     * */
+    EXPORT static float16_t make_from_signed_int(int64_t value, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
     /**@}*/
 
     /**\name Arithmetic operators

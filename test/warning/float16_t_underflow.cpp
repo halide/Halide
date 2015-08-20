@@ -15,7 +15,7 @@ void h_assert(bool condition, const char* msg) {
 int main() {
     // Number is subnormal as a float but when converting to
     // half it will not be representable forcing rounding to occur
-    float verySmallNum = (1.0f)/(1<<25);
+    const float verySmallNum = (1.0f)/(1<<25);
     
     h_assert(verySmallNum != 0.0, "smallNum should not be 0");
     
