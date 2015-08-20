@@ -40,7 +40,7 @@ set(RUNTIME_CPP
   module_jit_ref_count
   nacl_host_cpu_count
   opencl
-  metal,
+  metal
   opengl
   openglcompute
   osx_clock
