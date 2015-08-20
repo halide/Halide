@@ -22,7 +22,7 @@ void test_median(bool isDbl, Target& target) {
   /* EJP: note that there's some overlap between max and min and mid.
    * Does the compiler pick this up automatically, or do we need to tweak the code?
    */
-
+#ifdef BORDERS
   Func clamped_input = BoundaryConditions::constant_exterior(input, 0);
   clamped_input.compute_root();
   Halide::Func max_x("max_x");
@@ -36,7 +36,19 @@ void test_median(bool isDbl, Target& target) {
   mid_x(x,y) = max(min(max(clamped_input(x-1,y),clamped_input(x,y)),
                        clamped_input(x+1,y)), min(clamped_input(x-1,y),
                                                   clamped_input(x,y)));
-
+#else
+  Halide::Func max_x("max_x");
+  Halide::Func median("median");
+  max_x(x,y) = max(max(input(x-1,y),input(x,y)),
+                   input(x+1,y));
+  Halide::Func min_x("min_x");
+  min_x(x,y) = min(min(input(x-1,y),input(x,y)),
+                   input(x+1,y));
+  Halide::Func mid_x("mid_x");
+  mid_x(x,y) = max(min(max(input(x-1,y),input(x,y)),
+                       input(x+1,y)), min(input(x-1,y),
+                                                  input(x,y)));
+#endif
   Halide::Func minmax_y("minmax_y");
   minmax_y(x,y) = min(min(max_x(x,y-1),max_x(x,y)),max_x(x,y+1));
   Halide::Func maxmin_y("maxmin_y");

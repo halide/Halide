@@ -21,7 +21,7 @@ gaussian3x3.out: gaussian3x3_run.o gaussian3x3.o gaussian3x3.h
 all: gaussian3x3.out
 
 clean:
-	rm -rf *.o gaussian3x3.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 pa_dump.core.0 stats_dump.v60.iss.0 out.bin result; \
+	rm -rf *.o gaussian3x3.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 pa_dump.core.0 stats_dump.v60.iss.0 out.bin result run.std*; \
         $(MAKE) -C ref clean
 
 .PHONY: assembly
@@ -38,11 +38,24 @@ bitcode: gaussian3x3.cpp
 
 .PHONY: all
 
-all: gaussian3x3.out run
+all: gaussian3x3.out run bmark-report
+
+bmark-report:
+	if [ -a ${CURR_DIR}/run.stdout ]; then \
+		grep -q PASS ${CURR_DIR}/result; \
+		if [ $$? -eq 0 ];  then \
+			grep "cycles/pixel" ${CURR_DIR}/run.stdout | awk '{print $$6"("$$4"):",$$7 " cycles/pixel"}'; \
+		else \
+			echo "${TEST_NAME}: FAIL";\
+		fi \
+	else \
+		echo "run.stdout not found; please run make run first"; \
+	fi
+
 
 
 run: gaussian3x3.out
-	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.out --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin; \
+	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.out --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
 	RUN_STATUS=$$?; \
 	FAIL=0; \
 	if [ $$RUN_STATUS -ne 0 ]; then \

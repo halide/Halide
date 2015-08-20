@@ -6,7 +6,7 @@ HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
-
+TEST_NAME= $(shell basename ${CURR_DIR})
 B128_MODE=
 GDB=
 
@@ -24,7 +24,7 @@ median.out: median_run.o median.o median.h
 all: median.out
 
 clean:
-	rm -rf *.o median.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result
+	rm -rf *.o median.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result run.std* pa_dump.core.0 stats_dump.v60.iss.0
 
 .PHONY: assembly
 
@@ -38,13 +38,23 @@ bitcode: median.cpp
 	${CLANG_CPP}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
-.PHONY: all
+.PHONY: all run bmark-report
 
-all: median.out run
-
+all: median.out run bmark-report
+bmark-report:
+	if [ -a ${CURR_DIR}/run.stdout ]; then \
+		grep -q PASS ${CURR_DIR}/result; \
+		if [ $$? -eq 0 ];  then \
+			grep "cycles/pixel" ${CURR_DIR}/run.stdout | awk '{print $$6"("$$4"):",$$7 " cycles/pixel"}'; \
+		else \
+			echo "${TEST_NAME}: FAIL";\
+		fi \
+	else \
+		echo "run.stdout not found; please run make run first"; \
+	fi
 
 run: median.out
-	${HEX_TOOLS}/bin/hexagon-sim median.out --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin; \
+	${HEX_TOOLS}/bin/hexagon-sim median.out --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
 	RUN_STATUS=$$?; \
 	FAIL=0; \
 	if [ $$RUN_STATUS -ne 0 ]; then \
@@ -56,7 +66,7 @@ run: median.out
 	if [ $$FAIL -eq 0 ]; then \
           echo PASS > ${CURR_DIR}/result; \
 	  echo PASS; \
-        else \
+	else \
           echo FAIL > ${CURR_DIR}/result; \
 	  echo FAIL;\
         fi
