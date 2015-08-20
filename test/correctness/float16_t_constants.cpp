@@ -281,7 +281,7 @@ int main() {
         // Try rounding up
         const float16_t noughtPointOneRU("0.1", RoundingMode::TowardPositiveInfinity);
         h_assert(noughtPointOneRU.to_bits() == 0x2e67, "0.1 incorrectly rounded up");
-        h_assert(noughtPointOneRU.to_hex_string() == "0x1.99cp-4", "0.1 incorrectly rounded to zero");
+        h_assert(noughtPointOneRU.to_hex_string() == "0x1.99cp-4", "0.1 incorrectly rounded up");
     }
 
     // 4091 is an integer that can't be exactly represented in half
@@ -316,7 +316,7 @@ int main() {
 
         const float16_t fourZeroNineOneRNA("4091", RoundingMode::ToNearestTiesToAway);
         const float16_t fourZeroNineOneRNAFromInt = float16_t::make_from_signed_int(4091, RoundingMode::ToNearestTiesToAway);
-        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRU.to_bits(), "4091 incorrectly rounded towards nearest even");
+        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRU.to_bits(), "4091 incorrectly rounded towards nearest, away from zero");
         h_assert(fourZeroNineOneRNAFromInt.to_bits() == fourZeroNineOneRU.to_bits(), "make_from_signed_int gave wrong value");
     }
 
@@ -352,7 +352,7 @@ int main() {
 
         const float16_t fourZeroNineOneRNA("-4091", RoundingMode::ToNearestTiesToAway);
         const float16_t fourZeroNineOneRNAFromInt = float16_t::make_from_signed_int(-4091, RoundingMode::ToNearestTiesToAway);
-        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRD.to_bits(), "-4091 incorrectly rounded towards nearest even");
+        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRD.to_bits(), "-4091 incorrectly rounded towards nearest, away from zero");
         h_assert(fourZeroNineOneRNAFromInt.to_bits() == fourZeroNineOneRD.to_bits(), "make_from_signed_int gave wrong value");
     }
 
@@ -378,13 +378,13 @@ int main() {
         h_assert(noughtPointThreeRU.to_decimal_string(0) == "3.0005E-1", "0.3 incorrectly rounded upward");
 
         const float16_t noughtPointThreeRZ("0.3", RoundingMode::TowardZero);
-        h_assert(noughtPointThreeRZ.to_bits() == noughtPointThreeRD.to_bits(), "0.3 incorrectly rounded toward nearest even");
+        h_assert(noughtPointThreeRZ.to_bits() == noughtPointThreeRD.to_bits(), "0.3 incorrectly rounded toward zeron");
 
         const float16_t noughtPointThreeRNE("0.3", RoundingMode::ToNearestTiesToEven);
         h_assert(noughtPointThreeRNE.to_bits() == noughtPointThreeRU.to_bits(), "0.3 incorrectly rounded toward nearest even");
 
         const float16_t noughtPointThreeRNA("0.3", RoundingMode::ToNearestTiesToAway);
-        h_assert(noughtPointThreeRNA.to_bits() == noughtPointThreeRU.to_bits(), "0.3 incorrectly rounded toward nearest even");
+        h_assert(noughtPointThreeRNA.to_bits() == noughtPointThreeRU.to_bits(), "0.3 incorrectly rounded toward nearest, away from zero");
     }
 
     printf("Success!\n");
