@@ -181,14 +181,13 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
 namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
-Expr is_ramp1(Expr e) {
+Expr is_ramp_one(Expr e) {
     const Ramp *r = e.as<Ramp>();
     if (r == NULL) {
         return Expr();
     }
 
-    const IntImm *i = r->stride.as<IntImm>();
-    if (i != NULL && i->value == 1) {
+    if (is_one(r->stride)) {
         return r->base;
     }
 
@@ -203,7 +202,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
     // If we're loading a contiguous ramp, load from a vector type pointer.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = is_ramp_one(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->type.is_vector());
         string id_ramp_base = print_expr(ramp_base);
@@ -273,7 +272,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
     Type t = op->value.type();
 
     // If we're writing a contiguous ramp, store through a pointer of vector type.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = is_ramp_one(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
