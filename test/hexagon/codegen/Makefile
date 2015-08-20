@@ -14,7 +14,7 @@ SOURCES = $(wildcard  *.cpp)
 EXES = $(addsuffix .out, $(basename $(SOURCES)))
 
 %.out: %.cpp
-	${CC} -g ${INCLUDES} -lHalide -lpthread -ldl ${LDFLAGS}  -O0 ${CXXFLAGS} -o $@ $<
+	${CLANG_CPP} -g ${INCLUDES} -lHalide -lpthread -ldl ${LDFLAGS}  -O0 ${CXXFLAGS} -o $@ $<
 
 .PHONY: all clean run check-codegen
 all: run
