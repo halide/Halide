@@ -818,25 +818,25 @@ string schedule_to_source(Function f,
     if (compute_at.is_inline()) {
         ss << ".compute_inline()";
     } else {
-        string store_var = store_at.var;
-        string compute_var = compute_at.var;
-        if (store_var == Var::outermost().name()) {
-            store_var = "Var::outermost()";
+        string store_var_name = store_at.var;
+        string compute_var_name = compute_at.var;
+        if (store_var_name == Var::outermost().name()) {
+            store_var_name = "Var::outermost()";
         }
-        if (compute_var == Var::outermost().name()) {
-            compute_var = "Var::outermost()";
+        if (compute_var_name == Var::outermost().name()) {
+            compute_var_name = "Var::outermost()";
         }
         if (!store_at.match(compute_at)) {
             if (store_at.is_root()) {
                 ss << ".store_root()";
             } else {
-                ss << ".store_at(" << store_at.func << ", " << store_var << ")";
+                ss << ".store_at(" << store_at.func << ", " << store_var_name << ")";
             }
         }
         if (compute_at.is_root()) {
             ss << ".compute_root()";
         } else {
-            ss << ".compute_at(" << compute_at.func << ", " << compute_var << ")";
+            ss << ".compute_at(" << compute_at.func << ", " << compute_var_name << ")";
         }
     }
     ss << ";";
