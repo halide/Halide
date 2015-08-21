@@ -19,8 +19,6 @@ int main() {
     // down to the largest representable value in half(65504).  but should be
     // representable in single precision
     const int32_t largeNum = 65536;
-    h_assert(!std::isnan(largeNum), "largeNum should not be NaN");
-    h_assert(!std::isinf(largeNum), "largeNum should not be inf");
 
     // This should fail as it triggers overflow
     float16_t fail = float16_t::make_from_signed_int(largeNum, RoundingMode::ToNearestTiesToEven);
