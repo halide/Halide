@@ -385,11 +385,11 @@ void CodeGen_X86::visit(const Cast *op) {
 
     #if LLVM_VERSION >= 38
     // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
-    // Oddly, this generates fewer instructions than LLVM's native
-    // implementation.
+    // LLVM uses a numerically unstable method for vector
+    // uint32->float conversion before AVX.
     if (op->value.type().element_of() == UInt(32) &&
         op->type.is_float() &&
-        op->type.width > 4 &&
+        op->type.is_vector() &&
         !target.has_feature(Target::AVX)) {
         Type signed_type = Int(32, op->type.width);
 
