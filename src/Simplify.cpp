@@ -2093,14 +2093,20 @@ private:
             Expr a = mutate(op->args[0]);
             Type ta = a.type();
             int ia = 0;
-            if (ta.is_int() && const_castint(a, &ia) && ia != ta.imin()) {
-                if (ia < 0) {
+            float fa = 0;
+            if (ta.is_int() && const_castint(a, &ia)) {
+                if (ia < 0 && ia != Int(32).imin()) {
                     ia = -ia;
                 }
                 expr = Cast::make(op->type, ia);
             } else if (ta.is_uint()) {
                 // abs(uint) is a no-op.
                 expr = a;
+            } else if (const_float(a, &fa)) {
+                if (fa < 0) {
+                    fa = -fa;
+                }
+                expr = fa;
             } else if (a.same_as(op->args[0])) {
                 expr = op;
             } else {
