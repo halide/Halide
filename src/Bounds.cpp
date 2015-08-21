@@ -155,7 +155,7 @@ private:
         // If overflow is impossible, cast the min and max. If it's
         // possible, use the bounds of the destination type.
         bool could_overflow = true;
-        if (to.can_represent(from)) {
+        if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
         } else if (to.is_int() && to.bits >= 32) {
             // If we cast to an int32 or greater, assume that it won't
@@ -1470,6 +1470,11 @@ void bounds_test() {
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
+
+    check(scope, cast<int32_t>(abs(cast<int16_t>(x/y))), 0, 32768);
+    check(scope, cast<float>(x), 0.0f, 10.0f);
+
+    check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
 
     // Check some operations that may overflow
     check(scope, (cast<uint8_t>(x)+250), cast<uint8_t>(0), cast<uint8_t>(255));
