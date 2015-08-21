@@ -37,6 +37,45 @@ int static_sign(Expr x) {
     }
     return 0;
 }
+
+
+// Try to find a constant that is:
+// greater than or equal to the given Expr (if d is Up), or
+// less than or equal to the given Expr (if d is Down).
+enum Direction {Up, Down};
+Expr simplify_to_constant(Expr e, Direction d) {
+    // We look through casts, so we only handle ops that can't
+    // overflow. E.g. if A >= a and B >= b, then you can't assume that
+    // (A + B) >= (a + b) in a world with overflow.
+    if (const Min *min = e.as<Min>()) {
+        Expr a = simplify_to_constant(min->a, d);
+        Expr b = simplify_to_constant(min->b, d);
+        if (is_const(a) && is_const(b)) {
+            return simplify(Min::make(a, b));
+        } else if (is_const(a) && d == Up) {
+            return a;
+        } else if (is_const(b) && d == Up) {
+            return b;
+        }
+    } else if (const Max *max = e.as<Max>()) {
+        Expr a = simplify_to_constant(max->a, d);
+        Expr b = simplify_to_constant(max->b, d);
+        if (is_const(a) && is_const(b)) {
+            return simplify(Max::make(a, b));
+        } else if (is_const(a) && d == Down) {
+            return a;
+        } else if (is_const(b) && d == Down) {
+            return b;
+        }
+    } else if (const Cast *cast = e.as<Cast>()) {
+        Expr a = simplify_to_constant(cast->value, d);
+        if (is_const(a)) {
+            return simplify(Cast::make(cast->type, a));
+        }
+    }
+    return e;
+}
+
 }
 
 class Bounds : public IRVisitor {
@@ -116,54 +155,30 @@ private:
         // If overflow is impossible, cast the min and max. If it's
         // possible, use the bounds of the destination type.
         bool could_overflow = true;
-        if (to.is_float()) {
-            could_overflow = false;
-        } else if (to.is_int() && from.is_int() && to.bits >= from.bits) {
-            could_overflow = false;
-        } else if (to.is_uint() && from.is_uint() && to.bits >= from.bits) {
-            could_overflow = false;
-        } else if (to.is_int() && from.is_uint() && to.bits > from.bits) {
+        if (to.can_represent(from)) {
             could_overflow = false;
         } else if (to.is_int() && to.bits >= 32) {
-            // Warning: dubious code ahead.
-
             // If we cast to an int32 or greater, assume that it won't
-            // overflow. Otherwise expressions like
-            // cast<int32_t>(bounded_float) barf.
+            // overflow. Signed 32-bit integer overflow is undefined.
             could_overflow = false;
-        }
+        } else if (min_a.defined() && max_a.defined() && from.can_represent(to)) {
+            // The other case to consider is narrowing where the
+            // bounds of the original fit into the narrower type. We
+            // can only really prove that this is the case if they're
+            // constants, so try to make the constants first.
 
-        // If min and max are different constants that fit into the
-        // narrower type, we should allow it.
-        if (from == Int(32) && min_a.defined() && max_a.defined()) {
-            if (const IntImm *min_int = min_a.as<IntImm>()) {
-                if (const IntImm *max_int = max_a.as<IntImm>()) {
-                    if (to.is_uint() && to.bits <= 32 &&
-                        min_int->value >= 0 &&
-                        (to.bits == 32 || (max_int->value < (1 << to.bits)))) {
-                        could_overflow = false;
-                    } else if (to.is_int() && to.bits <= 32 &&
-                               min_int->value >= -(1 << (to.bits-1)) &&
-                               max_int->value < (1 << (to.bits-1))) {
-                        could_overflow = false;
-                    }
-                }
-            }
-        }
+            min_a = simplify_to_constant(min_a, Down);
+            max_a = simplify_to_constant(max_a, Up);
 
-        if (from == Float(32) && min_a.defined() && max_a.defined()) {
-            if (const FloatImm *min_float = min_a.as<FloatImm>()) {
-                if (const FloatImm *max_float = max_a.as<FloatImm>()) {
-                    double max_magnitude = ::pow(2.0, to.bits-1);
-                    if (to.is_uint() &&
-                        min_float->value >= 0.0f &&
-                        max_float->value < 2.0*max_magnitude) {
-                        could_overflow = false;
-                    } else if (to.is_int() &&
-                               min_float->value >= -max_magnitude &&
-                               max_float->value < max_magnitude) {
-                        could_overflow = false;
-                    }
+            if (is_const(min_a) && is_const(max_a)) {
+                // Cast them to the narrow type and back and see if
+                // they're provably unchanged.
+                Expr test =
+                    (cast(from, cast(to, min_a)) == min_a &&
+                     cast(from, cast(to, max_a)) == max_a);
+                test = simplify(test);
+                if (is_one(test)) {
+                    could_overflow = false;
                 }
             }
         }
@@ -1372,23 +1387,6 @@ Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValue
     return box_touched(Expr(), s, true, true, fn, scope, fb);
 }
 
-void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
-    FuncValueBounds fb;
-    Interval result = bounds_of_expr_in_scope(e, scope, fb);
-    if (result.min.defined()) result.min = simplify(result.min);
-    if (result.max.defined()) result.max = simplify(result.max);
-    if (!equal(result.min, correct_min)) {
-        internal_error << "In bounds of " << e << ":\n"
-                       << "Incorrect min: " << result.min << '\n'
-                       << "Should have been: " << correct_min << '\n';
-    }
-    if (!equal(result.max, correct_max)) {
-        internal_error << "In bounds of " << e << ":\n"
-                       << "Incorrect max: " << result.max << '\n'
-                       << "Should have been: " << correct_max << '\n';
-    }
-}
-
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
@@ -1433,6 +1431,23 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
     return fb;
 }
 
+void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
+    FuncValueBounds fb;
+    Interval result = bounds_of_expr_in_scope(e, scope, fb);
+    if (result.min.defined()) result.min = simplify(result.min);
+    if (result.max.defined()) result.max = simplify(result.max);
+    if (!equal(result.min, correct_min)) {
+        internal_error << "In bounds of " << e << ":\n"
+                       << "Incorrect min: " << result.min << '\n'
+                       << "Should have been: " << correct_min << '\n';
+    }
+    if (!equal(result.max, correct_max)) {
+        internal_error << "In bounds of " << e << ":\n"
+                       << "Incorrect max: " << result.max << '\n'
+                       << "Should have been: " << correct_max << '\n';
+    }
+}
+
 void bounds_test() {
     Scope<Interval> scope;
     Var x("x"), y("y");
@@ -1467,6 +1482,14 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x)+10)*10, cast<uint8_t>(100), cast<uint8_t>(200));
     check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), cast<uint8_t>(0), cast<uint8_t>(200));
     check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), cast<uint8_t>(5), cast<uint8_t>(25));
+
+    check(scope,
+          cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
+          cast<uint16_t>(0), cast<uint16_t>(4095));
+
+    check(scope,
+          cast<uint8_t>(clamp(cast<uint16_t>(x/y), cast<uint16_t>(0), cast<uint16_t>(128))),
+          cast<uint8_t>(0), cast<uint8_t>(128));
 
     Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer(), Parameter()));
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer(), Parameter()));
