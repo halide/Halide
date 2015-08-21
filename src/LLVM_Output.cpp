@@ -223,7 +223,6 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     #else
         llvm::DataLayout target_data_layout(target_machine->createDataLayout());
     #endif
-    #ifdef NEWER
     if (!(target_data_layout == module->getDataLayout())) {
         // This *might* be indicative on a bug elsewhere, but might
         // also be fine. It depends on what the differences are
@@ -233,17 +232,6 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
                            << module->getDataLayout().getStringRepresentation() << "\n";
         module->setDataLayout(target_data_layout);
     }
-#else
-    if (!((target_machine->getDataLayout()) == module->getDataLayout())) {
-        // This *might* be indicative on a bug elsewhere, but might
-        // also be fine. It depends on what the differences are
-        // precisely. Notify when in debug mode.
-        Internal::debug(1) << "Warning: module's data layout does not match target machine's\n"
-                           << target_machine->getDataLayout()->getStringRepresentation() << "\n"
-                           << module->getDataLayout()->getStringRepresentation() << "\n";
-        module->setDataLayout(target_machine->getDataLayout());
-    }
-#endif
     std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
 
     // Build up all of the passes that we want to do to the module.
