@@ -30,14 +30,14 @@ void test_sobel(Target &target) {
   input_16(x, y) = cast<uint16_t>(input(x, y));
 
   Halide::Func sobel_x_avg("sobel_x_avg");
-  sobel_x_avg(x,y) = input_16(x, y)  + input_16(x+2,y) + 2*input_16(x+1, y);
+  sobel_x_avg(x,y) = input_16(x-1, y)  + input_16(x+1,y) + 2*input_16(x, y);
   Halide::Func sobel_x("sobel_x");
-  sobel_x(x, y) = abs(sobel_x_avg(x, y) - sobel_x_avg(x, y+2));
+  sobel_x(x, y) = abs(sobel_x_avg(x, y-1) - sobel_x_avg(x, y+1));
 
   Halide::Func sobel_y_avg("sobel_y_avg");
-  sobel_y_avg(x,y) = input_16(x, y) + 2*input_16(x, y+1)  + input_16(x, y+2);
+  sobel_y_avg(x,y) = input_16(x, y-1) + 2*input_16(x, y)  + input_16(x, y+1);
   Halide::Func sobel_y("sobel_y");
-  sobel_y(x, y) = abs(sobel_y_avg(x, y) - sobel_y_avg(x+2, y));
+  sobel_y(x, y) = abs(sobel_y_avg(x-1, y) - sobel_y_avg(x+1, y));
 
   Halide::Func Sobel("Sobel");
   Sobel(x, y) = cast<uint8_t>(clamp(sobel_y(x, y) + sobel_x(x, y), 0, 255));
@@ -53,7 +53,7 @@ void test_sobel(Target &target) {
   Sobel.compile_to_assembly("sobel.s", args, target);
 #endif
 #ifdef STMT
-  Sobel.compile_to_lowered_stmt("sobel.html", HTML);
+  Sobel.compile_to_lowered_stmt("sobel.html", args, HTML);
 #endif
 #ifdef RUN
   COMPILE_OBJ(Sobel);
