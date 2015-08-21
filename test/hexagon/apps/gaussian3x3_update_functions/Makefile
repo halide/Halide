@@ -1,19 +1,32 @@
 CURR_DIR = $(shell pwd)
 HALIDE_TOP = ${CURR_DIR}/../../../..
+# Vector Length
+ifeq (,$(LOG2VLEN))
+  LOG2VLEN:=7
+endif
+
+ifeq (7,$(LOG2VLEN))
+  MHVX:=-mhvx-double
+else
+  MHVX:=-mhvx
+endif
+
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
-INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
+INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
 TEST_TYPE?=realimage
+CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
+
 gaussian3x3.o gaussian3x3.h: gaussian3x3.cpp
-	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DRUN -O0 ${INCLUDES} ${LDFLAGS}
+	${CLANG_CPP} -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DRUN -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 
 gaussian3x3_run.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
-	${HEX_TOOLS}/bin/hexagon-clang++ -c gaussian3x3_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
+	${HEX_TOOLS}/bin/hexagon-clang++ -c gaussian3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 
 gaussian3x3.out: gaussian3x3_run.o gaussian3x3.o gaussian3x3.h
 	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian3x3.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian3x3_run.o gaussian3x3.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
@@ -27,13 +40,13 @@ clean:
 .PHONY: assembly
 
 assembly: gaussian3x3.cpp
-	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DASSEMBLY -O0 ${INCLUDES} ${LDFLAGS}
+	${CLANG_CPP}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DASSEMBLY -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: bitcode
 
 bitcode: gaussian3x3.cpp
-	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DBITCODE -O0 ${INCLUDES} ${LDFLAGS}
+	${CLANG_CPP}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DBITCODE -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: all
@@ -79,13 +92,13 @@ run: gaussian3x3.out
 .PHONY: stmt
 
 stmt: gaussian3x3.cpp
-	${CLANG_CPP} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS}
+	${CLANG_CPP}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: halide_synthetic
 
 gaussian3x3_run.halide_synthetic.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
-	${HEXAGON_CLANG} -c gaussian3x3_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o gaussian3x3_run.halide_synthetic.o
+	${HEXAGON_CLANG} -c gaussian3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o gaussian3x3_run.halide_synthetic.o
 
 
 gaussian3x3.halide_synthetic.out: gaussian3x3_run.halide_synthetic.o gaussian3x3.o gaussian3x3.h

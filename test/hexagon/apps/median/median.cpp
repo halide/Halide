@@ -3,8 +3,6 @@
 #include <stdio.h>
 using namespace Halide;
 
-#define VECTORSIZE 64 //Vector width in bytes. (Single mode)
-#define DOUBLEVECTORSIZE 128
 #define COMPILE_OBJ(X)  ((X).compile_to_file("median", args, target))
 
 /*
@@ -15,7 +13,7 @@ using namespace Halide;
  */
 
 
-void test_median(bool isDbl, Target& target) {
+void test_median(Target& target) {
   Halide::Var x("x"),y("y");
   ImageParam input(type_of<uint8_t>(), 2);
 
@@ -62,7 +60,11 @@ void test_median(bool isDbl, Target& target) {
   // max_x.compute_root();
   // min_x.compute_root();
   // mid_x.compute_root();
-  median.vectorize(x, isDbl ? DOUBLEVECTORSIZE : VECTORSIZE );
+#if LOG2VLEN == 7
+  median.vectorize(x, 128);
+#else
+  median.vectorize(x, 64);
+#endif
   std::vector<Argument> args(1);
   args[0]  = input;
 #ifdef BITCODE
@@ -82,12 +84,10 @@ void test_median(bool isDbl, Target& target) {
 int main(int argc, char **argv) {
 	Target target;
 	setupHexagonTarget(target);
-        bool isDbl = false;
-        if (argc>1) {
-          target.set_feature(Target::HVX_DOUBLE);
-          isDbl = true;
-        }
-	test_median(isDbl, target);
+#if LOG2VLEN == 7
+        target.set_feature(Target::HVX_DOUBLE);
+#endif
+	test_median(target);
 	printf ("Done\n");
 	return 0;
 }

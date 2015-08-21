@@ -2,8 +2,6 @@
 #include "halide-hexagon-setup.h"
 #include <stdio.h>
 using namespace Halide;
-#define VECTORSIZE 64 //Vector width in bytes. (Single mode)
-#define DOUBLEVECTORSIZE 128
 #define COMPILE_OBJ(X)  ((X).compile_to_file("sobel", args, target))
 
 /*
@@ -43,7 +41,7 @@ void test_sobel(Target &target) {
   Sobel(x, y) = cast<uint8_t>(clamp(sobel_y(x, y) + sobel_x(x, y), 0, 255));
 
   // Halide:: Schedule
-  Sobel.vectorize(x, 64);
+  Sobel.vectorize(x, 1<<LOG2VLEN);
   std::vector<Argument> args(1);
   args[0]  = input;
 #ifdef BITCODE
@@ -62,7 +60,11 @@ void test_sobel(Target &target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+#if LOG2VLEN == 7
+  target.set_feature(Target::HVX_DOUBLE);
+#endif
   test_sobel(target);
   printf ("Done\n");
   return 0;
 }
+

@@ -1,11 +1,22 @@
 CURR_DIR = $(shell pwd)
 HALIDE_TOP = ${CURR_DIR}/../../../..
-CXXFLAGS="--std=c++11"
+# Vector Length
+ifeq (,$(LOG2VLEN))
+  LOG2VLEN:=7
+endif
+
+ifeq (7,$(LOG2VLEN))
+  MHVX:=-mhvx-double
+else
+  MHVX:=-mhvx
+endif
+
+CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
-CXXFLAGS="--std=c++11"
+CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 
 
 sobel.o sobel.h: sobel.cpp
@@ -15,7 +26,7 @@ sobel.o sobel.h: sobel.cpp
 
 
 sobel_run.o: sobel.o sobel.h sobel_run.cpp
-	${HEXAGON_CLANG} -c sobel_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
+	${HEXAGON_CLANG} -c sobel_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 sobel.out: sobel_run.o sobel.o sobel.h
 	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o sobel.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 sobel_run.o sobel.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
@@ -83,7 +94,7 @@ stmt: sobel.cpp
 .PHONY: synthetic
 
 sobel_run.synthetic.o: sobel.o sobel.h sobel_run.cpp
-	${HEXAGON_CLANG} -c sobel_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o sobel_run.synthetic.o ${CXXFLAGS}
+	${HEXAGON_CLANG} -c sobel_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o sobel_run.synthetic.o ${CXXFLAGS}
 
 
 sobel.synthetic.out: sobel_run.synthetic.o sobel.o sobel.h

@@ -5,8 +5,6 @@ using namespace Halide;
 using namespace Halide::Internal;
 IRPrinter irp(std::cerr);
 
-#define VECTORSIZE 64 //Vector width in bytes. (Single mode)
-#define DOUBLEVECTORSIZE 128
 #define COMPILE_OBJ(X)  ((X).compile_to_file("gaussian3x3", args, target))
 
 
@@ -62,13 +60,9 @@ void test_gaussian3x3(Target& target) {
   gaussian3x3(input.width()-1, input.height()-1) = cast<uint8_t> (clamp(bottomRight(input.width()-1, input.height()-1) >> 4, 0, 255));
 
 
-  gaussian3x3.vectorize(x,128);
-  gaussian3x3.update(0).vectorize(x, 128);
-  gaussian3x3.update(1).vectorize(x, 128);
-  // gaussian3x3.vectorize(x, 64);
-  // gaussian3x3.update(0).vectorize(x, 64);
-  // gaussian3x3.update(1).vectorize(x, 64);
-
+  gaussian3x3.vectorize(x,1 << LOG2VLEN );
+  gaussian3x3.update(0).vectorize(x, 1 << LOG2VLEN);
+  gaussian3x3.update(1).vectorize(x, 1 << LOG2VLEN);
 
   std::vector<Argument> args(1);
   args[0]  = input;
@@ -89,7 +83,9 @@ void test_gaussian3x3(Target& target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+#if LOG2VLEN == 7
   target.set_feature(Target::HVX_DOUBLE);
+#endif
   test_gaussian3x3(target);
   printf ("Done\n");
   return 0;

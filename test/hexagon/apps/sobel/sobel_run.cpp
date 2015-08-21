@@ -83,6 +83,9 @@ int main(int argc, char **argv) {
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
   SIM_ACQUIRE_HVX;
+#if LOG2VLEN == 7
+  SIM_SET_HVX_DOUBLE_MODE;
+#endif
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif
@@ -197,8 +200,8 @@ int main(int argc, char **argv) {
   /* -----------------------------------------------------*/
   /*  Allocate memory for input/output                    */
   /* -----------------------------------------------------*/
-  unsigned char *input  = (unsigned char *)memalign(64, width*height*sizeof(unsigned char));
-  unsigned char *output = (unsigned char *)memalign(64, width*height*sizeof(unsigned char));
+  unsigned char *input  = (unsigned char *)memalign(1 << LOG2VLEN, width*height*sizeof(unsigned char));
+  unsigned char *output = (unsigned char *)memalign(1 << LOG2VLEN, width*height*sizeof(unsigned char));
 
   if ( input == NULL || output == NULL ){
     printf("Error: Could not allocate Memory for image\n");
@@ -273,6 +276,9 @@ int main(int argc, char **argv) {
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
   SIM_ACQUIRE_HVX;
+#if LOG2VLEN == 7
+  SIM_SET_HVX_DOUBLE_MODE;
+#endif
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif

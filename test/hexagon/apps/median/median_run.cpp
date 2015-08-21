@@ -87,6 +87,10 @@ int main(int argc, char **argv) {
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
   SIM_ACQUIRE_HVX
+#if LOG2VLEN == 7
+    SIM_SET_HVX_DOUBLE_MODE;
+#endif
+
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif
@@ -107,8 +111,13 @@ int main(int argc, char **argv) {
     printf("Halide returned an error: %d\n", error);
     return -1;
   }
+#ifdef BORDERS
   for (y = 0; y < 8; y++) {
     for (x = 0; x < 128; x++) {
+#else
+  for (y = 1; y < 7; y++) {
+    for (x = 1; x < 127; x++) {
+#endif
       uint8_t max_x[3];
       uint8_t min_x[3];
       uint8_t mid_x[3];
@@ -244,6 +253,10 @@ int main(int argc, char **argv) {
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
   SIM_ACQUIRE_HVX;
+#if LOG2VLEN == 7
+    SIM_SET_HVX_DOUBLE_MODE;
+#endif
+
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif

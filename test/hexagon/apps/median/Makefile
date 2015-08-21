@@ -1,5 +1,16 @@
 CURR_DIR = $(shell pwd)
 HALIDE_TOP = ${CURR_DIR}/../../../..
+# Vector Length
+ifeq (,$(LOG2VLEN))
+  LOG2VLEN:=7
+endif
+
+ifeq (7,$(LOG2VLEN))
+  MHVX:=-mhvx-double
+else
+  MHVX:=-mhvx
+endif
+
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
@@ -9,14 +20,14 @@ INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct
 TEST_NAME= $(shell basename ${CURR_DIR})
 B128_MODE=
 GDB=
-
+CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 median.o median.h: median.cpp
-	${CLANG_CPP}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS}; \
+	${CLANG_CPP}  median.cpp -g -o median.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./median.generate.out  ${B128_MODE}
 
 
 median_run.o: median.o median.h median_run.cpp
-	${HEXAGON_CLANG} -c median_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
+	${HEXAGON_CLANG} -c median_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 median.out: median_run.o median.o median.h
 	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o median.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 median_run.o median.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
@@ -29,7 +40,7 @@ clean:
 .PHONY: assembly
 
 assembly: median.cpp
-	${CLANG_CPP}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS}; \
+	${CLANG_CPP}  median.cpp -g  -o median.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: bitcode
@@ -84,7 +95,7 @@ stmt: median.cpp
 .PHONY: synthetic
 
 median_run.synthetic.o: median.o median.h median_run.cpp
-	${HEXAGON_CLANG} -c median_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o median_run.synthetic.o ${CXXFLAGS}
+	${HEXAGON_CLANG} -c median_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include -DSYNTHETIC -o median_run.synthetic.o ${CXXFLAGS}
 
 
 median.synthetic.out: median_run.synthetic.o median.o median.h
