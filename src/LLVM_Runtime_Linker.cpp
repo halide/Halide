@@ -368,7 +368,7 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     for (size_t i = 0; i < modules.size(); i++) {
         #if LLVM_VERSION >= 37
         //modules[i]->setDataLayout(*data_layout);
-        modules[i]->setDataLayout(&data_layout);
+        modules[i]->setDataLayout(data_layout);
         #elif LLVM_VERSION >= 35
         modules[i]->setDataLayout(data_layout);
         #else
@@ -850,7 +850,7 @@ llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LL
 
     llvm::DataLayout dl("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
     #if LLVM_VERSION > 36
-    m->setDataLayout(&dl);
+    m->setDataLayout(dl);
     #else
     m->setDataLayout(&dl);
     #endif
