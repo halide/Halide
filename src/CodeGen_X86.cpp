@@ -382,6 +382,32 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
+
+    #if LLVM_VERSION >= 38
+    // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
+    // LLVM uses a numerically unstable method for vector
+    // uint32->float conversion before AVX.
+    if (op->value.type().element_of() == UInt(32) &&
+        op->type.is_float() &&
+        op->type.is_vector() &&
+        !target.has_feature(Target::AVX)) {
+        Type signed_type = Int(32, op->type.width);
+
+        // Convert the top 31 bits to float using the signed version
+        Expr top_bits = cast(signed_type, op->value / 2);
+        top_bits = cast(op->type, top_bits);
+
+        // Convert the bottom bit
+        Expr bottom_bit = cast(signed_type, op->value % 2);
+        bottom_bit = cast(op->type, bottom_bit);
+
+        // Recombine as floats
+        codegen(top_bits + top_bits + bottom_bit);
+        return;
+    }
+    #endif
+
+
     CodeGen_Posix::visit(op);
 }
 
