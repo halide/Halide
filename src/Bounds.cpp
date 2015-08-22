@@ -39,41 +39,44 @@ int static_sign(Expr x) {
 }
 
 
-// Try to find a constant that is:
-// greater than or equal to the given Expr (if d is Up), or
-// less than or equal to the given Expr (if d is Down).
-enum Direction {Up, Down};
-Expr simplify_to_constant(Expr e, Direction d) {
+// Given a varying expression, try to find a constant that is either:
+// An upper bound (always greater than or equal to the expression), or
+// A lower bound (always less than or equal to the expression)
+// If it fails, returns an undefined Expr.
+enum Direction {Upper, Lower};
+Expr find_constant_bound(Expr e, Direction d) {
     // We look through casts, so we only handle ops that can't
     // overflow. E.g. if A >= a and B >= b, then you can't assume that
     // (A + B) >= (a + b) in a world with overflow.
-    if (const Min *min = e.as<Min>()) {
-        Expr a = simplify_to_constant(min->a, d);
-        Expr b = simplify_to_constant(min->b, d);
-        if (is_const(a) && is_const(b)) {
+    if (is_const(e)) {
+        return e;
+    } else if (const Min *min = e.as<Min>()) {
+        Expr a = find_constant_bound(min->a, d);
+        Expr b = find_constant_bound(min->b, d);
+        if (a.defined() && b.defined()) {
             return simplify(Min::make(a, b));
-        } else if (is_const(a) && d == Up) {
+        } else if (a.defined() && d == Upper) {
             return a;
-        } else if (is_const(b) && d == Up) {
+        } else if (b.defined() && d == Upper) {
             return b;
         }
     } else if (const Max *max = e.as<Max>()) {
-        Expr a = simplify_to_constant(max->a, d);
-        Expr b = simplify_to_constant(max->b, d);
-        if (is_const(a) && is_const(b)) {
+        Expr a = find_constant_bound(max->a, d);
+        Expr b = find_constant_bound(max->b, d);
+        if (a.defined() && b.defined()) {
             return simplify(Max::make(a, b));
-        } else if (is_const(a) && d == Down) {
+        } else if (a.defined() && d == Lower) {
             return a;
-        } else if (is_const(b) && d == Down) {
+        } else if (b.defined() && d == Lower) {
             return b;
         }
     } else if (const Cast *cast = e.as<Cast>()) {
-        Expr a = simplify_to_constant(cast->value, d);
-        if (is_const(a)) {
+        Expr a = find_constant_bound(cast->value, d);
+        if (a.defined()) {
             return simplify(Cast::make(cast->type, a));
         }
     }
-    return e;
+    return Expr();
 }
 
 }
@@ -167,18 +170,23 @@ private:
             // can only really prove that this is the case if they're
             // constants, so try to make the constants first.
 
-            min_a = simplify_to_constant(min_a, Down);
-            max_a = simplify_to_constant(max_a, Up);
+            Expr lower_bound = find_constant_bound(min_a, Lower);
+            Expr upper_bound = find_constant_bound(max_a, Upper);
 
-            if (is_const(min_a) && is_const(max_a)) {
+            if (lower_bound.defined() && upper_bound.defined()) {
                 // Cast them to the narrow type and back and see if
                 // they're provably unchanged.
                 Expr test =
-                    (cast(from, cast(to, min_a)) == min_a &&
-                     cast(from, cast(to, max_a)) == max_a);
+                    (cast(from, cast(to, lower_bound)) == lower_bound &&
+                     cast(from, cast(to, upper_bound)) == upper_bound);
                 test = simplify(test);
                 if (is_one(test)) {
                     could_overflow = false;
+                    // Relax the bounds to the constants we found. Not
+                    // strictly necessary, but probably helpful to
+                    // keep the expressions small.
+                    min_a = lower_bound;
+                    max_a = upper_bound;
                 }
             }
         }
