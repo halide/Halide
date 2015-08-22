@@ -161,4 +161,14 @@ const struct halide_device_interface *halide_renderscript_device_interface() {
     return NULL;
 }
 
+const struct halide_device_interface *halide_metal_device_interface() {
+    Target target(get_host_target());
+    target.set_feature(Target::Metal);
+    struct halide_device_interface *(*fn)();
+    if (lookup_runtime_routine("halide_metal_device_interface", target, fn)) {
+        return (*fn)();
+    }
+    return NULL;
+}
+
 }
