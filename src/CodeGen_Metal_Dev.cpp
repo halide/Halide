@@ -267,7 +267,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
-  debug(0) << "Generating code for Store op " << Stmt(op) << "\n";
     string id_value = print_expr(op->value);
     Type t = op->value.type();
 
