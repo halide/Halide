@@ -96,6 +96,10 @@ struct float16_t {
      */
     EXPORT static float16_t make_from_bits(uint16_t bits);
     
+    /** Get a new float16_t from a signed integer.
+     *  It is not provided as a constructor to avoid call ambiguity
+     * */
+    EXPORT static float16_t make_from_signed_int(int64_t value, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
     /**@}*/
 
     /**\name Arithmetic operators

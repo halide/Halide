@@ -25,11 +25,13 @@ int main() {
         const float16_t zeroPStringConstructorHex("0x0p0", RoundingMode::ToNearestTiesToEven);
         const float16_t zeroPFromFloat(0.0f, RoundingMode::ToNearestTiesToEven);
         const float16_t zeroPFromDouble(0.0,RoundingMode::ToNearestTiesToEven);
+        const float16_t zeroPFromInt = float16_t::make_from_signed_int(0, RoundingMode::ToNearestTiesToEven);
         h_assert(zeroDefaultConstructor.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
         h_assert(zeroPStringConstructorDecimal.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
         h_assert(zeroPStringConstructorHex.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
         h_assert(zeroPFromFloat.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
         h_assert(zeroPFromDouble.to_bits() == zeroP.to_bits(), "Mistmatch between constructors");
+        h_assert(zeroPFromInt.to_bits() == zeroP.to_bits(), "make_from_signed_int gave wrong value");
 
         // Check the representation
         h_assert(zeroP.is_zero() && !zeroP.is_negative(), "+ve zero invalid");
@@ -166,6 +168,8 @@ int main() {
     // Largest +ve
     {
         const float16_t largestNorm("65504");
+        const float16_t largestNormFromInt = float16_t::make_from_signed_int(65504);
+        h_assert(largestNormFromInt.to_bits() == largestNorm.to_bits(), "make_from_signed_int gave wrong value");
         h_assert(largestNorm.to_bits() == 0x7bff, "65504 as float_16t has wrong bits");
         h_assert(largestNorm.to_hex_string() == "0x1.ffcp15", "65504 as float_16t has wrong hex repr");
         h_assert(largestNorm.to_decimal_string() == "6.5504E+4", "65504 as float_16t has wrong decimal repr");
@@ -184,6 +188,8 @@ int main() {
     // Largest -ve
     {
         const float16_t largestNorm("-65504");
+        const float16_t largestNormFromInt = float16_t::make_from_signed_int(-65504);
+        h_assert(largestNormFromInt.to_bits() == largestNorm.to_bits(), "make_from_signed_int gave wrong value");
         h_assert(largestNorm.to_bits() == 0xfbff, "65504 as float_16t has wrong bits");
         h_assert(largestNorm.to_hex_string() == "-0x1.ffcp15", "65504 as float_16t has wrong hex repr");
         h_assert(largestNorm.to_decimal_string() == "-6.5504E+4", "65504 as float_16t has wrong decimal repr");
@@ -275,59 +281,79 @@ int main() {
         // Try rounding up
         const float16_t noughtPointOneRU("0.1", RoundingMode::TowardPositiveInfinity);
         h_assert(noughtPointOneRU.to_bits() == 0x2e67, "0.1 incorrectly rounded up");
-        h_assert(noughtPointOneRU.to_hex_string() == "0x1.99cp-4", "0.1 incorrectly rounded to zero");
+        h_assert(noughtPointOneRU.to_hex_string() == "0x1.99cp-4", "0.1 incorrectly rounded up");
     }
 
     // 4091 is an integer that can't be exactly represented in half
     {
         const float16_t fourZeroNineOneRD("4091", RoundingMode::TowardNegativeInfinity);
+        const float16_t fourZeroNineOneRDFromInt = float16_t::make_from_signed_int(4091, RoundingMode::TowardNegativeInfinity);
         h_assert(fourZeroNineOneRD.to_bits() == 0x6bfd, "4091 incorreclty rounded down");
         h_assert(fourZeroNineOneRD.to_hex_string() == "0x1.ff4p11", "4091 incorreclty rounded down");
         h_assert(fourZeroNineOneRD.to_decimal_string(0) == "4.09E+3", "4091 converted to half then decimal failed");
+        h_assert(fourZeroNineOneRDFromInt.to_bits() == fourZeroNineOneRD.to_bits(), "make_from_signed_int gave wrong value");
 
         // Check can roundtrip convert float16_t to a string and back again
         const float16_t reconstruct(fourZeroNineOneRD.to_decimal_string(0).c_str(), RoundingMode::TowardNegativeInfinity);
         h_assert(reconstruct.to_bits() == fourZeroNineOneRD.to_bits(), "roundtrip conversion failed");
 
         const float16_t fourZeroNineOneRU("4091", RoundingMode::TowardPositiveInfinity);
+        const float16_t fourZeroNineOneRUFromInt = float16_t::make_from_signed_int(4091, RoundingMode::TowardPositiveInfinity);
         h_assert(fourZeroNineOneRU.to_bits() == 0x6bfe, "4091 incorreclty rounded up");
         h_assert(fourZeroNineOneRU.to_hex_string() == "0x1.ff8p11", "4091 incorreclty rounded up");
         h_assert(fourZeroNineOneRU.to_decimal_string(0) == "4.092E+3", "4091 converted to half then decimal failed");
+        h_assert(fourZeroNineOneRUFromInt.to_bits() == fourZeroNineOneRU.to_bits(), "make_from_signed_int gave wrong value");
 
         const float16_t fourZeroNineOneRZ("4091", RoundingMode::TowardZero);
+        const float16_t fourZeroNineOneRZFromInt = float16_t::make_from_signed_int(4091, RoundingMode::TowardZero);
         h_assert(fourZeroNineOneRZ.to_bits() == fourZeroNineOneRD.to_bits(), "4091 incorrectly rounded toward zero");
+        h_assert(fourZeroNineOneRZFromInt.to_bits() == fourZeroNineOneRD.to_bits(), "make_from_signed_int gave wrong value");
 
         const float16_t fourZeroNineOneRNE("4091", RoundingMode::ToNearestTiesToEven);
+        const float16_t fourZeroNineOneRNEFromInt = float16_t::make_from_signed_int(4091, RoundingMode::ToNearestTiesToEven);
         h_assert(fourZeroNineOneRNE.to_bits() == fourZeroNineOneRU.to_bits(), "4091 incorrectly rounded towards nearest even");
+        h_assert(fourZeroNineOneRNEFromInt.to_bits() == fourZeroNineOneRU.to_bits(), "make_from_signed_int gave wrong value");
 
         const float16_t fourZeroNineOneRNA("4091", RoundingMode::ToNearestTiesToAway);
-        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRU.to_bits(), "4091 incorrectly rounded towards nearest even");
+        const float16_t fourZeroNineOneRNAFromInt = float16_t::make_from_signed_int(4091, RoundingMode::ToNearestTiesToAway);
+        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRU.to_bits(), "4091 incorrectly rounded towards nearest, away from zero");
+        h_assert(fourZeroNineOneRNAFromInt.to_bits() == fourZeroNineOneRU.to_bits(), "make_from_signed_int gave wrong value");
     }
 
     // -4091 is an integer that can't be exactly represented in half
     {
         const float16_t fourZeroNineOneRD("-4091", RoundingMode::TowardNegativeInfinity);
+        const float16_t fourZeroNineOneRDFromInt = float16_t::make_from_signed_int(-4091, RoundingMode::TowardNegativeInfinity);
         h_assert(fourZeroNineOneRD.to_bits() == 0xebfe, "-4091 incorreclty rounded down");
         h_assert(fourZeroNineOneRD.to_hex_string() == "-0x1.ff8p11", "-4091 incorreclty rounded down");
         h_assert(fourZeroNineOneRD.to_decimal_string(0) == "-4.092E+3", "-4091 converted to half then decimal failed");
+        h_assert(fourZeroNineOneRDFromInt.to_bits() == fourZeroNineOneRD.to_bits(), "make_from_signed_int gave wrong value");
 
         // Check can roundtrip convert float16_t to a string and back again
         const float16_t reconstruct(fourZeroNineOneRD.to_decimal_string(0).c_str(), RoundingMode::TowardNegativeInfinity);
         h_assert(reconstruct.to_bits() == fourZeroNineOneRD.to_bits(), "roundtrip conversion failed");
 
         const float16_t fourZeroNineOneRU("-4091", RoundingMode::TowardPositiveInfinity);
+        const float16_t fourZeroNineOneRUFromInt = float16_t::make_from_signed_int(-4091, RoundingMode::TowardPositiveInfinity);
         h_assert(fourZeroNineOneRU.to_bits() == 0xebfd, "4091 incorreclty rounded up");
         h_assert(fourZeroNineOneRU.to_hex_string() == "-0x1.ff4p11", "-4091 incorreclty rounded up");
         h_assert(fourZeroNineOneRU.to_decimal_string(0) == "-4.09E+3", "-4091 converted to half then decimal failed");
+        h_assert(fourZeroNineOneRUFromInt.to_bits() == fourZeroNineOneRU.to_bits(), "make_from_signed_int gave wrong value");
 
         const float16_t fourZeroNineOneRZ("-4091", RoundingMode::TowardZero);
+        const float16_t fourZeroNineOneRZFromInt = float16_t::make_from_signed_int(-4091, RoundingMode::TowardZero);
         h_assert(fourZeroNineOneRZ.to_bits() == fourZeroNineOneRU.to_bits(), "-4091 incorrectly rounded toward zero");
+        h_assert(fourZeroNineOneRZFromInt.to_bits() == fourZeroNineOneRU.to_bits(), "make_from_signed_int gave wrong value");
 
         const float16_t fourZeroNineOneRNE("-4091", RoundingMode::ToNearestTiesToEven);
+        const float16_t fourZeroNineOneRNEFromInt = float16_t::make_from_signed_int(-4091, RoundingMode::ToNearestTiesToEven);
         h_assert(fourZeroNineOneRNE.to_bits() == fourZeroNineOneRD.to_bits(), "-4091 incorrectly rounded towards nearest even");
+        h_assert(fourZeroNineOneRNEFromInt.to_bits() == fourZeroNineOneRD.to_bits(), "make_from_signed_int gave wrong value");
 
         const float16_t fourZeroNineOneRNA("-4091", RoundingMode::ToNearestTiesToAway);
-        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRD.to_bits(), "-4091 incorrectly rounded towards nearest even");
+        const float16_t fourZeroNineOneRNAFromInt = float16_t::make_from_signed_int(-4091, RoundingMode::ToNearestTiesToAway);
+        h_assert(fourZeroNineOneRNA.to_bits() == fourZeroNineOneRD.to_bits(), "-4091 incorrectly rounded towards nearest, away from zero");
+        h_assert(fourZeroNineOneRNAFromInt.to_bits() == fourZeroNineOneRD.to_bits(), "make_from_signed_int gave wrong value");
     }
 
     // 0.3 can't be exactly represented in half
@@ -352,13 +378,13 @@ int main() {
         h_assert(noughtPointThreeRU.to_decimal_string(0) == "3.0005E-1", "0.3 incorrectly rounded upward");
 
         const float16_t noughtPointThreeRZ("0.3", RoundingMode::TowardZero);
-        h_assert(noughtPointThreeRZ.to_bits() == noughtPointThreeRD.to_bits(), "0.3 incorrectly rounded toward nearest even");
+        h_assert(noughtPointThreeRZ.to_bits() == noughtPointThreeRD.to_bits(), "0.3 incorrectly rounded toward zeron");
 
         const float16_t noughtPointThreeRNE("0.3", RoundingMode::ToNearestTiesToEven);
         h_assert(noughtPointThreeRNE.to_bits() == noughtPointThreeRU.to_bits(), "0.3 incorrectly rounded toward nearest even");
 
         const float16_t noughtPointThreeRNA("0.3", RoundingMode::ToNearestTiesToAway);
-        h_assert(noughtPointThreeRNA.to_bits() == noughtPointThreeRU.to_bits(), "0.3 incorrectly rounded toward nearest even");
+        h_assert(noughtPointThreeRNA.to_bits() == noughtPointThreeRU.to_bits(), "0.3 incorrectly rounded toward nearest, away from zero");
     }
 
     printf("Success!\n");
