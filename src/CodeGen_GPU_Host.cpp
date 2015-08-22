@@ -202,11 +202,10 @@ void GPU_Host_Closure::visit(const For *loop) {
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
-    // For the default GPU, OpenCL is preferred, CUDA next, then
-    // OpenGLCompute, Renderscript, and OpenGL last. The code is in reverse order to
-    // allow later tests to override earlier ones. If Metal is
-    // specified in the target, it will be used as the default. (TODO:
-    // verify this is a good bet.)
+    // For the default GPU, the order of preferences is: Metal,
+    // OpenCL, CUDA, OpenGLCompute, Renderscript, and OpenGL last.
+    // The code is in reverse order to allow later tests to override
+    // earlier ones.
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
@@ -218,10 +217,6 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
         cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
-    }
-    if (target.has_feature(Target::Renderscript)) {
-        debug(1) << "Constructing Renderscript device codegen\n";
-        cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
     }
     if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
