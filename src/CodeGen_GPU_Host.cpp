@@ -207,7 +207,6 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     // allow later tests to override earlier ones. If Metal is
     // specified in the target, it will be used as the default. (TODO:
     // verify this is a good bet.)
-    DeviceAPI default_api = DeviceAPI::Default_GPU;
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
@@ -223,7 +222,6 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     if (target.has_feature(Target::Renderscript)) {
         debug(1) << "Constructing Renderscript device codegen\n";
         cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
-        default_api = DeviceAPI::Renderscript;
     }
     if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
@@ -232,12 +230,10 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
         cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
-        default_api = DeviceAPI::OpenCL;
     }
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
         cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
-        default_api = DeviceAPI::Metal;
     }
 
     if (cgdev.empty()) {
