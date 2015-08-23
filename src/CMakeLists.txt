@@ -41,6 +41,8 @@ set(RUNTIME_CPP
   nacl_host_cpu_count
   opencl
   metal
+  metal_objc_arm
+  metal_objc_x86
   opengl
   openglcompute
   osx_clock
@@ -497,6 +499,10 @@ endif()
 if (TARGET_MIPS)
   target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
   list(APPEND LLVM_COMPONENTS mips)
+endif()
+
+if (TARGET_METAL)
+  target_compile_definitions(Halide PRIVATE "-DWITH_METAL")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
