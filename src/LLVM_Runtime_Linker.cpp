@@ -122,12 +122,22 @@ DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(runtime_api)
+#ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
 #ifdef WITH_ARM
 DECLARE_CPP_INITMOD(metal_objc_arm)
+#else
+DECLARE_NO_INITMOD(metal_objc_arm)
 #endif
 #ifdef WITH_X86
 DECLARE_CPP_INITMOD(metal_objc_x86)
+#else
+DECLARE_NO_INITMOD(metal_objc_x86)
+#endif
+#else
+DECLARE_NO_INITMOD(metal)
+DECLARE_NO_INITMOD(metal_objc_arm)
+DECLARE_NO_INITMOD(metal_objc_x86)
 #endif
 
 #ifdef WITH_ARM
