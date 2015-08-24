@@ -91,6 +91,11 @@ void load_opengl() {
 #endif
 }
 
+void load_metal() {
+    // TODO: load the right libraries for metal on os x
+    internal_error << "JIT support for Metal not yet implemented\n";
+}
+
 }
 
 using namespace llvm;
@@ -634,6 +639,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case Metal:
             one_gpu.set_feature(Target::Metal);
             module_name = "metal";
+            load_metal();
             break;
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
