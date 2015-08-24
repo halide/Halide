@@ -40,6 +40,9 @@ set(RUNTIME_CPP
   module_jit_ref_count
   nacl_host_cpu_count
   opencl
+  metal
+  metal_objc_arm
+  metal_objc_x86
   opengl
   openglcompute
   osx_clock
@@ -206,6 +209,7 @@ set(HEADER_FILES
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
+  CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_PNaCl.h
@@ -309,6 +313,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
 file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeMetal.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeOpenGLCompute.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 file(COPY runtime/HalideRuntimeRenderscript.h DESTINATION "${CMAKE_BINARY_DIR}/include")
@@ -346,6 +351,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
+  CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PNaCl.cpp
@@ -493,6 +499,10 @@ endif()
 if (TARGET_MIPS)
   target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
   list(APPEND LLVM_COMPONENTS mips)
+endif()
+
+if (TARGET_METAL)
+  target_compile_definitions(Halide PRIVATE "-DWITH_METAL")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
