@@ -125,24 +125,7 @@ LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
 
 UNAME = $(shell uname)
 
-OPENGL_LDFLAGS =
-ifneq ($(WITH_OPENGL), )
-ifeq ($(UNAME), Linux)
-OPENGL_LDFLAGS = -lX11 -lGL
-endif
-ifeq ($(UNAME), Darwin)
-OPENGL_LDFLAGS = -framework OpenGL -framework AGL
-endif
-endif
-
-METAL_LDFLAGS=
-ifneq ($(WITH_METAL), )
-ifeq ($(UNAME), Darwin)
-METAL_LDFLAGS += -framework Foundation -framework Metal
-endif
-endif
-
-TEST_LDFLAGS=$(LLVM_LDFLAGS) $(OPENGL_LDFLAGS) $(METAL_LDFLAGS)
+TEST_LDFLAGS=$(LLVM_LDFLAGS)
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
