@@ -59,10 +59,10 @@ extern void halide_print(void *user_context, const char *);
  */
 extern void halide_error(void *user_context, const char *);
 
-/** A macro that calls halide_error if the supplied condition is
- * false, then aborts (if halide_error has not done so already). Used
- * for unrecoverable errors, or should-never-happen errors. */
-#define halide_assert(user_context, cond) if (!(cond)) {halide_error(user_context, #cond); abort();}
+/** A macro that calls halide_print if the supplied condition is
+ * false, then aborts. Used for unrecoverable errors, or
+ * should-never-happen errors. */
+#define halide_assert(user_context, cond) if (!(cond)) {halide_print(user_context, #cond); abort();}
 
 /** These are allocated statically inside the runtime, hence the fixed
  * size. They must be initialized with zero. The first time
