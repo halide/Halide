@@ -75,6 +75,7 @@ int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
+void abort();
 char *strncpy(char *dst, const char *src, size_t n);
 
 // Below are prototypes for various functions called by generated code
