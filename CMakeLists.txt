@@ -98,7 +98,11 @@ else()
 endif()
 
 if (NOT MSVC)
-  add_compile_options(-Wall -Wno-unused-function -Wcast-qual -Woverloaded-virtual)
+    add_compile_options(-Wall
+                        -Wno-unused-function
+                        -Wcast-qual
+                        -Woverloaded-virtual
+                        -Wignored-qualifiers)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
