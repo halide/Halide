@@ -81,7 +81,11 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
         break;
     case DeviceAPI::Renderscript:
         out << "<Renderscript>";
-        break;    }
+        break;
+    case DeviceAPI::Metal:
+        out << "<Metal>";
+        break;
+    }
     return out;
 }
 

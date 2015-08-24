@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     // First define the function that gives the initial state.
     {
         Param<float> cx, cy;
-        Func initial;
+        Func initial("initial");
 
         // The initial state is a quantity of three chemicals present
         // at each pixel near the boundaries
@@ -17,19 +17,24 @@ int main(int argc, char **argv) {
         Expr r = dx * dx + dy * dy;
         Expr mask = r < 200 * 200;
         initial(x, y, c) = random_float();// * select(mask, 1.0f, 0.001f);
+        initial.reorder(c, x, y).bound(c, 0, 3).vectorize(c).gpu_tile(x, y, 4, 4);
+        initial.output_buffer().set_bounds(2, 0, 3);
+        initial.output_buffer().set_stride(0, 3);
+        initial.output_buffer().set_stride(2, 1);
         initial.compile_to_file("reaction_diffusion_2_init", {cx, cy});
     }
 
     // Then the function that updates the state. Also depends on user input.
     {
-        ImageParam state(Float(32), 3);
+        ImageParam state(Float(32), 3, "state");
         Param<int> mouse_x, mouse_y;
         Param<float> cx, cy;
         Param<int> frame;
 
         Func clamped = BoundaryConditions::repeat_edge(state);
+        state.set_bounds(2, 0, 3);
 
-        Func blur_x, blur_y, blur;
+        Func blur_x("blur_x"), blur_y("blur_y"), blur("blur");
         blur_x(x, y, c) = (clamped(x-3, y, c) +
                            clamped(x-1, y, c) +
                            clamped(x, y, c) +
@@ -72,8 +77,7 @@ int main(int argc, char **argv) {
         G = clamp(G, 0.0f, 1.0f);
         B = clamp(B, 0.0f, 1.0f);
 
-
-        Func new_state;
+        Func new_state("new_state");
         new_state(x, y, c) = select(c == 0, R, select(c == 1, G, B));
 
         // Noise at the edges
@@ -95,17 +99,20 @@ int main(int argc, char **argv) {
         new_state(clobber.x, clobber.y, c) = select(radius < 400.0f, 1.0f, new_state(clobber.x, clobber.y, c));
 
         new_state.reorder(c, x, y).bound(c, 0, 3).unroll(c);
+        blur.reorder(c, x, y).vectorize(c);
+        blur.compute_at(new_state, Var::gpu_threads());
+        new_state.gpu_tile(x, y, 8, 2);
+        new_state.update(0).reorder(c, x).unroll(c);
+        new_state.update(1).reorder(c, x).unroll(c);
+        new_state.update(2).reorder(c, y).unroll(c);
+        new_state.update(3).reorder(c, y).unroll(c);
+        new_state.update(4).reorder(c, clobber.x).unroll(c);
 
-        Var yi;
-        new_state.split(y, y, yi, 64).parallel(y);
-
-        //blur_x.store_at(new_state, y).compute_at(new_state, yi);
-        blur.compute_at(new_state, yi);
-        clamped.store_at(new_state, y).compute_at(new_state, yi);
-
-        new_state.vectorize(x, 4);
-        blur.vectorize(x, 4);
-        state.set_bounds(2, 0, 3);
+        new_state.update(0).gpu_tile(x, 8);
+        new_state.update(1).gpu_tile(x, 8);
+        new_state.update(2).gpu_tile(y, 8);
+        new_state.update(3).gpu_tile(y, 8);
+        new_state.update(4).gpu_tile(clobber.x, clobber.y, 1, 1);
 
         std::vector<Argument> args(6);
         args[0] = state;
@@ -114,12 +121,18 @@ int main(int argc, char **argv) {
         args[3] = cx;
         args[4] = cy;
         args[5] = frame;
+        state.set_stride(0, 3);
+        state.set_stride(2, 1);
+        state.set_extent(2, 3);
+        new_state.output_buffer().set_extent(2, 3);
+        new_state.output_buffer().set_stride(0, 3);
+        new_state.output_buffer().set_stride(2, 1);
         new_state.compile_to_file("reaction_diffusion_2_update", args);
     }
 
-    // Now the function that converts the state into an argb image.
+    // Now the function that converts the state into an bgra8 image.
     {
-        ImageParam state(Float(32), 3);
+        ImageParam state(Float(32), 3, "state");
 
         Func contour;
         contour(x, y, c) = pow(state(x, y, c) * (1 - state(x, y, c)) * 4, 8);
@@ -131,16 +144,17 @@ int main(int argc, char **argv) {
         Expr B = max(c0, max(c1, c2));
 
         Expr alpha = 255 << 24;
-        Expr red = cast<int32_t>(R * 255) * (1 << 0);
+        Expr red = cast<int32_t>(R * 255) * (1 << 16);
         Expr green = cast<int32_t>(G * 255) * (1 << 8);
-        Expr blue = cast<int32_t>(B * 255) * (1 << 16);
+        Expr blue = cast<int32_t>(B * 255) * (1 << 0);
 
-        Func render;
+        Func render("render");
         render(x, y) = alpha + red + green + blue;
 
-        render.vectorize(x, 4);
-        Var yi;
-        render.split(y, y, yi, 64).parallel(y);
+        state.set_bounds(2, 0, 3);
+        state.set_stride(2, 1);
+        state.set_stride(0, 3);
+        render.gpu_tile(x, y, 32, 4);
 
         render.compile_to_file("reaction_diffusion_2_render", {state});
     }

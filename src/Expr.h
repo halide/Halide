@@ -226,7 +226,8 @@ enum class DeviceAPI {
     OpenCL,
     GLSL,
     Renderscript,
-    OpenGLCompute
+    OpenGLCompute,
+    Metal
 };
 
 namespace Internal {

@@ -35,16 +35,18 @@ class SelectGPUAPI : public IRMutator {
     }
 public:
     SelectGPUAPI(Target t) : target(t) {
-        if (target.has_feature(Target::OpenGL)) {
-            default_api = DeviceAPI::GLSL;
-        } else if (target.has_feature(Target::Renderscript)) {
-            default_api = DeviceAPI::Renderscript;
-        } else if (target.has_feature(Target::OpenGLCompute)) {
-            default_api = DeviceAPI::OpenGLCompute;
-        } else if (target.has_feature(Target::CUDA)) {
-            default_api = DeviceAPI::CUDA;
+        if (target.has_feature(Target::Metal)) {
+            default_api = DeviceAPI::Metal;
         } else if (target.has_feature(Target::OpenCL)) {
             default_api = DeviceAPI::OpenCL;
+        } else if (target.has_feature(Target::CUDA)) {
+            default_api = DeviceAPI::CUDA;
+        } else if (target.has_feature(Target::OpenGLCompute)) {
+            default_api = DeviceAPI::OpenGLCompute;
+        } else if (target.has_feature(Target::Renderscript)) {
+            default_api = DeviceAPI::Renderscript;
+        } else if (target.has_feature(Target::OpenGL)) {
+            default_api = DeviceAPI::GLSL;
         } else {
             default_api = DeviceAPI::Host;
         }

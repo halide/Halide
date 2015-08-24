@@ -4,6 +4,7 @@
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeRenderscript.h"
+#include "HalideRuntimeMetal.h"
 #include "runtime_internal.h"
 
 // This runtime module will contain extern declarations of the Halide
@@ -40,8 +41,8 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_error_buffer_allocation_too_large,
     (void *)&halide_error_buffer_argument_is_null,
     (void *)&halide_error_buffer_extents_too_large,
-    (void *)&halide_error_constraints_make_required_region_smaller,
     (void *)&halide_error_constraint_violated,
+    (void *)&halide_error_constraints_make_required_region_smaller,
     (void *)&halide_error_debug_to_file_failed,
     (void *)&halide_error_explicit_bounds_too_small,
     (void *)&halide_error_extern_stage_failed,
@@ -62,9 +63,17 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_malloc,
     (void *)&halide_memoization_cache_cleanup,
     (void *)&halide_memoization_cache_lookup,
+    (void *)&halide_memoization_cache_release,
     (void *)&halide_memoization_cache_set_size,
     (void *)&halide_memoization_cache_store,
-    (void *)&halide_memoization_cache_release,
+    (void *)&halide_metal_acquire_context,
+    (void *)&halide_metal_detach_buffer,
+    (void *)&halide_metal_device_interface,
+    (void *)&halide_metal_get_buffer,
+    (void *)&halide_metal_initialize_kernels,
+    (void *)&halide_metal_release_context,
+    (void *)&halide_metal_run,
+    (void *)&halide_metal_wrap_buffer,
     (void *)&halide_mutex_cleanup,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
@@ -93,10 +102,10 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_openglcompute_run,
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
-    (void *)&halide_profiler_pipeline_start,
     (void *)&halide_profiler_get_state,
-    (void *)&halide_profiler_reset,
+    (void *)&halide_profiler_pipeline_start,
     (void *)&halide_profiler_report,
+    (void *)&halide_profiler_reset,
     (void *)&halide_release_jit_module,
     (void *)&halide_renderscript_device_interface,
     (void *)&halide_renderscript_initialize_kernels,
@@ -106,10 +115,12 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_set_trace_file,
     (void *)&halide_shutdown_thread_pool,
     (void *)&halide_shutdown_trace,
+    (void *)&halide_sleep_ms,
+    (void *)&halide_spawn_thread,
     (void *)&halide_start_clock,
     (void *)&halide_string_to_string,
     (void *)&halide_trace,
     (void *)&halide_uint64_to_string,
-    (void *)&halide_use_jit_module
+    (void *)&halide_use_jit_module,
 };
 }
