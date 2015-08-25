@@ -92,8 +92,18 @@ void load_opengl() {
 }
 
 void load_metal() {
-    // TODO: load the right libraries for metal on os x
-    internal_error << "JIT support for Metal not yet implemented\n";
+#if defined(__APPLE__)
+    if (have_symbol("MTLCreateSystemDefaultDevice")) {
+        debug(1) << "Metal framework already linked in...\n";
+    } else {
+        debug(1) << "Looking for Metal framework...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/Metal.framework/Metal", &error);
+        user_assert(error.empty()) << "Could not find Metal.framework\n";
+    }
+#else
+    internal_error << "JIT support for Metal only implemented on OS X\n";
+#endif
 }
 
 }
