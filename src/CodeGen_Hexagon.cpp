@@ -776,6 +776,71 @@ bool CodeGen_Hexagon::shouldUseVMPA(const Add *op,
   }
   return false;
 }
+bool CodeGen_Hexagon::possiblyGenerateVMPAAccumulate(const Add *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Pattern> Patterns;
+
+  // Convert A:zxt(a:u8x64) + B:zxt(bu8x64) + C:i16x64 ->
+  // C += (vcombine(a,b).ub, 0x01010101)
+  //
+  // PDB: FIXME: Is it ok to accumulate into C? For instance, if C is needed
+  // in another iteration, then C will need to be reloaded, right? Consider this
+  // Halide code.
+  //   ImageParam g(type_of<uint8_t>(), 2);
+  //   Halide::Func f, g_16;
+  //   g_16(x, y) = cast<int16_t> g(x, y);
+  //   f(x, y) = g_16(x, y-1) + g_16(x, y) + g_16(x, y+1)
+  // In this case the vectors for g_16(x, y) and g_16(x, y+1) can be reused,
+  // but if we accumulate into either one of the two, then reuse is not
+  // possible.
+
+  Patterns.push_back(Pattern(WPICK((wild_i16x128 + wild_i16x128 + wild_i16x128),
+                                   (wild_i16x64 + wild_i16x64 + wild_i16x64)),
+                             IPICK(Intrinsic::hexagon_V6_vmpabus_acc)));
+  Patterns.push_back(Pattern(WPICK((wild_i32x64 + wild_i32x64 + wild_i32x64),
+                                   (wild_i32x32 + wild_i32x32 + wild_i32x32)),
+                             IPICK(Intrinsic::hexagon_V6_vmpahb_acc)));
+  vector<Expr> matches;
+  for (size_t I = 0; I < Patterns.size(); ++I) {
+    const Pattern &P = Patterns[I];
+    if (expr_match(P.pattern, op, matches)) {
+      internal_assert(matches.size() == 3);
+      Expr Op0, Op1, Op2;
+      Expr Acc, OpA, OpB;
+      Op0 = lossless_cast(UInt(8, CPICK(128, 64)), matches[0]);
+      Op1 = lossless_cast(UInt(8, CPICK(128, 64)), matches[1]);
+      Op2 = lossless_cast(UInt(8, CPICK(128, 64)), matches[2]);
+      if (Op0.defined() && Op1.defined() && !Op2.defined()) {
+        Acc = matches[2]; OpA = Op0; OpB = Op1;
+      } else if (Op0.defined() && !Op1.defined() && Op2.defined()) {
+        Acc = matches[1]; OpA = Op0; OpB = Op2;
+      } else if (!Op0.defined() && Op1.defined() && Op2.defined()) {
+        Acc = matches[0]; OpA = Op1; OpB = Op2;
+      } else if (Op0.defined() && Op1.defined() && Op2.defined()) {
+        Acc = matches[0]; OpA = Op1; OpB = Op2;
+      } else
+        return false;
+      Value *Accumulator = codegen(Acc);
+      Value *Operand0 = codegen(OpA);
+      Value *Operand1 = codegen(OpB);
+      Value *Multiplicand = concatVectors(Operand0, Operand1);
+      int ScalarValue = 0x01010101;
+      Expr ScalarImmExpr = IntImm::make(ScalarValue);
+      Value *Scalar = codegen(ScalarImmExpr);
+      std::vector<Value *> Ops;
+      Ops.push_back(Accumulator);
+      Ops.push_back(Multiplicand);
+      Ops.push_back(Scalar);
+      Intrinsic::ID IntrinsID = P.ID;
+      Value *Result = CallLLVMIntrinsic(Intrinsic::
+                                        getDeclaration(module, IntrinsID),
+                                        Ops);
+      value =  convertValueType(Result, llvm_type_of(op->type));
+      return true;
+    }
+  }
+  return false;
+}
 void CodeGen_Hexagon::visit(const Add *op) {
   debug(4) << "HexagonCodegen: " << op->type << ", " << op->a
            << " + " << op->b << "\n";
@@ -835,7 +900,11 @@ void CodeGen_Hexagon::visit(const Add *op) {
     debug(4) << "HexagonCodegen: Generating Vd32.w=vdmpy(Vu32.h,Rt32.h):sat\n";
     return;
   }
-  value = emitBinaryOp(op, varith);
+  // See if you can generate Vdd.h += vmpa(Vuu.ub, Rt.b)
+  if(possiblyGenerateVMPAAccumulate(op))
+    return;
+  if (!value)
+    value = emitBinaryOp(op, varith);
   if (!value)
     CodeGen_Posix::visit(op);
   return;

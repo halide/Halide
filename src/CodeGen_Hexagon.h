@@ -63,6 +63,8 @@ protected:
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Cast *);
     bool possiblyCodeGenWideningMultiply(const Mul *);
+    bool possiblyGenerateVMPAAccumulate(const Add *);
+
 };
 
 }}
