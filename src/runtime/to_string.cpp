@@ -243,4 +243,82 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
     return halide_string_to_string(dst, end, buf_ptr);
 }
 
+/** Interprets uint16_t as the bits of a binary16 IEEE-754 2008 floating
+ *  point number ("half") and prints as a C99 hex float.
+ */
+WEAK char *halide_half_bits_to_hex_float_string(char *dst, char *end, uint16_t bits) {
+    bool isNegative = bits & 0x8000;
+    bool exponentIsAllOnes = ((bits & 0x7c00) == 0x7c00);
+    bool exponentsIsAllZeros = ((bits & 0x7c00) == 0);
+    bool significandBitsAreNonZero = bits & 0x03ff;
+
+    if (dst >= end) {
+        return dst;
+    }
+
+    // Check for NaN and Infinity
+    if (exponentIsAllOnes) {
+        if (significandBitsAreNonZero) {
+            return halide_string_to_string(dst, end, "nan");
+        }
+        else {
+            if (isNegative) {
+                dst = halide_string_to_string(dst, end, "-");
+            } else {
+                dst = halide_string_to_string(dst, end, "+");
+            }
+            return halide_string_to_string(dst, end, "inf");
+        }
+    }
+
+    // Print hex float format
+    if (isNegative) {
+        dst = halide_string_to_string(dst, end, "-");
+    }
+
+    dst = halide_string_to_string(dst, end, "0x");
+
+    if (exponentsIsAllZeros) {
+        // Value is either zero or subnormal
+        dst = halide_string_to_string(dst, end, "0.");
+    } else {
+        dst = halide_string_to_string(dst, end, "1.");
+    }
+
+    // print significand bits in hex
+    // We print the shifted value because the significand
+    // is 10-bits and we need to pretend there are two extra
+    // zero bits (least significant end) when printing.
+    uint32_t shiftedSignifcand = (bits & 0x03ff) << 2;
+    for (int nibbleIndex=2; nibbleIndex >= 0; --nibbleIndex) {
+        uint32_t mask = 0xf << (nibbleIndex*4);
+        uint32_t significandNibble = (shiftedSignifcand & mask) >> (nibbleIndex*4);
+
+        if (significandNibble >= 16) {
+            abort();
+        }
+        // print nibble
+        char hexChar[2];
+        hexChar[1] = 0;
+        if (significandNibble < 10) {
+            hexChar[0] = '0' + significandNibble;
+        } else {
+            hexChar[0] = 'a' + (significandNibble -10);
+        }
+        dst = halide_string_to_string(dst, end, hexChar);
+    }
+
+    // Compute exponent and print it as decimal
+    dst = halide_string_to_string(dst, end, "p");
+    int32_t exponent = ((bits & 0x7c00) >> 10) -15;
+    if (exponent < 0) {
+        dst = halide_string_to_string(dst, end, "-");
+    } else {
+        dst = halide_string_to_string(dst, end, "+");
+    }
+    // print absolute value of the exponent as we've already handled the
+    // sign
+    dst = halide_int64_to_string(dst, end, ((exponent < 0)? -exponent : exponent), /*min_digits=*/1);
+    return dst;
+}
 }

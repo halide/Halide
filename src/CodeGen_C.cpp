@@ -744,26 +744,41 @@ static bool isinf(T x)
 }
 
 void CodeGen_C::visit(const FloatImm *op) {
-    if (isnan(op->value)) {
-        id = "nan_f32()";
-    } else if (isinf(op->value)) {
-        if (op->value > 0) {
-            id = "inf_f32()";
+    unsigned bitWidth = op->type.bits;
+    ostringstream oss;
+    if (isnan(op->as_highest_precision_float())) {
+        oss << "nan_f" << bitWidth << "()";
+    } else if (isinf(op->as_highest_precision_float())) {
+        if (op->as_highest_precision_float() > 0) {
+            oss << "inf_f" << bitWidth << "()";
         } else {
-            id = "neg_inf_f32()";
+            oss << "neg_inf_f" << bitWidth << "()";
         }
     } else {
         // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
-        union {
-            uint32_t as_uint;
-            float as_float;
-        } u;
-        u.as_float = op->value;
-
-        ostringstream oss;
-        oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
-        id = oss.str();
+        if (/*const float16_t* asHalf = */op->as<float16_t>()) {
+            static_assert(sizeof(float16_t) == 2, "float16_t wrong size");
+            // FIXME: Can we support a function like this in C runtime given
+            // that it's not a native type?
+            // oss << "half_from_bits(" << asHalf->to_bits() << " /* " <<
+            //    asHalf->to_hex_string() << " */)";
+            internal_error << "half immediates not supported in the C backend yet\n";
+        }
+        else if (const float* asFloat = op->as<float>()) {
+            static_assert(sizeof(float) == 4, "float wrong size");
+            oss << "float_from_bits(" << *reinterpret_cast<const uint32_t*>(asFloat) <<
+                " /* " << *asFloat << " */)";
+        }
+        else if (const double* asDouble = op->as<double>()) {
+            static_assert(sizeof(double) == 8, "double wrong size");
+            oss << "double_from_bits(" << *reinterpret_cast<const uint64_t*>(asDouble) <<
+                " /* " << *asDouble << " */)";
+        }
+        else {
+            internal_error << "Unhandled float width\n";
+        }
     }
+    id = oss.str();
 }
 
 void CodeGen_C::visit(const Call *op) {

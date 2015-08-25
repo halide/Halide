@@ -145,14 +145,54 @@ private:
 
 /** Floating point constants */
 struct FloatImm : public ExprNode<FloatImm> {
-    float value;
+ private:
+    // We could use double to represent all three types
+    // here losslessly but then we wouldn't be able to
+    // return a pointer to the right data type.
+    union {
+        float16_t asFloat16;
+        float asFloat32;
+        double asFloat64;
+    } _value; // FIXME: Deliberately renamed to give better error msgs due to interface change, should we change it back?
+    FloatImm() : _value{ .asFloat64 = 0.0 } {};
 
-    static FloatImm *make(float value) {
+  public:
+    typedef double HighestPrecisionTy;
+
+    static FloatImm *make(float16_t value) {
+        static_assert(sizeof(float16_t) == 2, "float16_t is wrong size");
         FloatImm *node = new FloatImm;
-        node->type = Float(32);
-        node->value = value;
+        node->type = Float(16);
+        node->_value.asFloat16 = value;
         return node;
     }
+
+    static FloatImm *make(float value) {
+        static_assert(sizeof(float) == 4, "float is wrong size");
+        FloatImm *node = new FloatImm;
+        node->type = Float(32);
+        node->_value.asFloat32 = value;
+        return node;
+    }
+
+    static FloatImm *make(double value) {
+        static_assert(sizeof(double) == 8, "double is wrong size");
+        FloatImm *node = new FloatImm;
+        node->type = Float(64);
+        node->_value.asFloat64 = value;
+        return node;
+    }
+
+  template <typename T>
+  const T* as() const {
+    if (type == Float(sizeof(T)*8)) {
+      return reinterpret_cast<const T*>(&_value);
+    }
+    return NULL;
+  }
+
+  // Cast up to highest precision type available
+  HighestPrecisionTy as_highest_precision_float() const;
 };
 
 /** String constants */
@@ -184,18 +224,17 @@ struct Expr : public Internal::IRHandle {
     EXPORT Expr(int x) : IRHandle(Internal::IntImm::make(x)) {
     }
 
+    /** Make an expression representing a const 16-bit float (i.e. a FloatImm) */
+    EXPORT Expr(float16_t x) : IRHandle(Internal::FloatImm::make(x)) {
+    }
+
     /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
     EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(x)) {
     }
 
-    /** Make an expression representing a const 32-bit float, given a
-     * double. Also emits a warning due to truncation. */
-    EXPORT Expr(double x) : IRHandle(Internal::FloatImm::make((float)x)) {
-        user_warning << "Halide cannot represent double constants. "
-                     << "Converting " << x << " to float. "
-                     << "If you wanted a double, use cast<double>(" << x
-                     << (x == (int64_t)(x) ? ".0f" : "f")
-                     << ")\n";
+    /** Make an expression representing a const 64-bit float (double), given a
+     * */
+    EXPORT Expr(double x) : IRHandle(Internal::FloatImm::make(x)) {
     }
 
     /** Make an expression representing a const string (i.e. a StringImm) */

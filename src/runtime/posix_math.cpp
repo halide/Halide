@@ -59,6 +59,18 @@ INLINE double double_from_bits(uint64_t bits) {
     return u.as_double;
 }
 
+INLINE double nan_f64() {
+    return double_from_bits(UINT64_C(0x7ff8000000000000));
+}
+
+INLINE double neg_inf_f64() {
+    return double_from_bits(UINT64_C(0xfff0000000000000));
+}
+
+INLINE double inf_f64() {
+    return double_from_bits(UINT64_C(0x7ff0000000000000));
+}
+
 INLINE double maxval_f64() {
     return double_from_bits(UINT64_C(0x7fefffffffffffff));
 }

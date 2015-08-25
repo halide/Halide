@@ -199,7 +199,16 @@ string CodeGen_GLSLBase::print_type(Type type) {
     type = map_type(type);
     if (type.is_scalar()) {
         if (type.is_float()) {
-            oss << "float";
+            if (type.bits == 64) {
+                oss << "double";
+            }
+            else if (type.bits == 32) {
+                oss << "float";
+            }
+            else {
+                internal_error << "GLSL: Float type of width " << type.bits <<
+                "not supported\n";
+            }
         } else if (type.is_bool()) {
             oss << "bool";
         } else if (type.is_int()) {
@@ -235,14 +244,53 @@ std::string CodeGen_GLSLBase::print_name(const std::string &name) {
 void CodeGen_GLSL::visit(const FloatImm *op) {
     ostringstream oss;
     // Print integral numbers with trailing ".0". For fractional numbers use a
-    // precision of 9 digits, which should be enough to recover the binary
+    // fixed precision, which should be enough to recover the binary
     // float unambiguously from the decimal representation (if iostreams
     // implements correct rounding).
-    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
-    if (truncated == op->value) {
-        oss << std::fixed << std::setprecision(1) << op->value;
+    //
+    // The required precision is computed using the formula
+    //
+    // precision = 2 + floor( significand_bits / log_2(10) )
+    //
+    // Taken from "How to Print Floating-Point Numbers Accurately"
+    unsigned precision = 0;
+    bool isDouble = false;
+    if (op->as<float16_t>()) {
+        internal_error << "GLSL: Half not supported\n";
+    } else if (op->as<float>()) {
+        precision = 9;
+    }
+    else if (op->as<double>()) {
+        precision = 17;
+        isDouble = true;
+    }
+    else {
+        internal_error << "GLSL: Unsupported float type\n";
+    }
+
+    const FloatImm::HighestPrecisionTy floatValue = op->as_highest_precision_float();
+
+    // FIXME: I don't know how you are supposed to write NaN or infinity in GLSL
+    // so just error out for now.
+    if (std::isnan(floatValue)) {
+        internal_error << "GLSL: emission of NaN literal not supported\n";
+    }
+    if (std::isinf(floatValue)) {
+        internal_error << "GLSL: emission of Infinite literal not supported\n";
+    }
+
+    const FloatImm::HighestPrecisionTy truncated =
+        (floatValue < 0 ? std::ceil(floatValue) : std::floor(floatValue) );
+    if (truncated == floatValue) {
+        oss << std::fixed << std::setprecision(1) << floatValue;
     } else {
-        oss << std::setprecision(9) << op->value;
+        oss << std::setprecision(precision) << floatValue;
+    }
+
+    if (isDouble) {
+        // Emit suffix for doubles as specified in
+        // GLSL language spec 4.5: 4.1.4 Floating point variables
+        oss << "LF";
     }
     id = oss.str();
 }

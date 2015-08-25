@@ -52,7 +52,12 @@ bool constant_expr_equals(Expr expr, T value) {
         return i->value == value;
     }
     if (const FloatImm* f = expr.as<FloatImm>()) {
-        return f->value == value;
+        if (const float* asFloat = f->as<float>()) {
+            return *asFloat == value;
+        } else {
+            // FIXME: Unsupported float type
+            abort();
+        }
     }
     if (const Cast* c = expr.as<Cast>()) {
         return constant_expr_equals(c->value, value);
