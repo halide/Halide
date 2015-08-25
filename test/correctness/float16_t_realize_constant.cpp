@@ -18,7 +18,7 @@ int main() {
     Halide::Var x, y;
 
     // Function simply writes a constant
-    f(x, y) = float16_t(0.25);
+    f(x, y) = float16_t(0.75);
     // Make sure tracing works. It should abort if something is wrong.
     f.trace_stores();
 
@@ -37,8 +37,8 @@ int main() {
     // Read result back
     for (int x = simple.min(0); x < simple.extent(0); ++x) {
         for (int y = simple.min(1); y < simple.extent(1); ++y) {
-            h_assert(simple(x, y) == float16_t(0.25), "Invalid value read back");
-            h_assert(simple(x, y).to_bits() == 0x3400, "Bit pattern incorrect");
+            h_assert(simple(x, y) == float16_t(0.75), "Invalid value read back");
+            h_assert(simple(x, y).to_bits() == 0x3a00, "Bit pattern incorrect");
         }
     }
 
@@ -50,8 +50,8 @@ int main() {
                            sizeof(float16_t) * ((x - rawImage->min[0]) * rawImage->stride[0] +
                                                 (y - rawImage->min[1]) * rawImage->stride[1]);
             float16_t *pixel = (float16_t *)loc;
-            h_assert(*pixel == float16_t(0.25), "Failed to read value back via buffer_t");
-            h_assert(pixel->to_bits() == 0x3400, "Bit pattern incorrect via buffer_t");
+            h_assert(*pixel == float16_t(0.75), "Failed to read value back via buffer_t");
+            h_assert(pixel->to_bits() == 0x3a00, "Bit pattern incorrect via buffer_t");
         }
     }
 
