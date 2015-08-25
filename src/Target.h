@@ -72,6 +72,8 @@ struct Target {
         Profile, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
         NoRuntime, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
+        Metal, ///< Enable the (Apple) Metal runtime.
+
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
@@ -143,11 +145,30 @@ struct Target {
         return copy;
     }
 
-    /** Is OpenCL or CUDA enabled in this target? I.e. is
-     * Func::gpu_tile and similar going to work in a way that supports the full range of Halide types.
-     */
+    /** Is a fully feature GPU compute runtime enabled? I.e. is
+     * Func::gpu_tile and similar going to work? Currently includes
+     * CUDA, OpenCL, and Metal. We do not include OpenGL, because it
+     * is not capable of gpgpu, and is not scheduled via
+     * Func::gpu_tile.
+     * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-        return has_feature(CUDA) || has_feature(OpenCL);
+      return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+    }
+
+    /** Does this target allow using a certain type. Generally all
+     * types except 64-bit float and int/uint should be supported by
+     * all backends.
+     */
+    bool supports_type(const Type &t) {
+        if (t.bits == 64) {
+            if (t.is_float()) {
+                return !has_feature(Metal) &&
+                       (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
+            } else {
+                return !has_feature(Metal);
+            }
+        }
+        return true;
     }
 
     bool operator==(const Target &other) const {

@@ -59,9 +59,6 @@ extern void halide_print(void *user_context, const char *);
  */
 extern void halide_error(void *user_context, const char *);
 
-/** A macro that calls halide_error if the supplied condition is false. */
-#define halide_assert(user_context, cond) if (!(cond)) halide_error(user_context, #cond);
-
 /** These are allocated statically inside the runtime, hence the fixed
  * size. They must be initialized with zero. The first time
  * halide_mutex_lock is called, the lock must be initialized in a

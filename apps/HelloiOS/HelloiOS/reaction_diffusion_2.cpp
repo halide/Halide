@@ -105,6 +105,7 @@ int main(int argc, char **argv) {
 
         new_state.vectorize(x, 4);
         blur.vectorize(x, 4);
+        state.set_bounds(2, 0, 3);
 
         std::vector<Argument> args(6);
         args[0] = state;

@@ -181,7 +181,7 @@ Target parse_target_string(const std::string &target) {
                    << "and os is linux, windows, osx, nacl, ios, or android. "
                    << "If arch or os are omitted, they default to the host. "
                    << "Features include sse41, avx, avx2, armv7s, cuda, "
-                   << "opencl, no_asserts, no_bounds_query, and debug.\n"
+                   << "opencl, metal, no_asserts, no_bounds_query, and debug.\n"
                    << "HL_TARGET can also begin with \"host\", which sets the "
                    << "host's architecture, os, and feature set, with the "
                    << "exception of the GPU runtimes, which default to off.\n"
@@ -278,6 +278,8 @@ bool Target::merge_string(const std::string &target) {
             set_features({Target::CUDA, Target::CUDACapability50});
         } else if (tok == "opencl") {
             set_feature(Target::OpenCL);
+        } else if (tok == "metal") {
+            set_feature(Target::Metal);
         } else if (tok == "debug" || tok == "gpu_debug") {
             set_feature(Target::Debug);
         } else if (tok == "opengl") {
@@ -372,7 +374,8 @@ std::string Target::to_string() const {
         "register_metadata",
         "matlab",
         "profile",
-        "no_runtime"
+        "no_runtime",
+        "metal"
     };
     internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
     string result = string(arch_names[arch])

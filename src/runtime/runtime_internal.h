@@ -75,6 +75,7 @@ int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
+void abort();
 char *strncpy(char *dst, const char *src, size_t n);
 
 // Below are prototypes for various functions called by generated code
@@ -107,6 +108,17 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names);
 }
+
+/** A macro that calls halide_print if the supplied condition is
+ * false, then aborts. Used for unrecoverable errors, or
+ * should-never-happen errors. */
+#define _halide_stringify(x) #x
+#define _halide_expand_and_stringify(x) _halide_stringify(x)
+#define halide_assert(user_context, cond)                               \
+    if (!(cond)) {                                                      \
+        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
+        abort();                                                        \
+    }
 
 // A convenient namespace for weak functions that are internal to the
 // halide runtime.

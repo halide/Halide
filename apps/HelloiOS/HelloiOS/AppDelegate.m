@@ -9,6 +9,7 @@
 #import "AppDelegate.h"
 #import "HalideView.h"
 #include <algorithm>
+#include "HalideRuntime.h"
 #include "reaction_diffusion_2_init.h"
 #include "reaction_diffusion_2_render.h"
 #include "reaction_diffusion_2_update.h"
@@ -91,8 +92,10 @@
         float cx = image_width / 2;
         float cy = image_height / 2;
         
+        NSLog(@"Calling reaction_diffusion_2_init");
         reaction_diffusion_2_init(cx, cy, &buf1);
-        
+        NSLog(@"Returned from reaction_diffusion_2_init");
+   
         for (int i = 0; ;i++) {
   
             // Grab the current touch position (or leave it far off-screen if there isn't one)
@@ -102,10 +105,21 @@
                 ty = (int)output_image.touch_position.y;
             }
             
-            double t_before = CACurrentMediaTime();
+            //NSLog(@"Calling reaction_diffusion_2_update");
+            double t_before_update = CACurrentMediaTime();
             reaction_diffusion_2_update(&buf1, tx, ty, cx, cy, i, &buf2);
+            double t_after_update = CACurrentMediaTime();
+            //NSLog(@"Returned from reaction_diffusion_2_update");
+          
+            //NSLog(@"Calling reaction_diffusion_2_render");
+            double t_before_render = CACurrentMediaTime();
             reaction_diffusion_2_render(&buf2, &pixel_buf);
-            double t_elapsed = CACurrentMediaTime() - t_before;
+            double t_after_render = CACurrentMediaTime();
+            //NSLog(@"Returned from reaction_diffusion_2_render");
+
+            halide_copy_to_host(nullptr, &pixel_buf);
+            
+            double t_elapsed = (t_after_update - t_before_update) + (t_after_render - t_before_render);
             
             // Smooth elapsed using an IIR
             if (i == 0) t_estimate = t_elapsed;

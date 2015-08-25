@@ -70,6 +70,7 @@ option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ON)
 option(TARGET_ARM "Include ARM target" ON)
 option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ON)
+option(TARGET_METAL "Include Metal target" ON)
 option(TARGET_MIPS "Include MIPS target" ON)
 option(TARGET_PTX "Include PTX target" ON)
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
@@ -97,7 +98,11 @@ else()
 endif()
 
 if (NOT MSVC)
-  add_compile_options(-Wall -Wno-unused-function -Wcast-qual -Woverloaded-virtual)
+    add_compile_options(-Wall
+                        -Wno-unused-function
+                        -Wcast-qual
+                        -Woverloaded-virtual
+                        -Wignored-qualifiers)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
