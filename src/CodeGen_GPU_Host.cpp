@@ -501,7 +501,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // allocate stack space to mirror the closure element. It
             // might be in a register and we need a pointer to it for
             // the gpu args array.
-            Value *ptr = builder->CreateAlloca(val->getType(), NULL, name+".stack");
+            Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
             // store the closure value into the stack space
             builder->CreateStore(val, ptr);
 
@@ -516,8 +516,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument
-            int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
+            // store the size of the argument. Buffer arguments get
+            // the dev field, which is 64-bits.
+            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits;
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
