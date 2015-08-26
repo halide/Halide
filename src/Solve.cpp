@@ -456,9 +456,10 @@ private:
                     }
                 }
             }
-        } else if (a_uses_var && b_uses_var) {
+        } else if (a_uses_var && b_uses_var && a.type().is_int() && a.type().bits >= 32) {
             // Convert to f(x) - g(x) == 0 and let the subtract mutator clean up.
-            expr = mutate(Cmp::make(a - b, 0));
+            // Only safe if the type is not subject to overflow.
+            expr = mutate(Cmp::make(a - b, make_zero(a.type())));
         }
 
         if (!expr.defined()) {
