@@ -3,7 +3,7 @@ CC = /pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS = "--std=c++11"
 CLANG = hexagon-clang++
 
-SUBDIRS = median gaussian3x3_update_functions sobel integrate
+SUBDIRS = median gaussian3x3_update_functions sobel integrate dilate3x3
 .PHONY: all run perf bmark-report
 
 all: perf
