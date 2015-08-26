@@ -2432,6 +2432,11 @@ void CodeGen_LLVM::visit(const Call *op) {
                         trace_event,
                         0,
                         i);
+                // llvm::PointerType *field = cast<PointerType>(field_ptr->getType());
+                // llvm::Type *FieldType = field->getElementType();
+                // if (members[i]->getType() != FieldType)
+                //   builder->CreateBitCast(members[i], FieldType);
+
                 builder->CreateStore(members[i], field_ptr);
             }
 

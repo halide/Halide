@@ -26,7 +26,9 @@ void test_sobel(Target &target) {
   // Halide:: Function
   Halide::Func input_16("input_16");
   input_16(x, y) = cast<uint16_t>(input(x, y));
-
+#ifdef TRACING
+  input_16.trace_stores();
+#endif
   Halide::Func sobel_x_avg("sobel_x_avg");
   sobel_x_avg(x,y) = input_16(x-1, y)  + input_16(x+1,y) + 2*input_16(x, y);
   Halide::Func sobel_x("sobel_x");
@@ -39,7 +41,9 @@ void test_sobel(Target &target) {
 
   Halide::Func Sobel("Sobel");
   Sobel(x, y) = cast<uint8_t>(clamp(sobel_y(x, y) + sobel_x(x, y), 0, 255));
-
+#ifdef TRACING
+  Sobel.trace_stores();
+#endif
   // Halide:: Schedule
   Sobel.vectorize(x, 1<<LOG2VLEN);
   std::vector<Argument> args(1);

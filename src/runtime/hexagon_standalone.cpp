@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include <stdio.h>
 #ifdef __cplusplus
 extern "C" {
   WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
@@ -9,6 +10,7 @@ extern "C" {
   WEAK void halide_mutex_unlock(struct halide_mutex *mutex) {}
   WEAK void halide_mutex_cleanup(struct halide_mutex *mutex_arg) {}
   WEAK void halide_error(void *user_context, const char *s) {
+    fprintf(stderr, "%s\n", s);
   }
   WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                              int min, int size, uint8_t *closure) {
@@ -93,6 +95,124 @@ WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closu
 #endif
 }
 
+
+typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
+
+namespace Halide { namespace Runtime { namespace Internal {
+
+      WEAK void halide_print_impl(void *user_context, const char * str) {
+        fprintf(stderr, "%s\n", str);
+      }
+
+      WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
+        stringstream ss(user_context);
+
+        // Round up bits to 8, 16, 32, or 64
+        int print_bits = 8;
+        while (print_bits < e->bits) print_bits <<= 1;
+        halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
+
+        // Otherwise, use halide_printf and a plain-text format
+        const char *event_types[] = {"Load",
+                                     "Store",
+                                     "Begin realization",
+                                     "End realization",
+                                     "Produce",
+                                     "Update",
+                                     "Consume",
+                                     "End consume"};
+
+        // Only print out the value on stores and loads.
+        bool print_value = (e->event < 2);
+
+        ss << event_types[e->event] << " " << e->func << "." << e->value_index << "(";
+        if (e->vector_width > 1) {
+            ss << "<";
+        }
+        for (int i = 0; i < e->dimensions; i++) {
+            if (i > 0) {
+                if ((e->vector_width > 1) && (i % e->vector_width) == 0) {
+                    ss << ">, <";
+                } else {
+                    ss << ", ";
+                }
+            }
+            ss << e->coordinates[i];
+        }
+        if (e->vector_width > 1) {
+            ss << ">)";
+        } else {
+            ss << ")";
+        }
+
+        if (print_value) {
+            if (e->vector_width > 1) {
+                ss << " = <";
+            } else {
+                ss << " = ";
+            }
+            for (int i = 0; i < e->vector_width; i++) {
+                if (i > 0) {
+                    ss << ", ";
+                }
+                if (e->type_code == 0) {
+                    if (print_bits == 8) {
+                        ss << ((int8_t *)(e->value))[i];
+                    } else if (print_bits == 16) {
+                        ss << ((int16_t *)(e->value))[i];
+                    } else if (print_bits == 32) {
+                        ss << ((int32_t *)(e->value))[i];
+                    } else {
+                        ss << ((int64_t *)(e->value))[i];
+                    }
+                } else if (e->type_code == 1) {
+                    if (print_bits == 8) {
+                        ss << ((uint8_t *)(e->value))[i];
+                    } else if (print_bits == 16) {
+                        ss << ((uint16_t *)(e->value))[i];
+                    } else if (print_bits == 32) {
+                        ss << ((uint32_t *)(e->value))[i];
+                    } else {
+                        ss << ((uint64_t *)(e->value))[i];
+                    }
+                } else if (e->type_code == 2) {
+                    halide_assert(user_context, print_bits >= 32 && "Tracing a bad type");
+                    if (print_bits == 32) {
+                        ss << ((float *)(e->value))[i];
+                    } else {
+                        ss << ((double *)(e->value))[i];
+                    }
+                } else if (e->type_code == 3) {
+                    ss << ((void **)(e->value))[i];
+                }
+            }
+            if (e->vector_width > 1) {
+                ss << ">";
+            }
+        }
+        ss << "\n";
+
+        halide_print(user_context, ss.str());
+        return 0;
+      }
+      WEAK trace_fn halide_custom_trace = default_trace;
+      WEAK void (*halide_custom_print)(void *, const char *) = halide_print_impl;
+    }}} // namespace Halide::Runtime::Internal
+
+  WEAK trace_fn halide_set_custom_trace(trace_fn t) {
+    trace_fn result = halide_custom_trace;
+    halide_custom_trace = t;
+    return result;
+  }
+  WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
+    return (*halide_custom_trace)(user_context, e);
+  }
+  WEAK int halide_shutdown_trace() {
+        return 0;
+  }
+  WEAK void halide_print(void *user_context, const char *msg) {
+    (*halide_custom_print)(user_context, msg);
+  }
 
 }
 #endif

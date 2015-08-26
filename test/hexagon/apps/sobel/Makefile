@@ -11,7 +11,7 @@ else
   MHVX:=-mhvx
 endif
 
-CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
+CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} # -DTRACING -DSYNTHETIC
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
