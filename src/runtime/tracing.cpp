@@ -23,7 +23,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
     // If we're dumping to a file, use a binary format
     int fd = halide_get_trace_file(user_context);
     if (fd > 0) {
-        // A 32-byte header. The first 6 bytes are metadata, then the rest is a zero-terminated string.
+        // A 48-byte header. The first 6 bytes are metadata, then the rest is a zero-terminated string.
         uint8_t clamped_width = e->vector_width < 256 ? e->vector_width : 255;
         uint8_t clamped_dimensions = e->dimensions < 256 ? e->dimensions : 255;
 
@@ -33,7 +33,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         while (bytes*8 < e->bits) bytes <<= 1;
 
         // Compute the size of each portion of the tracing packet
-        size_t header_bytes = 32;
+        size_t header_bytes = 48;
         size_t value_bytes = clamped_width * bytes;
         size_t int_arg_bytes = clamped_dimensions * sizeof(int32_t);
         size_t total_bytes = header_bytes + value_bytes + int_arg_bytes;
@@ -49,7 +49,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         buffer[12] = e->value_index;
         buffer[13] = clamped_dimensions;
 
-        // Use up to 17 bytes for the function name
+        // Use up to 33 bytes for the function name
         int i = 14;
         for (; i < header_bytes-1; i++) {
             buffer[i] = e->func[i-14];
@@ -70,7 +70,6 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
             buffer[header_bytes + value_bytes + i] = ((uint8_t *)(e->coordinates))[i];
         }
 
-
         {
             ScopedSpinLock lock(&halide_trace_file_lock);
             size_t written = write(fd, &buffer[0], total_bytes);
@@ -85,7 +84,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         while (print_bits < e->bits) print_bits <<= 1;
         halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
-        // Otherwise, use halide_printf and a plain-text format
+        // Otherwise, use halide_print and a plain-text format
         const char *event_types[] = {"Load",
                                      "Store",
                                      "Begin realization",
@@ -93,7 +92,9 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
                                      "Produce",
                                      "Update",
                                      "Consume",
-                                     "End consume"};
+                                     "End consume",
+                                     "Begin pipeline",
+                                     "End pipeline"};
 
         // Only print out the value on stores and loads.
         bool print_value = (e->event < 2);

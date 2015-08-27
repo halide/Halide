@@ -27,13 +27,15 @@ int my_trace(void *user_context, const halide_trace_event *e) {
                                   "Produce ",
                                   "Update ",
                                   "Consume ",
-                                  "End consume "};
+                                  "End consume ",
+                                  "Begin pipeline ",
+                                  "End pipeline "};
 
-    if (e->event == 3 || e->event > 4) {
+    if (e->event == 3 || e->event == 5 || e->event == 6 || e->event == 7 || e->event == 9) {
         // These events signal the end of some previous event
         stack_trace.pop();
     }
-    if (e->event == 2 || e->event == 4 || e->event == 5 || e->event == 6) {
+    if (e->event == 2 || e->event == 4 || e->event == 5 || e->event == 6 || e->event == 8) {
         // These events signal the start of some new region
         stack_trace.push(event_types[e->event] + e->func);
     }
