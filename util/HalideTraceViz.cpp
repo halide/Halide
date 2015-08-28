@@ -149,16 +149,40 @@ struct Label {
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
     // Configuration for how the func should be drawn
-    int zoom = 0;
-    int cost = 0;
-    int dims = 0;
-    int x, y = 0;
-    int x_stride[16] {0};
-    int y_stride[16] {0};
-    int color_dim = 0;
-    float min = 0.0f, max = 0.0f;
-    vector<Label> labels;
-    bool blank_on_end_realization = false;
+    struct {
+        int zoom = 0;
+        int cost = 0;
+        int dims = 0;
+        int x, y = 0;
+        int x_stride[16] {0};
+        int y_stride[16] {0};
+        int color_dim = 0;
+        float min = 0.0f, max = 0.0f;
+        vector<Label> labels;
+        bool blank_on_end_realization = false;
+
+        void dump(const char *name) {
+            fprintf(stderr,
+                    "Func %s:\n"
+                    " min: %f max: %f\n"
+                    " color_dim: %d\n"
+                    " blank: %d\n"
+                    " dims: %d\n"
+                    " zoom: %d\n"
+                    " cost: %d\n"
+                    " x: %d y: %d\n"
+                    " x_stride: %d %d %d %d\n"
+                    " y_stride: %d %d %d %d\n",
+                    name,
+                    min, max,
+                    color_dim,
+                    blank_on_end_realization,
+                    dims,
+                    zoom, cost, x, y,
+                    x_stride[0], x_stride[1], x_stride[2], x_stride[3],
+                    y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
+        }
+    } config;
 
     // Information about actual observed values gathered while parsing the trace
     struct {
@@ -229,29 +253,7 @@ struct FuncInfo {
                     (long long unsigned)stores);
         }
 
-    } observed;
-
-    void dump(const char *name) {
-        fprintf(stderr,
-                "Func %s:\n"
-                " min: %f max: %f\n"
-                " color_dim: %d\n"
-                " blank: %d\n"
-                " dims: %d\n"
-                " zoom: %d\n"
-                " cost: %d\n"
-                " x: %d y: %d\n"
-                " x_stride: %d %d %d %d\n"
-                " y_stride: %d %d %d %d\n",
-                name,
-                min, max,
-                color_dim,
-                blank_on_end_realization,
-                dims,
-                zoom, cost, x, y,
-                x_stride[0], x_stride[1], x_stride[2], x_stride[3],
-                y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
-    }
+    } stats;
 };
 
 // Composite a single pixel of b over a single pixel of a, writing the result into dst
@@ -391,21 +393,21 @@ int run(int argc, char **argv) {
             }
             char *func = argv[++i];
             FuncInfo &fi = func_info[func];
-            fi.min = atof(argv[++i]);
-            fi.max = atof(argv[++i]);
-            fi.color_dim = atoi(argv[++i]);
-            fi.blank_on_end_realization = atoi(argv[++i]);
-            fi.zoom = atoi(argv[++i]);
-            fi.cost = atoi(argv[++i]);
-            fi.x = atoi(argv[++i]);
-            fi.y = atoi(argv[++i]);
+            fi.config.min = atof(argv[++i]);
+            fi.config.max = atof(argv[++i]);
+            fi.config.color_dim = atoi(argv[++i]);
+            fi.config.blank_on_end_realization = atoi(argv[++i]);
+            fi.config.zoom = atoi(argv[++i]);
+            fi.config.cost = atoi(argv[++i]);
+            fi.config.x = atoi(argv[++i]);
+            fi.config.y = atoi(argv[++i]);
             int d = 0;
             for (; i+1 < argc && argv[i+1][0] != '-' && d < 16; d++) {
-                fi.x_stride[d] = atoi(argv[++i]);
-                fi.y_stride[d] = atoi(argv[++i]);
+                fi.config.x_stride[d] = atoi(argv[++i]);
+                fi.config.y_stride[d] = atoi(argv[++i]);
             }
-            fi.dims = d;
-            fi.dump(func);
+            fi.config.dims = d;
+            fi.config.dump(func);
 
         } else if (next == "-l") {
             if (i + 5 >= argc) {
@@ -420,7 +422,7 @@ int run(int argc, char **argv) {
             Label l = {text, x, y, n};
             fprintf(stderr, "Adding label %s to func %s\n",
                     text, func);
-            func_info[func].labels.push_back(l);
+            func_info[func].config.labels.push_back(l);
         } else if (next == "-t") {
             if (i + 1 >= argc) {
                 usage();
@@ -551,24 +553,24 @@ int run(int argc, char **argv) {
         // Draw the event
         FuncInfo &fi = func_info[search_name];
 
-        if (fi.observed.first_draw_time == 0) {
-            fi.observed.first_draw_time = halide_clock;
+        if (fi.stats.first_draw_time == 0) {
+            fi.stats.first_draw_time = halide_clock;
         }
 
-        if (fi.observed.first_packet_idx == 0) {
-            fi.observed.first_packet_idx = packet_clock;
-            fi.observed.qualified_name = qualified_name;
+        if (fi.stats.first_packet_idx == 0) {
+            fi.stats.first_packet_idx = packet_clock;
+            fi.stats.qualified_name = qualified_name;
         }
 
         switch (p.event) {
         case 0: // load
-            fi.observed.observe_load(p);
+            fi.stats.observe_load(p);
         case 1: // store
         {
-            int frames_since_first_draw = (halide_clock - fi.observed.first_draw_time) / timestep;
+            int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
 
-            for (size_t i = 0; i < fi.labels.size(); i++) {
-                const Label &label = fi.labels[i];
+            for (size_t i = 0; i < fi.config.labels.size(); i++) {
+                const Label &label = fi.config.labels[i];
                 if (frames_since_first_draw <= label.n) {
                     uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
                     if (color > 255) color = 255;
@@ -581,23 +583,23 @@ int run(int argc, char **argv) {
             if (p.event == 1) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
-                halide_clock += fi.cost * (p.value_bytes() / (p.bits / 8));
+                halide_clock += fi.config.cost * (p.value_bytes() / (p.bits / 8));
 
-                fi.observed.observe_store(p);
+                fi.stats.observe_store(p);
             }
             // Check the tracing packet contained enough information
             // given the number of dimensions the user claims this
             // Func has.
-            assert(p.num_int_args >= p.width * fi.dims);
-            if (p.num_int_args >= p.width * fi.dims) {
+            assert(p.num_int_args >= p.width * fi.config.dims);
+            if (p.num_int_args >= p.width * fi.config.dims) {
                 for (int lane = 0; lane < p.width; lane++) {
                     // Compute the screen-space x, y coord to draw this.
-                    int x = fi.x;
-                    int y = fi.y;
-                    for (int d = 0; d < fi.dims; d++) {
+                    int x = fi.config.x;
+                    int y = fi.config.y;
+                    for (int d = 0; d < fi.config.dims; d++) {
                         int a = p.get_int_arg(d * p.width + lane);
-                        x += fi.zoom * fi.x_stride[d] * a;
-                        y += fi.zoom * fi.y_stride[d] * a;
+                        x += fi.config.zoom * fi.config.x_stride[d] * a;
+                        y += fi.config.zoom * fi.config.y_stride[d] * a;
                     }
 
                     // Stores are orange, loads are blue.
@@ -619,19 +621,19 @@ int run(int argc, char **argv) {
                         double value = p.get_value_as<double>(lane);
 
                         // Normalize it.
-                        value = 255 * (value - fi.min) / (fi.max - fi.min);
+                        value = 255 * (value - fi.config.min) / (fi.config.max - fi.config.min);
                         if (value < 0) value = 0;
                         if (value > 255) value = 255;
 
                         // Convert to 8-bit color.
                         uint8_t int_value = (uint8_t)value;
 
-                        if (fi.color_dim < 0) {
+                        if (fi.config.color_dim < 0) {
                             // Grayscale
                             image_color = (int_value * 0x00010101) | 0xff000000;
                         } else {
                             // Color
-                            uint32_t channel = p.get_int_arg(fi.color_dim * p.width + lane);
+                            uint32_t channel = p.get_int_arg(fi.config.color_dim * p.width + lane);
                             uint32_t mask = ~(255 << (channel * 8));
                             image_color &= mask;
                             image_color |= int_value << (channel * 8);
@@ -639,8 +641,8 @@ int run(int argc, char **argv) {
                     }
 
                     // Draw the pixel
-                    for (int dy = 0; dy < fi.zoom; dy++) {
-                        for (int dx = 0; dx < fi.zoom; dx++) {
+                    for (int dy = 0; dy < fi.config.zoom; dy++) {
+                        for (int dx = 0; dx < fi.config.zoom; dx++) {
                             if (y + dy >= 0 && y + dy < frame_height &&
                                 x + dx >= 0 && x + dx < frame_width) {
                                 int px = frame_width * (y + dy) + x + dx;
@@ -656,24 +658,24 @@ int run(int argc, char **argv) {
             break;
         }
         case 2: // begin realization
-            fi.observed.num_realizations++;
+            fi.stats.num_realizations++;
             pipeline_info[p.id] = pipeline;
             break;
         case 3: // end realization
-            if (fi.blank_on_end_realization) {
-                assert(p.num_int_args >= 2 * fi.dims);
-                int x_min = fi.x, y_min = fi.y;
+            if (fi.config.blank_on_end_realization) {
+                assert(p.num_int_args >= 2 * fi.config.dims);
+                int x_min = fi.config.x, y_min = fi.config.y;
                 int x_extent = 0, y_extent = 0;
-                for (int d = 0; d < fi.dims; d++) {
+                for (int d = 0; d < fi.config.dims; d++) {
                     int m = p.get_int_arg(d * 2 + 0);
                     int e = p.get_int_arg(d * 2 + 1);
-                    x_min += fi.zoom * fi.x_stride[d] * m;
-                    y_min += fi.zoom * fi.y_stride[d] * m;
-                    x_extent += fi.zoom * fi.x_stride[d] * e;
-                    y_extent += fi.zoom * fi.y_stride[d] * e;
+                    x_min += fi.config.zoom * fi.config.x_stride[d] * m;
+                    y_min += fi.config.zoom * fi.config.y_stride[d] * m;
+                    x_extent += fi.config.zoom * fi.config.x_stride[d] * e;
+                    y_extent += fi.config.zoom * fi.config.y_stride[d] * e;
                 }
-                if (x_extent == 0) x_extent = fi.zoom;
-                if (y_extent == 0) y_extent = fi.zoom;
+                if (x_extent == 0) x_extent = fi.config.zoom;
+                if (y_extent == 0) y_extent = fi.config.zoom;
                 for (int y = y_min; y < y_min + y_extent; y++) {
                     for (int x = x_min; x < x_min + x_extent; x++) {
                         image[y * frame_width + x] = 0;
@@ -684,7 +686,7 @@ int run(int argc, char **argv) {
             break;
         case 4: // produce
             pipeline_info[p.id] = pipeline;
-            fi.observed.num_productions++;
+            fi.stats.num_productions++;
             break;
         case 5: // update
             break;
@@ -710,12 +712,12 @@ int run(int argc, char **argv) {
     struct by_first_packet_idx {
         bool operator()(const std::pair<std::string, FuncInfo> &a,
                         const std::pair<std::string, FuncInfo> &b) const {
-            return a.second.observed.first_packet_idx < b.second.observed.first_packet_idx;
+            return a.second.stats.first_packet_idx < b.second.stats.first_packet_idx;
         }
     };
     std::sort(funcs.begin(), funcs.end(), by_first_packet_idx());
     for (std::pair<std::string, FuncInfo> p : funcs) {
-        p.second.observed.report();
+        p.second.stats.report();
     }
 
     return 0;
@@ -724,5 +726,5 @@ int run(int argc, char **argv) {
 }  // namespace
 
 int main(int argc, char **argv) {
-  run(argc, argv);
+    run(argc, argv);
 }
