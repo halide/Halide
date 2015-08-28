@@ -611,11 +611,10 @@ int run(int argc, char **argv) {
                     uint32_t image_color;
                     bool update_image = false;
 
-                    // If it's a store, or a load from an input,
-                    // update one or more of the color channels of the
-                    // image layer.
-
-                    if (p.event == 1 || p.parent == pipeline.id) {
+                    // Update one or more of the color channels of the
+                    // image layer in case it's a store or a load from
+                    // the input.
+                    if (true /** TODO: only do this if it's a store or load from the input */) {
                         update_image = true;
                         // Get the old color, in case we're only
                         // updating one of the color channels.
