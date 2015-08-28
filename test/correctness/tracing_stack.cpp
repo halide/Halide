@@ -31,11 +31,19 @@ int my_trace(void *user_context, const halide_trace_event *e) {
                                   "Begin pipeline ",
                                   "End pipeline "};
 
-    if (e->event == 3 || e->event == 5 || e->event == 6 || e->event == 7 || e->event == 9) {
+    if (e->event == halide_trace_end_realization ||
+        e->event == halide_trace_update ||
+        e->event == halide_trace_consume ||
+        e->event == halide_trace_end_consume ||
+        e->event == halide_trace_end_pipeline) {
         // These events signal the end of some previous event
         stack_trace.pop();
     }
-    if (e->event == 2 || e->event == 4 || e->event == 5 || e->event == 6 || e->event == 8) {
+    if (e->event == halide_trace_begin_realization ||
+        e->event == halide_trace_produce ||
+        e->event == halide_trace_update ||
+        e->event == halide_trace_consume ||
+        e->event == halide_trace_begin_pipeline) {
         // These events signal the start of some new region
         stack_trace.push(event_types[e->event] + e->func);
     }

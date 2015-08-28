@@ -28,13 +28,15 @@ using std::vector;
 using std::string;
 using std::queue;
 
+// The first 48 bytes of a tracing packet are metadata
+const int packet_header_size = 48;
+
 // A struct representing a single Halide tracing packet.
 struct Packet {
-    // The first 48 bytes are metadata
     uint32_t id, parent;
     uint8_t event, type, bits, width, value_idx, num_int_args;
-    char name[34];
-    uint8_t payload[4096-48]; // Not all of this will be used, but this is the max possible packet size.
+    char name[packet_header_size - 14];
+    uint8_t payload[4096 - packet_header_size]; // Not all of this will be used, but this is the max possible packet size.
 
     size_t value_bytes() const {
         size_t bytes_per_elem = 1;
@@ -103,7 +105,7 @@ struct Packet {
 
     // Grab a packet from stdin. Returns false when stdin closes.
     bool read_from_stdin() {
-        if (!read_stdin(this, 48)) {
+        if (!read_stdin(this, packet_header_size)) {
             return false;
         }
         if (!read_stdin(payload, payload_bytes())) {
