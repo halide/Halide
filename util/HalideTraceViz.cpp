@@ -156,8 +156,8 @@ struct FuncInfo {
         int cost = 0;
         int dims = 0;
         int x, y = 0;
-        int x_stride[16] {0};
-        int y_stride[16] {0};
+        int x_stride[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        int y_stride[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         int color_dim = 0;
         float min = 0.0f, max = 0.0f;
         vector<Label> labels;
@@ -191,7 +191,8 @@ struct FuncInfo {
         string qualified_name;
         int first_draw_time = 0, first_packet_idx = 0;
         double min_value = 0.0, max_value = 0.0;
-        int min_coord[16] {0}, max_coord[16] {0};
+        int min_coord[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        int max_coord[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         int num_realizations = 0, num_productions = 0;
         uint64_t stores = 0, loads = 0;
 
