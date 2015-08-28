@@ -1,17 +1,15 @@
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cassert>
+#include "fcam/Demosaic.h"
+#include "fcam/Demosaic_ARM.h"
 
 #include "benchmark.h"
 #include "curved.h"
 #include "halide_image.h"
 #include "halide_image_io.h"
 
-#include "fcam/Demosaic.h"
-#include "fcam/Demosaic_ARM.h"
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cassert>
 
 using namespace Halide::Tools;
 
