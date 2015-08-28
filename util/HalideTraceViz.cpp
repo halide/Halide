@@ -542,19 +542,18 @@ int run(int argc, char **argv) {
         PipelineInfo pipeline = pipeline_info[p.parent];
 
         string qualified_name = pipeline.name + ":" + p.name;
-        string search_name = qualified_name;
 
-        // First look it up as fully qualified.
-        if (func_info.find(search_name) == func_info.end()) {
-            search_name = p.name;
-        }
-        // Then try the unqualified func name
-        if (func_info.find(search_name) == func_info.end()) {
-            fprintf(stderr, "Warning: ignoring func %s\n", qualified_name.c_str());
+        if (func_info.find(qualified_name) == func_info.end()) {
+            if (func_info.find(p.name) != func_info.end()) {
+                func_info[qualified_name] = func_info[p.name];
+                func_info.erase(p.name);
+            } else {
+                fprintf(stderr, "Warning: ignoring func %s\n", qualified_name.c_str());
+            }
         }
 
         // Draw the event
-        FuncInfo &fi = func_info[search_name];
+        FuncInfo &fi = func_info[qualified_name];
 
         if (fi.stats.first_draw_time == 0) {
             fi.stats.first_draw_time = halide_clock;
