@@ -10,8 +10,6 @@ target_include_directories(blur_test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 if (NOT WIN32)
   target_link_libraries(blur_test PRIVATE dl pthread)
 endif()
-set_target_properties(blur_test halide_blur PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                      "${CMAKE_CURRENT_BINARY_DIR}")
 
 if (NOT MSVC)
   target_compile_options(blur_test PRIVATE "-std=c++11")
@@ -33,5 +31,6 @@ endif()
 # halide_blur doesn't handle the commandline args passed.
 add_custom_command(OUTPUT "${halide_blur_h}" "${halide_blur_obj}"
                    COMMAND halide_blur
+                   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
                    COMMENT "Generating halide_blur"
                   )

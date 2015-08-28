@@ -14,14 +14,12 @@ target_include_directories(ll_process PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 if (NOT WIN32)
   target_link_libraries(ll_process PRIVATE dl pthread)
 endif()
-set_target_properties(ll_process local_laplacian_gen
-                      PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                      "${CMAKE_CURRENT_BINARY_DIR}")
 if (NOT MSVC)
   target_compile_options(ll_process PRIVATE "-std=c++11")
 endif()
 
 add_custom_command(OUTPUT "${ll_header}" "${ll_obj}"
                    COMMAND local_laplacian_gen
+                   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
                    COMMENT "Generating local_laplacian header and obj file"
                   )
