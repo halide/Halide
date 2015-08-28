@@ -11,6 +11,13 @@
 #include <queue>
 #include <iostream>
 #include <algorithm>
+#ifdef _MSC_VER
+#include <io.h>
+typedef int64_t ssize_t;
+#else
+#include <unistd.h>
+#endif
+#include <string.h>
 
 #include "inconsolata.h"
 
@@ -44,7 +51,7 @@ struct Packet {
     }
 
     int get_int_arg(int idx) const {
-        return ((int *)(payload + value_bytes()))[idx];
+        return ((const int *)(payload + value_bytes()))[idx];
     }
 
     template<typename T>
@@ -53,13 +60,13 @@ struct Packet {
         case 0: // int
             switch (bits) {
             case 8:
-                return (T)(((int8_t *)payload)[idx]);
+                return (T)(((const int8_t *)payload)[idx]);
             case 16:
-                return (T)(((int16_t *)payload)[idx]);
+                return (T)(((const int16_t *)payload)[idx]);
             case 32:
-                return (T)(((int32_t *)payload)[idx]);
+                return (T)(((const int32_t *)payload)[idx]);
             case 64:
-                return (T)(((int64_t *)payload)[idx]);
+                return (T)(((const int64_t *)payload)[idx]);
             default:
                 bad_type_error();
             }
@@ -67,13 +74,13 @@ struct Packet {
         case 1: // uint
             switch (bits) {
             case 8:
-                return (T)(((uint8_t *)payload)[idx]);
+                return (T)(((const uint8_t *)payload)[idx]);
             case 16:
-                return (T)(((uint16_t *)payload)[idx]);
+                return (T)(((const uint16_t *)payload)[idx]);
             case 32:
-                return (T)(((uint32_t *)payload)[idx]);
+                return (T)(((const uint32_t *)payload)[idx]);
             case 64:
-                return (T)(((uint64_t *)payload)[idx]);
+                return (T)(((const uint64_t *)payload)[idx]);
             default:
                 bad_type_error();
             }
@@ -81,9 +88,9 @@ struct Packet {
         case 2: // float
             switch (bits) {
             case 32:
-                return (T)(((float *)payload)[idx]);
+                return (T)(((const float *)payload)[idx]);
             case 64:
-                return (T)(((double *)payload)[idx]);
+                return (T)(((const double *)payload)[idx]);
             default:
                 bad_type_error();
             }
@@ -111,7 +118,7 @@ private:
     bool read_stdin(void *d, ssize_t size) {
         uint8_t *dst = (uint8_t *)d;
         if (!size) return true;
-        while (1) {
+        for (;;) {
             ssize_t s = read(0, dst, size);
             if (s == 0) {
                 // EOF
@@ -470,11 +477,11 @@ int run(int argc, char **argv) {
 
     size_t end_counter = 0;
     size_t packet_clock = 0;
-    while (1) {
+    for (;;) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
             halide_clock += timestep;
-            if (end_counter == hold_frames) {
+            if (end_counter == (size_t)hold_frames) {
                 break;
             }
         }
@@ -491,7 +498,7 @@ int run(int argc, char **argv) {
             }
 
             // Dump the frame
-            size_t bytes = 4 * frame_width * frame_height;
+            ssize_t bytes = 4 * frame_width * frame_height;
             ssize_t bytes_written = write(1, blend, bytes);
             if (bytes_written < bytes) {
                 fprintf(stderr, "Could not write frame to stdout.\n");
@@ -602,6 +609,7 @@ int run(int argc, char **argv) {
                     // If it's a store, or a load from an input,
                     // update one or more of the color channels of the
                     // image layer.
+
                     if (p.event == 1 || p.parent == pipeline.id) {
                         update_image = true;
                         // Get the old color, in case we're only

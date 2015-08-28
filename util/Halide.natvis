@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+	<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" MenuName="Add to Image Watch"/>
+
+	<Type Name="Halide::Internal::BufferContents">
+		<DisplayString>{{ {name} }}</DisplayString>
+		<Expand>
+			<Synthetic Name="[type]" Condition='type.code == 0'>
+				<DisplayString>INT{type.bits}</DisplayString>
+			</Synthetic>
+			<Synthetic Name="[type]" Condition='type.code == 1'>
+				<DisplayString>UINT{type.bits}</DisplayString>
+			</Synthetic>
+			<Synthetic Name="[type]" Condition='type.code == 2'>
+				<DisplayString>FLOAT{type.bits}</DisplayString>
+			</Synthetic>
+			<Item Name="[channels]">buf.extent[2] > 1 ? buf.extent[2] : 1</Item>
+			<Item Name="[planes]">buf.extent[2] > 1 ? buf.extent[2] : 1</Item>
+			<Item Name="[width]">buf.extent[0]</Item>
+			<Item Name="[height]">buf.extent[1]</Item>
+			<Item Name="[data]">buf.host</Item>
+			<Item Name="[stride]">buf.stride[1] * buf.elem_size</Item>
+			<Item Name="raw">this</Item>
+		</Expand>
+	</Type>
+
+	<Type Name="Halide::Buffer">
+		<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+	</Type>
+
+	<Type Name="Halide::Buffer">
+		<Expand>
+			<ExpandedItem>
+				(Halide.dll!Halide::Internal::BufferContents*)contents.ptr
+			</ExpandedItem>
+		</Expand>
+	</Type>
+</AutoVisualizer>
