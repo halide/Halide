@@ -518,16 +518,12 @@ int run(int argc, char **argv) {
         }
         packet_clock++;
 
-        if (!p.parent) {
-            // It's a pipeline begin/end event
-            if (p.event == 8) {
-                pipeline_info[p.id] = {p.name, p.id};
-            } else if (p.event == 9) {
-                pipeline_info.erase(p.id);
-            } else {
-                fprintf(stderr, "Tracing event with no parent of type %d!\n", p.event);
-                return -1;
-            }
+        // It's a pipeline begin/end event
+        if (p.event == 8) {
+            pipeline_info[p.id] = {p.name, p.id};
+            continue;
+        } else if (p.event == 9) {
+            pipeline_info.erase(p.id);
             continue;
         }
 
