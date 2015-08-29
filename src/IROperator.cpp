@@ -277,6 +277,9 @@ void match_types(Expr &a, Expr &b) {
 
     Type ta = a.type(), tb = b.type();
 
+    // If type widening has made the types match no additional casts are needed
+    if (ta == tb) return;
+
     if (!ta.is_float() && tb.is_float()) {
         // int(a) * float(b) -> float(b)
         // uint(a) * float(b) -> float(b)
