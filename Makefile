@@ -461,6 +461,7 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   fake_thread_pool \
+  float16_t \
   gcd_thread_pool \
   gpu_device_selection \
   ios_io \

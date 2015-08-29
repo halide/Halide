@@ -742,6 +742,20 @@ extern void halide_profiler_reset();
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
+/// \name halide_float16_t type and associated functions
+///{@
+#ifndef COMPILING_HALIDE_RUNTIME
+struct halide_float16_t {
+    uint16_t data;
+};
+
+extern float halide_float16_t_to_float(struct halide_float16_t);
+extern double halide_float16_t_to_double(struct halide_float16_t);
+
+// TODO: Conversion functions to half
+#endif
+///@}
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif
