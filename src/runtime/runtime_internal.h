@@ -105,7 +105,6 @@ WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scienti
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits);
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
-WEAK char *halide_half_bits_to_hex_float_string(char *dst, char *end, uint16_t bits);
 
 // Search the current process for a symbol with the given name.
 WEAK void *halide_get_symbol(const char *name);
