@@ -49,6 +49,18 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+// Representation of float16_t in runtime.
+// This is copied from HalideRuntime.h
+// This type is special in that it must available
+// internally and externally.
+//
+// Perhaps a typedef would be better? We need this
+// type to always be 16-bits wide and I'm not sure
+// the struct below is guaranteed to be this size.
+struct halide_float16_t {
+    uint16_t data;
+};
+
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);
@@ -77,6 +89,9 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
 void abort();
 char *strncpy(char *dst, const char *src, size_t n);
+
+WEAK float halide_float16_t_to_float(struct halide_float16_t);
+WEAK double halide_float16_t_to_double(struct halide_float16_t);
 
 // Below are prototypes for various functions called by generated code
 // and parts of the runtime but not exposed to users:
@@ -201,8 +216,9 @@ public:
         return *this;
     }
 
-    Printer & write_float16_from_bits_as_hex_float(uint16_t bits) {
-        dst = halide_half_bits_to_hex_float_string(dst, end, bits);
+    Printer &operator<<(const struct halide_float16_t arg) {
+        double value = halide_float16_t_to_double(arg);
+        dst = halide_double_to_string(dst, end, value, 1);
         return *this;
     }
 
