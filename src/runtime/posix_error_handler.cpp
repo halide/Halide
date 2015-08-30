@@ -1,6 +1,5 @@
-// FIXME: The first two includes should probably be swapped!
-#include "HalideRuntime.h"
 #include "runtime_internal.h"
+#include "HalideRuntime.h"
 #include "printer.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
