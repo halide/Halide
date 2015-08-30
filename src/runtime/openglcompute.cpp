@@ -1,6 +1,7 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
 #include "HalideRuntimeOpenGLCompute.h"
+#include "printer.h"
 #include "mini_opengl.h"
 
 // Implementation note: all function that directly or indirectly access the

@@ -1,5 +1,6 @@
 #include "runtime_internal.h"
 #include "HalideRuntime.h"
+#include "printer.h"
 #include "scoped_mutex_lock.h"
 
 // This is temporary code. In particular, the hash table is stupid and
