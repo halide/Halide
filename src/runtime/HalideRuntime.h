@@ -744,16 +744,22 @@ extern void halide_profiler_report(void *user_context);
 
 /// \name halide_float16_t type and associated functions
 ///{@
-#ifndef COMPILING_HALIDE_RUNTIME
+/**
+ * This type represents the bits for the IEEE-754 2008 binary16 floating point
+ * format (also known as "half")
+ */
 struct halide_float16_t {
     uint16_t data;
 };
 
+/** Read a ``halide_float16_t`` and return the float that represents the same value */
 extern float halide_float16_t_to_float(struct halide_float16_t);
+
+/** Read a ``halide_float16_t`` and return the double that represents the same value */
 extern double halide_float16_t_to_double(struct halide_float16_t);
 
 // TODO: Conversion functions to half
-#endif
+
 ///@}
 
 #ifdef __cplusplus

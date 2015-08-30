@@ -49,18 +49,6 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
-// Representation of float16_t in runtime.
-// This is copied from HalideRuntime.h
-// This type is special in that it must available
-// internally and externally.
-//
-// Perhaps a typedef would be better? We need this
-// type to always be 16-bits wide and I'm not sure
-// the struct below is guaranteed to be this size.
-struct halide_float16_t {
-    uint16_t data;
-};
-
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);
@@ -89,9 +77,6 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
 void abort();
 char *strncpy(char *dst, const char *src, size_t n);
-
-WEAK float halide_float16_t_to_float(struct halide_float16_t);
-WEAK double halide_float16_t_to_double(struct halide_float16_t);
 
 // Below are prototypes for various functions called by generated code
 // and parts of the runtime but not exposed to users:
@@ -138,138 +123,6 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 // A convenient namespace for weak functions that are internal to the
 // halide runtime.
 namespace Halide { namespace Runtime { namespace Internal {
-
-enum PrinterType {BasicPrinter = 0,
-                  ErrorPrinter = 1,
-                  StringStreamPrinter = 2};
-
-// A class for constructing debug messages from the runtime. Dumps
-// items into a stack array, then prints them when the object leaves
-// scope using halide_print. Think of it as a stringstream that prints
-// when it dies. Use it like this:
-
-// debug(user_context) << "A" << b << c << "\n";
-
-// If you use it like this:
-
-// debug d(user_context);
-// d << "A";
-// d << b;
-// d << c << "\n";
-
-// Then remember the print only happens when the debug object leaves
-// scope, which may print at a confusing time.
-
-namespace {
-template<int type, uint64_t length = 1024>
-class Printer {
-public:
-    char *buf, *dst, *end;
-    void *user_context;
-    bool own_mem;
-
-    Printer(void *ctx, char *mem = NULL) : user_context(ctx), own_mem(mem == NULL) {
-        buf = mem ? mem : (char *)halide_malloc(user_context, length);
-        dst = buf;
-        end = buf + (length-1);
-        *end = 0;
-    }
-
-    Printer &operator<<(const char *arg) {
-        dst = halide_string_to_string(dst, end, arg);
-        return *this;
-    }
-
-    Printer &operator<<(int64_t arg) {
-        dst = halide_int64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(int32_t arg) {
-        dst = halide_int64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(uint64_t arg) {
-        dst = halide_uint64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(uint32_t arg) {
-        dst = halide_uint64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(double arg) {
-        dst = halide_double_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(float arg) {
-        dst = halide_double_to_string(dst, end, arg, 0);
-        return *this;
-    }
-
-    Printer &operator<<(const void *arg) {
-        dst = halide_pointer_to_string(dst, end, arg);
-        return *this;
-    }
-
-    Printer &operator<<(const struct halide_float16_t arg) {
-        double value = halide_float16_t_to_double(arg);
-        dst = halide_double_to_string(dst, end, value, 1);
-        return *this;
-    }
-
-    // Use it like a stringstream.
-    const char *str() {
-        return buf;
-    }
-
-    // Clear it. Useful for reusing a stringstream.
-    void clear() {
-        dst = buf;
-        dst[0] = 0;
-    }
-
-    // Returns the number of characters in the buffer
-    uint64_t size() const {
-        return (uint64_t)(dst-buf);
-    }
-
-    ~Printer() {
-        if (type == ErrorPrinter) {
-            halide_error(user_context, buf);
-        } else if (type == BasicPrinter) {
-            halide_print(user_context, buf);
-        } else {
-            // It's a stringstream. Do nothing.
-        }
-        if (own_mem) halide_free(user_context, buf);
-    }
-};
-
-// A class that supports << with all the same types as Printer, but
-// does nothing and should compile to a no-op.
-class SinkPrinter {
-public:
-    SinkPrinter(void *user_context) {}
-};
-template<typename T>
-SinkPrinter operator<<(const SinkPrinter &s, T) {
-    return s;
-}
-
-typedef Printer<BasicPrinter> print;
-typedef Printer<ErrorPrinter> error;
-typedef Printer<StringStreamPrinter> stringstream;
-
-#ifdef DEBUG_RUNTIME
-typedef Printer<BasicPrinter> debug;
-#else
-typedef SinkPrinter debug;
-#endif
-}
 
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
