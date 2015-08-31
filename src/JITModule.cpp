@@ -192,6 +192,21 @@ void load_opengl() {
 #endif
 }
 
+void load_metal() {
+#if defined(__APPLE__)
+    if (have_symbol("MTLCreateSystemDefaultDevice")) {
+        debug(1) << "Metal framework already linked in...\n";
+    } else {
+        debug(1) << "Looking for Metal framework...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/Metal.framework/Metal", &error);
+        user_assert(error.empty()) << "Could not find Metal.framework\n";
+    }
+#else
+    internal_error << "JIT support for Metal only implemented on OS X\n";
+#endif
+}
+
 }
 
 using namespace llvm;
@@ -759,6 +774,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case Metal:
             one_gpu.set_feature(Target::Metal);
             module_name = "metal";
+            load_metal();
             break;
         case CUDA:
             one_gpu.set_feature(Target::CUDA);

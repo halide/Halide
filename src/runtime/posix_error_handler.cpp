@@ -14,7 +14,7 @@ WEAK void default_error_handler(void *user_context, const char *msg) {
         dst[1] = 0;
     }
     halide_print(user_context, buf);
-    exit(1);
+    abort();
 }
 
 WEAK void (*halide_error_handler)(void *, const char *) = default_error_handler;

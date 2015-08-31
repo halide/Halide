@@ -85,6 +85,7 @@ function(halide_project name folder)
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (WIN32)
     set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
+    target_compile_definitions("${name}" PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_link_libraries("${name}" PRIVATE Kernel32)
   endif()
 endfunction(halide_project)
@@ -98,7 +99,11 @@ else()
 endif()
 
 if (NOT MSVC)
-  add_compile_options(-Wall -Wno-unused-function -Wcast-qual -Woverloaded-virtual)
+    add_compile_options(-Wall
+                        -Wno-unused-function
+                        -Wcast-qual
+                        -Woverloaded-virtual
+                        -Wignored-qualifiers)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
@@ -192,4 +197,12 @@ find_package(Doxygen)
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Building Doxygen documentation"
   )
+endif()
+
+option(WITH_UTILS "Build utils" ON)
+if (WITH_UTILS)
+  message(STATUS "Building utils enabled")
+  add_subdirectory(util)
+else()
+  message(STATUS "Building utils disabled")
 endif()

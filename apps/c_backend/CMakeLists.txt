@@ -14,8 +14,6 @@ target_include_directories(${run_target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 if (NOT WIN32)
   target_link_libraries(${run_target} PRIVATE dl pthread)
 endif()
-set_target_properties(${run_target} pipeline PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                      "${CMAKE_CURRENT_BINARY_DIR}")
 
 # HACK: Emitted C code isn't valid C code, just compile with
 # C++ compiler for now
@@ -26,5 +24,6 @@ set_property(SOURCE "${pipeline_c_src}" PROPERTY LANGUAGE CXX)
 add_custom_command(OUTPUT "${pipeline_c_h}" "${pipeline_c_src}"
                           "${pipeline_native_h}" "${pipeline_native_obj}"
                    COMMAND pipeline
+                   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
                    COMMENT "Generating pipeline outputs"
                   )

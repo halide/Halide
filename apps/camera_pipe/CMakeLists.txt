@@ -19,8 +19,6 @@ target_compile_definitions(process PRIVATE ${PNG_DEFINITIONS})
 if (NOT WIN32)
   target_link_libraries(process PRIVATE dl pthread)
 endif()
-set_target_properties(process camera_pipe PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                      "${CMAKE_CURRENT_BINARY_DIR}")
 if (NOT MSVC)
   target_compile_options(process PRIVATE "-std=c++11")
 endif()
@@ -28,4 +26,5 @@ endif()
 # FIXME: Cannot use halide_add_generator_dependency()
 add_custom_command(OUTPUT "${curved_h}" "${curved_obj}"
                    COMMAND camera_pipe 8 0
+                   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
                    COMMENT "Generating curved header and object file")

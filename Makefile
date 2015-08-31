@@ -21,7 +21,7 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
+LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
@@ -103,7 +103,8 @@ JAVASCRIPT_SPIDERMONKEY_LDFLAGS=$(if $(WITH_JAVASCRIPT_SPIDERMONKEY), $(SPIDERMO
 JAVASCRIPT_CXX_FLAGS=$(JAVASCRIPT_V8_CXX_FLAGS) $(JAVASCRIPT_SPIDERMONKEY_CXX_FLAGS)
 JAVASCRIPT_LDFLAGS=$(JAVASCRIPT_V8_LDFLAGS) $(JAVASCRIPT_SPIDERMONKEY_LDFLAGS)
 
-CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wno-invalid-offsetof -Wno-c99-extensions
+CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers
+
 CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual -fPIC $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
@@ -139,24 +140,7 @@ LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
 
 UNAME = $(shell uname)
 
-OPENGL_LDFLAGS =
-ifneq ($(WITH_OPENGL), )
-ifeq ($(UNAME), Linux)
-OPENGL_LDFLAGS = -lX11 -lGL
-endif
-ifeq ($(UNAME), Darwin)
-OPENGL_LDFLAGS = -framework OpenGL -framework AGL
-endif
-endif
-
-METAL_LDFLAGS=
-ifneq ($(WITH_METAL), )
-ifeq ($(UNAME), Darwin)
-METAL_LDFLAGS += -framework Foundation -framework Metal
-endif
-endif
-
-TEST_LDFLAGS=$(LLVM_LDFLAGS) $(OPENGL_LDFLAGS) $(METAL_LDFLAGS)
+TEST_LDFLAGS=$(LLVM_LDFLAGS)
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
