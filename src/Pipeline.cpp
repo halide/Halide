@@ -1133,9 +1133,70 @@ void Pipeline::realize(Realization dst, const Target &t) {
         }
     }
 
+    // We need to make a context for calling the jitted function to
+    // carry the the set of custom handlers. Here's how handlers get
+    // called when running jitted code:
+
+    // There's a single shared module that includes runtime code like
+    // posix_error_handler.cpp. This module is created the first time
+    // you JIT something and is reused for all subsequent runs of
+    // jitted code for any pipeline with the same target.
+
+    // To handle events like printing, tracing, or errors, the jitted
+    // code calls things like halide_error or halide_print in the
+    // shared runtime, which in turn call global function pointer
+    // variables in the shared runtime (e.g. halide_error_handler,
+    // halide_custom_print). When the shared module is created, we set
+    // those variables to point to the global handlers in
+    // JITModule.cpp (e.g. error_handler_handler, print_handler).
+
+    // Those global handlers use the user_context passed in to call
+    // the right handler for this particular pipeline run. The
+    // user_context is just a pointer to a JITUserContext, which is a
+    // member of the JITFuncCallContext which we will declare now:
+
     JITFuncCallContext jit_context(jit_handlers(), contents.ptr->user_context_arg.param);
 
+    // The handlers in the jit_context default to the default handlers
+    // in the runtime of the shared module (e.g. halide_print_impl,
+    // default_trace). As an example, here's what happens with a
+    // halide_print call:
+
+    // 1) Before the pipeline runs, when the single shared runtime
+    // module is created, halide_custom_print in posix_print.cpp is
+    // set to print_handler in JITModule.cpp
+
+    // 2) When the jitted module is compiled, we tell llvm to resolve
+    // calls to halide_print to the halide_print in the shared module
+    // we made.
+
+    // 3) The user calls realize(), and the jitted code calls
+    // halide_print in the shared runtime.
+
+    // 4) halide_print calls the function pointer halide_custom_print,
+    // which is print_handler in JITModule.cpp
+
+    // 5) print_handler casts the user_context to a JITUserContext,
+    // then calls the function pointer member handlers.custom_print,
+    // which is either halide_print_impl in the runtime, or some other
+    // function set by Pipeline::set_custom_print.
+
+    // Errors are slightly different, in that we always override the
+    // default when jitting.  We instead use ErrorBuffer::handler
+    // above (this was set in jit_context's constructor). When
+    // jit-compiled code encounters an error, it calls this handler,
+    // which just records the fact there was an error and what the
+    // message was, then returns back into jitted code. The jitted
+    // code cleans up and returns early with an exit code. We record
+    // this exit status below, then pass it to jit_context.finalize at
+    // the end of this function. If it's non-zero,
+    // jit_context.finalize passes the recorded error message to
+    // halide_runtime_error, which either calls abort() or throws an
+    // exception.
+
+    debug(2) << "Calling jitted function\n";
     int exit_status = call_jit_code(target, args);
+    debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
     if (target.has_feature(Target::Profile)) {

@@ -775,7 +775,7 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
 //     (...<something in JavaScripExecutor.cpp>...)
 // This is due to SpiderMonkey changing the prototypes of APIs based on whether DEBUG
 // is defined or not.
-#define DEBUG
+//#define DEBUG
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "js/Conversions.h"
@@ -787,9 +787,9 @@ namespace JS_SpiderMonkey {
 using namespace JS;
 
 void dump_object(const char *label, JSContext *context, HandleObject obj) {
-    JSIdArray *ids = JS_Enumerate(context, obj);
-    if (ids == NULL) {
-      debug(0) << label << ": getting ids failed.\n";
+    JSMutableHandle<JS::IdVector> ids;
+    if (JS_Enumerate(context, obj, ids)) {
+        debug(0) << label << ": getting ids failed.\n";
     } else {
       uint32_t len = JS_IdArrayLength(context, ids);
       if (len == 0) {
@@ -815,7 +815,6 @@ void dump_object(const char *label, JSContext *context, HandleObject obj) {
           JS_free(context, val_utf8);
           JS_free(context, id_utf8);
       }
-      JS_DestroyIdArray(context, ids);
     }
 }
 
@@ -903,33 +902,6 @@ ExternalArrayType halide_type_to_external_array_type(const Type &t) {
    internal_error << "Unsupported buffer type.\n";
    return kExternalUint8Array;
 }
-
-#if 0
-struct WrappedBuffer {
-    JSContext *context; // TODO: Can we get this from objects?
-    RootedObject buffer;
-    RootedObject host_buffer;
-    RootedObject min_buffer;
-    RootedObject stride_buffer;
-    RootedObject extent_buffer;
-    RootedObject host_array;
-    RootedObject min_array;
-    RootedObject stride_array;
-    RootedObject extent_array;
-
-    WrappedBuffer(JSContext *context, buffer_t *buf) :
-      context(context), buffer(context), host_buffer(context), min_buffer(context), stride_buffer(context), extent_buffer(context),
-        host_array(context), min_array(context), stride_array(context), extent_array(context) {
-    }
-
-    ~WrappedBuffer() {
-        JS_StealArrayBufferContents(context, host_buffer);
-        JS_StealArrayBufferContents(context, min_buffer);
-        JS_StealArrayBufferContents(context, stride_buffer);
-        JS_StealArrayBufferContents(context, extent_buffer);
-    }
-};
-#endif
 
 JSObject *make_array_of_type(JSContext *context, HandleObject array_buffer, ExternalArrayType element_type) {
     internal_assert(JS_IsArrayBufferObject(&*array_buffer)) << "Passed array buffer is not an array buffer object (SpiderMonkey).\n";
@@ -1053,7 +1025,7 @@ Value make_buffer_t(JSContext *context, struct buffer_t *buf, ExternalArrayType 
         RootedObject host_array(context, make_array_of_type(context, host_buffer, element_type));
         JS_DefineProperty(context, buffer, "host", host_array, JSPROP_READONLY | JSPROP_ENUMERATE);
     } else {
-        RootedValue temp_null(context, JSVAL_NULL);
+        RootedValue temp_null(context, NullValue());
         JS_DefineProperty(context, buffer, "host", temp_null, JSPROP_READONLY | JSPROP_ENUMERATE);
     }
 
@@ -1783,8 +1755,7 @@ int run_javascript(const Target &target, const std::string &source, const std::s
     }
 #endif
 
-
-
+    return -1;
 }
 
 }} // close Halide::Internal namespace

@@ -46,7 +46,7 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     }
 
 #define DECLARE_NO_INITMOD(mod)                                         \
-    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool) {             \
+    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
         user_error << "Halide was compiled without support for this target\n"; \
         return NULL;                                                    \
     }                                                                   \
@@ -122,6 +122,23 @@ DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(runtime_api)
+#ifdef WITH_METAL
+DECLARE_CPP_INITMOD(metal)
+#ifdef WITH_ARM
+DECLARE_CPP_INITMOD(metal_objc_arm)
+#else
+DECLARE_NO_INITMOD(metal_objc_arm)
+#endif
+#ifdef WITH_X86
+DECLARE_CPP_INITMOD(metal_objc_x86)
+#else
+DECLARE_NO_INITMOD(metal_objc_x86)
+#endif
+#else
+DECLARE_NO_INITMOD(metal)
+DECLARE_NO_INITMOD(metal_objc_arm)
+DECLARE_NO_INITMOD(metal_objc_x86)
+#endif
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -707,6 +724,15 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
 
         } else if (t.has_feature(Target::Renderscript)) {
             modules.push_back(get_initmod_renderscript(c, bits_64, debug));
+        } else if (t.has_feature(Target::Metal)) {
+            modules.push_back(get_initmod_metal(c, bits_64, debug));
+            if (t.arch == Target::ARM) {
+                modules.push_back(get_initmod_metal_objc_arm(c, bits_64, debug));
+            } else if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_metal_objc_x86(c, bits_64, debug));
+            } else {
+                user_error << "Metal can only be used on ARM or X86 architectures.\n";
+            }
         }
     }
 
