@@ -4,11 +4,9 @@
 extern "C" {
 
 // Will this work on big-endian?
-WEAK float halide_float16_t_to_float(struct halide_float16_t value) {
+WEAK float halide_float16_t_to_float(halide_float16_t bits) {
     // FIXME: Could really do with static_asserts here!
-    //static_assert(sizeof(struct halide_float16_t) == 2,"");
     //static_assert(sizeof(float) == 4, "");
-    uint16_t bits = value.data;
     uint32_t signMask = (bits & 0x8000) << 16;
     union {
         float asFloat;
@@ -68,10 +66,10 @@ WEAK float halide_float16_t_to_float(struct halide_float16_t value) {
     return result.asFloat;
 }
 
-WEAK double halide_float16_t_to_double(struct halide_float16_t value) {
+WEAK double halide_float16_t_to_double(halide_float16_t bits) {
     // Just use native support for converting between float
     // and double
-    float valueAsFloat = halide_float16_t_to_float(value);
+    float valueAsFloat = halide_float16_t_to_float(bits);
     return (double) valueAsFloat;
 }
 
