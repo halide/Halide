@@ -78,7 +78,7 @@ public:
         return *this;
     }
 
-    Printer &operator<<(const struct halide_float16_t arg) {
+    Printer & write_halide_float16_t(const halide_float16_t arg) {
         double value = halide_float16_t_to_double(arg);
         dst = halide_double_to_string(dst, end, value, 1);
         return *this;
