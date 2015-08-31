@@ -3,10 +3,7 @@
 
 extern "C" {
 
-// Note this function assumes little endian
-#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-#error Only little endian supported
-#endif
+// Will this work on big-endian?
 WEAK float halide_float16_t_to_float(struct halide_float16_t value) {
     // FIXME: Could really do with static_asserts here!
     //static_assert(sizeof(struct halide_float16_t) == 2,"");
@@ -35,29 +32,37 @@ WEAK float halide_float16_t_to_float(struct halide_float16_t value) {
        uint32_t newSignificand = significandBits;
        // Is it safe to use this built-in?
        int leadingZeros =  __builtin_clz(significandBits);
-       // Chop off the leading bit which isn't stored
-       // in the normalised number
-       newSignificand <<= (leadingZeros + 1);
-       // Now move bits into the correct position
-       newSignificand >>= 9;
-       // Compute the new exponent for the normalised form
        int setMSB = 31 - leadingZeros;
-       int newExponent = exponent - (setMSB + 1);
+       // Zero the leading bit which isn't represented in the IEEE-754 2008 binary32 normalised format
+       newSignificand &= ~(1 << setMSB);
+       // Now move bits into the correct position
+       newSignificand <<= (23 - setMSB);
+       // Compute the new exponent for the normalised form
+       int newExponent = -24 + setMSB; // (-14 - (10 - setMSB))
        uint32_t reEncodedExponent = newExponent + 127;
        result.asUInt = signMask | (reEncodedExponent << 23) | newSignificand;
 
     } else {
         // Normalised number, NaN, zero or infinity.
         // Here we can just zero extended the significand
-        // and re-encode the exponent.
+        // and re-encode the exponent as appropriate
         //
         // In binary16 the stored significand is 10 bits and
         // in binary32 the stored significant is 23 bits so
         // we need to shift left by 13 bits.
         significandBits <<= 13;
 
-        // binary32 exponent is stored as bias 127
-        uint32_t reEncodedExponent = exponent + 127;
+        uint32_t reEncodedExponent;
+        if (exponent == -15) {
+            // Zero
+            reEncodedExponent = 0x00;
+        } else if (exponent == 16) {
+            // NaN or Infinity
+            reEncodedExponent = 0xff;
+        } else {
+            // Normal number (exponent stored as bias 127)
+            reEncodedExponent = exponent + 127;
+        }
         result.asUInt = signMask | (reEncodedExponent << 23) | significandBits;
     }
     return result.asFloat;
