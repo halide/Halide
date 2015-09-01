@@ -250,6 +250,7 @@ SOURCE_FILES = \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
+  Expr.cpp \
   ExprUsesVar.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -460,6 +461,7 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   fake_thread_pool \
+  float16_t \
   gcd_thread_pool \
   gpu_device_selection \
   ios_io \
@@ -716,15 +718,37 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
 
+# Standalone Halide runtime for pure runtime tests
+HALIDE_DEBUG_RUNTIME := $(FILTERS_DIR)/halide_runtime.debug.o
+$(HALIDE_DEBUG_RUNTIME): $(BIN_DIR)/runtime.generator
+	@mkdir -p $(FILTERS_DIR)
+	$(LD_PATH_SETUP) $(BIN_DIR)/runtime.generator -r $(notdir $@) -o $(dir $@) target=host-debug
+
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -I$(SRC_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread -ldl -lz -o $@
 
+# We follow the convention that a test source file that starts with the prefix
+# ``runtime_`` is a pure runtime test (links against Halide runtime and not
+# libHalide).  The rules for these tests appear before the version of the rule
+# for conventional tests that link against libHalide so that those rules take
+# precedence
+
+# Pure runtime correctness tests
+$(BIN_DIR)/correctness_runtime_%: $(ROOT_DIR)/test/correctness/runtime_%.cpp $(HALIDE_DEBUG_RUNTIME) $(INCLUDE_DIR)/HalideRuntime.h
+	$(CXX) $(CXX_FLAGS) $< -I$(INCLUDE_DIR) $(HALIDE_DEBUG_RUNTIME) -lpthread -ldl -lz -o $@
+
+# Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread -ldl -lz -o $@
 
+# Pure runtime error tests
+$(BIN_DIR)/error_runtime_%: $(ROOT_DIR)/test/error/runtime_%.cpp $(HALIDE_DEBUG_RUNTIME) $(INCLUDE_DIR)/HalideRuntime.h
+	$(CXX) $(CXX_FLAGS) $< -I$(INCLUDE_DIR) $(HALIDE_DEBUG_RUNTIME)  -lpthread -ldl -lz -o $@
+
+# Error tests that link against libHalide
 $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread -ldl -lz -o $@
 
@@ -1094,3 +1118,7 @@ distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp
 	$(CXX) $(OPTIMIZE) -std=c++11 $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -o $@
+
+# No registered generators so this can only generate a standalone runtime
+$(BIN_DIR)/runtime.generator: $(ROOT_DIR)/tools/GenGen.cpp $(BIN_DIR)/libHalide.so
+	$(CXX) $(CXX_FLAGS) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide -lpthread -ldl -lz -o $@

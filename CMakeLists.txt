@@ -154,6 +154,7 @@ else()
 endif()
 
 add_subdirectory(src)
+add_subdirectory(tools)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
   message(STATUS "Building tests enabled")
