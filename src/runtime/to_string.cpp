@@ -242,5 +242,4 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
     *buf_ptr = '0';
     return halide_string_to_string(dst, end, buf_ptr);
 }
-
 }

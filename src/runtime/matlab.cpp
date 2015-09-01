@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "printer.h"
 
 #define INLINE inline __attribute__((always_inline))
 

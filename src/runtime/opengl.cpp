@@ -1,6 +1,7 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
 #include "HalideRuntimeOpenGL.h"
+#include "printer.h"
 #include "mini_opengl.h"
 
 // This constant is used to indicate that the application will take

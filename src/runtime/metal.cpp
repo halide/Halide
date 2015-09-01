@@ -2,6 +2,7 @@
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
 #include "HalideRuntimeMetal.h"
+#include "printer.h"
 
 #include "cuda_opencl_shared.h"
 #include "objc_support.h"

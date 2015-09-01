@@ -1,5 +1,6 @@
 #include "runtime_internal.h"
 #include "HalideRuntime.h"
+#include "printer.h"
 #include "scoped_mutex_lock.h"
 
 // Note: The profiler thread may out-live any valid user_context, or
