@@ -1,6 +1,7 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
 #include "HalideRuntimeCuda.h"
+#include "printer.h"
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
 
