@@ -184,8 +184,9 @@ struct Expr : public Internal::IRHandle {
     EXPORT Expr(int x) : IRHandle(Internal::IntImm::make(x)) {
     }
 
-    /** Make an expression representing a const 16-bit float as a
-     * cast of a (i.e. a FloatImm).*/
+    /** Make an expression representing a const 16-bit float (IEEE-754 2008
+     * binary32, also know as "half"), given a float16_t.  This is internally
+     * represented as a cast of a FloatImm. */
     EXPORT Expr(float16_t x);
 
     /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
