@@ -742,23 +742,22 @@ extern void halide_profiler_reset();
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
-/// \name halide_float16_t type and associated functions
-///{@
-/**
- * This type represents the bits for the IEEE-754 2008 binary16 floating point
- * format (also known as "half")
- */
-typedef uint16_t halide_float16_t;
+/// \name "Float16" functions
+/// These functions operate of bits (``uint16_t``) representing a half
+/// precision floating point number (IEEE-754 2008 binary16).
+//{@
 
-/** Read a ``halide_float16_t`` and return the float that represents the same value */
-extern float halide_float16_t_to_float(halide_float16_t);
+/** Read bits representing a half precision floating point number and return
+ *  the float that represents the same value */
+extern float halide_float16_bits_to_float(uint16_t);
 
-/** Read a ``halide_float16_t`` and return the double that represents the same value */
-extern double halide_float16_t_to_double(halide_float16_t);
+/** Read bits representing a half precision floating point number and return
+ *  the double that represents the same value */
+extern double halide_float16_bits_to_double(uint16_t);
 
 // TODO: Conversion functions to half
 
-///@}
+//@}
 
 #ifdef __cplusplus
 } // End extern "C"

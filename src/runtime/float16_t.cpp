@@ -4,7 +4,7 @@
 extern "C" {
 
 // Will this work on big-endian?
-WEAK float halide_float16_t_to_float(halide_float16_t bits) {
+WEAK float halide_float16_bits_to_float(uint16_t bits) {
     // FIXME: Could really do with static_asserts here!
     //static_assert(sizeof(float) == 4, "");
     uint32_t signMask = (bits & 0x8000) << 16;
@@ -66,10 +66,10 @@ WEAK float halide_float16_t_to_float(halide_float16_t bits) {
     return result.asFloat;
 }
 
-WEAK double halide_float16_t_to_double(halide_float16_t bits) {
+WEAK double halide_float16_bits_to_double(uint16_t bits) {
     // Just use native support for converting between float
     // and double
-    float valueAsFloat = halide_float16_t_to_float(bits);
+    float valueAsFloat = halide_float16_bits_to_float(bits);
     return (double) valueAsFloat;
 }
 

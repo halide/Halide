@@ -78,8 +78,8 @@ public:
         return *this;
     }
 
-    Printer & write_halide_float16_t(const halide_float16_t arg) {
-        double value = halide_float16_t_to_double(arg);
+    Printer & write_float16_from_bits(const uint16_t arg) {
+        double value = halide_float16_bits_to_double(arg);
         dst = halide_double_to_string(dst, end, value, 1);
         return *this;
     }

@@ -96,17 +96,17 @@ int main() {
              "size of half array doesn't match double array");
 
     for (unsigned int index=0; index < sizeof(inputs)/sizeof(uint16_t); ++index) {
-        halide_float16_t in = inputs[index];
+        uint16_t in = inputs[index];
         union {
             float asFloat;
             uint32_t asUInt;
         } outF;
-        outF.asFloat = halide_float16_t_to_float(in);
+        outF.asFloat = halide_float16_bits_to_float(in);
         union {
             double asDouble;
             uint64_t asUInt;
         } outD;
-        outD.asDouble = halide_float16_t_to_double(in);
+        outD.asDouble = halide_float16_bits_to_double(in);
 
         union {
           float asFloat;
