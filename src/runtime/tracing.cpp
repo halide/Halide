@@ -154,7 +154,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
                     } else if (print_bits == 16) {
-                        ss.write_halide_float16_t( ((halide_float16_t *)(e->value))[i]);
+                        ss.write_float16_from_bits( ((uint16_t *)(e->value))[i]);
                     } else {
                         ss << ((double *)(e->value))[i];
                     }
