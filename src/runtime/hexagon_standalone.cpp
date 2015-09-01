@@ -1,5 +1,6 @@
 #include "HalideRuntime.h"
 #include <stdio.h>
+#include "printer.h"
 #ifdef __cplusplus
 extern "C" {
   WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
