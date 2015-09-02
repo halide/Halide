@@ -1,6 +1,7 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
 #include "HalideRuntime.h"
+#include "printer.h"
 #include "scoped_mutex_lock.h"
 
 extern "C" {

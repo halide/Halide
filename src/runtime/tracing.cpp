@@ -1,5 +1,6 @@
 #include "runtime_internal.h"
 #include "HalideRuntime.h"
+#include "printer.h"
 #include "scoped_spin_lock.h"
 
 extern "C" {
@@ -149,9 +150,11 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
                         ss << ((uint64_t *)(e->value))[i];
                     }
                 } else if (e->type_code == 2) {
-                    halide_assert(user_context, print_bits >= 32 && "Tracing a bad type");
+                    halide_assert(user_context, print_bits >= 16 && "Tracing a bad type");
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
+                    } else if (print_bits == 16) {
+                        ss.write_float16_from_bits( ((uint16_t *)(e->value))[i]);
                     } else {
                         ss << ((double *)(e->value))[i];
                     }

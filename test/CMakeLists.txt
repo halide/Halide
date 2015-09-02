@@ -27,6 +27,17 @@ else()
   message(WARNING "Internal tests disabled")
 endif()
 
+# Generate the Halide runtime object file used by pure runtime tests
+set(HALIDE_RUNTIME_DIR "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build")
+set(HALIDE_RUNTIME_FILE_NAME "halide_runtime.debug${CMAKE_CXX_OUTPUT_EXTENSION}")
+set(HALIDE_RUNTIME_FILE_PATH "${HALIDE_RUNTIME_DIR}/${HALIDE_RUNTIME_FILE_NAME}")
+add_custom_command(OUTPUT "${HALIDE_RUNTIME_FILE_PATH}"
+                   COMMAND runtime.generator
+                           -r "${HALIDE_RUNTIME_FILE_NAME}"
+                           -o "${HALIDE_RUNTIME_DIR}"
+                           "target=host-debug"
+                  )
+
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
   if (WIN32)
@@ -34,7 +45,19 @@ function(tests folder)
   endif()
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
-    halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
+    if (${name} MATCHES "^runtime_")
+      # By convention test names that start with the ``runtime_`` prefix
+      # are treated as pure runtime tests so the test will not be linked against
+      # libHalide and instead is linked against's Halide's generated runtime
+      add_executable("${folder}_${name}" "${folder}/${file}" "${HALIDE_RUNTIME_FILE_PATH}")
+      target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
+      if (NOT WIN32)
+        target_link_libraries("${folder}_${name}" dl pthread z)
+      endif()
+    else()
+      # Test links against libHalide
+      halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
+    endif()
   endforeach()
 endfunction(tests)
 
