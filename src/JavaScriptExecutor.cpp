@@ -768,6 +768,10 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
 
 #if WITH_JAVASCRIPT_SPIDERMONKEY
 
+// SpiderMonkey headers do not compile with -Werror and -Wall
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winvalid-offsetof"
+
 // If SpiderMonkey was compiled in debug mode, DEBUG must be defined before including
 // its headers or else there will be link errors. E.g.:
 //     Undefined symbols for architecture x86_64:
@@ -780,6 +784,8 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
 #include "jsfriendapi.h"
 #include "js/Conversions.h"
 
+#pragma clang diagnostic pop
+
 namespace Halide { namespace Internal {
 
 namespace JS_SpiderMonkey {
@@ -787,34 +793,32 @@ namespace JS_SpiderMonkey {
 using namespace JS;
 
 void dump_object(const char *label, JSContext *context, HandleObject obj) {
-    JSMutableHandle<JS::IdVector> ids;
-    if (JS_Enumerate(context, obj, ids)) {
+  Rooted<IdVector> ids(context, IdVector(context));
+    if (JS_Enumerate(context, obj, &ids)) {
         debug(0) << label << ": getting ids failed.\n";
     } else {
-      uint32_t len = JS_IdArrayLength(context, ids);
-      if (len == 0) {
-          debug(0) << label << ": object is empty.\n";
-      }
-      for (uint32_t i = 0; i < len; i++) {
-          jsid cur_id = JS_IdArrayGet(context, ids, i);
-          RootedId cur_rooted_id(context, cur_id);
-          RootedValue id_val(context);
-          JS_IdToValue(context, cur_id, &id_val);
+        if (ids.length() == 0) {
+            debug(0) << label << ": object is empty.\n";
+        }
+        for (uint32_t i = 0; i < ids.length(); i++) {
+            RootedId cur_rooted_id(context, ids[i]);
+            RootedValue id_val(context);
+            JS_IdToValue(context, ids[i], &id_val);
 
-          RootedValue val(context);
-          JS_GetPropertyById(context, obj, cur_rooted_id, &val);
+            RootedValue val(context);
+            JS_GetPropertyById(context, obj, cur_rooted_id, &val);
 
-          RootedString id_str(context, JS_ValueToSource(context, id_val));
-          RootedString val_str(context, JS_ValueToSource(context, val));
+            RootedString id_str(context, JS_ValueToSource(context, id_val));
+            RootedString val_str(context, JS_ValueToSource(context, val));
 
-          char *id_utf8 = JS_EncodeStringToUTF8(context, id_str);
-          char *val_utf8 = JS_EncodeStringToUTF8(context, val_str);
+            char *id_utf8 = JS_EncodeStringToUTF8(context, id_str);
+            char *val_utf8 = JS_EncodeStringToUTF8(context, val_str);
 
-          // debug(0) << label << ": id is " << id_utf8 << " val is " << val_utf8 << "\n";
+            // debug(0) << label << ": id is " << id_utf8 << " val is " << val_utf8 << "\n";
 
-          JS_free(context, val_utf8);
-          JS_free(context, id_utf8);
-      }
+            JS_free(context, val_utf8);
+            JS_free(context, id_utf8);
+        }
     }
 }
 
