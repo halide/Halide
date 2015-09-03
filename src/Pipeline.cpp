@@ -188,6 +188,13 @@ void Pipeline::compile_to_bitcode(const string &filename,
     compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
 }
 
+void Pipeline::compile_to_llvm_assembly(const string &filename,
+                                        const vector<Argument> &args,
+                                        const string &fn_name,
+                                        const Target &target) {
+    compile_module_to_llvm_assembly(compile_to_module(args, fn_name, target), filename);
+}
+
 void Pipeline::compile_to_object(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,
