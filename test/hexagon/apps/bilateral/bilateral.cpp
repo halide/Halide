@@ -66,8 +66,22 @@ int main(int argc, char **argv) {
     args[1] = gauss_LUT;
     args[2] = range_LUT;
 
-    //bilateral9x9.compile_to_assembly("bilateral_gen.s", args, target);
-    bilateral9x9.compile_to_file("bilateral_halide", args, target);
+#ifdef BITCODE
+    bilateral9x9.compile_to_bitcode("bilateral.bc", args, target);
+#endif
+#ifdef ASSEMBLY
+    bilateral9x9.compile_to_assembly("bilateral.s", args, target);
+#endif
+#ifdef STMT
+    bilateral9x9.compile_to_lowered_stmt("bilateral.html", args, HTML);
+#endif
+#ifdef DOC
+    bilateral9x9.compile_to_c("bilateral.c", args, "bilateral_halide", target);
+#endif
+#ifdef RUN
+    bilateral9x9.compile_to_file("bilateral", args, target);
+#endif
+
     printf("Done\n");
     return 0;
 }
