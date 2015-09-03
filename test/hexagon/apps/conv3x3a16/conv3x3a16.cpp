@@ -28,9 +28,9 @@ int main(int argc, char **argv) {
 
   Halide::Func conv3x3;
   conv3x3(x, y) = cast<uint8_t>
-    (clamp(sum(In(x+r.x, y+r.y) * mask(r.x, r.y)) >> 4, 0, 255));
+    (clamp(sum(cast<int16_t>(In(x+r.x, y+r.y)) * cast<int16_t>( mask(r.x, r.y))) >> 4, 0, 255));
 
-//conv3x3.vectorize(x,128);
+  conv3x3.vectorize(x, 1 << LOG2VLEN);
 
   std::vector<Argument> args(1);
   args[0]  = In;

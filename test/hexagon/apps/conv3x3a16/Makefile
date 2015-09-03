@@ -14,7 +14,8 @@ endif
 TIMING="--timing"
 ARG12="1920 1080"
 
-CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
+GDB=
+CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
@@ -25,7 +26,7 @@ CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 conv3x3a16.o conv3x3a16.h: conv3x3a16.cpp
 	${CLANG_CPP} conv3x3a16.cpp -g  -o conv3x3a16.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./conv3x3a16.generate.out
+	${GDB} ./conv3x3a16.generate.out
 
 
 conv3x3a16_run.o: conv3x3a16.o conv3x3a16.h conv3x3a16_run.cpp
