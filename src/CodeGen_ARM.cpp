@@ -1261,4 +1261,9 @@ int CodeGen_ARM::native_vector_bits() const {
     return 128;
 }
 
+bool CodeGen_ARM::target_needs_software_float16_cast(Type t, bool isDestinationType) const {
+    // TODO: Return true on targets that need it
+    return false;
+}
+
 }}

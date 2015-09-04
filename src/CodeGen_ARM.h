@@ -70,6 +70,8 @@ protected:
     bool neon_intrinsics_disabled() {
         return target.has_feature(Target::NoNEON);
     }
+
+    bool target_needs_software_float16_cast(Type t, bool isDestinationType) const override;
 };
 
 }}
