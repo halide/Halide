@@ -78,6 +78,8 @@ protected:
     llvm::Function *fetch_SetElement_func(Type type);
     std::vector<llvm::Value *> add_x_y_c_args(Expr name, Expr x, Expr y,
                                               Expr c);
+
+    bool target_needs_software_float16_cast(Type t, bool isDestinationType) const override;
 private:
     // Metadata records keep track of all Renderscript kernels.
     llvm::NamedMDNode *rs_export_foreach_name;

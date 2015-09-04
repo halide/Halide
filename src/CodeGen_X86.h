@@ -47,6 +47,8 @@ protected:
     void visit(const NE *);
     void visit(const Select *);
     // @}
+
+    bool target_needs_software_float16_cast(Type t, bool isDestinationType) const override;
 };
 
 }}

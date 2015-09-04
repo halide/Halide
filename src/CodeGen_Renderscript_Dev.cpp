@@ -611,5 +611,13 @@ void CodeGen_Renderscript_Dev::dump() { module->dump(); }
 std::string CodeGen_Renderscript_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
+
+bool CodeGen_Renderscript_Dev::target_needs_software_float16_cast(Type t, bool isDestinationType) const {
+    // FIXME: Not sure what this needs to be
+    // so pretend that we have support so that
+    // compilation will fail if an attempt is made to use this feature
+    return false;
+}
+
 }
 }
