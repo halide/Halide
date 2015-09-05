@@ -41,4 +41,11 @@ int CodeGen_MIPS::native_vector_bits() const {
     return 128;
 }
 
+
+bool CodeGen_MIPS::target_needs_software_float16_cast(Type t, bool isDestinationType) const {
+    // FIXME: Not sure if this right. I don't
+    // think any MIPS architecture has half precision
+    return true;
+}
+
 }}

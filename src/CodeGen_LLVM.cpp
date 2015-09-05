@@ -1195,6 +1195,36 @@ void CodeGen_LLVM::visit(const Cast *op) {
         value = builder->CreateUIToFP(value, llvm_dst);
     } else {
         internal_assert(src.is_float() && dst.is_float());
+
+        // Use software implementation for converting half to higher precision
+        // float when operating on scalar types. If the target doesn't support
+        // this natively LLVM will emit a call to ``__gnu_h2f_ieee()`` which isn't
+        // available as we don't use compiler-rt so we use our own
+        // implementation.
+        if (src.bits == 16 && dst.bits > 16 &&
+            target_needs_software_float16_cast(dst,/*isDestinationType=*/true)) {
+            user_assert(src.width == 1 && src.width == dst.width) <<
+                "The target requires a software implementation of float16_t conversion"
+                " but vectorization has been requested which is not possible\n";
+            llvm::Function* convFunc = nullptr;
+            if (dst.bits == 32) {
+                convFunc = module->getFunction("halide_float16_bits_to_float");
+                debug(1) << "Using software implementation to convert half to float\n";
+            } else {
+                internal_assert(dst.bits == 64) << "Expected destination to be f64" <<
+                                                   " but was width " << dst.bits << "\n";
+                convFunc = module->getFunction("halide_float16_bits_to_double");
+                debug(1) << "Using software implementation to convert half to double\n";
+            }
+            internal_assert(convFunc != nullptr) << "internal runtime function missing\n";
+
+            // Need to bitcast to treat bits of half as uint16_t to match
+            // halide_float16_bits_to*() function signature
+            llvm::Value* bitCastResult = builder->CreateBitCast(value, i16);
+            value = builder->CreateCall(convFunc, {bitCastResult});
+            return;
+        }
+
         // Float widening or narrowing
         value = builder->CreateFPCast(value, llvm_dst);
     }

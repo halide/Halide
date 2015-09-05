@@ -1261,4 +1261,13 @@ int CodeGen_ARM::native_vector_bits() const {
     return 128;
 }
 
+bool CodeGen_ARM::target_needs_software_float16_cast(Type t, bool isDestinationType) const {
+    // TODO: This needs testing!
+    if (target.bits == 64) {
+        // AArch64 has native support (FCVT)
+        return false;
+    }
+    return true;
+}
+
 }}
