@@ -604,6 +604,8 @@ endif
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
 
+CXX_WARNING_FLAGS += $(if $(WITH_HEXAGON), -DHEXAGON_TYPES=1, )
+
 # -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.hexagon_%_64.ll: src/runtime/hexagon_%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
