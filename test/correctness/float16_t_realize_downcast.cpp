@@ -308,7 +308,7 @@ void initExpectedResults() {
         floatToFloat16Results.push_back(std::make_pair(-65520.0f, resultFromFloat));
         doubleToFloat16Results.push_back(std::make_pair(-65520.0, resultFromFloat));
     }
-    
+
     // 66519.9 is slightly less than 66520 so RNE and RNA should round toward
     // zero
     {
@@ -618,7 +618,6 @@ void testFloatAndDoubleConversion(Target host, Result modes, int vectorizeWidth=
     } else {
         printf("Skipping RD\n");
     }
-    
 }
 
 int main(){
@@ -642,7 +641,7 @@ int main(){
     }
     // TODO: Add code for other architectures to disable their native float16
     // conversion support if they have it
-    
+
     // Test all rounding modes
     Result roundingModesToTest = Result::all(0x0001);
     testFloatAndDoubleConversion(host, roundingModesToTest);
