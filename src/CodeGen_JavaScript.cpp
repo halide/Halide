@@ -180,16 +180,7 @@ const string preamble =
     "                    total_size = buf.extent[i] * stride;\n"
     "                }\n"
     "             }\n"
-    "             // TODO: get type passed through so this can be right.\n"
-    "             if (buf.elem_size == 8) {\n"
-    "                 buf.host = new Uint8Array(total_size);\n"
-    "             } else if (buf.elem_size == 16) {\n"
-    "                 buf.host = new Uint16Array(total_size);\n"
-    "             } else if (buf.elem_size == 32) {\n"
-    "                 buf.host = new Float32Array(total_size);\n"
-    "             } else if (buf.elem_size == 64) {\n"
-    "                 buf.host = new Float64Array(total_size);\n"
-    "             }\n"
+    "             buf.host = new buf.array_constructor(total_size);\n"
     "        }\n"
     "        halide_memoization_cache_lookup = function(user_context, cache_key, size, computed_bounds, tuple_count, tuple_buffers) {\n"
     "            var key = { cache_key: cache_key, computed_bounds: computed_bounds };\n"
@@ -1179,8 +1170,9 @@ void CodeGen_JavaScript::visit(const Call *op) {
             }
             stream << "],\n";
             do_indent();
-            stream << "elem_size: " << args[1] << ",\n";
+            stream << "elem_size: " << op->args[1].type().bytes() << ",\n";
             do_indent();
+            stream << "array_constructor: " << javascript_type_array_name_fragment(op->args[1].type()) << "Array,\n";
             stream << "host_dirty: false,\n";
             do_indent();
             stream << "dev_dirty: false,\n";
