@@ -333,7 +333,7 @@ public:
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
                         Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                              {null_handle, input.output_types()[k].bytes()},
+                                              {null_handle, make_zero(input.output_types()[k])},
                                               Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(Handle(), name));
@@ -361,7 +361,7 @@ public:
             for (int j = 0; j < func.outputs(); j++) {
                 vector<Expr> output_buffer_t_args(2);
                 output_buffer_t_args[0] = null_handle;
-                output_buffer_t_args[1] = func.output_types()[j].bytes();
+                output_buffer_t_args[1] = make_zero(func.output_types()[j]);
                 for (size_t k = 0; k < func.args().size(); k++) {
                     const string &arg = func.args()[k];
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;

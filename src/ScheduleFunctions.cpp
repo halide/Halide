@@ -412,7 +412,7 @@ Stmt build_produce(Function f) {
                 host_ptr = Call::make(Handle(), Call::address_of, {host_ptr}, Call::Intrinsic);
 
                 buffer_args[0] = host_ptr;
-                buffer_args[1] = f.output_types()[j].bytes();
+                buffer_args[1] = make_zero(f.output_types()[j]);
                 for (int k = 0; k < f.dimensions(); k++) {
                     string var = stage_name + f.args()[k];
                     Expr min = Variable::make(Int(32), var + ".min");
