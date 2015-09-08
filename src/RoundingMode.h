@@ -12,5 +12,9 @@ enum class RoundingMode {
     Undefined ///< Not defined. This is not a real rounding mode.
 };
 
+namespace Internal {
+    const char* rounding_mode_to_string(RoundingMode rm);
+}
+
 }
 #endif

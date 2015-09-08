@@ -191,6 +191,9 @@ private:
 
         stream << open_span("Matched");
         stream << open_span("Type") << op->type << close_span();
+        if (op->roundingMode != RoundingMode::Undefined) {
+            stream << "_" << rounding_mode_to_string(op->roundingMode);
+        }
         stream << "(";
         stream << close_span();
         print(op->value);

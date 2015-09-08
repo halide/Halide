@@ -419,6 +419,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
+  RoundingMode.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp

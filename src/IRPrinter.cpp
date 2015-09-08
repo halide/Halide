@@ -251,7 +251,12 @@ void IRPrinter::visit(const StringImm *op) {
 }
 
 void IRPrinter::visit(const Cast *op) {
-    stream << op->type << '(';
+    stream << op->type;
+
+    if (op->roundingMode != RoundingMode::Undefined) {
+        stream << "_" << rounding_mode_to_string(op->roundingMode);
+    }
+    stream << '(';
     print(op->value);
     stream << ')';
 }
