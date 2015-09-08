@@ -222,6 +222,9 @@ void testFloatAndDoubleConversion(Target host, int vectorizeWidth=0) {
         Var x, y;
         Func upCast;
         upCast(x, y) = cast<double>(tenByTen.first(x, y));
+        if (vectorizeWidth) {
+            upCast.vectorize(x, vectorizeWidth);
+        }
         Image<double> result = upCast.realize( { tenByTen.first.width(),
                                                  tenByTen.first.height()},
                                                host);
@@ -262,7 +265,24 @@ int main() {
         // x86-64 f16c intrinsics have 4 and 8 wide versions just try 4
         // for now.
         // FIXME: Is there a way to test that we vectorized correctly?
+        printf("Trying vectorization width 4\n");
         testFloatAndDoubleConversion(host, /*vectorizeWidth=*/4);
+
+        // Pick a width that isn't the native size
+        // FIXME: This produces wrong results!
+        //testFloatAndDoubleConversion(host, /*vectorizeWidth=*/3);
+
+        printf("Trying vectorization width 8\n");
+        testFloatAndDoubleConversion(host, /*vectorizeWidth=*/8);
+
+        // Pick a width that isn't the native size
+        printf("Trying vectorization width 10\n");
+        testFloatAndDoubleConversion(host, /*vectorizeWidth=*/10);
+
+        // Make sure when on F16C we generate correct code even when we don't
+        // ask to vectorize
+        printf("Trying non vectorized\n");
+        testFloatAndDoubleConversion(host, /*vectorizeWidth=*/0);
     } else {
         printf("No target specific float16 support available on target \"%s\"\n",
                host.to_string().c_str());

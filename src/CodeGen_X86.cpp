@@ -306,10 +306,139 @@ void CodeGen_X86::visit(const Select *op) {
 
 }
 
+bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
+    Type destTy = op->type;
+    Type srcTy = op->value.type();
+
+    // half -> single/double
+    if (destTy.is_float() && srcTy.is_float() && srcTy.bits == 16 && destTy.bits > 16) {
+        internal_assert(destTy.bits == 64 || destTy.bits == 32) << "Unexpected float type\n";
+
+        if (target_needs_software_float16_cast(destTy, /*isDestinationType=*/true)) {
+            // Let parent class codegen calling software implementation of cast
+            return false;
+        }
+
+        // Use @llvm.x86.vcvtph2ps.128 or @llvm.x86.vcvtph2ps.256 to handle the
+        // conversion
+        internal_assert(srcTy.width == destTy.width) << "Source and destination widths must match\n";
+        if (srcTy.width <= 4) {
+            // Use @llvm.x86.vcvtph2ps.128. This returns <4 x float>
+            // FIXME: Codegen using other widths (e.g. 3) seems to give wrong
+            // results explicitly disable until this can be investigated.
+            internal_assert(srcTy.width == 4 || srcTy.width == 1) <<
+              "FIXME: Doing codegen with width less than four produces incorrect results\n";
+
+            // Codegen argument
+            llvm::Value* valueToCast = codegen(op->value);
+
+            // Note with width is 8 here because that is what is expected by
+            // the instrinsic. Only the first 4 lanes matter here.
+            // Slice to correct width
+            if (srcTy.width == 1) {
+                // Handle scalar value by inserting as the first element
+                // in a vector
+                internal_assert(!(valueToCast->getType()->isVectorTy()));
+                // FIXME: Should we make this type a class member?
+                // FIXME: Leak?
+                llvm::Type* f16x8 = VectorType::get(f16, 8);
+                Constant* zeroHalfVectorSplat = ConstantFP::get(f16x8, 0.0);
+                valueToCast = builder->CreateInsertElement(/*Vec=*/zeroHalfVectorSplat,
+                                                           /*NewElt=*/valueToCast,
+                                                           /*Idx=*/ConstantInt::get(i32, 0)
+                                                          );
+            } else {
+                // Handle vectorized inputs by extending to correct width.
+                // Introduced undef lanes will be removed later.
+                valueToCast = slice_vector(valueToCast, /*start=*/0, /*size=*/8);
+            }
+
+            // Cast argument to <8 x i16> as expected by the intrinsic
+            valueToCast = builder->CreateBitCast(valueToCast, i16x8);
+
+            // Can't use call_intrin() because it asserts the number of elements
+            // in the source and dest match so call it manually.
+            llvm::Function* fn = module->getFunction("llvm.x86.vcvtph2ps.128");
+            internal_assert(fn != nullptr) << "Could not find intrinsic\n";
+
+            llvm::Value* result = builder->CreateCall(fn, { valueToCast });
+
+            if (destTy.bits == 64) {
+                // Cast the single to double
+                result = builder->CreateFPExt(result, f64x4);
+            }
+
+            if (srcTy.width == 1) {
+                // Handling a scalar value so extract the element we want
+                result = builder->CreateExtractElement(/*Vec=*/result,
+                                                       /*Idx=*/ConstantInt::get(i32, 0)
+                                                      );
+            } else {
+                // Remove undef lanes that might have been introduced by first
+                // call to slice_vector()
+                result = slice_vector(result, /*start=*/0, /*size=*/destTy.width);
+            }
+
+            value = result;
+        } else {
+            // Use @llvm.x86.vcvtph2ps.256 this results <8x float>
+            // The number of elements in the argument and result match
+            // so we can use call_intrin() here.
+
+            // Codegen the argument
+            llvm::Value* valueToCast = codegen(op->value);
+            // Bitcast the argument to the right type
+            // e.g. <8 x half> ==> <8 x i16>
+            int numElements = 0;
+            if (llvm::VectorType* vecTy = dyn_cast<VectorType>(valueToCast->getType())) {
+                numElements = vecTy->getNumElements();
+            } else {
+                internal_error << "Expecting vector type\n";
+            }
+            // FIXME: Leak?
+            llvm::Type* newVectorType = VectorType::get(i16, numElements);
+            valueToCast = builder->CreateBitCast(valueToCast, newVectorType);
+
+
+            // FIXME: destTy isn't really the return type when working with
+            // doubles but this doesn't matter as long as the intrinsic is
+            // already declared in x86.ll
+            llvm::Value* result = call_intrin(/*result_type=*/llvm_type_of(destTy),
+                                              /*intrin_vector_width=*/8,
+                                              /*name=*/"llvm.x86.vcvtph2ps.256",
+                                              /*arg_values=*/{ valueToCast }
+                                             );
+
+            if (destTy.bits == 64) {
+                // Cast the single to double. It's width is not necessarily a
+                // fp64x8 so we need to construct a new type representing a
+                // vector of the right number of doubles
+                // FIXME: Leak?
+                llvm::Type* newDblVectorType = VectorType::get(f64, destTy.width);
+                result = builder->CreateFPExt(result, newDblVectorType);
+            }
+
+            value = result;
+        }
+        return true;
+    }
+
+    // single/double -> half
+    // TODO
+
+    // Not a half conversion
+    return false;
+}
+
 void CodeGen_X86::visit(const Cast *op) {
+    if (try_visit_float16_cast(op)) {
+        // Doing cast using a Float16 which has already been handled
+        return;
+    }
+
 
     if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+        // We only have peephole optimizations for vectors from this point on
         CodeGen_Posix::visit(op);
         return;
     }

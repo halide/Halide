@@ -155,7 +155,7 @@ protected:
     llvm::Type *i32x2, *i32x4, *i32x8;
     llvm::Type *i64x2, *i64x4;
     llvm::Type *f32x2, *f32x4, *f32x8;
-    llvm::Type *f64x2, *f64x4;
+    llvm::Type *f64x2, *f64x4, *f64x8;
     // @}
 
     /** Some wildcard variables used for peephole optimizations in

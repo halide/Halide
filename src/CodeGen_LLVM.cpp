@@ -158,6 +158,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     f32x8(NULL),
     f64x2(NULL),
     f64x4(NULL),
+    f64x8(NULL),
 
     // Wildcards for pattern matching
     wild_i8x8(Variable::make(Int(8, 8), "*")),
@@ -361,6 +362,7 @@ void CodeGen_LLVM::init_context() {
     f32x8 = VectorType::get(f32, 8);
     f64x2 = VectorType::get(f64, 2);
     f64x4 = VectorType::get(f64, 4);
+    f64x8 = VectorType::get(f64, 8);
 }
 
 

@@ -49,6 +49,8 @@ protected:
     // @}
 
     bool target_needs_software_float16_cast(Type t, bool isDestinationType) const override;
+private:
+    bool try_visit_float16_cast(const Cast*);
 };
 
 }}
