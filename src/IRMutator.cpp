@@ -50,7 +50,7 @@ void IRMutator::visit(const Cast *op) {
     if (value.same_as(op->value)) {
         expr = op;
     } else {
-        expr = Cast::make(op->type, value);
+        expr = Cast::make(op->type, value, op->roundingMode);
     }
 }
 
