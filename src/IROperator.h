@@ -159,8 +159,13 @@ inline Expr cast(Expr a) {
     return cast(type_of<T>(), a);
 }
 
+template<typename T>
+inline Expr cast(Expr a, RoundingMode rm) {
+    return cast(type_of<T>(), a, rm);
+}
+
 /** Cast an expression to a new type. */
-inline Expr cast(Type t, Expr a) {
+inline Expr cast(Type t, Expr a, RoundingMode rm) {
     user_assert(a.defined()) << "cast of undefined Expr\n";
     if (a.type() == t) return a;
 
@@ -174,15 +179,24 @@ inline Expr cast(Type t, Expr a) {
                    << "reinterpret(UInt(64), " << a << ");\n";
     }
 
+    if ((t.is_float() && t.bits == 16) && rm == RoundingMode::Undefined) {
+        user_error << "When casting to float16_t the rounding mode cannot be"
+                      " set to RoundingMode::Undefined\n";
+    }
+
     if (t.is_vector()) {
         if (a.type().is_scalar()) {
-            return Internal::Broadcast::make(cast(t.element_of(), a), t.width);
+            return Internal::Broadcast::make(cast(t.element_of(), a, rm), t.width);
         } else if (const Internal::Broadcast *b = a.as<Internal::Broadcast>()) {
             internal_assert(b->width == t.width);
-            return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
+            return Internal::Broadcast::make(cast(t.element_of(), b->value, rm), t.width);
         }
     }
-    return Internal::Cast::make(t, a);
+    return Internal::Cast::make(t, a, rm);
+}
+
+inline Expr cast(Type t, Expr a) {
+    return cast(t, a, RoundingMode::Undefined);
 }
 
 /** Return the sum of two expressions, doing any necessary type

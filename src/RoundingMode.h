@@ -8,7 +8,8 @@ enum class RoundingMode {
     ToNearestTiesToEven, ///< Round to nearest, when there is a tie pick even integral significand (IEEE754 2008 4.3.1)
     ToNearestTiesToAway, ///< Round to nearest, when there is a tie pick value furthest away from zero (IEEE754 2008 4.3.1)
     TowardPositiveInfinity, ///< Round towards positive infinity (IEEE754 2008 4.3.2)
-    TowardNegativeInfinity ///< Round towards negative infinity (IEEE754 2008 4.3.2)
+    TowardNegativeInfinity, ///< Round towards negative infinity (IEEE754 2008 4.3.2)
+    Undefined ///< Not defined. This is not a real rounding mode.
 };
 
 }
