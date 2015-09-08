@@ -19,6 +19,10 @@ int dump_to_file(buffer_t *input, const char *filename,
         input->min[0] = desired_min;
         input->extent[0] = desired_extent;
     } else {
+      printf("dump_to_file called with desired_min %d, desired_extent %d.\n", desired_min, desired_extent);
+      printf("dump_to_file called with mins (%d, %d, %d, %d).\n", input->min[0], input->min[1], input->min[2], input->min[3]);
+      printf("dump_to_file called with extents (%d, %d, %d, %d).\n", input->extent[0], input->extent[1], input->extent[2], input->extent[3]);
+
         FILE *f = fopen(filename, "w");
         // Depending on the schedule, other consumers, etc, Halide may
         // have evaluated more than we asked for, so don't assume that

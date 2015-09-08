@@ -166,7 +166,7 @@ struct Target {
                 return !has_feature(Metal) &&
                        (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
             } else {
-                return !has_feature(Metal);
+                return !(has_feature(Metal) || has_feature(JavaScript));
             }
         }
         return true;

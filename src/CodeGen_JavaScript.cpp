@@ -134,6 +134,96 @@ const string preamble =
     "    function(user_context, func, filename, error_code) {\n"
     "        halide_error(user_context, \"Failed to dump function \" + func + \" to file \" + filename + \" with error \" + error_code);\n"
     "        return halide_error_code_debug_to_file_failed; } }\n"
+    "var halide_memoization_cache_lookup;\n"
+    "var halide_memoization_cache_store;\n"
+    "var halide_memoization_cache_release;\n"
+    "var halide_memoization_cache_cleanup;\n"
+    "var halide_memoization_cache_set_size;\n"
+    "if (typeof(halide_memoization_cache_lookup) !=\"function\" ||\n"
+    "    typeof(halide_memoization_cache_store) !=\"function\" ||\n"
+    "    typeof(halide_memoization_cache_release) !=\"function\" ||\n"
+    "    typeof(halide_memoization_cache_set_size) !=\"function\" ||\n"
+    "    typeof(halide_memoization_cache_cleanup) !=\"function\") {\n"
+    "    (function () {\n"
+    "        var max_cache_size = 1 << 20;\n"
+    "        var current_cache_size = 0;\n"
+    "        var entries = {};\n"
+    "        var most_recent = null;\n"
+    "        var least_recent = null;\n"
+    "        var prune_cache = function() {\n"
+    "            while (current_cache_size > max_cache_size && least_recent != NULL) {\n"
+    "                var entry = least_recent;\n"
+    "                least_recent = entry.more_recent;\n"
+    "                if (most_recent == entry) {\n"
+    "                    most_recent = null;\n"
+    "                }\n"
+    "                if (least_recent != null) {\n"
+    "                    least_recent.less_recent = null;\n"
+    "                }\n"
+    "                delete entries[entry.key];\n"
+    "                current_cache_size -= entry.size;\n"
+    "            }\n"
+    "        }\n"
+    "        halide_memoization_set_cache_size = function(size) {\n"
+    "            if (size == 0) {\n"
+    "                size = 1 << 20;\n"
+    "            }\n"
+    "            max_cache_size = size;\n"
+    "            prune_cache();\n"
+    "        }\n"
+    "        function new_entry(buf) {\n"
+    "            var total_size = 1;\n"
+    "            for (var i = 0; i < buf.extent.length && buf.extent[i] != 0; i++) { \n"
+    "                var stride = buf.stride[i];\n"
+    "                if (stride < 0) stride = -stride;\n"
+    "                if (buf.extent[i] * stride > total_size) {\n"
+    "                    total_size = buf.extent[i] * stride;\n"
+    "                }\n"
+    "             }\n"
+    "             // TODO: get type passed through so this can be right.\n"
+    "             if (buf.elem_size == 8) {\n"
+    "                 buf.host = new Uint8Array(total_size);\n"
+    "             } else if (buf.elem_size == 16) {\n"
+    "                 buf.host = new Uint16Array(total_size);\n"
+    "             } else if (buf.elem_size == 32) {\n"
+    "                 buf.host = new Float32Array(total_size);\n"
+    "             } else if (buf.elem_size == 64) {\n"
+    "                 buf.host = new Float64Array(total_size);\n"
+    "             }\n"
+    "        }\n"
+    "        halide_memoization_cache_lookup = function(user_context, cache_key, size, computed_bounds, tuple_count, tuple_buffers) {\n"
+    "            var key = { cache_key: cache_key, computed_bounds: computed_bounds };\n"
+    "            if (key in entries) {\n"
+    "                var entry = entries[key];\n"
+    "                for (var i = 0; i < tuple_count; i++) {\n"
+    "                    tuple_buffers[i] = entry.tuple_buffers[i];\n"
+    "                }\n"
+    "                \n"
+    "                return 0;\n"
+    "            }\n"
+    "            for (var i = 0; i < tuple_count; i++) {\n"
+    "                new_entry(tuple_buffers[i]);\n"
+    "            }\n"
+    "            return 1;\n"
+    "        }\n"
+    "        halide_memoization_cache_store = function(user_context, cache_key, size, computed_bounds, tuple_count, tuple_buffers) {\n"
+    "            var key = { cache_key: cache_key, computed_bounds: computed_bounds };\n"
+    "            if (key in entries) {\n"
+    "                return 0;\n"
+    "            } else {\n"
+    "                var entry = { tuple_buffers: tuple_buffers };\n"
+    "                entries[key] = entry;\n"
+    "            }\n"
+    "            return 0;\n"
+    "        }\n"
+    "        halide_memoization_cache_release = function(user_context, host) {\n"
+    "        }\n"
+    "        halide_memoization_cache_cleanup = function() {\n"
+    "            entries = {};\n"
+    "            current_cache_size = 0;\n"
+    "        }\n"
+    "    })();\n"
+    "}\n"
     "function halide_rewrite_buffer(b, elem_size,\n"
     "                           min0, extent0, stride0,\n"
     "                           min1, extent1, stride1,\n"
@@ -163,7 +253,6 @@ const string preamble =
 }
 
 CodeGen_JavaScript::CodeGen_JavaScript(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {
-    stream << preamble;
 }
 
 CodeGen_JavaScript::~CodeGen_JavaScript() {
@@ -282,6 +371,9 @@ string CodeGen_JavaScript::print_name(const string &name) {
 }
 
 void CodeGen_JavaScript::compile(const Module &input) {
+    if (!input.target().has_feature(Target::NoRuntime)) {
+        stream << preamble;
+    }
     for (size_t i = 0; i < input.buffers.size(); i++) {
         compile(input.buffers[i]);
     }
@@ -1151,26 +1243,23 @@ void CodeGen_JavaScript::visit(const Call *op) {
             close_scope("memcpy");
             rhs << dest;
         } else if (op->name == Call::make_struct) {
-            // TODO: Figure out if this is at all useful in JavaScript
-            // and if it should be an array rather than an object.
-
-            // Emit a line something like:
-            // var foo = {f_0: 3.0f, char f_1: 'c', int f_2: 4 };
+            // Emit a line something like: var foo = [3.0f, 'c', 4 ];
+            // Using an array has been chosen as the order is the most
+            // important property of a structure as it is used bay
+            // Halide.
 
             // Get the args
             vector<string> values;
             for (size_t i = 0; i < op->args.size(); i++) {
                 values.push_back(print_expr(op->args[i]));
             }
-            do_indent();
-            string struct_name = unique_name('s');
-            stream << "var " << struct_name << " = { ";
+            rhs << "/* make_struct */ [ ";
+            const char *separator = "";
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (i > 0) stream << ", ";
-                stream << "f_" << i << ": " << values[i];
+                rhs << separator << values[i];
+                separator = ", ";
             }
-            stream <<" } // make struct\n";
-            rhs << struct_name;
+            rhs <<" ]";
         } else if (op->name == Call::stringify) {
             string buf_name = unique_name('b');
 
@@ -1238,13 +1327,15 @@ void CodeGen_JavaScript::visit(const Call *op) {
                 }
                 rhs << lead_char << fround_start_if_needed(op->type) << js_name << "(";
 
+                const char *separator = "";
                 if (function_takes_user_context(op->name)) {
-                    rhs << (have_user_context ? "__user_context, " : "null, ");
+                    rhs << (have_user_context ? "__user_context" : "null");
+                    separator = ", ";
                 }
 
                 for (size_t i = 0; i < op->args.size(); i++) {
-                    if (i > 0) rhs << ", ";
-                    rhs << args[i];
+                    rhs << separator << args[i];
+                    separator = ", ";
                 }
                 rhs << ")" << fround_end_if_needed(op->type);
             }

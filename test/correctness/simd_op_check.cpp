@@ -1105,7 +1105,7 @@ void check_neon_all() {
         check(arm32 ? "vshll.u16" : "ushll", 4*w, u32(u16_1)*16);
         check(arm32 ? "vshll.u32" : "ushll", 2*w, u64(u32_1)*16);
 
-        // VSHR     I	-	Shift Right
+        // VSHR     I   -       Shift Right
         check(arm32 ? "vshr.s64" : "sshr", 2*w, i64_1/16);
         check(arm32 ? "vshr.s8"  : "sshr", 8*w,  i8_1/16);
         check(arm32 ? "vshr.s16" : "sshr", 4*w, i16_1/16);
@@ -1115,7 +1115,7 @@ void check_neon_all() {
         check(arm32 ? "vshr.u16" : "ushr", 4*w, u16_1/16);
         check(arm32 ? "vshr.u32" : "ushr", 2*w, u32_1/16);
 
-        // VSHRN	I	-	Shift Right Narrow
+        // VSHRN        I       -       Shift Right Narrow
         check(arm32 ? "vshrn.i16" : "shrn", 8*w,  i8(i16_1/256));
         check(arm32 ? "vshrn.i32" : "shrn", 4*w, i16(i32_1/65536));
         check(arm32 ? "vshrn.i16" : "shrn", 8*w,  u8(u16_1/256));
@@ -1128,11 +1128,11 @@ void check_neon_all() {
         // VSLI X       -       Shift Left and Insert
         // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
 
-        // VSQRT	-	F, D	Square Root
+        // VSQRT        -       F, D    Square Root
         check(arm32 ? "vsqrt.f32" : "fsqrt", 4*w, sqrt(f32_1));
         check(arm32 ? "vsqrt.f64" : "fsqrt", 2*w, sqrt(f64_1));
 
-        // VSRA	I	-	Shift Right and Accumulate
+        // VSRA I       -       Shift Right and Accumulate
         check(arm32 ? "vsra.s64" : "ssra", 2*w, i64_2 + i64_1/16);
         check(arm32 ? "vsra.s8"  : "ssra", 8*w,  i8_2 + i8_1/16);
         check(arm32 ? "vsra.s16" : "ssra", 4*w, i16_2 + i16_1/16);
@@ -1146,7 +1146,7 @@ void check_neon_all() {
         // See VSLI
 
 
-        // VSUB	I, F	F, D	Subtract
+        // VSUB I, F    F, D    Subtract
         check(arm32 ? "vsub.i64" : "sub",  2*w, i64_1 - i64_2);
         check(arm32 ? "vsub.i64" : "sub",  2*w, u64_1 - u64_2);
         check(arm32 ? "vsub.f32" : "fsub", 4*w, f32_1 - f32_2);
@@ -1158,13 +1158,13 @@ void check_neon_all() {
         check(arm32 ? "vsub.i32" : "sub",  2*w, u32_1 - u32_2);
         check(arm32 ? "vsub.f32" : "fsub", 2*w, f32_1 - f32_2);
 
-        // VSUBHN	I	-	Subtract and Narrow
+        // VSUBHN       I       -       Subtract and Narrow
         check(arm32 ? "vsubhn.i16" : "subhn", 8*w,  i8((i16_1 - i16_2)/256));
         check(arm32 ? "vsubhn.i16" : "subhn", 8*w,  u8((u16_1 - u16_2)/256));
         check(arm32 ? "vsubhn.i32" : "subhn", 4*w, i16((i32_1 - i32_2)/65536));
         check(arm32 ? "vsubhn.i32" : "subhn", 4*w, u16((u32_1 - u32_2)/65536));
 
-        // VSUBL	I	-	Subtract Long
+        // VSUBL        I       -       Subtract Long
         check(arm32 ? "vsubl.s8"  : "ssubl", 8*w, i16(i8_1)  - i16(i8_2));
         check(arm32 ? "vsubl.u8"  : "usubl", 8*w, u16(u8_1)  - u16(u8_2));
         check(arm32 ? "vsubl.s16" : "ssubl", 4*w, i32(i16_1) - i32(i16_2));
@@ -1172,7 +1172,7 @@ void check_neon_all() {
         check(arm32 ? "vsubl.s32" : "ssubl", 2*w, i64(i32_1) - i64(i32_2));
         check(arm32 ? "vsubl.u32" : "usubl", 2*w, u64(u32_1) - u64(u32_2));
 
-        // VSUBW	I	-	Subtract Wide
+        // VSUBW        I       -       Subtract Wide
         check(arm32 ? "vsubw.s8"  : "ssubw", 8*w, i16_1 - i8_1);
         check(arm32 ? "vsubw.u8"  : "usubw", 8*w, u16_1 - u8_1);
         check(arm32 ? "vsubw.s16" : "ssubw", 4*w, i32_1 - i16_1);
@@ -1180,7 +1180,7 @@ void check_neon_all() {
         check(arm32 ? "vsubw.s32" : "ssubw", 2*w, i64_1 - i32_1);
         check(arm32 ? "vsubw.u32" : "usubw", 2*w, u64_1 - u32_1);
 
-        // VST1	X	-	Store single-element structures
+        // VST1 X       -       Store single-element structures
         check(arm32 ? "vst1.8" : "st", 8*w, i8_1);
 
     }

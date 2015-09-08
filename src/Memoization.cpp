@@ -322,7 +322,7 @@ public:
         }
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
-        return Call::make(Bool(1), "halide_memoization_cache_lookup", args, Call::Extern);
+        return Call::make(Int(32), "halide_memoization_cache_lookup", args, Call::Extern);
     }
 
     // Returns a statement which will store the result of a computation under this key

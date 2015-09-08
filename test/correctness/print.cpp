@@ -18,9 +18,7 @@ extern "C" void halide_print(void *user_context, const char *message) {
 #endif
 
 int main(int argc, char **argv) {
-<<<<<<< HEAD
     Target target = get_jit_target_from_environment();
-=======
     if (get_jit_target_from_environment().has_feature(Target::Profile)) {
         // The profiler adds lots of extra prints, so counting the
         // number of prints is not useful.
@@ -28,7 +26,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
->>>>>>> master
     Var x;
 
     {
@@ -93,9 +90,9 @@ int main(int argc, char **argv) {
 
     messages.clear();
 
-    if (target.has_feature(Target::JavaScript)) {
+    if (!target.supports_type(UInt(64))) {
         // TODO: Add JavaScript support for 64-bit integers
-        printf("Skipping int64_t based print test for JavaScript as it depends on 64-bit integer support.\n");
+        printf("Skipping uint64_t based print test for target which does not have 64-bit integer support.\n");
     } else {
         Func f;
 
@@ -198,9 +195,9 @@ int main(int argc, char **argv) {
 
         messages.clear();
 
-        if (target.has_feature(Target::JavaScript)) {
+        if (!target.supports_type(UInt(64))) {
             // TODO: Add JavaScript support for 64-bit integers
-            printf("Skipping int64_t based print test for JavaScript as it depends on 64-bit integer support.\n");
+            printf("Skipping uint64_t based print test for target which does not have 64-bit integer support.\n");
         } else {
             g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_int()) << 32) | random_int()));
             g.set_custom_print(halide_print);

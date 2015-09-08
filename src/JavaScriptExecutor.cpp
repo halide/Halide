@@ -1,10 +1,12 @@
 #include "Error.h"
+#include "CodeGen_JavaScript.h"
 #include "JavaScriptExecutor.h"
 #include "JITModule.h"
 #include "Func.h"
 #include "Target.h"
 
 #include "runtime/HalideRuntime.h"
+#include <sstream>
 #include <valarray>
 #include <vector>
 
@@ -59,7 +61,7 @@ void get_host_array(Local<String> property,
     Local<Object> obj = info.Holder();
     Local<External> buf_wrapper = Local<External>::Cast(obj->GetInternalField(0));
     const buffer_t *buf = (const buffer_t *)buf_wrapper->Value();
-    String::Utf8Value str_val(property);
+    //    String::Utf8Value str_val(property);
     //    debug(0) << "Getter from " << buf << " for " << *str_val << " host is " << (void *)buf->host << "\n";
     if (buf->host == NULL) {
         info.GetReturnValue().SetNull();  
@@ -317,17 +319,32 @@ Local<Value> wrap_scalar(Isolate *isolate, const Type &t, const void *val_ptr) {
    }
 }
 
-void dump_object(Local<Object> &obj) {
+// Useful for debugging...
+#if 0
+void dump_object(Local<Object> &obj, bool include_values = false) {
     Local<Array> names = obj->GetPropertyNames();
 
-    //    debug(0) << "Dumping object names for obj with " << names->Length() << " names.\n";
+    debug(0) << "Dumping object names for obj with " << names->Length() << " names.\n";
     for (uint32_t i = 0; i < names->Length(); i++) {
         Local<Value> name = names->Get(i);
-        internal_assert(name->IsString()) << "Name is not a string.\n";
+        //        internal_assert(name->IsString()) << "Name is not a string.\n";
         String::Utf8Value printable(name);
-        //      debug(0) << "object has key: " << *printable << "\n";
+        if (include_values) {
+            Local<Value> val = obj->Get(name);
+            if (val->IsObject()) {
+                Local<Object> sub_obj = val->ToObject();
+                debug(0) << "Dumping subobject under key: " << *printable << "\n";
+                dump_object(sub_obj, true);
+            } else {
+                String::Utf8Value val_printable(val);
+                debug(0) << "object key " << *printable << " has value: " << *val_printable << "\n";
+            }
+        } else {
+            debug(0) << "object has key: " << *printable << "\n";
+        }
     }
 }
+#endif
 
 class HalideArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
  public:
@@ -343,11 +360,19 @@ void print_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
   //  debug(0) << "print callback called with " << args.Length() << " args\n";
     internal_assert(args.Length() >= 2) << "Not enough arguments to print_callback in JavaScriptExecutor.\n";
     HandleScope scope(args.GetIsolate());
+    Local<Value> arg = args[1];
+    String::Utf8Value value(arg);
+
+    // Turns out to be convenient to get debug output in some cases where the
+    // user_context is not setup. 
+    if (args[0]->IsNull()) {
+        debug(0) << "Bad user_context to print_callback: " << *value;
+        return;
+    }
+
     Local<Object> user_context = args[0]->ToObject();
     Local<External> handle_wrapper = Local<External>::Cast(user_context->GetInternalField(0));
     JITUserContext *jit_user_context = (JITUserContext *)handle_wrapper->Value();
-    Local<Value> arg = args[1];
-    String::Utf8Value value(arg);
 
     if (jit_user_context->handlers.custom_print != NULL) {
         (*jit_user_context->handlers.custom_print)(jit_user_context, *value);
@@ -361,11 +386,19 @@ void error_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
   //  debug(0) << "error callback called with " << args.Length() << " args\n";
     internal_assert(args.Length() >= 2) << "Not enough arguments to error_callback in JavaScriptExecutor(V8).\n";
     HandleScope scope(args.GetIsolate());
+    Local<Value> arg = args[1];
+    String::Utf8Value value(arg);
+
+    // Turns out to be convenient to get debug output in some cases where the
+    // user_context is not setup. 
+    if (args[0]->IsNull()) {
+        halide_runtime_error << "Bad user_context to error_callback: " << *value;
+        return;
+    }
+
     Local<Object> user_context = args[0]->ToObject();
     Local<External> handle_wrapper = Local<External>::Cast(user_context->GetInternalField(0));
     JITUserContext *jit_user_context = (JITUserContext *)handle_wrapper->Value();
-    Local<Value> arg = args[1];
-    String::Utf8Value value(arg);
 
     if (jit_user_context->handlers.custom_error != NULL) {
         (*jit_user_context->handlers.custom_error)(jit_user_context, *value);
@@ -458,13 +491,160 @@ void trace_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     }
 }
 
-void js_buffer_t_to_struct(const Local<Value> &val, struct buffer_t *slot) {
-#if 0
-    Local<Object> buf = val->ToObject();
+int compile_function(Isolate *isolate, Local<Context> &context,
+                     const std::string &fn_name, const std::string &source,
+                     Local<v8::Function> &result) {
+    // Create a string containing the JavaScript source code.
+    Local<String> source_v8 = String::NewFromUtf8(isolate, source.c_str());
 
-    Local<TypedArray> host_array = Cast<TypedArray>(buf->Get(String::NewFromUtf8(isolate, "host")));
-    Local<ArrayBuffer> array_buffer = host_array->Buffer();
-#endif
+    TryCatch try_catch;
+    try_catch.SetCaptureMessage(true);
+
+    // Compile the source code.
+    Local<Script> compiled_script = Script::Compile(source_v8);
+    if (compiled_script.IsEmpty()) {
+        String::Utf8Value error(try_catch.Exception());
+        internal_error << "Error compiling JavaScript: " << *error << "\n";
+        return -1;
+    }
+    Local<Value> run_result = compiled_script->Run();
+    if (run_result.IsEmpty()) {
+        String::Utf8Value error(try_catch.Exception());
+        internal_error << "Error running JavaScript: " << *error << "\n";
+        return -1;
+    }
+
+    result = Local<v8::Function>::Cast(context->Global()->Get(String::NewFromUtf8(isolate, fn_name.c_str())));
+    return 0;
+}
+
+int make_js_copy_routine(Isolate *isolate, Local<Context> &context,
+                         const buffer_t *buf, const Type &type, int32_t dimensions,
+                         Local<v8::Function> &result) {
+    std::stringstream type_name_stream;
+    type_name_stream << type;
+    std::string fn_name = "halide_copy_buffer_" + type_name_stream.str() + "_" + std::to_string(dimensions) + "_dimensions";
+
+    Local<Value> preexisting = context->Global()->Get(String::NewFromUtf8(isolate, fn_name.c_str()));
+    if (preexisting->IsFunction()) {
+        result = Local<v8::Function>::Cast(preexisting);
+        return 0;
+    }
+
+    // Chunk of Halide code to copy input to output
+    ImageParam in(type, dimensions);
+    Func out;
+    out(_) = in(_);
+    in.set_stride(0, Expr());
+    out.output_buffer().set_stride(0, Expr());
+
+    Target temp_target;
+    temp_target.set_features({Target::JavaScript, Target::NoRuntime});
+    Module module = out.compile_to_module({ in }, fn_name, temp_target);
+    std::stringstream js_out_stream;
+    Internal::CodeGen_JavaScript cg(js_out_stream);
+    cg.compile(module);
+
+    debug(0) << js_out_stream.str() << "\n";
+
+    return compile_function(isolate, context, fn_name, js_out_stream.str(), result);
+}
+
+/* This routine copies a JS object representing a buffer_t to a
+ * buffer_t structure that can be passed to a C routine. It allocates
+ * storage for the target buffer.
+ *
+ * With V8, it is impossible to get a pointer to the underly storage
+ * for an array object without forcing it to be an external array,
+ * thus getting a direct pointer mutates the state of the object. The
+ * arrays used can be any sort of array like object from a variety of
+ * sources, and thus it is not acceptable change the object to be
+ * external. In some cases, the array is already external and this
+ * could be optimized, but since this is only used for testing the
+ * performance hit of copying the buffers is not a huge concern.
+ *
+ * The copy is done using Halide generated JS code to handle any sort
+ * of array that Halide can handle. (Using e.g. ArrayBuffer.slice()
+ * would impose a cosntraint that the vlaue is an ArrayBuffer based
+ * thing, etc.) This is likely not important right now, but it results
+ * on concise code and better exercises the JavaScript codegen, which
+ * improves testing anyway.
+ */
+int32_t js_buffer_t_to_struct(Isolate *isolate, const Local<Value> &val, struct buffer_t *slot) {
+    Local<Object> buf = val->ToObject();
+    Local<Context> context = buf->CreationContext();
+
+    Local<Object> extents = buf->Get(String::NewFromUtf8(isolate, "extent"))->ToObject();
+    Local<Object> mins = buf->Get(String::NewFromUtf8(isolate, "min"))->ToObject();
+    Local<Object> strides = buf->Get(String::NewFromUtf8(isolate, "stride"))->ToObject();
+    for (int32_t i = 0; i < 4; i++) {
+        slot->extent[i] = extents->Has(i) ? extents->Get(i)->Int32Value() : 0;
+        slot->min[i] = mins->Has(i) ? mins->Get(i)->Int32Value() : 0;
+        slot->stride[i] = strides->Has(i) ? strides->Get(i)->Int32Value() : 0;
+    }
+    slot->dev = 0;
+    slot->elem_size = buf->Get(String::NewFromUtf8(isolate, "elem_size"))->Int32Value();
+    slot->host_dirty = buf->Get(String::NewFromUtf8(isolate, "host_dirty"))->BooleanValue();
+    slot->dev_dirty = buf->Get(String::NewFromUtf8(isolate, "dev_dirty"))->BooleanValue();
+
+    Type buf_type_guess;
+    Local<Value> host_array = buf->Get(String::NewFromUtf8(isolate, "host"));
+    if (host_array->IsInt8Array()) {
+        buf_type_guess = Int(8);
+    } else if (host_array->IsUint8Array()) {
+        buf_type_guess = UInt(8);
+    } else if (host_array->IsInt16Array()) {
+        buf_type_guess = Int(16);
+    } else if (host_array->IsUint16Array()) {
+        buf_type_guess = UInt(16);
+    } else if (host_array->IsInt32Array()) {
+        buf_type_guess = Int(32);
+    } else if (host_array->IsUint32Array()) {
+        buf_type_guess = UInt(32);
+    } else if (host_array->IsFloat32Array()) {
+        buf_type_guess = Float(32);
+    } else if (host_array->IsFloat64Array()) {
+        buf_type_guess = Float(64);
+    } else {
+        if (slot->elem_size == 8) {
+            buf_type_guess = Float(64);
+        } else {
+            buf_type_guess = UInt(slot->elem_size * 8);
+        }
+    }
+
+    int32_t dimensions = 0;
+    while (dimensions < 4 && slot->extent[dimensions] != 0) {
+        dimensions++;
+    }
+
+    int32_t result = 0;
+    if (!host_array->IsNull() && dimensions != 0) {
+        Local<v8::Function> copy_function;
+        if (make_js_copy_routine(isolate, context, slot, buf_type_guess, dimensions, copy_function) != 0) {
+            return -1;
+        }
+
+        int32_t total_size = buffer_total_size(slot);
+        slot->host = (uint8_t *)malloc(total_size * slot->elem_size);
+
+        Local<Object> temp_buf = make_buffer_t(isolate, slot, halide_type_to_external_array_type(buf_type_guess));
+
+        v8::Handle<Value> js_args[2];
+        js_args[0] = val;
+        js_args[1] = temp_buf;
+
+        result = copy_function->Call(copy_function, 2, &js_args[0])->Int32Value();
+
+        if (result != 0) {
+            free(slot->host);
+            slot->host = NULL;
+        }
+    } else {
+        slot->host = nullptr;
+    }
+
+    return result;
 }
 
 template <typename T>
@@ -474,9 +654,12 @@ void val_to_slot(const Local<Value> &val, uint64_t *slot) {
 }
 
 void js_value_to_uint64_slot(const Halide::Type &type, const Local<Value> &val, uint64_t *slot) {
-  String::Utf8Value printable(val);
+  //    String::Utf8Value printable(val);
   //  debug(0) << "Argument is " << *printable << "\n";
     if (type.is_handle()) {
+        Local<Object> wrapper_obj = val->ToObject();
+        Local<External> wrapped_handle = Local<External>::Cast(wrapper_obj->GetInternalField(0));
+        *slot = (uint64_t)wrapped_handle->Value();
     } else if (type.is_float()) {
         if (type.bits == 32) {
             val_to_slot<float>(val, slot);
@@ -514,10 +697,89 @@ void js_value_to_uint64_slot(const Halide::Type &type, const Local<Value> &val, 
     //    debug(0) << "Slot is " << *slot << "(or " << *(float *)slot << ")\n";
 }
 
-void buffer_t_struct_to_js(const buffer_t *slot, Local<Value> val) {
-#if 0
+/* This routine copies a buffer_t struct to the storage pointed to by
+ * a JS object representing a buffer_t. It frees the storage for the
+ * source buffer. */
+int buffer_t_struct_to_js(Isolate *isolate, buffer_t *slot, Local<Value> val) {
     Local<Object> buf = val->ToObject();
-#endif
+    Local<Context> context = buf->CreationContext();
+
+    int32_t dimensions = 0;
+    while (dimensions < 4 && slot->extent[dimensions] != 0) {
+        dimensions++;
+    }
+
+    Local<Object> extents = buf->Get(String::NewFromUtf8(isolate, "extent"))->ToObject();
+    Local<Object> mins = buf->Get(String::NewFromUtf8(isolate, "min"))->ToObject();
+    Local<Object> strides = buf->Get(String::NewFromUtf8(isolate, "stride"))->ToObject();
+    for (int32_t i = 0; i < 4; i++) {
+        if (i < dimensions || extents->Has(i)) {
+            Local<Value> extent = Integer::New(isolate, slot->extent[i]);
+            extents->Set(i, extent);
+        }
+        if (i < dimensions || mins->Has(i)) {
+            Local<Value> min = Integer::New(isolate, slot->min[i]);
+            mins->Set(i, min);
+        }
+        if (i < dimensions || strides->Has(i)) {
+            Local<Value> stride = Integer::New(isolate, slot->stride[i]);
+            strides->Set(i, stride);
+        }
+    }
+    Local<Value> elem_size = Integer::New(isolate, slot->elem_size);
+    buf->Set(String::NewFromUtf8(isolate, "elem_size"), elem_size);
+    buf->Set(String::NewFromUtf8(isolate, "host_dirty"), Boolean::New(isolate, slot->host_dirty));
+    buf->Set(String::NewFromUtf8(isolate, "dev_dirty"), Boolean::New(isolate, slot->dev_dirty));
+
+    Type buf_type_guess;
+    Local<Value> host_array = buf->Get(String::NewFromUtf8(isolate, "host"));
+    if (host_array->IsInt8Array()) {
+        buf_type_guess = Int(8);
+    } else if (host_array->IsUint8Array()) {
+        buf_type_guess = UInt(8);
+    } else if (host_array->IsInt16Array()) {
+        buf_type_guess = Int(16);
+    } else if (host_array->IsUint16Array()) {
+        buf_type_guess = UInt(16);
+    } else if (host_array->IsInt32Array()) {
+        buf_type_guess = Int(32);
+    } else if (host_array->IsUint32Array()) {
+        buf_type_guess = UInt(32);
+    } else if (host_array->IsFloat32Array()) {
+        buf_type_guess = Float(32);
+    } else if (host_array->IsFloat64Array()) {
+        buf_type_guess = Float(64);
+    } else {
+        if (slot->elem_size == 8) {
+            buf_type_guess = Float(64);
+        } else {
+            buf_type_guess = UInt(slot->elem_size * 8);
+        }
+    }
+
+    int32_t result = 0;
+    if (!host_array->IsNull() && dimensions != 0) {
+        Local<v8::Function> copy_function;
+        if (make_js_copy_routine(isolate, context, slot, buf_type_guess, dimensions, copy_function) != 0) {
+            return -1;
+        }
+
+        Local<Object> temp_buf = make_buffer_t(isolate, slot, halide_type_to_external_array_type(buf_type_guess));
+
+        v8::Handle<Value> js_args[2];
+        js_args[0] = temp_buf;
+        js_args[1] = val;
+
+        // TODO: Is this the correct reciever?
+        result = copy_function->Call(copy_function, 2, &js_args[0])->Int32Value();
+
+        free(slot->host);
+        slot->host = NULL;
+    } else {
+        internal_assert(slot->host == nullptr) << "";
+    }
+
+    return result;
 }
 
 template <typename T, typename S>
@@ -584,7 +846,6 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     size_t buffer_t_args_count = 0;
 
     std::vector<void *> trampoline_args;
-    internal_assert(iter->second.pipeline.defined());
     for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             buffer_t_args_count++;
@@ -601,7 +862,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     size_t scalar_arg_index = 0;
     for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
-            js_buffer_t_to_struct(args[args_index++], &buffer_t_args[buffer_t_arg_index]);
+            js_buffer_t_to_struct(isolate, args[args_index++], &buffer_t_args[buffer_t_arg_index]);
             trampoline_args.push_back(&buffer_t_args[buffer_t_arg_index++]);
         } else {
             js_value_to_uint64_slot(scalar_or_buffer_t.scalar_type, args[args_index++], &scalar_args[scalar_arg_index]);
@@ -619,7 +880,9 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     buffer_t_arg_index = 0;
     for (const ScalarOrBufferT &scalar_or_buffer_t : iter->second.signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
-            buffer_t_struct_to_js(&buffer_t_args[buffer_t_arg_index], args[args_index++]);
+            buffer_t_struct_to_js(isolate, &buffer_t_args[buffer_t_arg_index++], args[args_index++]);
+        } else {
+            args_index++;
         }
         // No need to retrieve scalar args as they are passed by value.
     }
@@ -709,28 +972,13 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
 
     add_extern_callbacks(isolate, context, externs, trampolines);
 
-    // Create a string containing the JavaScript source code.
-    Local<String> source_v8 = String::NewFromUtf8(isolate, source.c_str());
-
     TryCatch try_catch;
     try_catch.SetCaptureMessage(true);
 
-    // Compile the source code.
-    Local<Script> compiled_script = Script::Compile(source_v8);
-    if (compiled_script.IsEmpty()) {
-        String::Utf8Value error(try_catch.Exception());
-        internal_error << "Error compiling JavaScript: " << *error << "\n";
+    Local<v8::Function> function;
+    if (compile_function(isolate, context, fn_name, source, function) != 0) {
         return -1;
     }
-    Local<Value> run_result = compiled_script->Run();
-    if (run_result.IsEmpty()) {
-        String::Utf8Value error(try_catch.Exception());
-        internal_error << "Error running JavaScript: " << *error << "\n";
-        return -1;
-    }
-
-    debug(0) << "Script compiled.\n";
-    Local<v8::Function> function(Local<v8::Function>::Cast(context->Global()->Get(String::NewFromUtf8(isolate, fn_name.c_str()))));
 
     debug(0) << "Making args.\n";
 
@@ -1327,8 +1575,6 @@ void copy_out_int32_array(JSContext *context, HandleObject buffer_obj, const cha
 void js_buffer_t_to_struct(JSContext *context, HandleValue val, struct buffer_t *slot) {
     RootedObject buffer_obj(context, &val.toObject());
     
-    dump_object("js_buffer_t_to_struct object", context, buffer_obj);
-
     uint32_t length = 0;
     uint8_t *data = NULL;
     RootedObject array_buffer(context);
@@ -1427,8 +1673,6 @@ void copy_in_int32_array(JSContext *context, MutableHandleObject buffer_obj, con
 
 void buffer_t_struct_to_js(JSContext *context, const buffer_t *slot, HandleValue val) {
     RootedObject buffer_obj(context, &val.toObject());
-    
-    dump_object("buffer_t_struct_to_js object", context, buffer_obj);
     RootedObject array_buffer(context);
 
     // If there was host data, this is not a bounds query and results do not need to be copied back.
