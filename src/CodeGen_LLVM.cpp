@@ -1200,7 +1200,7 @@ void CodeGen_LLVM::visit(const Cast *op) {
         internal_assert(src.is_float() && dst.is_float());
 
         if (src.bits == 16 && dst.bits > 16 &&
-            target_needs_software_float16_cast(dst,/*isDestinationType=*/true)) {
+            target_needs_software_cast_from_float16_to(dst)) {
             // Use software implementation for converting half to higher precision
             // float when operating on scalar types. If the target doesn't support
             // this natively LLVM will emit a call to ``__gnu_h2f_ieee()`` which isn't
@@ -1227,7 +1227,7 @@ void CodeGen_LLVM::visit(const Cast *op) {
             value = builder->CreateCall(convFunc, {bitCastResult});
             return;
         } else if (dst.bits == 16 && src.bits > 16 &&
-                   target_needs_software_float16_cast(src, /*isDestinationType=*/false)) {
+                   target_needs_software_cast_to_float16_from(src, op->roundingMode)) {
             // Use software implementation for converting higher precision
             // floats to half when operating on scalar types. If the target
             // doesn't support this natively LLVM will emit a call to

@@ -406,19 +406,24 @@ protected:
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
 
     /**
-      * \param t the source/destination type for a cast (where the
-      *        destination/source type is float16)
-      *
-      * \param isDestinationType is true if ``t`` would be the destination type
-      *        (``float16`` -> ``t``) and false if ``t`` would be the source type
-      *        (``t`` -> ``float16``) for the cast
+      * \param t the destination type for a cast (where the source type is float16)
       *
       * \return True iff the target being used for CodeGen requires a software implementation
-     *          for the cast operation specified by the arguments ``t`` and ``isDestinationType``.
+     *          to cast from float16 to type ``t``.
       *
       * This can be overriden by architecture specific code.
       */
-    bool virtual target_needs_software_float16_cast(Type t, bool isDestinationType) const = 0;
+    bool virtual target_needs_software_cast_from_float16_to(Type t) const = 0;
+    /**
+      * \param t the source type for a cast (where the destination type is float16)
+      * \param rm the RoundingMode required by the cast.
+      *
+      * \return True iff the target being used for CodeGen requires a software implementation
+     *          to cast from type ``t`` to float16.
+      *
+      * This can be overriden by architecture specific code.
+      */
+    bool virtual target_needs_software_cast_to_float16_from(Type t, RoundingMode rm) const = 0;
 
 private:
 

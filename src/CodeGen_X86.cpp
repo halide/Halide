@@ -314,7 +314,7 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
     if (destTy.is_float() && srcTy.is_float() && srcTy.bits == 16 && destTy.bits > 16) {
         internal_assert(destTy.bits == 64 || destTy.bits == 32) << "Unexpected float type\n";
 
-        if (target_needs_software_float16_cast(destTy, /*isDestinationType=*/true)) {
+        if (target_needs_software_cast_from_float16_to(destTy)) {
             // Let parent class codegen calling software implementation of cast
             return false;
         }
@@ -810,42 +810,49 @@ int CodeGen_X86::native_vector_bits() const {
     }
 }
 
-bool CodeGen_X86::target_needs_software_float16_cast(Type t, bool isDestinationType) const {
+bool CodeGen_X86::target_needs_software_cast_from_float16_to(Type t) const {
     internal_assert(t.bits == 32 || t.bits == 64);
-    if (isDestinationType) {
-        // float16 -> t
-        internal_assert(t.is_float()) << "float16 -> t, where is not a float type not supported\n";
-        if (target.has_feature(Target::F16C)) {
-            // vctph2ps can handle float16 -> float
-            // it doesn't handle float16 -> double but LLVM
-            // seems to emit the correct code anyway (double cast)
-            return false;
-        }
-
-        // Without F16C there is no hardware support so must use
-        // software implementation
-        return true;
-    } else {
-        // t-> float16
-        internal_assert(t.is_float()) << "t -> float16, where is not a float type not supported\n";
-
-        if (target.has_feature(Target::F16C)) {
-            if (t.bits == 32) {
-                // vctps2ph can handle float -> float16
-                return false;
-            } else {
-              // double -> float16
-              // No native support for this.
-              // Doing ``double -> float -> float16`` is not safe.
-              // so request software implementation which will only round once
-              return true;
-            }
-        }
-
-        // Without F16C there is no hardware support so must use
-        // software implementation
-        return true;
+    internal_assert(t.is_float());
+    // float16 -> t
+    internal_assert(t.is_float()) << "float16 -> t, where is not a float type not supported\n";
+    if (target.has_feature(Target::F16C)) {
+        // vcvtph2ps can handle float16 -> float
+        // and float16 -> double can be handled by doing
+        // a ``fpextend`` after using vcvtph2ps
+        return false;
     }
+
+    // Without F16C there is no hardware support so must use
+    // software implementation
+    return true;
+}
+
+bool CodeGen_X86::target_needs_software_cast_to_float16_from(Type t, RoundingMode rm) const {
+    internal_assert(t.bits == 32 || t.bits == 64);
+    internal_assert(t.is_float());
+    internal_assert(rm != RoundingMode::Undefined) << "Rounding mode cannot be undefined\n";
+    if (target.has_feature(Target::F16C)) {
+        if (t.bits == 32) {
+            // vcvtps2ph can handle float -> float16
+            // provided the rounding mode is one support by the instruction
+            if (rm == RoundingMode::ToNearestTiesToAway) {
+                // vcvtps2ph doesn't support this rounding mode
+                // so must use software implementation
+                return true;
+            }
+            return false;
+        } else {
+          // double -> float16
+          // No native support for this.
+          // Doing ``double -> float -> float16`` is not safe.
+          // so request software implementation which will only round once
+          return true;
+        }
+    }
+
+    // Without F16C there is no hardware support so must use
+    // software implementation
+    return true;
 }
 
 }}

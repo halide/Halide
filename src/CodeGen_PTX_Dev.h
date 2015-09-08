@@ -69,7 +69,8 @@ protected:
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
-    bool target_needs_software_float16_cast(Type t, bool isDestinationType) const override;
+    bool target_needs_software_cast_from_float16_to(Type t) const override;
+    bool target_needs_software_cast_to_float16_from(Type t, RoundingMode rm) const override;
 };
 
 }}

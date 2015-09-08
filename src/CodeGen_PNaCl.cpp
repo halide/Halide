@@ -35,7 +35,13 @@ int CodeGen_PNaCl::native_vector_bits() const {
     return 128;
 }
 
-bool CodeGen_PNaCl::target_needs_software_float16_cast(Type t, bool isDestinationType) const {
+bool CodeGen_PNaCl::target_needs_software_cast_from_float16_to(Type t) const {
+    // FIXME: Not sure what to do here. PNaCl is supposed to be target
+    // indepedent LLVM IR but I'm not sure if the right thing will happen when
+    // PNaCl gets codegen'ed on the real target.
+    return false;
+}
+bool CodeGen_PNaCl::target_needs_software_cast_to_float16_from(Type t, RoundingMode rm) const {
     // FIXME: Not sure what to do here. PNaCl is supposed to be target
     // indepedent LLVM IR but I'm not sure if the right thing will happen when
     // PNaCl gets codegen'ed on the real target.
