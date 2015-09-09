@@ -2255,15 +2255,18 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
 
             // Type check integer arguments
-            for (size_t i = 1; i < op->args.size(); i++) {
+            for (size_t i = 2; i < op->args.size(); i++) {
                 internal_assert(op->args[i].type() == Int(32))
-                    << "All arguments to create_buffer_t beyond the first must have type Int(32)\n";
+                    << "All arguments to create_buffer_t beyond the second must have type Int(32)\n";
             }
 
-            Value *elem_size = codegen(op->args[1]);
+            // Second argument is used solely for its Type. Value is unimportant.
+            // Currenty, only the size matters, but ultimately we will encode
+            // complete type info in buffer_t.
+            Value *elem_size = codegen(op->args[1].type().bytes());
             builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
 
-            int dims = op->args.size()/3;
+            int dims = (op->args.size() - 2) / 3;
             user_assert(dims <= 4)
                 << "Halide currently has a limit of four dimensions on "
                 << "Funcs used on the GPU or passed to extern stages.\n";
