@@ -711,11 +711,17 @@ int main(){
     h_assert(doubleToFloat16Results.size() > 0, "doubleToFloat16Results too small");
     h_assert(floatToFloat16Results.size() == doubleToFloat16Results.size(), "size mismatch");
 
+    // FIXME: This test only works with x86 right now.
+    Target host = get_jit_target_from_environment();
+    if (host.arch != Target::X86) {
+        printf("FIXME: Running test on other architectures not supported.\n");
+        return 0;
+    }
+
     /*
      * Test software implementation of converting float16 to single
      * and double
      */
-    Target host = get_jit_target_from_environment();
 
     // FIXME: This seems a bit cumbersome and fragile, perhaps we should have
     // a softf16c target feature that forces our software implementation to be used?
