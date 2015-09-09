@@ -46,7 +46,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 Type t = op->type.vector_of(value.type().width);
-                expr = Cast::make(t, value);
+                expr = Cast::make(t, value, op->roundingMode);
             }
         }
 
