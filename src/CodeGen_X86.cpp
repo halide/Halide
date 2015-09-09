@@ -463,6 +463,11 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
             // Note that only the first 4 lanes in the returned <8 xi16> are
             // relevant so we'll need to slice the vector afterwards
 
+            // FIXME: Codegen using other widths (e.g. 3) seems to give wrong
+            // results explicitly disable until this can be investigated.
+            internal_assert(srcTy.width == 4 || srcTy.width == 1) <<
+              "FIXME: Doing codegen with width less than four produces incorrect results\n";
+
             if (srcTy.width == 1) {
                 // Handle scalar value by inserting as the first element in a
                 // vector
