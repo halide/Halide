@@ -5,7 +5,6 @@
 #include <limits>
 #include <vector>
 
-
 // FIXME: We should use a proper framework for this. See issue #898
 void h_assert(bool condition, const char *msg) {
     if (!condition) {
@@ -158,15 +157,54 @@ int main() {
      * These values cannot be represented exactly in half
      */
 
-    // Overflow: These values are not representable and will not round to
-    // representable values
-    // Should go to +infinity
-    test_float(65536.0f, Result::all(0x7c00));
-    test_double(65536.0, Result::all(0x7c00));
+    // Overflow:
+    // Overflow: Not representable (2^16)
+    {
+        Result resultFromFloat = { .RZ = 0x7bff, // Never rounds to +inf
+                                   .RU = 0x7c00, // +inf
+                                   .RD = 0x7bff, // Never rounds to +inf
+                                   .RNE = 0x7c00, // +inf
+                                   .RNA = 0x7c00 // +inf
+                                 };
+        test_float(65536.0f, resultFromFloat);
+        test_double(65536.0, resultFromFloat);
+    }
+    // Not representable (-2^16)
+    {
+        Result resultFromFloat = { .RZ = 0xfbff, // Never rounds to -inf
+                                   .RU = 0xfbff, // Never rounds to -inf
+                                   .RD = 0xfc00, // -inf
+                                   .RNE = 0xfc00, // -inf
+                                   .RNA = 0xfc00 // -inf
+                                 };
+        test_float(-65536.0f, resultFromFloat);
+        test_double(-65536.0, resultFromFloat);
+    }
 
-    // Should go to -infinity
-    test_float(-65536.0f, Result::all(0xfc00));
-    test_double(-65536.0, Result::all(0xfc00));
+    // 2^16 -1. This does not have an overflowing exponent but is still greater
+    // than the largest representable binary16 (65504).
+    {
+        Result resultFromFloat = { .RZ = 0x7bff, // Never rounds to +inf
+                                   .RU = 0x7c00, // +inf
+                                   .RD = 0x7bff, // Never rounds to +inf
+                                   .RNE = 0x7c00, // +inf
+                                   .RNA = 0x7c00 // +inf
+                                 };
+        test_float(65535.0f, resultFromFloat);
+        test_double(65535.0, resultFromFloat);
+    }
+    // -2^16 -1. This does not have an overflowing exponent but is still smaller
+    // than the smallest representable binary16 (-65504).
+    {
+        Result resultFromFloat = { .RZ = 0xfbff, // Never rounds to -inf
+                                   .RU = 0xfbff, // Never rounds to -inf
+                                   .RD = 0xfc00, // -inf
+                                   .RNE = 0xfc00, // -inf
+                                   .RNA = 0xfc00 // -inf
+                                 };
+        test_float(-65535.0f, resultFromFloat);
+        test_double(-65535.0, resultFromFloat);
+    }
 
     // Underflow: This value is too small to be representable and will
     // be rounded to + zero apart from RU

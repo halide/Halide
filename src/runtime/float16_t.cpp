@@ -1,5 +1,3 @@
-// HACK
-//#include "runtime_internal.h"
 #include "HalideRuntime.h"
 
 extern "C" {
@@ -215,10 +213,15 @@ WEAK uint16_t halide_float_to_float16_bits(float value, halide_rounding_mode_t r
         exponent = -15; // e_min -1. Fake exponent so that reEncoded exponent will be 0.
     } else if (exponent > 15) {
         // **Overflow**
-        // The floating point number is larger than
-        // the largest normalised number as binary16
-        // so we return +/- Infinity
-        return signMask | (0x1f << 10);
+        // The floating point number is larger than the largest normalised
+        // number as binary16.  Use the largest value for the
+        // truncatedSignificand This will cause the sticky bit and round bit set
+        // to be set to true which will cause correct rounding behavior (i.e we
+        // don't always round to +/- infinity, e.g. when doing
+        // halide_toward_negative_infinity the result can **never** be
+        // +infinity)
+        truncatedSignificand = signMask | 0x007fffff;
+        exponent = 15; // pretend the exponent is e_max
     } else {
         truncatedSignificand = significandBits;
     }
@@ -307,10 +310,15 @@ WEAK uint16_t halide_double_to_float16_bits(double value, halide_rounding_mode_t
         exponent = -15; // e_min -1. Fake exponent so that reEncoded exponent will be 0.
     } else if (exponent > 15) {
         // **Overflow**
-        // The floating point number is larger than
-        // the largest normalised number as binary16
-        // so we return +/- Infinity
-        return signMask | (0x1f << 10);
+        // The floating point number is larger than the largest normalised
+        // number as binary16.  Use the largest value for the
+        // truncatedSignificand This will cause the sticky bit and round bit set
+        // to be set to true which will cause correct rounding behavior (i.e we
+        // don't always round to +/- infinity, e.g. when doing
+        // halide_toward_negative_infinity the result can **never** be
+        // +infinity)
+        truncatedSignificand = signMask | 0x000fffffffffffff;
+        exponent = 15; // pretend the exponent is e_max
     } else {
         truncatedSignificand = significandBits;
     }

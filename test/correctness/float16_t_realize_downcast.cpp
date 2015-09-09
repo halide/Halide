@@ -86,6 +86,9 @@ struct Result {
 std::vector<std::pair<float, Result>> floatToFloat16Results;
 std::vector<std::pair<double, Result>> doubleToFloat16Results;
 
+// FIXME: These test cases are copied from ``runtime_float16_t_downcast.cpp``.
+// We should probably refactor so the test cases can be shared between these
+// two tests.
 void initExpectedResults() {
     /*
      * Exact rounding:
@@ -727,8 +730,7 @@ int main(){
 
     // Test all rounding modes
     Result roundingModesToTest = Result::all(0x0001);
-    // FIXME: Need to fix the software implementation so we can re-enable this
-    //testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/true);
+    testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/true);
 
     /*
      * Try to test hardware implementations of converting single and double to
@@ -743,20 +745,36 @@ int main(){
             .RNE = 1,
             .RNA = 0, // Not supported by vcvtps2ph
         };
+
+        // RNA from float and * from double are not supported in hardware but
+        // because no vectorization is used it should fall back to the software
+        // implementation in those cases
         printf("Trying no vectorization\n");
-        testFloatAndDoubleConversion(host, /*FIXME: should be Result::all(0x0001)*/roundingModesToTest, /*testDoubleConv=*/ /*FIXME: should be true*/false, /*vectorizeWidth=*/0);
+        testFloatAndDoubleConversion(host,
+                                     Result::all(0x0001), // Test all rounding modes
+                                     /*testDoubleConv=*/true,
+                                     /*vectorizeWidth=*/0);
 
         printf("Trying vectorization width 4\n");
         // Note: No native support for "double -> float16" if vectorizing
-        testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/ false, /*vectorizeWidth=*/4);
+        testFloatAndDoubleConversion(host,
+                                     roundingModesToTest,
+                                     /*testDoubleConv=*/ false,
+                                     /*vectorizeWidth=*/4);
 
         printf("Trying vectorization width 8\n");
         // Note: No native support for "double -> float16" if vectorizing
-        testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/ false, /*vectorizeWidth=*/8);
+        testFloatAndDoubleConversion(host,
+                                     roundingModesToTest,
+                                     /*testDoubleConv=*/ false,
+                                     /*vectorizeWidth=*/8);
 
         printf("Trying vectorization width 10\n");
         // Note: No native support for "double -> float16" if vectorizing
-        testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/ false, /*vectorizeWidth=*/10);
+        testFloatAndDoubleConversion(host,
+                                     roundingModesToTest,
+                                     /*testDoubleConv=*/ false,
+                                     /*vectorizeWidth=*/10);
     }
     printf("Success!\n");
     return 0;
