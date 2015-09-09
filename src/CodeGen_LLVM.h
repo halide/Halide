@@ -154,6 +154,7 @@ protected:
     llvm::Type *i16x4, *i16x8, *i16x16;
     llvm::Type *i32x2, *i32x4, *i32x8;
     llvm::Type *i64x2, *i64x4;
+    llvm::Type *f16x2, *f16x4, *f16x8;
     llvm::Type *f32x2, *f32x4, *f32x8;
     llvm::Type *f64x2, *f64x4, *f64x8;
     // @}

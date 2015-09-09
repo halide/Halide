@@ -339,9 +339,6 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
                 // Handle scalar value by inserting as the first element
                 // in a vector
                 internal_assert(!(valueToCast->getType()->isVectorTy()));
-                // FIXME: Should we make this type a class member?
-                // FIXME: Leak?
-                llvm::Type* f16x8 = VectorType::get(f16, 8);
                 Constant* zeroHalfVectorSplat = ConstantFP::get(f16x8, 0.0);
                 valueToCast = builder->CreateInsertElement(/*Vec=*/zeroHalfVectorSplat,
                                                            /*NewElt=*/valueToCast,
@@ -490,9 +487,6 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
             llvm::Value* result = builder->CreateCall(fn, {valueToCast, roundingModeArg});
 
             // Bitcast the result to half <8 x i16> -> <8 x half>
-            // FIXME: Should we make this type a class member?
-            // FIXME: Leak?
-            llvm::Type* f16x8 = VectorType::get(f16, 8);
             result = builder->CreateBitCast(result, f16x8);
 
             if (srcTy.width == 1) {

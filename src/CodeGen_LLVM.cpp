@@ -154,6 +154,9 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     i32x8(NULL),
     i64x2(NULL),
     i64x4(NULL),
+    f16x2(NULL),
+    f16x4(NULL),
+    f16x8(NULL),
     f32x2(NULL),
     f32x4(NULL),
     f32x8(NULL),
@@ -361,6 +364,9 @@ void CodeGen_LLVM::init_context() {
     f32x2 = VectorType::get(f32, 2);
     f32x4 = VectorType::get(f32, 4);
     f32x8 = VectorType::get(f32, 8);
+    f16x2 = VectorType::get(f16, 2);
+    f16x4 = VectorType::get(f16, 4);
+    f16x8 = VectorType::get(f16, 8);
     f64x2 = VectorType::get(f64, 2);
     f64x4 = VectorType::get(f64, 4);
     f64x8 = VectorType::get(f64, 8);
