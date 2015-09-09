@@ -396,10 +396,10 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
             valueToCast = builder->CreateBitCast(valueToCast, newVectorType);
 
 
-            // FIXME: destTy isn't really the return type when working with
-            // doubles but this doesn't matter as long as the intrinsic is
-            // already declared in x86.ll
-            llvm::Value* result = call_intrin(/*result_type=*/llvm_type_of(destTy),
+            // Explicitly make a type because when are working with doubles
+            // we shouldn't use "destTy".
+            llvm::Type* returnTy = VectorType::get(f32, destTy.width);
+            llvm::Value* result = call_intrin(/*result_type=*/returnTy,
                                               /*intrin_vector_width=*/8,
                                               /*name=*/"llvm.x86.vcvtph2ps.256",
                                               /*arg_values=*/{ valueToCast }
