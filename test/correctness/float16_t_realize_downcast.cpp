@@ -25,6 +25,15 @@ float float_from_bits(uint32_t bits) {
     return out.asFloat;
 }
 
+uint32_t float_to_bits(float value) {
+    union {
+        float asFloat;
+        uint32_t asUInt;
+    } out;
+    out.asFloat = value;
+    return out.asUInt;
+}
+
 double double_from_bits(uint64_t bits) {
     union {
         double asDouble;
@@ -32,6 +41,15 @@ double double_from_bits(uint64_t bits) {
     } out;
     out.asUInt = bits;
     return out.asDouble;
+}
+
+uint64_t double_to_bits(double value) {
+    union {
+        double asDouble;
+        uint64_t asUInt;
+    } out;
+    out.asDouble = value;
+    return out.asUInt;
 }
 struct Result {
     uint16_t RZ; // Result for round to Zero
@@ -149,10 +167,14 @@ void initExpectedResults() {
     // Overflow: These values are not representable and will not round to
     // representable values
     // Should go to +infinity
+    // FIXME: Intel's vcvtps2ph disagree with the software implementation.
+    // At least one of us is wrong!
     floatToFloat16Results.push_back(std::make_pair(65536.0f, Result::all(0x7c00)));
     doubleToFloat16Results.push_back(std::make_pair(65536.0, Result::all(0x7c00)));
 
     // Should go to -infinity
+    // FIXME: Intel's vcvtps2ph disagree with the software implementation.
+    // At least one of us is wrong!
     floatToFloat16Results.push_back(std::make_pair(-65536.0f, Result::all(0xfc00)));
     doubleToFloat16Results.push_back(std::make_pair(-65536.0, Result::all(0xfc00)));
 
@@ -435,7 +457,7 @@ std::pair<Image<double>,Image<float16_t>> getInputAndExpectedResultImagesD(unsig
 }
 
 template <typename T>
-void checkResults(Image<T>& expected, Image<T>& result) {
+void checkResults(Image<float16_t>& expected, Image<float16_t>& result) {
     h_assert(expected.width() == result.width(), "width mismatch");
     h_assert(expected.height() == result.height(), "height mismatch");
 
@@ -451,7 +473,28 @@ void checkResults(Image<T>& expected, Image<T>& result) {
                printf("Failed to cast correctly: x:%u y:%u\n", x, y);
                printf("resultValueAsBits  : 0x%.4" PRIx16 "\n", resultValueAsBits);
                printf("expectedValueAsBits: 0x%.4" PRIx16 "\n", expectedValueAsBits);
-               h_assert(false, "Failed conversion");
+
+              // Show input and possible outputs
+              int index = (x + y* result.width()) % floatToFloat16Results.size();
+              printf("data index: %u\n", index);
+              Result r;
+              if (sizeof(T) == sizeof(float)) {
+                  std::pair<float,Result> resultPair = floatToFloat16Results[index];
+                  r = resultPair.second;
+                  printf("Input: 0x%.8" PRIx32 "(~%f)\n", float_to_bits(resultPair.first), resultPair.first);
+              } else {
+                  h_assert(sizeof(T) == sizeof(double), "wrong type?");
+                  std::pair<double,Result> resultPair = doubleToFloat16Results[index];
+                  r = resultPair.second;
+                  printf("Input: 0x%.16" PRIx64 "(~%f)\n", double_to_bits(resultPair.first), resultPair.first);
+              }
+              printf("Expected result as RZ: 0x%.4" PRIx16 "\n", r.RZ);
+              printf("Expected result as RU: 0x%.4" PRIx16 "\n", r.RU);
+              printf("Expected result as RD: 0x%.4" PRIx16 "\n", r.RD);
+              printf("Expected result as RNE: 0x%.4" PRIx16 "\n", r.RNE);
+              printf("Expected result as RNA: 0x%.4" PRIx16 "\n", r.RNA);
+
+              h_assert(false, "Failed conversion");
             }
         }
     }
@@ -476,7 +519,7 @@ void testFloatSingleRoundingMode(Target host,
     Image<float16_t> result = downCast.realize( {img.first.width(), img.first.height()},
                                                 host);
     // Check results
-    checkResults(img.second, result);
+    checkResults<float>(img.second, result);
 }
 
 
@@ -499,10 +542,10 @@ void testDoubleSingleRoundingMode(Target host,
     Image<float16_t> result = downCast.realize( {img.first.width(), img.first.height()},
                                                 host);
     // Check results
-    checkResults(img.second, result);
+    checkResults<double>(img.second, result);
 }
 
-void testFloatAndDoubleConversion(Target host, Result modes, int vectorizeWidth=0) {
+void testFloatAndDoubleConversion(Target host, Result modes, bool testDoubleConv, int vectorizeWidth=0) {
     int width = 10;
     int height = 10;
     if (vectorizeWidth > 0) {
@@ -566,57 +609,61 @@ void testFloatAndDoubleConversion(Target host, Result modes, int vectorizeWidth=
     }
 
     // Test double
-    printf("Testing double -> float16\n");
-    if (modes.RZ > 0) {
-        printf("Testing RZ\n");
-        testDoubleSingleRoundingMode(host,
-                                    width,
-                                    height,
-                                    vectorizeWidth,
-                                    RoundingMode::TowardZero);
-    } else {
-        printf("Skipping RZ\n");
-    }
+    if (testDoubleConv) {
+        printf("Testing double -> float16\n");
+        if (modes.RZ > 0) {
+            printf("Testing RZ\n");
+            testDoubleSingleRoundingMode(host,
+                                        width,
+                                        height,
+                                        vectorizeWidth,
+                                        RoundingMode::TowardZero);
+        } else {
+            printf("Skipping RZ\n");
+        }
 
-    if (modes.RNE > 0) {
-        printf("Testing RNE\n");
-        testDoubleSingleRoundingMode(host,
-                                    width,
-                                    height,
-                                    vectorizeWidth,
-                                    RoundingMode::ToNearestTiesToEven);
+        if (modes.RNE > 0) {
+            printf("Testing RNE\n");
+            testDoubleSingleRoundingMode(host,
+                                        width,
+                                        height,
+                                        vectorizeWidth,
+                                        RoundingMode::ToNearestTiesToEven);
+        } else {
+            printf("Skipping RNE\n");
+        }
+        if (modes.RNA > 0) {
+            printf("Testing RNA\n");
+            testDoubleSingleRoundingMode(host,
+                                        width,
+                                        height,
+                                        vectorizeWidth,
+                                        RoundingMode::ToNearestTiesToAway);
+        } else {
+            printf("Skipping RNA\n");
+        }
+        if (modes.RU > 0) {
+            printf("Testing RU\n");
+            testDoubleSingleRoundingMode(host,
+                                        width,
+                                        height,
+                                        vectorizeWidth,
+                                        RoundingMode::TowardPositiveInfinity);
+        } else {
+            printf("Skipping RU\n");
+        }
+        if (modes.RD > 0) {
+            printf("Testing RD\n");
+            testDoubleSingleRoundingMode(host,
+                                        width,
+                                        height,
+                                        vectorizeWidth,
+                                        RoundingMode::TowardNegativeInfinity);
+        } else {
+            printf("Skipping RD\n");
+        }
     } else {
-        printf("Skipping RNE\n");
-    }
-    if (modes.RNA > 0) {
-        printf("Testing RNA\n");
-        testDoubleSingleRoundingMode(host,
-                                    width,
-                                    height,
-                                    vectorizeWidth,
-                                    RoundingMode::ToNearestTiesToAway);
-    } else {
-        printf("Skipping RNA\n");
-    }
-    if (modes.RU > 0) {
-        printf("Testing RU\n");
-        testDoubleSingleRoundingMode(host,
-                                    width,
-                                    height,
-                                    vectorizeWidth,
-                                    RoundingMode::TowardPositiveInfinity);
-    } else {
-        printf("Skipping RU\n");
-    }
-    if (modes.RD > 0) {
-        printf("Testing RD\n");
-        testDoubleSingleRoundingMode(host,
-                                    width,
-                                    height,
-                                    vectorizeWidth,
-                                    RoundingMode::TowardNegativeInfinity);
-    } else {
-        printf("Skipping RD\n");
+        printf("Skipping double -> float16\n");
     }
 }
 
@@ -624,6 +671,7 @@ int main(){
     initExpectedResults();
     h_assert(floatToFloat16Results.size() > 0, "floatToFloat16Results too small");
     h_assert(doubleToFloat16Results.size() > 0, "doubleToFloat16Results too small");
+    h_assert(floatToFloat16Results.size() == doubleToFloat16Results.size(), "size mismatch");
 
     /*
      * Test software implementation of converting float16 to single
@@ -644,8 +692,36 @@ int main(){
 
     // Test all rounding modes
     Result roundingModesToTest = Result::all(0x0001);
-    testFloatAndDoubleConversion(host, roundingModesToTest);
+    testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/true);
 
+    /*
+     * Try to test hardware implementations of converting single and double to
+     * float16
+     */
+    host = get_jit_target_from_environment();
+    if (host.arch == Target::X86 && host.has_feature(Target::F16C)) {
+        roundingModesToTest = {
+            .RZ = 0, // FIXME: Produces wrong result
+            .RU = 0, // FIXME: Produces wrong result
+            .RD = 0, // FIXME: Produces wrong result
+            .RNE = 1,
+            .RNA = 0, // Not supported by vcvtps2ph
+        };
+        printf("Trying no vectorization\n");
+        testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/ true, /*vectorizeWidth=*/0);
+
+        printf("Trying vectorization width 4\n");
+        // Note: No native support for "double -> float16" if vectorizing
+        testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/ false, /*vectorizeWidth=*/4);
+
+        printf("Trying vectorization width 8\n");
+        // Note: No native support for "double -> float16" if vectorizing
+        testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/ false, /*vectorizeWidth=*/8);
+
+        printf("Trying vectorization width 10\n");
+        // Note: No native support for "double -> float16" if vectorizing
+        testFloatAndDoubleConversion(host, roundingModesToTest, /*testDoubleConv=*/ false, /*vectorizeWidth=*/10);
+    }
     printf("Success!\n");
     return 0;
 }

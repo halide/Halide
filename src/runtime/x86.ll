@@ -139,3 +139,8 @@ define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwi
 declare <4 x float> @llvm.x86.vcvtph2ps.128(<8 x i16> %a) readnone
 ; Converts 8 halfs to 8 floats
 declare <8 x float> @llvm.x86.vcvtph2ps.256(<8 x i16> %a) readnone
+
+; Converts 4 floats to 4 halfs. Only the first four lanes are relevant.
+declare <8 x i16> @llvm.x86.vcvtps2ph.128(<4 x float> %a, i32 %roundingMode) readnone
+; Convert 8 floats to 8 halfs.
+declare <8 x i16> @llvm.x86.vcvtps2ph.256(<8 x float> %a, i32 %roundingMode) readnone
