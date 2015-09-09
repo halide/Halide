@@ -392,7 +392,6 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
             } else {
                 internal_error << "Expecting vector type\n";
             }
-            // FIXME: Leak?
             llvm::Type* newVectorType = VectorType::get(i16, numElements);
             valueToCast = builder->CreateBitCast(valueToCast, newVectorType);
 
@@ -410,7 +409,6 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
                 // Cast the single to double. It's width is not necessarily a
                 // fp64x8 so we need to construct a new type representing a
                 // vector of the right number of doubles
-                // FIXME: Leak?
                 llvm::Type* newDblVectorType = VectorType::get(f64, destTy.width);
                 result = builder->CreateFPExt(result, newDblVectorType);
             }
@@ -508,10 +506,9 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
             // The number of elements in the input vector match the output so we
             // can use call_intrin() here
 
-            // FIXME: Leak?
-            llvm::Type* newVectorType = VectorType::get(i16, srcTy.width);
-
-            llvm::Value* result = call_intrin(/*result_type=*/newVectorType,
+            // Type is not necessarily <8 x i16>
+            llvm::Type* outputVectorType = VectorType::get(i16, srcTy.width);
+            llvm::Value* result = call_intrin(/*result_type=*/outputVectorType,
                                              /*intrin_vector_width=*/8,
                                              /*name=*/"llvm.x86.vcvtps2ph.256",
                                              /*arg_values=*/{ valueToCast,
@@ -523,9 +520,9 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
             if (llvm::VectorType* vecTy = dyn_cast<llvm::VectorType>(result->getType())) {
                 numElements = vecTy->getNumElements();
             } else {
-                    internal_error << "Not vector type\n";
+                internal_error << "Not vector type\n";
             }
-            // FIXME: Leak?
+            // Bitcast the result to a vector of halfs
             llvm::Type* newHalfVectorType = VectorType::get(f16, numElements);
             result = builder->CreateBitCast(result, newHalfVectorType);
             value = result;
