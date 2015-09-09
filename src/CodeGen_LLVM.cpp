@@ -1285,7 +1285,8 @@ void CodeGen_LLVM::visit(const Cast *op) {
                     internal_error << "Unsupported rounding mode\n";
             }
 
-            value = builder->CreateCall(convFunc, {value, roundingModeArg});
+            std::vector<Value*> args = { value, roundingModeArg };
+            value = builder->CreateCall(convFunc, args);
 
             // Bitcast to half
             value = builder->CreateBitCast(value, f16);

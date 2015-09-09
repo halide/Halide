@@ -482,7 +482,8 @@ bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
             llvm::Function* fn = module->getFunction("llvm.x86.vcvtps2ph.128");
             internal_assert(fn != nullptr) << "Could not find intrinsic\n";
 
-            llvm::Value* result = builder->CreateCall(fn, {valueToCast, roundingModeArg});
+            std::vector<Value*> args = {valueToCast, roundingModeArg};
+            llvm::Value* result = builder->CreateCall(fn, args);
 
             // Bitcast the result to half <8 x i16> -> <8 x half>
             result = builder->CreateBitCast(result, f16x8);
