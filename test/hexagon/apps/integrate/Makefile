@@ -58,7 +58,7 @@ bitcode: integrate.cpp
 all: integrate.out run bmark-report
 
 bmark-report:
-	if [ -a ${CURR_DIR}/run.stdout ]; then \
+	if [ -e ${CURR_DIR}/run.stdout ]; then \
 		grep -q PASS ${CURR_DIR}/result; \
 		if [ $$? -eq 0 ];  then \
 			grep "cycles/pixel" ${CURR_DIR}/run.stdout | awk '{print $$6"("$$4"):",$$7 " cycles/pixel"}'; \
