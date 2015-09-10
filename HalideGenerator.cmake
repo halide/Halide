@@ -115,7 +115,7 @@ function(halide_add_generator_dependency)
         DEPENDS "${args_GENERATOR_TARGET}"
         COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
         # Create an archive using ar (or similar)
-        COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
+        COMMAND "${CMAKE_AR}" r "${FILTER_LIB}" "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
         WORKING_DIRECTORY "${SCRATCH_DIR}"
         )
     else()
