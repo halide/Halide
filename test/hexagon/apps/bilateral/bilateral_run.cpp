@@ -9,17 +9,15 @@
 #include <math.h>
 #if defined(__hexagon__)
 #include "hexagon_standalone.h"
-#include "subsys.h"
 #endif
 #include "io.h"
-#include "hvx.cfg.h"
 #include "bilateral.h"
 
 
 #define KERNEL_SIZE     9
 #define Q               8
 #define PRECISION       (1<<Q)
-
+#define VLEN (1<<LOG2VLEN)
 
 double getGauss(double sigma,double value)
 {
@@ -30,7 +28,7 @@ double getGauss(double sigma,double value)
 
 int main(int argc, char* argv[])
 {
-    int i;
+    int i,j;
     int width, height, stride;
     FH fp;
 
@@ -44,9 +42,16 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+#ifdef SYNTHETIC
+    width=10;
+    height=12;
+    stride = width;
+    printf("Using synthetic size 12x10\n");
+#else
     width  = atoi(argv[1]);
     height = atoi(argv[2]);
     stride = (width + VLEN-1)&(-VLEN);  // make stride a multiple of HVX vector size
+#endif
 
     /* -----------------------------------------------------*/
     /*  Allocate memory for input/output                    */
@@ -59,6 +64,23 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+#ifdef SYNTHETIC
+  char loc_input[12][10] = {
+  38, 50, 46, 46, 45, 44, 45, 45, 44, 46,
+  49, 51, 54, 57, 59, 63, 66, 70, 74, 76,
+  81, 83, 83, 84, 86, 87, 88, 87, 86, 82,
+  81, 79, 76, 73, 71, 66, 62, 59, 56, 53,
+  51, 48, 46, 44, 43, 42, 42, 40, 40, 39,
+  39, 40, 41, 42, 44, 46, 47, 51, 54, 56,
+  60, 61, 64, 66, 67, 66, 67, 68, 67, 65,
+  64, 59, 59, 58, 56, 53, 50, 47, 44, 41,
+  39, 38, 35, 33, 30, 28, 26, 25, 23, 21,
+  21, 20, 19, 18, 17, 16, 15, 14, 15, 15,
+  14, 13, 13, 13, 12, 13, 14, 12, 12, 12,
+  12, 12, 12, 12, 13, 12, 15, 14, 15, 15,
+};
+  memcpy(input, loc_input, 12*10);
+#else
     /* -----------------------------------------------------*/
     /*  Read image input from file                          */
     /* -----------------------------------------------------*/
@@ -78,6 +100,10 @@ int main(int argc, char* argv[])
         }
     }
     close(fp);
+#endif
+#if DEBUG
+  printf ("finished reading the input.\n");
+#endif
 
 #if defined(__hexagon__)
     SIM_ACQUIRE_HVX;
@@ -94,7 +120,7 @@ int main(int argc, char* argv[])
 
     unsigned char gauss_LUT[KERNEL_SIZE*KERNEL_SIZE];
 
-    unsigned char *range_LUT = (unsigned char *)memalign(VLEN,256);
+    unsigned char *range_LUT = (unsigned char *)memalign(PRECISION,256);
 
     // Space gaussian coefficients calculation
     int x, y;
@@ -120,20 +146,71 @@ int main(int argc, char* argv[])
         range_LUT[y]=range_fixedpoint;
     }
 
+#if DEBUG
+  printf ("finished generating gauss_LUT and range_LUT.\n");
+  printf("Range_LUT:\n");
+  for(y=0;y<PRECISION;y++)
+    printf("  %d", range_LUT[y]);
+  printf("\nGauss_LUT:\n");
+  for(y=0;y<KERNEL_SIZE;y++) {
+    for(x=0;x<KERNEL_SIZE;x++)
+      printf("  %d", gauss_LUT[y*KERNEL_SIZE+x]);
+    printf("\n");
+  }
+#endif
+  buffer_t input1_buf = {0}, output_buf = {0};
+  buffer_t gauss_LUT_buf = {0}, range_LUT_buf = {0};
+
+  // The host pointers point to the start of the image data:
+  input1_buf.host = (uint8_t *)&input[0];
+  output_buf.host = (uint8_t *)&output[0];
+
+  input1_buf.stride[0] = output_buf.stride[0] = 1;
+  input1_buf.stride[1] = width;  output_buf.stride[1] = width;
+  input1_buf.extent[0] = width;
+  output_buf.extent[0] = width;
+  input1_buf.extent[1] = height;
+  output_buf.extent[1] = height;
+  input1_buf.elem_size = 1; output_buf.elem_size = 4;
+
+  gauss_LUT_buf.host = (uint8_t *)&gauss_LUT[0];
+  gauss_LUT_buf.stride[0] = 1;
+  gauss_LUT_buf.stride[1] = KERNEL_SIZE;
+  gauss_LUT_buf.extent[0] = KERNEL_SIZE;
+  gauss_LUT_buf.extent[1] = KERNEL_SIZE;
+  gauss_LUT_buf.elem_size = 1;
+
+  range_LUT_buf.host = (uint8_t *)&range_LUT[0];
+  range_LUT_buf.extent[0] = PRECISION;
+  range_LUT_buf.stride[0] = 1;
+  range_LUT_buf.elem_size = 1;
+
+
     /* -----------------------------------------------------*/
     /*  Call fuction                                        */
     /* -----------------------------------------------------*/
     RESET_PMU();
     start_time = READ_PCYCLES();
 
-    bilateral9x9( input, stride, width, height, gauss_LUT, range_LUT, output );
+    bilateral( &input1_buf, &gauss_LUT_buf, &range_LUT_buf, &output_buf );
 
     total_cycles = READ_PCYCLES() - start_time;
     DUMP_PMU();
 
+#ifdef SYNTHETIC
+  printf("\noutput:\n");
+  for(i = 4; i < height-4; i++) {
+    for(j = 4; j < width-4; j++)
+      printf("  %d", output[i*stride+j]);
+    printf("\n");
+  }
+#endif
 #if defined(__hexagon__)
     printf("AppReported (HVX%db-mode): Image %dx%d - bilateral3x3: %0.4f cycles/pixel\n", VLEN, (int)width, (int)height, (float)total_cycles/width/(height-8));
 #endif
+
+
+
     /* -----------------------------------------------------*/
     /*  Write image output to file                          */
     /* -----------------------------------------------------*/

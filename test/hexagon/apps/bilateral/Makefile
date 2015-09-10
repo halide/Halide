@@ -12,6 +12,8 @@ else
 endif
 
 TIMING="--timing"
+TIMING=
+
 ARG12="1920 1080"
 GDB=
 
