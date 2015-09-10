@@ -11,6 +11,7 @@ else
   MHVX:=-mhvx
 endif
 
+TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} # -DTRACING -DSYNTHETIC
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
@@ -65,7 +66,7 @@ bmark-report:
 	fi
 
 run: sobel.out
-	${HEX_TOOLS}/bin/hexagon-sim sobel.out --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
+	${HEX_TOOLS}/bin/hexagon-sim sobel.out ${TIMING} -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
 	RUN_STATUS=$$?; \
 	FAIL=0; \
 	if [ $$RUN_STATUS -ne 0 ]; then \
@@ -102,4 +103,4 @@ sobel.synthetic.out: sobel_run.synthetic.o sobel.o sobel.h
 
 
 synthetic: sobel.synthetic.out
-	${HEX_TOOLS}/bin/hexagon-sim sobel.synthetic.out --timing
+	${HEX_TOOLS}/bin/hexagon-sim sobel.synthetic.out ${TIMING}

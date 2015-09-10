@@ -11,6 +11,7 @@ else
   MHVX:=-mhvx
 endif
 
+TIMING=--timing
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
@@ -65,7 +66,7 @@ bmark-report:
 	fi
 
 run: dilate3x3.out
-	${HEX_TOOLS}/bin/hexagon-sim dilate3x3.out --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
+	${HEX_TOOLS}/bin/hexagon-sim dilate3x3.out ${TIMING} -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
 	RUN_STATUS=$$?; \
 	FAIL=0; \
 	if [ $$RUN_STATUS -ne 0 ]; then \
@@ -103,4 +104,4 @@ dilate3x3.synthetic.out: dilate3x3_run.synthetic.o dilate3x3.o dilate3x3.h
 
 
 synthetic: dilate3x3.synthetic.out
-	${HEX_TOOLS}/bin/hexagon-sim dilate3x3.synthetic.out --timing
+	${HEX_TOOLS}/bin/hexagon-sim dilate3x3.synthetic.out ${TIMING}

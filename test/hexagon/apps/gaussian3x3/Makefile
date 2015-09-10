@@ -1,6 +1,8 @@
 CURR_DIR = $(shell pwd)
 HALIDE_TOP = ${CURR_DIR}/../../../..
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
+
+TIMING=--timing
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
@@ -41,7 +43,7 @@ all: gaussian3x3.out run
 
 
 run: gaussian3x3.out
-	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.out --timing -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin; \
+	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.out ${TIMING} -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin; \
 	RUN_STATUS=$$?; \
 	FAIL=0; \
 	if [ $$RUN_STATUS -ne 0 ]; then \
@@ -79,4 +81,4 @@ gaussian3x3.synthetic.out: gaussian3x3_run.synthetic.o gaussian3x3.o gaussian3x3
 
 
 synthetic: gaussian3x3.synthetic.out
-	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.synthetic.out --timing
+	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.synthetic.out ${TIMING}
