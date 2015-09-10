@@ -465,13 +465,15 @@ string CodeGen_Hexagon::mattrs() const {
 bool CodeGen_Hexagon::use_soft_float_abi() const {
   return false;
 }
-
+static bool EmittedOnce = false;
 int CodeGen_Hexagon::native_vector_bits() const {
+  bool DoTrace = ! EmittedOnce;
+  EmittedOnce = true;
   if (target.has_feature(Halide::Target::HVX_DOUBLE)) {
-    debug(1) << "128 Byte mode\n";
+    if (DoTrace) debug(1) << "128 Byte mode\n";
     return 128*8;
   } else {
-    debug(1) << "64 Byte mode\n";
+    if (DoTrace) debug(1) << "64 Byte mode\n";
     return 64*8;
   }
 }
@@ -922,6 +924,7 @@ CodeGen_Hexagon::handleLargeVectors(const Add *op) {
                      + WPICK(wild_u32x128, wild_u32x64));
   Patterns.push_back(WPICK(wild_i32x128, wild_i32x64)
                      + WPICK(wild_i32x128, wild_i32x64));
+  debug(4) << "HexCG: " << op->type <<  ", handleLargeVectors (Add)\n";
   for (size_t I = 0; I < Patterns.size(); ++I) {
     Expr pat = Patterns[I];
     if (expr_match(pat, op, matches)) {
@@ -980,6 +983,8 @@ CodeGen_Hexagon::handleLargeVectors(const Div *op) {
   Expr wild_u32x128_bc = Broadcast::make(wild_u32, 128);
   Expr wild_i32x128_bc = Broadcast::make(wild_i32, 128);
 
+  debug(4) << "HexCG: " << op->type <<  ", handleLargeVectors (Div)\n";
+
   Patterns.push_back(WPICK(wild_u32x128, wild_u32x64)
                      / WPICK(wild_u32x128_bc, wild_u32x64_bc));
   Patterns.push_back(WPICK(wild_i32x128, wild_i32x64)
@@ -1028,7 +1033,7 @@ CodeGen_Hexagon::handleLargeVectors(const Div *op) {
   return NULL;
 }
 void CodeGen_Hexagon::visit(const Div *op) {
-  debug(1) << "HexCG: " << op->type <<  "visit(Div)\n";
+  debug(1) << "HexCG: " << op->type <<  ", visit(Div)\n";
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   value = emitBinaryOp(op, averages);
   if (!value) {
@@ -1108,6 +1113,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   if (isWideningVectorCast(op)) {
     std::vector<Pattern> Patterns;
+    debug(4) << "Entered handleLargeVectors (Cast)\n";
     std::vector<Expr> matches;
     Patterns.push_back(Pattern(cast(UInt(32, CPICK(128, 64)),
                                     WPICK(wild_u8x128, wild_u8x64)),
@@ -1120,7 +1126,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
         if (expr_match(P.pattern, op, matches)) {
           // You have a vector that is u8x64 in matches. Extend this to u32x64.
           debug(4) << "HexCG::" << op->type <<
-            "handleLargeVectors(const Cast *)\n";
+            " handleLargeVectors(const Cast *)\n";
           debug(4) << "HexCG::First widening to 16bit elements\n";
           Intrinsic::ID IntrinsID = P.ID;
           Type NewT = Type(op->type.code, 16, op->type.width);
@@ -1567,6 +1573,7 @@ CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
   Patterns.push_back(WPICK(wild_i32x128_bc, wild_i32x64_bc)
                      * WPICK(wild_i32x128, wild_i32x64));
 
+  debug(4) << "HexCG: " << op->type <<  ", handleLargeVectors (Mul)\n";
   for (size_t I = 0; I < Patterns.size(); ++I) {
     Expr pat = Patterns[I];
     if (expr_match(pat, op, matches)) {
