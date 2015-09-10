@@ -7,14 +7,14 @@ CURR_DIR = $(shell pwd)
 LIT = $(shell ${LLVM_CONFIG} --src-root)/utils/lit/lit.py
 FILECHECK_PATH = $(shell ${LLVM_CONFIG} --bindir)
 FILECHECK = ${FILECHECK_PATH}/FileCheck
-CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
+X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
 SOURCES = $(wildcard  *.cpp)
 EXES = $(addsuffix .out, $(basename $(SOURCES)))
 
 %.out: %.cpp
-	${CLANG_CPP} -g ${INCLUDES} -lHalide -lpthread -ldl ${LDFLAGS}  -O0 ${CXXFLAGS} -o $@ $<
+	${X86_CLANG} -g ${INCLUDES} -lHalide -lpthread -ldl ${LDFLAGS}  -O0 ${CXXFLAGS} -o $@ $<
 
 .PHONY: all clean run check-codegen
 all: run

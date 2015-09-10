@@ -14,7 +14,7 @@ endif
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
+X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -22,7 +22,7 @@ B128_MODE=
 GDB=
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 median.o median.h: median.cpp
-	${CLANG_CPP}  median.cpp -g -o median.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
+	${X86_CLANG}  median.cpp -g -o median.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./median.generate.out  ${B128_MODE}
 
 
@@ -40,13 +40,13 @@ clean:
 .PHONY: assembly
 
 assembly: median.cpp
-	${CLANG_CPP}  median.cpp -g  -o median.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS}; \
+	${X86_CLANG}  median.cpp -g  -o median.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: median.cpp
-	${CLANG_CPP}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS}; \
+	${X86_CLANG}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
@@ -89,7 +89,7 @@ run: median.out
 .PHONY: stmt
 
 stmt: median.cpp
-	${CLANG_CPP}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS}; \
+	${X86_CLANG}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out
 
 .PHONY: synthetic

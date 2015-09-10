@@ -14,14 +14,14 @@ endif
 CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
+X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
 TEST_TYPE?=realimage
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 
 gaussian3x3.o gaussian3x3.h: gaussian3x3.cpp
-	${CLANG_CPP} -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DRUN -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
+	${X86_CLANG} -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DRUN -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 
@@ -40,13 +40,13 @@ clean:
 .PHONY: assembly
 
 assembly: gaussian3x3.cpp
-	${CLANG_CPP}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DASSEMBLY -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
+	${X86_CLANG}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DASSEMBLY -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: bitcode
 
 bitcode: gaussian3x3.cpp
-	${CLANG_CPP}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DBITCODE -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
+	${X86_CLANG}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DBITCODE -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: all
@@ -92,7 +92,7 @@ run: gaussian3x3.out
 .PHONY: stmt
 
 stmt: gaussian3x3.cpp
-	${CLANG_CPP}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
+	${X86_CLANG}  -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: halide_synthetic

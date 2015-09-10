@@ -13,14 +13,14 @@ endif
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} # -DTRACING -DSYNTHETIC
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
+X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 
 
 sobel.o sobel.h: sobel.cpp
-	${CLANG_CPP} sobel.cpp -g  -o sobel.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./sobel.generate.out
 
@@ -37,14 +37,14 @@ clean:
 .PHONY: assembly
 
 assembly: sobel.cpp
-	${CLANG_CPP} sobel.cpp -g -o sobel.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} sobel.cpp -g -o sobel.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./sobel.generate.out
 
 .PHONY: bitcode
 
 bitcode: sobel.cpp
-	${CLANG_CPP} sobel.cpp -g  -o sobel.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./sobel.generate.out
 
@@ -87,7 +87,7 @@ run: sobel.out
 .PHONY: stmt
 
 stmt: sobel.cpp
-	${CLANG_CPP} sobel.cpp -g  -o sobel.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./sobel.generate.out
 

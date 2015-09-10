@@ -18,14 +18,14 @@ ARG12="1920 1080"
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-CLANG_CPP=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
+X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 
 
 integrate.o integrate.h: integrate.cpp
-	${CLANG_CPP} integrate.cpp -g  -o integrate.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} integrate.cpp -g  -o integrate.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./integrate.generate.out
 
@@ -42,14 +42,14 @@ clean:
 .PHONY: assembly
 
 assembly: integrate.cpp
-	${CLANG_CPP} integrate.cpp -g -o integrate.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} integrate.cpp -g -o integrate.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./integrate.generate.out
 
 .PHONY: bitcode
 
 bitcode: integrate.cpp
-	${CLANG_CPP} integrate.cpp -g  -o integrate.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} integrate.cpp -g  -o integrate.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./integrate.generate.out
 
@@ -92,7 +92,7 @@ run: integrate.out
 .PHONY: stmt
 
 stmt: integrate.cpp
-	${CLANG_CPP} integrate.cpp -g  -o integrate.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${X86_CLANG} integrate.cpp -g  -o integrate.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
 	./integrate.generate.out
 
