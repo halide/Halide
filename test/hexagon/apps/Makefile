@@ -16,6 +16,7 @@ all: perf
 
 run:
 	for dir in $(SUBDIRS); do \
+		export MALLOC_CHECK_=0; \
 		$(MAKE) -C $$dir clean run; \
 	done
 
@@ -26,6 +27,7 @@ clean:
 
 bmark-report:
 	for dir in $(SUBDIRS); do \
+		export MALLOC_CHECK_=0; \
 		$(MAKE) -C $$dir bmark-report; \
 	done
 perf: run bmark-report
