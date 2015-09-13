@@ -24,15 +24,22 @@ namespace Halide { namespace Internal {
  */
 std::map<std::string, JITExtern> filter_externs(const std::map<std::string, JITExtern> &externs);
 
-/** Run generated JavaScript code with a set of arguments and
- * externs. Target is used to choose the JavaScript engine. (Default
- * is V8 if both V8 and SpiderMonkey are enabled.) There is no caching
- * of JavaScript context at present so performance on repeated calls
- * is not ideal. Current intended use is to facilitate testing. */
-EXPORT int run_javascript(const Target &target, const std::string &source, const std::string &fn_name,
-                          const std::vector<std::pair<Argument, const void *>> &args,
-                          const std::map<std::string, JITExtern> &externs,
-                          const std::vector<JITModule> &extern_deps);
+struct JavaScriptModuleContents;
+
+/** Handle to compiled JavaScript code which can be called later. */
+struct JavaScriptModule {
+    Internal::IntrusivePtr<JavaScriptModuleContents> contents;
+};
+
+/** Compile generated JavaScript code with a set of externs. Target is
+ * used to choose the JavaScript engine. (Default is V8 if both V8 and
+ * SpiderMonkey are enabled.) */
+EXPORT JavaScriptModule compile_javascript(const Target &target, const std::string &source, const std::string &fn_name,
+                                           const std::map<std::string, JITExtern> &externs,
+                                           const std::vector<JITModule> &extern_deps);
+
+/** Run generated previously compiled JavaScript code with a set of arguments. */
+EXPORT int run_javascript(JavaScriptModule module, const std::vector<std::pair<Argument, const void *>> &args);
 
 }}
 

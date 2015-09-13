@@ -171,6 +171,16 @@ const string preamble =
     "            max_cache_size = size;\n"
     "            prune_cache();\n"
     "        }\n"
+    "        function memoization_full_cache_key(cache_key, size, computed_bounds) {\n"
+    "            var result = \"\";\n"
+    "            for (var c = 0; c < size; c++) {\n"
+    "                result += String.fromCharCode(cache_key[c]);\n"
+    "            }\n"
+    "            for (var i = 0; i < computed_bounds.extent.length; i++) {\n"
+    "                result += computed_bounds.min[i].toString() + computed_bounds.extent[i].toString() + computed_bounds.stride[i].toString();\n"
+    "            }\n"
+    "            return result;\n"
+    "        }\n"
     "        function new_entry(buf) {\n"
     "            var total_size = 1;\n"
     "            for (var i = 0; i < buf.extent.length && buf.extent[i] != 0; i++) { \n"
@@ -183,11 +193,11 @@ const string preamble =
     "             buf.host = new buf.array_constructor(total_size);\n"
     "        }\n"
     "        halide_memoization_cache_lookup = function(user_context, cache_key, size, computed_bounds, tuple_count, tuple_buffers) {\n"
-    "            var key = { cache_key: cache_key, computed_bounds: computed_bounds };\n"
+    "            var key = memoization_full_cache_key(cache_key, size, computed_bounds);\n"
     "            if (key in entries) {\n"
     "                var entry = entries[key];\n"
     "                for (var i = 0; i < tuple_count; i++) {\n"
-    "                    tuple_buffers[i] = entry.tuple_buffers[i];\n"
+    "                    tuple_buffers[i].host = entry[i].host;\n"
     "                }\n"
     "                \n"
     "                return 0;\n"
@@ -198,11 +208,11 @@ const string preamble =
     "            return 1;\n"
     "        }\n"
     "        halide_memoization_cache_store = function(user_context, cache_key, size, computed_bounds, tuple_count, tuple_buffers) {\n"
-    "            var key = { cache_key: cache_key, computed_bounds: computed_bounds };\n"
+    "            var key = memoization_full_cache_key(cache_key, size, computed_bounds);\n"
     "            if (key in entries) {\n"
     "                return 0;\n"
     "            } else {\n"
-    "                var entry = { tuple_buffers: tuple_buffers };\n"
+    "                var entry = tuple_buffers.slice();\n"
     "                entries[key] = entry;\n"
     "            }\n"
     "            return 0;\n"
@@ -459,7 +469,9 @@ void CodeGen_JavaScript::unpack_buffer(Type t, const std::string &buffer_name) {
            << " = "
            << buf_name
            << ".host;\n";
-    allocations.push(buffer_name, t);
+    Allocation alloc;
+    alloc.type = t;
+    allocations.push(buffer_name, alloc);
 
     stream << "var "
            << name
@@ -1188,6 +1200,10 @@ void CodeGen_JavaScript::visit(const Call *op) {
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << a0 << ".min[" << a1 << "]";
+        } else if (op->name == Call::extract_buffer_host) {
+            internal_assert(op->args.size() == 1);
+            string a0 = print_expr(op->args[0]);
+            rhs << a0 << ".host";
         } else if (op->name == Call::set_host_dirty) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
@@ -1228,11 +1244,18 @@ void CodeGen_JavaScript::visit(const Call *op) {
             string src = print_expr(op->args[1]);
             string size = print_expr(op->args[2]);
             string index_var = unique_name('i');
+
+            bool is_string_imm = op->args[1].as<StringImm>() != nullptr;
             stream << "for (var " << index_var << " = 0; " << index_var << " < " << size << "; " << index_var << "++) ";
             open_scope();
             do_indent();
-            stream << dest << "[" << index_var << "] = " << src << "[" << index_var << "];\n";
-            close_scope("memcpy");
+            stream << dest << "[" << index_var << "] = " << src;
+            if (is_string_imm) {
+                stream << ".charCodeAt(" << index_var << ");\n";
+            } else {
+                stream << "[" << index_var << "];\n";
+            }
+            close_scope("copy_memory");
             rhs << dest;
         } else if (op->name == Call::make_struct) {
             // Emit a line something like: var foo = [3.0f, 'c', 4 ];
@@ -1342,33 +1365,57 @@ void CodeGen_JavaScript::visit(const Call *op) {
 }
 
 void CodeGen_JavaScript::visit(const Load *op) {
-#if 0 // TODO: Figure out if this can ever result in a value changing cast.
+    Type t = op->type;
+
     bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name) == op->type);
-#endif
+                              allocations.get(op->name).type == t);
+ 
+    std::string typed_name = print_name(op->name);
+
     ostringstream rhs;
-    if (op->type.width == 1) {
-        rhs << print_name(op->name);
-        rhs << "["
-            << print_expr(op->index)
-            << "]";
+    if (t.width == 1) {
+        std::string index_expr = print_expr(op->index);
+        if (type_cast_needed) {
+            std::string temp = unique_name('_');
+            std::string array_type = javascript_type_array_name_fragment(t);
+            do_indent();
+            stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
+                   << index_expr << " * " << t.bytes() << ", 1);\n";
+            rhs << temp << "[0]";
+        } else {
+            rhs << typed_name;
+            rhs << "["
+                << index_expr
+                << "]";
+        }
     } else {
         std::vector<string> indices;
 
-        for (int32_t i = 0; i < op->type.width; i++) {
+        for (int32_t i = 0; i < t.width; i++) {
             indices.push_back(print_expr(extract_lane(op->index, i)));
         }
         rhs << "[";
-        for (int32_t i = 0; i < op->type.width; i++) {
+        // TODO: Handle dense ramps.
+        for (int32_t i = 0; i < t.width; i++) {
+            std::string possibly_casted = typed_name;
+            std::string index_expr = indices[i];
+            if (type_cast_needed) {
+                std::string temp = unique_name('_');
+                std::string array_type = javascript_type_array_name_fragment(t);
+                stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
+                       << index_expr << " * " << t.bytes() << ", 1);\n";
+                possibly_casted = temp;
+                index_expr = "0";
+            }
             if (i != 0) {
                 rhs << ", ";
             }
-            rhs << print_name(op->name) << "[" << indices[i] << "]";
+            rhs << possibly_casted << "[" << index_expr << "]";
         }
         rhs << "]";
     }
 
-    print_assignment(op->type, rhs.str());
+    print_assignment(t, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Ramp *op) {
@@ -1401,25 +1448,33 @@ void CodeGen_JavaScript::visit(const Broadcast *op) {
 }
 
 void CodeGen_JavaScript::visit(const Store *op) {
-#if 0 // TODO: Figure out if this can ever result in a value changing cast.
     Type t = op->value.type();
 
     bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name) == t);
-#endif
+                              allocations.get(op->name).type == t);
+ 
+    std::string typed_name = print_name(op->name);
 
     int32_t width = op->value.type().width;
     if (width == 1) {
         string id_index = print_expr(op->index);
         string id_value = print_expr(op->value);
         do_indent();
-
-        stream << print_name(op->name);
-        stream << "["
-               << id_index
-               << "] = "
-               << id_value
-               << ";\n";
+        if (type_cast_needed) {
+            std::string temp = unique_name('_');
+            std::string array_type = javascript_type_array_name_fragment(t);
+            stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
+                   << id_index << " * " << t.bytes() << ", 1);\n";
+            do_indent();
+            stream << temp << "[0] = " << id_value << ";\n";
+        } else {
+            stream << typed_name;
+            stream << "["
+                   << id_index
+                   << "] = "
+                   << id_value
+                   << ";\n";
+        }
     } else {
         std::vector<string> indices;
         std::vector<string> values;
@@ -1429,13 +1484,25 @@ void CodeGen_JavaScript::visit(const Store *op) {
             values.push_back(print_expr(extract_lane(op->value, i)));
         }
         for (int32_t i = 0; i < width; i++) {
-            stream << print_name(op->name);
-            stream << "["
-                   << indices[i]
-                   << "] = "
-                   << values[i]
-                   << ";\n";
-
+            do_indent();
+            if (type_cast_needed) {
+                std::string temp = unique_name('_');
+                std::string array_type = javascript_type_array_name_fragment(t);
+                stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
+                       << indices[i] << " * " << t.bytes() << ", 1);\n";
+                do_indent();
+                stream << temp;
+                stream << "[0]= "
+                       << values[i]
+                       << ";\n";
+            } else {
+                stream << typed_name;
+                stream << "["
+                       << indices[i]
+                       << "] = "
+                       << values[i]
+                       << ";\n";
+            }
         }
     }
     cache.clear();
@@ -1544,41 +1611,54 @@ void CodeGen_JavaScript::visit(const Provide *op) {
 void CodeGen_JavaScript::visit(const Allocate *op) {
     open_scope(); // TODO: this probably doesn't work right as JavaScript has ridiculous scoping. Either use Let or explicitly deallocate...
 
-    allocations.push(op->name, op->type);
+    Allocation alloc;
+    alloc.type = op->type;
+    alloc.free_function = op->free_function;
+    allocations.push(op->name, alloc);
     
-    internal_assert(op->type.is_float() || op->type.is_int() || op->type.is_uint()) << "Cannot allocate numeric type in JavaScript codegen.\n";
+    internal_assert(op->type.is_float() || op->type.is_int() || op->type.is_uint()) << "Cannot allocate non-numeric type in JavaScript codegen.\n";
+    // TODO: this needs to go away with SIMD.js...
     internal_assert(op->type.width == 1) << "Vector types not supported in JavaScript codegen.\n";
 
-    string typed_array_name = javascript_type_array_name_fragment(op->type) + "Array";
-    std::string allocation_size;
-    int32_t constant_size;
-    // This both potentially does strength reduction at compile time, but also handles the zero extents case.
-    if (constant_allocation_size(op->extents, op->name, constant_size)) {
-        allocation_size = print_expr(static_cast<int32_t>(constant_size));
+    if (op->new_expr.defined()) {
+        std::string alloc_expr = print_expr(op->new_expr);
+        stream << "var " << print_name(op->name) << " = (" << alloc_expr << ");\n";
     } else {
-        // TODO: Verify overflow is not a concern.
-        allocation_size = print_expr(op->extents[0]);
-        for (size_t i = 1; i < op->extents.size(); i++) {
-            allocation_size = print_assignment(Float(64), allocation_size + " * " + print_expr(op->extents[i]));
+        string typed_array_name = javascript_type_array_name_fragment(op->type) + "Array";
+        std::string allocation_size;
+        int32_t constant_size;
+        // This both potentially does strength reduction at compile time, but also handles the zero extents case.
+        if (constant_allocation_size(op->extents, op->name, constant_size)) {
+            allocation_size = print_expr(static_cast<int32_t>(constant_size));
+        } else {
+            // TODO: Verify overflow is not a concern.
+            allocation_size = print_expr(op->extents[0]);
+            for (size_t i = 1; i < op->extents.size(); i++) {
+                allocation_size = print_assignment(Float(64), allocation_size + " * " + print_expr(op->extents[i]));
+            }
         }
+
+        stream << "var " << print_name(op->name) << " = new " << typed_array_name << "(" << allocation_size << ");\n";
+        do_indent();
     }
 
-    stream << "var " << print_name(op->name) << " = new " << typed_array_name << "(" << allocation_size << ");\n";
-    // TODO: Error handling?
-    heap_allocations.push(op->name, 0);
-    do_indent();
-
     op->body.accept(this);
-
-    // Should have been freed internally
-    internal_assert(!heap_allocations.contains(op->name));
 
     close_scope("alloc " + print_name(op->name));
 }
 
 void CodeGen_JavaScript::visit(const Free *op) {
-    stream << print_name(op->name) << " = undefined;"; // TODO: should this be null?
-    heap_allocations.pop(op->name);
+    string free_function = allocations.get(op->name).free_function;
+    if (free_function.empty()) {
+        stream << print_name(op->name) << " = undefined;"; // TODO: should this be null?
+    } else {
+        do_indent();
+        stream << free_function << "("
+               << (have_user_context ? "__user_context, " : "NULL, ")
+               << print_name(op->name)
+               << ");\n";
+    }
+    allocations.pop(op->name);
 }
 
 void CodeGen_JavaScript::visit(const Realize *op) {

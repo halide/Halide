@@ -54,7 +54,7 @@ struct PipelineContents {
     Target jit_target;
 
     // Cache compiled JavaScript is JITting with Target::JavaScript. */
-    std::string cached_javascript;
+    JavaScriptModule javascript_module;
 
     /** Clear all cached state */
     void invalidate_cache() {
@@ -62,7 +62,7 @@ struct PipelineContents {
         jit_module = JITModule();
         jit_target = Target();
         inferred_args.clear();
-        cached_javascript.clear();
+        javascript_module = JavaScriptModule();
     }
 
     // The outputs
@@ -651,11 +651,10 @@ void Pipeline::compile_jit(const Target &target_arg) {
 
     debug(2) << "jit-compiling for: " << target_arg.to_string() << "\n";
 
-    std::map<std::string, JITExtern> externs_js = contents.ptr->jit_externs;
     // TODO: see if JS and non-JS can share more code.
     if (target.has_feature(Target::JavaScript)) {
     #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
-        if (!contents.ptr->cached_javascript.empty()) {
+        if (contents.ptr->javascript_module.contents.defined()) {
             return;
         }
     #else
@@ -691,11 +690,29 @@ void Pipeline::compile_jit(const Target &target_arg) {
         std::stringstream out(std::ios_base::out);
         CodeGen_JavaScript cg(out);
         cg.compile(module);
-        contents.ptr->cached_javascript = out.str();
         if (debug::debug_level >= 3) {
             std::ofstream js_debug((name + ".js").c_str());
-            js_debug << contents.ptr->cached_javascript;
+            js_debug << out.str();
         }
+        
+        std::map<std::string, JITExtern> externs_js;
+        externs_js = contents.ptr->jit_externs;
+        FindExterns find_externs(externs_js);
+        for (LoweredFunc &f : contents.ptr->module.functions) {
+            f.body.accept(&find_externs);
+        }
+        externs_js = filter_externs(externs_js);
+
+        // Sanitise the name of the generated function
+        string js_fn_name = contents.ptr->module.name();
+        for (size_t i = 0; i < js_fn_name.size(); i++) {
+            if (!isalnum(js_fn_name[i])) {
+                js_fn_name[i] = '_';
+            }
+        }
+
+        std::vector<JITModule> extern_deps = make_externs_jit_module(target, externs_js);
+        contents.ptr->javascript_module = compile_javascript(target, out.str(), js_fn_name, externs_js, extern_deps);
     } else {
         // Make sure we're not embedding any images
         internal_assert(module.buffers.empty());
@@ -923,7 +940,7 @@ Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
 
     JITModule &compiled_module = contents.ptr->jit_module;
     internal_assert(compiled_module.argv_function() ||
-                    !contents.ptr->cached_javascript.empty());
+                    contents.ptr->javascript_module.contents.defined());
 
     struct OutputBufferType {
         Function func;
@@ -1066,32 +1083,15 @@ int Pipeline::call_jit_code(const Target &target, std::pair<std::vector<const vo
     int exit_status = 0;
     #if defined(WITH_JAVASCRIPT_V8) || defined(WITH_JAVASCRIPT_SPIDERMONKEY)
     if (target.has_feature(Target::JavaScript)) {
-        internal_assert(!contents.ptr->cached_javascript.empty());
-
-        // Sanitise the name of the generated function
-        string js_fn_name = contents.ptr->module.name();
-        for (size_t i = 0; i < js_fn_name.size(); i++) {
-            if (!isalnum(js_fn_name[i])) {
-                js_fn_name[i] = '_';
-            }
-        }
-
-        std::map<std::string, JITExtern> externs_js;
-        externs_js = contents.ptr->jit_externs;
-        FindExterns find_externs(externs_js);
-        for (LoweredFunc &f : contents.ptr->module.functions) {
-            f.body.accept(&find_externs);
-        }
-        externs_js = filter_externs(externs_js);
+        internal_assert(contents.ptr->javascript_module.contents.defined());
 
         std::vector<std::pair<Argument, const void *> > js_args;
         for (size_t i = 0; i < args.second.size(); i++) {
             js_args.push_back(std::make_pair(args.second[i], args.first[i]));
         }
 
-        Internal::debug(2) << "Calling jitted JavaScript function " << js_fn_name << "\n";
-        std::vector<JITModule> extern_deps = make_externs_jit_module(target, externs_js);
-        exit_status = run_javascript(target, contents.ptr->cached_javascript, js_fn_name, js_args, externs_js, extern_deps);
+        Internal::debug(2) << "Calling jitted JavaScript function\n";
+        exit_status = run_javascript(contents.ptr->javascript_module, js_args);
         Internal::debug(2) << "Back from jitted JavaScript function. Exit status was " << exit_status << "\n";
     } else
     #endif

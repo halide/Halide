@@ -79,11 +79,13 @@ protected:
     /** Unpack a buffer into its constituent parts */
     void unpack_buffer(Type t, const std::string &buffer_name);
 
-    /** Track the types of allocations to avoid unnecessary casts. */
-    Scope<Type> allocations;
+    struct Allocation {
+        Type type;
+        std::string free_function;
+    };
 
-    /** Track which allocations actually went on the heap. */
-    Scope<int> heap_allocations;
+    /** Track the types of allocations to avoid unnecessary casts. */
+    Scope<Allocation> allocations;
 
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;

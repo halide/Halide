@@ -927,13 +927,14 @@ void add_extern_callbacks(Isolate *isolate, Local<Context> &context,
 
 } // namespace JS_V8;
 
-int run_javascript_v8(const std::string &source, const std::string &fn_name,
-                      std::vector<std::pair<Argument, const void *>> args,
-                      const std::map<std::string, JITExtern> &externs,
-                      JITModule trampolines) {
+int compile_javascript_v8(const std::string &source, const std::string &fn_name,
+                          const std::map<std::string, JITExtern> &externs,
+                          JITModule trampolines,
+                          JS_V8::Isolate *&isolate, JS_V8::Persistent<JS_V8::Context> &context_holder,
+                          JS_V8::Persistent<JS_V8::Function> &function_holder) {
     using namespace JS_V8;
 
-    debug(0) << "Calling JavaScript function " << fn_name << " with " << args.size() << " args.\n";
+    debug(0) << "Compiling JavaScript function " << fn_name << "\n";
     // TODO: thread safety.
     static bool inited = false;
     if (!inited) {
@@ -957,15 +958,16 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
     }
 
     // Create a new Isolate and make it the current one.
-    Isolate* isolate = Isolate::New();
+    isolate = Isolate::New();
 
     Isolate::Scope isolate_scope(isolate);
 
     // Create a stack-allocated handle scope.
     HandleScope handle_scope(isolate);
 
-    // Create a new context.
     Local<Context> context = Context::New(isolate, NULL, make_global_template(isolate));
+    // Create a new context.
+    context_holder.Reset(isolate, context);
 
     // Enter the context for compiling and running the hello world script.
     Context::Scope context_scope(context);
@@ -979,6 +981,27 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
     if (compile_function(isolate, context, fn_name, source, function) != 0) {
         return -1;
     }
+    function_holder.Reset(isolate, function);
+    
+    return 0;
+}
+
+int run_javascript_v8(std::vector<std::pair<Argument, const void *>> args,
+                      v8::Isolate *&isolate, v8::Persistent<v8::Context> &context_holder,
+                      v8::Persistent<v8::Function> &function_holder) {
+    using namespace JS_V8;
+
+    Isolate::Scope isolate_scope(isolate);
+
+    // Create a stack-allocated handle scope.
+    HandleScope handle_scope(isolate);
+
+    Local<Context> context = Local<Context>::New(isolate, context_holder);
+    // Enter the context for compiling and running the hello world script.
+    Context::Scope context_scope(context);
+
+    TryCatch try_catch;
+    try_catch.SetCaptureMessage(true);
 
     debug(0) << "Making args.\n";
 
@@ -996,6 +1019,7 @@ int run_javascript_v8(const std::string &source, const std::string &fn_name,
 
     debug(0) << "Calling function.\n";
 
+    Local<v8::Function> function = Local<v8::Function>::New(isolate, function_holder);
     // TODO: Is this the correct reciever?
     Local<Value> result = function->Call(function, js_args.size(), &js_args[0]);
 
@@ -1843,17 +1867,48 @@ bool add_extern_callbacks(JSContext *context, HandleObject global,
     return true;
 }
 
+// SpiderMonkey basically insists on a one to one mapping between its JSRuntime
+// data structure and a thread. Though aruntime can be destroyed and then a
+// new one made on the same thread. The issue is if two Funcs are compiled
+// on a thread and their lifetimes overlap, they need to use the same JSRuntime.
+// However we do want to free the resources used by the runtime if it is not in use.
+// The design here is to assume single threading, which is true for JS tests, and
+// to reference count the runtime so it can be freed if there are no uses.
+
 } // namespace JS_SpiderMonkey
 
-int run_javascript_spidermonkey(const std::string &source, const std::string &fn_name,
-                                std::vector<std::pair<Argument, const void *>> args,
-                                const std::map<std::string, JITExtern> &externs,
-                                JITModule trampolines) {
-    int32_t result = 0; 
+namespace {
+JSRuntime *current_spider_monkey_runtime = nullptr;
+uint32_t current_spider_monkey_runtime_refs = 0;
+JSRuntime *spider_monkey_get_runtime() {
+    if (current_spider_monkey_runtime == nullptr) {
+        internal_assert(current_spider_monkey_runtime_refs == 0) << "Current Spider Moneky runtime is nullptr with refcount non-zero.\n";
+        current_spider_monkey_runtime = JS_NewRuntime(128L * 1024L * 1024L);
+    }
+    if (current_spider_monkey_runtime != nullptr) {
+        current_spider_monkey_runtime_refs++;
+    }
+    return current_spider_monkey_runtime;
+}
+}
 
+void spider_monkey_release_runtime() {
+    internal_assert(current_spider_monkey_runtime_refs > 0) << "Releasing Spider Moneky runtime with refcount at zero.\n";
+    if (--current_spider_monkey_runtime_refs == 0) {
+        JS_DestroyRuntime(current_spider_monkey_runtime);
+        current_spider_monkey_runtime = nullptr;
+    }
+}
+
+int compile_javascript_spider_monkey(const std::string &source, const std::string &fn_name,
+                                     const std::map<std::string, JITExtern> &externs,
+                                     JITModule trampolines,
+                                     JSRuntime *&runtime, JSContext *&context,
+                                     JS::PersistentRootedObject &global_holder, std::string &function_name,
+                                     std::vector<JS_SpiderMonkey::CallbackInfo> &callback_info_storage) {
     using namespace JS_SpiderMonkey;
 
-    debug(0) << "Calling JavaScript function " << fn_name << " with " << args.size() << " args.\n";
+    debug(0) << "Calling JavaScript function " << fn_name << "\n";
     // TODO: thread safety.
     static bool inited = false;
     if (!inited) {
@@ -1864,49 +1919,50 @@ int run_javascript_spidermonkey(const std::string &source, const std::string &fn
     }
 
     // Create a JS runtime.
-    JSRuntime *runtime = JS_NewRuntime(128L * 1024L * 1024L);
+    runtime = spider_monkey_get_runtime();
     if (!runtime) {
         return -1;
     }
 
     // Create a context.
-    JSContext *context = JS_NewContext(runtime, 8192);
+    context = JS_NewContext(runtime, 8192);
     if (!context) {
-        JS_DestroyRuntime(runtime);
+        spider_monkey_release_runtime();
         return -1;
     }
     JS_SetErrorReporter(runtime, reportError);
 
-    {
-        JSAutoRequest auto_request(context);
+    JSAutoRequest request(context);
 
+    {
         // Create the global object and a new compartment.
         RootedObject global(context);
         global = JS_NewGlobalObject(context, &global_class, NULL,
                                     JS::DontFireOnNewGlobalHook);
         if (!global) {
             JS_DestroyContext(context);
-            JS_DestroyRuntime(runtime);
+            spider_monkey_release_runtime();
             return -1;
         }
+        global_holder.init(context, global);
 
-        JSAutoCompartment auto_compartment(context, global);
+        JSAutoCompartment compartment(context, global);
 
         // Populate the global object with the standard globals, like Object and
         // Array.
         if (!JS_InitStandardClasses(context, global)) {
             JS_DestroyContext(context);
-            JS_DestroyRuntime(runtime);
+            spider_monkey_release_runtime();
             return -1;
         }
 
         make_callbacks(context, global);
 
-        std::vector<CallbackInfo> callback_info_storage(externs.size());
+        callback_info_storage.resize(externs.size());
         if (!add_extern_callbacks(context, global, externs, trampolines, callback_info_storage)) {
             debug(0) << "Failure adding extern callbacks to SpiderMonkey globals.\n";
             JS_DestroyContext(context);
-            JS_DestroyRuntime(runtime);
+            spider_monkey_release_runtime();
             return -1;
         }
 
@@ -1918,49 +1974,64 @@ int run_javascript_spidermonkey(const std::string &source, const std::string &fn
         if (!succeeded) {
             debug(0) << "JavaScript script evaulation failed(SpiderMonkey).\n";
             JS_DestroyContext(context);
-            JS_DestroyRuntime(runtime);
+            spider_monkey_release_runtime();
             return -1;
         }
 
         debug(0) << "Script compiled(SpiderMonkey).\n";
 
-        AutoValueVector js_args(context);
-        for (size_t i = 0; i < args.size(); i++) {
-            Argument &arg(args[i].first);
-            if (arg.is_buffer()) {
-                js_args.append(make_buffer_t(context,
-                                             (struct buffer_t *)args[i].second,
-                                             halide_type_to_external_array_type(arg.type)));
-            } else {
-                js_args.append(wrap_scalar(context, arg.type, args[i].second));
-            }
-        }
+        function_name = fn_name;
+    }
 
-        RootedValue js_result(context);
-        succeeded = JS::Call(context, global, fn_name.c_str(), js_args, &js_result);
+    return 0;
+}
 
-        debug(0) << "Returned from call with return val " << succeeded << ".\n";
+int run_javascript_spider_monkey(std::vector<std::pair<Argument, const void *>> args,
+                                 JSContext *context, JS::PersistentRootedObject &global_holder,
+                                 const std::string &fn_name) {
+    int32_t result = 0; 
 
-        // The underlying memory for the array buffers must be stolen back
-        // so GC doesn't try to free the pointers.
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].first.is_buffer()) {
-                disconnect_array_buffer(context, js_args[i], "host");
-                disconnect_array_buffer(context, js_args[i], "min");
-                disconnect_array_buffer(context, js_args[i], "stride");
-                disconnect_array_buffer(context, js_args[i], "extent");
-            }
-        }
+    using namespace JS_SpiderMonkey;
 
-        if (succeeded) {
-            JS::ToInt32(context, js_result, &result);
+    JSAutoRequest request(context);
+    JSAutoCompartment compartment(context, global_holder);
+
+    debug(0) << "Calling JavaScript function " << fn_name << " with " << args.size() << " args.\n";
+
+    AutoValueVector js_args(context);
+    for (size_t i = 0; i < args.size(); i++) {
+        Argument &arg(args[i].first);
+        if (arg.is_buffer()) {
+            js_args.append(make_buffer_t(context,
+                                         (struct buffer_t *)args[i].second,
+                                         halide_type_to_external_array_type(arg.type)));
         } else {
-          result = -1;
+            js_args.append(wrap_scalar(context, arg.type, args[i].second));
         }
     }
 
-    JS_DestroyContext(context);
-    
+    RootedValue js_result(context);
+    int succeeded = JS::Call(context, global_holder, fn_name.c_str(), js_args, &js_result);
+
+    debug(0) << "Returned from call with return val " << succeeded << ".\n";
+
+    // The underlying memory for the array buffers must be stolen back
+    // so GC doesn't try to free the pointers.
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].first.is_buffer()) {
+            disconnect_array_buffer(context, js_args[i], "host");
+            disconnect_array_buffer(context, js_args[i], "min");
+            disconnect_array_buffer(context, js_args[i], "stride");
+            disconnect_array_buffer(context, js_args[i], "extent");
+        }
+    }
+
+    if (succeeded) {
+        JS::ToInt32(context, js_result, &result);
+    } else {
+      result = -1;
+    }
+
     return result;
 }
 
@@ -1970,36 +2041,149 @@ int run_javascript_spidermonkey(const std::string &source, const std::string &fn
 
 namespace Halide { namespace Internal {
 
-int run_javascript(const Target &target, const std::string &source, const std::string &fn_name,
-                   const std::vector<std::pair<Argument, const void *>> &args,
-                   const std::map<std::string, JITExtern> &externs,
-                   const std::vector<JITModule> &extern_deps) {
+struct JavaScriptModuleContents {
+    mutable RefCount ref_count;
+
+    std::map<std::string, JITExtern> externs;
+    std::vector<JITModule> extern_deps;
+    JITModule trampolines;
+
+#ifdef WITH_JAVASCRIPT_V8
+    v8::Isolate *v8_isolate;
+    v8::Persistent<v8::Context> v8_context;
+    v8::Persistent<v8::Function> v8_function;
+#endif
+
+#ifdef WITH_JAVASCRIPT_SPIDERMONKEY
+    JSRuntime *spider_monkey_runtime;
+    JSContext *spider_monkey_context;
+    JS::PersistentRootedObject spider_monkey_globals;
+    std::string spider_monkey_function_name;
+    std::vector<JS_SpiderMonkey::CallbackInfo> spider_monkey_callback_info_storage;
+#endif
+
+JavaScriptModuleContents() {
+#ifdef WITH_JAVASCRIPT_V8
+    v8_isolate = nullptr;
+#endif
+#ifdef WITH_JAVASCRIPT_SPIDERMONKEY
+    spider_monkey_runtime = nullptr;
+    spider_monkey_context = nullptr;
+#endif
+    }
+
+    ~JavaScriptModuleContents() {
+#ifdef WITH_JAVASCRIPT_V8
+        if (v8_isolate != NULL) {
+            // Not sure if this is required...
+            {
+                v8::Isolate::Scope isolate_scope(v8_isolate);
+
+                v8_function.Reset();
+                v8_context.Reset();
+            }
+
+            v8_isolate->Dispose();
+        }
+#endif
+
+#ifdef WITH_JAVASCRIPT_SPIDERMONKEY
+        spider_monkey_globals.reset();
+        if (spider_monkey_context != nullptr) {
+            JS_DestroyContext(spider_monkey_context);
+        }
+        if (spider_monkey_runtime != nullptr) {
+            internal_assert(spider_monkey_runtime == current_spider_monkey_runtime) << "Releasing JSRuntime that is not the current one.\n";
+            spider_monkey_release_runtime();
+        }
+#endif
+    }
+};
+
+template<>
+EXPORT RefCount &ref_count<JavaScriptModuleContents>(const JavaScriptModuleContents *p) {
+    return p->ref_count;
+}
+
+template<>
+EXPORT void destroy<JavaScriptModuleContents>(const JavaScriptModuleContents *p) {
+    delete p;
+}
+
+EXPORT JavaScriptModule compile_javascript(const Target &target, const std::string &source, const std::string &fn_name,
+                                           const std::map<std::string, JITExtern> &externs,
+                                           const std::vector<JITModule> &extern_deps) {
+#if !defined(WITH_JAVASCRIPT_V8) && !defined(WITH_JAVASCRIPT_SPIDERMONKEY)
+    user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
+    return JavaScriptModule();
+#endif
+
+    JavaScriptModule module;
+    module.contents = new JavaScriptModuleContents();
+
+    module.contents.ptr->externs = externs;
+    module.contents.ptr->extern_deps = extern_deps;
+    // This call explicitly does not use "_argv" as the suffix because
+    // that name may already exist and if so, will return an int
+    // instead of taking a pointer at the end of the args list to
+    // receive the result value.
+    module.contents.ptr->trampolines = JITModule::make_trampolines_module(target, module.contents.ptr->externs,
+                                                                          "_js_trampoline", module.contents.ptr->extern_deps);
+
+#ifdef WITH_JAVASCRIPT_V8
+    if (!target.has_feature(Target::JavaScript_SpiderMonkey)) {
+        if (compile_javascript_v8(source, fn_name, module.contents.ptr->externs, module.contents.ptr->trampolines,
+                                  module.contents.ptr->v8_isolate, module.contents.ptr->v8_context,
+                                  module.contents.ptr->v8_function) ==0) {
+            return module;
+        }
+    }
+#else    
+    if (target.has_feature(Target::JavaScript_V8)) {
+        user_error << "V8 JavaScript requested without configuring V8 JavaScript engine.";
+    }
+#endif
+
+#ifdef WITH_JAVASCRIPT_SPIDERMONKEY
+    debug(0) << "Compiling with SpiderMonkey\n";
+    if (compile_javascript_spider_monkey(source, fn_name, module.contents.ptr->externs,
+                                         module.contents.ptr->trampolines, module.contents.ptr->spider_monkey_runtime,
+                                         module.contents.ptr->spider_monkey_context, module.contents.ptr->spider_monkey_globals,
+                                         module.contents.ptr->spider_monkey_function_name,
+                                         module.contents.ptr->spider_monkey_callback_info_storage) == 0) {
+        debug(0) << "Compiling with SpiderMonkey suceeded\n";
+        return module;
+    }
+#else    
+    if (target.has_feature(Target::JavaScript_SpiderMonkey)) {
+        user_error << "SpiderMonkey JavaScript requested without configuring SpiderMonkey JavaScript engine.";
+    }
+#endif
+
+    module.contents = nullptr;
+    return module;
+}
+
+/** Run generated previously compiled JavaScript code with a set of arguments. */
+EXPORT int run_javascript(JavaScriptModule module, const std::vector<std::pair<Argument, const void *>> &args) {
 #if !defined(WITH_JAVASCRIPT_V8) && !defined(WITH_JAVASCRIPT_SPIDERMONKEY)
     user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
     return -1;
 #endif
 
-    // This call explicitly does not use "_argv" as the suffix because
-    // that name may already exist and if so, will return an int
-    // instead of taking a pointer at the end of the args list to
-    // receive the result value.
-    JITModule trampolines = JITModule::make_trampolines_module(target, externs, "_js_trampoline", extern_deps);
-
 #ifdef WITH_JAVASCRIPT_V8
-    if (!target.has_feature(Target::JavaScript_SpiderMonkey)) {
-      return run_javascript_v8(source, fn_name, args, externs, trampolines);
-    }
-#else    
-    if (target.has_feature(Target::JavaScript_V8)) {
-        user_error << "V8 JavaScript requrested without configuring V8 JavaScript engine.";
+    if (module.contents.ptr->v8_isolate) {
+        return run_javascript_v8(args, module.contents.ptr->v8_isolate,
+                                 module.contents.ptr->v8_context, module.contents.ptr->v8_function);
     }
 #endif
 
 #ifdef WITH_JAVASCRIPT_SPIDERMONKEY
-    return run_javascript_spidermonkey(source, fn_name, args, externs, trampolines);
-#else    
-    if (target.has_feature(Target::JavaScript_SpiderMonkey)) {
-        user_error << "V8 JavaScript requrested without configuring V8 JavaScript engine.";
+    debug(0) << "Running with SpiderMonkey\n";
+    if (module.contents.ptr->spider_monkey_runtime) {
+      return run_javascript_spider_monkey(args, module.contents.ptr->spider_monkey_context,
+                                         module.contents.ptr->spider_monkey_globals,
+                                         module.contents.ptr->spider_monkey_function_name);
     }
 #endif
 
