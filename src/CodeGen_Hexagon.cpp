@@ -455,7 +455,10 @@ CodeGen_Hexagon::slice_into_halves(Expr a, std::vector<Expr> &Res) {
 
 
 string CodeGen_Hexagon::mcpu() const {
-  return "hexagonv60";
+  if (target.has_feature(Halide::Target::HVX_V62))
+    return "hexagonv62";
+  else
+    return "hexagonv60";
 }
 
 string CodeGen_Hexagon::mattrs() const {

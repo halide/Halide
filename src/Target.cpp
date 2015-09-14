@@ -371,6 +371,7 @@ std::string Target::to_string() const {
         "user_context",
         "hvx",
         "hvx-double",
+        "hvx-v62",
         "register_metadata",
         "matlab",
         "profile",
