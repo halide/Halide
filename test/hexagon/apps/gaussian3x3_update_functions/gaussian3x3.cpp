@@ -14,6 +14,10 @@ IRPrinter irp(std::cerr);
 void test_gaussian3x3(Target& target) {
   Halide::Var x("x"),y("y");
   ImageParam input(type_of<uint8_t>(), 2);
+  set_min(input, 0, 0);
+  set_min(input, 1, 0);
+  set_stride_multiple(input, 1, 1 << LOG2VLEN);
+
 
 
   Func input_16("input_16");
@@ -65,6 +69,9 @@ void test_gaussian3x3(Target& target) {
   gaussian3x3.update(0).vectorize(x, 1 << LOG2VLEN);
   gaussian3x3.update(1).vectorize(x, 1 << LOG2VLEN);
 #endif
+  set_output_buffer_min(gaussian3x3, 0, 0);
+  set_output_buffer_min(gaussian3x3, 1, 0);
+  set_stride_multiple(gaussian3x3, 1, 1 << LOG2VLEN);
 
   std::vector<Argument> args(1);
   args[0]  = input;
@@ -88,6 +95,7 @@ int main(int argc, char **argv) {
 #if LOG2VLEN == 7
   target.set_feature(Target::HVX_DOUBLE);
 #endif
+  target.set_cgoption(Target::BuffersAligned);
   test_gaussian3x3(target);
   printf ("Done\n");
   return 0;

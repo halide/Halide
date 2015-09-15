@@ -548,6 +548,23 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
+    for (size_t i = 0; i < args.size(); i++) {
+      if (args[i].is_buffer()) {
+        const int *sm = &(args[i].stride_multiples[0]);
+        if (sm) {
+          int dims = args[i].dimensions;
+          string arg_name = args[i].name;
+          for (int j=0; j < dims; j++) {
+            if (sm[j] != -1) {
+              string dim = std::to_string(j);
+              string stride_name = arg_name + ".stride." + dim;
+              ModulusRemainder MR(sm[j], 0);
+              alignment_info.push(stride_name, MR);
+            }
+          }
+        }
+      }
+    }
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
     function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module);
@@ -1011,7 +1028,8 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
 
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
-    might_be_misaligned.insert(name);
+    if (!target.has_cgoption(Target::BuffersAligned))
+      might_be_misaligned.insert(name);
 
     // Make sure the buffer object itself is not null
     create_assertion(builder->CreateIsNotNull(buffer),

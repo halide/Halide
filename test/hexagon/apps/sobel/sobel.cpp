@@ -23,6 +23,10 @@ void test_sobel(Target &target) {
   Halide::Var x("x"), y("y");
   // Halide:: input
   ImageParam input(type_of<uint8_t>(), 2);
+  set_min(input, 0, 0);
+  set_min(input, 1, 0);
+  set_stride_multiple(input, 1, 1 << LOG2VLEN);
+
   // Halide:: Function
   Halide::Func input_16("input_16");
   input_16(x, y) = cast<uint16_t>(input(x, y));
@@ -41,6 +45,10 @@ void test_sobel(Target &target) {
 
   Halide::Func Sobel("Sobel");
   Sobel(x, y) = cast<uint8_t>(clamp(sobel_y(x, y) + sobel_x(x, y), 0, 255));
+  set_output_buffer_min(Sobel, 0, 0);
+  set_output_buffer_min(Sobel, 1, 0);
+  set_stride_multiple(Sobel, 1, 1 << LOG2VLEN);
+
 #ifdef TRACING
   Sobel.trace_stores();
 #endif
@@ -69,6 +77,7 @@ int main(int argc, char **argv) {
 #if LOG2VLEN == 7
   target.set_feature(Target::HVX_DOUBLE);
 #endif
+  target.set_cgoption(Target::BuffersAligned);
   test_sobel(target);
   printf ("Done\n");
   return 0;

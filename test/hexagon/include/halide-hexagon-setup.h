@@ -24,3 +24,16 @@ Expr sat_i32(Expr e) {
   int min = 0x80000000;
   return clamp(e, min, max);
 }
+void set_min(ImageParam &I, int dim, Expr a) {
+  I.set_min(dim, a);
+}
+void set_output_buffer_min(Func &f, int dim, Expr a) {
+  f.output_buffer().set_min(dim, a);
+}
+void set_stride_multiple(ImageParam &I, int dim, int m) {
+  I.set_stride_multiple(dim, m);
+}
+void set_stride_multiple(Func &f, int dim, int m) {
+  Expr stride = f.output_buffer().stride(dim);
+  f.output_buffer().set_stride_multiple(dim, m);
+}

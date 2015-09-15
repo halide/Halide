@@ -159,8 +159,9 @@ int main(int argc, char **argv) {
   /* -----------------------------------------------------*/
   /*  Allocate memory for input/output                    */
   /* -----------------------------------------------------*/
-  unsigned char *input  = (unsigned char *)memalign(1<<LOG2VLEN, width*height*sizeof(unsigned char));
-  unsigned char *output = (unsigned char *)memalign(1<<LOG2VLEN, width*height*sizeof(unsigned char));
+
+  unsigned char *input  = (unsigned char *)memalign(1 << LOG2VLEN, width*height*sizeof(unsigned char));
+  unsigned char *output = (unsigned char *)memalign(1 << LOG2VLEN, width*height*sizeof(unsigned char));
 
   if ( input == NULL || output == NULL ){
     printf("Error: Could not allocate Memory for image\n");
@@ -282,8 +283,10 @@ int main(int argc, char **argv) {
   free(input);
   free(output);
 
-#if defined(__hexagon__)
-    printf("AppReported (HVX64b-mode): Image %dx%d - dilate3x3: %0.4f cycles/pixel\n", (int)width, (int)height, (float)total_cycles/width/height);
+#if LOG2VLEN == 7
+    printf("AppReported (HVX128B-mode): Image %dx%d - dilate3x3: %0.4f cycles/pixel\n", (int)width, (int)height, (float)total_cycles/width/height);
+#else
+    printf("AppReported (HVX64B-mode): Image %dx%d - dilate3x3: %0.4f cycles/pixel\n", (int)width, (int)height, (float)total_cycles/width/height);
 #endif
     printf("Success!\n");
     return 0;

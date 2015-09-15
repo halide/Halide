@@ -16,6 +16,10 @@ using namespace Halide;
 void test_median(Target& target) {
   Halide::Var x("x"),y("y");
   ImageParam input(type_of<uint8_t>(), 2);
+  set_min(input, 0, 0);
+  set_min(input, 1, 0);
+  set_stride_multiple(input, 1, 1 << LOG2VLEN);
+
 
   /* EJP: note that there's some overlap between max and min and mid.
    * Does the compiler pick this up automatically, or do we need to tweak the code?
@@ -57,6 +61,10 @@ void test_median(Target& target) {
 
   median(x,y) = max(min(max(minmax_y(x,y),maxmin_y(x,y)),midmid_y(x,y)),
                     min(minmax_y(x,y),maxmin_y(x,y)));
+  set_output_buffer_min(median, 0, 0);
+  set_output_buffer_min(median, 1, 0);
+  set_stride_multiple(median, 1, 1 << LOG2VLEN);
+
   // max_x.compute_root();
   // min_x.compute_root();
   // mid_x.compute_root();
@@ -85,6 +93,7 @@ int main(int argc, char **argv) {
 #if LOG2VLEN == 7
         target.set_feature(Target::HVX_DOUBLE);
 #endif
+        target.set_cgoption(Target::BuffersAligned);
 	test_median(target);
 	printf ("Done\n");
 	return 0;

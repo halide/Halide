@@ -373,8 +373,10 @@ int main(int argc, char **argv) {
   free(input);
   free(output);
 
-#if defined(__hexagon__)
+#if LOG2VLEN == 7
   printf("AppReported (HVX128B-mode): Image %dx%d - gaussian3x3: %0.4f cycles/pixel (Total Cycles = %ld)\n", (int)width, (int)height, (float)total_cycles/width/height, total_cycles);
+#else
+  printf("AppReported (HVX64B-mode): Image %dx%d - gaussian3x3: %0.4f cycles/pixel (Total Cycles = %ld)\n", (int)width, (int)height, (float)total_cycles/width/height, total_cycles);
 #endif
     printf("Success!\n");
     return 0;
