@@ -2684,16 +2684,17 @@ void CodeGen_LLVM::visit(const Call *op) {
             args[i] = codegen(op->args[i]);
         }
 
-        // Add a user context arg as needed. It's never a vector.
-        bool takes_user_context = function_takes_user_context(op->name);
-        if (takes_user_context) {
-            debug(4) << "Adding user_context to " << op->name << " args\n";
-            args.insert(args.begin(), get_user_context());
-        }
-
         llvm::Function *fn = module->getFunction(op->name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
+
+        // Add a user context arg as needed. It's never a vector.
+        bool takes_user_context = function_takes_user_context(op->name);
+        if (takes_user_context) {
+            internal_assert(fn) << "External function " << op->name << "is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
+            debug(4) << "Adding user_context to " << op->name << " args\n";
+            args.insert(args.begin(), get_user_context());
+        }
 
         // If we can't find it, declare it extern "C"
         if (!fn) {
@@ -2704,10 +2705,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                     VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
                     arg_types[i] = vt->getElementType();
                 }
-            }
-
-            if (function_takes_user_context(op->name)) {
-                arg_types.insert(arg_types.begin(), i8->getPointerTo());
             }
 
             llvm::Type *scalar_result_type = result_type;
