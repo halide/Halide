@@ -239,6 +239,10 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
 
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
 
+
+    // Add internal analysis passes from the target machine.
+    pass_manager.add(llvm::createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
+
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerPass());
 
