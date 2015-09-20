@@ -517,6 +517,14 @@ isLargeVector(Type t, int vec_bits) {
   return t.is_vector() &&
     (t.bits * t.width) > (2 * vec_bits);
 }
+static bool
+isValidHexagonVector(Type t, int vec_bits) {
+  return t.is_vector() &&
+    ((t.bits * t.width) == vec_bits);
+}
+int CodeGen_Hexagon::bytes_in_vector() const {
+  return native_vector_bits() / 8;
+}
 
 llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
                                            std::vector<Pattern> &Patterns) {
@@ -1927,6 +1935,121 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     }
     CodeGen_Posix::visit(op);
 }
+void CodeGen_Hexagon::visit(const Load *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  if (op->type.is_vector() && isValidHexagonVector(op->type,
+                                                   native_vector_bits())) {
 
+    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+    const Ramp *ramp = op->index.as<Ramp>();
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+    if (ramp && stride && stride->value == 1) {
+      int width = ramp->width;
+      ModulusRemainder mod_rem = getAlignmentInfo(ramp->base);
+      int alignment_required = CPICK(128, 64);
+      if (width != alignment_required) {
+        // This will happen only under two cases.
+        // 1. We are loading a partial vector.
+        // 2. We are loading a type other than u8 or i8.
+        // FIXME: PDB: Relax the second condition.
+        CodeGen_Posix::visit(op);
+        return;
+      }
+      if (mod_rem.modulus == 1 &&
+          mod_rem.remainder == 0) {
+        // We know nothing about alignment. Just fall back upon vanilla codegen.
+        CodeGen_Posix::visit(op);
+        return;
+      }
+      if (!possibly_misaligned && mod_rem.modulus == alignment_required) {
+        if (mod_rem.remainder == 0) {
+          // This is a perfectly aligned address. Vanilla codegen can deal with
+          // this.
+          CodeGen_Posix::visit(op);
+          return;
+        } else {
+          Expr base = ramp->base;
+          const Add *add = base.as<Add>();
+          const IntImm *b = add->b.as<IntImm>();
+          // We can generate a combination of two vmems (aligned) followed by
+          // a valign/vlalign if The base is like
+          // 1. (aligned_expr + const)
+          // In the former case, for double vector mode, we will have
+          // mod_rem.modulus == alignment_required and
+          // mod_rem.remainder == vector_width + const
+          if (!b) {
+            CodeGen_Posix::visit(op);
+            return;
+          }
+          int offset = b->value;
+          if (mod_rem.remainder != ((bytes_in_vector() + offset) % bytes_in_vector())) {
+            CodeGen_Posix::visit(op);
+            return;
+          }
+          int bytes_off = std::abs(offset) * (op->type.bits / 8);
+          Expr base_low = offset > 0 ? add->a : simplify(add->a - width);
+          Expr base_high = offset > 0 ? simplify(add->a + width) : add->a;
+          Expr ramp_low = Ramp::make(base_low, 1, width);
+          Expr ramp_high = Ramp::make(base_high, 1, width);
+          Expr load_low = Load::make(op->type, op->name, ramp_low, op->image,
+                                     op->param);
+          Expr load_high = Load::make(op->type, op->name, ramp_high, op->image,
+                                      op->param);
+          Value *vec_low = codegen(load_low);
+          Value *vec_high = codegen(load_high);
+
+          Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
+          std::vector<Value *> Ops;
+          if (offset > 0) {
+            Value *Scalar;
+            if (bytes_off < 7) {
+              IntrinsID = IPICK(Intrinsic::hexagon_V6_valignbi);
+              Expr ScalarImmExpr = IntImm::make(bytes_off);
+              Scalar = codegen(ScalarImmExpr);
+            }
+            else {
+              IntrinsID = IPICK(Intrinsic::hexagon_V6_valignb);
+              // FIXME: PDB: Is this correct? Should this require a register
+              // transfer.
+              Scalar = codegen(bytes_off);
+            }
+            Ops.push_back(vec_high);
+            Ops.push_back(vec_low);
+            Ops.push_back(Scalar);
+            Value *valign =
+              CallLLVMIntrinsic(Intrinsic::
+                                getDeclaration(module, IntrinsID), Ops);
+            value = convertValueType(valign, llvm_type_of(op->type));
+            return;
+          } else {
+            Value *Scalar;
+            if (bytes_off < 7) {
+              IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignbi);
+              Expr ScalarImmExpr = IntImm::make(bytes_off);
+              Scalar = codegen(ScalarImmExpr);
+            }
+            else {
+              IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignb);
+              // FIXME: PDB: Is this correct? Should this require a register
+              // transfer.
+             Scalar = codegen(bytes_off);
+            }
+            Ops.push_back(vec_high);
+            Ops.push_back(vec_low);
+            Ops.push_back(Scalar);
+            Value *valign =
+              CallLLVMIntrinsic(Intrinsic::
+                                getDeclaration(module, IntrinsID), Ops);
+            value = convertValueType(valign, llvm_type_of(op->type));
+            return;
+          }
+        }
+      }
+    }
+  }
+  if (!value)
+    CodeGen_Posix::visit(op);
+  return;
+}
 }}
 

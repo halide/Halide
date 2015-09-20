@@ -35,6 +35,7 @@ protected:
     void visit(const Cast *);
     void visit(const Call *);
     void visit(const Mul *);
+    void visit(const Load *);
     /* // @} */
 
     bool shouldUseVMPA(const Add *, std::vector<llvm::Value *> &);
@@ -52,6 +53,7 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
+    int bytes_in_vector() const;
 
  private:
     Expr wild_i32, wild_u32;

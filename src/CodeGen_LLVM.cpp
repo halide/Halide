@@ -1679,7 +1679,9 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
     inst->setMetadata("tbaa", tbaa);
 }
-
+ModulusRemainder CodeGen_LLVM::getAlignmentInfo(Expr e) {
+  return modulus_remainder(e, alignment_info);
+}
 void CodeGen_LLVM::visit(const Load *op) {
 
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());

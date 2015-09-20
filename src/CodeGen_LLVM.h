@@ -418,7 +418,7 @@ protected:
      * If there's no match, returns (NULL, 0).
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
-
+    ModulusRemainder getAlignmentInfo(Expr e);
 private:
 
     /** All the values in scope at the current code location during
