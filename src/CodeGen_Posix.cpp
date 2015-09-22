@@ -31,7 +31,14 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 
     Expr no_overflow = const_true(1);
     Expr total_size = cast<int64_t>(type.width * type.bytes());
-    Expr max_size = cast<int64_t>(0x7fffffff);
+    Expr max_size;
+    if (target.bits < 64) {
+        max_size = cast<int64_t>(0x7fffffff);
+    } else {
+        // The Halide compiler currently can't represent
+        // 64-bit immediate values.
+        max_size = (cast<int64_t>(1) << cast<int64_t>(63)) - cast<int64_t>(1);
+    }
     for (size_t i = 0; i < extents.size(); i++) {
         total_size *= extents[i];
         no_overflow = no_overflow && (total_size <= max_size);
@@ -45,7 +52,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
                                     {name, total_size, max_size}, Call::Extern));
     }
 
-    total_size = simplify(cast<int32_t>(total_size));
+    total_size = simplify(total_size);
     return codegen(total_size);
 }
 
@@ -54,13 +61,15 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                                                            Expr new_expr, std::string free_function) {
     Value *llvm_size = NULL;
     int64_t stack_bytes = 0;
+    const int64_t max_size = target.bits == 64 ? 0x7fffffffffffffff : 0x7fffffff;
     int32_t constant_bytes = 0;
     if (constant_allocation_size(extents, name, constant_bytes)) {
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
 
-        if (stack_bytes > ((int64_t(1) << 31) - 1)) {
-            user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
+        if (stack_bytes > max_size) {
+            const string str_max_size = target.bits == 64 ? "2^63 - 1" : "2^31 - 1";
+            user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (stack_bytes <= 1024 * 16) {
             // Round up to nearest multiple of 32.
             stack_bytes = ((stack_bytes + 31)/32)*32;

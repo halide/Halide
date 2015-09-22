@@ -294,15 +294,21 @@ Stmt add_image_checks(Stmt s,
             }
             lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
 
-            // Insert checks to make sure the total size of all input
-            // and output buffers is <= 2^31 - 1.  And that no product
-            // of extents overflows 2^31 - 1. This second test is
-            // likely only needed if a fuse directive is used in the
-            // schedule to combine multiple extents, but it is here
-            // for extra safety. Ultimately we will want to make
-            // Halide handle larger single buffers, at least on 64-bit
-            // systems.
-            Expr max_size = cast<int64_t>(0x7fffffff);
+            // On 32-bit systems, insert checks to make sure the total
+            // size of all input and output buffers is <= 2^31 - 1.
+            // And that no product of extents overflows 2^31 - 1. This
+            // second test is likely only needed if a fuse directive
+            // is used in the schedule to combine multiple extents,
+            // but it is here for extra safety. On 64-bit systems the
+            // maximum size is 2^63 - 1.
+            Expr max_size, max_extent = cast<int64_t>(0x7fffffff);
+            if (t.bits < 64) {
+                max_size = cast<int64_t>(0x7fffffff);
+            } else {
+                // The Halide compiler currently can't represent
+                // 64-bit immediate values.
+                max_size = (cast<int64_t>(1) << cast<int64_t>(63)) - cast<int64_t>(1);
+            }
             Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);
