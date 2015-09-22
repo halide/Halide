@@ -1663,7 +1663,8 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < load_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, load_lanes - i);
                 Expr slice_base = simplify(ramp->base + i);
-                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, 1, slice_lanes);
+                Expr slice_stride = slice_base.type().bits == 64 ? cast<int64_t>(1) : 1;
+                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
                 llvm::Type *slice_type = VectorType::get(llvm_type_of(op->type.element_of()), slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
@@ -1676,6 +1677,8 @@ void CodeGen_LLVM::visit(const Load *op) {
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Expr base_a = ramp->base, base_b = ramp->base + ramp->width;
+            Expr stride_a = base_a.type().bits == 64 ? cast<int64_t>(1) : 1;
+            Expr stride_b = base_b.type().bits == 64 ? cast<int64_t>(1) : 1;
 
             // False indicates we should take the even-numbered lanes
             // from the load, true indicates we should take the
@@ -1703,8 +1706,8 @@ void CodeGen_LLVM::visit(const Load *op) {
             }
 
             // Do each load.
-            Expr ramp_a = Ramp::make(base_a, 1, ramp->width);
-            Expr ramp_b = Ramp::make(base_b, 1, ramp->width);
+            Expr ramp_a = Ramp::make(base_a, stride_a, ramp->width);
+            Expr ramp_b = Ramp::make(base_b, stride_b, ramp->width);
             Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param);
             Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param);
             Value *vec_a = codegen(load_a);
@@ -1723,7 +1726,8 @@ void CodeGen_LLVM::visit(const Load *op) {
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->width + 1;
-            Expr flipped_index = Ramp::make(flipped_base, 1, ramp->width);
+            Expr flipped_stride = flipped_base.type().bits == 64 ? cast<int64_t>(1) : 1;
+            Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->width);
             Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param);
 
             Value *flipped = codegen(flipped_load);
@@ -3062,7 +3066,8 @@ void CodeGen_LLVM::visit(const Store *op) {
             for (int i = 0; i < store_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, store_lanes - i);
                 Expr slice_base = simplify(ramp->base + i);
-                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, 1, slice_lanes);
+                Expr slice_stride = slice_base.type().bits == 64 ? cast<int64_t>(1) : 1;
+                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
                 Value *slice_val = slice_vector(val, i, slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
