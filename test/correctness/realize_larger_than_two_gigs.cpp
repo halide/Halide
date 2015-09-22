@@ -11,6 +11,7 @@ void halide_error(void *ctx, const char *msg) {
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target t = get_target_from_environment();
     Param<int> extent;
     Var x, y, z;
     RDom r(0, extent, 0, 4096, 0, 256);
@@ -26,6 +27,10 @@ int main(int argc, char **argv) {
 
     Image<uint8_t> result = grand_total.realize();
 
-    assert(error_occurred);
+    if (t.bits == 64) {
+        assert(!error_occurred);
+    } else {
+        assert(error_occurred);
+    }
     printf("Success!\n");
 }
