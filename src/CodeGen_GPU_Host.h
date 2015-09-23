@@ -11,6 +11,7 @@
 #include "CodeGen_X86.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
+#include "CodeGen_POWERPC.h"
 
 #include "IR.h"
 
