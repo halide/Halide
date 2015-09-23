@@ -7,13 +7,19 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#if defined(__powerpc__) && defined(__linux__)
+// This uses elf.h and must be included after "LLVM_Headers.h", which
+// uses llvm/support/Elf.h.
+#include <sys/auxv.h>
+#endif
+
 namespace Halide {
 
 using std::string;
 using std::vector;
 
 namespace {
-#ifndef __arm__
+#if defined(__x86_64__) || defined(__i386__)
 
 #ifdef _MSC_VER
 static void cpuid(int info[4], int infoType, int extra) {
@@ -69,6 +75,24 @@ Target get_host_target() {
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
     #else
+    #if defined(__powerpc__) && defined(__linux__)
+    Target::Arch arch = Target::POWERPC;
+
+    unsigned long hwcap = getauxval(AT_HWCAP);
+    unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
+    bool have_vsx     = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
+    bool arch_2_07    = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+
+    user_assert(have_altivec)
+        << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
+
+    std::vector<Target::Feature> initial_features;
+    if (have_vsx)     initial_features.push_back(Target::VSX);
+    if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
+
+    return Target(os, arch, bits, initial_features);
+#else
 
     Target::Arch arch = Target::X86;
 
@@ -108,6 +132,7 @@ Target get_host_target() {
     }
 
     return Target(os, arch, bits, initial_features);
+#endif
 #endif
 #endif
 }
@@ -219,6 +244,9 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "mips") {
             arch = Target::MIPS;
             is_arch = true;
+        } else if (tok == "powerpc") {
+            arch = Target::POWERPC;
+            is_arch = true;
         } else if (tok == "32") {
             bits = 32;
             is_bits = true;
@@ -264,6 +292,10 @@ bool Target::merge_string(const std::string &target) {
             set_feature(Target::ARMv7s);
         } else if (tok == "no_neon") {
             set_feature(Target::NoNEON);
+        } else if (tok == "vsx") {
+            set_feature(Target::VSX);
+        } else if (tok == "power_arch_2_07") {
+            set_feature(Target::POWER_ARCH_2_07);
         } else if (tok == "cuda") {
             set_feature(Target::CUDA);
         } else if (tok == "ptx") {
@@ -355,7 +387,7 @@ bool Target::merge_string(const std::string &target) {
 
 std::string Target::to_string() const {
     const char* const arch_names[] = {
-        "arch_unknown", "x86", "arm", "pnacl", "mips"
+        "arch_unknown", "x86", "arm", "pnacl", "mips", "powerpc",
     };
     const char* const os_names[] = {
         "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
@@ -364,7 +396,7 @@ std::string Target::to_string() const {
     const char* const feature_names[] = {
         "jit", "debug", "no_asserts", "no_bounds_query",
         "sse41", "avx", "avx2", "fma", "fma4", "f16c",
-        "armv7s", "no_neon",
+        "armv7s", "no_neon", "vsx", "power_arch_2_07",
         "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
         "opencl", "cl_doubles",
         "opengl", "openglcompute", "renderscript",

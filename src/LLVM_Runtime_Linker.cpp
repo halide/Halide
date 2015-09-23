@@ -177,6 +177,11 @@ DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
 #endif
+#ifdef WITH_POWERPC
+DECLARE_LL_INITMOD(powerpc)
+#else
+DECLARE_NO_INITMOD(powerpc)
+#endif
 
 namespace {
 
@@ -229,6 +234,12 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
         } else {
             return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
+        }
+    } else if (target.arch == Target::POWERPC) {
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:e-i32:32-n32");
+        } else {
+            return llvm::DataLayout("e-m:e-i64:64-n32:64");
         }
     } else if (target.arch == Target::PNaCl) {
         return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
@@ -339,6 +350,23 @@ llvm::Triple get_triple_for_target(Target target) {
         } else {
             user_error << "No mips support for this OS\n";
         }
+    } else if (target.arch == Target::POWERPC) {
+        #if (WITH_POWERPC)
+        // Only ppc*-unknown-linux-gnu are supported for the time being.
+        user_assert(target.os == Target::Linux) << "PowerPC target is Linux-only.\n";
+        triple.setVendor(llvm::Triple::UnknownVendor);
+        triple.setOS(llvm::Triple::Linux);
+        triple.setEnvironment(llvm::Triple::GNU);
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::ppc);
+        } else {
+            // Currently POWERPC64 support is only little-endian.
+            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
+            triple.setArch(llvm::Triple::ppc64le);
+        }
+        #else
+        user_error << "PowerPC llvm target not enabled in this build of Halide\n";
+        #endif
     } else if (target.arch == Target::PNaCl) {
         #if (WITH_NATIVE_CLIENT)
         triple.setArch(llvm::Triple::le32);
@@ -668,6 +696,9 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             }
             if (t.arch == Target::MIPS) {
                 modules.push_back(get_initmod_mips_ll(c));
+            }
+            if (t.arch == Target::POWERPC) {
+                modules.push_back(get_initmod_powerpc_ll(c));
             }
             if (t.has_feature(Target::SSE41)) {
                 modules.push_back(get_initmod_x86_sse41_ll(c));
