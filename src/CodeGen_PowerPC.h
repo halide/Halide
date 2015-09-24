@@ -11,11 +11,11 @@ namespace Halide {
 namespace Internal {
 
 /** A code generator that emits mips code from a given Halide stmt. */
-class CodeGen_POWERPC : public CodeGen_Posix {
+class CodeGen_PowerPC : public CodeGen_Posix {
 public:
     /** Create a powerpc code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    CodeGen_POWERPC(Target);
+    CodeGen_PowerPC(Target);
 
     static void test();
 

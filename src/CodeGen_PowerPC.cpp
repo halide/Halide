@@ -1,4 +1,4 @@
-#include "CodeGen_POWERPC.h"
+#include "CodeGen_PowerPC.h"
 #include "IROperator.h"
 #include "IRMatch.h"
 #include "Util.h"
@@ -12,14 +12,14 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_POWERPC::CodeGen_POWERPC(Target t) : CodeGen_Posix(t) {
+CodeGen_PowerPC::CodeGen_PowerPC(Target t) : CodeGen_Posix(t) {
     #if !(WITH_POWERPC)
-    user_error << "llvm build not configured with POWERPC target enabled.\n";
+    user_error << "llvm build not configured with PowerPC target enabled.\n";
     #endif
-    user_assert(llvm_PowerPC_enabled) << "llvm build not configured with POWERPC target enabled.\n";
+    user_assert(llvm_PowerPC_enabled) << "llvm build not configured with PowerPC target enabled.\n";
 }
 
-const char* CodeGen_POWERPC::altivec_int_type_name(const Type& t) {
+const char* CodeGen_PowerPC::altivec_int_type_name(const Type& t) {
     if (t.is_int()) {
         switch (t.bits) {
         case  8: return "sb";
@@ -120,7 +120,7 @@ Expr lossless_cast(Type t, Expr e) {
 
 }
 
-void CodeGen_POWERPC::visit(const Cast *op) {
+void CodeGen_PowerPC::visit(const Cast *op) {
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors in here.
         CodeGen_Posix::visit(op);
@@ -202,7 +202,7 @@ void CodeGen_POWERPC::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_POWERPC::visit(const Min *op) {
+void CodeGen_PowerPC::visit(const Min *op) {
     if (!op->type.is_vector()) {
         CodeGen_Posix::visit(op);
         return;
@@ -228,7 +228,7 @@ void CodeGen_POWERPC::visit(const Min *op) {
     }
 }
 
-void CodeGen_POWERPC::visit(const Max *op) {
+void CodeGen_PowerPC::visit(const Max *op) {
     if (!op->type.is_vector()) {
         CodeGen_Posix::visit(op);
         return;
@@ -254,7 +254,7 @@ void CodeGen_POWERPC::visit(const Max *op) {
     }
 }
 
-string CodeGen_POWERPC::mcpu() const {
+string CodeGen_PowerPC::mcpu() const {
     if (target.bits == 32) {
         return "ppc32";
     } else {
@@ -267,7 +267,7 @@ string CodeGen_POWERPC::mcpu() const {
     }
 }
 
-string CodeGen_POWERPC::mattrs() const {
+string CodeGen_PowerPC::mattrs() const {
     std::string features;
     std::string separator;
     std::string enable;
@@ -292,11 +292,11 @@ string CodeGen_POWERPC::mattrs() const {
     return features;
 }
 
-bool CodeGen_POWERPC::use_soft_float_abi() const {
+bool CodeGen_PowerPC::use_soft_float_abi() const {
     return false;
 }
 
-int CodeGen_POWERPC::native_vector_bits() const {
+int CodeGen_PowerPC::native_vector_bits() const {
     return 128;
 }
 
