@@ -11,10 +11,10 @@ namespace Internal {
 
 struct Pattern;
 
-/** A code generator that emits ARM code from a given Halide stmt. */
+/** A code generator that emits Hexagon code from a given Halide stmt. */
 class CodeGen_Hexagon : public CodeGen_Posix {
 public:
-    /** Create an ARM code generator for the given arm target. */
+    /** Create a Hexagon code generator for the given Hexagon target. */
     CodeGen_Hexagon(Target);
 
     static void test();
@@ -24,7 +24,7 @@ protected:
 
     using CodeGen_Posix::visit;
 
-    /* /\** Nodes for which we want to emit specific neon intrinsics *\/ */
+    /* /\** Nodes for which we want to emit specific hexagon intrinsics *\/ */
     /* // @{ */
     void visit(const Add *);
     void visit(const Sub *);
@@ -52,6 +52,7 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
+
  private:
     Expr wild_i32, wild_u32;
     Expr wild_i16, wild_u16;

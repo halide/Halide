@@ -1735,7 +1735,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 slices.push_back(load);
             }
             value = concat_vectors(slices);
-
+            debug(2) << "Concat_vectors 1:\n";
+            if (debug::debug_level >= 2) value -> dump();
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Expr base_a = ramp->base, base_b = ramp->base + ramp->width;
@@ -1782,7 +1783,10 @@ void CodeGen_LLVM::visit(const Load *op) {
                 indices[i] = ConstantInt::get(i32, i*2 + (shifted_b ? 1 : 0));
             }
 
+            debug(2) << "Loading two vectors and shuffle: \n";
+
             value = builder->CreateShuffleVector(vec_a, vec_b, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->width + 1;
@@ -1797,7 +1801,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             }
 
             Constant *undef = UndefValue::get(flipped->getType());
+            debug(2) << "Load the vector and then flip it in-place\n";
             value = builder->CreateShuffleVector(flipped, undef, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
         } else if (ramp) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
@@ -1808,6 +1814,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
+                debug(2) << "Generate InsertElement without indices\n";
+                if (debug::debug_level >= 2) value -> dump();
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
         } else if (false /* should_scalarize(op->index) */) {
@@ -1823,6 +1831,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+                debug(2) << "Generate InsertElement with index as scalars\n";
+                if (debug::debug_level >= 2) vec -> dump();
             }
             value = vec;
         } else {
@@ -1835,6 +1845,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+                debug(2) << "Generate InsertElement general gathers\n";
+                if (debug::debug_level >= 2) vec -> dump();
             }
             value = vec;
         }
@@ -1867,6 +1879,8 @@ void CodeGen_LLVM::visit(const Ramp *op) {
                 }
             }
             value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
+            debug(2) << "Generate InsertElement Ramp adding stride to base\n";
+            if (debug::debug_level >= 2) value -> dump();
         }
     }
 }
@@ -1875,12 +1889,18 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int width) {
     Constant *undef = UndefValue::get(VectorType::get(v->getType(), width));
     Constant *zero = ConstantInt::get(i32, 0);
     v = builder->CreateInsertElement(undef, v, zero);
+    debug(2) << "Generate InsertElement broadcast v\n";
+    if (debug::debug_level >= 2) v -> dump();
     Constant *zeros = ConstantVector::getSplat(width, zero);
-    return builder->CreateShuffleVector(v, undef, zeros);
+    debug(2) << "Creating broadcast via shufflevector of zeros and V\n";
+    Value *value = builder->CreateShuffleVector(v, undef, zeros);
+    if (debug::debug_level >= 2) value -> dump();
+    return value;
 }
 
 void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->width);
+    if (debug::debug_level >= 2) value -> dump();
 }
 
 // Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
@@ -1908,7 +1928,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
             indices[i] = ConstantInt::get(i32, idx);
         }
 
-        return builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        debug(2) << "Interleaving vectors\n";
+        Value *value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value -> dump();
+        return value;
     } else if(vecs.size() == 3) {
         Expr a = vecs[0], b = vecs[1], c = vecs[2];
         debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << "\n";
@@ -1924,8 +1947,9 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 indices[i] = UndefValue::get(i32);
             }
         }
-
+        debug(2) << "Interleaving 3 vectors, ab first\n";
         Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_ab -> dump();
 
         // Then we create a vector of the output size that contains c...
         for (int i = 0; i < type.width; i++) {
@@ -1937,7 +1961,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
         }
 
         Value *none = UndefValue::get(llvm_type_of(c.type()));
+        debug(2) << "Interleaving 3 vectors, now c\n";
         Value *value_c = builder->CreateShuffleVector(codegen(c), none, ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_c -> dump();
+
 
         // Finally, we shuffle the above 2 vectors together into the result.
         for (int i = 0; i < type.width; i++) {
@@ -1947,8 +1974,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 indices[i] = ConstantInt::get(i32, i/3 + type.width);
             }
         }
-
-        return builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
+        debug(2) << "Interleaving 3 vectors, last c\n";
+        Value *value = builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value -> dump();
+        return value;
     } else if (vecs.size() == 4 && vecs[0].type().bits <= 32) {
         Expr a = vecs[0], b = vecs[1], c = vecs[2], d = vecs[3];
         debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << ", " << d << "\n";
@@ -1962,10 +1991,16 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
         }
 
         // First we shuffle a & b together...
+        debug(2) << "Interleaving 4 vectors, a & b \n";
         Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_ab -> dump();
+
 
         // Next we shuffle c & d together...
+        debug(2) << "Interleaving 4 vectors, c & d \n";
         Value *value_cd = builder->CreateShuffleVector(codegen(c), codegen(d), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_cd -> dump();
+
 
         // Now we reinterpret the shuffled vectors as vectors of pairs...
         Type t = a.type();
@@ -1974,8 +2009,13 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
         Value *vec_cd = builder->CreateBitCast(value_cd, llvm_type_of(t));
 
         // Finally, we shuffle the above 2 vectors together into the result.
+        debug(2) << "Interleaving 4 vectors, ab & cd \n";
         Value *vec = builder->CreateShuffleVector(vec_ab, vec_cd, ConstantVector::get(indices));
-        return builder->CreateBitCast(vec, llvm_type_of(type));
+        if (debug::debug_level >= 2) vec -> dump();
+
+        Value *value = builder->CreateBitCast(vec, llvm_type_of(type));
+        if (debug::debug_level >= 2) value -> dump();
+        return value;
     } else {
         Type even_t = type;
         Type odd_t  = type;
@@ -2008,7 +2048,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 indices[i] = ConstantInt::get(i32, idx);
             }
 
-            return builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+            debug(2) << "Interleaving 2 vectors, p1\n";
+            Value *value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
+            return value;
         } else {
             vector<Constant *> indices(type.width);
             for (int i = 0, idx = 0; i < type.width; i++) {
@@ -2025,6 +2068,7 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 }
             }
 
+            debug(2) << "Interleaving 2 vectors, p2\n";
             Value *ab = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
 
             for (int i = 0; i < type.width; i++) {
@@ -2035,8 +2079,11 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 }
             }
 
+            debug(2) << "Interleaving 2 vectors, p3\n";
             Value *none = UndefValue::get(llvm_type_of(last.type()));
             Value *c = builder->CreateShuffleVector(codegen(last), none, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) c -> dump();
+
 
             for (int i = 0; i < type.width; i++) {
                 if (i % vecs.size() < vecs.size()-1) {
@@ -2046,7 +2093,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 }
             }
 
-            return builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
+            debug(2) << "Interleaving 2 vectors, p4\n";
+            Value *value = builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
+            return value;
         }
     }
 }
@@ -2059,6 +2109,8 @@ void CodeGen_LLVM::scalarize(Expr e) {
     for (int i = 0; i < e.type().width; i++) {
         Value *v = codegen(extract_lane(e, i));
         result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+        debug(2) << "Generate InsertElement scalarize\n";
+        if (debug::debug_level >= 2) result -> dump();
     }
     value = result;
 }
@@ -2086,8 +2138,9 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             // Make a size 1 vector of undef at the end to mix in undef values.
             Value *undefs = UndefValue::get(arg->getType());
-
+            debug(2) << "shuffle call intrin\n";
             value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
 
             if (op->type.is_scalar()) {
                 value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
@@ -2692,6 +2745,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         bool takes_user_context = function_takes_user_context(op->name);
         if (takes_user_context) {
             internal_assert(fn) << "External function " << op->name << "is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
+
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
@@ -2807,6 +2861,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                     }
                     call->setDoesNotThrow();
                     value = builder->CreateInsertElement(value, call, idx);
+                    debug(2) << "Generate InsertElement call\n";
+                    if (debug::debug_level >= 2) value -> dump();
                 }
             }
         }
@@ -3288,6 +3344,9 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_vector_widt
             results.push_back(call_intrin(result_slice_type, intrin_vector_width, name, args));
         }
         Value *result = concat_vectors(results);
+        debug(2) << "Concat_vectors 2:\n";
+        if (debug::debug_level >= 2) result -> dump();
+
         return slice_vector(result, 0, arg_vector_width);
     }
 
@@ -3331,7 +3390,10 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
     }
     Constant *indices_vec = ConstantVector::get(indices);
     Value *undefs = UndefValue::get(vec->getType());
-    return builder->CreateShuffleVector(vec, undefs, indices_vec);
+    debug(2) << "shuffle slice vector\n";
+    Value *value = builder->CreateShuffleVector(vec, undefs, indices_vec);
+    if (debug::debug_level >= 2) value -> dump();
+    return value;
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
@@ -3369,8 +3431,9 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
                 indices[w1 + i] = ConstantInt::get(i32, w_matched + i);
             }
             Constant *indices_vec = ConstantVector::get(indices);
-
+            debug(2) << "shuffle concat vectors\n";
             Value *merged = builder->CreateShuffleVector(v1, v2, indices_vec);
+            if (debug::debug_level >= 2) merged -> dump();
 
             new_vecs.push_back(merged);
         }

@@ -453,7 +453,6 @@ CodeGen_Hexagon::slice_into_halves(Expr a, std::vector<Expr> &Res) {
   return;
 }
 
-
 string CodeGen_Hexagon::mcpu() const {
   if (target.has_feature(Halide::Target::HVX_V62))
     return "hexagonv62";
@@ -503,11 +502,22 @@ static bool canUseVadd(const Add *op) {
 }
 #endif
 
+static bool enableVecAsserts = false;
+static void
+checkVectorOp(Type t, string msg) {
+  if (t.is_vector()) {
+    debug(1) << "VEC-EXPECT " << msg ;
+    if (enableVecAsserts)
+      internal_error << "VEC-EXPECT " << msg;
+  }
+}
+
 static bool
 isLargeVector(Type t, int vec_bits) {
   return t.is_vector() &&
     (t.bits * t.width) > (2 * vec_bits);
 }
+
 llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
                                            std::vector<Pattern> &Patterns) {
   vector<Expr> matches;
@@ -910,8 +920,10 @@ void CodeGen_Hexagon::visit(const Add *op) {
     return;
   if (!value)
     value = emitBinaryOp(op, varith);
-  if (!value)
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(Add * , vector case)\n");
     CodeGen_Posix::visit(op);
+  }
   return;
 }
   // Handle types greater than double vectors.
@@ -969,6 +981,7 @@ CodeGen_Hexagon::handleLargeVectors(const Add *op) {
       return convertValueType(Result, llvm_type_of(op->type));
     }
   }
+
   return NULL;
 }
   // Handle types greater than double vectors.
@@ -1081,6 +1094,8 @@ void CodeGen_Hexagon::visit(const Div *op) {
       }
     }
   }
+  checkVectorOp(op->type, "Unhandled case in visit(Div * , vector case)\n");
+
   if (!value)
     CodeGen_Posix::visit(op);
   return;
@@ -1442,7 +1457,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     }
   }
   // ******** End Part 2: Down casts (Narrowing)* ***************
-
+  checkVectorOp(op->type, "Unhandled case in visit(Cast * , vector case)\n");
   CodeGen_Posix::visit(op);
   return;
 }
@@ -1555,6 +1570,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
       }
     }
+    checkVectorOp(op->type, "Unhandled case in visit(Call * , vector case)\n");
     CodeGen_Posix::visit(op);
   }
 }
@@ -1807,6 +1823,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
           }
           debug(4) << "vector " << Vec << "\n";
           debug(4) << "Broadcast " << Other << "\n";
+          debug(4) << "Other bits size : " << Other.type().bits << "\n";
           const IntImm *Imm = Other.as<IntImm>();
           if (!Imm) {
             const Cast *C = Other.as<Cast>();
@@ -1839,7 +1856,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
                   "Cannot deal with an Imm value greater than 16"
                   "bits in generating vmpyi\n";
             } else
-              internal_error << "Unhandled case in visit(Mul *)\n";
+              checkVectorOp(op->type, "Unhandled case in visit(Mul * Vector Scalar Imm)\n");
             Expr ScalarImmExpr = IntImm::make(ScalarValue);
             Value *Scalar = codegen(ScalarImmExpr);
             Value *VectorOp = codegen(Vec);
@@ -1875,9 +1892,15 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             else
               value = CombineCall;
             return;
+          // It is Vector x Vector
+          } else  if (matches[0].type().is_vector() && matches[1].type().is_vector()) {
+            checkVectorOp(op->type, "Unhandled case in visit(Vector x Vector Mul *)\n");
+            internal_error << "Unhandled case in visit(Vector x Vector Mul *)\n";
           }
         }
       }
+      checkVectorOp(op->type, "Unhandled case in visit(Vector x Vector Mul * no match)\n");
+      debug(4) << "HexCG: FAILED to generate a  vector multiply.\n";
     }
   }
   value = emitBinaryOp(op, multiplies);
