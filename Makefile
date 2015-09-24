@@ -249,7 +249,7 @@ SOURCE_FILES = \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_PNaCl.cpp \
   CodeGen_Posix.cpp \
-  CodeGen_POWERPC.cpp \
+  CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
   CodeGen_Renderscript_Dev.cpp \
   CodeGen_X86.cpp \
@@ -369,7 +369,7 @@ HEADER_FILES = \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_PNaCl.h \
   CodeGen_Posix.h \
-  CodeGen_POWERPC.h \
+  CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
   CodeGen_Renderscript_Dev.h \
   CodeGen_X86.h \

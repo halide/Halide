@@ -695,7 +695,7 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 #endif
 
 #ifdef WITH_POWERPC
-template class CodeGen_GPU_Host<CodeGen_POWERPC>;
+template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 #endif
 
 #ifdef WITH_NATIVE_CLIENT
