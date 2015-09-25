@@ -93,12 +93,7 @@ int main(int argc, char **argv) {
     uint8_t arm_32_android_magic[] = {0x7f, 'E', 'L', 'F', // ELF format
                                       1,       // 32-bit
                                       1,       // 2's complement little-endian
-                                      1,       // Current version of elf
-                                      3,       // Linux
-                                      0, 0, 0, 0, 0, 0, 0, 0, // 8 unused bytes
-                                      1, 0,    // Relocatable
-                                      0x28, 0};  // ARM
-
+                                      1};      // Current version of elf
 
     FILE *f = fopen("lesson_11_arm_32_android.o", "rb");
     uint8_t header[32];
