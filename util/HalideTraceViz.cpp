@@ -6,6 +6,7 @@
 
 #include <map>
 #include <vector>
+#include <array>
 #include <string>
 #include <queue>
 #include <iostream>
@@ -26,6 +27,7 @@ using std::map;
 using std::vector;
 using std::string;
 using std::queue;
+using std::array;
 
 // The first 48 bytes of a tracing packet are metadata
 const int packet_header_size = 48;
@@ -155,8 +157,8 @@ struct FuncInfo {
         int cost = 0;
         int dims = 0;
         int x, y = 0;
-        int x_stride[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-        int y_stride[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        array<int, 16> x_stride {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+        array<int, 16> y_stride {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
         int color_dim = 0;
         float min = 0.0f, max = 0.0f;
         vector<Label> labels;
