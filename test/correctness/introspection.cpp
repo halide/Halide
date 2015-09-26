@@ -125,6 +125,7 @@ int main(int argc, char **argv) {
     // .. unless they're members of explicitly registered objects
     HeapObject *obj = new HeapObject;
     static HeapObject *dummy_heap_object_ptr = NULL;
+    check(&dummy_heap_object_ptr, "HeapObject *", "dummy_heap_object_ptr", __FILE__, __LINE__);
     Halide::Internal::Introspection::register_heap_object(obj, sizeof(HeapObject), &dummy_heap_object_ptr);
     check(&(obj->f), "float", "f", __FILE__, __LINE__);
     check(&(obj->f2), "fancy_float", "f2", __FILE__, __LINE__);
