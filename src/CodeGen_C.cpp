@@ -912,7 +912,9 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::create_buffer_t) {
             internal_assert(op->args.size() >= 2);
             vector<string> args;
-            for (size_t i = 0; i < op->args.size(); i++) {
+            args.push_back(print_expr(op->args[0]));
+            args.push_back(print_expr(op->args[1].type().bytes()));
+            for (size_t i = 2; i < op->args.size(); i++) {
                 args.push_back(print_expr(op->args[i]));
             }
             string buf_id = unique_name('B');

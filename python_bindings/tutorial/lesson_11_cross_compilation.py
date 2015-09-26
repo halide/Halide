@@ -104,23 +104,20 @@ def main():
         # 32-arm android object files start with the magic bytes:
         # uint8_t []
         arm_32_android_magic = [0x7f, ord('E'), ord('L'), ord('F'), # ELF format
-                                          1,       # 32-bit
-                                          1,       # 2's complement little-endian
-                                          1,       # Current version of elf
-                                          3,       # Linux
-                                          0, 0, 0, 0, 0, 0, 0, 0, # 8 unused bytes
-                                          1, 0,    # Relocatable
-                                          0x28, 0]  # ARM
+                                1,       # 32-bit
+                                1,       # 2's complement little-endian
+                                1]       # Current version of elf
 
+        length = len(arm_32_android_magic)
         f = open("lesson_11_arm_32_android.o", "rb")
         try:
-            header_bytes = f.read(20)
+            header_bytes = f.read(length)
         except:
             print("Android object file not generated")
             return -1
         f.close()
 
-        header = list(unpack("B"*20, header_bytes))
+        header = list(unpack("B"*length, header_bytes))
         if header != arm_32_android_magic:
             print([x == y for x, y in zip(header, arm_32_android_magic)])
             raise Exception("Unexpected header bytes in 32-bit arm object file.")

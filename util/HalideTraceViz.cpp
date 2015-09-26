@@ -2,14 +2,17 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
+
 #include <map>
 #include <vector>
 #include <string>
 #include <queue>
 #include <iostream>
+#include <algorithm>
 #ifdef _MSC_VER
 #include <io.h>
-typedef int ssize_t;
+typedef int64_t ssize_t;
 #else
 #include <unistd.h>
 #endif
@@ -24,13 +27,15 @@ using std::vector;
 using std::string;
 using std::queue;
 
+// The first 48 bytes of a tracing packet are metadata
+const int packet_header_size = 48;
+
 // A struct representing a single Halide tracing packet.
 struct Packet {
-    // The first 32 bytes are metadata
     uint32_t id, parent;
     uint8_t event, type, bits, width, value_idx, num_int_args;
-    char name[17];
-    uint8_t payload[4096-32]; // Not all of this will be used, but this is the max possible packet size.
+    char name[packet_header_size - 14];
+    uint8_t payload[4096 - packet_header_size]; // Not all of this will be used, but this is the max possible packet size.
 
     size_t value_bytes() const {
         size_t bytes_per_elem = 1;
@@ -99,12 +104,13 @@ struct Packet {
 
     // Grab a packet from stdin. Returns false when stdin closes.
     bool read_from_stdin() {
-        if (!read_stdin(this, 32)) {
+        if (!read_stdin(this, packet_header_size)) {
             return false;
         }
-        assert(read_stdin(payload, payload_bytes()) &&
-               "Unexpected EOF mid-packet");
-        name[16] = 0;
+        if (!read_stdin(payload, payload_bytes())) {
+            fprintf(stderr, "Unexpected EOF mid-packet");
+        }
+        name[sizeof(name)-1] = 0;
         return true;
     }
 
@@ -142,44 +148,114 @@ struct Label {
 };
 
 // A struct specifying how a single Func will get visualized.
-struct FuncDrawInfo {
-    int zoom;
-    int cost;
-    int dims;
-    int x, y;
-    int x_stride[4];
-    int y_stride[4];
-    int color_dim;
-    float min, max;
-    vector<Label> labels;
-    int first_draw_time;
-    bool blank_on_end_realization;
+struct FuncInfo {
+    // Configuration for how the func should be drawn
+    struct {
+        int zoom = 0;
+        int cost = 0;
+        int dims = 0;
+        int x, y = 0;
+        int x_stride[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        int y_stride[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        int color_dim = 0;
+        float min = 0.0f, max = 0.0f;
+        vector<Label> labels;
+        bool blank_on_end_realization = false;
 
-    FuncDrawInfo() {
-        memset(this, 0, sizeof(FuncDrawInfo));
-    }
+        void dump(const char *name) {
+            fprintf(stderr,
+                    "Func %s:\n"
+                    " min: %f max: %f\n"
+                    " color_dim: %d\n"
+                    " blank: %d\n"
+                    " dims: %d\n"
+                    " zoom: %d\n"
+                    " cost: %d\n"
+                    " x: %d y: %d\n"
+                    " x_stride: %d %d %d %d\n"
+                    " y_stride: %d %d %d %d\n",
+                    name,
+                    min, max,
+                    color_dim,
+                    blank_on_end_realization,
+                    dims,
+                    zoom, cost, x, y,
+                    x_stride[0], x_stride[1], x_stride[2], x_stride[3],
+                    y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
+        }
+    } config;
 
-    void dump(const char *name) {
-        fprintf(stderr,
-                "Func %s:\n"
-                " min: %f max: %f\n"
-                " color_dim: %d\n"
-                " blank: %d\n"
-                " dims: %d\n"
-                " zoom: %d\n"
-                " cost: %d\n"
-                " x: %d y: %d\n"
-                " x_stride: %d %d %d %d\n"
-                " y_stride: %d %d %d %d\n",
-                name,
-                min, max,
-                color_dim,
-                blank_on_end_realization,
-                dims,
-                zoom, cost, x, y,
-                x_stride[0], x_stride[1], x_stride[2], x_stride[3],
-                y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
-    }
+    // Information about actual observed values gathered while parsing the trace
+    struct {
+        string qualified_name;
+        int first_draw_time = 0, first_packet_idx = 0;
+        double min_value = 0.0, max_value = 0.0;
+        int min_coord[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        int max_coord[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        int num_realizations = 0, num_productions = 0;
+        uint64_t stores = 0, loads = 0;
+
+        void observe_load(const Packet &p) {
+            observe_load_or_store(p);
+            loads += p.width;
+        }
+
+        void observe_store(const Packet &p) {
+            observe_load_or_store(p);
+            stores += p.width;
+        }
+
+        void observe_load_or_store(const Packet &p) {
+            for (int i = 0; i < std::min(16, p.num_int_args / p.width); i++) {
+                for (int lane = 0; lane < p.width; lane++) {
+                    int coord = p.get_int_arg(i*p.width + lane);
+                    if (loads + stores == 0 && lane == 0) {
+                        min_coord[i] = coord;
+                        max_coord[i] = coord + 1;
+                    } else {
+                        min_coord[i] = std::min(min_coord[i], coord);
+                        max_coord[i] = std::max(max_coord[i], coord + 1);
+                    }
+                }
+            }
+
+            for (int i = 0; i < p.width; i++) {
+                double value = p.get_value_as<double>(i);
+                if (stores + loads == 0) {
+                    min_value = value;
+                    max_value = value;
+                } else {
+                    min_value = std::min(min_value, value);
+                    max_value = std::max(max_value, value);
+                }
+            }
+        }
+
+        void report() {
+            fprintf(stderr,
+                    "Func %s:\n"
+                    " bounds of domain: ", qualified_name.c_str());
+            for (int i = 0; i < 16; i++) {
+                if (min_coord[i] == 0 && max_coord[i] == 0) break;
+                if (i > 0) {
+                    fprintf(stderr, " x ");
+                }
+                fprintf(stderr, "[%d, %d)", min_coord[i], max_coord[i]);
+            }
+            fprintf(stderr,
+                    "\n"
+                    " range of values: [%f, %f]\n"
+                    " number of realizations: %d\n"
+                    " number of productions: %d\n"
+                    " number of loads: %llu\n"
+                    " number of stores: %llu\n",
+                    min_value, max_value,
+                    num_realizations, num_productions,
+                    (long long unsigned)loads,
+                    (long long unsigned)stores);
+        }
+
+    } stats;
 };
 
 // Composite a single pixel of b over a single pixel of a, writing the result into dst
@@ -254,7 +330,10 @@ void usage() {
             " For each Func you want to visualize, also specify:\n"
             " -f func_name min_value max_value color_dim blank zoom cost x y strides\n"
             " where\n"
-            "  func_name: The name of the func or input image\n"
+            "  func_name: The name of the func or input image. If you have multiple \n"
+            "    pipelines that use Funcs or the same name, you can optionally \n"
+            "    prefix this with the name of the containing pipeline like so: \n"
+            "    pipeline_name:func_name\n"
             "\n"
             "  min_value: The minimum value taken on by the Func. Values less than\n"
             "    or equal to this will map to black\n"
@@ -293,7 +372,7 @@ int run(int argc, char **argv) {
     // State that determines how different funcs get drawn
     int frame_width = 1920, frame_height = 1080;
     int decay_factor = 2;
-    map<string, FuncDrawInfo> draw_info;
+    map<string, FuncInfo> func_info;
 
     int timestep = 10000;
     int hold_frames = 250;
@@ -315,22 +394,22 @@ int run(int argc, char **argv) {
                 return -1;
             }
             char *func = argv[++i];
-            FuncDrawInfo &fdi = draw_info[func];
-            fdi.min = atof(argv[++i]);
-            fdi.max = atof(argv[++i]);
-            fdi.color_dim = atoi(argv[++i]);
-            fdi.blank_on_end_realization = atoi(argv[++i]);
-            fdi.zoom = atoi(argv[++i]);
-            fdi.cost = atoi(argv[++i]);
-            fdi.x = atoi(argv[++i]);
-            fdi.y = atoi(argv[++i]);
+            FuncInfo &fi = func_info[func];
+            fi.config.min = atof(argv[++i]);
+            fi.config.max = atof(argv[++i]);
+            fi.config.color_dim = atoi(argv[++i]);
+            fi.config.blank_on_end_realization = atoi(argv[++i]);
+            fi.config.zoom = atoi(argv[++i]);
+            fi.config.cost = atoi(argv[++i]);
+            fi.config.x = atoi(argv[++i]);
+            fi.config.y = atoi(argv[++i]);
             int d = 0;
-            for (; i+1 < argc && argv[i+1][0] != '-' && d < 4; d++) {
-                fdi.x_stride[d] = atoi(argv[++i]);
-                fdi.y_stride[d] = atoi(argv[++i]);
+            for (; i+1 < argc && argv[i+1][0] != '-' && d < 16; d++) {
+                fi.config.x_stride[d] = atoi(argv[++i]);
+                fi.config.y_stride[d] = atoi(argv[++i]);
             }
-            fdi.dims = d;
-            fdi.dump(func);
+            fi.config.dims = d;
+            fi.config.dump(func);
 
         } else if (next == "-l") {
             if (i + 5 >= argc) {
@@ -345,7 +424,7 @@ int run(int argc, char **argv) {
             Label l = {text, x, y, n};
             fprintf(stderr, "Adding label %s to func %s\n",
                     text, func);
-            draw_info[func].labels.push_back(l);
+            func_info[func].config.labels.push_back(l);
         } else if (next == "-t") {
             if (i + 1 >= argc) {
                 usage();
@@ -374,11 +453,6 @@ int run(int argc, char **argv) {
         i++;
     }
 
-    if (draw_info.empty()) {
-        usage();
-        return 0;
-    }
-
     // halide_clock counts halide events. video_clock counts how many
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
@@ -398,13 +472,21 @@ int run(int argc, char **argv) {
     uint32_t *blend = new uint32_t[frame_width * frame_height];
     memset(blend, 0, 4 * frame_width * frame_height);
 
+    struct PipelineInfo {
+        string name;
+        uint32_t id;
+    };
+
+    map<uint32_t, PipelineInfo> pipeline_info;
+
     size_t end_counter = 0;
+    size_t packet_clock = 0;
     for (;;) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
             halide_clock += timestep;
             if (end_counter == (size_t)hold_frames) {
-                return 0;
+                break;
             }
         }
 
@@ -445,26 +527,51 @@ int run(int argc, char **argv) {
             end_counter++;
             continue;
         }
+        packet_clock++;
 
-        if (draw_info.find(p.name) == draw_info.end()) {
-            fprintf(stderr, "Warning: ignoring func %s\n", p.name);
+        // It's a pipeline begin/end event
+        if (p.event == 8) {
+            pipeline_info[p.id] = {p.name, p.id};
+            continue;
+        } else if (p.event == 9) {
+            pipeline_info.erase(p.id);
+            continue;
+        }
+
+        PipelineInfo pipeline = pipeline_info[p.parent];
+
+        string qualified_name = pipeline.name + ":" + p.name;
+
+        if (func_info.find(qualified_name) == func_info.end()) {
+            if (func_info.find(p.name) != func_info.end()) {
+                func_info[qualified_name] = func_info[p.name];
+                func_info.erase(p.name);
+            } else {
+                fprintf(stderr, "Warning: ignoring func %s\n", qualified_name.c_str());
+            }
         }
 
         // Draw the event
-        FuncDrawInfo &di = draw_info[p.name];
+        FuncInfo &fi = func_info[qualified_name];
 
-        if (di.first_draw_time == 0) {
-            di.first_draw_time = halide_clock;
+        if (fi.stats.first_draw_time == 0) {
+            fi.stats.first_draw_time = halide_clock;
+        }
+
+        if (fi.stats.first_packet_idx == 0) {
+            fi.stats.first_packet_idx = packet_clock;
+            fi.stats.qualified_name = qualified_name;
         }
 
         switch (p.event) {
         case 0: // load
+            fi.stats.observe_load(p);
         case 1: // store
         {
-            int frames_since_first_draw = (halide_clock - di.first_draw_time) / timestep;
+            int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
 
-            for (size_t i = 0; i < di.labels.size(); i++) {
-                const Label &label = di.labels[i];
+            for (size_t i = 0; i < fi.config.labels.size(); i++) {
+                const Label &label = fi.config.labels[i];
                 if (frames_since_first_draw <= label.n) {
                     uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
                     if (color > 255) color = 255;
@@ -477,21 +584,23 @@ int run(int argc, char **argv) {
             if (p.event == 1) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
-                halide_clock += di.cost * (p.value_bytes() / (p.bits / 8));
+                halide_clock += fi.config.cost * (p.value_bytes() / (p.bits / 8));
+
+                fi.stats.observe_store(p);
             }
             // Check the tracing packet contained enough information
             // given the number of dimensions the user claims this
             // Func has.
-            assert(p.num_int_args >= p.width * di.dims);
-            if (p.num_int_args >= p.width * di.dims) {
+            assert(p.num_int_args >= p.width * fi.config.dims);
+            if (p.num_int_args >= p.width * fi.config.dims) {
                 for (int lane = 0; lane < p.width; lane++) {
                     // Compute the screen-space x, y coord to draw this.
-                    int x = di.x;
-                    int y = di.y;
-                    for (int d = 0; d < di.dims; d++) {
+                    int x = fi.config.x;
+                    int y = fi.config.y;
+                    for (int d = 0; d < fi.config.dims; d++) {
                         int a = p.get_int_arg(d * p.width + lane);
-                        x += di.zoom * di.x_stride[d] * a;
-                        y += di.zoom * di.y_stride[d] * a;
+                        x += fi.config.zoom * fi.config.x_stride[d] * a;
+                        y += fi.config.zoom * fi.config.y_stride[d] * a;
                     }
 
                     // Stores are orange, loads are blue.
@@ -500,10 +609,10 @@ int run(int argc, char **argv) {
                     uint32_t image_color;
                     bool update_image = false;
 
-                    // If it's a store, or a load from an input,
-                    // update one or more of the color channels of the
-                    // image layer.
-                    if (p.event == 1 || p.parent == 0xFFFFFFFF) {
+                    // Update one or more of the color channels of the
+                    // image layer in case it's a store or a load from
+                    // the input.
+                    if (true /** TODO: only do this if it's a store or load from the input */) {
                         update_image = true;
                         // Get the old color, in case we're only
                         // updating one of the color channels.
@@ -512,19 +621,19 @@ int run(int argc, char **argv) {
                         double value = p.get_value_as<double>(lane);
 
                         // Normalize it.
-                        value = 255 * (value - di.min) / (di.max - di.min);
+                        value = 255 * (value - fi.config.min) / (fi.config.max - fi.config.min);
                         if (value < 0) value = 0;
                         if (value > 255) value = 255;
 
                         // Convert to 8-bit color.
                         uint8_t int_value = (uint8_t)value;
 
-                        if (di.color_dim < 0) {
+                        if (fi.config.color_dim < 0) {
                             // Grayscale
                             image_color = (int_value * 0x00010101) | 0xff000000;
                         } else {
                             // Color
-                            uint32_t channel = p.get_int_arg(di.color_dim * p.width + lane);
+                            uint32_t channel = p.get_int_arg(fi.config.color_dim * p.width + lane);
                             uint32_t mask = ~(255 << (channel * 8));
                             image_color &= mask;
                             image_color |= int_value << (channel * 8);
@@ -532,8 +641,8 @@ int run(int argc, char **argv) {
                     }
 
                     // Draw the pixel
-                    for (int dy = 0; dy < di.zoom; dy++) {
-                        for (int dx = 0; dx < di.zoom; dx++) {
+                    for (int dy = 0; dy < fi.config.zoom; dy++) {
+                        for (int dx = 0; dx < fi.config.zoom; dx++) {
                             if (y + dy >= 0 && y + dy < frame_height &&
                                 x + dx >= 0 && x + dx < frame_width) {
                                 int px = frame_width * (y + dy) + x + dx;
@@ -549,33 +658,42 @@ int run(int argc, char **argv) {
             break;
         }
         case 2: // begin realization
+            fi.stats.num_realizations++;
+            pipeline_info[p.id] = pipeline;
             break;
         case 3: // end realization
-            if (di.blank_on_end_realization) {
-                assert(p.num_int_args >= 2 * di.dims);
-                int x_min = di.x, y_min = di.y;
+            if (fi.config.blank_on_end_realization) {
+                assert(p.num_int_args >= 2 * fi.config.dims);
+                int x_min = fi.config.x, y_min = fi.config.y;
                 int x_extent = 0, y_extent = 0;
-                for (int d = 0; d < di.dims; d++) {
+                for (int d = 0; d < fi.config.dims; d++) {
                     int m = p.get_int_arg(d * 2 + 0);
                     int e = p.get_int_arg(d * 2 + 1);
-                    x_min += di.zoom * di.x_stride[d] * m;
-                    y_min += di.zoom * di.y_stride[d] * m;
-                    x_extent += di.zoom * di.x_stride[d] * e;
-                    y_extent += di.zoom * di.y_stride[d] * e;
+                    x_min += fi.config.zoom * fi.config.x_stride[d] * m;
+                    y_min += fi.config.zoom * fi.config.y_stride[d] * m;
+                    x_extent += fi.config.zoom * fi.config.x_stride[d] * e;
+                    y_extent += fi.config.zoom * fi.config.y_stride[d] * e;
                 }
-                if (x_extent == 0) x_extent = di.zoom;
-                if (y_extent == 0) y_extent = di.zoom;
+                if (x_extent == 0) x_extent = fi.config.zoom;
+                if (y_extent == 0) y_extent = fi.config.zoom;
                 for (int y = y_min; y < y_min + y_extent; y++) {
                     for (int x = x_min; x < x_min + x_extent; x++) {
                         image[y * frame_width + x] = 0;
                     }
                 }
             }
+            pipeline_info.erase(p.parent);
             break;
         case 4: // produce
+            pipeline_info[p.id] = pipeline;
+            fi.stats.num_productions++;
+            break;
         case 5: // update
+            break;
         case 6: // consume
+            break;
         case 7: // end consume
+            pipeline_info.erase(p.parent);
             break;
         default:
             fprintf(stderr, "Unknown tracing event code: %d\n", p.event);
@@ -584,11 +702,29 @@ int run(int argc, char **argv) {
 
     }
 
+    fprintf(stderr, "Total number of Funcs: %d\n", (int)func_info.size());
+
+    // Print stats about the Func gleaned from the trace.
+    vector<std::pair<std::string, FuncInfo> > funcs;
+    for (std::pair<std::string, FuncInfo> p : func_info) {
+        funcs.push_back(p);
+    }
+    struct by_first_packet_idx {
+        bool operator()(const std::pair<std::string, FuncInfo> &a,
+                        const std::pair<std::string, FuncInfo> &b) const {
+            return a.second.stats.first_packet_idx < b.second.stats.first_packet_idx;
+        }
+    };
+    std::sort(funcs.begin(), funcs.end(), by_first_packet_idx());
+    for (std::pair<std::string, FuncInfo> p : funcs) {
+        p.second.stats.report();
+    }
+
     return 0;
 }
 
 }  // namespace
 
 int main(int argc, char **argv) {
-  run(argc, argv);
+    run(argc, argv);
 }

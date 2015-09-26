@@ -2192,15 +2192,18 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
 
             // Type check integer arguments
-            for (size_t i = 1; i < op->args.size(); i++) {
+            for (size_t i = 2; i < op->args.size(); i++) {
                 internal_assert(op->args[i].type() == Int(32))
-                    << "All arguments to create_buffer_t beyond the first must have type Int(32)\n";
+                    << "All arguments to create_buffer_t beyond the second must have type Int(32)\n";
             }
 
-            Value *elem_size = codegen(op->args[1]);
+            // Second argument is used solely for its Type. Value is unimportant.
+            // Currenty, only the size matters, but ultimately we will encode
+            // complete type info in buffer_t.
+            Value *elem_size = codegen(op->args[1].type().bytes());
             builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
 
-            int dims = op->args.size()/3;
+            int dims = (op->args.size() - 2) / 3;
             user_assert(dims <= 4)
                 << "Halide currently has a limit of four dimensions on "
                 << "Funcs used on the GPU or passed to extern stages.\n";
@@ -2610,16 +2613,17 @@ void CodeGen_LLVM::visit(const Call *op) {
             args[i] = codegen(op->args[i]);
         }
 
-        // Add a user context arg as needed. It's never a vector.
-        bool takes_user_context = function_takes_user_context(op->name);
-        if (takes_user_context) {
-            debug(4) << "Adding user_context to " << op->name << " args\n";
-            args.insert(args.begin(), get_user_context());
-        }
-
         llvm::Function *fn = module->getFunction(op->name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
+
+        // Add a user context arg as needed. It's never a vector.
+        bool takes_user_context = function_takes_user_context(op->name);
+        if (takes_user_context) {
+            internal_assert(fn) << "External function " << op->name << "is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
+            debug(4) << "Adding user_context to " << op->name << " args\n";
+            args.insert(args.begin(), get_user_context());
+        }
 
         // If we can't find it, declare it extern "C"
         if (!fn) {
@@ -2630,10 +2634,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                     VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
                     arg_types[i] = vt->getElementType();
                 }
-            }
-
-            if (function_takes_user_context(op->name)) {
-                arg_types.insert(arg_types.begin(), i8->getPointerTo());
             }
 
             llvm::Type *scalar_result_type = result_type;
