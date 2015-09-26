@@ -427,7 +427,7 @@ private:
             std::vector<Expr> computed_bounds_args;
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
             computed_bounds_args.push_back(null_handle);
-            computed_bounds_args.push_back(f.output_types()[0].bytes());
+            computed_bounds_args.push_back(make_zero(f.output_types()[0]));
             std::string max_stage_num = std::to_string(f.updates().size());
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");

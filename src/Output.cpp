@@ -122,7 +122,9 @@ void compile_module_to_c(const Module &module,
 }
 
 void compile_standalone_runtime(std::string object_filename, Target t) {
-    Module empty("standalone_runtime", t.without_feature(Target::NoRuntime));
+    t.set_feature(Target::NoRuntime, false);
+    t.set_feature(Target::JIT, false);
+    Module empty("standalone_runtime", t);
     compile_module_to_object(empty, object_filename);
 }
 
