@@ -60,9 +60,11 @@ void test_gaussian3x3(Target& target) {
   gaussian3x3(input.width()-1, input.height()-1) = cast<uint8_t> (clamp(bottomRight(input.width()-1, input.height()-1) >> 4, 0, 255));
 
 
+#ifndef NOVECTOR
   gaussian3x3.vectorize(x,1 << LOG2VLEN );
   gaussian3x3.update(0).vectorize(x, 1 << LOG2VLEN);
   gaussian3x3.update(1).vectorize(x, 1 << LOG2VLEN);
+#endif
 
   std::vector<Argument> args(1);
   args[0]  = input;

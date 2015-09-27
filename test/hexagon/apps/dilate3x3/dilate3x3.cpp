@@ -16,10 +16,8 @@ void test_dilate3x3(Target& target) {
 
   dilate3x3(x,y) = max(max(max_x(x, y-1), max_x(x, y)), max_x(x, y+1));
 
-#if LOG2VLEN == 7
-  dilate3x3.vectorize(x, 128);
-#else
-  dilate3x3.vectorize(x, 64);
+#ifndef NOVECTOR
+  dilate3x3.vectorize(x, 1<<LOG2VLEN);
 #endif
   std::vector<Argument> args(1);
   args[0]  = input;

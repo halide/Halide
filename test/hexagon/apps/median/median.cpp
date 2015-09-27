@@ -60,10 +60,8 @@ void test_median(Target& target) {
   // max_x.compute_root();
   // min_x.compute_root();
   // mid_x.compute_root();
-#if LOG2VLEN == 7
-  median.vectorize(x, 128);
-#else
-  median.vectorize(x, 64);
+#ifndef NOVECTOR 
+  median.vectorize(x, 1<<LOG2VLEN);
 #endif
   std::vector<Argument> args(1);
   args[0]  = input;

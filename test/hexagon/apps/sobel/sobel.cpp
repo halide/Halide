@@ -45,7 +45,9 @@ void test_sobel(Target &target) {
   Sobel.trace_stores();
 #endif
   // Halide:: Schedule
+#ifndef NOVECTOR
   Sobel.vectorize(x, 1<<LOG2VLEN);
+#endif
   std::vector<Argument> args(1);
   args[0]  = input;
 #ifdef BITCODE

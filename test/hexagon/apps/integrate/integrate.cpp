@@ -28,7 +28,10 @@ int main(int argc, char **argv) {
     integrate(r1.x, r1.y) += integrate(r1.x - 1, r1.y);
     RDom r0(0, 1, 1, In.height()-1);
     integrate(x, r0.y) += integrate(x, r0.y - 1);
+
+#ifndef NOVECTOR
     integrate.vectorize(x, 1 << LOG2VLEN);
+#endif
 
     std::vector<Argument> args(1);
     args[0] = In;

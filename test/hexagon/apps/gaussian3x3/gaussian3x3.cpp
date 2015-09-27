@@ -43,8 +43,9 @@ void test_gaussian3x3(Target& target) {
   // Current problem: cols(x,y) only returns a value the size of a byte
   
 
-  gaussian3x3.vectorize(x, 64);
-
+#ifndef NOVECTOR
+  gaussian3x3.vectorize(x, 1<<LOG2VLEN);
+#endif
   std::vector<Argument> args(1);
   args[0]  = input;
 #ifdef BITCODE
