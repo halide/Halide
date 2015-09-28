@@ -152,13 +152,13 @@ struct Label {
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
     // Configuration for how the func should be drawn
-    struct {
+    struct Config {
         int zoom = 0;
         int cost = 0;
         int dims = 0;
         int x, y = 0;
-        array<int, 16> x_stride {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
-        array<int, 16> y_stride {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+        int x_stride[16];
+        int y_stride[16];
         int color_dim = 0;
         float min = 0.0f, max = 0.0f;
         vector<Label> labels;
@@ -185,17 +185,27 @@ struct FuncInfo {
                     x_stride[0], x_stride[1], x_stride[2], x_stride[3],
                     y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
         }
+
+        Config() {
+            memset(x_stride, 0, sizeof(x_stride));
+            memset(y_stride, 0, sizeof(y_stride));
+        }
     } config;
 
     // Information about actual observed values gathered while parsing the trace
-    struct {
+    struct Observed {
         string qualified_name;
         int first_draw_time = 0, first_packet_idx = 0;
         double min_value = 0.0, max_value = 0.0;
-        int min_coord[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-        int max_coord[16] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        int min_coord[16];
+        int max_coord[16];
         int num_realizations = 0, num_productions = 0;
         uint64_t stores = 0, loads = 0;
+
+        Observed() {
+            memset(min_coord, 0, sizeof(min_coord));
+            memset(max_coord, 0, sizeof(max_coord));
+        }
 
         void observe_load(const Packet &p) {
             observe_load_or_store(p);
