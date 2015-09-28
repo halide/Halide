@@ -23,7 +23,7 @@ X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
-
+CXXFLAGS += ${EXTRA_FLAGS}
 
 bilateral.o bilateral.h: bilateral.cpp
 	${X86_CLANG} bilateral.cpp -g  -o bilateral.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
