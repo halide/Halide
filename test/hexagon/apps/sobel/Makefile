@@ -12,7 +12,7 @@ else
 endif
 
 TIMING=--timing
-CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} # -DTRACING -DSYNTHETIC
+CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} # -DTRACING -DSYNTHETIC
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
