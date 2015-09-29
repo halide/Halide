@@ -213,8 +213,18 @@ void IRPrinter::visit(const IntImm *op) {
     stream << op->value;
 }
 
+void IRPrinter::visit(const UIntImm *op) {
+    stream << op->value;
+}
+
 void IRPrinter::visit(const FloatImm *op) {
-    stream << op->value << 'f';
+    if (op->type.bits == 32) {
+        stream << op->value << 'f';
+    } else if (op->type.bits == 64) {
+        stream << op->value << 'f';
+    } else {
+        stream << "(float16_t)(" << op->value << ")";
+    }
 }
 
 void IRPrinter::visit(const StringImm *op) {

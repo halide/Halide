@@ -315,45 +315,6 @@ Value *CodeGen_ARM::call_pattern(const Pattern &p, llvm::Type *t, const vector<l
     }
 }
 
-namespace {
-
-// Try to losslessly narrow an integer expression to the target type
-Expr try_narrow(Expr a, Type target) {
-    internal_assert(a.type().width == target.width);
-    if (const Cast *c = a.as<Cast>()) {
-        Type old_type = c->value.type();
-        if (old_type == target) {
-            return c->value;
-        } else if (target.can_represent(old_type)) {
-            return cast(target, c->value);
-        } else if (c->type.can_represent(target)) {
-            // We lose nothing by stripping off the cast and pressing onwards.
-            return try_narrow(c->value, target);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const Broadcast *b = a.as<Broadcast>()) {
-        Expr n = try_narrow(b->value, target.element_of());
-        if (n.defined()) {
-            return Broadcast::make(n, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = a.as<IntImm>()) {
-        if (i->value <= target.imax() &&
-            i->value >= target.imin()) {
-            return cast(target, a);
-        }
-    }
-
-    return Expr();
-}
-}
-
 void CodeGen_ARM::visit(const Cast *op) {
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
@@ -380,7 +341,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                     internal_assert(matches[i].type().bits == t.bits * 2);
                     internal_assert(matches[i].type().width == t.width);
                     // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
-                    matches[i] = try_narrow(matches[i], t);
+                    matches[i] = lossless_cast(t, matches[i]);
                     if (!matches[i].defined()) {
                         // debug(4) << "failed\n";
                         all_narrow = false;
@@ -1190,14 +1151,14 @@ void CodeGen_ARM::visit(const Call *op) {
             if (sub) {
                 Expr a = sub->a, b = sub->b;
                 Type narrow = UInt(a.type().bits/2, a.type().width);
-                Expr na = try_narrow(a, narrow);
-                Expr nb = try_narrow(b, narrow);
+                Expr na = lossless_cast(narrow, a);
+                Expr nb = lossless_cast(narrow, b);
 
                 // Also try an unsigned narrowing
                 if (!na.defined() || !nb.defined()) {
                     narrow = Int(narrow.bits, narrow.width);
-                    na = try_narrow(a, narrow);
-                    nb = try_narrow(b, narrow);
+                    na = lossless_cast(narrow, a);
+                    nb = lossless_cast(narrow, b);
                 }
 
                 if (na.defined() && nb.defined()) {

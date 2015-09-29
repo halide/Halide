@@ -35,9 +35,6 @@ protected:
         /** The memory */
         llvm::Value *ptr;
 
-        /** Code to generate for destructor. May be redundant now. */
-        Stmt delete_stmt;
-
         /** Destructor stack slot for this allocation. */
         llvm::Value *destructor;
 

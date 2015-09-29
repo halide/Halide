@@ -35,6 +35,7 @@ using std::vector;
 // immediates.
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
+    if (e.as<UIntImm>()) return true;
     if (e.as<FloatImm>()) return true;
     if (const Broadcast *b = e.as<Broadcast>()) {
         return is_simple_const(b->value);
@@ -42,25 +43,9 @@ bool is_simple_const(Expr e) {
     return false;
 }
 
-// Is a constant representable as a certain type
-int do_indirect_int_cast(Type t, int x) {
-    if (t == UInt(1)) {
-        return x&1;
-    } else if (t.is_int() || t.is_uint()) {
-        return int_cast_constant(t, x);
-    } else if (t == Float(32)) {
-        return (int)((float)x);
-    } else if (t == Float(64)) {
-        return (int)((double)x);
-    } else {
-        internal_error << "Can't do an indirect int cast via this type: " << t << "\n";
-        return 0;
-    }
-}
-
 // Returns true if T does not have a well defined overflow behavior.
 bool no_overflow(Type T) {
-    return T.is_float() || (T.is_int() && T.bits == 32);
+    return T.is_float() || (T.is_int() && T.bits >= 32);
 }
 
 class Simplify : public IRMutator {
@@ -99,7 +84,7 @@ private:
 
     using IRMutator::visit;
 
-    bool const_float(Expr e, float *f) {
+    bool const_float(Expr e, double *f) {
         if (!e.defined()) {
             return false;
         }
@@ -112,7 +97,7 @@ private:
         }
     }
 
-    bool const_int(Expr e, int *i) {
+    bool const_int(Expr e, int64_t *i) {
         if (!e.defined()) {
             return false;
         }
@@ -125,7 +110,20 @@ private:
         }
     }
 
-    Expr is_round_up(Expr e, int *factor) {
+    bool const_uint(Expr e, uint64_t *u) {
+        if (!e.defined()) {
+            return false;
+        }
+        const UIntImm *c = e.as<UIntImm>();
+        if (c) {
+            *u = c->value;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    Expr is_round_up(Expr e, int64_t *factor) {
         const Mul *mul = e.as<Mul>();
         if (!mul) return Expr();
         if (!const_int(mul->b, factor)) return Expr();
@@ -138,70 +136,47 @@ private:
         return add->a;
     }
 
-    /* Recognise an integer or cast integer and fetch its value.
-     * Only matches if the number of bits of the cast integer does not exceed
-     * the number of bits of an int in the compiler, because simplification
-     * uses type int for its calculations. */
-    bool const_castint(Expr e, int *i) {
-        const IntImm *intimm = e.as<IntImm>();
-        const Cast *cast = e.as<Cast>();
-        const int max_bits = (int)(sizeof(int) * 8);
-        if (intimm) {
-            *i = intimm->value;
-            return true;
-        } else if (cast &&
-                   ((cast->type.is_int() && cast->type.bits <= max_bits) ||
-                    (cast->type.is_uint() && cast->type.bits <= max_bits)) &&
-                   const_castint(cast->value, i)) {
-            // When fetching a cast integer, ensure that the
-            // return value is in the correct range (i.e. the
-            // canonical value) for the cast type.
-            *i = int_cast_constant(cast->type, *i);
-            return true;
-        } else {
-            return false;
-        }
-    }
-
     void visit(const Cast *op) {
         Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
-        float f = 0.0f;
-        int i = 0;
+        double f = 0.0;
+        int64_t i = 0;
+        uint64_t u = 0;
         if (value.type() == op->type) {
             expr = value;
-        } else if (op->type == Int(32) && const_float(value, &f)) {
-            expr = IntImm::make((int)f);
-        } else if (Int(32).can_represent(op->type) && const_float(value, &f)) {
-            // u16(123.25f) -> u16(123)
-            expr = Cast::make(op->type, IntImm::make((int)f));
-        } else if (op->type == Float(32) && const_int(value, &i)) {
-            expr = FloatImm::make((float)i);
+        } else if (op->type.is_int() && const_float(value, &f)) {
+            // float -> int
+            expr = IntImm::make(op->type, (int64_t)f);
+        } else if (op->type.is_uint() && const_float(value, &f)) {
+            // float -> uint
+            expr = UIntImm::make(op->type, (uint64_t)f);
+        } else if (op->type.is_float() && const_float(value, &f)) {
+            // float -> float
+            expr = FloatImm::make(op->type, f);
+        } else if (op->type.is_int() && const_int(value, &i)) {
+            // int -> int
+            expr = IntImm::make(op->type, i);
+        } else if (op->type.is_uint() && const_int(value, &i)) {
+            // int -> uint
+            expr = UIntImm::make(op->type, (uint64_t)i);
+        } else if (op->type.is_float() && const_int(value, &i)) {
+            // int -> float
+            expr = FloatImm::make(op->type, (double)i);
+        } else if (op->type.is_int() && const_uint(value, &u)) {
+            // uint -> int
+            expr = IntImm::make(op->type, (int64_t)u);
+        } else if (op->type.is_uint() && const_uint(value, &u)) {
+            // uint -> uint
+            expr = UIntImm::make(op->type, u);
+        } else if (op->type.is_float() && const_uint(value, &u)) {
+            // uint -> float
+            expr = FloatImm::make(op->type, (double)u);
         } else if (cast && op->type.code == cast->type.code && op->type.bits < cast->type.bits) {
             // If this is a cast of a cast of the same type, where the
             // outer cast is narrower, the inner cast can be
             // eliminated.
             expr = mutate(Cast::make(op->type, cast->value));
-        } else if (op->type.bits < 64 && cast && const_castint(cast->value, &i)) {
-            // cast of cast of const int can just be cast of const int
-            // (with the int suitably munged to fit in the
-            // intermediate type). We can't do the munging correctly
-            // when the result has > 32 bits.
-            // u16(u8(255)) -> u16(255)
-            // u16(u8(257)) -> u16(1)
-            expr = mutate(Cast::make(op->type, do_indirect_int_cast(cast->type, i)));
-        } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
-            // Cast to something then back to int
-            expr = do_indirect_int_cast(cast->type, i);
-        } else if (!op->type.is_float() &&
-                   op->type.bits <= 32 &&
-                   const_int(value, &i) &&
-                   do_indirect_int_cast(op->type, i) != i) {
-            // Rewrite things like cast(UInt(8), 256) to cast(UInt(8),
-            // 0), so any later peephole matching that ignores casts
-            // doesn't get confused.
-            expr = Cast::make(op->type, do_indirect_int_cast(op->type, i));
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
             expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->width));
@@ -236,8 +211,9 @@ private:
     }
 
     void visit(const Add *op) {
-        int ia = 0, ib = 0, ic = 0;
-        float fa = 0.0f, fb = 0.0f;
+        int64_t ia = 0, ib = 0, ic = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0.0f, fb = 0.0f;
 
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
@@ -291,22 +267,20 @@ private:
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
-            expr = ia + ib;
             // const int + const int
+            expr = IntImm::make(a.type(), ia + ib);
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
+            // const uint + const uint
+            expr = UIntImm::make(a.type(), ua + ub);
         } else if (const_float(a, &fa) &&
                    const_float(b, &fb)) {
             // const float + const float
-            expr = fa + fb;
+            expr = FloatImm::make(a.type(), fa + fb);
         } else if (is_zero(b)) {
             expr = a;
         } else if (is_zero(a)) {
             expr = b;
-        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
-            if (op->type.is_uint()) {
-                expr = make_const(op->type, ((unsigned int) ia) + ((unsigned int) ib));
-            } else {
-                expr = make_const(op->type, ia + ib);
-            }
         } else if (ramp_a && ramp_b) {
             // Ramp + Ramp
             expr = mutate(Ramp::make(ramp_a->base + ramp_b->base,
@@ -451,8 +425,9 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        int ia = 0, ib = 0;
-        float fa = 0.0f, fb = 0.0f;
+        int64_t ia = 0, ib = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0.0f, fb = 0.0f;
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
@@ -484,19 +459,15 @@ private:
         } else if (equal(a, b)) {
             expr = make_zero(op->type);
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = ia - ib;
+            expr = IntImm::make(a.type(), ia - ib);
+        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+            expr = UIntImm::make(a.type(), ua - ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = fa - fb;
+            expr = FloatImm::make(a.type(), fa - fb);
         } else if (const_int(b, &ib)) {
-            expr = mutate(a + (-ib));
+            expr = mutate(a + make_const(a.type(), (-ib)));
         } else if (const_float(b, &fb)) {
-            expr = mutate(a + (-fb));
-        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
-            if (op->type.is_uint()) {
-                expr = make_const(op->type, ((unsigned int) ia) - ((unsigned int) ib));
-            } else {
-                expr = make_const(op->type, ia - ib);
-            }
+            expr = mutate(a + make_const(a.type(), (-fb)));
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
@@ -629,8 +600,9 @@ private:
 
         if (is_simple_const(a)) std::swap(a, b);
 
-        int ia = 0, ib = 0;
-        float fa = 0.0f, fb = 0.0f;
+        int64_t ia = 0, ib = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0.0f, fb = 0.0f;
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
@@ -649,15 +621,11 @@ private:
         } else if (is_one(b)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = ia*ib;
+            expr = IntImm::make(a.type(), ia * ib);
+        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+            expr = UIntImm::make(a.type(), ua * ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = fa*fb;
-        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
-            if (op->type.is_uint()) {
-                expr = make_const(op->type, ((unsigned int) ia) * ((unsigned int) ib));
-            } else {
-                expr = make_const(op->type, ia * ib);
-            }
+            expr = FloatImm::make(a.type(), fa * fb);
         } else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->width);
         } else if (ramp_a && broadcast_b) {
@@ -683,8 +651,9 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        int ia = 0, ib = 0, ic = 0;
-        float fa = 0.0f, fb = 0.0f;
+        int64_t ia = 0, ib = 0, ic = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0.0f, fb = 0.0f;
 
         const Mul *mul_a = a.as<Mul>();
         const Add *add_a = a.as<Add>();
@@ -710,7 +679,7 @@ private:
             mul_a_a = ramp_a->base.as<Mul>();
         }
 
-        if (op->type == Int(32) && const_int(b, &ib) && ib && !is_const(a)) {
+        if (no_overflow(op->type) && const_int(b, &ib) && ib && !is_const(a)) {
             // Check for bounded numerators divided by constant
             // denominators.
             Interval bounds = bounds_of_expr_in_scope(a, bounds_info);
@@ -718,7 +687,7 @@ private:
                 bounds.max.defined()) {
                 bounds.min = mutate(bounds.min);
                 bounds.max = mutate(bounds.max);
-                int num_min = 0, num_max = 0;
+                int64_t num_min = 0, num_max = 0;
                 if (const_int(bounds.min, &num_min) &&
                     const_int(bounds.max, &num_max) &&
                     div_imp(num_max, ib) == div_imp(num_min, ib)) {
@@ -729,7 +698,7 @@ private:
         }
 
         ModulusRemainder mod_rem(0, 1);
-        if (ramp_a && ramp_a->base.type() == Int(32)) {
+        if (ramp_a && no_overflow(ramp_a->base.type())) {
             // Do modulus remainder analysis on the base.
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
@@ -741,39 +710,36 @@ private:
         } else if (equal(a, b) && !is_zero(b)) {
             expr = make_one(a.type());
         } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
-            expr = div_imp(ia,ib);
+            expr = IntImm::make(a.type(), div_imp(ia, ib));
+        } else if (const_uint(a, &ua) && const_uint(b, &ub) && ub) {
+            expr = UIntImm::make(a.type(), ua / ub);
         } else if (const_float(a, &fa) && const_float(b, &fb) && fb != 0.0f) {
-            expr = fa/fb;
-        } else if (const_castint(a, &ia) && const_castint(b, &ib) && ib) {
-            if (op->type.is_uint()) {
-                expr = make_const(op->type, ((unsigned int)ia)/((unsigned int)ib));
-            } else {
-                expr = make_const(op->type, div_imp(ia,ib)); //Use the definition::make of division
-            }
+            expr = FloatImm::make(a.type(), fa / fb);
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
                    ia % ib == 0) {
             // ramp(x, 4, w) / broadcast(2, w) -> ramp(x / 2, 2, w)
-            expr = mutate(Ramp::make(ramp_a->base / ib, div_imp(ia, ib), ramp_a->width));
-        } else if (ramp_a && ramp_a->base.type() == Int(32) && const_int(ramp_a->stride, &ia) &&
+            Type t = a.type().element_of();
+            expr = mutate(Ramp::make(ramp_a->base / ib, IntImm::make(t, div_imp(ia, ib)), ramp_a->width));
+        } else if (ramp_a && no_overflow(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
-                   div_imp(mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
+                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
             // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
             expr = mutate(Broadcast::make(ramp_a->base / ib, ramp_a->width));
         } else if (div_a &&
                    const_int(div_a->b, &ia) && ia >= 0 &&
                    const_int(b, &ib) && ib >= 0) {
             // (x / 3) / 4 -> x / 12
-            expr = mutate(Div::make(div_a->a, ia*ib));
+            expr = mutate(div_a->a / (ia * ib));
         } else if (div_a_a && add_a &&
                    const_int(div_a_a->b, &ia) && ia >= 0 &&
                    const_int(add_a->b, &ib) &&
                    const_int(b, &ic) && ic >= 0) {
             // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
-            expr = mutate(Div::make(div_a_a->a + ia*ib, ia*ic));
+            expr = mutate((div_a_a->a + ia*ib) / (ia*ic));
         } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
                    ia > 0 && ib > 0 && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
@@ -816,8 +782,9 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        int ia = 0, ib = 0;
-        float fa = 0.0f, fb = 0.0f;
+        int64_t ia = 0, ib = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Mul *mul_a = a.as<Mul>();
@@ -828,7 +795,7 @@ private:
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
-        if (const_int(b, &ib) && ib && a.type() == Int(32)) {
+        if (const_int(b, &ib) && ib && no_overflow(a.type()) && a.type().is_scalar()) {
             // If the LHS is bounded, we can possibly bail out early
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
             if (ia.max.defined() && ia.min.defined() &&
@@ -844,22 +811,18 @@ private:
         // remainder analysis on the base.
         if (broadcast_b &&
             const_int(broadcast_b->value, &ib) && ib &&
-            ramp_a && ramp_a->base.type() == Int(32)) {
+            ramp_a && no_overflow(ramp_a->base.type())) {
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
         if (is_zero(a) && !is_zero(b)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
-            expr = mod_imp(ia, ib);
+            expr = IntImm::make(a.type(), mod_imp(ia, ib));
+        } else if (const_uint(a, &ua) && const_uint(b, &ub) && ub) {
+            expr = UIntImm::make(a.type(), ua % ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = mod_imp(fa, fb);
-        } else if (const_castint(a, &ia) && const_castint(b, &ib) && ib) {
-            if (op->type.is_uint()) {
-                expr = make_const(op->type, ((unsigned int)ia) % ((unsigned int)ib));
-            } else {
-                expr = Cast::make(op->type, mod_imp(ia, ib));
-            }
+            expr = FloatImm::make(a.type(), mod_imp(fa, fb));
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Mod::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (mul_a && const_int(b, &ib) && ib && const_int(mul_a->b, &ia) && (ia % ib == 0)) {
@@ -874,26 +837,28 @@ private:
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % ib);
-        } else if (const_int(b, &ib) && ib && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
+        } else if (const_int(b, &ib) && ib && no_overflow(a.type()) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
-            expr = mod_imp(mod_rem.remainder, ib);
+            expr = mod_imp((int64_t)mod_rem.remainder, ib);
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % ib, ramp_a->width));
-        } else if (ramp_a && ramp_a->base.type() == Int(32) && const_int(ramp_a->stride, &ia) &&
+        } else if (ramp_a && no_overflow(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
-                   div_imp(mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
+                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) if x/z == (x + (w-1)*y)/z
-            expr = mutate(Ramp::make(mod_imp(mod_rem.remainder, ib), ramp_a->stride, ramp_a->width));
-        } else if (ramp_a && ramp_a->base.type() == Int(32) &&
+            Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
+            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width));
+        } else if (ramp_a && no_overflow(ramp_a->base.type()) &&
                    const_int(ramp_a->stride, &ia) && !is_const(ramp_a->base) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) % z
-            expr = mutate(Ramp::make(mod_imp(mod_rem.remainder, ib), ramp_a->stride, ramp_a->width) % ib);
+            Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
+            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width) % ib);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -910,8 +875,9 @@ private:
             std::swap(a, b);
         }
 
-        int ia = 0, ib = 0, ic = 0;
-        float fa = 0.0f, fb = 0.0f;
+        int64_t ia = 0, ib = 0, ic = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -936,7 +902,7 @@ private:
         min_a_a = max_a ? max_a->a.as<Min>() : min_a_a;
 
         // Detect if the lhs or rhs is a rounding-up operation
-        int a_round_up_factor = 0, b_round_up_factor = 0;
+        int64_t a_round_up_factor = 0, b_round_up_factor = 0;
         Expr a_round_up = is_round_up(a, &a_round_up_factor);
         Expr b_round_up = is_round_up(b, &b_round_up_factor);
 
@@ -944,30 +910,34 @@ private:
             expr = a;
             return;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = std::min(ia, ib);
+            expr = IntImm::make(a.type(), std::min(ia, ib));
+            return;
+        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+            expr = UIntImm::make(a.type(), std::min(ua, ub));
             return;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = std::min(fa, fb);
+            expr = FloatImm::make(a.type(), std::min(fa, fb));
             return;
-        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
-            if (op->type.is_uint()) {
-                expr = make_const(op->type, std::min(((unsigned int) ia), ((unsigned int) ib)));
-            } else {
-                expr = make_const(op->type, std::min(ia,ib));
-            }
-            return;
-        } else if (const_castint(b, &ib) && ib == b.type().imax()) {
+        } else if (const_int(b, &ib) && ib == b.type().imax()) {
             // Compute minimum of expression of type and maximum of type --> expression
             expr = a;
             return;
-        } else if (const_castint(b, &ib) && ib == b.type().imin()) {
+        } else if (const_int(b, &ib) && ib == b.type().imin()) {
+            // Compute minimum of expression of type and minimum of type --> min of type
+            expr = b;
+            return;
+        } else if (const_uint(b, &ub) && ub == (uint64_t)b.type().imax()) {
+            // Compute minimum of expression of type and maximum of type --> expression
+            expr = a;
+            return;
+        } else if (op->type.is_uint() && is_zero(b)) {
             // Compute minimum of expression of type and minimum of type --> min of type
             expr = b;
             return;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
+        } else if (no_overflow(op->type) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1032,14 +1002,14 @@ private:
             // min(((a + 3)/4)*4, a) -> a
             expr = b;
         } else if (a_round_up.defined() && max_b &&
-                   equal(a_round_up, max_b->a) && equal(a_round_up_factor, max_b->b)) {
+                   equal(a_round_up, max_b->a) && is_const(max_b->b, a_round_up_factor)) {
             // min(((a + 3)/4)*4, max(a, 4)) -> max(a, 4)
             expr = b;
         } else if (b_round_up.defined() && equal(b_round_up, a)) {
             // min(a, ((a + 3)/4)*4) -> a
             expr = a;
         } else if (b_round_up.defined() && max_a &&
-                   equal(b_round_up, max_a->a) && equal(b_round_up_factor, max_a->b)) {
+                   equal(b_round_up, max_a->a) && is_const(max_a->b, b_round_up_factor)) {
             // min(max(a, 4), ((a + 3)/4)*4) -> max(a, 4)
             expr = a;
         } else if (max_a && equal(max_a->b, b)) {
@@ -1161,8 +1131,9 @@ private:
         }
 
 
-        int ia = 0, ib = 0, ic = 0;
-        float fa = 0.0f, fb = 0.0f;
+        int64_t ia = 0, ib = 0, ic = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -1188,30 +1159,34 @@ private:
             expr = a;
             return;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = std::max(ia, ib);
+            expr = IntImm::make(a.type(), std::max(ia, ib));
+            return;
+        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+            expr = UIntImm::make(a.type(), std::max(ua, ub));
             return;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = std::max(fa, fb);
+            expr = FloatImm::make(a.type(), std::max(fa, fb));
             return;
-        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
-            if (op->type.is_uint()) {
-                expr = make_const(op->type, std::max(((unsigned int) ia), ((unsigned int) ib)));
-            } else {
-                expr = make_const(op->type, std::max(ia, ib));
-            }
-            return;
-        } else if (const_castint(b, &ib) && ib == b.type().imin()) {
+        } else if (const_int(b, &ib) && ib == b.type().imin()) {
             // Compute maximum of expression of type and minimum of type --> expression
             expr = a;
             return;
-        } else if (const_castint(b, &ib) && ib == b.type().imax()) {
+        } else if (const_int(b, &ib) && ib == b.type().imax()) {
+            // Compute maximum of expression of type and maximum of type --> max of type
+            expr = b;
+            return;
+        } else if (op->type.is_uint() && is_zero(b)) {
+            // Compute maximum of expression of type and minimum of type --> expression
+            expr = a;
+            return;
+        } else if (const_uint(b, &ub) && ub == (uint64_t)b.type().imax()) {
             // Compute maximum of expression of type and maximum of type --> max of type
             expr = b;
             return;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
+        } else if (no_overflow(op->type) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1413,7 +1388,7 @@ private:
                 expr = const_false(op->type.width);
                 return;
             }
-        } else if (delta.type() == Int(32)) {
+        } else if (no_overflow(delta.type())) {
             // Attempt to disprove using modulus remainder analysis
             ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
             if (mod_rem.remainder) {
@@ -1455,8 +1430,8 @@ private:
                 // x - y == 0 -> x == y
                 expr = (sub->a == sub->b);
             }
-        } else if (mul && mul->type == Int(32)) {
-            // Restrict to int32, because, e.g. 64 * 4 == 0 as a uint8.
+        } else if (mul && no_overflow(mul->type)) {
+            // Restrict to int32 and greater, because, e.g. 64 * 4 == 0 as a uint8.
             expr = mutate(mul->a == zero || mul->b == zero);
         } else {
             expr = (delta == make_zero(delta.type()));
@@ -1488,9 +1463,10 @@ private:
         const Max *max_b = b.as<Max>();
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
 
-        int ia = 0, ib = 0, ic = 0;
+        int64_t ia = 0, ib = 0, ic = 0;
+        uint64_t ua = 0, ub = 0;
 
-        if (delta.type() == Int(32) && !is_const(delta)) {
+        if (no_overflow(delta.type()) && delta.type().is_scalar() && !is_const(delta)) {
             Interval i = bounds_of_expr_in_scope(delta, bounds_info);
             i.max = mutate(i.max);
             i.min = mutate(i.min);
@@ -1505,7 +1481,7 @@ private:
         }
 
         ModulusRemainder mod_rem(0, 1);
-        if (delta_ramp && delta_ramp->base.type() == Int(32)) {
+        if (delta_ramp && no_overflow(delta_ramp->base.type())) {
             // Do modulus remainder analysis on the base.
             mod_rem = modulus_remainder(delta_ramp->base, alignment_info);
         }
@@ -1514,16 +1490,14 @@ private:
         // ia and/or ib are large unsigned integer constants, especially when
         // int is 32 bits on the machine.
         // Explicit comparison is preferred.
-        if (const_castint(a, &ia) && const_castint(b, &ib)) {
-            if (a.type().is_uint()) {
-                expr = make_bool(((unsigned int) ia) < ((unsigned int) ib), op->type.width);
-            } else {
-                expr = make_bool(ia < ib, op->type.width);
-            }
-        } else if (const_castint(a, &ia) && ia == a.type().imax()) {
+        if (const_int(a, &ia) && const_int(b, &ib)) {
+            expr = make_bool(ia < ib, op->type.width);
+        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+            expr = make_bool(ua < ub, op->type.width);
+        } else if (const_int(a, &ia) && ia == a.type().imax()) {
             // Comparing maximum of type < expression of type.  This can never be true.
             expr = const_false(op->type.width);
-        } else if (const_castint(b, &ib) && ib == b.type().imin()) {
+        } else if (const_int(b, &ib) && ib == b.type().imin()) {
             // Comparing expression of type < minimum of type.  This can never be true.
             expr = const_false(op->type.width);
         } else if (is_zero(delta) || (no_overflow(delta.type()) && is_positive_const(delta))) {
@@ -2038,9 +2012,9 @@ private:
             (op->name == Call::shift_left ||
              op->name == Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
-            int ib = 0;
 
-            if (const_castint(b, &ib)) {
+            int64_t ib = 0;
+            if (const_int(b, &ib)) {
                 Type t = op->type;
 
                 bool shift_left = op->name == Call::shift_left;
@@ -2049,8 +2023,8 @@ private:
                     ib = -ib;
                 }
 
-                if (ib < std::min(t.bits, 32)) {
-                    ib = 1 << ib;
+                if (ib < std::min(t.bits, 64)) {
+                    ib = 1LL << ib;
                     b = make_const(t, ib);
 
                     if (shift_left) {
@@ -2075,13 +2049,13 @@ private:
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::bitwise_and) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
-            int ib = 0;
+            int64_t ib = 0;
             int bits;
 
-            if (const_castint(b, &ib) &&
-                ((ib < b.type().imax()) && (ib < std::numeric_limits<int>::max()) &&
-                 is_const_power_of_two_integer(ib + 1, &bits))) {
-                  expr = Mod::make(a, ib + 1);
+            if (const_int(b, &ib) &&
+                ib < b.type().imax() &&
+                is_const_power_of_two_integer(ib + 1, &bits)) {
+                expr = Mod::make(a, ib + 1);
             } else  if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
             } else {
@@ -2092,13 +2066,13 @@ private:
             // Constant evaluate abs(x).
             Expr a = mutate(op->args[0]);
             Type ta = a.type();
-            int ia = 0;
-            float fa = 0;
-            if (ta.is_int() && const_castint(a, &ia)) {
-                if (ia < 0 && ia != Int(32).imin()) {
+            int64_t ia = 0;
+            double fa = 0;
+            if (ta.is_int() && const_int(a, &ia)) {
+                if (ia < 0 && ia != Int(64).imin()) {
                     ia = -ia;
                 }
-                expr = Cast::make(op->type, ia);
+                expr = make_const(op->type, ia);
             } else if (ta.is_uint()) {
                 // abs(uint) is a no-op.
                 expr = a;
@@ -2115,7 +2089,7 @@ private:
         } else if (op->call_type == Call::Extern &&
                    op->name == "is_nan_f32") {
             Expr arg = mutate(op->args[0]);
-            float f = 0.0f;
+            double f = 0.0;
             if (const_float(arg, &f)) {
                 expr = std::isnan(f);
             } else if (arg.same_as(op->args[0])) {
@@ -2215,7 +2189,7 @@ private:
                     new_args.back() = last->value + string_imm->value;
                     changed = true;
                 } else if (int_imm) {
-                    snprintf(buf, sizeof(buf), "%d", int_imm->value);
+                    snprintf(buf, sizeof(buf), "%lld", (long long)int_imm->value);
                     if (last) {
                         new_args.back() = last->value + buf;
                     } else {
@@ -2247,8 +2221,8 @@ private:
         } else if (op->call_type == Call::Extern &&
                    op->name == "log_f32") {
             Expr arg = mutate(op->args[0]);
-            if (const float *f = as_const_float(arg)) {
-                expr = logf(*f);
+            if (const double *f = as_const_float(arg)) {
+                expr = FloatImm::make(arg.type(), std::log(*f));
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
@@ -2257,8 +2231,8 @@ private:
         } else if (op->call_type == Call::Extern &&
                    op->name == "exp_f32") {
             Expr arg = mutate(op->args[0]);
-            if (const float *f = as_const_float(arg)) {
-                expr = expf(*f);
+            if (const double *f = as_const_float(arg)) {
+                expr = FloatImm::make(arg.type(), std::exp(*f));
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
             } else {
@@ -2270,14 +2244,16 @@ private:
             internal_assert(op->args.size() == 1);
             Expr arg = mutate(op->args[0]);
             const Call *call = arg.as<Call>();
-            if (const float *f = as_const_float(arg)) {
-                if (op->name == "floor_f32") expr = std::floor(*f);
-                else if (op->name == "ceil_f32") expr = std::ceil(*f);
-                else if (op->name == "round_f32") expr = std::nearbyint(*f);
-                else if (op->name == "trunc_f32") {
-                    expr = (*f < 0 ? std::ceil(*f) : std::floor(*f));
+            if (const double *f = as_const_float(arg)) {
+                if (op->name == "floor_f32") {
+                    expr = FloatImm::make(arg.type(), std::floor(*f));
+                } else if (op->name == "ceil_f32") {
+                    expr = FloatImm::make(arg.type(), std::ceil(*f));
+                } else if (op->name == "round_f32") {
+                    expr = FloatImm::make(arg.type(), std::nearbyint(*f));
+                } else if (op->name == "trunc_f32") {
+                    expr = FloatImm::make(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
                 }
-
             } else if (call && call->call_type == Call::Extern &&
                        (call->name == "floor_f32" || call->name == "ceil_f32" ||
                         call->name == "round_f32" || call->name == "trunc_f32")) {
@@ -2393,7 +2369,7 @@ private:
 
         // Before we enter the body, track the alignment info
         bool new_value_tracked = false;
-        if (new_value.defined() && new_value.type() == Int(32)) {
+        if (new_value.defined() && no_overflow(new_value.type()) && new_value.type().is_scalar()) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(new_name, mod_rem);
@@ -2401,7 +2377,7 @@ private:
             }
         }
         bool value_tracked = false;
-        if (value.type() == Int(32)) {
+        if (no_overflow(value.type()) && value.type().is_scalar()) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(op->name, mod_rem);
@@ -2667,41 +2643,6 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
     }
 }
 
-template <typename T>
-void test_int_cast_constant() {
-    Type t = type_of<T>();
-
-    int min = t.imin();
-    internal_assert(int_cast_constant(t, min - 1) == (int)((T)(min - 1)))
-        << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, min) == (int)((T)min))
-        << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, min + 1) == (int)((T)(min + 1)))
-        << "Simplify test failed: int_cast_constant\n";
-
-    int max = t.imax();
-    internal_assert(int_cast_constant(t, max - 1) == (int)((T)(max - 1)))
-        << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, max) == (int)((T)max))
-        << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, max + 1) == (int)((T)(max + 1)))
-        << "Simplify test failed: int_cast_constant\n";
-
-    internal_assert(int_cast_constant(t, -1) == (int)((T)(-1)))
-        << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, 0) == (int)((T)0))
-        << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, 1) == (int)((T)1))
-        << "Simplify test failed: int_cast_constant\n";
-
-    // Test some random integers.
-    for (int i = 0; i < 100; i++) {
-        int x = rand() - RAND_MAX/2;
-        internal_assert(int_cast_constant(t, x) == (int)((T)x))
-            << "Simplify test failed: int_cast_constant\n";
-    }
-}
-
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
     Type t = e[0].type();
@@ -2725,14 +2666,6 @@ void simplify_test() {
     Expr yf = cast<float>(y);
     Expr t = const_true(), f = const_false();
 
-    // Check the type casting operations.
-    test_int_cast_constant<int8_t>();
-    test_int_cast_constant<int16_t>();
-    test_int_cast_constant<int32_t>();
-    test_int_cast_constant<uint8_t>();
-    test_int_cast_constant<uint16_t>();
-    test_int_cast_constant<uint32_t>();
-
     check(cast(Int(32), cast(Int(32), x)), x);
     check(cast(Float(32), 3), 3.0f);
     check(cast(Int(32), 5.0f), 5);
@@ -2741,29 +2674,29 @@ void simplify_test() {
     check(cast(Int(32), cast(Int(8), 1232)), -48);
 
     // Check evaluation of constant expressions involving casts
-    check(cast(UInt(16), 53) + cast(UInt(16), 87), cast(UInt(16), 140));
-    check(cast(Int(8), 127) + cast(Int(8), 1), cast(Int(8), -128));
-    check(cast(UInt(16), -1) - cast(UInt(16), 1), cast(UInt(16), 65534));
-    check(cast(Int(16), 4) * cast(Int(16), -5), cast(Int(16), -20));
-    check(cast(Int(16), 16) / cast(Int(16), 4), cast(Int(16), 4));
-    check(cast(Int(16), 23) % cast(Int(16), 5), cast(Int(16), 3));
-    check(min(cast(Int(16), 30000), cast(Int(16), -123)), cast(Int(16), -123));
-    check(max(cast(Int(16), 30000), cast(Int(16), 65000)), cast(Int(16), 30000));
+    check(cast(UInt(16), 53) + cast(UInt(16), 87), make_const(UInt(16), 140));
+    check(cast(Int(8), 127) + cast(Int(8), 1), make_const(Int(8), -128));
+    check(cast(UInt(16), -1) - cast(UInt(16), 1), make_const(UInt(16), 65534));
+    check(cast(Int(16), 4) * cast(Int(16), -5), make_const(Int(16), -20));
+    check(cast(Int(16), 16) / cast(Int(16), 4), make_const(Int(16), 4));
+    check(cast(Int(16), 23) % cast(Int(16), 5), make_const(Int(16), 3));
+    check(min(cast(Int(16), 30000), cast(Int(16), -123)), make_const(Int(16), -123));
+    check(max(cast(Int(16), 30000), cast(Int(16), 65000)), make_const(Int(16), 30000));
     check(cast(UInt(16), -1) == cast(UInt(16), 65535), const_true());
     check(cast(UInt(16), 65) == cast(UInt(16), 66), const_false());
     check(cast(UInt(16), -1) < cast(UInt(16), 65535), const_false());
     check(cast(UInt(16), 65) < cast(UInt(16), 66), const_true());
-    check(cast(UInt(16), 123.4f), cast(UInt(16), 123));
+    check(cast(UInt(16), 123.4f), make_const(UInt(16), 123));
     check(cast(Float(32), cast(UInt(16), 123456.0f)), 57920.0f);
     // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
     // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
-    check(cast(UInt(32), (int) 4000000000UL) + cast(UInt(32), 5), cast(UInt(32), (int) 4000000005UL));
-    check(cast(UInt(32), (int) 4000000000UL) - cast(UInt(32), 5), cast(UInt(32), (int) 3999999995UL));
-    check(cast(UInt(32), (int) 4000000000UL) / cast(UInt(32), 5), cast(UInt(32), 800000000));
-    check(cast(UInt(32), 800000000) * cast(UInt(32), 5), cast(UInt(32), (int) 4000000000UL));
-    check(cast(UInt(32), (int) 4000000023UL) % cast(UInt(32), 100), cast(UInt(32), 23));
-    check(min(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), cast(UInt(32), (int) 1000));
-    check(max(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), cast(UInt(32), (int) 4000000023UL));
+    check(cast(UInt(32), (int) 4000000000UL) + cast(UInt(32), 5), make_const(UInt(32), (int) 4000000005UL));
+    check(cast(UInt(32), (int) 4000000000UL) - cast(UInt(32), 5), make_const(UInt(32), (int) 3999999995UL));
+    check(cast(UInt(32), (int) 4000000000UL) / cast(UInt(32), 5), make_const(UInt(32), 800000000));
+    check(cast(UInt(32), 800000000) * cast(UInt(32), 5), make_const(UInt(32), (int) 4000000000UL));
+    check(cast(UInt(32), (int) 4000000023UL) % cast(UInt(32), 100), make_const(UInt(32), 23));
+    check(min(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), make_const(UInt(32), (int) 1000));
+    check(max(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), make_const(UInt(32), (int) 4000000023UL));
     check(cast(UInt(32), (int) 4000000023UL) < cast(UInt(32), 1000), const_false());
     check(cast(UInt(32), (int) 4000000023UL) == cast(UInt(32), 1000), const_false());
 
@@ -2975,7 +2908,7 @@ void simplify_test() {
     check(max(x, Int(32).min()), x);
     check(max(x, Int(32).max()), Int(32).max());
     // Check that non-extremes do not lead to incorrect simplification
-    check(max(cast(Int(8), x), cast(Int(8), -127)), max(cast(Int(8), x), cast(Int(8), -127)));
+    check(max(cast(Int(8), x), cast(Int(8), -127)), max(cast(Int(8), x), make_const(Int(8), -127)));
 
     // Check an optimization important for fusing dimensions
     check((x/3)*3 + x%3, x);
@@ -2997,8 +2930,7 @@ void simplify_test() {
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
     check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
-          cast(UInt(64), cast(UInt(32), -1)));
-
+          UIntImm::make(UInt(64), 0xffffffffULL));
 
     // Some quaternary rules with cancellations
     check((x + y) - (z + y), x - z);
