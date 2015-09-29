@@ -301,6 +301,7 @@ protected:
      * optimizations. The result of each is stored in \ref value */
     // @{
     virtual void visit(const IntImm *);
+    virtual void visit(const UIntImm *);
     virtual void visit(const FloatImm *);
     virtual void visit(const StringImm *);
     virtual void visit(const Cast *);

@@ -1238,11 +1238,15 @@ void CodeGen_LLVM::codegen(Stmt s) {
 }
 
 void CodeGen_LLVM::visit(const IntImm *op) {
-    value = ConstantInt::getSigned(i32, op->value);
+    value = ConstantInt::getSigned(llvm_type_of(op->type), op->value);
+}
+
+void CodeGen_LLVM::visit(const UIntImm *op) {
+    value = ConstantInt::get(llvm_type_of(op->type), op->value);
 }
 
 void CodeGen_LLVM::visit(const FloatImm *op) {
-    value = ConstantFP::get(*context, APFloat(op->value));
+    value = ConstantFP::get(llvm_type_of(op->type), op->value);
 }
 
 void CodeGen_LLVM::visit(const StringImm *op) {
@@ -1644,17 +1648,17 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;
-    int base = 0;
-    int width = 1;
+    int64_t base = 0;
+    int64_t width = 1;
 
     if (index.defined()) {
         if (const Ramp *ramp = index.as<Ramp>()) {
-            const int *pstride = as_const_int(ramp->stride);
-            const int *pbase = as_const_int(ramp->base);
+            const int64_t *pstride = as_const_int(ramp->stride);
+            const int64_t *pbase = as_const_int(ramp->base);
             if (pstride && pbase) {
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
-                int stride = *pstride;
+                int64_t stride = *pstride;
                 base = *pbase;
                 assert(base >= 0);
                 width = next_power_of_two(ramp->width * stride);
@@ -1666,7 +1670,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
                 constant_index = true;
             }
         } else {
-            const int *pbase = as_const_int(index);
+            const int64_t *pbase = as_const_int(index);
             if (pbase) {
                 base = *pbase;
                 constant_index = true;
@@ -1686,7 +1690,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
     // stores to the same buffer to get reordered.
     if (constant_index) {
         for (int w = 1024; w >= width; w /= 2) {
-            int b = (base / w) * w;
+            int64_t b = (base / w) * w;
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;

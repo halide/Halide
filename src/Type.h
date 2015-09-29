@@ -100,14 +100,21 @@ struct Type {
     /** Can this type represent all values of another type? */
     EXPORT bool can_represent(Type other) const;
 
+    /** Can this type represent a particular constant? */
+    // @{
+    EXPORT bool can_represent(double x) const;
+    EXPORT bool can_represent(int64_t x) const;
+    EXPORT bool can_represent(uint64_t x) const;
+    // @}
+
     /** Return an integer which is the maximum value of this type. */
-    EXPORT int imax() const;
+    EXPORT int64_t imax() const;
 
     /** Return an expression which is the maximum value of this type */
     EXPORT Expr max() const;
 
     /** Return an integer which is the minimum value of this type */
-    EXPORT int imin() const;
+    EXPORT int64_t imin() const;
 
     /** Return an expression which is the minimum value of this type */
     EXPORT Expr min() const;

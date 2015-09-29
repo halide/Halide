@@ -23,6 +23,7 @@ class IRVisitor {
 public:
     EXPORT virtual ~IRVisitor();
     EXPORT virtual void visit(const IntImm *);
+    EXPORT virtual void visit(const UIntImm *);
     EXPORT virtual void visit(const FloatImm *);
     EXPORT virtual void visit(const StringImm *);
     EXPORT virtual void visit(const Cast *);
@@ -86,6 +87,7 @@ public:
      * visit them if they haven't been visited already. */
     // @{
     EXPORT virtual void visit(const IntImm *);
+    EXPORT virtual void visit(const UIntImm *);
     EXPORT virtual void visit(const FloatImm *);
     EXPORT virtual void visit(const StringImm *);
     EXPORT virtual void visit(const Cast *);

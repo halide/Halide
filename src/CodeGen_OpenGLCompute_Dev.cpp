@@ -185,7 +185,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
             "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
 
         // Buffer type is 4-elements wide, that's why we divide by ramp->width.
-        id_index = print_expr(Div::make(ramp->base, IntImm::make(ramp->width)));
+        id_index = print_expr(Div::make(ramp->base, ramp->width));
     } else {
         id_index = print_expr(op->index);
     }
@@ -211,7 +211,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
             << " and width " << ramp->width << " instead.";
 
         // Buffer type is 4-elements wide, that's why we divide by ramp->width.
-        id_index = print_expr(Div::make(ramp->base, IntImm::make(ramp->width)));
+        id_index = print_expr(Div::make(ramp->base, ramp->width));
     } else {
         id_index = print_expr(op->index);
     }

@@ -19,15 +19,19 @@ EXPORT bool is_const(Expr e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
  * Cast, or Broadcast of the same. */
-EXPORT bool is_const(Expr e, int v);
+EXPORT bool is_const(Expr e, int64_t v);
 
 /** If an expression is an IntImm, return a pointer to its
  * value. Otherwise returns NULL. */
-EXPORT const int *as_const_int(Expr e);
+EXPORT const int64_t *as_const_int(Expr e);
+
+/** If an expression is an IntImm, return a pointer to its
+ * value. Otherwise returns NULL. */
+EXPORT const uint64_t *as_const_uint(Expr e);
 
 /** If an expression is a FloatImm, return a pointer to its
  * value. Otherwise returns NULL. */
-EXPORT const float *as_const_float(Expr e);
+EXPORT const double *as_const_float(Expr e);
 
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. Only returns true for
@@ -66,18 +70,8 @@ EXPORT bool is_two(Expr e);
  * undefined Stmt, or as an Evaluate node of a constant) */
 EXPORT bool is_no_op(Stmt s);
 
-/** Given an integer value, cast it into a designated integer type
- * and return the bits as int. Unsigned types are returned as bits in the int
- * and should be cast to unsigned int for comparison.
- * int_cast_constant implements bit manipulations to wrap val into the
- * value range of the Type t.
- * For example, int_cast_constant(UInt(16), -1) returns 65535
- * int_cast_constant(Int(8), 128) returns -128
- */
-EXPORT int int_cast_constant(Type t, int val);
-
 /** Construct a const of the given type */
-EXPORT Expr make_const(Type t, int val);
+EXPORT Expr make_const(Type t, int64_t val);
 
 /** Construct a boolean constant from a C++ boolean value.
  * May also be a vector if width is given.
@@ -105,6 +99,11 @@ EXPORT Expr const_true(int width = 1);
 /** Construct the constant boolean false. May also be a vector of
  * falses, if a width argument is given. */
 EXPORT Expr const_false(int width = 1);
+
+/** Attempt to cast an expression to a smaller type while provably not
+ * losing information. If it can't be done, return an undefined
+ * Expr. */
+EXPORT Expr lossless_cast(Type t, Expr e);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -889,7 +888,7 @@ inline Expr log(Expr x) {
 inline Expr pow(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "pow of undefined Expr\n";
 
-    if (const int *i = as_const_int(y)) {
+    if (const int64_t *i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
     }
 
@@ -933,7 +932,7 @@ EXPORT Expr fast_exp(Expr x);
  * mantissa for typical exponents. Gets worse when approaching
  * overflow. Vectorizes cleanly. */
 inline Expr fast_pow(Expr x, Expr y) {
-    if (const int *i = as_const_int(y)) {
+    if (const int64_t *i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
     }
 
@@ -1257,11 +1256,11 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.
     if (!zero_val.type().is_float()) {
-        const float *const_weight = as_const_float(weight);
+        const double *const_weight = as_const_float(weight);
         if (const_weight) {
-            user_assert(*const_weight >= 0.0f && *const_weight <= 1.0f)
+            user_assert(*const_weight >= 0.0 && *const_weight <= 1.0)
                 << "Floating-point weight for lerp with integer arguments is "
-                << *const_weight << ", which is not in the range [0.0f, 1.0f].\n";
+                << *const_weight << ", which is not in the range [0.0, 1.0].\n";
         }
     }
     return Internal::Call::make(zero_val.type(), Internal::Call::lerp,
