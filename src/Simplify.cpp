@@ -2463,7 +2463,8 @@ private:
         const IntImm *new_extent_int = new_extent.as<IntImm>();
         bool bounds_tracked = new_min_int && new_extent_int;
         if (bounds_tracked) {
-            Interval i = Interval(new_min, new_min_int->value + new_extent_int->value - 1);
+            Expr new_max = make_const(new_min.type(), new_min_int->value + new_extent_int->value - 1);
+            Interval i = Interval(new_min, new_max);
             bounds_info.push(op->name, i);
         }
 
