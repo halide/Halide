@@ -125,16 +125,29 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
 
 /** Integer constants */
 struct IntImm : public ExprNode<IntImm> {
-    int value;
+    int64_t value;
 
-    static IntImm *make(int value) {
-        if (value >= -8 && value <= 8 &&
-            !small_int_cache[value + 8].ref_count.is_zero()) {
-            return &small_int_cache[value + 8];
+    static IntImm *make(Type t, int64_t value) {
+        internal_assert(t.is_int()) << "IntImm must be an Int\n";
+        if (t.bits == 32 && value >= -8 && value <= 8 &&
+            !small_int_cache[(int)value + 8].ref_count.is_zero()) {
+            return &small_int_cache[(int)value + 8];
         }
         IntImm *node = new IntImm;
-        node->type = Int(32);
-        node->value = value;
+        node->type = t;
+        switch (t.bits) {
+        case 8:
+            node->value = (int8_t)value;
+            break;
+        case 16:
+            node->value = (int16_t)value;
+            break;
+        case 32:
+            node->value = (int32_t)value;
+            break;
+        default:
+            node->value = value;
+        }
         return node;
     }
 
@@ -143,14 +156,50 @@ private:
     EXPORT static IntImm small_int_cache[17];
 };
 
+/** Unsigned integer constants */
+struct UIntImm : public ExprNode<UIntImm> {
+    uint64_t value;
+
+    static UIntImm *make(Type t, uint64_t value) {
+        internal_assert(t.is_uint()) << "UIntImm must be a UInt\n";
+        UIntImm *node = new UIntImm;
+        node->type = t;
+        switch (t.bits) {
+        case 8:
+            node->value = (uint8_t)value;
+            break;
+        case 16:
+            node->value = (uint16_t)value;
+            break;
+        case 32:
+            node->value = (uint32_t)value;
+            break;
+        default:
+            node->value = value;
+        }
+        return node;
+    }
+};
+
 /** Floating point constants */
 struct FloatImm : public ExprNode<FloatImm> {
-    float value;
+    double value;
 
-    static FloatImm *make(float value) {
+    static FloatImm *make(Type t, double value) {
+        internal_assert(t.is_float()) << "FloatImm must be a Float\n";
         FloatImm *node = new FloatImm;
-        node->type = Float(32);
-        node->value = value;
+        node->type = t;
+        switch (t.bits) {
+        case 16:
+            node->value = (double)((float16_t)value);
+            break;
+        case 32:
+            node->value = (float)value;
+            break;
+        default:
+            node->value = value;
+        }
+
         return node;
     }
 };
@@ -180,28 +229,20 @@ struct Expr : public Internal::IRHandle {
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
 
 
-    /** Make an expression representing a const 32-bit int (i.e. an IntImm) */
-    EXPORT Expr(int x) : IRHandle(Internal::IntImm::make(x)) {
-    }
-
-    /** Make an expression representing a const 16-bit float (IEEE-754 2008
-     * binary32, also know as "half"), given a float16_t.  This is internally
-     * represented as a cast of a FloatImm. */
+    /** Make an expression representing numeric constants of various types. */
+    // @{
+    EXPORT Expr(int8_t x) : IRHandle(Internal::IntImm::make(Int(8), x)) {}
+    EXPORT Expr(int16_t x) : IRHandle(Internal::IntImm::make(Int(16), x)) {}
+    EXPORT Expr(int32_t x) : IRHandle(Internal::IntImm::make(Int(32), x)) {}
+    EXPORT Expr(int64_t x) : IRHandle(Internal::IntImm::make(Int(64), x)) {}
+    EXPORT Expr(uint8_t x) : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
+    EXPORT Expr(uint16_t x) : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
+    EXPORT Expr(uint32_t x) : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
+    EXPORT Expr(uint64_t x) : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
     EXPORT Expr(float16_t x);
-
-    /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
-    EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(x)) {
-    }
-
-    /** Make an expression representing a const 32-bit float, given a
-     * double. Also emits a warning due to truncation. */
-    EXPORT Expr(double x) : IRHandle(Internal::FloatImm::make((float)x)) {
-        user_warning << "Halide cannot represent double constants. "
-                     << "Converting " << x << " to float. "
-                     << "If you wanted a double, use cast<double>(" << x
-                     << (x == (int64_t)(x) ? ".0f" : "f")
-                     << ")\n";
-    }
+    EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
+    EXPORT Expr(double x) : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
     EXPORT Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {

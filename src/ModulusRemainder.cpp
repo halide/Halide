@@ -20,6 +20,7 @@ public:
     }
 
     void visit(const IntImm *);
+    void visit(const UIntImm *);
     void visit(const FloatImm *);
     void visit(const StringImm *);
     void visit(const Cast *);
@@ -132,6 +133,10 @@ void ComputeModulusRemainder::visit(const IntImm *op) {
     // handle zero in the rest of the code...
     remainder = op->value;
     modulus = 0;
+}
+
+void ComputeModulusRemainder::visit(const UIntImm *op) {
+    internal_error << "modulus_remainder of uint\n";
 }
 
 void ComputeModulusRemainder::visit(const FloatImm *) {

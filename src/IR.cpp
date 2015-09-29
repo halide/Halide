@@ -210,7 +210,7 @@ Expr And::make(Expr a, Expr b) {
     internal_assert(a.type().is_bool()) << "lhs of And is not a bool\n";
     internal_assert(b.type().is_bool()) << "rhs of And is not a bool\n";
     internal_assert(a.type() == b.type()) << "And of mismatched types\n";
-    
+
     And *node = new And;
     node->type = Bool(a.type().width);
     node->a = a;
@@ -224,7 +224,7 @@ Expr Or::make(Expr a, Expr b) {
     internal_assert(a.type().is_bool()) << "lhs of Or is not a bool\n";
     internal_assert(b.type().is_bool()) << "rhs of Or is not a bool\n";
     internal_assert(a.type() == b.type()) << "Or of mismatched types\n";
-    
+
     Or *node = new Or;
     node->type = Bool(a.type().width);
     node->a = a;
@@ -515,6 +515,7 @@ Expr Variable::make(Type type, std::string name, Buffer image, Parameter param, 
 }
 
 template<> void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
+template<> void ExprNode<UIntImm>::accept(IRVisitor *v) const { v->visit((const UIntImm *)this); }
 template<> void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
 template<> void ExprNode<StringImm>::accept(IRVisitor *v) const { v->visit((const StringImm *)this); }
 template<> void ExprNode<Cast>::accept(IRVisitor *v) const { v->visit((const Cast *)this); }
@@ -555,6 +556,7 @@ template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((con
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 
 template<> IRNodeType ExprNode<IntImm>::_type_info = {};
+template<> IRNodeType ExprNode<UIntImm>::_type_info = {};
 template<> IRNodeType ExprNode<FloatImm>::_type_info = {};
 template<> IRNodeType ExprNode<StringImm>::_type_info = {};
 template<> IRNodeType ExprNode<Cast>::_type_info = {};

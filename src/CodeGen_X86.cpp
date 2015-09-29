@@ -75,45 +75,6 @@ Expr _f64(Expr e) {
 
 namespace {
 
-// Attempt to cast an expression to a smaller type while provably not
-// losing information. If it can't be done, return an undefined Expr.
-
-Expr lossless_cast(Type t, Expr e) {
-    if (t == e.type()) {
-        return e;
-    } else if (t.can_represent(e.type())) {
-        return cast(t, e);
-    }
-
-    if (const Cast *c = e.as<Cast>()) {
-        if (t == c->value.type()) {
-            return c->value;
-        } else {
-            return lossless_cast(t, c->value);
-        }
-    }
-
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value);
-        if (v.defined()) {
-            return Broadcast::make(v, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = e.as<IntImm>()) {
-        int x = int_cast_constant(t, i->value);
-        if (x == i->value) {
-            return cast(t, e);
-        } else {
-            return Expr();
-        }
-    }
-
-    return Expr();
-}
-
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
 // interleaving a, c, and b, d, and then using pmaddwd. We
 // recognize it here, and implement it in the initial module.
