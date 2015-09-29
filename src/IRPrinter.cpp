@@ -210,11 +210,15 @@ void IRPrinter::do_indent() {
 }
 
 void IRPrinter::visit(const IntImm *op) {
-    stream << op->value;
+    if (op->type == Int(32)) {
+        stream << op->value;
+    } else {
+        stream << "(" << op->type << ")" << op->value;
+    }
 }
 
 void IRPrinter::visit(const UIntImm *op) {
-    stream << op->value;
+    stream << "(" << op->type << ")" << op->value;
 }
 
 void IRPrinter::visit(const FloatImm *op) {
