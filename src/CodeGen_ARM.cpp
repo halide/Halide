@@ -143,10 +143,10 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
         Expr ws_vector = Variable::make(ws, "*");
 
         // Bounds of the type stored in the wider vector type
-        Expr tmin = simplify(cast(w, t.imin()));
-        Expr tmax = simplify(cast(w, t.imax()));
-        Expr tsmin = simplify(cast(ws, t.imin()));
-        Expr tsmax = simplify(cast(ws, t.imax()));
+        Expr tmin = simplify(make_const(w, t.imin()));
+        Expr tmax = simplify(make_const(w, t.imax()));
+        Expr tsmin = simplify(make_const(ws, t.imin()));
+        Expr tsmax = simplify(make_const(ws, t.imax()));
 
         // Can't fit uint32 max into an intimm
         if (t.element_of() == UInt(32)) {

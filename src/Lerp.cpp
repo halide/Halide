@@ -38,7 +38,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
         if (weight.type().is_float())
             half_weight = 0.5f;
         else {
-            half_weight = weight.type().imax() / 2;
+            half_weight = weight.type().max() / 2;
         }
 
         result = select(weight > half_weight, one_val, zero_val);
@@ -60,9 +60,9 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 } else {
                     typed_weight =
                         Cast::make(computation_type,
-                                   computation_type.imax() * typed_weight);
+                                   computation_type.max() * typed_weight);
                 }
-                inverse_typed_weight = computation_type.imax() - typed_weight;
+                inverse_typed_weight = computation_type.max() - typed_weight;
             } else {
                 inverse_typed_weight = 1.0f - typed_weight;
             }
@@ -121,7 +121,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 }
                 inverse_typed_weight =
                     Cast::make(computation_type,
-                               computation_type.imax() - typed_weight);
+                               computation_type.max() - typed_weight);
             }
         }
 

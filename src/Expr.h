@@ -231,17 +231,17 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    EXPORT Expr(int8_t x) : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    EXPORT Expr(int16_t x) : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-    EXPORT Expr(int32_t x) : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    EXPORT Expr(int64_t x) : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    EXPORT Expr(uint8_t x) : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    EXPORT Expr(uint16_t x) : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    EXPORT Expr(uint32_t x) : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    EXPORT Expr(uint64_t x) : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-    EXPORT Expr(float16_t x);
-    EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    EXPORT Expr(double x) : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    EXPORT Expr(int8_t x)            : IRHandle(Internal::IntImm::make(Int(8), x)) {}
+    EXPORT Expr(int16_t x)           : IRHandle(Internal::IntImm::make(Int(16), x)) {}
+    EXPORT Expr(int32_t x)           : IRHandle(Internal::IntImm::make(Int(32), x)) {}
+    EXPORT explicit Expr(int64_t x)  : IRHandle(Internal::IntImm::make(Int(64), x)) {}
+    EXPORT Expr(uint8_t x)           : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
+    EXPORT Expr(uint16_t x)          : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
+    EXPORT Expr(uint32_t x)          : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
+    EXPORT explicit Expr(uint64_t x) : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
+    EXPORT Expr(float16_t x)         : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
+    EXPORT Expr(float x)             : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
+    EXPORT explicit Expr(double x)   : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
