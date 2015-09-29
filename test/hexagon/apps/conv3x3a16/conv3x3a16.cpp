@@ -13,11 +13,15 @@ int main(int argc, char **argv) {
 #if LOG2VLEN == 7
   target.set_feature(Target::HVX_DOUBLE);
 #endif
+  target.set_cgoption(Target::BuffersAligned);
 
   Halide::Var x("x"), y("y");
   Var xo,xi;
 
   ImageParam In (type_of<uint8_t>(), 2);
+  set_min(In, 0, 0);
+  set_min(In, 1, 0);
+  set_stride_multiple(In, 1, 1 << LOG2VLEN);
 
   Halide::Func mask;
   mask(x,y) = 0;
@@ -33,6 +37,9 @@ int main(int argc, char **argv) {
 #ifndef NOVECTOR
   conv3x3.vectorize(x, 1 << LOG2VLEN);
 #endif
+  set_output_buffer_min(conv3x3, 0, 0);
+  set_output_buffer_min(conv3x3, 1, 0);
+  set_stride_multiple(conv3x3, 1, 1 << LOG2VLEN);
   std::vector<Argument> args(1);
   args[0]  = In;
 #ifdef BITCODE
