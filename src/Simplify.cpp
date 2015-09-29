@@ -374,7 +374,8 @@ private:
                    const_int(div_a->b, &ib) && ib &&
                    const_int(b, &ic)) {
             // ((a + ia) / ib + ic) -> (a + (ia + ib*ic)) / ib
-            expr = mutate((add_a_a->a + (ia + ib*ic)) / ib);
+
+            expr = mutate((add_a_a->a + make_const(op->type, ia + ib*ic)) / div_a->b);
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
             expr = mutate(mul_a->a * (mul_a->b + mul_b->b));
@@ -691,7 +692,7 @@ private:
                 if (const_int(bounds.min, &num_min) &&
                     const_int(bounds.max, &num_max) &&
                     div_imp(num_max, ib) == div_imp(num_min, ib)) {
-                    expr = div_imp(num_max, ib);
+                    expr = make_const(op->type, div_imp(num_max, ib));
                     return;
                 }
             }
@@ -708,65 +709,71 @@ private:
         } else if (is_one(b)) {
             expr = a;
         } else if (equal(a, b) && !is_zero(b)) {
-            expr = make_one(a.type());
+            expr = make_one(op->type);
         } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
-            expr = IntImm::make(a.type(), div_imp(ia, ib));
+            expr = IntImm::make(op->type, div_imp(ia, ib));
         } else if (const_uint(a, &ua) && const_uint(b, &ub) && ub) {
-            expr = UIntImm::make(a.type(), ua / ub);
+            expr = UIntImm::make(op->type, ua / ub);
         } else if (const_float(a, &fa) && const_float(b, &fb) && fb != 0.0f) {
-            expr = FloatImm::make(a.type(), fa / fb);
+            expr = FloatImm::make(op->type, fa / fb);
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
                    ia % ib == 0) {
             // ramp(x, 4, w) / broadcast(2, w) -> ramp(x / 2, 2, w)
-            Type t = a.type().element_of();
-            expr = mutate(Ramp::make(ramp_a->base / ib, IntImm::make(t, div_imp(ia, ib)), ramp_a->width));
+            Type t = op->type.element_of();
+            expr = mutate(Ramp::make(ramp_a->base / broadcast_b->value,
+                                     IntImm::make(t, div_imp(ia, ib)),
+                                     ramp_a->width));
         } else if (ramp_a && no_overflow(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
                    div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
             // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
-            expr = mutate(Broadcast::make(ramp_a->base / ib, ramp_a->width));
+            expr = mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->width));
         } else if (div_a &&
                    const_int(div_a->b, &ia) && ia >= 0 &&
                    const_int(b, &ib) && ib >= 0) {
             // (x / 3) / 4 -> x / 12
-            expr = mutate(div_a->a / (ia * ib));
+            expr = mutate(div_a->a / make_const(op->type, ia * ib));
         } else if (div_a_a && add_a &&
                    const_int(div_a_a->b, &ia) && ia >= 0 &&
                    const_int(add_a->b, &ib) &&
                    const_int(b, &ic) && ic >= 0) {
             // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
-            expr = mutate((div_a_a->a + ia*ib) / (ia*ic));
+            expr = mutate((div_a_a->a + make_const(op->type, ia*ib)) / make_const(op->type, ia*ic));
         } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
                    ia > 0 && ib > 0 && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
                 // (x * 4) / 2 -> x * 2
-                expr = mutate(mul_a->a * div_imp(ia, ib));
+                expr = mutate(mul_a->a * make_const(op->type, div_imp(ia, ib)));
             } else {
                 // (x * 2) / 4 -> x / 2
-                expr = mutate(mul_a->a / div_imp(ib, ia));
+                expr = mutate(mul_a->a / make_const(op->type, div_imp(ib, ia)));
             }
         } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
             // (x*4 + y) / 2 -> x*2 + y/2
-            expr = mutate((mul_a_a->a * div_imp(ia, ib)) + (add_a->b / b));
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_a->a * ratio) + (add_a->b / b));
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
             // (y + x*4) / 2 -> y/2 + x*2
-            expr = mutate((add_a->a / b) + (mul_a_b->a * div_imp(ia, ib)));
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((add_a->a / b) + (mul_a_b->a * ratio));
         } else if (sub_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
             // (x*4 - y) / 2 -> x*2 - y/2
-            expr = mutate((mul_a_a->a * div_imp(ia, ib)) - (sub_a->b / b));
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_a->a * ratio) - (sub_a->b / b));
         } else if (sub_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
             // (y - x*4) / 2 -> y/2 - x*2
-            expr = mutate((sub_a->a / b) - (mul_a_b->a * div_imp(ia, ib)));
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((sub_a->a / b) - (mul_a_b->a * ratio));
         } else if (b.type().is_float() && is_simple_const(b)) {
             // Convert const float division to multiplication
             // x / 2 -> x * 0.5
@@ -795,7 +802,7 @@ private:
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
-        if (const_int(b, &ib) && ib && no_overflow(a.type()) && a.type().is_scalar()) {
+        if (const_int(b, &ib) && ib && no_overflow(op->type) && op->type.is_scalar()) {
             // If the LHS is bounded, we can possibly bail out early
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
             if (ia.max.defined() && ia.min.defined() &&
@@ -818,33 +825,33 @@ private:
         if (is_zero(a) && !is_zero(b)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
-            expr = IntImm::make(a.type(), mod_imp(ia, ib));
+            expr = IntImm::make(op->type, mod_imp(ia, ib));
         } else if (const_uint(a, &ua) && const_uint(b, &ub) && ub) {
-            expr = UIntImm::make(a.type(), ua % ub);
+            expr = UIntImm::make(op->type, ua % ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = FloatImm::make(a.type(), mod_imp(fa, fb));
+            expr = FloatImm::make(op->type, mod_imp(fa, fb));
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Mod::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (mul_a && const_int(b, &ib) && ib && const_int(mul_a->b, &ia) && (ia % ib == 0)) {
             // (x * (b*a)) % b -> 0
-            expr = make_zero(a.type());
+            expr = make_zero(op->type);
         } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (x * (b*a) + y) % b -> (y % b)
-            expr = mutate(add_a->b % ib);
+            expr = mutate(add_a->b % b);
         } else if (add_a && const_int(add_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + (b*a)) % b -> (y % b)
-            expr = mutate(add_a->a % ib);
+            expr = mutate(add_a->a % b);
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
-            expr = mutate(add_a->a % ib);
-        } else if (const_int(b, &ib) && ib && no_overflow(a.type()) && mod_rem.modulus % ib == 0) {
+            expr = mutate(add_a->a % b);
+        } else if (const_int(b, &ib) && ib && no_overflow(op->type) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
-            expr = mod_imp((int64_t)mod_rem.remainder, ib);
+            expr = make_const(op->type, mod_imp((int64_t)mod_rem.remainder, ib));
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
-            expr = mutate(Broadcast::make(ramp_a->base % ib, ramp_a->width));
+            expr = mutate(Broadcast::make(ramp_a->base % broadcast_b->value, ramp_a->width));
         } else if (ramp_a && no_overflow(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
@@ -857,8 +864,9 @@ private:
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) % z
-            Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
-            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width) % ib);
+            Type t = ramp_a->base.type();
+            Expr new_base = make_const(t, mod_imp((int64_t)mod_rem.remainder, ib));
+            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width) % b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -910,13 +918,13 @@ private:
             expr = a;
             return;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = IntImm::make(a.type(), std::min(ia, ib));
+            expr = IntImm::make(op->type, std::min(ia, ib));
             return;
         } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
-            expr = UIntImm::make(a.type(), std::min(ua, ub));
+            expr = UIntImm::make(op->type, std::min(ua, ub));
             return;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = FloatImm::make(a.type(), std::min(fa, fb));
+            expr = FloatImm::make(op->type, std::min(fa, fb));
             return;
         } else if (const_int(b, &ib) && ib == b.type().imax()) {
             // Compute minimum of expression of type and maximum of type --> expression
@@ -1081,28 +1089,32 @@ private:
                    const_int(div_b->b, &ib) &&
                    (ia == ib)) {
             // min(a / 4, b / 4) -> min(a, b) / 4
+            Expr factor = make_const(op->type, ia);
             if (ia > 0) {
-                expr = mutate(min(div_a->a, div_b->a) / ia);
+                expr = mutate(min(div_a->a, div_b->a) / factor);
             } else {
-                expr = mutate(max(div_a->a, div_b->a) / ia);
+                expr = mutate(max(div_a->a, div_b->a) / factor);
             }
         } else if (mul_a && mul_b &&
                    const_int(mul_a->b, &ia) &&
                    const_int(mul_b->b, &ib) &&
                    (ia == ib)) {
+            Expr factor = make_const(op->type, ia);
             if (ia > 0) {
-                expr = mutate(min(mul_a->a, mul_b->a) * ia);
+                expr = mutate(min(mul_a->a, mul_b->a) * factor);
             } else {
-                expr = mutate(max(mul_a->a, mul_b->a) * ia);
+                expr = mutate(max(mul_a->a, mul_b->a) * factor);
             }
         } else if (mul_a && const_int(mul_a->b, &ia) &&
                    const_int(b, &ib) &&
                    ia && (ib % ia == 0)) {
             // min(x*8, 24) -> min(x, 3)*8
+            Expr ratio  = make_const(op->type, ib/ia);
+            Expr factor = make_const(op->type, ia);
             if (ia > 0) {
-                expr = mutate(min(mul_a->a, ib/ia) * ia);
+                expr = mutate(min(mul_a->a, ratio) * factor);
             } else {
-                expr = mutate(max(mul_a->a, ib/ia) * ia);
+                expr = mutate(max(mul_a->a, ratio) * factor);
             }
         } else if (call_a && call_a->name == Call::likely && call_a->call_type == Call::Intrinsic &&
                    equal(call_a->args[0], b)) {
@@ -1159,13 +1171,13 @@ private:
             expr = a;
             return;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = IntImm::make(a.type(), std::max(ia, ib));
+            expr = IntImm::make(op->type, std::max(ia, ib));
             return;
         } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
-            expr = UIntImm::make(a.type(), std::max(ua, ub));
+            expr = UIntImm::make(op->type, std::max(ua, ub));
             return;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            expr = FloatImm::make(a.type(), std::max(fa, fb));
+            expr = FloatImm::make(op->type, std::max(fa, fb));
             return;
         } else if (const_int(b, &ib) && ib == b.type().imin()) {
             // Compute maximum of expression of type and minimum of type --> expression
@@ -1316,28 +1328,32 @@ private:
                    const_int(div_b->b, &ib) &&
                    (ia == ib)) {
             // max(a / 4, b / 4) -> max(a, b) / 4
+            Expr factor = make_const(op->type, ia);
             if (ia > 0) {
-                expr = mutate(max(div_a->a, div_b->a) / ia);
+                expr = mutate(max(div_a->a, div_b->a) / factor);
             } else {
-                expr = mutate(min(div_a->a, div_b->a) / ia);
+                expr = mutate(min(div_a->a, div_b->a) / factor);
             }
         } else if (mul_a && mul_b &&
                    const_int(mul_a->b, &ia) &&
                    const_int(mul_b->b, &ib) &&
                    (ia == ib)) {
+            Expr factor = make_const(op->type, ia);
             if (ia > 0) {
-                expr = mutate(max(mul_a->a, mul_b->a) * ia);
+                expr = mutate(max(mul_a->a, mul_b->a) * factor);
             } else {
-                expr = mutate(min(mul_a->a, mul_b->a) * ia);
+                expr = mutate(min(mul_a->a, mul_b->a) * factor);
             }
         } else if (mul_a && const_int(mul_a->b, &ia) &&
                    const_int(b, &ib) &&
                    ia && (ib % ia == 0)) {
             // max(x*8, 24) -> max(x, 3)*8
+            Expr ratio = make_const(op->type, ib/ia);
+            Expr factor = make_const(op->type, ia);
             if (ia > 0) {
-                expr = mutate(max(mul_a->a, ib/ia) * ia);
+                expr = mutate(max(mul_a->a, ratio) * factor);
             } else {
-                expr = mutate(min(mul_a->a, ib/ia) * ia);
+                expr = mutate(min(mul_a->a, ratio) * factor);
             }
         } else if (call_a && call_a->name == Call::likely && call_a->call_type == Call::Intrinsic &&
                    equal(call_a->args[0], b)) {
@@ -1538,7 +1554,7 @@ private:
                 expr = mutate(make_zero(add_b->a.type()) < add_b->a);
             } else if (add_b && const_int(a, &ia) && const_int(add_b->b, &ib)) {
                 // ia < x + ib
-                expr = mutate((ia - ib) < add_b->a);
+                expr = mutate(make_const(a.type(), ia - ib) < add_b->a);
             } else if (sub_b && equal(sub_b->a, a)) {
                 // Add a term to both sides
                 expr = mutate(sub_b->b < make_zero(sub_b->b.type()));
@@ -2054,8 +2070,8 @@ private:
 
             if (const_int(b, &ib) &&
                 ib < b.type().imax() &&
-                is_const_power_of_two_integer(ib + 1, &bits)) {
-                expr = Mod::make(a, ib + 1);
+                is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
+                expr = Mod::make(a, make_const(a.type(), ib + 1));
             } else  if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
             } else {
@@ -2082,7 +2098,7 @@ private:
                 if (fa < 0) {
                     fa = -fa;
                 }
-                expr = fa;
+                expr = make_const(a.type(), fa);
             } else if (a.same_as(op->args[0])) {
                 expr = op;
             } else {

@@ -537,12 +537,12 @@ void CodeGen_GLSL::visit(const Call *op) {
             // Normalize integer weights to [0.0f, 1.0f] range.
             internal_assert(weight.type().bits < 32);
             weight = Div::make(Cast::make(Float(32), weight),
-                               Cast::make(Float(32), weight.type().imax()));
+                               Cast::make(Float(32), weight.type().max()));
         } else if (op->type.is_uint()) {
             // Round float weights down to next multiple of (1/op->type.imax())
             // to give same results as lerp based on integer arithmetic.
             internal_assert(op->type.bits < 32);
-            weight = floor(weight * op->type.imax()) / op->type.imax();
+            weight = floor(weight * op->type.max()) / op->type.max();
         }
 
         Type result_type = Float(32, op->type.width);
