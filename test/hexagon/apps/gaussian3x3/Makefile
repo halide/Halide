@@ -5,7 +5,7 @@ CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 TIMING=--timing
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
+X86_CLANG=clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 
