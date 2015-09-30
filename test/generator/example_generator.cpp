@@ -79,7 +79,7 @@ public:
         f(x, y) = max(x, y);
         g(x, y, c) = cast(output_type, f(x, y) * c * compiletime_factor * runtime_factor);
 
-        g.bound(c, 0, channels).reorder(c, x, y).unroll(c);
+        g.bound(c, 0, (int)channels).reorder(c, x, y).unroll(c);
 
         // Note that we can use the Generator method natural_vector_size()
         // here; this produces the width of the SIMD vector being targeted

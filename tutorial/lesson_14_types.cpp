@@ -135,8 +135,9 @@ int main(int argc, char **argv) {
         // The rules above handle all the floating-point cases. The
         // following three rules handle the integer cases.
 
-        // 5) If one of the expressions is an integer constant, then it is
-        // coerced to the type of the other expression.
+        // 5) If one of the arguments is an C++ int, and the other is
+        // a Halide::Expr, then the int is coerced to the type of the
+        // expression.
         assert((u32 + 3).type() == UInt(32));
         assert((3 + s16).type() == Int(16));
 

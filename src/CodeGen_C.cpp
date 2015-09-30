@@ -720,7 +720,15 @@ void CodeGen_C::visit(const Not *op) {
 }
 
 void CodeGen_C::visit(const IntImm *op) {
-    id = std::to_string(op->value);
+    if (op->type == Int(32)) {
+        id = std::to_string(op->value);
+    } else {
+        id = "(" + print_type(op->type) + ")" + std::to_string(op->value);
+    }
+}
+
+void CodeGen_C::visit(const UIntImm *op) {
+    id = "(" + print_type(op->type) + ")" + std::to_string(op->value);
 }
 
 void CodeGen_C::visit(const StringImm *op) {

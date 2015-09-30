@@ -219,14 +219,6 @@ public:
 
     operator T() const { return value; }
 
-    operator Expr() const { return value; }
-
-    // Add an explicit overload to operator! to resolve ambiguity between
-    // the overloads on T and Expr
-    inline bool operator!() const {
-        return !value;
-    }
-
 private:
     T value;
     const T min, max;  // only for arithmetic types

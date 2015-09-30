@@ -70,8 +70,15 @@ EXPORT bool is_two(Expr e);
  * undefined Stmt, or as an Evaluate node of a constant) */
 EXPORT bool is_no_op(Stmt s);
 
-/** Construct a const of the given type */
+/** Construct an immediate of the given type */
+// @{
 EXPORT Expr make_const(Type t, int64_t val);
+EXPORT Expr make_const(Type t, double val);
+inline Expr make_const(Type t, int val) {return make_const(t, (int64_t)val);}
+// @}
+
+/** Check if a constant value can be correctly represented as the given type. */
+EXPORT void check_representable(Type t, int64_t val);
 
 /** Construct a boolean constant from a C++ boolean value.
  * May also be a vector if width is given.
@@ -116,13 +123,6 @@ EXPORT Expr lossless_cast(Type t, Expr e);
  *
  * Then, if one type is floating-point and the other is not, the
  * non-float is cast to the floating-point type, and we're done.
- *
- * Then, if neither is a float but one of the two is a constant, the
- * constant is cast to match the non-const type and we're done. For
- * example, e has type UInt(8), then (e*32) also has type UInt(8),
- * despite the overflow that may occur. Note that this also means that
- * (e*(-1)) is positive, and is equivalent to (e*255) - i.e. the (-1)
- * is cast to a UInt(8) before the multiplication.
  *
  * Then, if both types are unsigned ints, the one with fewer bits is
  * cast to match the one with more bits and we're done.
@@ -192,6 +192,25 @@ inline Expr operator+(Expr a, Expr b) {
     return Internal::Add::make(a, b);
 }
 
+/** Add an expression and a constant integer. Coerces the type of the
+ * integer to match the type of the expression. Errors if the integer
+ * cannot be represented in the type of the expression. */
+// @{
+inline Expr operator+(Expr a, int b) {
+    user_assert(a.defined()) << "operator+ of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::Add::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Add a constant integer and an expression. Coerces the type of the
+ * integer to match the type of the expression. Errors if the integer
+ * cannot be represented in the type of the expression. */
+inline Expr operator+(int a, Expr b) {
+    user_assert(b.defined()) << "operator+ of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::Add::make(Internal::make_const(b.type(), a), b);
+}
+
 /** Modify the first expression to be the sum of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
@@ -207,6 +226,24 @@ inline Expr operator-(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator- of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::Sub::make(a, b);
+}
+
+/** Subtracts a constant integer from an expression. Coerces the type of the
+ * integer to match the type of the expression. Errors if the integer
+ * cannot be represented in the type of the expression. */
+inline Expr operator-(Expr a, int b) {
+    user_assert(a.defined()) << "operator- of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::Sub::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Subtracts an expression from a constant integer. Coerces the type
+ * of the integer to match the type of the expression. Errors if the
+ * integer cannot be represented in the type of the expression. */
+inline Expr operator-(int a, Expr b) {
+    user_assert(b.defined()) << "operator- of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::Sub::make(Internal::make_const(b.type(), a), b);
 }
 
 /** Return the negative of the argument. Does no type casting, so more
@@ -236,6 +273,24 @@ inline Expr operator*(Expr a, Expr b) {
     return Internal::Mul::make(a, b);
 }
 
+/** Multiply an expression and a constant integer. Coerces the type of the
+ * integer to match the type of the expression. Errors if the integer
+ * cannot be represented in the type of the expression. */
+inline Expr operator*(Expr a, int b) {
+    user_assert(a.defined()) << "operator* of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::Mul::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Multiply a constant integer and an expression. Coerces the type of
+ * the integer to match the type of the expression. Errors if the
+ * integer cannot be represented in the type of the expression. */
+inline Expr operator*(int a, Expr b) {
+    user_assert(b.defined()) << "operator* of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::Mul::make(Internal::make_const(b.type(), a), b);
+}
+
 /** Modify the first expression to be the product of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
@@ -251,7 +306,6 @@ inline Expr &operator*=(Expr &a, Expr b) {
  * rounds towards zero. */
 inline Expr operator/(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator/ of undefined Expr\n";
-    user_assert(!Internal::is_const(b, 0)) << "operator/ with constant 0 divisor\n";
     Internal::match_types(a, b);
     return Internal::Div::make(a, b);
 }
@@ -263,9 +317,28 @@ inline Expr operator/(Expr a, Expr b) {
  * zero. */
 inline Expr &operator/=(Expr &a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator/= of undefined Expr\n";
-    user_assert(!Internal::is_const(b, 0)) << "operator/= with constant 0 divisor\n";
     a = Internal::Div::make(a, cast(a.type(), b));
     return a;
+}
+
+
+
+/** Divides an expression by a constant integer. Coerces the type
+ * of the integer to match the type of the expression. Errors if the
+ * integer cannot be represented in the type of the expression. */
+inline Expr operator/(Expr a, int b) {
+    user_assert(a.defined()) << "operator/ of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::Div::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Divides a constant integer by an expression. Coerces the type
+ * of the integer to match the type of the expression. Errors if the
+ * integer cannot be represented in the type of the expression. */
+inline Expr operator/(int a, Expr b) {
+    user_assert(b.defined()) << "operator- of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::Div::make(Internal::make_const(b.type(), a), b);
 }
 
 /** Return the first argument reduced modulo the second, doing any
@@ -276,9 +349,26 @@ inline Expr &operator/=(Expr &a, Expr b) {
  * zero or one, even if x is negative.*/
 inline Expr operator%(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator% of undefined Expr\n";
-    user_assert(!Internal::is_const(b, 0)) << "operator% with constant 0 modulus\n";
+    user_assert(!Internal::is_zero(b)) << "operator% with constant 0 modulus\n";
     Internal::match_types(a, b);
     return Internal::Mod::make(a, b);
+}
+
+/** Mods an expression by a constant integer. Coerces the type
+ * of the integer to match the type of the expression. Errors if the
+ * integer cannot be represented in the type of the expression. */
+inline Expr operator%(Expr a, int b) {
+    user_assert(a.defined()) << "operator% of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::Mod::make(a, Internal::make_const(a.type(), b));
+}
+/** Mods a constant integer by an expression. Coerces the type
+ * of the integer to match the type of the expression. Errors if the
+ * integer cannot be represented in the type of the expression. */
+inline Expr operator%(int a, Expr b) {
+    user_assert(b.defined()) << "operator% of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::Mod::make(Internal::make_const(b.type(), a), b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -290,6 +380,26 @@ inline Expr operator>(Expr a, Expr b) {
     return Internal::GT::make(a, b);
 }
 
+/** Return a boolean expression that tests whether an expression is
+ * greater than a constant integer. Coerces the integer to the type of
+ * the expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator>(Expr a, int b) {
+    user_assert(a.defined()) << "operator> of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::GT::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Return a boolean expression that tests whether a constant integer is
+ * greater than an expression. Coerces the integer to the type of
+ * the expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator>(int a, Expr b) {
+    user_assert(b.defined()) << "operator> of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::GT::make(Internal::make_const(b.type(), a), b);
+}
+
 /** Return a boolean expression that tests whether the first argument
  * is less than the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
@@ -297,6 +407,26 @@ inline Expr operator<(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator< of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::LT::make(a, b);
+}
+
+/** Return a boolean expression that tests whether an expression is
+ * less than a constant integer. Coerces the integer to the type of
+ * the expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator<(Expr a, int b) {
+    user_assert(a.defined()) << "operator< of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::LT::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Return a boolean expression that tests whether a constant integer is
+ * less than an expression. Coerces the integer to the type of
+ * the expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator<(int a, Expr b) {
+    user_assert(b.defined()) << "operator< of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::LT::make(Internal::make_const(b.type(), a), b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -308,14 +438,53 @@ inline Expr operator<=(Expr a, Expr b) {
     return Internal::LE::make(a, b);
 }
 
+/** Return a boolean expression that tests whether an expression is
+ * less than or equal to a constant integer. Coerces the integer to
+ * the type of the expression. Errors if the integer is not
+ * representable in that type. */
+inline Expr operator<=(Expr a, int b) {
+    user_assert(a.defined()) << "operator<= of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::LE::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Return a boolean expression that tests whether a constant integer
+ * is less than or equal to an expression. Coerces the integer to the
+ * type of the expression. Errors if the integer is not representable
+ * in that type. */
+inline Expr operator<=(int a, Expr b) {
+    user_assert(b.defined()) << "operator<= of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::LE::make(Internal::make_const(b.type(), a), b);
+}
+
 /** Return a boolean expression that tests whether the first argument
  * is greater than or equal to the second, after doing any necessary
  * type coercion using \ref Internal::match_types */
-
 inline Expr operator>=(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator>= of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::GE::make(a, b);
+}
+
+/** Return a boolean expression that tests whether an expression is
+ * greater than or equal to a constant integer. Coerces the integer to
+ * the type of the expression. Errors if the integer is not
+ * representable in that type. */
+inline Expr operator>=(Expr a, int b) {
+    user_assert(a.defined()) << "operator>= of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::GE::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Return a boolean expression that tests whether a constant integer
+ * is greater than or equal to an expression. Coerces the integer to the
+ * type of the expression. Errors if the integer is not representable
+ * in that type. */
+inline Expr operator>=(int a, Expr b) {
+    user_assert(b.defined()) << "operator>= of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::GE::make(Internal::make_const(b.type(), a), b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -327,6 +496,26 @@ inline Expr operator==(Expr a, Expr b) {
     return Internal::EQ::make(a, b);
 }
 
+/** Return a boolean expression that tests whether an expression is
+ * equal to a constant integer. Coerces the integer to the type of the
+ * expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator==(Expr a, int b) {
+    user_assert(a.defined()) << "operator== of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::EQ::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Return a boolean expression that tests whether a constant integer
+ * is equal to an expression. Coerces the integer to the type of the
+ * expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator==(int a, Expr b) {
+    user_assert(b.defined()) << "operator== of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::EQ::make(Internal::make_const(b.type(), a), b);
+}
+
 /** Return a boolean expression that tests whether the first argument
  * is not equal to the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
@@ -334,6 +523,26 @@ inline Expr operator!=(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator!= of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::NE::make(a, b);
+}
+
+/** Return a boolean expression that tests whether an expression is
+ * not equal to a constant integer. Coerces the integer to the type of
+ * the expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator!=(Expr a, int b) {
+    user_assert(a.defined()) << "operator!= of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::NE::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Return a boolean expression that tests whether a constant integer
+ * is not equal to an expression. Coerces the integer to the type of
+ * the expression. Errors if the integer is not representable in that
+ * type. */
+inline Expr operator!=(int a, Expr b) {
+    user_assert(b.defined()) << "operator!= of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::NE::make(Internal::make_const(b.type(), a), b);
 }
 
 /** Returns the logical and of the two arguments */
@@ -364,6 +573,29 @@ inline Expr max(Expr a, Expr b) {
     return Internal::Max::make(a, b);
 }
 
+/** Returns an expression representing the greater of an expression
+ * and a constant integer.  The integer is coerced to the type of the
+ * expression. Errors if the integer is not representable as that
+ * type. Vectorizes cleanly on most platforms (with the exception of
+ * integer types on x86 without SSE4). */
+inline Expr max(Expr a, int b) {
+    user_assert(a.defined()) << "max of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::Max::make(a, Internal::make_const(a.type(), b));
+}
+
+
+/** Returns an expression representing the greater of a constant
+ * integer and an expression. The integer is coerced to the type of
+ * the expression. Errors if the integer is not representable as that
+ * type. Vectorizes cleanly on most platforms (with the exception of
+ * integer types on x86 without SSE4). */
+inline Expr max(int a, Expr b) {
+    user_assert(b.defined()) << "max of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::Max::make(Internal::make_const(b.type(), a), b);
+}
+
 /** Returns an expression representing the lesser of the two
  * arguments, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
@@ -374,6 +606,60 @@ inline Expr min(Expr a, Expr b) {
     Internal::match_types(a, b);
     return Internal::Min::make(a, b);
 }
+
+/** Returns an expression representing the lesser of an expression
+ * and a constant integer.  The integer is coerced to the type of the
+ * expression. Errors if the integer is not representable as that
+ * type. Vectorizes cleanly on most platforms (with the exception of
+ * integer types on x86 without SSE4). */
+inline Expr min(Expr a, int b) {
+    user_assert(a.defined()) << "max of undefined Expr\n";
+    Internal::check_representable(a.type(), b);
+    return Internal::Min::make(a, Internal::make_const(a.type(), b));
+}
+
+/** Returns an expression representing the lesser of a constant
+ * integer and an expression. The integer is coerced to the type of
+ * the expression. Errors if the integer is not representable as that
+ * type. Vectorizes cleanly on most platforms (with the exception of
+ * integer types on x86 without SSE4). */
+inline Expr min(int a, Expr b) {
+    user_assert(b.defined()) << "max of undefined Expr\n";
+    Internal::check_representable(b.type(), a);
+    return Internal::Min::make(Internal::make_const(b.type(), a), b);
+}
+
+/** Operators on floats treats those floats as Exprs. Making these
+ * explicit prevents implicit float->int casts that might otherwise
+ * occur. */
+// @{
+inline Expr operator+(Expr a, float b) {return a + Expr(b);}
+inline Expr operator+(float a, Expr b) {return Expr(a) + b;}
+inline Expr operator-(Expr a, float b) {return a - Expr(b);}
+inline Expr operator-(float a, Expr b) {return Expr(a) - b;}
+inline Expr operator*(Expr a, float b) {return a * Expr(b);}
+inline Expr operator*(float a, Expr b) {return Expr(a) * b;}
+inline Expr operator/(Expr a, float b) {return a / Expr(b);}
+inline Expr operator/(float a, Expr b) {return Expr(a) / b;}
+inline Expr operator%(Expr a, float b) {return a % Expr(b);}
+inline Expr operator%(float a, Expr b) {return Expr(a) % b;}
+inline Expr operator>(Expr a, float b) {return a > Expr(b);}
+inline Expr operator>(float a, Expr b) {return Expr(a) > b;}
+inline Expr operator<(Expr a, float b) {return a < Expr(b);}
+inline Expr operator<(float a, Expr b) {return Expr(a) < b;}
+inline Expr operator>=(Expr a, float b) {return a >= Expr(b);}
+inline Expr operator>=(float a, Expr b) {return Expr(a) >= b;}
+inline Expr operator<=(Expr a, float b) {return a <= Expr(b);}
+inline Expr operator<=(float a, Expr b) {return Expr(a) <= b;}
+inline Expr operator==(Expr a, float b) {return a == Expr(b);}
+inline Expr operator==(float a, Expr b) {return Expr(a) == b;}
+inline Expr operator!=(Expr a, float b) {return a != Expr(b);}
+inline Expr operator!=(float a, Expr b) {return Expr(a) != b;}
+inline Expr min(float a, Expr b) {return min(Expr(a), b);}
+inline Expr min(Expr a, float b) {return min(a, Expr(b));}
+inline Expr max(float a, Expr b) {return max(Expr(a), b);}
+inline Expr max(Expr a, float b) {return max(a, Expr(b));}
+// @}
 
 /** Clamps an expression to lie within the given bounds. The bounds
  * are type-cast to match the expression. Vectorizes as well as min/max. */
@@ -1129,6 +1415,7 @@ inline Expr operator~(Expr x) {
  * shifting (e.g. because the exponent is a run-time parameter). The
  * type of the result is equal to the type of the first argument. Both
  * arguments must have integer type. */
+// @{
 inline Expr operator<<(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "shift left of undefined Expr\n";
     user_assert(!x.type().is_float()) << "First argument to shift left is a float: " << x << "\n";
@@ -1136,6 +1423,15 @@ inline Expr operator<<(Expr x, Expr y) {
     Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_left, {x, y}, Internal::Call::Intrinsic);
 }
+inline Expr operator<<(Expr x, int y) {
+    Internal::check_representable(x.type(), y);
+    return x << Internal::make_const(x.type(), y);
+}
+inline Expr operator<<(int x, Expr y) {
+    Internal::check_representable(y.type(), x);
+    return Internal::make_const(y.type(), x) << y;
+}
+// @}
 
 /** Shift the bits of an integer value right. Does sign extension for
  * signed integers. This is less efficient than dividing by a power of
@@ -1145,6 +1441,7 @@ inline Expr operator<<(Expr x, Expr y) {
  * division and can work with it. The type of the result is equal to
  * the type of the first argument. Both arguments must have integer
  * type. */
+// @{
 inline Expr operator>>(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "shift right of undefined Expr\n";
     user_assert(!x.type().is_float()) << "First argument to shift right is a float: " << x << "\n";
@@ -1152,6 +1449,15 @@ inline Expr operator>>(Expr x, Expr y) {
     Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_right, {x, y}, Internal::Call::Intrinsic);
 }
+inline Expr operator>>(Expr x, int y) {
+    Internal::check_representable(x.type(), y);
+    return x >> Internal::make_const(x.type(), y);
+}
+inline Expr operator>>(int x, Expr y) {
+    Internal::check_representable(y.type(), x);
+    return Internal::make_const(y.type(), x) >> y;
+}
+// @}
 
 /** Linear interpolate between the two values according to a weight.
  * \param zero_val The result when weight is 0

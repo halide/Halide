@@ -153,6 +153,15 @@ public:
     const Scope<int> &external_lets;
 
     Deinterleaver(const Scope<int> &lets) : external_lets(lets) {}
+
+    /*
+    using IRMutator::mutate;
+    Expr mutate(Expr e) {
+        debug(0) << "mutating: " << e << "\n";
+        return IRMutator::mutate(e);
+    }
+    */
+
 private:
     Scope<Expr> internal;
 
@@ -178,6 +187,7 @@ private:
 
     void visit(const Ramp *op) {
         expr = op->base + starting_lane * op->stride;
+        internal_assert(expr.type() == op->base.type());
         if (new_width > 1) {
             expr = Ramp::make(expr, op->stride * lane_stride, new_width);
         }
