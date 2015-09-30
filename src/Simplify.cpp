@@ -45,14 +45,14 @@ bool is_simple_const(Expr e) {
     return false;
 }
 
-// Returns true iff t is an integral type where overflow is undefined
-bool no_overflow_int(Type t) {
-    return (t.is_int() && t.bits >= 32);
+// Returns true iff t is a scalar integral type where overflow is undefined
+bool no_overflow_scalar_int(Type t) {
+    return (t.is_scalar() && t.is_int() && t.bits >= 32);
 }
 
 // Returns true iff t does not have a well defined overflow behavior.
 bool no_overflow(Type t) {
-    return t.is_float() || no_overflow_int(t);
+    return t.is_float() || no_overflow_scalar_int(t.element_of());
 }
 
 }
@@ -68,11 +68,18 @@ public:
     // Uncomment to debug all Expr mutations.
     /*
     Expr mutate(Expr e) {
+        static int indent = 0;
+        std::string spaces;
+        for (int i = 0; i < indent; i++) spaces += ' ';
+
+        debug(1) << spaces << "Simplifying " << e << "\n";
+        indent++;
         Expr new_e = IRMutator::mutate(e);
+        indent--;
         if (!new_e.same_as(e)) {
             debug(1)
-                << "Before: " << e << "\n"
-                << "After:  " << new_e << "\n";
+                << spaces << "Before: " << e << "\n"
+                << spaces << "After:  " << new_e << "\n";
         }
         return new_e;
     }
@@ -384,7 +391,7 @@ private:
                    const_int(b, &ic)) {
             // ((a + ia) / ib + ic) -> (a + (ia + ib*ic)) / ib
 
-            expr = mutate((add_a_a->a + make_const(op->type, ia + ib*ic)) / div_a->b);
+            expr = mutate((add_a_a->a + IntImm::make(op->type, ia + ib*ic)) / div_a->b);
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
             expr = mutate(mul_a->a * (mul_a->b + mul_b->b));
@@ -475,9 +482,9 @@ private:
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = FloatImm::make(a.type(), fa - fb);
         } else if (const_int(b, &ib)) {
-            expr = mutate(a + make_const(a.type(), (-ib)));
+            expr = mutate(a + IntImm::make(a.type(), (-ib)));
         } else if (const_float(b, &fb)) {
-            expr = mutate(a + make_const(a.type(), (-fb)));
+            expr = mutate(a + FloatImm::make(a.type(), (-fb)));
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
@@ -689,7 +696,7 @@ private:
             mul_a_a = ramp_a->base.as<Mul>();
         }
 
-        if (no_overflow_int(op->type) && const_int(b, &ib) && ib && !is_const(a)) {
+        if (no_overflow_scalar_int(op->type) && const_int(b, &ib) && ib && !is_const(a)) {
             // Check for bounded numerators divided by constant
             // denominators.
             Interval bounds = bounds_of_expr_in_scope(a, bounds_info);
@@ -708,7 +715,7 @@ private:
         }
 
         ModulusRemainder mod_rem(0, 1);
-        if (ramp_a && no_overflow_int(ramp_a->type)) {
+        if (ramp_a && no_overflow_scalar_int(ramp_a->base.type())) {
             // Do modulus remainder analysis on the base.
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
@@ -735,8 +742,12 @@ private:
             expr = mutate(Ramp::make(ramp_a->base / broadcast_b->value,
                                      IntImm::make(t, div_imp(ia, ib)),
                                      ramp_a->width));
-        } else if (ramp_a && no_overflow_int(ramp_a->type) && const_int(ramp_a->stride, &ia) &&
-                   broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
+        } else if (ramp_a &&
+                   no_overflow_scalar_int(ramp_a->base.type()) &&
+                   const_int(ramp_a->stride, &ia) &&
+                   broadcast_b &&
+                   const_int(broadcast_b->value, &ib) &&
+                   ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
                    div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
             // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
@@ -811,7 +822,7 @@ private:
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
-        if (const_int(b, &ib) && ib && no_overflow_int(op->type) && op->type.is_scalar()) {
+        if (const_int(b, &ib) && ib && no_overflow_scalar_int(op->type)) {
             // If the LHS is bounded, we can possibly bail out early
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
             if (ia.max.defined() && ia.min.defined() &&
@@ -827,7 +838,7 @@ private:
         // remainder analysis on the base.
         if (broadcast_b &&
             const_int(broadcast_b->value, &ib) && ib &&
-            ramp_a && no_overflow_int(ramp_a->type)) {
+            ramp_a && no_overflow_scalar_int(ramp_a->base.type())) {
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
@@ -853,7 +864,7 @@ private:
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % b);
-        } else if (const_int(b, &ib) && ib && no_overflow_int(op->type) && mod_rem.modulus % ib == 0) {
+        } else if (const_int(b, &ib) && ib && no_overflow_scalar_int(op->type) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
             expr = make_const(op->type, mod_imp((int64_t)mod_rem.remainder, ib));
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
@@ -861,16 +872,24 @@ private:
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % broadcast_b->value, ramp_a->width));
-        } else if (ramp_a && no_overflow_int(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
-                   broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
+        } else if (ramp_a &&
+                   no_overflow_scalar_int(ramp_a->base.type()) &&
+                   const_int(ramp_a->stride, &ia) &&
+                   broadcast_b &&
+                   const_int(broadcast_b->value, &ib) &&
+                   ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
                    div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) if x/z == (x + (w-1)*y)/z
             Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
             expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width));
-        } else if (ramp_a && no_overflow_int(ramp_a->base.type()) &&
-                   const_int(ramp_a->stride, &ia) && !is_const(ramp_a->base) &&
-                   broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
+        } else if (ramp_a &&
+                   no_overflow_scalar_int(ramp_a->base.type()) &&
+                   const_int(ramp_a->stride, &ia) &&
+                   !is_const(ramp_a->base) &&
+                   broadcast_b &&
+                   const_int(broadcast_b->value, &ib) &&
+                   ib != 0 &&
                    mod_rem.modulus % ib == 0) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) % z
             Type t = ramp_a->base.type();
@@ -1413,7 +1432,7 @@ private:
                 expr = const_false(op->type.width);
                 return;
             }
-        } else if (no_overflow_int(delta.type())) {
+        } else if (no_overflow_scalar_int(delta.type())) {
             // Attempt to disprove using modulus remainder analysis
             ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
             if (mod_rem.remainder) {
@@ -1506,7 +1525,7 @@ private:
         }
 
         ModulusRemainder mod_rem(0, 1);
-        if (delta_ramp && no_overflow_int(delta.type())) {
+        if (delta_ramp && no_overflow_scalar_int(delta_ramp->base.type())) {
             // Do modulus remainder analysis on the base.
             mod_rem = modulus_remainder(delta_ramp->base, alignment_info);
         }
@@ -2394,7 +2413,7 @@ private:
 
         // Before we enter the body, track the alignment info
         bool new_value_tracked = false;
-        if (new_value.defined() && no_overflow_int(new_value.type()) && new_value.type().is_scalar()) {
+        if (new_value.defined() && no_overflow_scalar_int(new_value.type())) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(new_name, mod_rem);
@@ -2402,7 +2421,7 @@ private:
             }
         }
         bool value_tracked = false;
-        if (no_overflow_int(value.type()) && value.type().is_scalar()) {
+        if (no_overflow_scalar_int(value.type())) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(op->name, mod_rem);
@@ -2726,7 +2745,10 @@ void simplify_test() {
     check(cast(UInt(32), (int) 4000000023UL) < cast(UInt(32), 1000), const_false());
     check(cast(UInt(32), (int) 4000000023UL) == cast(UInt(32), 1000), const_false());
 
+    check(cast(Float(64), 0.5f), Expr(0.5));
 
+    check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
+          (x + Expr(-0.5)) * (x + Expr(-0.5)));
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
@@ -2857,8 +2879,8 @@ void simplify_test() {
     check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),
           broadcast(1, 4));
 
-    check(min(7, 3), 3);
-    check(min(4.25f, 1.25f), 1.25f);
+    check(min(Expr(7), 3), 3);
+    check(min(Expr(4.25f), 1.25f), 1.25f);
     check(min(broadcast(x, 4), broadcast(y, 4)),
           broadcast(min(x, y), 4));
     check(min(x, x+3), x);
@@ -2870,8 +2892,8 @@ void simplify_test() {
     check(min(x, min(x, y)), min(x, y));
     check(min(y, min(x, y)), min(x, y));
 
-    check(max(7, 3), 7);
-    check(max(4.25f, 1.25f), 4.25f);
+    check(max(Expr(7), 3), 7);
+    check(max(Expr(4.25f), 1.25f), 4.25f);
     check(max(broadcast(x, 4), broadcast(y, 4)),
           broadcast(max(x, y), 4));
     check(max(x, x+3), x+3);

@@ -18,7 +18,7 @@ int main() {
 
     // Function mixes type, the float16_t should be implicitly upcast
     // to a float
-    f(x, y) = 0.25f + float16_t(0.75);
+    f(x, y) = 0.25f + Expr(float16_t(0.75));
 
     // Use JIT for computation
     Image<float> simple = f.realize(10, 3);

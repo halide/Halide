@@ -229,12 +229,31 @@ Expr make_const(Type t, int64_t val) {
     }
 }
 
+Expr make_const(Type t, double val) {
+    if (t.is_vector()) {
+        return Broadcast::make(make_const(t.element_of(), val), t.width);
+    } else if (t.is_int() || t.is_uint()) {
+        internal_error << "Can't make an integral constant from a double\n";
+        return Expr();
+    } else if (t.is_float()) {
+        return FloatImm::make(t, val);
+    } else {
+        internal_error << "Can't make a constant of type " << t << "\n";
+        return Expr();
+    }
+}
+
+
 Expr make_bool(bool val, int w) {
     return make_const(UInt(1, w), val);
 }
 
 Expr make_zero(Type t) {
-    return make_const(t, 0);
+    if (t.is_handle()) {
+        return Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
+    } else {
+        return make_const(t, 0);
+    }
 }
 
 Expr make_one(Type t) {
@@ -304,15 +323,11 @@ Expr lossless_cast(Type t, Expr e) {
     return Expr();
 }
 
-namespace {
-
-template<typename T>
-void check_representable(Type dst, T x) {
+void check_representable(Type dst, int64_t x) {
     user_assert(dst.can_represent(x))
         << "Integer constant " << x
         << " will be implicitly coerced to type " << dst
         << ", which changes its value.\n";
-}
 }
 
 void match_types(Expr &a, Expr &b) {
@@ -320,13 +335,6 @@ void match_types(Expr &a, Expr &b) {
         << "Can't do arithmetic on opaque pointer types\n";
 
     if (a.type() == b.type()) return;
-
-    const int64_t *a_int_imm = as_const_int(a);
-    const int64_t *b_int_imm = as_const_int(b);
-    const uint64_t *a_uint_imm = as_const_uint(a);
-    const uint64_t *b_uint_imm = as_const_uint(b);
-    const double *a_float_imm = as_const_float(a);
-    const double *b_float_imm = as_const_float(b);
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -346,32 +354,12 @@ void match_types(Expr &a, Expr &b) {
         // int(a) * float(b) -> float(b)
         // uint(a) * float(b) -> float(b)
         a = cast(tb, a);
-    } else if (ta.is_float() && b_float_imm) {
-        // float(a) * FloatImm -> float(a)
-        b = make_const(ta, *b_float_imm);
-    } else if (tb.is_float() && a_float_imm) {
-        // FloatImm * float(b) -> float(b)
-        a = make_const(tb, *a_float_imm);
     } else if (ta.is_float() && !tb.is_float()) {
         b = cast(ta, b);
     } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
         if (ta.bits > tb.bits) b = cast(ta, b);
         else a = cast(tb, a);
-    } else if (!ta.is_float() && b_int_imm) {
-        // (u)int(a) * IntImm(b) -> (u)int(a)
-        check_representable(ta, *b_int_imm);
-        b = make_const(ta, *b_int_imm);
-    } else if (!ta.is_float() && b_uint_imm) {
-        // (u)int(a) * UIntImm(b) -> (u)int(a)
-        check_representable(ta, *b_uint_imm);
-        b = make_const(ta, *b_uint_imm);
-    } else if (!tb.is_float() && a_int_imm) {
-        check_representable(tb, *a_int_imm);
-        a = make_const(tb, *a_int_imm);
-    } else if (!tb.is_float() && a_uint_imm) {
-        check_representable(tb, *a_uint_imm);
-        a = make_const(tb, *a_uint_imm);
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
         if (ta.bits > tb.bits) b = cast(ta, b);
@@ -391,7 +379,7 @@ void match_types(Expr &a, Expr &b) {
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
     Type type = input.type();
-    Type int_type = Int(32, type.width);
+    Type int_type = UInt(32, type.width);
     Expr int_version = reinterpret(int_type, input);
 
     // single precision = SEEE EEEE EMMM MMMM MMMM MMMM MMMM MMMM
@@ -399,7 +387,7 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
     //                    0x7  0xF  0x8  0x0  0x0  0x0  0x0  0x0
     // non-exponent     = 1000 0000 0111 1111 1111 1111 1111 1111
     //                  = 0x8  0x0  0x7  0xF  0xF  0xF  0xF  0xF
-    Expr non_exponent_mask = make_const(int_type, 0x807fffff);
+    Expr non_exponent_mask = UIntImm::make(int_type, 0x807fffff);
 
     // Extract a version with no exponent (between 1.0 and 2.0)
     Expr no_exponent = int_version & non_exponent_mask;
@@ -416,28 +404,6 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
     Expr blended = (int_version & non_exponent_mask) | (new_biased_exponent << 23);
 
     *reduced = reinterpret(type, blended);
-
-    /*
-    // Floats represent exponents using 8 bits, which encode the range
-    // from [-127, 128]. Zero maps to 127.
-
-    // The reduced version is between 0.5 and 1.0, which means it has
-    // an exponent of -1. Floats encode this as 126.
-    int exponent_neg1 = 126 << 23;
-
-    // Grab the exponent bits from the input. We know the sign bit is
-    // zero because we're taking a log, and negative inputs are
-    // handled elsewhere.
-    Expr biased_exponent = int_version >> 23;
-
-    // Add one, to account for the fact that the reduced version has
-    // an exponent of -1.
-    Expr offset_exponent = biased_exponent + 1;
-    *exponent = offset_exponent - 127;
-
-    // Blend the offset_exponent with the original input.
-    Expr blended = (int_version & non_exponent_mask) | (exponent_neg1);
-    */
 }
 
 Expr halide_log(Expr x_full) {
