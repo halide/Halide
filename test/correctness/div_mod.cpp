@@ -322,15 +322,15 @@ bool div_mod() {
             }
 
             if (i < SWIDTH && j < SHEIGHT) {
-                Expr ae = cast<T>((int)ai);
-                Expr be = cast<T>((int)bi);
+                Expr ae = ai;
+                Expr be = bi;
                 Expr qe = simplify(ae/be);
                 Expr re = simplify(ae%be);
 
-                if (!Internal::equal(qe, cast<T>((int)qi)) && (ecount++) < 10) {
+                if (!Internal::equal(qe, qi) && (ecount++) < 10) {
                     std::cout << "Compiled a/b != simplified a/b: " << (int)ai << "/" << (int)bi << " = " << (int)qi << " != " << qe << "\n";
                     success = false;
-                } else if (!Internal::equal(re, cast<T>((int)ri)) && (ecount++) < 10) {
+                } else if (!Internal::equal(re, ri) && (ecount++) < 10) {
                     std::cout << "Compiled a%b != simplified a%b: " << (int)ai << "/" << (int)bi << " = " << (int)ri << " != " << re << "\n";
                     success = false;
                 }
