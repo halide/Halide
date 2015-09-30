@@ -31,6 +31,8 @@ using std::make_pair;
 using std::ostringstream;
 using std::vector;
 
+namespace {
+
 // Things that we can constant fold: Immediates and broadcasts of
 // immediates.
 bool is_simple_const(Expr e) {
@@ -43,9 +45,16 @@ bool is_simple_const(Expr e) {
     return false;
 }
 
-// Returns true if T does not have a well defined overflow behavior.
-bool no_overflow(Type T) {
-    return T.is_float() || (T.is_int() && T.bits >= 32);
+// Returns true iff t is an integral type where overflow is undefined
+bool no_overflow_int(Type t) {
+    return (t.is_int() && t.bits >= 32);
+}
+
+// Returns true iff t does not have a well defined overflow behavior.
+bool no_overflow(Type t) {
+    return t.is_float() || no_overflow_int(t);
+}
+
 }
 
 class Simplify : public IRMutator {
@@ -680,7 +689,7 @@ private:
             mul_a_a = ramp_a->base.as<Mul>();
         }
 
-        if (no_overflow(op->type) && const_int(b, &ib) && ib && !is_const(a)) {
+        if (no_overflow_int(op->type) && const_int(b, &ib) && ib && !is_const(a)) {
             // Check for bounded numerators divided by constant
             // denominators.
             Interval bounds = bounds_of_expr_in_scope(a, bounds_info);
@@ -699,7 +708,7 @@ private:
         }
 
         ModulusRemainder mod_rem(0, 1);
-        if (ramp_a && no_overflow(ramp_a->base.type())) {
+        if (ramp_a && no_overflow_int(ramp_a->type)) {
             // Do modulus remainder analysis on the base.
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
@@ -726,7 +735,7 @@ private:
             expr = mutate(Ramp::make(ramp_a->base / broadcast_b->value,
                                      IntImm::make(t, div_imp(ia, ib)),
                                      ramp_a->width));
-        } else if (ramp_a && no_overflow(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
+        } else if (ramp_a && no_overflow_int(ramp_a->type) && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
                    div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
@@ -802,7 +811,7 @@ private:
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
-        if (const_int(b, &ib) && ib && no_overflow(op->type) && op->type.is_scalar()) {
+        if (const_int(b, &ib) && ib && no_overflow_int(op->type) && op->type.is_scalar()) {
             // If the LHS is bounded, we can possibly bail out early
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
             if (ia.max.defined() && ia.min.defined() &&
@@ -818,7 +827,7 @@ private:
         // remainder analysis on the base.
         if (broadcast_b &&
             const_int(broadcast_b->value, &ib) && ib &&
-            ramp_a && no_overflow(ramp_a->base.type())) {
+            ramp_a && no_overflow_int(ramp_a->type)) {
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
@@ -844,7 +853,7 @@ private:
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % b);
-        } else if (const_int(b, &ib) && ib && no_overflow(op->type) && mod_rem.modulus % ib == 0) {
+        } else if (const_int(b, &ib) && ib && no_overflow_int(op->type) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
             expr = make_const(op->type, mod_imp((int64_t)mod_rem.remainder, ib));
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
@@ -852,14 +861,14 @@ private:
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % broadcast_b->value, ramp_a->width));
-        } else if (ramp_a && no_overflow(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
+        } else if (ramp_a && no_overflow_int(ramp_a->base.type()) && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
                    div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) if x/z == (x + (w-1)*y)/z
             Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
             expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width));
-        } else if (ramp_a && no_overflow(ramp_a->base.type()) &&
+        } else if (ramp_a && no_overflow_int(ramp_a->base.type()) &&
                    const_int(ramp_a->stride, &ia) && !is_const(ramp_a->base) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
                    mod_rem.modulus % ib == 0) {
@@ -1404,7 +1413,7 @@ private:
                 expr = const_false(op->type.width);
                 return;
             }
-        } else if (no_overflow(delta.type())) {
+        } else if (no_overflow_int(delta.type())) {
             // Attempt to disprove using modulus remainder analysis
             ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
             if (mod_rem.remainder) {
@@ -1497,7 +1506,7 @@ private:
         }
 
         ModulusRemainder mod_rem(0, 1);
-        if (delta_ramp && no_overflow(delta_ramp->base.type())) {
+        if (delta_ramp && no_overflow_int(delta.type())) {
             // Do modulus remainder analysis on the base.
             mod_rem = modulus_remainder(delta_ramp->base, alignment_info);
         }
@@ -2385,7 +2394,7 @@ private:
 
         // Before we enter the body, track the alignment info
         bool new_value_tracked = false;
-        if (new_value.defined() && no_overflow(new_value.type()) && new_value.type().is_scalar()) {
+        if (new_value.defined() && no_overflow_int(new_value.type()) && new_value.type().is_scalar()) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(new_name, mod_rem);
@@ -2393,7 +2402,7 @@ private:
             }
         }
         bool value_tracked = false;
-        if (no_overflow(value.type()) && value.type().is_scalar()) {
+        if (no_overflow_int(value.type()) && value.type().is_scalar()) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(op->name, mod_rem);
