@@ -577,7 +577,6 @@ int run(int argc, char **argv) {
 
         switch (p.event) {
         case 0: // load
-            fi.stats.observe_load(p);
         case 1: // store
         {
             int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
@@ -599,7 +598,10 @@ int run(int argc, char **argv) {
                 halide_clock += fi.config.cost * (p.value_bytes() / (p.bits / 8));
 
                 fi.stats.observe_store(p);
+            } else {
+                fi.stats.observe_load(p);
             }
+
             // Check the tracing packet contained enough information
             // given the number of dimensions the user claims this
             // Func has.
