@@ -104,7 +104,6 @@ string simt_intrinsic(const string &name) {
 }
 }
 
-
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
     if (op->type.is_int()) {
         print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), {op->a, op->b}, Call::Extern));

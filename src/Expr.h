@@ -135,19 +135,11 @@ struct IntImm : public ExprNode<IntImm> {
         }
         IntImm *node = new IntImm;
         node->type = t;
-        switch (t.bits) {
-        case 8:
-            node->value = (int8_t)value;
-            break;
-        case 16:
-            node->value = (int16_t)value;
-            break;
-        case 32:
-            node->value = (int32_t)value;
-            break;
-        default:
-            node->value = value;
-        }
+        // Normalize the value by dropping the high bits
+        value <<= (64 - t.bits);
+        // Then sign-extending to get them back
+        value >>= (64 - t.bits);
+        node->value = value;
         return node;
     }
 
@@ -164,19 +156,10 @@ struct UIntImm : public ExprNode<UIntImm> {
         internal_assert(t.is_uint()) << "UIntImm must be a UInt\n";
         UIntImm *node = new UIntImm;
         node->type = t;
-        switch (t.bits) {
-        case 8:
-            node->value = (uint8_t)value;
-            break;
-        case 16:
-            node->value = (uint16_t)value;
-            break;
-        case 32:
-            node->value = (uint32_t)value;
-            break;
-        default:
-            node->value = value;
-        }
+        // Normalize the value by dropping the high bits
+        value <<= (64 - t.bits);
+        value >>= (64 - t.bits);
+        node->value = value;
         return node;
     }
 };
@@ -231,17 +214,17 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    EXPORT Expr(int8_t x)            : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    EXPORT Expr(int16_t x)           : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-    EXPORT Expr(int32_t x)           : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    EXPORT explicit Expr(int64_t x)  : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    EXPORT Expr(uint8_t x)           : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    EXPORT Expr(uint16_t x)          : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    EXPORT Expr(uint32_t x)          : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    EXPORT explicit Expr(uint64_t x) : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-    EXPORT Expr(float16_t x)         : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
-    EXPORT Expr(float x)             : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    EXPORT explicit Expr(double x)   : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    EXPORT explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
+    EXPORT explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
+    EXPORT          Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
+    EXPORT explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
+    EXPORT explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
+    EXPORT explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
+    EXPORT explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
+    EXPORT explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
+    EXPORT          Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
+    EXPORT          Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
+    EXPORT explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */

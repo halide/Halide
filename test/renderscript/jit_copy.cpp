@@ -68,15 +68,15 @@ protected:
                         StringImm::make("input"),
                         Variable::make(Handle(1), "input.buffer"),
                         (Variable::make(Int(32), "result.s0.x.__block_id_x") +
-                            Variable::make(Int(32), "result.min.0")) -
-                            Variable::make(Int(32), "input.min.0"),
+                         Variable::make(Int(32), "result.min.0")) -
+                         Variable::make(Int(32), "input.min.0"),
                         Variable::make(Int(32), "input.extent.0"),
                         (Variable::make(Int(32), "result.s0.y.__block_id_y") +
-                            Variable::make(Int(32), "result.min.1")) -
-                            Variable::make(Int(32), "input.min.1"),
+                         Variable::make(Int(32), "result.min.1")) -
+                         Variable::make(Int(32), "input.min.1"),
                         Variable::make(Int(32), "input.extent.1"),
                         Variable::make(Int(32), "result.s0.c"),
-                        IntImm::make(channels)
+                        channels
                     },
                     Call::CallType::Intrinsic),
                 call->args[5],
@@ -168,7 +168,7 @@ class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline 
                             channels),
                         Broadcast::make(Variable::make(Int(32), "input.extent.1"), channels),
                         Ramp::make(0, 1, channels),
-                        Broadcast::make(IntImm::make(channels), channels)
+                        Broadcast::make(channels, channels)
                     },
                     Call::CallType::Intrinsic),
                 call->args[5],
