@@ -15,24 +15,33 @@ void test_nv12torgb888(Target& target) {
     ImageParam inputY(type_of<uint8_t>(), 2);
     ImageParam inputUV(type_of<uint8_t>(), 2);
 
-    Expr scaleY = inputY(x,y) & 0xff;
-    scaleY = cast<int>(scaleY) - 16;
-    scaleY = 1192 * max(scaleY,0);
+    // Y channel
+    Expr scaleY = inputY(x,y);
+    scaleY = cast<int32_t>(scaleY);
+    scaleY = max(scaleY-16,0);
+    scaleY = 1192*scaleY;
 
-    Expr V = select((x & 1) == 0, (inputUV(x,y) & 0xff) -128, (inputUV(x-1,y) & 0xff) -128);
-    Expr U = select((x & 1) == 0, (inputUV(x+1,y) & 0xff) -128, (inputUV(x,y)));
-    Expr R = clamp(scaleY + 1634 * cast<int>(V), 0, 262143);
-    Expr G = clamp(scaleY - 833 * cast<int>(V) -400 * cast<int>(U), 0, 262143);
-    Expr B = clamp(scaleY + 2066 * cast<int>(U), 0, 262143);
+    // V channel
+    Expr scaleV = inputUV(x - (x & 1),y >> 1);
+    scaleV = cast<int32_t>(scaleV) - 128;
 
-    Expr rgb1 = (((B << 6) & 0xff0000)
-                | ((G >> 2) & 0xff00) | ((R >> 10) & 0xff)) | (0xff<<24);
+    // U channel
+    Expr scaleU = inputUV((x - (x & 1)) + 1,y >> 1);
+    scaleU = cast<int32_t>(scaleU) - 128;
+
+    // calculate r, g, and b values
+    Expr r = clamp(scaleY + 1634*scaleV, 0, 262143);
+    Expr g = clamp(scaleY - 833 * scaleV - 400 * scaleU, 0, 262143);
+    Expr b = clamp(scaleY + 2066 * scaleU, 0, 262143);
+
+    Expr rgb1 = cast<uint32_t>((0xff<<24) | ((b << 6) & 0xff0000) | ((g >> 2) & 0xff00) | ((r >> 10) & 0xff));
+
 
     Func nv12torgb888("nv12torgb888");
-    nv12torgb888(x,y) = cast<uint32_t>(rgb1);
+    nv12torgb888(x,y) = rgb1;
 
 #ifndef NOVECTOR
-    nv12torgb888.vectorize(x, 1<<LOG2VLEN);
+    nv12torgb888.vectorize(x,1<<LOG2VLEN);
 #endif
     std::vector<Argument> args(2);
     args[0]  = inputY;
@@ -55,6 +64,9 @@ void test_nv12torgb888(Target& target) {
 int main(int argc, char **argv) {
 	Target target;
 	setupHexagonTarget(target);
+#if LOG2VLEN == 7
+        target.set_feature(Target::HVX_DOUBLE);
+#endif
 	test_nv12torgb888(target);
 	printf ("Done\n");
 	return 0;

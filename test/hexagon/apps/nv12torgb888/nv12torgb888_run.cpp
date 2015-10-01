@@ -40,7 +40,6 @@ int main(int argc, char **argv) {
     printf("Width: %d height: %d stride: %d \n",width, height, stride);
     unsigned char *src = (unsigned char *)memalign(1<<LOG2VLEN, sizeof(src[0]) * stride * height * 3 / 2);
     unsigned int *dst = (unsigned int *)memalign(1<<LOG2VLEN, sizeof(dst[0]) * stride * height);
-    unsigned int *dstRef = (unsigned int *)memalign(1<<LOG2VLEN, sizeof(dst[0]) * stride * height);
 
     unsigned char* yuv420sp = src;
     unsigned char* uv420sp = src+stride*height;
@@ -65,13 +64,16 @@ int main(int argc, char **argv) {
     }
 
 #ifdef SYNTHETIC
-    memset(dstRef, 0, stride*height*4);
-    dstRef[0] = -16727808;
-    dstRef[1] = -16719616;
-    dstRef[2] = -14298327;
-    dstRef[3] = -15745773;
-    dstRef[4] = -16729587;
-    dstRef[5] = -16725732;
+    unsigned int dstRef[48] = {
+-16727808, -16719616, -14298327, -15745773, -16729587, -16725732,
+-16713977, -16715004, -13180102, -12653758, -15472325, -15538118,
+-13315297, -13183968, -14049973, -13786545,  -8935326,  -8014224,
+-13381090, -14762743, -14444475, -16751598, -14396401, -15712256,
+-13823170, -14152135, -16760320, -16761600, -10551244, -10485706,
+-15007444, -15007444, -16763904, -16762880, -10420169, -11010003,
+-16771328, -16770301, -14680036, -13037002, -16624081, -15440063,
+-15837119, -14916017,  -5273428,  -7576183, -16763376, -16766974 };
+
     { printf("src\n");
       for (int i=0; i<height*3/2; i++) {
         for (int j=0; j<width; j++)
@@ -81,7 +83,7 @@ int main(int argc, char **argv) {
       printf("Ref\n");
       for (int i=0; i<height; i++) {
         for (int j=0; j<width; j++)
-           printf("%8d ", dstRef[i*stride+j]);
+           printf("%8d ", dstRef[i*width+j]);
         printf("\n");
       }
     }
@@ -153,9 +155,9 @@ int main(int argc, char **argv) {
     {
         for(int j = 0; j < width; j++)
         {
-            if(dstRef[i*stride+j] != dst[i*stride+j])
+            if(dstRef[i*width+j] != dst[i*stride+j])
             {
-                printf("MISMATCH (%d,%d): ref = %d, tst = %d\n",j,i,dstRef[i*stride+j],dst[i*stride+j]);
+                printf("MISMATCH (%d,%d): ref = %d, tst = %d\n",j,i,dstRef[i*width+j],dst[i*stride+j]);
                 error = 1;
              //   goto cleanup;
             }
