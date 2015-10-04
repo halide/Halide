@@ -141,23 +141,15 @@ int main(int argc, char **argv) {
       five = (int16_t) (input[y+2][x+2]);
       int16_t int5 = (int16_t) one + 4*two + 6*three + 4*four + five;
 
-      // printf ("int1 = %d\t int2 = %d\t int3 = %d\n", int1, int2, int3);
       int16_t op = (int1 + 4*int2 + 6*int3 + 4*int4 + int5);
-      // if (op > INT16_MAX)
-      //   op = 0;
-      // else
       op = op >> 8;
-      if (op > 255)
-        op = 255;
-      if (op < 0)
-        op = 0;
 
       uint8_t op1 = (uint8_t) op;
       if (output[y][x] != op1) {
         printf ("output[%d][%d] = %d instead of %d\n", y, x, output[y][x], op);
-        //  return 1;
-      } else
-        printf ("output[%d][%d] = %d\n", y, x, output[y][x]);
+         return 1;
+      } // else
+        // printf ("output[%d][%d] = %d\n", y, x, output[y][x]);
     }
   }
 

@@ -1357,8 +1357,67 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         if (value)
           return;
       }
-      // Lets look for saturate and pack.
     bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+    // Looking for shuffles
+    {
+      std::vector<Pattern> Shuffles;
+      // Halide has a bad habit of converting "a >> 8" to "a/256"
+      Expr TwoFiveSix_u = u16_(256);
+      Expr TwoFiveSix_i = i16_(256);
+      Expr Divisor_u = u32_(65536);
+      Expr Divisor_i = i32_(65536);
+      // Vd.b = shuffo(Vu.b, Vv.b)
+      Shuffles.push_back(Pattern(u8_(WPICK(wild_u16x128, wild_u16x64) /
+                                     Broadcast::make(TwoFiveSix_u,
+                                                     CPICK(128, 64))),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffob)));
+      Shuffles.push_back(Pattern(i8_(WPICK(wild_u16x128, wild_u16x64) /
+                                     Broadcast::make(TwoFiveSix_u,
+                                                     CPICK(128, 64))),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffob)));
+      Shuffles.push_back(Pattern(u8_(WPICK(wild_i16x128, wild_i16x64) /
+                                     Broadcast::make(TwoFiveSix_i,
+                                                     CPICK(128, 64))),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffob)));
+      Shuffles.push_back(Pattern(i8_(WPICK(wild_i16x128, wild_i16x64) /
+                                     Broadcast::make(TwoFiveSix_i,
+                                                     CPICK(128, 64))),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffob)));
+      // Vd.h = shuffo(Vu.h, Vv.h)
+      Shuffles.push_back(Pattern(u16_(WPICK(wild_u32x64, wild_u32x32) /
+                                     Broadcast::make(Divisor_u,
+                                                     CPICK(64, 32))),
+                                 IPICK(Intrinsic::hexagon_V6_vshufoh)));
+      Shuffles.push_back(Pattern(i16_(WPICK(wild_u32x64, wild_u32x32) /
+                                     Broadcast::make(Divisor_u,
+                                                     CPICK(64, 32))),
+                                 IPICK(Intrinsic::hexagon_V6_vshufoh)));
+      Shuffles.push_back(Pattern(u16_(WPICK(wild_i32x64, wild_i32x32) /
+                                     Broadcast::make(Divisor_i,
+                                                     CPICK(64, 32))),
+                                 IPICK(Intrinsic::hexagon_V6_vshufoh)));
+      Shuffles.push_back(Pattern(i16_(WPICK(wild_i32x64, wild_i32x32) /
+                                     Broadcast::make(Divisor_i,
+                                                     CPICK(64, 32))),
+                                 IPICK(Intrinsic::hexagon_V6_vshufoh)));
+
+      matches.clear();
+      for (size_t I = 0; I < Shuffles.size(); ++I) {
+        const Pattern &P = Shuffles[I];
+        if (expr_match(P.pattern, op, matches)) {
+          std::vector<Value *> Ops;
+          Value *DoubleVector = codegen(matches[0]);
+          getHighAndLowVectors(DoubleVector, Ops);
+          Intrinsic::ID ID = P.ID;
+          Value *ShuffleInst =
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module, ID), Ops);
+          value = convertValueType(ShuffleInst, llvm_type_of(op->type));
+          return;
+        }
+      }
+    }
+
+    // Lets look for saturate and pack.
     std::vector<Pattern> SatAndPack;
     SatAndPack.push_back(Pattern(u8_(min(WPICK(wild_u16x128, wild_u16x64),
                                          255)),
@@ -1461,6 +1520,42 @@ void CodeGen_Hexagon::visit(const Cast *op) {
             value = convertValueType(Result, llvm_type_of(op->type));
             return;
           }
+      }
+    }
+    {
+      std::vector<Pattern> Shuffles;
+      // Vd.b = shuffe(Vu.b, Vv.b)
+      Shuffles.push_back(Pattern(u8_(WPICK(wild_u16x128, wild_u16x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+      Shuffles.push_back(Pattern(i8_(WPICK(wild_u16x128, wild_u16x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+      Shuffles.push_back(Pattern(u8_(WPICK(wild_i16x128, wild_i16x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+      Shuffles.push_back(Pattern(i8_(WPICK(wild_i16x128, wild_i16x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+
+      // Vd.h = shuffe(Vu.h, Vv.h)
+      Shuffles.push_back(Pattern(u16_(WPICK(wild_u32x64, wild_u32x32)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      Shuffles.push_back(Pattern(i16_(WPICK(wild_u32x64, wild_u32x32)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      Shuffles.push_back(Pattern(u16_(WPICK(wild_i32x64, wild_i32x32)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      Shuffles.push_back(Pattern(i16_(WPICK(wild_i32x64, wild_i32x32)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      matches.clear();
+      for (size_t I = 0; I < Shuffles.size(); ++I) {
+        const Pattern &P = Shuffles[I];
+        if (expr_match(P.pattern, op, matches)) {
+          std::vector<Value *> Ops;
+          Value *DoubleVector = codegen(matches[0]);
+          getHighAndLowVectors(DoubleVector, Ops);
+          Intrinsic::ID ID = P.ID;
+          Value *ShuffleInst =
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module, ID), Ops);
+          value = convertValueType(ShuffleInst, llvm_type_of(op->type));
+          return;
+        }
       }
     }
   }
