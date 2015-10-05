@@ -895,9 +895,12 @@ private:
                    div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
             // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
             expr = mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->width));
-        } else if (div_a &&
-                   const_int(div_a->b, &ia) && ia >= 0 &&
-                   const_int(b, &ib) && ib >= 0) {
+        } else if (no_overflow(op->type) &&
+                   div_a &&
+                   const_int(div_a->b, &ia) &&
+                   ia >= 0 &&
+                   const_int(b, &ib) &&
+                   ib >= 0) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / make_const(op->type, ia * ib));
         } else if (no_overflow(op->type) &&
@@ -1505,7 +1508,9 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (no_overflow(op->type) && a.as<Variable>() && is_simple_const(b)) {
+        } else if (no_overflow(op->type) &&
+                   a.as<Variable>() &&
+                   is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1518,7 +1523,9 @@ private:
                 expr = b;
                 return;
             }
-        } else if (ramp_a && broadcast_b &&
+        } else if (no_overflow(op->type) &&
+                   ramp_a &&
+                   broadcast_b &&
                    const_int(ramp_a->base, &ia) &&
                    const_int(ramp_a->stride, &ib) &&
                    const_int(broadcast_b->value, &ic)) {
