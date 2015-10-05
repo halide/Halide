@@ -481,7 +481,7 @@ Expr halide_exp(Expr x_full) {
     int fpbias = 127;
     Expr biased = k + fpbias;
 
-    Expr inf = Call::make(type, "inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr inf = reinterpret_bits<float>(0x7f800000);
 
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
