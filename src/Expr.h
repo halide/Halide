@@ -228,8 +228,7 @@ struct Expr : public Internal::IRHandle {
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    EXPORT Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {
-    }
+    EXPORT          Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
 
     /** Get the type of this expression node */
     Type type() const {
