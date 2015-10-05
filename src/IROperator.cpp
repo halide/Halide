@@ -411,8 +411,8 @@ Expr halide_log(Expr x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
-    Expr nan = Call::make(type, "nan_f32", std::vector<Expr>(), Call::Extern);
-    Expr neg_inf = Call::make(type, "neg_inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr nan = reinterpret_bits<float>(0x7fc00000);
+    Expr neg_inf = reinterpret_bits<float>(0xff800000);
 
     Expr use_nan = x_full < 0.0f; // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
