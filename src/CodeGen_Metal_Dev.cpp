@@ -22,7 +22,7 @@ CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
 
 static string print_type_maybe_storage(Type type, bool storage) {
     ostringstream oss;
-    
+
     // Storage uses packed vector types.
     if (storage && type.width != 1) {
         oss << "packed_";
@@ -86,7 +86,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_storage_type(Type type) {
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) {
     ostringstream oss;
-    
+
     string temp = unique_name('V');
     string expr = print_expr(e);
     do_indent();
@@ -580,12 +580,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "using namespace metal;\n" // Seems like the right way to go.
                << "namespace {\n"
                << "constexpr float float_from_bits(unsigned int x) {return as_type<float>(x);}\n"
-               << "constexpr float maxval_f32() {return FLT_MAX;}\n"
-               << "constexpr float minval_f32() {return -FLT_MAX;}\n"
-               << "constexpr float nan_f32() { return as_type<float>(0x7fc00000); }\n" // Quiet NaN with minimum fractional value.
-               << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
-               << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
-               << "bool is_nan_f32(float x) {return isnan(x); }\n"
                << "float fast_inverse_f32(float x) { return 1.0f / x; } \n"
                << smod_def("char") << "\n"
                << smod_def("short") << "\n"
@@ -643,7 +637,7 @@ string CodeGen_Metal_Dev::get_current_kernel_name() {
 void CodeGen_Metal_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
 }
-    
+
 std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
