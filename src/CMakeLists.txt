@@ -56,7 +56,6 @@ set(RUNTIME_CPP
   posix_error_handler
   posix_get_symbol
   posix_io
-  posix_math
   posix_print
   posix_thread_pool
   profiler
