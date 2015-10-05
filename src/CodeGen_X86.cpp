@@ -248,7 +248,6 @@ void CodeGen_X86::visit(const Select *op) {
         {"pblendvb_i8x16", select(wild_u1x_, wild_u8x_, wild_u8x_)}
     };
 
-
     if (target.has_feature(Target::SSE41) &&
         op->condition.type().is_vector() &&
         op->type.bits == 8 &&
@@ -378,11 +377,18 @@ void CodeGen_X86::visit(const Div *op) {
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
-    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;
-    const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
-    if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
+    const IntImm *int_imm = broadcast ? broadcast->value.as<IntImm>() : NULL;
+    const UIntImm *uint_imm = broadcast ? broadcast->value.as<UIntImm>() : NULL;
     if (!int_imm) int_imm = op->b.as<IntImm>();
-    int const_divisor = int_imm ? int_imm->value : 0;
+    if (!uint_imm) uint_imm = op->b.as<UIntImm>();
+    int64_t const_int_divisor = 0;
+    uint64_t const_uint_divisor = 0;
+    if (int_imm) {
+        const_int_divisor = int_imm->value;
+    }
+    if (uint_imm) {
+        const_uint_divisor = uint_imm->value;
+    }
     int shift_amount;
     bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
@@ -397,20 +403,20 @@ void CodeGen_X86::visit(const Div *op) {
         value = builder->CreateLShr(numerator, shift);
     } else if (op->type.is_int() &&
                (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
-               const_divisor > 1 &&
-               ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
+               const_int_divisor > 1 &&
+               ((op->type.bits > 8 && const_int_divisor < 256) || const_int_divisor < 128)) {
 
         int64_t multiplier, shift;
         if (op->type.bits == 32) {
-            multiplier = IntegerDivision::table_s32[const_divisor][2];
-            shift      = IntegerDivision::table_s32[const_divisor][3];
+            multiplier = IntegerDivision::table_s32[const_int_divisor][2];
+            shift      = IntegerDivision::table_s32[const_int_divisor][3];
         } else if (op->type.bits == 16) {
-            multiplier = IntegerDivision::table_s16[const_divisor][2];
-            shift      = IntegerDivision::table_s16[const_divisor][3];
+            multiplier = IntegerDivision::table_s16[const_int_divisor][2];
+            shift      = IntegerDivision::table_s16[const_int_divisor][3];
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[const_divisor][2];
-            shift      = IntegerDivision::table_s8[const_divisor][3];
+            multiplier = IntegerDivision::table_s8[const_int_divisor][2];
+            shift      = IntegerDivision::table_s8[const_int_divisor][3];
         }
 
         Value *val = codegen(op->a);
@@ -449,21 +455,21 @@ void CodeGen_X86::visit(const Div *op) {
 
     } else if (op->type.is_uint() &&
                (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
-               const_divisor > 1 && const_divisor < 256) {
+               const_uint_divisor > 1 && const_uint_divisor < 256) {
 
         int64_t method, multiplier, shift;
         if (op->type.bits == 32) {
-            method     = IntegerDivision::table_u32[const_divisor][1];
-            multiplier = IntegerDivision::table_u32[const_divisor][2];
-            shift      = IntegerDivision::table_u32[const_divisor][3];
+            method     = IntegerDivision::table_u32[const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u32[const_uint_divisor][2];
+            shift      = IntegerDivision::table_u32[const_uint_divisor][3];
         } else if (op->type.bits == 16) {
-            method     = IntegerDivision::table_u16[const_divisor][1];
-            multiplier = IntegerDivision::table_u16[const_divisor][2];
-            shift      = IntegerDivision::table_u16[const_divisor][3];
+            method     = IntegerDivision::table_u16[const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u16[const_uint_divisor][2];
+            shift      = IntegerDivision::table_u16[const_uint_divisor][3];
         } else {
-            method     = IntegerDivision::table_u8[const_divisor][1];
-            multiplier = IntegerDivision::table_u8[const_divisor][2];
-            shift      = IntegerDivision::table_u8[const_divisor][3];
+            method     = IntegerDivision::table_u8[const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u8[const_uint_divisor][2];
+            shift      = IntegerDivision::table_u8[const_uint_divisor][3];
         }
 
         internal_assert(method != 0)
