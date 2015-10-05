@@ -489,11 +489,12 @@ void CodeGen_ARM::visit(const Div *op) {
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
-    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;
-    const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
-    if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
+    const IntImm *int_imm = broadcast ? broadcast->value.as<IntImm>() : NULL;
     if (!int_imm) int_imm = op->b.as<IntImm>();
-    int const_divisor = int_imm ? int_imm->value : 0;
+    const UIntImm *uint_imm = broadcast ? broadcast->value.as<UIntImm>() : NULL;
+    if (!uint_imm) uint_imm = op->b.as<UIntImm>();
+    int const_int_divisor = int_imm ? int_imm->value : 0;
+    int const_uint_divisor = uint_imm ? uint_imm->value : 0;
 
     // Check if the divisor is a power of two
     int shift_amount;
@@ -510,20 +511,20 @@ void CodeGen_ARM::visit(const Div *op) {
         value = builder->CreateLShr(numerator, shift);
     } else if (op->type.is_int() &&
                (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
-               const_divisor > 1 &&
-               ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
+               const_int_divisor > 1 &&
+               ((op->type.bits > 8 && const_int_divisor < 256) || const_int_divisor < 128)) {
 
         int64_t multiplier, shift;
         if (op->type.bits == 32) {
-            multiplier = IntegerDivision::table_s32[const_divisor][2];
-            shift      = IntegerDivision::table_s32[const_divisor][3];
+            multiplier = IntegerDivision::table_s32[const_int_divisor][2];
+            shift      = IntegerDivision::table_s32[const_int_divisor][3];
         } else if (op->type.bits == 16) {
-            multiplier = IntegerDivision::table_s16[const_divisor][2];
-            shift      = IntegerDivision::table_s16[const_divisor][3];
+            multiplier = IntegerDivision::table_s16[const_int_divisor][2];
+            shift      = IntegerDivision::table_s16[const_int_divisor][3];
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[const_divisor][2];
-            shift      = IntegerDivision::table_s8[const_divisor][3];
+            multiplier = IntegerDivision::table_s8[const_int_divisor][2];
+            shift      = IntegerDivision::table_s8[const_int_divisor][3];
         }
 
         Value *val = codegen(op->a);
@@ -550,21 +551,21 @@ void CodeGen_ARM::visit(const Div *op) {
 
     } else if (op->type.is_uint() &&
                (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
-               const_divisor > 1 && const_divisor < 256) {
+               const_uint_divisor > 1 && const_uint_divisor < 256) {
 
         int64_t method, multiplier, shift;
         if (op->type.bits == 32) {
-            method     = IntegerDivision::table_u32[const_divisor][1];
-            multiplier = IntegerDivision::table_u32[const_divisor][2];
-            shift      = IntegerDivision::table_u32[const_divisor][3];
+            method     = IntegerDivision::table_u32[const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u32[const_uint_divisor][2];
+            shift      = IntegerDivision::table_u32[const_uint_divisor][3];
         } else if (op->type.bits == 16) {
-            method     = IntegerDivision::table_u16[const_divisor][1];
-            multiplier = IntegerDivision::table_u16[const_divisor][2];
-            shift      = IntegerDivision::table_u16[const_divisor][3];
+            method     = IntegerDivision::table_u16[const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u16[const_uint_divisor][2];
+            shift      = IntegerDivision::table_u16[const_uint_divisor][3];
         } else {
-            method     = IntegerDivision::table_u8[const_divisor][1];
-            multiplier = IntegerDivision::table_u8[const_divisor][2];
-            shift      = IntegerDivision::table_u8[const_divisor][3];
+            method     = IntegerDivision::table_u8[const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u8[const_uint_divisor][2];
+            shift      = IntegerDivision::table_u8[const_uint_divisor][3];
         }
 
         internal_assert(method != 0)
@@ -594,19 +595,19 @@ void CodeGen_ARM::visit(const Div *op) {
 
         // Average with original numerator
         if (method == 2) {
-            if (op->type.bits == 32) {
+            if (op->type.is_vector() && op->type.bits == 32) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", {val, num});
                 } else {
                     val = call_intrin(narrower, 2, "llvm.aarch64.neon.uhadd.v2i32", {val, num});
                 }
-            } else if (op->type.bits == 16) {
+            } else if (op->type.is_vector() && op->type.bits == 16) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", {val, num});
                 } else {
                     val = call_intrin(narrower, 4, "llvm.aarch64.neon.uhadd.v4i16", {val, num});
                 }
-            } else if (op->type.bits == 8) {
+            } else if (op->type.is_vector() && op->type.bits == 8) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", {val, num});
                 } else {
@@ -627,7 +628,6 @@ void CodeGen_ARM::visit(const Div *op) {
         }
 
         value = val;
-
     } else {
         CodeGen_Posix::visit(op);
     }
