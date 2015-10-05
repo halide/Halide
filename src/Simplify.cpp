@@ -2087,16 +2087,16 @@ private:
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
 
             int64_t ib = 0;
-            if (const_int(b, &ib)) {
+            if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
                 Type t = op->type;
 
                 bool shift_left = op->name == Call::shift_left;
-                if (ib < 0) {
+                if (t.is_int() && ib < 0) {
                     shift_left = !shift_left;
                     ib = -ib;
                 }
 
-                if (ib < std::min(t.bits, 64)) {
+                if (ib >= 0 && ib < std::min(t.bits, 64)) {
                     ib = 1LL << ib;
                     b = make_const(t, ib);
 
