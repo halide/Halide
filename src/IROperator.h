@@ -25,7 +25,7 @@ EXPORT bool is_const(Expr e, int64_t v);
  * value. Otherwise returns NULL. */
 EXPORT const int64_t *as_const_int(Expr e);
 
-/** If an expression is an IntImm, return a pointer to its
+/** If an expression is an UIntImm, return a pointer to its
  * value. Otherwise returns NULL. */
 EXPORT const uint64_t *as_const_uint(Expr e);
 
@@ -70,11 +70,20 @@ EXPORT bool is_two(Expr e);
  * undefined Stmt, or as an Evaluate node of a constant) */
 EXPORT bool is_no_op(Stmt s);
 
-/** Construct an immediate of the given type */
+/** Construct an immediate of the given type from any numeric C++ type. */
 // @{
 EXPORT Expr make_const(Type t, int64_t val);
+EXPORT Expr make_const(Type t, uint64_t val);
 EXPORT Expr make_const(Type t, double val);
-inline Expr make_const(Type t, int val) {return make_const(t, (int64_t)val);}
+inline Expr make_const(Type t, int32_t val)   {return make_const(t, (int64_t)val);}
+inline Expr make_const(Type t, uint32_t val)  {return make_const(t, (uint64_t)val);}
+inline Expr make_const(Type t, int16_t val)   {return make_const(t, (int64_t)val);}
+inline Expr make_const(Type t, uint16_t val)  {return make_const(t, (uint64_t)val);}
+inline Expr make_const(Type t, int8_t val)    {return make_const(t, (int64_t)val);}
+inline Expr make_const(Type t, uint8_t val)   {return make_const(t, (uint64_t)val);}
+inline Expr make_const(Type t, bool val)      {return make_const(t, (uint64_t)val);}
+inline Expr make_const(Type t, float val)     {return make_const(t, (double)val);}
+inline Expr make_const(Type t, float16_t val) {return make_const(t, (double)val);}
 // @}
 
 /** Check if a constant value can be correctly represented as the given type. */
@@ -171,6 +180,17 @@ inline Expr cast(Type t, Expr a) {
         user_error << "Can't cast handle \"" << a << "\" to type " << t << ". "
                    << "The only legal cast from handles to scalar types is: "
                    << "reinterpret(UInt(64), " << a << ");\n";
+    }
+
+    // Fold constants early
+    if (const int64_t *i = as_const_int(a)) {
+        return Internal::make_const(t, *i);
+    }
+    if (const uint64_t *u = as_const_uint(a)) {
+        return Internal::make_const(t, *u);
+    }
+    if (const double *f = as_const_float(a)) {
+        return Internal::make_const(t, *f);
     }
 
     if (t.is_vector()) {
@@ -1788,162 +1808,6 @@ inline Expr likely(Expr e) {
     return Internal::Call::make(e.type(), Internal::Call::likely,
                                 {e}, Internal::Call::Intrinsic);
 }
-
-namespace Internal {
-
-/** Given a scalar constant, return an Expr that represents it. This will
- * usually be a simple IntImm or FloatImm, with the exception of 64-bit values,
- * which are stored as wrappers to simple Call expressions.
- *
- * Note that in all cases, Expr.type == type_of<T>().
- */
-template<typename T>
-inline Expr scalar_to_constant_expr(T value) {
-    // All integral types <= 32 bits, including bool
-    return cast(type_of<T>(), static_cast<int32_t>(value));
-}
-
-template<>
-inline Expr scalar_to_constant_expr(float f32) {
-    // float32 needs to skip the cast to int32
-    return cast(Float(32), Expr(f32));
-}
-
-template<>
-inline Expr scalar_to_constant_expr(double f64) {
-    union {
-        int32_t as_int32[2];
-        double as_double;
-    } u;
-    u.as_double = f64;
-    return Call::make(Float(64), Call::make_float64, {u.as_int32[0], u.as_int32[1]}, Call::Intrinsic);
-}
-
-template<>
-inline Expr scalar_to_constant_expr(int64_t i) {
-    const int32_t hi = static_cast<int32_t>(i >> 32);
-    const int32_t lo = static_cast<int32_t>(i);
-    return Call::make(Int(64), Call::make_int64, {hi, lo}, Call::Intrinsic);
-}
-
-template<>
-inline Expr scalar_to_constant_expr(uint64_t u) {
-    return cast(UInt(64), scalar_to_constant_expr<int64_t>(static_cast<int64_t>(u)));
-}
-
-namespace {
-
-// extract_immediate is a private utility for scalar_from_constant_expr,
-// and should not be used elsewhere
-template<typename T>
-inline bool extract_immediate(Expr e, T *value) {
-    if (const IntImm* i = e.as<IntImm>()) {
-        *value = static_cast<T>(i->value);
-        return true;
-    }
-    return false;
-}
-
-template<>
-inline bool extract_immediate(Expr e, float *value) {
-    if (const FloatImm* f = e.as<FloatImm>()) {
-        *value = static_cast<float>(f->value);
-        return true;
-    }
-    if (const IntImm *i = e.as<IntImm>()) {
-        *value = static_cast<float>(i->value);
-        return true;
-    }
-    return false;
-}
-
-// We expect a float64-immediate to be either a call to make_float64()
-// (with two IntImm), or a single FloatImm (if the value fits into a float32)
-template<>
-inline bool extract_immediate(Expr e, double *value) {
-    union {
-        int32_t as_int32[2];
-        double as_double;
-    } u;
-    if (const Call* call = e.as<Call>()) {
-        if (call->name == Call::make_float64) {
-            if (!extract_immediate(call->args[0], &u.as_int32[0]) ||
-                !extract_immediate(call->args[1], &u.as_int32[1])) {
-                return false;
-            }
-            *value = u.as_double;
-            return true;
-        }
-        return false;
-    }
-    if (const IntImm *i = e.as<IntImm>()) {
-        *value = static_cast<double>(i->value);
-        return true;
-    }
-    float f0;
-    if (extract_immediate(e, &f0)) {
-        *value = static_cast<double>(f0);
-        return true;
-    }
-    return false;
-}
-
-
-// We expect an int64-immediate to be either a call to make_int64()
-// (with two IntImm), or a single IntImm (if the value fits into an int32)
-template<>
-inline bool extract_immediate(Expr e, int64_t *value) {
-    int32_t lo, hi;
-    if (const Call* call = e.as<Call>()) {
-        if (call->name == Call::make_int64) {
-            if (!extract_immediate(call->args[0], &hi) ||
-                !extract_immediate(call->args[1], &lo)) {
-                return false;
-            }
-            *value = (static_cast<int64_t>(hi) << 32) | static_cast<uint32_t>(lo);
-            return true;
-        }
-        return false;
-    }
-    if (extract_immediate(e, &lo)) {
-        *value = static_cast<int64_t>(lo);
-        return true;
-    }
-    return false;
-}
-
-template<>
-inline bool extract_immediate(Expr e, uint64_t *value) {
-    return extract_immediate(e, reinterpret_cast<int64_t*>(value));
-}
-
-}  // namespace
-
-/** Given an Expr produced by scalar_to_constant_expr<T>, extract the constant value
- * of type T and return true. If the constant value cannot be converted to type
- * T, return false.
- *
- * In general, ScalarFromExpr<T>(ScalarToExpr<T>(v)) -> (v, true) for all scalar
- * type T, with the notable exception of T == float64, which will return true
- * but possibly lose precision.
- *
- * This function exists primarily to allow for code that needs to extract
- * the default/min/max values in a Parameter (e.g. to write metadata for
- * a compiled Generator); it is not intended to be a general Expr evaluator,
- * and should not be used as one.
- */
-template<typename T>
-inline bool scalar_from_constant_expr(Expr e, T *value) {
-    if (!e.defined() || e.type() != type_of<T>()) {
-        return false;
-    }
-    if (const Cast* c = e.as<Cast>()) {
-        e = c->value;
-    }
-    return extract_immediate<T>(e, value);
-}
-
-}  // namespace Internal
 
 }
 
