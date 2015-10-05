@@ -330,7 +330,8 @@ private:
         InferredArgument a = {
             Argument(p.name(),
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                     p.type(), p.dimensions(), def, min, max, p.stride_multiples()),
+                     p.type(), p.dimensions(), def, min, max, p.is_buffer() ?
+                     p.stride_multiples() : nullptr),
             p,
             Buffer()};
         args.push_back(a);
