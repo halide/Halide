@@ -214,33 +214,34 @@ bool is_two(Expr e) {
     return false;
 }
 
-Expr make_const(Type t, int64_t val) {
+namespace {
+template<typename T>
+Expr make_const_helper(Type t, T val) {
     if (t.is_vector()) {
         return Broadcast::make(make_const(t.element_of(), val), t.width);
     } else if (t.is_int()) {
-        return IntImm::make(t, val);
+        return IntImm::make(t, (int64_t)val);
     } else if (t.is_uint()) {
-        return UIntImm::make(t, val);
+        return UIntImm::make(t, (uint64_t)val);
     } else if (t.is_float()) {
-        return FloatImm::make(t, val);
+        return FloatImm::make(t, (double)val);
     } else {
         internal_error << "Can't make a constant of type " << t << "\n";
         return Expr();
     }
 }
+}
+
+Expr make_const(Type t, int64_t val) {
+    return make_const_helper(t, val);
+}
+
+Expr make_const(Type t, uint64_t val) {
+    return make_const_helper(t, val);
+}
 
 Expr make_const(Type t, double val) {
-    if (t.is_vector()) {
-        return Broadcast::make(make_const(t.element_of(), val), t.width);
-    } else if (t.is_int() || t.is_uint()) {
-        internal_error << "Can't make an integral constant from a double\n";
-        return Expr();
-    } else if (t.is_float()) {
-        return FloatImm::make(t, val);
-    } else {
-        internal_error << "Can't make a constant of type " << t << "\n";
-        return Expr();
-    }
+    return make_const_helper(t, val);
 }
 
 
