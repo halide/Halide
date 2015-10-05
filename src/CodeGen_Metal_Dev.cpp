@@ -580,6 +580,9 @@ void CodeGen_Metal_Dev::init_module() {
                << "using namespace metal;\n" // Seems like the right way to go.
                << "namespace {\n"
                << "constexpr float float_from_bits(unsigned int x) {return as_type<float>(x);}\n"
+               << "constexpr float nan_f32() { return as_type<float>(0x7fc00000); }\n" // Quiet NaN with minimum fractional value.
+               << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
+               << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
                << "float fast_inverse_f32(float x) { return 1.0f / x; } \n"
                << smod_def("char") << "\n"
                << smod_def("short") << "\n"

@@ -529,6 +529,9 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     // Write out the Halide math functions.
     src_stream << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
+               << "float nan_f32() { return NAN; }\n"
+               << "float neg_inf_f32() { return -INFINITY; }\n"
+               << "float inf_f32() { return INFINITY; }\n"
                << smod_def("char") << "\n"
                << smod_def("short") << "\n"
                << smod_def("int") << "\n"
