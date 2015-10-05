@@ -35,8 +35,11 @@ void test_gaussian5x5(Target& target) {
   Func gaussian5x5("gaussian5x5");
   gaussian5x5(x, y) = cast<uint8_t> (cols(x, y) >> 8);
 
+#ifndef NOVECTOR
   // Schedule.
   gaussian5x5.vectorize(x, 1 << LOG2VLEN);
+#endif
+
 #ifndef DEBUG_SYNTHETIC
   set_output_buffer_min(gaussian5x5, 0, 0);
   set_output_buffer_min(gaussian5x5, 1, 0);

@@ -26,8 +26,9 @@ void test_histogram(Target& target) {
   RDom r(input);
   histogram(clamp(cast<int>(input(r.x, r.y)),0,255)) += 1;
 
+#ifndef NOVECTOR
   histogram.vectorize(x, 1 << LOG2VLEN);
-
+#endif
 
 
   // Schedule.
