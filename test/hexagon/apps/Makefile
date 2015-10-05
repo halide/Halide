@@ -8,6 +8,8 @@ SUBDIRS = median \
   sobel \
   integrate \
   dilate3x3 \
+  gaussian5x5 \
+  histogram \
   conv3x3a16
 
 .PHONY: all run perf bmark-report
