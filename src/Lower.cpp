@@ -18,6 +18,7 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "HexagonIRChecker.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -244,6 +245,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
+    s = hexagon_ir_checker(s);
+    debug(1) << "Lowering after hexagon_ir_checker: \n" << s << "\n\n";
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
