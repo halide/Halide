@@ -12,9 +12,18 @@ SUBDIRS = median \
   histogram \
   conv3x3a16
 
+NOT_READY4PRIMTIME = \
+  conv3x3a32 \
+  nv12torgb888 \
+  sigma3x3 \
+  bilateral 
+
+# Causes make error  camera_pipe
+
+
 .PHONY: all run perf bmark-report
 
-all: perf
+all: perf not-ready
 
 run:
 	for dir in $(SUBDIRS); do \
@@ -32,4 +41,12 @@ bmark-report:
 		export MALLOC_CHECK_=0; \
 		$(MAKE) -C $$dir bmark-report; \
 	done
+
 perf: run bmark-report
+
+not-ready:
+	for dir in $(NOT_READY4PRIMTIME); do \
+		export MALLOC_CHECK_=0; \
+		$(MAKE) -C $$dir TIMING=  EXTRA_FLAGS=-DNOVECTOR clean run; \
+	done
+
