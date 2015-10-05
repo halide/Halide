@@ -31,10 +31,10 @@ void expr_match_test() {
                     equal(matches[0], y*2));
 
     internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
-                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), matches) &&
+                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(x + 4.5f)), matches) &&
                     equal(matches[0], 81.0f * fy) &&
                     equal(matches[1], x/2) &&
-                    equal(matches[2], 4.5f));
+                    equal(matches[2], x + 4.5f)) << matches[0] << ", " << matches[1] << ", " << matches[2] << "\n";
 
     internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
                     matches.empty());
@@ -71,14 +71,27 @@ public:
 
     void visit(const IntImm *op) {
         const IntImm *e = expr.as<IntImm>();
-        if (!e || e->value != op->value) {
+        if (!e ||
+            e->value != op->value ||
+            !types_match(op->type, e->type)) {
+            result = false;
+        }
+    }
+
+    void visit(const UIntImm *op) {
+        const UIntImm *e = expr.as<UIntImm>();
+        if (!e ||
+            e->value != op->value ||
+            !types_match(op->type, e->type)) {
             result = false;
         }
     }
 
     void visit(const FloatImm *op) {
         const FloatImm *e = expr.as<FloatImm>();
-        if (!e || e->value != op->value) {
+        if (!e ||
+            e->value != op->value ||
+            !types_match(op->type, e->type)) {
             result = false;
         }
     }
