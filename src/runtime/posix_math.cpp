@@ -25,12 +25,4 @@ INLINE float inf_f32() {
     return float_from_bits(0x7f800000);
 }
 
-INLINE float maxval_f32() {
-    return float_from_bits(0x7f7fffff);
-}
-
-INLINE float minval_f32() {
-    return float_from_bits(0xff7fffff);
-}
-
 }
