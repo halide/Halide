@@ -852,23 +852,52 @@ private:
             expr = FloatImm::make(op->type, mod_imp(fa, fb));
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Mod::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
-        } else if (mul_a && const_int(b, &ib) && ib && const_int(mul_a->b, &ia) && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   mul_a &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   const_int(mul_a->b, &ia) &&
+                   (ia % ib == 0)) {
             // (x * (b*a)) % b -> 0
             expr = make_zero(op->type);
-        } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   mul_a_a &&
+                   const_int(mul_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   (ia % ib == 0)) {
             // (x * (b*a) + y) % b -> (y % b)
             expr = mutate(add_a->b % b);
-        } else if (add_a && const_int(add_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   const_int(add_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   (ia % ib == 0)) {
             // (y + (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % b);
-        } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   mul_a_b &&
+                   const_int(mul_a_b->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % b);
-        } else if (const_int(b, &ib) && ib && no_overflow_scalar_int(op->type) && mod_rem.modulus % ib == 0) {
+        } else if (no_overflow_scalar_int(op->type) &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
             expr = make_const(op->type, mod_imp((int64_t)mod_rem.remainder, ib));
-        } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
-                   broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
+        } else if (no_overflow(op->type) &&
+                   ramp_a &&
+                   const_int(ramp_a->stride, &ia) &&
+                   broadcast_b &&
+                   const_int(broadcast_b->value, &ib) &&
+                   ib &&
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % broadcast_b->value, ramp_a->width));
