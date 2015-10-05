@@ -101,7 +101,6 @@ DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(windows_io)
-DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
@@ -621,7 +620,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
         if (module_type != ModuleJITShared) {
             // The first module for inline only case has to be C/C++ compiled otherwise the
             // datalayout is not properly setup.
-            modules.push_back(get_initmod_posix_math(c, bits_64, debug));
+            modules.push_back(get_initmod_destructors(c, bits_64, debug));
 
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows && t.bits == 32) {
@@ -631,7 +630,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             } else {
                 modules.push_back(get_initmod_posix_math_ll(c));
             }
-            modules.push_back(get_initmod_destructors(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
