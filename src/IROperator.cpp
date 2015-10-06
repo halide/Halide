@@ -350,7 +350,7 @@ void check_representable(Type dst, int64_t x) {
     user_assert(dst.can_represent(x))
         << "Integer constant " << x
         << " will be implicitly coerced to type " << dst
-        << ", which changes its value.\n";
+        << ", which changes its value to " << make_const(dst, x) << "\n";
 }
 
 void match_types(Expr &a, Expr &b) {
