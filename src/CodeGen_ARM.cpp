@@ -1047,9 +1047,6 @@ void CodeGen_ARM::visit(const Load *op) {
 
         Value *align = ConstantInt::get(i32, alignment);
 
-        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-
         // Decide what width to slice things into. If not a multiple
         // of 64 or 128 bits, then we can't safely slice it up into
         // some number of vlds, so we hand it over the base class.
