@@ -40,13 +40,13 @@ private:
   bool is_invalid_type(Type t) {
     if (!t.is_vector())
       return false;
-    if (t.bytes() * t.width != hexagon_vector_size())
+    if (t.bits * t.width != hexagon_vector_size_bits())
       return true;
     return false;
   }
-  int hexagon_vector_size() {
+  int hexagon_vector_size_bits() {
     // Do double mode for now.
-    return 128;
+    return 128*8;
   }
   Expr check_type(const BaseExprNode *op) {
     if(is_invalid_type(op->type)) {
