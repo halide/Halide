@@ -128,11 +128,15 @@ struct IntImm : public ExprNode<IntImm> {
     int64_t value;
 
     static IntImm *make(Type t, int64_t value) {
-        internal_assert(t.is_int()) << "IntImm must be an Int\n";
+        internal_assert(t.is_int() && t.is_scalar()) << "IntImm must be a scalar Int\n";
+        internal_assert(t.bits == 8 || t.bits == 16 || t.bits == 32 || t.bits == 64)
+            << "IntImm must be 8, 16, 32, or 64-bit\n";
+
         if (t.bits == 32 && value >= -8 && value <= 8 &&
             !small_int_cache[(int)value + 8].ref_count.is_zero()) {
             return &small_int_cache[(int)value + 8];
         }
+
         IntImm *node = new IntImm;
         node->type = t;
         // Normalize the value by dropping the high bits
@@ -153,7 +157,10 @@ struct UIntImm : public ExprNode<UIntImm> {
     uint64_t value;
 
     static UIntImm *make(Type t, uint64_t value) {
-        internal_assert(t.is_uint()) << "UIntImm must be a UInt\n";
+        internal_assert(t.is_uint() && t.is_scalar())
+            << "UIntImm must be a scalar UInt\n";
+        internal_assert(t.bits == 1 || t.bits == 8 || t.bits == 16 || t.bits == 32 || t.bits == 64)
+            << "UIntImm must be 1, 8, 16, 32, or 64-bit\n";
         UIntImm *node = new UIntImm;
         node->type = t;
         // Normalize the value by dropping the high bits
@@ -169,7 +176,7 @@ struct FloatImm : public ExprNode<FloatImm> {
     double value;
 
     static FloatImm *make(Type t, double value) {
-        internal_assert(t.is_float()) << "FloatImm must be a Float\n";
+        internal_assert(t.is_float() && t.is_scalar()) << "FloatImm must be a scalar Float\n";
         FloatImm *node = new FloatImm;
         node->type = t;
         switch (t.bits) {
@@ -179,8 +186,11 @@ struct FloatImm : public ExprNode<FloatImm> {
         case 32:
             node->value = (float)value;
             break;
-        default:
+        case 64:
             node->value = value;
+            break;
+        default:
+            internal_error << "FloatImm must be 16, 32, or 64-bit\n";
         }
 
         return node;
