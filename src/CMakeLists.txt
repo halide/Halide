@@ -368,7 +368,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DeviceInterface.cpp
   EarlyFree.cpp
   Error.cpp
-  Expr.cpp
   ExprUsesVar.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
