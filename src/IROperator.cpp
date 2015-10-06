@@ -302,10 +302,11 @@ Expr lossless_cast(Type t, Expr e) {
     }
 
     if (const Cast *c = e.as<Cast>()) {
-        if (t == c->value.type()) {
-            return c->value;
-        } else {
+        if (t.can_represent(c->value.type())) {
+            // We can recurse into widening casts.
             return lossless_cast(t, c->value);
+        } else {
+            return Expr();
         }
     }
 
