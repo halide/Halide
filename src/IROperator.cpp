@@ -321,7 +321,7 @@ Expr lossless_cast(Type t, Expr e) {
 
     if (const IntImm *i = e.as<IntImm>()) {
         if (t.can_represent(i->value)) {
-            return IntImm::make(t, i->value);
+            return make_const(t, i->value);
         } else {
             return Expr();
         }
@@ -329,7 +329,7 @@ Expr lossless_cast(Type t, Expr e) {
 
     if (const UIntImm *i = e.as<UIntImm>()) {
         if (t.can_represent(i->value)) {
-            return UIntImm::make(t, i->value);
+            return make_const(t, i->value);
         } else {
             return Expr();
         }
@@ -337,7 +337,7 @@ Expr lossless_cast(Type t, Expr e) {
 
     if (const FloatImm *f = e.as<FloatImm>()) {
         if (t.can_represent(f->value)) {
-            return FloatImm::make(t, f->value);
+            return make_const(t, f->value);
         } else {
             return Expr();
         }
