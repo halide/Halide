@@ -388,7 +388,7 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
     //                    0x7  0xF  0x8  0x0  0x0  0x0  0x0  0x0
     // non-exponent     = 1000 0000 0111 1111 1111 1111 1111 1111
     //                  = 0x8  0x0  0x7  0xF  0xF  0xF  0xF  0xF
-    Expr non_exponent_mask = cast(int_type, IntImm::make(Int(32), 0x807fffff));
+    Expr non_exponent_mask = make_const(int_type, 0x807fffff);
 
     // Extract a version with no exponent (between 1.0 and 2.0)
     Expr no_exponent = int_version & non_exponent_mask;
@@ -411,8 +411,8 @@ Expr halide_log(Expr x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
-    Expr nan = cast(type, Call::make(Float(32), "nan_f32", {}, Call::Extern));
-    Expr neg_inf = cast(type, Call::make(Float(32), "neg_inf_f32", {}, Call::Extern));
+    Expr nan = Call::make(type, "nan_f32", {}, Call::Extern);
+    Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::Extern);
 
     Expr use_nan = x_full < 0.0f; // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
@@ -481,7 +481,7 @@ Expr halide_exp(Expr x_full) {
     int fpbias = 127;
     Expr biased = k + fpbias;
 
-    Expr inf = cast(type, Call::make(Float(32), "inf_f32", {}, Call::Extern));
+    Expr inf = Call::make(type, "inf_f32", {}, Call::Extern);
 
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
