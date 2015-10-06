@@ -488,13 +488,8 @@ void CodeGen_ARM::visit(const Div *op) {
     }
 
     // Detect if it's a small int division
-    const Broadcast *broadcast = op->b.as<Broadcast>();
-    const IntImm *int_imm = broadcast ? broadcast->value.as<IntImm>() : NULL;
-    if (!int_imm) int_imm = op->b.as<IntImm>();
-    const UIntImm *uint_imm = broadcast ? broadcast->value.as<UIntImm>() : NULL;
-    if (!uint_imm) uint_imm = op->b.as<UIntImm>();
-    int const_int_divisor = int_imm ? int_imm->value : 0;
-    int const_uint_divisor = uint_imm ? uint_imm->value : 0;
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
 
     // Check if the divisor is a power of two
     int shift_amount;
@@ -509,22 +504,23 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *numerator = codegen(op->a);
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateLShr(numerator, shift);
-    } else if (op->type.is_int() &&
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
                (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
-               const_int_divisor > 1 &&
-               ((op->type.bits > 8 && const_int_divisor < 256) || const_int_divisor < 128)) {
+               *const_int_divisor > 1 &&
+               ((op->type.bits > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
         int64_t multiplier, shift;
         if (op->type.bits == 32) {
-            multiplier = IntegerDivision::table_s32[const_int_divisor][2];
-            shift      = IntegerDivision::table_s32[const_int_divisor][3];
+            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
         } else if (op->type.bits == 16) {
-            multiplier = IntegerDivision::table_s16[const_int_divisor][2];
-            shift      = IntegerDivision::table_s16[const_int_divisor][3];
+            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[const_int_divisor][2];
-            shift      = IntegerDivision::table_s8[const_int_divisor][3];
+            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
         }
 
         Value *val = codegen(op->a);
@@ -549,23 +545,24 @@ void CodeGen_ARM::visit(const Div *op) {
         // Maybe flip the bits again
         value = builder->CreateXor(val, sign);
 
-    } else if (op->type.is_uint() &&
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
                (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
-               const_uint_divisor > 1 && const_uint_divisor < 256) {
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
 
         int64_t method, multiplier, shift;
         if (op->type.bits == 32) {
-            method     = IntegerDivision::table_u32[const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u32[const_uint_divisor][2];
-            shift      = IntegerDivision::table_u32[const_uint_divisor][3];
+            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
         } else if (op->type.bits == 16) {
-            method     = IntegerDivision::table_u16[const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u16[const_uint_divisor][2];
-            shift      = IntegerDivision::table_u16[const_uint_divisor][3];
+            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
         } else {
-            method     = IntegerDivision::table_u8[const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u8[const_uint_divisor][2];
-            shift      = IntegerDivision::table_u8[const_uint_divisor][3];
+            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
         }
 
         internal_assert(method != 0)
