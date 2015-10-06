@@ -100,13 +100,15 @@ private:
 
     using IRMutator::visit;
 
+    // Wrappers for as_const_foo that are more convenient to use in
+    // the large chains of conditions in the visit methods
+    // below. Unlike the versions in IROperator, these only match
+    // scalars.
     bool const_float(Expr e, double *f) {
-        if (!e.defined()) {
+        if (e.type().is_vector()) {
             return false;
-        }
-        const FloatImm *c = e.as<FloatImm>();
-        if (c) {
-            *f = c->value;
+        } else if (const double *p = as_const_float(e)) {
+            *f = *p;
             return true;
         } else {
             return false;
@@ -114,12 +116,10 @@ private:
     }
 
     bool const_int(Expr e, int64_t *i) {
-        if (!e.defined()) {
+        if (e.type().is_vector()) {
             return false;
-        }
-        const IntImm *c = e.as<IntImm>();
-        if (c) {
-            *i = c->value;
+        } else if (const int64_t *p = as_const_int(e)) {
+            *i = *p;
             return true;
         } else {
             return false;
@@ -127,12 +127,10 @@ private:
     }
 
     bool const_uint(Expr e, uint64_t *u) {
-        if (!e.defined()) {
+        if (e.type().is_vector()) {
             return false;
-        }
-        const UIntImm *c = e.as<UIntImm>();
-        if (c) {
-            *u = c->value;
+        } else if (const uint64_t *p = as_const_uint(e)) {
+            *u = *p;
             return true;
         } else {
             return false;

@@ -88,18 +88,39 @@ bool is_no_op(Stmt s) {
 }
 
 const int64_t *as_const_int(Expr e) {
-    const IntImm *i = e.as<IntImm>();
-    return i ? &(i->value) : NULL;
+    if (!e.defined()) {
+        return NULL;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return as_const_int(b->value);
+    } else if (const IntImm *i = e.as<IntImm>()) {
+        return &(i->value);
+    } else {
+        return NULL;
+    }
 }
 
 const uint64_t *as_const_uint(Expr e) {
-    const UIntImm *i = e.as<UIntImm>();
-    return i ? &(i->value) : NULL;
+    if (!e.defined()) {
+        return NULL;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return as_const_uint(b->value);
+    } else if (const UIntImm *i = e.as<UIntImm>()) {
+        return &(i->value);
+    } else {
+        return NULL;
+    }
 }
 
 const double *as_const_float(Expr e) {
-    const FloatImm *f = e.as<FloatImm>();
-    return f ? &(f->value) : NULL;
+    if (!e.defined()) {
+        return NULL;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return as_const_float(b->value);
+    } else if (const FloatImm *f = e.as<FloatImm>()) {
+        return &(f->value);
+    } else {
+        return NULL;
+    }
 }
 
 bool is_const_power_of_two_integer(Expr e, int *bits) {
