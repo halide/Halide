@@ -89,8 +89,11 @@ public:
 
     void visit(const FloatImm *op) {
         const FloatImm *e = expr.as<FloatImm>();
+        // Note we use uint64_t equality instead of double equality to
+        // catch NaNs. We're checking for the same bits.
         if (!e ||
-            e->value != op->value ||
+            reinterpret_bits<uint64_t>(e->value) !=
+            reinterpret_bits<uint64_t>(op->value) ||
             !types_match(op->type, e->type)) {
             result = false;
         }
