@@ -347,10 +347,18 @@ Expr lossless_cast(Type t, Expr e) {
 }
 
 void check_representable(Type dst, int64_t x) {
-    user_assert(dst.can_represent(x))
-        << "Integer constant " << x
-        << " will be implicitly coerced to type " << dst
-        << ", which changes its value to " << make_const(dst, x) << "\n";
+    if (dst.is_handle()) {
+        user_assert(dst.can_represent(x))
+            << "Integer constant " << x
+            << " will be implicitly coerced to type " << dst
+            << ", but Halide does not support pointer arithmetic.\n";
+    } else {
+        user_assert(dst.can_represent(x))
+            << "Integer constant " << x
+            << " will be implicitly coerced to type " << dst
+            << ", which changes its value to " << make_const(dst, x)
+            << ".\n";
+    }
 }
 
 void match_types(Expr &a, Expr &b) {
