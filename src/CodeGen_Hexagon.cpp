@@ -132,7 +132,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     wild_i32(Variable::make(Int(32), "*")),
     wild_u32(Variable::make(UInt(32), "*")),
     wild_i16(Variable::make(Int(16), "*")),
-    wild_u16(Variable::make(UInt(16), "*")) {
+    wild_u16(Variable::make(UInt(16), "*")),
+    wild_i8(Variable::make(Int(8), "*")),
+    wild_u8(Variable::make(UInt(8), "*")) {
   bool B128 = t.has_feature(Halide::Target::HVX_DOUBLE);
   casts.push_back(Pattern(cast(UInt(16, CPICK(128,64)),
                                WPICK(wild_u8x128,wild_u8x64)),
@@ -2139,18 +2141,96 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 void CodeGen_Hexagon::visit(const Broadcast *op) {
     bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
 
-    //    int Width = op->width;
-    Expr WildI32 = Variable::make(Int(32), "*");
-    Expr PatternMatch = Broadcast::make(WildI32, CPICK(32,16));
+    // int Width = op->width;
+    bool match32 = false;
+    bool match16 = false;
+    bool match8  = false;
     vector<Expr> Matches;
-    if (expr_match(PatternMatch, op, Matches)) {
-        //    if (Width == 16) {
-      Intrinsic::ID ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
-      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-      Value *Op1 = codegen(op->value);
-      value = builder->CreateCall(F, Op1);
-      return;
+
+    int width_32 = CPICK(32,16);
+    int width_16 = CPICK(64,32);
+    int width_8 = CPICK(128,64);
+
+    // Look for supported broadcasts.
+    Expr match_i32 = Broadcast::make(wild_i32, width_32);
+    Expr match_u32 = Broadcast::make(wild_u32, width_32);
+    match32 = expr_match(match_i32, op, Matches) ||
+              expr_match(match_u32, op, Matches);
+    if (!match32) {
+      Expr match_i16 = Broadcast::make(wild_i16, width_16);
+      Expr match_u16 = Broadcast::make(wild_u16, width_16);
+      match16 = expr_match(match_i16, op, Matches) ||
+                expr_match(match_u16, op, Matches);
     }
+    if (!match16) {
+      Expr match_i8 = Broadcast::make(wild_i8, width_8);
+      Expr match_u8 = Broadcast::make(wild_u8, width_8);
+      match8 = expr_match(match_i8, op, Matches) ||
+               expr_match(match_u8, op, Matches);
+    }
+
+    // Select the correct intrinsic & broadcast value preparation.
+    Intrinsic::ID ID = (Intrinsic::ID) 0;
+    bool zext_wordsize = false;
+    bool fill_wordsize = false;
+    if (match32 || match16 || match8) {
+      if (target.has_feature(Halide::Target::HVX_V62)) {
+        if (match8) {
+          ID = IPICK(Intrinsic::hexagon_V6_lvsplatb);
+          zext_wordsize = true;
+        } else if (match16) {
+          ID = IPICK(Intrinsic::hexagon_V6_lvsplath);
+          zext_wordsize = true;
+        } else if (match32) {
+          ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
+        }
+      } else {
+        ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
+        if (match8 || match16) {
+          zext_wordsize = true;
+          fill_wordsize = true;
+        }
+      }
+    }
+
+    // Generate the broadcast code.
+    if (ID != (Intrinsic::ID) 0) {
+      Value *splatval = NULL;
+
+      if (zext_wordsize) {   // Widen splat value to 32bit word.
+        splatval = builder->CreateZExt(codegen(op->value), llvm_type_of(UInt(32)));
+      } else {
+        splatval = codegen(op->value);
+      }
+
+      if (fill_wordsize) {   // Replicate smaller bitsize within 32bit word.
+        if (match16 || match8) {  // Stage 1: shift left by 16 & or.
+          Constant *shift = ConstantInt::get(llvm_type_of(UInt(32)), 16);
+          Value *tempsh = builder->CreateShl(splatval, shift);
+          Value *tempor = builder->CreateOr(tempsh, splatval);
+          splatval = tempor;
+        }
+        if (match8) {             // Stage 2: shift left by 8 & or.
+          Constant *shift = ConstantInt::get(llvm_type_of(UInt(32)), 8);
+          Value *tempsh = builder->CreateShl(splatval, shift);
+          Value *tempor = builder->CreateOr(tempsh, splatval);
+          splatval = tempor;
+        }
+      }
+
+      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      value = builder->CreateCall(F, splatval);
+
+      if (fill_wordsize) {   // If filled, convert back to matched type.
+        value = convertValueType(value, llvm_type_of(op->type));
+      }
+      return;
+    } else {
+      user_warning << "Unsupported type for vector broadcast ("
+                   << op->type
+                   << ")\n";
+    }
+
     CodeGen_Posix::visit(op);
 }
 void CodeGen_Hexagon::visit(const Load *op) {

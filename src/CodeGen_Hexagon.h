@@ -58,6 +58,7 @@ protected:
  private:
     Expr wild_i32, wild_u32;
     Expr wild_i16, wild_u16;
+    Expr wild_i8, wild_u8;
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
     llvm::Value *getLoVectorFromPair(llvm::Value *Vec);
     void slice_into_halves(Expr, std::vector<Expr> &);
