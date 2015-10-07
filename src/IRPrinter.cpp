@@ -225,7 +225,7 @@ void IRPrinter::visit(const FloatImm *op) {
     if (op->type.bits == 32) {
         stream << op->value << 'f';
     } else if (op->type.bits == 64) {
-        stream << op->value << 'f';
+        stream << op->value;
     } else {
         stream << "(float16_t)(" << op->value << ")";
     }
