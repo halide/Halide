@@ -187,8 +187,7 @@ bool is_negative_const(Expr e) {
 
 bool is_negative_negatable_const(Expr e, Type T) {
     if (const IntImm *i = e.as<IntImm>()) {
-        return i->value < 0 &&
-               i->value != T.imin();
+        return (i->value < 0 && !T.is_min(i->value));
     }
     if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
     if (const Cast *c = e.as<Cast>()) {

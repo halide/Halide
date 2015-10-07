@@ -436,8 +436,9 @@ void CodeGen_GLSL::visit(const Call *op) {
         rhs << "texture2D(" << print_name(buffername) << ", vec2("
             << print_expr(op->args[2]) << ", "
             << print_expr(op->args[3]) << "))";
-        if (op->type.is_uint())
-            rhs << " * " << op->type.imax() << ".0";
+        if (op->type.is_uint()) {
+            rhs << " * " << print_expr(cast<float>(op->type.max()));
+        }
 
     } else if (op->name == Call::glsl_texture_store) {
         internal_assert(op->args.size() == 6);
@@ -445,8 +446,9 @@ void CodeGen_GLSL::visit(const Call *op) {
         do_indent();
         stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                << " = " << sval;
-        if (op->args[5].type().is_uint())
-            stream << " / " << op->args[5].type().imax() << ".0";
+        if (op->args[5].type().is_uint()) {
+            stream << " / " << print_expr(cast<float>(op->args[5].type().max()));
+        }
         stream << ";\n";
         // glsl_texture_store is called only for its side effect; there is
         // no return value.

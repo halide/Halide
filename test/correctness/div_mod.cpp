@@ -314,10 +314,18 @@ bool div_mod() {
             T ri = r(i, j);
 
             if (qi*bi + ri != ai && (ecount++) < 10) {
-                std::cout << "(a/b)*b + a%b != a; a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
+                std::cout << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
+                          << ", " << (int64_t)bi
+                          << "; q, r = " << (int64_t)qi
+                          << ", " << (int64_t)ri << "\n";
                 success = false;
-            } else if (!(0 <= ri && ((int64_t)bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
-                std::cout << "ri is not in the range [0, |b|); a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
+            } else if (!(0 <= ri &&
+                         (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
+                       (ecount++) < 10) {
+                std::cout << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
+                          << ", " << (int64_t)bi
+                          << "; q, r = " << (int64_t)qi
+                          << ", " << (int64_t)ri << "\n";
                 success = false;
             }
 
@@ -328,10 +336,16 @@ bool div_mod() {
                 Expr re = simplify(ae%be);
 
                 if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
-                    std::cout << "Compiled a/b != simplified a/b: " << (int)ai << "/" << (int)bi << " = " << (int)qi << " != " << qe << "\n";
+                    std::cout << "Compiled a/b != simplified a/b: " << (int64_t)ai
+                              << "/" << (int64_t)bi
+                              << " = " << (int64_t)qi
+                              << " != " << qe << "\n";
                     success = false;
                 } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
-                    std::cout << "Compiled a%b != simplified a%b: " << (int)ai << "/" << (int)bi << " = " << (int)ri << " != " << re << "\n";
+                    std::cout << "Compiled a%b != simplified a%b: " << (int64_t)ai
+                              << "/" << (int64_t)bi
+                              << " = " << (int64_t)ri
+                              << " != " << re << "\n";
                     success = false;
                 }
             }

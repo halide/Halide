@@ -17,12 +17,12 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     Type result_type = zero_val.type();
 
-    int bias_value = 0;
+    Expr bias_value = make_zero(result_type);
     Type computation_type = result_type;
 
     if (zero_val.type().is_int()) {
         computation_type = UInt(zero_val.type().bits, zero_val.type().width);
-        bias_value = result_type.imin();
+        bias_value = result_type.min();
     }
 
     // For signed integer types, just convert everything to unsigned
@@ -163,7 +163,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
             }
         }
 
-        if (bias_value != 0) {
+        if (!is_zero(bias_value)) {
             result = Cast::make(result_type, result) + bias_value;
         }
     }

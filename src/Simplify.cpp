@@ -1156,15 +1156,15 @@ private:
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = FloatImm::make(op->type, std::min(fa, fb));
             return;
-        } else if (const_int(b, &ib) && ib == b.type().imax()) {
+        } else if (const_int(b, &ib) && b.type().is_max(ib)) {
             // Compute minimum of expression of type and maximum of type --> expression
             expr = a;
             return;
-        } else if (const_int(b, &ib) && ib == b.type().imin()) {
+        } else if (const_int(b, &ib) && b.type().is_min(ib)) {
             // Compute minimum of expression of type and minimum of type --> min of type
             expr = b;
             return;
-        } else if (const_uint(b, &ub) && ub == (uint64_t)b.type().imax()) {
+        } else if (const_uint(b, &ub) && b.type().is_max(ub)) {
             // Compute minimum of expression of type and maximum of type --> expression
             expr = a;
             return;
@@ -1487,11 +1487,11 @@ private:
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = FloatImm::make(op->type, std::max(fa, fb));
             return;
-        } else if (const_int(b, &ib) && ib == b.type().imin()) {
+        } else if (const_int(b, &ib) && b.type().is_min(ib)) {
             // Compute maximum of expression of type and minimum of type --> expression
             expr = a;
             return;
-        } else if (const_int(b, &ib) && ib == b.type().imax()) {
+        } else if (const_int(b, &ib) && b.type().is_max(ib)) {
             // Compute maximum of expression of type and maximum of type --> max of type
             expr = b;
             return;
@@ -1499,7 +1499,7 @@ private:
             // Compute maximum of expression of type and minimum of type --> expression
             expr = a;
             return;
-        } else if (const_uint(b, &ub) && ub == (uint64_t)b.type().imax()) {
+        } else if (const_uint(b, &ub) && b.type().is_max(ub)) {
             // Compute maximum of expression of type and maximum of type --> max of type
             expr = b;
             return;
@@ -1890,11 +1890,11 @@ private:
             expr = make_bool(ia < ib, op->type.width);
         } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
             expr = make_bool(ua < ub, op->type.width);
-        } else if (const_int(a, &ia) && ia == a.type().imax()) {
+        } else if (const_int(a, &ia) && a.type().is_max(ia)) {
             // Comparing maximum of type < expression of type.  This can never be true.
             expr = const_false(op->type.width);
         } else if (const_int(b, &ib) &&
-                   ib == b.type().imin()) {
+                   b.type().is_min(ib)) {
             // Comparing expression of type < minimum of type.  This can never be true.
             expr = const_false(op->type.width);
         } else if (is_zero(delta) ||
@@ -2484,11 +2484,11 @@ private:
             int bits;
 
             if (const_int(b, &ib) &&
-                ib < b.type().imax() &&
+                !b.type().is_max(ib) &&
                 is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
                 expr = Mod::make(a, make_const(a.type(), ib + 1));
             } else if (const_uint(b, &ub)) {
-                if (ub == (uint64_t)b.type().imax()) {
+                if (b.type().is_max(ub)) {
                     expr = a;
                 } else if (is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
                     expr = Mod::make(a, make_const(a.type(), ib + 1));
@@ -2506,7 +2506,7 @@ private:
             int64_t ia = 0;
             double fa = 0;
             if (ta.is_int() && const_int(a, &ia)) {
-                if (ia < 0 && ia != Int(64).imin()) {
+                if (ia < 0 && !(Int(64).is_min(ia))) {
                     ia = -ia;
                 }
                 expr = make_const(op->type, ia);
