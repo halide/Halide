@@ -160,34 +160,45 @@ private:
         uint64_t u = 0;
         if (value.type() == op->type) {
             expr = value;
-        } else if (op->type.is_int() && const_float(value, &f)) {
+        } else if (op->type.is_int() &&
+                   const_float(value, &f)) {
             // float -> int
             expr = IntImm::make(op->type, (int64_t)f);
-        } else if (op->type.is_uint() && const_float(value, &f)) {
+        } else if (op->type.is_uint() &&
+                   const_float(value, &f)) {
             // float -> uint
             expr = UIntImm::make(op->type, (uint64_t)f);
-        } else if (op->type.is_float() && const_float(value, &f)) {
+        } else if (op->type.is_float() &&
+                   const_float(value, &f)) {
             // float -> float
             expr = FloatImm::make(op->type, f);
-        } else if (op->type.is_int() && const_int(value, &i)) {
+        } else if (op->type.is_int() &&
+                   const_int(value, &i)) {
             // int -> int
             expr = IntImm::make(op->type, i);
-        } else if (op->type.is_uint() && const_int(value, &i)) {
+        } else if (op->type.is_uint() &&
+                   const_int(value, &i)) {
             // int -> uint
             expr = UIntImm::make(op->type, (uint64_t)i);
-        } else if (op->type.is_float() && const_int(value, &i)) {
+        } else if (op->type.is_float() &&
+                   const_int(value, &i)) {
             // int -> float
             expr = FloatImm::make(op->type, (double)i);
-        } else if (op->type.is_int() && const_uint(value, &u)) {
+        } else if (op->type.is_int() &&
+                   const_uint(value, &u)) {
             // uint -> int
             expr = IntImm::make(op->type, (int64_t)u);
-        } else if (op->type.is_uint() && const_uint(value, &u)) {
+        } else if (op->type.is_uint() &&
+                   const_uint(value, &u)) {
             // uint -> uint
             expr = UIntImm::make(op->type, u);
-        } else if (op->type.is_float() && const_uint(value, &u)) {
+        } else if (op->type.is_float() &&
+                   const_uint(value, &u)) {
             // uint -> float
             expr = FloatImm::make(op->type, (double)u);
-        } else if (cast && op->type.code == cast->type.code && op->type.bits < cast->type.bits) {
+        } else if (cast &&
+                   op->type.code == cast->type.code &&
+                   op->type.bits < cast->type.bits) {
             // If this is a cast of a cast of the same type, where the
             // outer cast is narrower, the inner cast can be
             // eliminated.
@@ -300,22 +311,22 @@ private:
                    ramp_b) {
             // Ramp + Ramp
             expr = mutate(Ramp::make(ramp_a->base + ramp_b->base,
-                                   ramp_a->stride + ramp_b->stride, ramp_a->width));
+                                     ramp_a->stride + ramp_b->stride, ramp_a->width));
         } else if (ramp_a &&
                    broadcast_b) {
             // Ramp + Broadcast
             expr = mutate(Ramp::make(ramp_a->base + broadcast_b->value,
-                                   ramp_a->stride, ramp_a->width));
+                                     ramp_a->stride, ramp_a->width));
         } else if (broadcast_a &&
                    ramp_b) {
             // Broadcast + Ramp
             expr = mutate(Ramp::make(broadcast_a->value + ramp_b->base,
-                                   ramp_b->stride, ramp_b->width));
+                                     ramp_b->stride, ramp_b->width));
         } else if (broadcast_a &&
                    broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value + broadcast_b->value),
-                                 broadcast_a->width);
+                                   broadcast_a->width);
 
         } else if (select_a &&
                    select_b &&
@@ -862,13 +873,18 @@ private:
             expr = a;
         } else if (is_one(b)) {
             expr = a;
-        } else if (equal(a, b) && !is_zero(b)) {
+        } else if (equal(a, b) &&
+                   !is_zero(b)) {
             expr = make_one(op->type);
-        } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
+        } else if (const_int(a, &ia) &&
+                   const_int(b, &ib) && ib) {
             expr = IntImm::make(op->type, div_imp(ia, ib));
-        } else if (const_uint(a, &ua) && const_uint(b, &ub) && ub) {
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub) && ub) {
             expr = UIntImm::make(op->type, ua / ub);
-        } else if (const_float(a, &fa) && const_float(b, &fb) && fb != 0.0f) {
+        } else if (const_float(a, &fa) &&
+                   const_float(b, &fb) &&
+                   fb != 0.0f) {
             expr = FloatImm::make(op->type, fa / fb);
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
@@ -995,7 +1011,9 @@ private:
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
-        if (const_int(b, &ib) && ib && no_overflow_scalar_int(op->type)) {
+        if (const_int(b, &ib) &&
+            ib &&
+            no_overflow_scalar_int(op->type)) {
             // If the LHS is bounded, we can possibly bail out early
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
             if (ia.max.defined() && ia.min.defined() &&
@@ -1010,8 +1028,10 @@ private:
         // If the RHS is a constant and the LHS is a ramp, do modulus
         // remainder analysis on the base.
         if (broadcast_b &&
-            const_int(broadcast_b->value, &ib) && ib &&
-            ramp_a && no_overflow_scalar_int(ramp_a->base.type())) {
+            const_int(broadcast_b->value, &ib) &&
+            ib &&
+            ramp_a &&
+            no_overflow_scalar_int(ramp_a->base.type())) {
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
@@ -1147,28 +1167,35 @@ private:
         if (equal(a, b)) {
             expr = a;
             return;
-        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+        } else if (const_int(a, &ia) &&
+                   const_int(b, &ib)) {
             expr = IntImm::make(op->type, std::min(ia, ib));
             return;
-        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
             expr = UIntImm::make(op->type, std::min(ua, ub));
             return;
-        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+        } else if (const_float(a, &fa) &&
+                   const_float(b, &fb)) {
             expr = FloatImm::make(op->type, std::min(fa, fb));
             return;
-        } else if (const_int(b, &ib) && b.type().is_max(ib)) {
+        } else if (const_int(b, &ib) &&
+                   b.type().is_max(ib)) {
             // Compute minimum of expression of type and maximum of type --> expression
             expr = a;
             return;
-        } else if (const_int(b, &ib) && b.type().is_min(ib)) {
+        } else if (const_int(b, &ib) &&
+                   b.type().is_min(ib)) {
             // Compute minimum of expression of type and minimum of type --> min of type
             expr = b;
             return;
-        } else if (const_uint(b, &ub) && b.type().is_max(ub)) {
+        } else if (const_uint(b, &ub) &&
+                   b.type().is_max(ub)) {
             // Compute minimum of expression of type and maximum of type --> expression
             expr = a;
             return;
-        } else if (op->type.is_uint() && is_zero(b)) {
+        } else if (op->type.is_uint() &&
+                   is_zero(b)) {
             // Compute minimum of expression of type and minimum of type --> min of type
             expr = b;
             return;
@@ -1364,7 +1391,6 @@ private:
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_b &&
-                   no_overflow(op->type) &&
                    equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
@@ -1410,7 +1436,7 @@ private:
                    ia &&
                    (ib % ia == 0)) {
             // min(x*8, 24) -> min(x, 3)*8
-            Expr ratio  = make_const(op->type, ib/ia);
+            Expr ratio  = make_const(op->type, ib / ia);
             Expr factor = make_const(op->type, ia);
             if (ia > 0) {
                 expr = mutate(min(mul_a->a, ratio) * factor);
@@ -1478,28 +1504,35 @@ private:
         if (equal(a, b)) {
             expr = a;
             return;
-        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+        } else if (const_int(a, &ia) &&
+                   const_int(b, &ib)) {
             expr = IntImm::make(op->type, std::max(ia, ib));
             return;
-        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
             expr = UIntImm::make(op->type, std::max(ua, ub));
             return;
-        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+        } else if (const_float(a, &fa) &&
+                   const_float(b, &fb)) {
             expr = FloatImm::make(op->type, std::max(fa, fb));
             return;
-        } else if (const_int(b, &ib) && b.type().is_min(ib)) {
+        } else if (const_int(b, &ib) &&
+                   b.type().is_min(ib)) {
             // Compute maximum of expression of type and minimum of type --> expression
             expr = a;
             return;
-        } else if (const_int(b, &ib) && b.type().is_max(ib)) {
+        } else if (const_int(b, &ib) &&
+                   b.type().is_max(ib)) {
             // Compute maximum of expression of type and maximum of type --> max of type
             expr = b;
             return;
-        } else if (op->type.is_uint() && is_zero(b)) {
+        } else if (op->type.is_uint() &&
+                   is_zero(b)) {
             // Compute maximum of expression of type and minimum of type --> expression
             expr = a;
             return;
-        } else if (const_uint(b, &ub) && b.type().is_max(ub)) {
+        } else if (const_uint(b, &ub) &&
+                   b.type().is_max(ub)) {
             // Compute maximum of expression of type and maximum of type --> max of type
             expr = b;
             return;
@@ -1716,7 +1749,7 @@ private:
                    ia &&
                    (ib % ia == 0)) {
             // max(x*8, 24) -> max(x, 3)*8
-            Expr ratio = make_const(op->type, ib/ia);
+            Expr ratio = make_const(op->type, ib / ia);
             Expr factor = make_const(op->type, ia);
             if (ia > 0) {
                 expr = mutate(max(mul_a->a, ratio) * factor);
@@ -1876,7 +1909,8 @@ private:
         }
 
         ModulusRemainder mod_rem(0, 1);
-        if (delta_ramp && no_overflow_scalar_int(delta_ramp->base.type())) {
+        if (delta_ramp &&
+            no_overflow_scalar_int(delta_ramp->base.type())) {
             // Do modulus remainder analysis on the base.
             mod_rem = modulus_remainder(delta_ramp->base, alignment_info);
         }
@@ -1885,11 +1919,14 @@ private:
         // ia and/or ib are large unsigned integer constants, especially when
         // int is 32 bits on the machine.
         // Explicit comparison is preferred.
-        if (const_int(a, &ia) && const_int(b, &ib)) {
+        if (const_int(a, &ia) &&
+            const_int(b, &ib)) {
             expr = make_bool(ia < ib, op->type.width);
-        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
             expr = make_bool(ua < ub, op->type.width);
-        } else if (const_int(a, &ia) && a.type().is_max(ia)) {
+        } else if (const_int(a, &ia) &&
+                   a.type().is_max(ia)) {
             // Comparing maximum of type < expression of type.  This can never be true.
             expr = const_false(op->type.width);
         } else if (const_int(b, &ib) &&
@@ -2102,24 +2139,34 @@ private:
         } else if (equal(a, b)) {
             // a && a -> a
             expr = a;
-        } else if (le_a && le_b && equal(le_a->a, le_b->a)) {
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->a, le_b->a)) {
             // (x <= foo && x <= bar) -> x <= min(foo, bar)
             expr = mutate(le_a->a <= min(le_a->b, le_b->b));
-        } else if (le_a && le_b && equal(le_a->b, le_b->b)) {
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->b, le_b->b)) {
             // (foo <= x && bar <= x) -> max(foo, bar) <= x
             expr = mutate(max(le_a->a, le_b->a) <= le_a->b);
-        } else if (lt_a && lt_b && equal(lt_a->a, lt_b->a)) {
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->a, lt_b->a)) {
             // (x < foo && x < bar) -> x < min(foo, bar)
             expr = mutate(lt_a->a < min(lt_a->b, lt_b->b));
-        } else if (lt_a && lt_b && equal(lt_a->b, lt_b->b)) {
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->b, lt_b->b)) {
             // (foo < x && bar < x) -> max(foo, bar) < x
             expr = mutate(max(lt_a->a, lt_b->a) < lt_a->b);
-        } else if (eq_a && neq_b &&
+        } else if (eq_a &&
+                   neq_b &&
                    ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
                     (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
             // a == b && a != b
             expr = const_false(op->type.width);
-        } else if (eq_b && neq_a &&
+        } else if (eq_b &&
+                   neq_a &&
                    ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
                     (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
             // a != b && a == b
@@ -2128,21 +2175,25 @@ private:
                    (not_b && equal(not_b->a, a))) {
             // a && !a
             expr = const_false(op->type.width);
-        } else if (le_a && lt_b &&
+        } else if (le_a &&
+                   lt_b &&
                    equal(le_a->a, lt_b->b) &&
                    equal(le_a->b, lt_b->a)) {
             // a <= b && b < a
             expr = const_false(op->type.width);
-        } else if (lt_a && le_b &&
+        } else if (lt_a &&
+                   le_b &&
                    equal(lt_a->a, le_b->b) &&
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
             expr = const_false(op->type.width);
-        } else if (broadcast_a && broadcast_b &&
+        } else if (broadcast_a &&
+                   broadcast_b &&
                    broadcast_a->width == broadcast_b->width) {
             // x8(a) && x8(b) -> x8(a && b)
             expr = Broadcast::make(mutate(And::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
-        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+        } else if (a.same_as(op->a) &&
+                   b.same_as(op->b)) {
             expr = op;
         } else {
             expr = And::make(a, b);
@@ -2176,12 +2227,14 @@ private:
             expr = a;
         } else if (equal(a, b)) {
             expr = a;
-        } else if (eq_a && neq_b &&
+        } else if (eq_a &&
+                   neq_b &&
                    ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
                     (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
             // a == b || a != b
             expr = const_true(op->type.width);
-        } else if (neq_a && eq_b &&
+        } else if (neq_a &&
+                   eq_b &&
                    ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
                     (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
             // a != b || a == b
@@ -2190,17 +2243,20 @@ private:
                    (not_b && equal(not_b->a, a))) {
             // a || !a
             expr = const_true(op->type.width);
-        } else if (le_a && lt_b &&
+        } else if (le_a &&
+                   lt_b &&
                    equal(le_a->a, lt_b->b) &&
                    equal(le_a->b, lt_b->a)) {
             // a <= b || b < a
             expr = const_true(op->type.width);
-        } else if (lt_a && le_b &&
+        } else if (lt_a &&
+                   le_b &&
                    equal(lt_a->a, le_b->b) &&
                    equal(lt_a->b, le_b->a)) {
             // a < b || b <= a
             expr = const_true(op->type.width);
-        } else if (broadcast_a && broadcast_b &&
+        } else if (broadcast_a &&
+                   broadcast_b &&
                    broadcast_a->width == broadcast_b->width) {
             // x8(a) || x8(b) -> x8(a || b)
             expr = Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
@@ -2269,7 +2325,9 @@ private:
                    equal(ct->args[0], false_value)) {
             // select(cond, likely(a), a) -> likely(a)
             expr = true_value;
-        } else if (cf && cf->name == Call::likely && cf->call_type == Call::Intrinsic &&
+        } else if (cf &&
+                   cf->name == Call::likely &&
+                   cf->call_type == Call::Intrinsic &&
                    equal(cf->args[0], true_value)) {
             // select(cond, a, likely(a)) -> likely(a)
             expr = false_value;
@@ -2981,7 +3039,8 @@ private:
                 stmt = rest;
             } else if (is_no_op(rest)) {
                 stmt = first;
-            } else if (let_first && let_rest &&
+            } else if (let_first &&
+                       let_rest &&
                        equal(let_first->value, let_rest->value)) {
 
                 // Do both first and rest start with the same let statement (occurs when unrolling).
@@ -2996,7 +3055,9 @@ private:
                 }
 
                 stmt = LetStmt::make(let_first->name, let_first->value, new_block);
-            } else if (if_first && if_rest && equal(if_first->condition, if_rest->condition)) {
+            } else if (if_first &&
+                       if_rest &&
+                       equal(if_first->condition, if_rest->condition)) {
                 Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
                 Stmt else_case;
                 if (if_first->else_case.defined() && if_rest->else_case.defined()) {
@@ -3008,7 +3069,8 @@ private:
                     else_case = if_rest->else_case;
                 }
                 stmt = IfThenElse::make(if_first->condition, then_case, else_case);
-            } else if (op->first.same_as(first) && op->rest.same_as(rest)) {
+            } else if (op->first.same_as(first) &&
+                       op->rest.same_as(rest)) {
                 stmt = op;
             } else {
                 stmt = Block::make(first, rest);
