@@ -436,8 +436,9 @@ void CodeGen_GLSL::visit(const Call *op) {
         rhs << "texture2D(" << print_name(buffername) << ", vec2("
             << print_expr(op->args[2]) << ", "
             << print_expr(op->args[3]) << "))";
-        if (op->type.is_uint())
-            rhs << " * " << op->type.imax() << ".0";
+        if (op->type.is_uint()) {
+            rhs << " * " << print_expr(cast<float>(op->type.max()));
+        }
 
     } else if (op->name == Call::glsl_texture_store) {
         internal_assert(op->args.size() == 6);
@@ -445,8 +446,9 @@ void CodeGen_GLSL::visit(const Call *op) {
         do_indent();
         stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                << " = " << sval;
-        if (op->args[5].type().is_uint())
-            stream << " / " << op->args[5].type().imax() << ".0";
+        if (op->args[5].type().is_uint()) {
+            stream << " / " << print_expr(cast<float>(op->args[5].type().max()));
+        }
         stream << ";\n";
         // glsl_texture_store is called only for its side effect; there is
         // no return value.
@@ -537,12 +539,12 @@ void CodeGen_GLSL::visit(const Call *op) {
             // Normalize integer weights to [0.0f, 1.0f] range.
             internal_assert(weight.type().bits < 32);
             weight = Div::make(Cast::make(Float(32), weight),
-                               Cast::make(Float(32), weight.type().imax()));
+                               Cast::make(Float(32), weight.type().max()));
         } else if (op->type.is_uint()) {
             // Round float weights down to next multiple of (1/op->type.imax())
             // to give same results as lerp based on integer arithmetic.
             internal_assert(op->type.bits < 32);
-            weight = floor(weight * op->type.imax()) / op->type.imax();
+            weight = floor(weight * op->type.max()) / op->type.max();
         }
 
         Type result_type = Float(32, op->type.width);

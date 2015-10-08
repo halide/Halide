@@ -250,7 +250,6 @@ SOURCE_FILES = \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
-  Expr.cpp \
   ExprUsesVar.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -488,7 +487,6 @@ RUNTIME_CPP_COMPONENTS = \
   posix_error_handler \
   posix_get_symbol \
   posix_io \
-  posix_math \
   posix_print \
   posix_thread_pool \
   profiler \

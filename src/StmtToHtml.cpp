@@ -139,14 +139,22 @@ private:
 
     void visit(const IntImm *op){
         stream << open_span("IntImm Imm");
-        stream << op->value;
+        stream << Expr(op);
         stream << close_span();
     }
+
+    void visit(const UIntImm *op){
+        stream << open_span("UIntImm Imm");
+        stream << Expr(op);
+        stream << close_span();
+    }
+
     void visit(const FloatImm *op){
         stream << open_span("FloatImm Imm");
-        stream << op->value << 'f';
+        stream << Expr(op);
         stream << close_span();
     }
+
     void visit(const StringImm *op){
         stream << open_span("StringImm");
         stream << '"';

@@ -210,11 +210,31 @@ void IRPrinter::do_indent() {
 }
 
 void IRPrinter::visit(const IntImm *op) {
-    stream << op->value;
+    if (op->type == Int(32)) {
+        stream << op->value;
+    } else {
+        stream << "(" << op->type << ")" << op->value;
+    }
+}
+
+void IRPrinter::visit(const UIntImm *op) {
+    stream << "(" << op->type << ")" << op->value;
 }
 
 void IRPrinter::visit(const FloatImm *op) {
-    stream << op->value << 'f';
+    switch (op->type.bits) {
+    case 64:
+        stream << op->value;
+        break;
+    case 32:
+        stream << op->value << 'f';
+        break;
+    case 16:
+        stream << op->value << 'h';
+        break;
+    default:
+        internal_error << "Bad bit-width for float: " << op->type << "\n";
+    }
 }
 
 void IRPrinter::visit(const StringImm *op) {

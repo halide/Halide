@@ -6,11 +6,8 @@ using namespace Halide::Internal;
 
 template<typename T>
 bool constant_expr_equals(Expr expr, T expected) {
-    T actual;
-    if (scalar_from_constant_expr(expr, &actual)) {
-        return expected == actual;
-    }
-    return false;
+    return (expr.type() == type_of<T>() &&
+            is_one(simplify(expr == Expr(expected))));
 }
 
 int main(int argc, char **argv) {
@@ -27,7 +24,7 @@ int main(int argc, char **argv) {
         Param<float> frac("frac", 22.5f, 11.25f, 1e30f);
         // Named so that it will come last.
         const uint64_t kU64 = 0xf00dcafedeadbeef;
-        Param<uint64_t> z_unsigned("z_unsigned", 0xdeadbeef, 0x01, scalar_to_constant_expr(kU64));
+        Param<uint64_t> z_unsigned("z_unsigned", 0xdeadbeef, 0x01, Expr(kU64));
 
         Var x("x"), y("y"), c("c");
 

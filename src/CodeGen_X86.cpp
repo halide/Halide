@@ -75,45 +75,6 @@ Expr _f64(Expr e) {
 
 namespace {
 
-// Attempt to cast an expression to a smaller type while provably not
-// losing information. If it can't be done, return an undefined Expr.
-
-Expr lossless_cast(Type t, Expr e) {
-    if (t == e.type()) {
-        return e;
-    } else if (t.can_represent(e.type())) {
-        return cast(t, e);
-    }
-
-    if (const Cast *c = e.as<Cast>()) {
-        if (t == c->value.type()) {
-            return c->value;
-        } else {
-            return lossless_cast(t, c->value);
-        }
-    }
-
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value);
-        if (v.defined()) {
-            return Broadcast::make(v, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = e.as<IntImm>()) {
-        int x = int_cast_constant(t, i->value);
-        if (x == i->value) {
-            return cast(t, e);
-        } else {
-            return Expr();
-        }
-    }
-
-    return Expr();
-}
-
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
 // interleaving a, c, and b, d, and then using pmaddwd. We
 // recognize it here, and implement it in the initial module.
@@ -287,7 +248,6 @@ void CodeGen_X86::visit(const Select *op) {
         {"pblendvb_i8x16", select(wild_u1x_, wild_u8x_, wild_u8x_)}
     };
 
-
     if (target.has_feature(Target::SSE41) &&
         op->condition.type().is_vector() &&
         op->type.bits == 8 &&
@@ -416,12 +376,9 @@ void CodeGen_X86::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     // Detect if it's a small int division
-    const Broadcast *broadcast = op->b.as<Broadcast>();
-    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;
-    const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
-    if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
-    if (!int_imm) int_imm = op->b.as<IntImm>();
-    int const_divisor = int_imm ? int_imm->value : 0;
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
+
     int shift_amount;
     bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
 
@@ -434,22 +391,23 @@ void CodeGen_X86::visit(const Div *op) {
         Value *numerator = codegen(op->a);
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateLShr(numerator, shift);
-    } else if (op->type.is_int() &&
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
                (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
-               const_divisor > 1 &&
-               ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
+               *const_int_divisor > 1 &&
+               ((op->type.bits > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
         int64_t multiplier, shift;
         if (op->type.bits == 32) {
-            multiplier = IntegerDivision::table_s32[const_divisor][2];
-            shift      = IntegerDivision::table_s32[const_divisor][3];
+            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
         } else if (op->type.bits == 16) {
-            multiplier = IntegerDivision::table_s16[const_divisor][2];
-            shift      = IntegerDivision::table_s16[const_divisor][3];
+            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[const_divisor][2];
-            shift      = IntegerDivision::table_s8[const_divisor][3];
+            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
         }
 
         Value *val = codegen(op->a);
@@ -486,23 +444,24 @@ void CodeGen_X86::visit(const Div *op) {
         // Maybe flip the bits again
         value = builder->CreateXor(val, sign);
 
-    } else if (op->type.is_uint() &&
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
                (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
-               const_divisor > 1 && const_divisor < 256) {
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
 
         int64_t method, multiplier, shift;
         if (op->type.bits == 32) {
-            method     = IntegerDivision::table_u32[const_divisor][1];
-            multiplier = IntegerDivision::table_u32[const_divisor][2];
-            shift      = IntegerDivision::table_u32[const_divisor][3];
+            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
         } else if (op->type.bits == 16) {
-            method     = IntegerDivision::table_u16[const_divisor][1];
-            multiplier = IntegerDivision::table_u16[const_divisor][2];
-            shift      = IntegerDivision::table_u16[const_divisor][3];
+            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
         } else {
-            method     = IntegerDivision::table_u8[const_divisor][1];
-            multiplier = IntegerDivision::table_u8[const_divisor][2];
-            shift      = IntegerDivision::table_u8[const_divisor][3];
+            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
         }
 
         internal_assert(method != 0)

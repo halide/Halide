@@ -41,6 +41,7 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
 }
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
+void IRMutator::visit(const UIntImm *op)   {expr = op;}
 void IRMutator::visit(const FloatImm *op) {expr = op;}
 void IRMutator::visit(const StringImm *op) {expr = op;}
 void IRMutator::visit(const Variable *op) {expr = op;}
