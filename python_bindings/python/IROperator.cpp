@@ -220,19 +220,59 @@ void defineOperators()
 {
     // defined in IROperator.h
 
-    p::def("max", &h::max,
+    h::Expr (*max_exprs)(h::Expr, h::Expr) = &h::max;
+    h::Expr (*max_expr_int)(h::Expr, int)  = &h::max;
+    h::Expr (*max_int_expr)(int, h::Expr)  = &h::max;
+
+    h::Expr (*min_exprs)(h::Expr, h::Expr) = &h::min;
+    h::Expr (*min_expr_int)(h::Expr, int)  = &h::min;
+    h::Expr (*min_int_expr)(int, h::Expr)  = &h::min;
+
+    p::def("max", max_exprs,
            p::args("a", "b"),
            "Returns an expression representing the greater of the two "
            "arguments, after doing any necessary type coercion using "
-           "\\ref Internal::match_types. Vectorizes cleanly on most platforms "
+           "Internal::match_types. Vectorizes cleanly on most platforms "
            "(with the exception of integer types on x86 without SSE4).");
 
-    p::def("min", &h::min,
+    p::def("max", max_expr_int,
+           p::args("a", "b"),
+           "Returns an expression representing the greater of an expression"
+           " and a constant integer.  The integer is coerced to the type of the"
+           " expression. Errors if the integer is not representable as that"
+           " type. Vectorizes cleanly on most platforms (with the exception of"
+           " integer types on x86 without SSE4).");
+
+    p::def("max", max_int_expr,
+           p::args("a", "b"),
+           "Returns an expression representing the greater of a constant"
+           " integer and an expression. The integer is coerced to the type of"
+           " the expression. Errors if the integer is not representable as that"
+           " type. Vectorizes cleanly on most platforms (with the exception of"
+           " integer types on x86 without SSE4).");
+
+    p::def("min", min_exprs,
            p::args("a", "b"),
            "Returns an expression representing the greater of the two "
            "arguments, after doing any necessary type coercion using "
-           "\\ref Internal::match_types. Vectorizes cleanly on most platforms "
+           "Internal::match_types. Vectorizes cleanly on most platforms "
            "(with the exception of integer types on x86 without SSE4).");
+
+    p::def("min", min_expr_int,
+           p::args("a", "b"),
+           "Returns an expression representing the lesser of an expression"
+           " and a constant integer.  The integer is coerced to the type of the"
+           " expression. Errors if the integer is not representable as that"
+           " type. Vectorizes cleanly on most platforms (with the exception of"
+           " integer types on x86 without SSE4).");
+
+    p::def("min", min_int_expr,
+           p::args("a", "b"),
+           "Returns an expression representing the lesser of a constant"
+           " integer and an expression. The integer is coerced to the type of"
+           " the expression. Errors if the integer is not representable as that"
+           " type. Vectorizes cleanly on most platforms (with the exception of"
+           " integer types on x86 without SSE4).");
 
     p::def("clamp", &h::clamp,
            p::args("a", "min_val", "max_val"),
