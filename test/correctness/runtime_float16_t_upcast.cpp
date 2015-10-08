@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits>
+#include "float_helpers.h"
 
 // FIXME: We should use a proper framework for this. See issue #898
 void h_assert(bool condition, const char *msg) {
@@ -10,24 +11,6 @@ void h_assert(bool condition, const char *msg) {
         printf("FAIL: %s\n", msg);
         abort();
     }
-}
-
-float float_from_bits(uint32_t bits) {
-    union {
-        float asFloat;
-        uint32_t asUInt;
-    } out;
-    out.asUInt = bits;
-    return out.asFloat;
-}
-
-double double_from_bits(uint64_t bits) {
-    union {
-        double asDouble;
-        uint64_t asUInt;
-    } out;
-    out.asUInt = bits;
-    return out.asDouble;
 }
 
 int main() {

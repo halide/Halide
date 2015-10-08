@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cinttypes>
 #include <vector>
+#include "float_helpers.h"
 
 using namespace Halide;
 
@@ -13,43 +14,6 @@ void h_assert(bool condition, const char *msg) {
         abort();
     }
 }
-
-uint32_t bits_from_float(float v) {
-    union {
-        float asFloat;
-        uint32_t asUInt;
-    } out;
-    out.asFloat = v;
-    return out.asUInt;
-}
-
-float float_from_bits(uint32_t bits) {
-    union {
-        float asFloat;
-        uint32_t asUInt;
-    } out;
-    out.asUInt = bits;
-    return out.asFloat;
-}
-
-double double_from_bits(uint64_t bits) {
-    union {
-        double asDouble;
-        uint64_t asUInt;
-    } out;
-    out.asUInt = bits;
-    return out.asDouble;
-}
-
-uint64_t bits_from_double(double v) {
-    union {
-        double asDouble;
-        uint64_t asUInt;
-    } out;
-    out.asDouble = v;
-    return out.asUInt;
-}
-
 
 uint16_t inputs[] = {
   0x0000, // +ve zero

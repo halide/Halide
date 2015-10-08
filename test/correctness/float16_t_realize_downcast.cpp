@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <limits>
 #include <vector>
+#include "float_helpers.h"
 
 using namespace Halide;
 
@@ -16,41 +17,6 @@ void h_assert(bool condition, const char *msg) {
     }
 }
 
-float float_from_bits(uint32_t bits) {
-    union {
-        float asFloat;
-        uint32_t asUInt;
-    } out;
-    out.asUInt = bits;
-    return out.asFloat;
-}
-
-uint32_t float_to_bits(float value) {
-    union {
-        float asFloat;
-        uint32_t asUInt;
-    } out;
-    out.asFloat = value;
-    return out.asUInt;
-}
-
-double double_from_bits(uint64_t bits) {
-    union {
-        double asDouble;
-        uint64_t asUInt;
-    } out;
-    out.asUInt = bits;
-    return out.asDouble;
-}
-
-uint64_t double_to_bits(double value) {
-    union {
-        double asDouble;
-        uint64_t asUInt;
-    } out;
-    out.asDouble = value;
-    return out.asUInt;
-}
 struct Result {
     uint16_t RZ; // Result for round to Zero
     uint16_t RU; // Result for round to +ve infinity
@@ -519,12 +485,12 @@ void checkResults(Image<float16_t>& expected, Image<float16_t>& result) {
               if (sizeof(T) == sizeof(float)) {
                   std::pair<float,Result> resultPair = floatToFloat16Results[index];
                   r = resultPair.second;
-                  printf("Input: 0x%.8" PRIx32 "(~%f)\n", float_to_bits(resultPair.first), resultPair.first);
+                  printf("Input: 0x%.8" PRIx32 "(~%f)\n", bits_from_float(resultPair.first), resultPair.first);
               } else {
                   h_assert(sizeof(T) == sizeof(double), "wrong type?");
                   std::pair<double,Result> resultPair = doubleToFloat16Results[index];
                   r = resultPair.second;
-                  printf("Input: 0x%.16" PRIx64 "(~%f)\n", double_to_bits(resultPair.first), resultPair.first);
+                  printf("Input: 0x%.16" PRIx64 "(~%f)\n", bits_from_double(resultPair.first), resultPair.first);
               }
               printf("Expected result as RZ: 0x%.4" PRIx16 "\n", r.RZ);
               printf("Expected result as RU: 0x%.4" PRIx16 "\n", r.RU);
