@@ -222,12 +222,18 @@ void IRPrinter::visit(const UIntImm *op) {
 }
 
 void IRPrinter::visit(const FloatImm *op) {
-    if (op->type.bits == 32) {
-        stream << op->value << 'f';
-    } else if (op->type.bits == 64) {
+    switch (op->type.bits) {
+    case 64:
         stream << op->value;
-    } else {
-        stream << "(float16_t)(" << op->value << ")";
+        break;
+    case 32:
+        stream << op->value << 'f';
+        break;
+    case 16:
+        stream << op->value << 'h';
+        break;
+    default:
+        internal_error << "Bad bit-width for float: " << op->type << "\n";
     }
 }
 
