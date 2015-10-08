@@ -1593,7 +1593,7 @@ Expr promote_64(Expr e) {
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module);
-    if (d.getPointerSize() == 8) {
+    if (promote_indices() && d.getPointerSize() == 8) {
         index = promote_64(index);
     }
 
