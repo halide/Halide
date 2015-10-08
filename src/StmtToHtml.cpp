@@ -139,25 +139,22 @@ private:
 
     void visit(const IntImm *op){
         stream << open_span("IntImm Imm");
-        stream << op->value;
+        stream << Expr(op);
         stream << close_span();
     }
+
     void visit(const UIntImm *op){
         stream << open_span("UIntImm Imm");
-        stream << op->value;
+        stream << Expr(op);
         stream << close_span();
     }
+
     void visit(const FloatImm *op){
         stream << open_span("FloatImm Imm");
-        if (op->type.bits == 64) {
-            stream << op->value;
-        } else if (op->type.bits == 32) {
-            stream << op->value << 'f';
-        } else if (op->type.bits == 16) {
-            stream << "(float16_t)" << op->value;
-        }
+        stream << Expr(op);
         stream << close_span();
     }
+
     void visit(const StringImm *op){
         stream << open_span("StringImm");
         stream << '"';
