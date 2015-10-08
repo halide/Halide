@@ -15,6 +15,7 @@
 #include "Function.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
+#include "RoundingMode.h"
 #include "Type.h"
 #include "Util.h"
 
@@ -28,7 +29,11 @@ namespace Internal {
  * widths. */
 struct Cast : public ExprNode<Cast> {
     Expr value;
+    RoundingMode roundingMode;
 
+    EXPORT static Expr make(Type t, Expr v, RoundingMode rm);
+    /** Make a cast with an undefined rounding mode
+     */
     EXPORT static Expr make(Type t, Expr v);
 };
 

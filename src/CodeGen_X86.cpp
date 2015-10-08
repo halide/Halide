@@ -306,10 +306,249 @@ void CodeGen_X86::visit(const Select *op) {
 
 }
 
+bool CodeGen_X86::try_visit_float16_cast(const Cast* op) {
+    Type destTy = op->type;
+    Type srcTy = op->value.type();
+
+    // half -> single/double
+    if (destTy.is_float() && srcTy.is_float() && srcTy.bits == 16 && destTy.bits > 16) {
+        internal_assert(destTy.bits == 64 || destTy.bits == 32) << "Unexpected float type\n";
+
+        if (target_needs_software_cast_from_float16_to(destTy)) {
+            // Let parent class codegen calling software implementation of cast
+            return false;
+        }
+
+        // Use @llvm.x86.vcvtph2ps.128 or @llvm.x86.vcvtph2ps.256 to handle the
+        // conversion
+        internal_assert(srcTy.width == destTy.width) << "Source and destination widths must match\n";
+        if (srcTy.width <= 4) {
+            // Use @llvm.x86.vcvtph2ps.128. This returns <4 x float>
+            // FIXME: Codegen using other widths (e.g. 3) seems to give wrong
+            // results explicitly disable until this can be investigated.
+            internal_assert(srcTy.width == 4 || srcTy.width == 1) <<
+              "FIXME: Doing codegen with width less than four produces incorrect results\n";
+
+            // Codegen argument
+            llvm::Value* valueToCast = codegen(op->value);
+
+            // Note with width is 8 here because that is what is expected by
+            // the instrinsic. Only the first 4 lanes matter here.
+            // Slice to correct width
+            if (srcTy.width == 1) {
+                // Handle scalar value by inserting as the first element
+                // in a vector
+                internal_assert(!(valueToCast->getType()->isVectorTy()));
+                Constant* zeroHalfVectorSplat = ConstantFP::get(f16x8, 0.0);
+                valueToCast = builder->CreateInsertElement(/*Vec=*/zeroHalfVectorSplat,
+                                                           /*NewElt=*/valueToCast,
+                                                           /*Idx=*/ConstantInt::get(i32, 0)
+                                                          );
+            } else {
+                // Handle vectorized inputs by extending to correct width.
+                // Introduced undef lanes will be removed later.
+                valueToCast = slice_vector(valueToCast, /*start=*/0, /*size=*/8);
+            }
+
+            // Cast argument to <8 x i16> as expected by the intrinsic
+            valueToCast = builder->CreateBitCast(valueToCast, i16x8);
+
+            // Can't use call_intrin() because it asserts the number of elements
+            // in the source and dest match so call it manually.
+            llvm::Function* fn = module->getFunction("llvm.x86.vcvtph2ps.128");
+            internal_assert(fn != nullptr) << "Could not find intrinsic\n";
+
+            llvm::Value* result = builder->CreateCall(fn, { valueToCast });
+
+            if (destTy.bits == 64) {
+                // Cast the single to double
+                result = builder->CreateFPExt(result, f64x4);
+            }
+
+            if (srcTy.width == 1) {
+                // Handling a scalar value so extract the element we want
+                result = builder->CreateExtractElement(/*Vec=*/result,
+                                                       /*Idx=*/ConstantInt::get(i32, 0)
+                                                      );
+            } else {
+                // Remove undef lanes that might have been introduced by first
+                // call to slice_vector()
+                result = slice_vector(result, /*start=*/0, /*size=*/destTy.width);
+            }
+
+            value = result;
+        } else {
+            // Use @llvm.x86.vcvtph2ps.256 this results <8x float>
+            // The number of elements in the argument and result match
+            // so we can use call_intrin() here.
+
+            // Codegen the argument
+            llvm::Value* valueToCast = codegen(op->value);
+            // Bitcast the argument to the right type
+            // e.g. <8 x half> ==> <8 x i16>
+            int numElements = 0;
+            if (llvm::VectorType* vecTy = dyn_cast<VectorType>(valueToCast->getType())) {
+                numElements = vecTy->getNumElements();
+            } else {
+                internal_error << "Expecting vector type\n";
+            }
+            llvm::Type* newVectorType = VectorType::get(i16, numElements);
+            valueToCast = builder->CreateBitCast(valueToCast, newVectorType);
+
+
+            // Explicitly make a type because when are working with doubles
+            // we shouldn't use "destTy".
+            llvm::Type* returnTy = VectorType::get(f32, destTy.width);
+            llvm::Value* result = call_intrin(/*result_type=*/returnTy,
+                                              /*intrin_vector_width=*/8,
+                                              /*name=*/"llvm.x86.vcvtph2ps.256",
+                                              /*arg_values=*/{ valueToCast }
+                                             );
+
+            if (destTy.bits == 64) {
+                // Cast the single to double. It's width is not necessarily a
+                // fp64x8 so we need to construct a new type representing a
+                // vector of the right number of doubles
+                llvm::Type* newDblVectorType = VectorType::get(f64, destTy.width);
+                result = builder->CreateFPExt(result, newDblVectorType);
+            }
+
+            value = result;
+        }
+        return true;
+    }
+
+    // single -> half
+    // There is no native "double -> half" support. The software implementation
+    // will be used for this
+    if (destTy.is_float() && srcTy.is_float() && srcTy.bits == 32 && destTy.bits == 16) {
+        internal_assert(srcTy.width == destTy.width) << "Source and destination widths must match\n";
+        if (target_needs_software_cast_to_float16_from(srcTy, op->roundingMode)) {
+            // Let parent class codegen calling software implementation of cast
+            return false;
+        }
+
+        // Set the rounding arg mode argument that will be passed to the
+        // vcvtps2ph intrinsic.
+        // See "Table 4-17 Immediate Byte Encoding for 16-bit Floating-Point
+        // Conversion Instructions" from "Intel 64 and IA-32 Architectures
+        // Software Developer’s Manual"
+        Constant* roundingModeArg = nullptr;
+        switch (op->roundingMode) {
+            case RoundingMode::TowardZero:
+                roundingModeArg = ConstantInt::get(i32, 3, /*isSigned=*/false);
+                break;
+            case RoundingMode::ToNearestTiesToEven:
+                roundingModeArg = ConstantInt::get(i32, 0, /*isSigned=*/false);
+                break;
+            case RoundingMode::TowardPositiveInfinity:
+                roundingModeArg = ConstantInt::get(i32, 2, /*isSigned=*/false);
+                break;
+            case RoundingMode::TowardNegativeInfinity:
+                roundingModeArg = ConstantInt::get(i32, 1, /*isSigned=*/false);
+                break;
+            default:
+                internal_error << "Unsupported rounding mode\n";
+        }
+        internal_assert(roundingModeArg != nullptr);
+
+        // Codegen argument
+        llvm::Value* valueToCast = codegen(op->value);
+
+        // Use @llvm.x86.vcvtps2ph.128 or @llvm.x86.vcvtps2ph.256 to handle the
+        // conversion
+        if (srcTy.width <= 4) {
+            // Use
+            // <8 x i16> @llvm.x86.vcvtps2ph.128(<4 x float> %a, i32 %roundingMode) readnone
+            // Note that only the first 4 lanes in the returned <8 xi16> are
+            // relevant so we'll need to slice the vector afterwards
+
+            // FIXME: Codegen using other widths (e.g. 3) seems to give wrong
+            // results explicitly disable until this can be investigated.
+            internal_assert(srcTy.width == 4 || srcTy.width == 1) <<
+              "FIXME: Doing codegen with width less than four produces incorrect results\n";
+
+            if (srcTy.width == 1) {
+                // Handle scalar value by inserting as the first element in a
+                // vector
+                Constant* zeroFloatVectorSplat = ConstantFP::get(f32x4, 0.0);
+                valueToCast = builder->CreateInsertElement(/*Vec=*/zeroFloatVectorSplat,
+                                                           /*NewElt=*/valueToCast,
+                                                           /*Idx=*/ConstantInt::get(i32, 0)
+                                                          );
+            } else {
+                // Handle vectorized inputs by extending to correct width.
+                // Introduced undef lanes will be removed later
+                valueToCast = slice_vector(valueToCast, /*start=*/0, /*size=*/4);
+            }
+
+            // Can't use call_intrin() because it asserts the number of elements
+            // in the source and dest match so call it manually.
+            llvm::Function* fn = module->getFunction("llvm.x86.vcvtps2ph.128");
+            internal_assert(fn != nullptr) << "Could not find intrinsic\n";
+
+            std::vector<Value*> args = {valueToCast, roundingModeArg};
+            llvm::Value* result = builder->CreateCall(fn, args);
+
+            // Bitcast the result to half <8 x i16> -> <8 x half>
+            result = builder->CreateBitCast(result, f16x8);
+
+            if (srcTy.width == 1) {
+                // Handling scalar value to extract the element we want
+                result = builder->CreateExtractElement(/*Vec=*/result,
+                                                       /*Idx=*/ConstantInt::get(i32, 0)
+                                                      );
+            } else {
+                // We get a <8 x i16> back. We don't need all these lanes so
+                // slice out the lanes we want
+                result = slice_vector(result, /*start=*/0, /*size=*/srcTy.width);
+            }
+
+            value=result;
+
+        } else {
+            // Use
+            // <8 x i16> @llvm.x86.vcvtps2ph.256(<8 x float> %a, i32 %roundingMode) readnone
+            // The number of elements in the input vector match the output so we
+            // can use call_intrin() here
+
+            // Type is not necessarily <8 x i16>
+            llvm::Type* outputVectorType = VectorType::get(i16, srcTy.width);
+            llvm::Value* result = call_intrin(/*result_type=*/outputVectorType,
+                                             /*intrin_vector_width=*/8,
+                                             /*name=*/"llvm.x86.vcvtps2ph.256",
+                                             /*arg_values=*/{ valueToCast,
+                                                              roundingModeArg}
+                                            );
+
+            // Cast <? x i16> to <? x half>
+            int numElements = 0;
+            if (llvm::VectorType* vecTy = dyn_cast<llvm::VectorType>(result->getType())) {
+                numElements = vecTy->getNumElements();
+            } else {
+                internal_error << "Not vector type\n";
+            }
+            // Bitcast the result to a vector of halfs
+            llvm::Type* newHalfVectorType = VectorType::get(f16, numElements);
+            result = builder->CreateBitCast(result, newHalfVectorType);
+            value = result;
+        }
+        return true;
+    }
+
+    // Not a half conversion
+    return false;
+}
+
 void CodeGen_X86::visit(const Cast *op) {
+    if (try_visit_float16_cast(op)) {
+        // Doing cast using a Float16 which has already been handled
+        return;
+    }
+
 
     if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+        // We only have peephole optimizations for vectors from this point on
         CodeGen_Posix::visit(op);
         return;
     }
@@ -679,6 +918,51 @@ int CodeGen_X86::native_vector_bits() const {
     } else {
         return 128;
     }
+}
+
+bool CodeGen_X86::target_needs_software_cast_from_float16_to(Type t) const {
+    internal_assert(t.bits == 32 || t.bits == 64);
+    internal_assert(t.is_float());
+    // float16 -> t
+    internal_assert(t.is_float()) << "float16 -> t, where is not a float type not supported\n";
+    if (target.has_feature(Target::F16C)) {
+        // vcvtph2ps can handle float16 -> float
+        // and float16 -> double can be handled by doing
+        // a ``fpextend`` after using vcvtph2ps
+        return false;
+    }
+
+    // Without F16C there is no hardware support so must use
+    // software implementation
+    return true;
+}
+
+bool CodeGen_X86::target_needs_software_cast_to_float16_from(Type t, RoundingMode rm) const {
+    internal_assert(t.bits == 32 || t.bits == 64);
+    internal_assert(t.is_float());
+    internal_assert(rm != RoundingMode::Undefined) << "Rounding mode cannot be undefined\n";
+    if (target.has_feature(Target::F16C)) {
+        if (t.bits == 32) {
+            // vcvtps2ph can handle float -> float16
+            // provided the rounding mode is one support by the instruction
+            if (rm == RoundingMode::ToNearestTiesToAway) {
+                // vcvtps2ph doesn't support this rounding mode
+                // so must use software implementation
+                return true;
+            }
+            return false;
+        } else {
+          // double -> float16
+          // No native support for this.
+          // Doing ``double -> float -> float16`` is not safe.
+          // so request software implementation which will only round once
+          return true;
+        }
+    }
+
+    // Without F16C there is no hardware support so must use
+    // software implementation
+    return true;
 }
 
 }}

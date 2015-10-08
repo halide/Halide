@@ -175,14 +175,15 @@ private:
             expr = IntImm::make((int)f);
         } else if (Int(32).can_represent(op->type) && const_float(value, &f)) {
             // u16(123.25f) -> u16(123)
-            expr = Cast::make(op->type, IntImm::make((int)f));
+            expr = Cast::make(op->type, IntImm::make((int)f), op->roundingMode);
         } else if (op->type == Float(32) && const_int(value, &i)) {
             expr = FloatImm::make((float)i);
         } else if (cast && op->type.code == cast->type.code && op->type.bits < cast->type.bits) {
             // If this is a cast of a cast of the same type, where the
             // outer cast is narrower, the inner cast can be
             // eliminated.
-            expr = mutate(Cast::make(op->type, cast->value));
+            internal_assert(cast->roundingMode == op->roundingMode) << "Cannot fold cast when rounding modes do not match\n";
+            expr = mutate(Cast::make(op->type, cast->value, cast->roundingMode));
         } else if (op->type.bits < 64 && cast && const_castint(cast->value, &i)) {
             // cast of cast of const int can just be cast of const int
             // (with the int suitably munged to fit in the
@@ -190,7 +191,7 @@ private:
             // when the result has > 32 bits.
             // u16(u8(255)) -> u16(255)
             // u16(u8(257)) -> u16(1)
-            expr = mutate(Cast::make(op->type, do_indirect_int_cast(cast->type, i)));
+            expr = mutate(Cast::make(op->type, do_indirect_int_cast(cast->type, i), op->roundingMode));
         } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
             // Cast to something then back to int
             expr = do_indirect_int_cast(cast->type, i);
@@ -201,14 +202,15 @@ private:
             // Rewrite things like cast(UInt(8), 256) to cast(UInt(8),
             // 0), so any later peephole matching that ignores casts
             // doesn't get confused.
-            expr = Cast::make(op->type, do_indirect_int_cast(op->type, i));
+            expr = Cast::make(op->type, do_indirect_int_cast(op->type, i), op->roundingMode);
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
-            expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->width));
+            expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value, op->roundingMode),
+                                          broadcast_value->width));
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
-            expr = Cast::make(op->type, value);
+            expr = Cast::make(op->type, value, op->roundingMode);
         }
     }
 

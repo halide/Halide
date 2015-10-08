@@ -156,8 +156,9 @@ protected:
     llvm::Type *i16x4, *i16x8, *i16x16;
     llvm::Type *i32x2, *i32x4, *i32x8;
     llvm::Type *i64x2, *i64x4;
+    llvm::Type *f16x2, *f16x4, *f16x8;
     llvm::Type *f32x2, *f32x4, *f32x8;
-    llvm::Type *f64x2, *f64x4;
+    llvm::Type *f64x2, *f64x4, *f64x8;
     // @}
 
     /** Some wildcard variables used for peephole optimizations in
@@ -406,6 +407,26 @@ protected:
      * If there's no match, returns (NULL, 0).
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
+
+    /**
+      * \param t the destination type for a cast (where the source type is float16)
+      *
+      * \return True iff the target being used for CodeGen requires a software implementation
+     *          to cast from float16 to type ``t``.
+      *
+      * This can be overriden by architecture specific code.
+      */
+    bool virtual target_needs_software_cast_from_float16_to(Type t) const = 0;
+    /**
+      * \param t the source type for a cast (where the destination type is float16)
+      * \param rm the RoundingMode required by the cast.
+      *
+      * \return True iff the target being used for CodeGen requires a software implementation
+     *          to cast from type ``t`` to float16.
+      *
+      * This can be overriden by architecture specific code.
+      */
+    bool virtual target_needs_software_cast_to_float16_from(Type t, RoundingMode rm) const = 0;
 
 private:
 

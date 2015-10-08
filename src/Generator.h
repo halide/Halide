@@ -351,8 +351,11 @@ protected:
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
+    using RoundingMode = Halide::RoundingMode;
     template <typename T> Expr cast(Expr e) const { return Halide::cast<T>(e); }
     inline Expr cast(Halide::Type t, Expr e) const { return Halide::cast(t, e); }
+    template <typename T> Expr cast(Expr e, RoundingMode rm) const { return Halide::cast<T>(e, rm); }
+    inline Expr cast(Halide::Type t, Expr e, RoundingMode rm) const { return Halide::cast(t, e, rm); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using Image = Halide::Image<T>;
     template <typename T> using Param = Halide::Param<T>;

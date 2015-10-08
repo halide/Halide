@@ -20,6 +20,7 @@
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
+#include "runtime/HalideRuntime.h" // For halide_rounding_mode_t
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
@@ -153,11 +154,15 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     i32x8(NULL),
     i64x2(NULL),
     i64x4(NULL),
+    f16x2(NULL),
+    f16x4(NULL),
+    f16x8(NULL),
     f32x2(NULL),
     f32x4(NULL),
     f32x8(NULL),
     f64x2(NULL),
     f64x4(NULL),
+    f64x8(NULL),
 
     // Wildcards for pattern matching
     wild_i8x8(Variable::make(Int(8, 8), "*")),
@@ -359,8 +364,12 @@ void CodeGen_LLVM::init_context() {
     f32x2 = VectorType::get(f32, 2);
     f32x4 = VectorType::get(f32, 4);
     f32x8 = VectorType::get(f32, 8);
+    f16x2 = VectorType::get(f16, 2);
+    f16x4 = VectorType::get(f16, 4);
+    f16x8 = VectorType::get(f16, 8);
     f64x2 = VectorType::get(f64, 2);
     f64x4 = VectorType::get(f64, 4);
+    f64x8 = VectorType::get(f64, 8);
 }
 
 
@@ -1195,6 +1204,94 @@ void CodeGen_LLVM::visit(const Cast *op) {
         value = builder->CreateUIToFP(value, llvm_dst);
     } else {
         internal_assert(src.is_float() && dst.is_float());
+
+        if (src.bits == 16 && dst.bits > 16 &&
+            target_needs_software_cast_from_float16_to(dst)) {
+            // Use software implementation for converting half to higher precision
+            // float when operating on scalar types. If the target doesn't support
+            // this natively LLVM will emit a call to ``__gnu_h2f_ieee()`` which isn't
+            // available as we don't use compiler-rt so we use our own
+            // implementation.
+            user_assert(src.width == 1 && src.width == dst.width) <<
+                "The target requires a software implementation of float16_t conversion"
+                " but vectorization has been requested which is not possible\n";
+            llvm::Function* convFunc = nullptr;
+            if (dst.bits == 32) {
+                convFunc = module->getFunction("halide_float16_bits_to_float");
+                debug(1) << "Using software implementation to convert half to float\n";
+            } else {
+                internal_assert(dst.bits == 64) << "Expected destination to be f64" <<
+                                                   " but was width " << dst.bits << "\n";
+                convFunc = module->getFunction("halide_float16_bits_to_double");
+                debug(1) << "Using software implementation to convert half to double\n";
+            }
+            internal_assert(convFunc != nullptr) << "internal runtime function missing\n";
+
+            // Need to bitcast to treat bits of half as uint16_t to match
+            // halide_float16_bits_to*() function signature
+            llvm::Value* bitCastResult = builder->CreateBitCast(value, i16);
+            value = builder->CreateCall(convFunc, {bitCastResult});
+            return;
+        } else if (dst.bits == 16 && src.bits > 16 &&
+                   target_needs_software_cast_to_float16_from(src, op->roundingMode)) {
+            // Use software implementation for converting higher precision
+            // floats to half when operating on scalar types. If the target
+            // doesn't support this natively LLVM will emit a call to
+            // ``__gnu_f2h_ieee`` which isn't available as we don't user
+            // compiler-rt so we use our own implementation
+            user_assert(src.width == 1 && src.width == dst.width) <<
+                "The target requires a software implementation of float16_t conversion"
+                " but vectorization has been requested which is not possible\n";
+            llvm::Function* convFunc = nullptr;
+            if (src.bits == 32) {
+                convFunc = module->getFunction("halide_float_to_float16_bits");
+                debug(1) << "Using software implementation to convert float to half\n";
+            } else {
+                internal_assert(src.bits == 64) << "Expected destination to be f64" <<
+                                                   " but was width " << dst.bits << "\n";
+                convFunc = module->getFunction("halide_double_to_float16_bits");
+                debug(1) << "Using software implementation to convert double to half\n";
+            }
+            internal_assert(convFunc != nullptr) << "internal runtime function missing\n";
+
+            // Probably an i32 but to be safe don't assume that and instead use whatever
+            // the integer width is used for the second argument
+            llvm::Type* roundingModeArgTy = convFunc->getFunctionType()->getParamType(1);
+            internal_assert(roundingModeArgTy->isIntegerTy()) << "Expected enum argument to be an integer\n";
+
+            Value* roundingModeArg = nullptr;
+            switch (op->roundingMode) {
+                case RoundingMode::TowardZero:
+                    roundingModeArg = ConstantInt::get(roundingModeArgTy,
+                        static_cast<int>(halide_toward_zero));
+                    break;
+                case RoundingMode::ToNearestTiesToEven:
+                    roundingModeArg = ConstantInt::get(roundingModeArgTy,
+                        static_cast<int>(halide_to_nearest_ties_to_even));
+                    break;
+                case RoundingMode::ToNearestTiesToAway:
+                    roundingModeArg = ConstantInt::get(roundingModeArgTy,
+                        static_cast<int>(halide_to_nearest_ties_to_away));
+                    break;
+                case RoundingMode::TowardPositiveInfinity:
+                    roundingModeArg = ConstantInt::get(roundingModeArgTy,
+                        static_cast<int>(halide_toward_positive_infinity));
+                    break;
+                case RoundingMode::TowardNegativeInfinity:
+                    roundingModeArg = ConstantInt::get(roundingModeArgTy,
+                        static_cast<int>(halide_toward_negative_infinity));
+                    break;
+                default:
+                    internal_error << "Unsupported rounding mode\n";
+            }
+
+            std::vector<Value*> args = { value, roundingModeArg };
+            value = builder->CreateCall(convFunc, args);
+
+            // Bitcast to half
+            value = builder->CreateBitCast(value, f16);
+        }
+
         // Float widening or narrowing
         value = builder->CreateFPCast(value, llvm_dst);
     }

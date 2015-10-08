@@ -132,3 +132,15 @@ define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwi
   %result = select <2 x i1> %c, <2 x double> %b, <2 x double> %a
   ret <2 x double> %result
 }
+
+; Half conversion intrinsics as defined in LLVM (see ``include/llvm/IR/IntrinsicsX86.td``).
+; It's a bit strange that they take i16 rather half as the argument type.
+; Converts 4 halfs to 4 floats. It only uses the first 4 lanes in argument
+declare <4 x float> @llvm.x86.vcvtph2ps.128(<8 x i16> %a) readnone
+; Converts 8 halfs to 8 floats
+declare <8 x float> @llvm.x86.vcvtph2ps.256(<8 x i16> %a) readnone
+
+; Converts 4 floats to 4 halfs. Only the first four lanes are relevant.
+declare <8 x i16> @llvm.x86.vcvtps2ph.128(<4 x float> %a, i32 %roundingMode) readnone
+; Convert 8 floats to 8 halfs.
+declare <8 x i16> @llvm.x86.vcvtps2ph.256(<8 x float> %a, i32 %roundingMode) readnone

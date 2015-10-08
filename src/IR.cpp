@@ -36,14 +36,23 @@ IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
                                     make_immortal_int(8)};
 
 
-Expr Cast::make(Type t, Expr v) {
+Expr Cast::make(Type t, Expr v, RoundingMode rm) {
     internal_assert(v.defined()) << "Cast of undefined\n";
     internal_assert(t.width == v.type().width) << "Cast may not change vector widths\n";
+    if (t.is_float() && t.bits == 16) {
+        internal_assert(rm != RoundingMode::Undefined) <<
+          "Cast to float16_t must specify a correct rounding mode\n";
+    }
 
     Cast *node = new Cast;
     node->type = t;
     node->value = v;
+    node->roundingMode = rm;
     return node;
+}
+
+Expr Cast::make(Type t, Expr v) {
+    return Cast::make(t, v, RoundingMode::Undefined);
 }
 
 Expr Add::make(Expr a, Expr b) {
