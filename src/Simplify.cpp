@@ -1176,7 +1176,7 @@ private:
                    broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (no_overflow(op->type) &&
+        } else if (no_overflow_scalar_int(op->type) &&
                    a.as<Variable>() &&
                    is_simple_const(b)) {
             Expr delta = mutate(a - b);
@@ -1506,7 +1506,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (no_overflow(op->type) &&
+        } else if (no_overflow_scalar_int(op->type) &&
                    a.as<Variable>() &&
                    is_simple_const(b)) {
             Expr delta = mutate(a - b);
@@ -1858,8 +1858,7 @@ private:
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
 
-        if (no_overflow(delta.type()) &&
-            delta.type().is_scalar() &&
+        if (no_overflow_scalar_int(delta.type()) &&
             !is_const(delta)) {
             Interval i = bounds_of_expr_in_scope(delta, bounds_info);
             i.max = mutate(i.max);
