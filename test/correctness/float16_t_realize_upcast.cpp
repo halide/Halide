@@ -5,6 +5,9 @@
 #include <vector>
 #include "float_helpers.h"
 
+// Get test cases
+#include "float16_t_upcast_test_cases.h"
+
 using namespace Halide;
 
 // FIXME: We should use a proper framework for this. See issue #898
@@ -15,101 +18,39 @@ void h_assert(bool condition, const char *msg) {
     }
 }
 
-uint16_t inputs[] = {
-  0x0000, // +ve zero
-  0x8000, // -ve zero
-  0x7c00, // +ve infinity
-  0xfc00, // -ve infinity
-  0x7e00, // quiet NaN
-  0x7bff, // Largest +ve normal number
-  0xfbff, // Smallest -ve normal number
-  0x0001, // Smallest +ve subnormal number
-  0x8001, // Largest -ve subnormal number
-  0x0002, // 2nd smallest +ve subnormal number
-  0x8002, // 2nd largest -ve subnormal number
-  0x0003, // 3rd smallest subnormal number
-  0x03ff, // Largest subnormal
-  0x03fe, // 2nd largest subnormal
-  0x3c00, // 1.0
-  0xbc00  // -1.0
-};
-
-// Unfortunately we can't use the C99 hex float format
-// here because MSVC doesn't support them
-float expectedF[] = {
-    0.0f,
-    -0.0f,
-    INFINITY,
-    -INFINITY,
-    std::numeric_limits<float>::quiet_NaN(),
-    65504.0f,
-    -65504.0f,
-    (1.0f)/(1<<24),
-    (-1.0f)/(1<<24),
-    (1.0f)/(1<<23),  // 0x1.000000p-23
-    (-1.0f)/(1<<23), // -0x1.000000p-23
-    (1.5f)/(1<<23), // 0x1.800000p-23
-    float_from_bits(0x387fc000), //0x1.ff8000p-15,
-    float_from_bits(0x387f8000), // 0x1.ff0000p-15,
-    1.0f,
-    -1.0f
-};
-
-double expectedD[] = {
-    0.0,
-    -0.0,
-    (double) INFINITY,
-    (double) -INFINITY,
-    std::numeric_limits<double>::quiet_NaN(),
-    65504.0,
-    -65504.0,
-    (1.0)/(1<<24),
-    (-1.0)/(1<<24),
-    (1.0)/(1<<23), // 0x1.000000000000p-23
-    (-1.0)/(1<<23), // -0x1.000000000000p-23
-    (1.5)/(1<<23), // 0x1.800000000000p-23
-    double_from_bits(0x3f0ff80000000000), // 0x1.ff8000000000p-15,
-    double_from_bits(0x3f0ff00000000000), // 0x1.ff0000000000p-15,
-    1.0,
-    -1.0
-};
-
 // Make input image and expected output image that is filled
 // with our special values. We allow it to take any size so
 // we can test vectorisation later.
 // FIXME: Image class doesn't have Move constructor
 // so this will probably be super inefficient!!
 std::pair<Image<float16_t>,Image<float>> getInputAndExpectedResultImagesF(unsigned width, unsigned height) {
-    static_assert(sizeof(inputs)/sizeof(uint16_t) == sizeof(expectedF)/sizeof(float),
-                  "array size mismatch");
 
     Image<float16_t> input(width, height);
     Image<float> expected(width, height);
 
-    int modValue = sizeof(inputs)/sizeof(uint16_t);
+    auto testCases = get_float16_t_upcast_test_cases();
+    int modValue = testCases.size();
 
     for (unsigned x=0; x < width; ++x) {
         for (unsigned y=0; y < height; ++y) {
-            input(x,y) = float16_t::make_from_bits(inputs[ (x +y*width) % modValue]);
-            expected(x,y) = expectedF[ (x +y*width) % modValue];
+            input(x,y) = float16_t::make_from_bits(testCases[ (x +y*width) % modValue].first);
+            expected(x,y) = testCases[ (x +y*width) % modValue].second.asFloat;
         }
     }
     return std::make_pair(input, expected);
 }
 
 std::pair<Image<float16_t>,Image<double>> getInputAndExpectedResultImagesD(unsigned width, unsigned height) {
-    static_assert((sizeof(inputs)/sizeof(uint16_t)) == (sizeof(expectedD)/sizeof(double)),
-                  "array size mismatch");
-
     Image<float16_t> input(width, height);
     Image<double> expected(width, height);
 
-    int modValue = sizeof(inputs)/sizeof(uint16_t);
+    auto testCases = get_float16_t_upcast_test_cases();
+    int modValue = testCases.size();
 
     for (unsigned x=0; x < width; ++x) {
         for (unsigned y=0; y < height; ++y) {
-            input(x,y) = float16_t::make_from_bits(inputs[ (x +y*width) % modValue]);
-            expected(x,y) = expectedD[ (x +y*width) % modValue];
+            input(x,y) = float16_t::make_from_bits(testCases[ (x +y*width) % modValue].first);
+            expected(x,y) = testCases[ (x +y*width) % modValue].second.asDouble;
         }
     }
     return std::make_pair(input, expected);
