@@ -93,32 +93,31 @@ void checkResults(Image<float16_t>& expected, Image<float16_t>& result) {
             uint16_t expectedValueAsBits = expectedValue.to_bits();
             uint16_t resultValueAsBits = resultValue.to_bits();
             if (resultValueAsBits != expectedValueAsBits) {
-               printf("Failed to cast correctly: x:%u y:%u\n", x, y);
-               printf("resultValueAsBits  : 0x%.4" PRIx16 "\n", resultValueAsBits);
-               printf("expectedValueAsBits: 0x%.4" PRIx16 "\n", expectedValueAsBits);
+                printf("Failed to cast correctly: x:%u y:%u\n", x, y);
+                printf("resultValueAsBits  : 0x%.4" PRIx16 "\n", resultValueAsBits);
+                printf("expectedValueAsBits: 0x%.4" PRIx16 "\n", expectedValueAsBits);
 
-              // Show input and possible outputs
-              // FIXME: Getting size this way
-              int index = (x + y* result.width()) % expectedResults.first.size();
-              printf("data index: %u\n", index);
-              DownCastedValue r;
-              if (sizeof(T) == sizeof(float)) {
-                  std::pair<float,DownCastedValue> resultPair = expectedResults.first[index];
-                  r = resultPair.second;
-                  printf("Input: 0x%.8" PRIx32 "(~%f)\n", bits_from_float(resultPair.first), resultPair.first);
-              } else {
-                  h_assert(sizeof(T) == sizeof(double), "wrong type?");
-                  std::pair<double,DownCastedValue> resultPair = expectedResults.second[index];
-                  r = resultPair.second;
-                  printf("Input: 0x%.16" PRIx64 "(~%f)\n", bits_from_double(resultPair.first), resultPair.first);
-              }
-              printf("Expected result as RZ: 0x%.4" PRIx16 "\n", r.RZ);
-              printf("Expected result as RU: 0x%.4" PRIx16 "\n", r.RU);
-              printf("Expected result as RD: 0x%.4" PRIx16 "\n", r.RD);
-              printf("Expected result as RNE: 0x%.4" PRIx16 "\n", r.RNE);
-              printf("Expected result as RNA: 0x%.4" PRIx16 "\n", r.RNA);
-
-              h_assert(false, "Failed conversion");
+                // Show input and possible outputs
+                // FIXME: Getting size this way
+                int index = (x + y* result.width()) % expectedResults.first.size();
+                printf("data index: %u\n", index);
+                DownCastedValue r;
+                if (sizeof(T) == sizeof(float)) {
+                    std::pair<float,DownCastedValue> resultPair = expectedResults.first[index];
+                    r = resultPair.second;
+                    printf("Input: 0x%.8" PRIx32 "(~%f)\n", bits_from_float(resultPair.first), resultPair.first);
+                } else {
+                    h_assert(sizeof(T) == sizeof(double), "wrong type?");
+                    std::pair<double,DownCastedValue> resultPair = expectedResults.second[index];
+                    r = resultPair.second;
+                    printf("Input: 0x%.16" PRIx64 "(~%f)\n", bits_from_double(resultPair.first), resultPair.first);
+                }
+                printf("Expected result as RZ: 0x%.4" PRIx16 "\n", r.RZ);
+                printf("Expected result as RU: 0x%.4" PRIx16 "\n", r.RU);
+                printf("Expected result as RD: 0x%.4" PRIx16 "\n", r.RD);
+                printf("Expected result as RNE: 0x%.4" PRIx16 "\n", r.RNE);
+                printf("Expected result as RNA: 0x%.4" PRIx16 "\n", r.RNA);
+                h_assert(false, "Failed conversion");
             }
         }
     }
