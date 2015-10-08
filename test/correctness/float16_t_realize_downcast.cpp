@@ -500,8 +500,8 @@ void checkResults(Image<float16_t>& expected, Image<float16_t>& result) {
     h_assert(expected.height() == result.height(), "height mismatch");
 
     // Check results
-    for (unsigned x=0; x < result.width(); ++x) {
-        for (unsigned y=0; y < result.height(); ++y) {
+    for (unsigned x=0; x < static_cast<unsigned>(result.width()); ++x) {
+        for (unsigned y=0; y < static_cast<unsigned>(result.height()); ++y) {
             float16_t expectedValue = expected(x, y);
             float16_t resultValue = result(x, y);
             // Need to convert to bits as NaN is not comparable
