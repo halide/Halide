@@ -153,6 +153,7 @@ public:
     const Scope<int> &external_lets;
 
     Deinterleaver(const Scope<int> &lets) : external_lets(lets) {}
+
 private:
     Scope<Expr> internal;
 
@@ -178,6 +179,7 @@ private:
 
     void visit(const Ramp *op) {
         expr = op->base + starting_lane * op->stride;
+        internal_assert(expr.type() == op->base.type());
         if (new_width > 1) {
             expr = Ramp::make(expr, op->stride * lane_stride, new_width);
         }
@@ -552,14 +554,14 @@ class Interleaver : public IRMutator {
             // It's not a store of a ramp index.
             if (!r0) goto fail;
 
-            const int *stride_ptr = as_const_int(r0->stride);
+            const int64_t *stride_ptr = as_const_int(r0->stride);
 
             // The stride isn't a constant or is <= 0
             if (!stride_ptr || *stride_ptr < 1) goto fail;
 
-            const int stride = *stride_ptr;
+            const int64_t stride = *stride_ptr;
             const int width = r0->width;
-            const int expected_stores = stride == 1 ? width : stride;
+            const int64_t expected_stores = stride == 1 ? width : stride;
 
             // Collect the rest of the stores.
             std::vector<Store> stores;
@@ -593,7 +595,7 @@ class Interleaver : public IRMutator {
                 if (ri->width != width) goto fail;
 
                 Expr diff = simplify(ri->base - r0->base);
-                const int *offs = as_const_int(diff);
+                const int64_t *offs = as_const_int(diff);
 
                 // Difference between bases is not constant.
                 if (!offs) goto fail;

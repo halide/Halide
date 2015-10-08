@@ -132,6 +132,11 @@ private:
         max = op;
     }
 
+    void visit(const UIntImm *op) {
+        min = op;
+        max = op;
+    }
+
     void visit(const FloatImm *op) {
         min = op;
         max = op;
@@ -1472,7 +1477,7 @@ void bounds_test() {
     check(scope, x*y, select(y < 0, y*10, 0), select(y < 0, 0, y*10));
     check(scope, x/(x+y), Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
-    check(scope, Load::make(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
+    check(scope, Load::make(Int(8), "buf", x, Buffer(), Parameter()), make_const(Int(8), -128), make_const(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
 
@@ -1485,29 +1490,29 @@ void bounds_test() {
     check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
 
     // Check some operations that may overflow
-    check(scope, (cast<uint8_t>(x)+250), cast<uint8_t>(0), cast<uint8_t>(255));
-    check(scope, (cast<uint8_t>(x)+10)*20, cast<uint8_t>(0), cast<uint8_t>(255));
-    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)+5), cast<uint8_t>(0), cast<uint8_t>(255));
-    check(scope, (cast<uint8_t>(x)+10)-(cast<uint8_t>(x)+5), cast<uint8_t>(0), cast<uint8_t>(255));
+    check(scope, (cast<uint8_t>(x)+250), make_const(UInt(8), 0), make_const(UInt(8), 255));
+    check(scope, (cast<uint8_t>(x)+10)*20, make_const(UInt(8), 0), make_const(UInt(8), 255));
+    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)+5), make_const(UInt(8), 0), make_const(UInt(8), 255));
+    check(scope, (cast<uint8_t>(x)+10)-(cast<uint8_t>(x)+5), make_const(UInt(8), 0), make_const(UInt(8), 255));
 
     // Check some operations that we should be able to prove do not overflow
-    check(scope, (cast<uint8_t>(x)+240), cast<uint8_t>(240), cast<uint8_t>(250));
-    check(scope, (cast<uint8_t>(x)+10)*10, cast<uint8_t>(100), cast<uint8_t>(200));
-    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), cast<uint8_t>(0), cast<uint8_t>(200));
-    check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), cast<uint8_t>(5), cast<uint8_t>(25));
+    check(scope, (cast<uint8_t>(x)+240), make_const(UInt(8), 240), make_const(UInt(8), 250));
+    check(scope, (cast<uint8_t>(x)+10)*10, make_const(UInt(8), 100), make_const(UInt(8), 200));
+    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), make_const(UInt(8), 0), make_const(UInt(8), 200));
+    check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), make_const(UInt(8), 5), make_const(UInt(8), 25));
 
     check(scope,
           cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
-          cast<uint16_t>(0), cast<uint16_t>(4095));
+          make_const(UInt(16), 0), make_const(UInt(16), 4095));
 
     check(scope,
           cast<uint8_t>(clamp(cast<uint16_t>(x/y), cast<uint16_t>(0), cast<uint16_t>(128))),
-          cast<uint8_t>(0), cast<uint8_t>(128));
+          make_const(UInt(8), 0), make_const(UInt(8), 128));
 
     Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer(), Parameter()));
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer(), Parameter()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
-          cast<uint16_t>(0), cast<uint16_t>(255*2));
+          make_const(UInt(16), 0), make_const(UInt(16), 255*2));
 
     vector<Expr> input_site_1 = {2*x};
     vector<Expr> input_site_2 = {2*x+1};

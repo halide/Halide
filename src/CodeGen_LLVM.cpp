@@ -711,17 +711,6 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
-namespace {
-
-template<typename T>
-llvm::Constant *get_constant(llvm::Type *ty, Expr e) {
-    T v = 0;
-    internal_assert(scalar_from_constant_expr<T>(e, &v)) << "scalar_from_constant_expr fails for Expr " << e << "\n";
-    return std::numeric_limits<T>::is_integer ? ConstantInt::get(ty, v) : ConstantFP::get(ty, v);
-}
-
-}  // namespace
-
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
     if (!e.defined() || e.type() == Handle()) {
         // Handle is always emitted into metadata "undefined", regardless of
@@ -729,32 +718,9 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
 
-    llvm::Constant *constant = NULL;
-    if (e.type() == Bool()) {
-        constant = get_constant<bool>(i1, e);
-    } else if (e.type() == UInt(8)) {
-        constant = get_constant<uint8_t>(i8, e);
-    } else if (e.type() == UInt(16)) {
-        constant = get_constant<uint16_t>(i16, e);
-    } else if (e.type() == UInt(32)) {
-        constant = get_constant<uint32_t>(i32, e);
-    } else if (e.type() == UInt(64)) {
-        constant = get_constant<uint64_t>(i64, e);
-    } else if (e.type() == Int(8)) {
-        constant = get_constant<int8_t>(i8, e);
-    } else if (e.type() == Int(16)) {
-        constant = get_constant<int16_t>(i16, e);
-    } else if (e.type() == Int(32)) {
-        constant = get_constant<int32_t>(i32, e);
-    } else if (e.type() == Int(64)) {
-        constant = get_constant<int64_t>(i64, e);
-    } else if (e.type() == Float(32)) {
-        constant = get_constant<float>(f32, e);
-    } else if (e.type() == Float(64)) {
-        constant = get_constant<double>(f64, e);
-    } else {
-        internal_assert(0) << "Unhandled Constant Expr Type " << e.type() << "\n";
-    }
+    llvm::Value *val = codegen(e);
+    llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
+    internal_assert(constant);
 
     GlobalVariable *storage = new GlobalVariable(
             *module,
@@ -1157,11 +1123,15 @@ void CodeGen_LLVM::codegen(Stmt s) {
 }
 
 void CodeGen_LLVM::visit(const IntImm *op) {
-    value = ConstantInt::getSigned(i32, op->value);
+    value = ConstantInt::getSigned(llvm_type_of(op->type), op->value);
+}
+
+void CodeGen_LLVM::visit(const UIntImm *op) {
+    value = ConstantInt::get(llvm_type_of(op->type), op->value);
 }
 
 void CodeGen_LLVM::visit(const FloatImm *op) {
-    value = ConstantFP::get(*context, APFloat(op->value));
+    value = ConstantFP::get(llvm_type_of(op->type), op->value);
 }
 
 void CodeGen_LLVM::visit(const StringImm *op) {
@@ -1563,17 +1533,17 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;
-    int base = 0;
-    int width = 1;
+    int64_t base = 0;
+    int64_t width = 1;
 
     if (index.defined()) {
         if (const Ramp *ramp = index.as<Ramp>()) {
-            const int *pstride = as_const_int(ramp->stride);
-            const int *pbase = as_const_int(ramp->base);
+            const int64_t *pstride = as_const_int(ramp->stride);
+            const int64_t *pbase = as_const_int(ramp->base);
             if (pstride && pbase) {
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
-                int stride = *pstride;
+                int64_t stride = *pstride;
                 base = *pbase;
                 assert(base >= 0);
                 width = next_power_of_two(ramp->width * stride);
@@ -1585,7 +1555,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
                 constant_index = true;
             }
         } else {
-            const int *pbase = as_const_int(index);
+            const int64_t *pbase = as_const_int(index);
             if (pbase) {
                 base = *pbase;
                 constant_index = true;
@@ -1605,7 +1575,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
     // stores to the same buffer to get reordered.
     if (constant_index) {
         for (int w = 1024; w >= width; w /= 2) {
-            int b = (base / w) * w;
+            int64_t b = (base / w) * w;
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
