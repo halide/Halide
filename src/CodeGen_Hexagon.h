@@ -65,6 +65,7 @@ protected:
     llvm::Value *handleLargeVectors(const Add *);
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Cast *);
+    llvm::Value *handleLargeVectors(const Max *);
     bool possiblyCodeGenWideningMultiply(const Mul *);
     bool possiblyGenerateVMPAAccumulate(const Add *);
 

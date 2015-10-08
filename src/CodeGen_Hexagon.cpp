@@ -511,7 +511,11 @@ checkVectorOp(Type t, string msg) {
       internal_error << "VEC-EXPECT " << msg;
   }
 }
-
+static bool isDblOrQuadVector(Type t, int vec_bits) {
+  return t.is_vector() && (
+    ((t.bits * t.width) == (2 * vec_bits)) ||
+    ((t.bits * t.width) == (4 * vec_bits)));
+}
 static bool
 isLargeVector(Type t, int vec_bits) {
   return t.is_vector() &&
@@ -993,6 +997,119 @@ CodeGen_Hexagon::handleLargeVectors(const Add *op) {
   return NULL;
 }
   // Handle types greater than double vectors.
+  // Types handled:
+  // 1. max(u32x64 , u32x64) (Single Mode)
+  // 2. max(i32x64 , i32x64) (Single Mode)
+llvm::Value *
+CodeGen_Hexagon::handleLargeVectors(const Max *op) {
+  std::vector<Expr> Patterns;
+  std::vector<Expr> matches;
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  Patterns.push_back(max(WPICK(wild_u32x128, wild_u32x64),
+                         WPICK(wild_u32x128, wild_u32x64)));
+  Patterns.push_back(max(WPICK(wild_i32x128, wild_i32x64),
+                         WPICK(wild_i32x128, wild_i32x64)));
+  Patterns.push_back(max(WPICK(wild_u16x128, wild_u16x64),
+                         WPICK(wild_u16x128, wild_u16x64)));
+  Patterns.push_back(max(WPICK(wild_i16x128, wild_i16x64),
+                         WPICK(wild_i16x128, wild_i16x64)));
+  Patterns.push_back(max(WPICK(wild_u32x64 , wild_u32x32),
+                         WPICK(wild_u32x64 , wild_u32x32)));
+  Patterns.push_back(max(WPICK(wild_i32x64 , wild_i32x32),
+                         WPICK(wild_i32x64 , wild_i32x32)));
+  debug(4) << "HexCG: " << op->type <<  ", handleLargeVectors (Max)\n";
+  for (size_t I = 0; I < Patterns.size(); ++I) {
+    Expr pat = Patterns[I];
+    if (expr_match(pat, op, matches)) {
+      // There are two ways of doing this.
+      // The first is to use slice_into_halves to create smaller
+      // vectors that are still Halide IR of type u32x32 or i32x32.
+      // We then codegen u32x32 + u32x32 for the lower and higher
+      // parts and then put the result together using concat_vectors.
+      // However, slice_into_halves creates shuffle_vector that
+      // need to be lowered. Instead, we codegen the two u32x64/i32x64
+      // operands of the add and then put them together using concat_vectors.
+      Value *Op0 = codegen(matches[0]);
+      Value *Op1 = codegen(matches[1]);
+      bool isQuadVec = (op->type.bits *op->type.width)  == native_vector_bits()*4;
+      if (isQuadVec) {
+        int VectorSize = op->type.width / 4;
+        // We now have a u32x64 vector, i.e. 2 vector register pairs.
+        Value *Op0p0 = slice_vector(Op0, 0, VectorSize);
+        Value *Op1p0 = slice_vector(Op1, 0, VectorSize);
+        Value *Op0p1 = slice_vector(Op0, VectorSize, VectorSize);
+        Value *Op1p1 = slice_vector(Op1, VectorSize, VectorSize);
+        Value *Op0p2 = slice_vector(Op0, 2 * VectorSize, VectorSize);
+        Value *Op1p2 = slice_vector(Op1, 2 * VectorSize, VectorSize);
+        Value *Op0p3 = slice_vector(Op0, 3 * VectorSize, VectorSize);
+        Value *Op1p3 = slice_vector(Op1, 3 * VectorSize, VectorSize);
+
+        Intrinsic::ID IntrinsID = IPICK(Intrinsic::hexagon_V6_vmaxw);
+        std::vector<Value *> Ops;
+        Ops.push_back(Op0p0);
+        Ops.push_back(Op1p0);
+        Value *Part0 = CallLLVMIntrinsic(Intrinsic::
+                                         getDeclaration(module, IntrinsID), Ops);
+        Ops.clear();
+        Ops.push_back(Op0p1);
+        Ops.push_back(Op1p1);
+        Value *Part1 = CallLLVMIntrinsic(Intrinsic::
+                                         getDeclaration(module, IntrinsID), Ops);
+
+        Ops.clear();
+        Ops.push_back(Op0p2);
+        Ops.push_back(Op1p2);
+        Value *Part2 = CallLLVMIntrinsic(Intrinsic::
+                                         getDeclaration(module, IntrinsID), Ops);
+        Ops.clear();
+        Ops.push_back(Op0p3);
+        Ops.push_back(Op1p3);
+        Value *Part3 = CallLLVMIntrinsic(Intrinsic::
+                                         getDeclaration(module, IntrinsID), Ops);
+        Ops.clear();
+        Ops.push_back(Part0);
+        Ops.push_back(Part1);
+        Value *Part01 = concat_vectors(Ops);
+        Ops.clear();
+        Ops.push_back(Part2);
+        Ops.push_back(Part3);
+        Value *Part23 = concat_vectors(Ops);
+        Ops.clear();
+        Ops.push_back(Part01);
+        Ops.push_back(Part23);
+        Value *Result = concat_vectors(Ops);
+        return convertValueType(Result, llvm_type_of(op->type));
+      } else {
+        int VectorSize = op->type.width / 2;
+        Value *Op0p0 = slice_vector(Op0, 0, VectorSize);
+        Value *Op1p0 = slice_vector(Op1, 0, VectorSize);
+        Value *Op0p1 = slice_vector(Op0, VectorSize, VectorSize);
+        Value *Op1p1 = slice_vector(Op1, VectorSize, VectorSize);
+
+        Intrinsic::ID IntrinsID = IPICK(Intrinsic::hexagon_V6_vmaxw);
+        std::vector<Value *> Ops;
+        Ops.push_back(Op0p0);
+        Ops.push_back(Op1p0);
+        Value *Part0 = CallLLVMIntrinsic(Intrinsic::
+                                         getDeclaration(module, IntrinsID), Ops);
+        Ops.clear();
+        Ops.push_back(Op0p1);
+        Ops.push_back(Op1p1);
+        Value *Part1 = CallLLVMIntrinsic(Intrinsic::
+                                         getDeclaration(module, IntrinsID), Ops);
+
+        Ops.clear();
+        Ops.push_back(Part0);
+        Ops.push_back(Part1);
+        Value *Result = concat_vectors(Ops);
+        return convertValueType(Result, llvm_type_of(op->type));
+      }
+    }
+  }
+
+  return NULL;
+}
+  // Handle types greater than double vectors.
   // Also, only handles the case when the divisor is a power of 2.
   // Types handled:
   // 1. u32x64 (Single Mode)
@@ -1116,6 +1233,12 @@ void CodeGen_Hexagon::visit(const Sub *op) {
   return;
 }
 void CodeGen_Hexagon::visit(const Max *op) {
+  if (isDblOrQuadVector(op->type, native_vector_bits())) {
+    value = handleLargeVectors(op);
+    if (value)
+      return;
+  }
+
   value = emitBinaryOp(op, varith);
   if (!value)
     CodeGen_Posix::visit(op);
