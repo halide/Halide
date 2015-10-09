@@ -831,6 +831,10 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
+    if (debug::debug_level >= 3) {
+        module->dump();
+    }
+
     #if LLVM_VERSION < 37
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
@@ -860,6 +864,7 @@ void CodeGen_LLVM::optimize_module() {
     }
     function_pass_manager.doFinalization();
 
+    debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level >= 2) {
         module->dump();
     }
