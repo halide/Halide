@@ -296,8 +296,12 @@ bool Target::merge_string(const std::string &target) {
             set_feature(Target::NoAsserts);
         } else if (tok == "no_bounds_query") {
             set_feature(Target::NoBoundsQuery);
-        } else if (tok == "cl_doubles") {
-            set_feature(Target::CLDoubles);
+        } else if (tok == "cl_embedded") {
+            set_feature(Target::CLEmbedded);
+        } else if (tok == "cl_doubles" || tok == "cl_fp64") {
+            set_feature(Target::CLfp64);
+        } else if (tok == "cl_int64") {
+            set_feature(Target::CLint64);
         } else if (tok == "fma") {
             set_features({Target::FMA, Target::SSE41, Target::AVX});
         } else if (tok == "fma4") {
@@ -366,7 +370,7 @@ std::string Target::to_string() const {
         "sse41", "avx", "avx2", "fma", "fma4", "f16c",
         "armv7s", "no_neon",
         "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
-        "opencl", "cl_doubles",
+        "opencl", "cl_embedded", "cl_fp64", "cl_int64",
         "opengl", "openglcompute", "renderscript",
         "user_context",
         "register_metadata",

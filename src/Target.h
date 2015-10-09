@@ -53,7 +53,9 @@ struct Target {
         CUDACapability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
 
         OpenCL,  ///< Enable the OpenCL runtime.
-        CLDoubles,  ///< Enable double support on OpenCL targets
+        CLEmbedded,  ///< Generate code compatible with the embedded profile of OpenCL.
+        CLfp64,  ///< Enable double support on OpenCL targets
+        CLint64, ///< Enable in64 support on OpenCL embedded targets
 
         OpenGL,  ///< Enable the OpenGL runtime.
         OpenGLCompute, ///< Enable OpenGL Compute runtime.
@@ -159,10 +161,19 @@ struct Target {
     bool supports_type(const Type &t) {
         if (t.bits == 64) {
             if (t.is_float()) {
-                return !has_feature(Metal) &&
-                       (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
+                if (has_feature(Target::Metal)) {
+                    return false;
+                }
+                if (has_feature(Target::OpenCL)) {
+                    return has_feature(Target::CLfp64);
+                }
             } else {
-                return !has_feature(Metal);
+                if (has_feature(Target::Metal)) {
+                    return false;
+                }
+                if (has_feature(Target::OpenCL) && has_feature(Target::CLEmbedded)) {
+                    return has_feature(Target::CLint64);
+                }
             }
         }
         return true;
