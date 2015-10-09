@@ -88,7 +88,7 @@ Image<uint32_t> integer_divide_table_s32() {
 Expr fast_integer_divide(Expr numerator, Expr denominator) {
     if (is_const(denominator)) {
         // There's code elsewhere for this case.
-        return numerator / denominator;
+        return numerator / cast<uint8_t>(denominator);
     }
     user_assert(denominator.type() == UInt(8))
         << "Fast integer divide requires a UInt(8) denominator\n";
@@ -194,6 +194,8 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 
     // The tables don't work for denominator == 1
     result = select(denominator == 1, numerator, result);
+
+    internal_assert(result.type() == t);
 
     return result;
 
