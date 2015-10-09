@@ -889,6 +889,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (ramp_a &&
+                   no_overflow_scalar_int(ramp_a->base.type()) &&
                    const_int(ramp_a->stride, &ia) &&
                    broadcast_b &&
                    const_int(broadcast_b->value, &ib) &&
