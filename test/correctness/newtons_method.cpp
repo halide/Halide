@@ -12,7 +12,7 @@ int find_pi() {
     // Skip test if data type is not supported by the target.
     Target target = get_jit_target_from_environment();
     if (target.has_feature(Target::OpenCL) &&
-        !target.has_feature(Target::CLDoubles) &&
+        !target.has_feature(Target::CLfp64) &&
         type_of<T>() == type_of<double>()) {
         return 0;
     }
