@@ -55,7 +55,7 @@ struct Target {
         OpenCL,  ///< Enable the OpenCL runtime.
         CLEmbedded,  ///< Generate code compatible with the embedded profile of OpenCL.
         CLfp64,  ///< Enable double support on OpenCL targets
-        CLint64, ///< Enable in64 support on OpenCL embedded targets
+        CLint64, ///< Enable int64 support on OpenCL embedded targets
 
         OpenGL,  ///< Enable the OpenGL runtime.
         OpenGLCompute, ///< Enable OpenGL Compute runtime.
