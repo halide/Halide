@@ -599,7 +599,9 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     if (!target.has_feature(Target::CLEmbedded) || target.has_feature(Target::CLint64)) {
         if (target.has_feature(Target::CLEmbedded)) {
-            src_stream << "#pragma OPENCL EXTENSION cles_khr_int64 : enable\n";
+            src_stream << "#ifdef __EMBEDDED_PROFILE__\n"
+                       << "#pragma OPENCL EXTENSION cles_khr_int64 : enable\n"
+                       << "#endif\n";
         }
         src_stream << smod_def("long") << "\n"
                    << sdiv_def("long") << "\n";
