@@ -30,7 +30,9 @@ struct Target {
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
 
-    /** Optional features a target can have. */
+    /** Optional features a target can have.
+     * Corresponds to feature_name_map in Target.cpp. */
+
     enum Feature {
         JIT,  ///< Generate code that will run immediately inside the calling process.
         Debug,  ///< Turn on debug info and output for runtime code.
@@ -76,8 +78,6 @@ struct Target {
         Metal, ///< Enable the (Apple) Metal runtime.
 
         FeatureEnd
-        // NOTE: Changes to this enum must be reflected in the definition of
-        // to_string()!
     };
   enum CGOption {
     BuffersAligned,
@@ -291,6 +291,12 @@ EXPORT Target get_jit_target_from_environment();
  * will be used instead. An empty string is exactly equivalent to get_host_target().
  */
 EXPORT Target parse_target_string(const std::string &target);
+
+namespace Internal {
+
+EXPORT void target_test();
+
+}
 
 }
 

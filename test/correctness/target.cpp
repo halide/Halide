@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
                  Target::CUDA, Target::OpenCL, Target::OpenGL, Target::OpenGLCompute, Target::Renderscript,
                  Target::Debug});
     ts = t1.to_string();
-    if (ts != "arm-32-android-jit-debug-sse41-avx-avx2-cuda-opencl-opengl-openglcompute-renderscript") {
+    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-renderscript-sse41") {
        printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
        return -1;
     }
     // expect 32 (not 64), and both sse41 and opencl
-    if (t2.to_string() != "x86-32-linux-sse41-opencl") {
+    if (t2.to_string() != "x86-32-linux-opencl-sse41") {
        printf("merge_string: %s\n", t2.to_string().c_str());
        return -1;
     }
