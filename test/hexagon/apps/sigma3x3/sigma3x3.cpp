@@ -82,6 +82,10 @@ void test_sigma3x3(Target& target) {
     Var xo, xi;
 
     ImageParam In(type_of<uint8_t>(), 2);
+    set_min(In, 0, 0);
+    set_min(In, 1, 0);
+    set_stride_multiple(In, 1, 1 << LOG2VLEN);
+
     // ImageParam mask(type_of<int8_t>(), 2);
     // Making threshold uint16_t because absdiff is going to
     // be unsigned.
@@ -103,21 +107,27 @@ void test_sigma3x3(Target& target) {
     Func ClampedIn = BoundaryConditions::constant_exterior(In, 0);
     ClampedIn.compute_root();
     Halide::Func sum, cnt;
-    sum(x, y) = (uint16_t) (0);
-    cnt(x, y) = (uint16_t) (0);
+    sum(x, y) = cast<uint16_t> (0);
+    cnt(x, y) = cast<uint16_t> (0);
 
     Halide::RDom r(-1,3,-1,3);
     Expr absdiff;
-    absdiff = abs(cast<short>(ClampedIn(x + r.x, y + r.y)) - cast<short>(ClampedIn(x, y)));
-    sum(x, y) += select(absdiff <= threshold, cast<unsigned short>(ClampedIn(x + r.x, y + r.y)), 0);
-    cnt(x, y) += select(absdiff <= threshold, 1, 0);
+    absdiff = abs(cast<short>(In(x + r.x, y + r.y)) - cast<short>(In(x, y)));
+    sum(x, y) += select(absdiff <= threshold, cast<unsigned short>(In(x + r.x, y + r.y)), 0);
+    cnt(x, y) += select(absdiff <= threshold, cast<unsigned short>(1), cast<unsigned short>(0));
 
-    sigma3x3(x, y) = cast<uint8_t>((cast<int>(sum(x,y))*invTable(clamp(cnt(x,y), 0, 9))+(1<<14))>>15);
+    sigma3x3(x, y) = cast<uint8_t>(((sum(x,y))*invTable(clamp(cnt(x,y), 0, 9))+(1<<14))>>15);
 
     // vectorization disabled for now - until select supported
 #ifdef DOVECTOR
     sigma3x3.vectorize(x, 1<<LOG2VLEN);
+    // sum and cnt are reductions. We want to unroll the loops in the update step.
+    sum.update(0).unroll(r.y).unroll(r.x);
+    cnt.update(0).unroll(r.y).unroll(r.x);
 #endif
+    set_output_buffer_min(sigma3x3, 0, 0);
+    set_output_buffer_min(sigma3x3, 1, 0);
+    set_stride_multiple(sigma3x3, 1, 1 << LOG2VLEN);
 
     std::vector<Argument> args(2);
     args[0] = In;

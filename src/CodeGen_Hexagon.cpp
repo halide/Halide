@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "LLVM_Headers.h"
 #include "CodeGen_Hexagon.h"
 #include "IROperator.h"
 #include "IRMatch.h"
@@ -10,7 +11,6 @@
 #include "Simplify.h"
 #include "IntegerDivisionTable.h"
 #include "IRPrinter.h"
-#include "LLVM_Headers.h"
 
 // Native client llvm relies on global flags to control sandboxing on
 // arm, because they expect you to be coming from the command line.
@@ -527,6 +527,11 @@ static bool
 isValidHexagonVector(Type t, int vec_bits) {
   return t.is_vector() &&
     ((t.bits * t.width) == vec_bits);
+}
+static bool
+isValidHexagonVectorPair(Type t, int vec_bits) {
+  return t.is_vector() &&
+    ((t.bits * t.width) == 2*vec_bits);
 }
 int CodeGen_Hexagon::bytes_in_vector() const {
   return native_vector_bits() / 8;
@@ -2398,6 +2403,488 @@ void CodeGen_Hexagon::visit(const Load *op) {
   if (!value)
     CodeGen_Posix::visit(op);
   return;
+}
+void CodeGen_Hexagon::visit(const Select *op) {
+  if (!op->type.is_vector()) {
+    CodeGen_Posix::visit(op);
+    return;
+  }
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  Expr char_cmp_vector =  Variable::make(Bool(CPICK(128, 64)), "*");
+  Expr short_cmp_vector =  Variable::make(Bool(CPICK(64, 32)), "*");
+  Expr word_cmp_vector =  Variable::make(Bool(CPICK(32, 16)), "*");
+  Expr char_dbl_cmp_vector =  Variable::make(Bool(CPICK(128*2, 64*2)), "*");
+  Expr short_dbl_cmp_vector =  Variable::make(Bool(CPICK(64*2, 32*2)), "*");
+  Expr word_dbl_cmp_vector =  Variable::make(Bool(CPICK(32*2, 16*2)), "*");
+
+  if (op->condition.type().is_vector()) {
+      if (isValidHexagonVectorPair(op->type, native_vector_bits())) {
+        std::vector<Expr> PairSelects;
+        std::vector<Expr> matches;
+        int PredVectorSize = CPICK(1024, 512);
+        PairSelects.push_back(select(char_dbl_cmp_vector,
+                                     WPICK(wild_i8x256, wild_i8x128),
+                                     WPICK(wild_i8x256, wild_i8x128)));
+        PairSelects.push_back(select(char_dbl_cmp_vector,
+                                     WPICK(wild_u8x256, wild_u8x128),
+                                     WPICK(wild_u8x256, wild_u8x128)));
+        PairSelects.push_back(select(short_dbl_cmp_vector,
+                                     WPICK(wild_i16x128, wild_i16x64),
+                                     WPICK(wild_i16x128, wild_i16x64)));
+        PairSelects.push_back(select(short_dbl_cmp_vector,
+                                     WPICK(wild_u16x128, wild_u16x64),
+                                     WPICK(wild_u16x128, wild_u16x64)));
+        PairSelects.push_back(select(word_dbl_cmp_vector,
+                                     WPICK(wild_i32x64, wild_i32x32),
+                                     WPICK(wild_i32x64, wild_i32x32)));
+        PairSelects.push_back(select(word_dbl_cmp_vector,
+                                     WPICK(wild_u32x64, wild_u32x32),
+                                     WPICK(wild_u32x64, wild_u32x32)));
+        for (size_t I = 0; I < PairSelects.size(); ++I) {
+          const Expr P = PairSelects[I];
+          if (expr_match(P, op, matches)) {
+            // 1. Codegen the condition. Since we are dealing with vector pairs,
+            // the condition will be of type 2048i1(128B mode) or
+            // 1024i1(64B mode).
+            Value *Cond = codegen(op->condition);
+            // 2. Slice the condition into halves.
+            // PDB. Cond should be the result of an HVX intrinsics. We put pairs
+            // together using concat_vectors in all our comparison visitors.
+            // This means we don't use vcombine there, or in other words, we use
+            // shuffle_vector to concatenate the two vectors. This means the
+            // following slice_vectors that end up inserting "shuffle_vectors"
+            // and the shuffle_vectors inserted as part of codegen for cond
+            // should get optimized away.
+            Value *LowCond = slice_vector(Cond, 0, PredVectorSize);
+            Value *HighCond = slice_vector(Cond, PredVectorSize,
+                                           PredVectorSize);
+            // 3. Codegen the double vectors.
+            Value *DblVecA = codegen(matches[1]);
+            Value *DblVecB = codegen(matches[2]);
+            std::vector<Value *> OpsA, OpsB;
+            // 4. Slice them into halves or vector registers.
+            getHighAndLowVectors(DblVecA, OpsA);
+            getHighAndLowVectors(DblVecB, OpsB);
+            std::vector<Value *> Ops;
+            Ops.push_back(HighCond);
+            Ops.push_back(OpsA[0]);
+            Ops.push_back(OpsB[0]);
+            Intrinsic::ID ID = IPICK(Intrinsic::hexagon_V6_vmux);
+            Value *HighMux = CallLLVMIntrinsic(Intrinsic::
+                                               getDeclaration(module, ID),
+                                               Ops);
+            Ops.clear();
+            Ops.push_back(LowCond);
+            Ops.push_back(OpsA[1]);
+            Ops.push_back(OpsB[1]);
+            Value *LowMux = CallLLVMIntrinsic(Intrinsic::
+                                               getDeclaration(module, ID),
+                                               Ops);
+            Ops.clear();
+            Ops.push_back(LowMux);
+            Ops.push_back(HighMux);
+            value = convertValueType(concat_vectors(Ops),
+                                     llvm_type_of(op->type));
+            return;
+          }
+        }
+      }
+      else if (isValidHexagonVector(op->type, native_vector_bits())) {
+        std::vector<Expr> Selects;
+        std::vector<Expr> matches;
+        Selects.push_back(select(char_cmp_vector,
+                                     WPICK(wild_i8x128, wild_i8x64),
+                                     WPICK(wild_i8x128, wild_i8x64)));
+        Selects.push_back(select(char_cmp_vector,
+                                     WPICK(wild_u8x128, wild_u8x64),
+                                     WPICK(wild_u8x128, wild_u8x64)));
+        Selects.push_back(select(short_cmp_vector,
+                                     WPICK(wild_i16x64, wild_i16x32),
+                                     WPICK(wild_i16x64, wild_i16x32)));
+        Selects.push_back(select(short_cmp_vector,
+                                     WPICK(wild_u16x64, wild_u16x32),
+                                     WPICK(wild_u16x64, wild_u16x32)));
+        Selects.push_back(select(word_cmp_vector,
+                                     WPICK(wild_i32x32, wild_i32x16),
+                                     WPICK(wild_i32x32, wild_i32x16)));
+        Selects.push_back(select(word_cmp_vector,
+                                     WPICK(wild_u32x32, wild_u32x16),
+                                     WPICK(wild_u32x32, wild_u32x16)));
+        for (size_t I = 0; I < Selects.size(); ++I) {
+          const Expr P = Selects[I];
+          if (expr_match(P, op, matches)) {
+            // 1. Codegen the condition. Since we are dealing with vector pairs,
+            // the condition will be of type 2048i1(128B mode) or
+            // 1024i1(64B mode).
+            Value *Cond = codegen(op->condition);
+            // 2. Codegen the vectors.
+            Value *VecA = codegen(matches[1]);
+            Value *VecB = codegen(matches[2]);
+            // 3. Generate the vmux intrinsic.
+            std::vector<Value *> Ops;
+            Ops.push_back(Cond);
+            Ops.push_back(VecA);
+            Ops.push_back(VecB);
+            Intrinsic::ID ID = IPICK(Intrinsic::hexagon_V6_vmux);
+            Value *Mux = CallLLVMIntrinsic(Intrinsic::
+                                               getDeclaration(module, ID),
+                                               Ops);
+            value = convertValueType(Mux, llvm_type_of(op->type));
+            return;
+          }
+        }
+      }
+  }
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(Select *, vector case)\n");
+    CodeGen_Posix::visit(op);
+  }
+}
+llvm::Value *
+CodeGen_Hexagon::compare(llvm::Value *a, llvm::Value *b,
+                         llvm::Function *F) {
+
+  std::vector<Value*> Ops;
+  Ops.push_back(a);
+  Ops.push_back(b);
+  Value *Cmp = CallLLVMIntrinsic(F, Ops);
+  return Cmp;
+}
+llvm::Value *
+CodeGen_Hexagon::negate(llvm::Value *a) {
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  Intrinsic::ID PredNot = IPICK(Intrinsic::hexagon_V6_pred_not);
+  llvm::Function *PredNotF = Intrinsic::getDeclaration(module, PredNot);
+  std::vector<Value*> Ops;
+  Ops.push_back(a);
+  Value *Cmp = CallLLVMIntrinsic(PredNotF, Ops);
+  return Cmp;
+}
+llvm::Value*
+CodeGen_Hexagon::generate_vector_comparison(const BaseExprNode *op,
+                                          std::vector<Pattern> &VecPairCompares,
+                                          std::vector<Pattern> &VecCompares,
+                                          bool invert_ops, bool negate_after) {
+  std::vector<Expr> matches;
+  for (size_t I = 0; I < VecPairCompares.size(); ++I) {
+    const Pattern &P = VecPairCompares[I];
+    if (expr_match(P.pattern, op, matches)) {
+      Value *DblVecA = codegen(matches[0]);
+      Value *DblVecB = codegen(matches[1]);
+      Intrinsic::ID IntrinsID = P.ID;
+      std::vector<Value *> OpsA, OpsB;
+      std::vector<Value *> Ops;
+      getHighAndLowVectors(DblVecA, OpsA);
+      getHighAndLowVectors(DblVecB, OpsB);
+      // OpsA[0] == HighVector;
+      // OpsA[1] = LowVector;
+      // a <= b is !(a > b)
+      llvm::Function *CmpF = Intrinsic::getDeclaration(module, IntrinsID);
+      Value *LowCmp, *HighCmp;
+      if (invert_ops) {
+       LowCmp = compare(OpsB[0], OpsA[0], CmpF);
+       HighCmp = compare(OpsB[1], OpsA[1], CmpF);
+      } else {
+       LowCmp = compare(OpsA[0], OpsB[0], CmpF);
+       HighCmp = compare(OpsA[1], OpsB[1], CmpF);
+      }
+      if (negate_after) {
+        LowCmp = negate(LowCmp);
+        HighCmp = negate(HighCmp);
+      }
+      Ops.clear();
+      Ops.push_back(LowCmp);
+      Ops.push_back(HighCmp);
+      // Do not change type back to llvm_type_of(op->type);
+      return concat_vectors(Ops);
+     }
+  }
+  for (size_t I = 0; I < VecCompares.size(); ++I) {
+    const Pattern &P = VecCompares[I];
+    if (expr_match(P.pattern, op, matches)) {
+      Value *VecA = codegen(matches[0]);
+      Value *VecB = codegen(matches[1]);
+      Intrinsic::ID IntrinsID = P.ID;
+      // a <= b is !(a > b)
+      llvm::Function *CmpF = Intrinsic::getDeclaration(module, IntrinsID);
+      Value *Cmp;
+      if (invert_ops)
+        Cmp = compare(VecB, VecA, CmpF);
+      else
+        Cmp =  compare(VecA, VecB, CmpF);
+      if (negate_after)
+        Cmp = negate(Cmp);
+      // Do not change type back to llvm_type_of(op->type);
+      return Cmp;
+    }
+  }
+  return NULL;
+}
+
+void CodeGen_Hexagon::visit(const LE *op) {
+  if (!op->type.is_vector()) {
+    CodeGen_Posix::visit(op);
+    return;
+  }
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Pattern> VecPairCompares;
+  VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) <=
+                                    WPICK(wild_i8x256, wild_i8x128),
+                                    IPICK(Intrinsic::hexagon_V6_vgtb)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u8x256, wild_u8x128) <=
+                                    WPICK(wild_u8x256, wild_u8x128),
+                                    IPICK(Intrinsic::hexagon_V6_vgtub)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i16x128, wild_i16x64) <=
+                                    WPICK(wild_i16x128, wild_i16x64),
+                                    IPICK(Intrinsic::hexagon_V6_vgth)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u16x128, wild_u16x64) <=
+                                    WPICK(wild_u16x128, wild_u16x64),
+                                    IPICK(Intrinsic::hexagon_V6_vgtuh)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i32x64, wild_i32x32) <=
+                                    WPICK(wild_i32x64, wild_i32x32),
+                                    IPICK(Intrinsic::hexagon_V6_vgtw)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u32x64, wild_u32x32) <=
+                                    WPICK(wild_u32x64, wild_u32x32),
+                                    IPICK(Intrinsic::hexagon_V6_vgtuw)));
+  std::vector<Pattern> VecCompares;
+  VecCompares.push_back(Pattern(WPICK(wild_i8x128, wild_i8x64) <=
+                                WPICK(wild_i8x128, wild_i8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtb)));
+  VecCompares.push_back(Pattern(WPICK(wild_u8x128, wild_u8x64) <=
+                                WPICK(wild_u8x128, wild_u8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtub)));
+  VecCompares.push_back(Pattern(WPICK(wild_i16x64, wild_i16x32) <=
+                                WPICK(wild_i16x64, wild_i16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgth)));
+  VecCompares.push_back(Pattern(WPICK(wild_u16x64, wild_u16x32) <=
+                                WPICK(wild_u16x64, wild_u16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgtuh)));
+  VecCompares.push_back(Pattern(WPICK(wild_i32x32, wild_i32x16) <=
+                                WPICK(wild_i32x32, wild_i32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtw)));
+  VecCompares.push_back(Pattern(WPICK(wild_u32x32, wild_u32x16) <=
+                                WPICK(wild_u32x32, wild_u32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtuw)));
+
+  value = generate_vector_comparison(op,VecPairCompares, VecCompares, false,
+                                     true);
+
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(LE * , vector case)\n");
+    CodeGen_Posix::visit(op);
+  }
+}
+void CodeGen_Hexagon::visit(const LT *op) {
+  if (!op->type.is_vector()) {
+    CodeGen_Posix::visit(op);
+    return;
+  }
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Pattern> VecPairCompares;
+  VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) <
+                                    WPICK(wild_i8x256, wild_i8x128),
+                                    IPICK(Intrinsic::hexagon_V6_vgtb)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u8x256, wild_u8x128) <
+                                    WPICK(wild_u8x256, wild_u8x128),
+                                    IPICK(Intrinsic::hexagon_V6_vgtub)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i16x128, wild_i16x64) <
+                                    WPICK(wild_i16x128, wild_i16x64),
+                                    IPICK(Intrinsic::hexagon_V6_vgth)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u16x128, wild_u16x64) <
+                                    WPICK(wild_u16x128, wild_u16x64),
+                                    IPICK(Intrinsic::hexagon_V6_vgtuh)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i32x64, wild_i32x32) <
+                                    WPICK(wild_i32x64, wild_i32x32),
+                                    IPICK(Intrinsic::hexagon_V6_vgtw)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u32x64, wild_u32x32) <
+                                    WPICK(wild_u32x64, wild_u32x32),
+                                    IPICK(Intrinsic::hexagon_V6_vgtuw)));
+  std::vector<Pattern> VecCompares;
+  VecCompares.push_back(Pattern(WPICK(wild_i8x128, wild_i8x64) <
+                                WPICK(wild_i8x128, wild_i8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtb)));
+  VecCompares.push_back(Pattern(WPICK(wild_u8x128, wild_u8x64) <
+                                WPICK(wild_u8x128, wild_u8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtub)));
+  VecCompares.push_back(Pattern(WPICK(wild_i16x64, wild_i16x32) <
+                                WPICK(wild_i16x64, wild_i16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgth)));
+  VecCompares.push_back(Pattern(WPICK(wild_u16x64, wild_u16x32) <
+                                WPICK(wild_u16x64, wild_u16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgtuh)));
+  VecCompares.push_back(Pattern(WPICK(wild_i32x32, wild_i32x16) <
+                                WPICK(wild_i32x32, wild_i32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtw)));
+  VecCompares.push_back(Pattern(WPICK(wild_u32x32, wild_u32x16) <
+                                WPICK(wild_u32x32, wild_u32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtuw)));
+
+  value = generate_vector_comparison(op,VecPairCompares, VecCompares, true,
+                                     false);
+
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(LE * , vector case)\n");
+    CodeGen_Posix::visit(op);
+  }
+}
+void CodeGen_Hexagon::visit(const NE *op) {
+  if (!op->type.is_vector()) {
+    CodeGen_Posix::visit(op);
+    return;
+  }
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Pattern> VecPairCompares;
+  VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) !=
+                                    WPICK(wild_i8x256, wild_i8x128),
+                                    IPICK(Intrinsic::hexagon_V6_veqb)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u8x256, wild_u8x128) !=
+                                    WPICK(wild_u8x256, wild_u8x128),
+                                    IPICK(Intrinsic::hexagon_V6_veqb)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i16x128, wild_i16x64) !=
+                                    WPICK(wild_i16x128, wild_i16x64),
+                                    IPICK(Intrinsic::hexagon_V6_veqh)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u16x128, wild_u16x64) !=
+                                    WPICK(wild_u16x128, wild_u16x64),
+                                    IPICK(Intrinsic::hexagon_V6_veqh)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i32x64, wild_i32x32) !=
+                                    WPICK(wild_i32x64, wild_i32x32),
+                                    IPICK(Intrinsic::hexagon_V6_veqw)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u32x64, wild_u32x32) !=
+                                    WPICK(wild_u32x64, wild_u32x32),
+                                    IPICK(Intrinsic::hexagon_V6_veqw)));
+  std::vector<Pattern> VecCompares;
+  VecCompares.push_back(Pattern(WPICK(wild_i8x128, wild_i8x64) !=
+                                WPICK(wild_i8x128, wild_i8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtb)));
+  VecCompares.push_back(Pattern(WPICK(wild_u8x128, wild_u8x64) !=
+                                WPICK(wild_u8x128, wild_u8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtub)));
+  VecCompares.push_back(Pattern(WPICK(wild_i16x64, wild_i16x32) !=
+                                WPICK(wild_i16x64, wild_i16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgth)));
+  VecCompares.push_back(Pattern(WPICK(wild_u16x64, wild_u16x32) !=
+                                WPICK(wild_u16x64, wild_u16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgtuh)));
+  VecCompares.push_back(Pattern(WPICK(wild_i32x32, wild_i32x16) !=
+                                WPICK(wild_i32x32, wild_i32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtw)));
+  VecCompares.push_back(Pattern(WPICK(wild_u32x32, wild_u32x16) !=
+                                WPICK(wild_u32x32, wild_u32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtuw)));
+
+  value = generate_vector_comparison(op,VecPairCompares, VecCompares, false,
+                                     true);
+
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(LE * , vector case)\n");
+    CodeGen_Posix::visit(op);
+  }
+}
+void CodeGen_Hexagon::visit(const GT *op) {
+  if (!op->type.is_vector()) {
+    CodeGen_Posix::visit(op);
+    return;
+  }
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Pattern> VecPairCompares;
+  VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) >
+                                    WPICK(wild_i8x256, wild_i8x128),
+                                    IPICK(Intrinsic::hexagon_V6_vgtb)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u8x256, wild_u8x128) >
+                                    WPICK(wild_u8x256, wild_u8x128),
+                                    IPICK(Intrinsic::hexagon_V6_vgtub)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i16x128, wild_i16x64) >
+                                    WPICK(wild_i16x128, wild_i16x64),
+                                    IPICK(Intrinsic::hexagon_V6_vgth)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u16x128, wild_u16x64) >
+                                    WPICK(wild_u16x128, wild_u16x64),
+                                    IPICK(Intrinsic::hexagon_V6_vgtuh)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i32x64, wild_i32x32) >
+                                    WPICK(wild_i32x64, wild_i32x32),
+                                    IPICK(Intrinsic::hexagon_V6_vgtw)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u32x64, wild_u32x32) >
+                                    WPICK(wild_u32x64, wild_u32x32),
+                                    IPICK(Intrinsic::hexagon_V6_vgtuw)));
+  std::vector<Pattern> VecCompares;
+  VecCompares.push_back(Pattern(WPICK(wild_i8x128, wild_i8x64) >
+                                WPICK(wild_i8x128, wild_i8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtb)));
+  VecCompares.push_back(Pattern(WPICK(wild_u8x128, wild_u8x64) >
+                                WPICK(wild_u8x128, wild_u8x64),
+                                IPICK(Intrinsic::hexagon_V6_vgtub)));
+  VecCompares.push_back(Pattern(WPICK(wild_i16x64, wild_i16x32) >
+                                WPICK(wild_i16x64, wild_i16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgth)));
+  VecCompares.push_back(Pattern(WPICK(wild_u16x64, wild_u16x32) >
+                                WPICK(wild_u16x64, wild_u16x32),
+                                IPICK(Intrinsic::hexagon_V6_vgtuh)));
+  VecCompares.push_back(Pattern(WPICK(wild_i32x32, wild_i32x16) >
+                                WPICK(wild_i32x32, wild_i32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtw)));
+  VecCompares.push_back(Pattern(WPICK(wild_u32x32, wild_u32x16) >
+                                WPICK(wild_u32x32, wild_u32x16),
+                                IPICK(Intrinsic::hexagon_V6_vgtuw)));
+
+  value = generate_vector_comparison(op,VecPairCompares, VecCompares, false,
+                                     false);
+
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(LE * , vector case)\n");
+    CodeGen_Posix::visit(op);
+  }
+}
+void CodeGen_Hexagon::visit(const EQ *op) {
+  if (!op->type.is_vector()) {
+    CodeGen_Posix::visit(op);
+    return;
+  }
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Pattern> VecPairCompares;
+  VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) ==
+                                    WPICK(wild_i8x256, wild_i8x128),
+                                    IPICK(Intrinsic::hexagon_V6_veqb)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u8x256, wild_u8x128) ==
+                                    WPICK(wild_u8x256, wild_u8x128),
+                                    IPICK(Intrinsic::hexagon_V6_veqb)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i16x128, wild_i16x64) ==
+                                    WPICK(wild_i16x128, wild_i16x64),
+                                    IPICK(Intrinsic::hexagon_V6_veqh)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u16x128, wild_u16x64) ==
+                                    WPICK(wild_u16x128, wild_u16x64),
+                                    IPICK(Intrinsic::hexagon_V6_veqh)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_i32x64, wild_i32x32) ==
+                                    WPICK(wild_i32x64, wild_i32x32),
+                                    IPICK(Intrinsic::hexagon_V6_veqw)));
+  VecPairCompares.push_back(Pattern(WPICK(wild_u32x64, wild_u32x32) ==
+                                    WPICK(wild_u32x64, wild_u32x32),
+                                    IPICK(Intrinsic::hexagon_V6_veqw)));
+  std::vector<Pattern> VecCompares;
+  VecCompares.push_back(Pattern(WPICK(wild_i8x128, wild_i8x64) ==
+                                WPICK(wild_i8x128, wild_i8x64),
+                                IPICK(Intrinsic::hexagon_V6_veqb)));
+  VecCompares.push_back(Pattern(WPICK(wild_u8x128, wild_u8x64) ==
+                                WPICK(wild_u8x128, wild_u8x64),
+                                IPICK(Intrinsic::hexagon_V6_veqb)));
+  VecCompares.push_back(Pattern(WPICK(wild_i16x64, wild_i16x32) ==
+                                WPICK(wild_i16x64, wild_i16x32),
+                                IPICK(Intrinsic::hexagon_V6_veqh)));
+  VecCompares.push_back(Pattern(WPICK(wild_u16x64, wild_u16x32) ==
+                                WPICK(wild_u16x64, wild_u16x32),
+                                IPICK(Intrinsic::hexagon_V6_veqh)));
+  VecCompares.push_back(Pattern(WPICK(wild_i32x32, wild_i32x16) ==
+                                WPICK(wild_i32x32, wild_i32x16),
+                                IPICK(Intrinsic::hexagon_V6_veqw)));
+  VecCompares.push_back(Pattern(WPICK(wild_u32x32, wild_u32x16) ==
+                                WPICK(wild_u32x32, wild_u32x16),
+                                IPICK(Intrinsic::hexagon_V6_veqw)));
+
+  value = generate_vector_comparison(op,VecPairCompares, VecCompares, false,
+                                     false);
+
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(LE * , vector case)\n");
+    CodeGen_Posix::visit(op);
+  }
 }
 }}
 

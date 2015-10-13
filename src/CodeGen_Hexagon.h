@@ -36,6 +36,12 @@ protected:
     void visit(const Call *);
     void visit(const Mul *);
     void visit(const Load *);
+    void visit(const LE *);
+    void visit(const LT *);
+    void visit(const NE *);
+    void visit(const GT *);
+    void visit(const EQ *);
+    void visit(const Select *);
     /* // @} */
 
     bool shouldUseVMPA(const Add *, std::vector<llvm::Value *> &);
@@ -67,6 +73,18 @@ protected:
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Cast *);
     llvm::Value *handleLargeVectors(const Max *);
+    /* Ideally, we'd have liked to call compare with llvm::Intrinsic::ID
+     as the last argument, but that means "llvm/IR/Intrinsics.h" would be needed
+     to be included here. However, CodeGen_Hexagon.h is used to create Halide.h
+     which is needed by the user. All of this would mean that the user would
+     need all LLVM Headers. So, we use llvm::Function *F instead, much in the
+     same way we do for CallLLVMIntrinsic. */
+    llvm::Value *compare(llvm::Value *a, llvm::Value *b,
+                         llvm::Function *F);
+    llvm::Value *negate(llvm::Value *a);
+    llvm::Value *generate_vector_comparison(const BaseExprNode *,
+                                            std::vector<Pattern> &,
+                                            std::vector<Pattern> &, bool, bool);
     bool possiblyCodeGenWideningMultiply(const Mul *);
     bool possiblyGenerateVMPAAccumulate(const Add *);
 
