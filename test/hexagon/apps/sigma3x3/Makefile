@@ -12,8 +12,9 @@ else
 endif
 
 TIMING=--timing
-CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
-CXXFLAGS="--std=c++11"
+ARG12=1920 1080
+
+CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
 LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
@@ -21,7 +22,7 @@ INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct
 TEST_NAME= $(shell basename ${CURR_DIR})
 B128_MODE=
 GDB=
-CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} # -DSYNTHETIC
+CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 sigma3x3.o sigma3x3.h: sigma3x3.cpp
 	${X86_CLANG}  sigma3x3.cpp -g -o sigma3x3.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} ; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./sigma3x3.generate.out  ${B128_MODE}
@@ -66,7 +67,7 @@ bmark-report:
 	fi
 
 run: sigma3x3.out
-	${HEX_TOOLS}/bin/hexagon-sim sigma3x3.out ${TIMING} -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
+	${HEX_TOOLS}/bin/hexagon-sim sigma3x3.out ${TIMING} -- ${ARG12} ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
 	RUN_STATUS=$$?; \
 	FAIL=0; \
 	if [ $$RUN_STATUS -ne 0 ]; then \
