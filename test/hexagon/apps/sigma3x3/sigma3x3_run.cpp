@@ -3,16 +3,7 @@
 #include "io.h"
 #include <stdio.h>
 #include <stdlib.h>
-static uint8_t max(uint8_t a,  uint8_t b) {
-  return a > b ? a : b;
-}
-static uint8_t min(uint8_t a,  uint8_t b) {
-  return a < b ? a : b;
-}
 
-static uint8_t mid(uint8_t a,  uint8_t b, uint8_t c) {
-  return max(min(max(a, b), c), min(a, b));
-}
 #ifdef SYNTHETIC
 int main(int argc, char **argv) {
   int x, y;
@@ -53,7 +44,7 @@ int main(int argc, char **argv) {
   printf ("finished initializing output\n");
 #endif
 
-  int32_t threshold = 8;
+  uint16_t threshold = 8;
 
   // In AOT-compiled mode, Halide doesn't manage this memory for
   // you. You should use whatever image data type makes sense for
