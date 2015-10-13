@@ -24,7 +24,7 @@ struct Target {
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
      * set" is actually llvm bitcode. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS} arch;
+    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, POWERPC} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -45,6 +45,9 @@ struct Target {
 
         ARMv7s,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
         NoNEON,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
+
+        VSX,  ///< Use VSX instructions. Only relevant on POWERPC.
+        POWER_ARCH_2_07,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
 
         CUDA,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
         CUDACapability30,  ///< Enable CUDA compute capability 3.0 (Kepler)

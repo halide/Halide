@@ -104,6 +104,7 @@ protected:
     static bool llvm_AArch64_enabled;
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
+    static bool llvm_PowerPC_enabled;
 
     llvm::Module *module;
     llvm::Function *function;

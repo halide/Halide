@@ -19,6 +19,7 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
+#include "CodeGen_PowerPC.h"
 #include "CodeGen_PNaCl.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
@@ -108,6 +109,12 @@ using std::stack;
 #define InitializeMipsTarget()       InitializeTarget(Mips)
 #define InitializeMipsAsmParser()    InitializeAsmParser(Mips)
 #define InitializeMipsAsmPrinter()   InitializeAsmPrinter(Mips)
+#endif
+
+#ifdef WITH_POWERPC
+#define InitializePowerPCTarget()       InitializeTarget(PowerPC)
+#define InitializePowerPCAsmParser()    InitializeAsmParser(PowerPC)
+#define InitializePowerPCAsmPrinter()   InitializeAsmPrinter(PowerPC)
 #endif
 
 namespace {
@@ -274,6 +281,11 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
             return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS>>(target, context);
         }
 #endif
+#ifdef WITH_POWERPC
+        if (target.arch == Target::POWERPC) {
+            return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
+        }
+#endif
 #ifdef WITH_NATIVE_CLIENT
         if (target.arch == Target::PNaCl) {
             return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl>>(target, context);
@@ -290,6 +302,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_ARM>(target, context);
     } else if (target.arch == Target::MIPS) {
         return make_codegen<CodeGen_MIPS>(target, context);
+    } else if (target.arch == Target::POWERPC) {
+        return make_codegen<CodeGen_PowerPC>(target, context);
     } else if (target.arch == Target::PNaCl) {
         return make_codegen<CodeGen_PNaCl>(target, context);
     }
@@ -382,6 +396,7 @@ bool CodeGen_LLVM::llvm_ARM_enabled = false;
 bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
+bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 
 llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     init_module();
