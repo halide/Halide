@@ -5,6 +5,7 @@
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "IROperator.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -15,6 +16,127 @@ using std::vector;
 using std::sort;
 
 static ostringstream nil;
+
+// OpenCL doesn't support vectors of bools, this mutator rewrites IR
+// to use signed integer vectors instead.
+class EliminateBoolVectors : public IRMutator {
+private:
+    using IRMutator::visit;
+
+    template <typename T>
+    void visit_comparison(const T* op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        Type t = a.type();
+        if (t.width > 1) {
+            // To represent bool vectors, OpenCL uses vectors of signed
+            // integers with the same width as the types being compared.
+            t.code = Type::Int;
+            expr = T::make(a, b);
+            expr = Cast::make(t, expr);
+        } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
+            expr = T::make(a, b);
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const EQ *op) { visit_comparison(op); }
+    void visit(const NE *op) { visit_comparison(op); }
+    void visit(const LT *op) { visit_comparison(op); }
+    void visit(const LE *op) { visit_comparison(op); }
+    void visit(const GT *op) { visit_comparison(op); }
+    void visit(const GE *op) { visit_comparison(op); }
+
+    template <typename T>
+    void visit_logical_binop(const T* op, const std::string& bitwise_op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        Type ta = a.type();
+        Type tb = b.type();
+        if (ta.width > 1) {
+            // Ensure that both a and b have the same type.
+            Type t = ta;
+            t.bits = std::max(ta.bits, tb.bits);
+            if (t != a.type()) {
+                a = Cast::make(t, a);
+            }
+            if (t != b.type()) {
+                b = Cast::make(t, b);
+            }
+            // Replace logical operation with bitwise operation.
+            expr = Call::make(t, bitwise_op, {a, b}, Call::Intrinsic);
+        } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
+            expr = T::make(a, b);
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const Or *op) {
+        visit_logical_binop(op, Call::bitwise_or);
+    }
+
+    void visit(const And *op) {
+        visit_logical_binop(op, Call::bitwise_and);
+    }
+
+    void visit(const Not *op) {
+        Expr a = mutate(op->a);
+        if (a.type().width > 1) {
+            // Replace logical operation with bitwise operation.
+            expr = Call::make(a.type(), Call::bitwise_not, {a}, Call::Intrinsic);
+        } else if (!a.same_as(op->a)) {
+            expr = Not::make(a);
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const Select *op) {
+        Expr cond = mutate(op->condition);
+        Expr true_value = mutate(op->true_value);
+        Expr false_value = mutate(op->false_value);
+        Type cond_ty = cond.type();
+        if (cond_ty.width > 1) {
+            // If the condition is a vector, it should be a vector of ints, so rewrite it to compare to 0.
+            internal_assert(cond_ty.code == Type::Int);
+
+            // OpenCL's select function requires that all 3 operands have the same width.
+            internal_assert(true_value.type().bits == false_value.type().bits);
+            if (true_value.type().bits != cond_ty.bits) {
+                cond_ty.bits = true_value.type().bits;
+                cond = Cast::make(cond_ty, cond);
+            }
+
+            expr = Select::make(NE::make(cond, make_zero(cond_ty)), true_value, false_value);
+        } else if (!cond.same_as(op->condition) ||
+                   !true_value.same_as(op->true_value) ||
+                   !false_value.same_as(op->false_value)) {
+            expr = Select::make(cond, true_value, false_value);
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const Broadcast *op) {
+        Expr value = mutate(op->value);
+        if (op->type.bits == 1) {
+            expr = Broadcast::make(-Cast::make(Int(8), value), op->width);
+        } else if (!value.same_as(op->value)) {
+            expr = Broadcast::make(value, op->width);
+        } else {
+            expr = op;
+        }
+    }
+};
+
+Stmt eliminate_bool_vectors(Stmt s) {
+    EliminateBoolVectors eliminator;
+    return eliminator.mutate(s);
+}
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
     clc(src_stream), target(t) {
@@ -37,7 +159,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
         if (type.is_uint() && type.bits > 1) oss << 'u';
         switch (type.bits) {
         case 1:
-            user_assert(type.width == 1) << "Vector of bool not valid in OpenCL C (yet)\n";
+            internal_assert(type.width == 1) << "Encountered vector of bool\n";
             oss << "bool";
             break;
         case 8:
@@ -102,22 +224,6 @@ string simt_intrinsic(const string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
-}
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
-    if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), {op->a, op->b}, Call::Extern));
-    } else {
-        visit_binop(op->type, op->a, op->b, "/");
-    }
-}
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
-    if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "smod_" + print_type(op->type), {op->a, op->b}, Call::Extern));
-    } else {
-        visit_binop(op->type, op->a, op->b, "%");
-    }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
@@ -305,9 +411,74 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     cache.clear();
 }
 
+Type bool_to_int(Type result_type, Type input_type) {
+    if (result_type.is_vector() && result_type.bits == 1) {
+        result_type.code = Type::Int;
+        result_type.bits = input_type.bits;
+    }
+    return result_type;
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const EQ *op) {
+    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "==");
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const NE *op) {
+    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "!=");
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const LT *op) {
+    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "<");
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const LE *op) {
+    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "<=");
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GT *op) {
+    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, ">");
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GE *op) {
+    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, ">=");
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
     if (op->type.is_vector()) {
-        print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
+        if (op->value.type().bits == 1) {
+            // If this is a cast of a bool vector, then just print the
+            // value, overriding the type.
+            print_assignment(op->type, print_expr(op->value));
+        } else {
+            print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
+        }
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
+    if (op->condition.type().is_vector()) {
+        // We avoid boolean vectors in OpenCL C
+        Expr condition = op->condition;
+        const NE* cond_neq = condition.as<NE>();
+        if (cond_neq) {
+            if (is_zero(cond_neq->b)) {
+                condition = cond_neq->a;
+            }
+        }
+
+        ostringstream rhs;
+        string true_val = print_expr(op->true_value);
+        string false_val = print_expr(op->false_value);
+        string cond = print_expr(condition);
+
+        rhs << "(" << print_type(op->type) << ")"
+            << "select(" << false_val
+            << ", " << true_val
+            << ", " << cond
+            << ")";
+        print_assignment(op->type, rhs.str());
     } else {
         CodeGen_C::visit(op);
     }
@@ -397,6 +568,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                                                       const vector<GPU_Argument> &args) {
 
     debug(2) << "Adding OpenCL kernel " << name << "\n";
+
+    debug(2) << "Eliminating bool vectors\n";
+    s = eliminate_bool_vectors(s);
+    debug(2) << "After eliminating bool vectors:\n" << s << "\n";
 
     // Figure out which arguments should be passed in __constant.
     // Such arguments should be:
@@ -493,28 +668,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     }
 }
 
-static string smod_def(string T) {
-    ostringstream ss;
-    ss << T << " smod_" << T << "(" << T << " a, " << T << " b) {\n";
-    ss << T << " r = a % b;\n";
-    ss << "if (r < 0) { r += b < 0 ? -b : b; }\n";
-    ss << "return r;\n";
-    ss << "}\n";
-    return ss.str();
-}
-
-static string sdiv_def(string T) {
-    ostringstream ss;
-    ss << T << " sdiv_" << T << "(" << T << " a, " << T << " b) {\n";
-    ss << T << " q = a / b;\n";
-    ss << T << " r = a - q*b;\n";
-    ss << T << " bs = b >> (8*sizeof(" << T << ") - 1);\n";
-    ss << T << " rs = r >> (8*sizeof(" << T << ") - 1);\n";
-    ss << "return q - (rs&bs) + (rs&~bs);\n";
-    ss << "}\n";
-    return ss.str();
-}
-
 void CodeGen_OpenCL_Dev::init_module() {
     debug(2) << "OpenCL device codegen init_module\n";
 
@@ -532,14 +685,6 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
                << "float inf_f32() { return INFINITY; }\n"
-               << smod_def("char") << "\n"
-               << smod_def("short") << "\n"
-               << smod_def("int") << "\n"
-               << smod_def("long") << "\n"
-               << sdiv_def("char") << "\n"
-               << sdiv_def("short") << "\n"
-               << sdiv_def("int") << "\n"
-               << sdiv_def("long") << "\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
