@@ -2173,8 +2173,13 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     Intrinsic::ID ID = (Intrinsic::ID) 0;
     bool zext_wordsize = false;
     bool fill_wordsize = false;
+    bool zero_bcast = false;
+
     if (match32 || match16 || match8) {
-      if (target.has_feature(Halide::Target::HVX_V62)) {
+      if (is_zero(op->value)) {
+        ID = IPICK(Intrinsic::hexagon_V6_vd0);
+        zero_bcast = true;
+      } else if (target.has_feature(Halide::Target::HVX_V62)) {
         if (match8) {
           ID = IPICK(Intrinsic::hexagon_V6_lvsplatb);
           zext_wordsize = true;
@@ -2196,6 +2201,14 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     // Generate the broadcast code.
     if (ID != (Intrinsic::ID) 0) {
       Value *splatval = NULL;
+
+      if (zero_bcast) {       // Broadcast of zero
+        llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+        std::vector<Value *> Ops;
+        Value *Result = CallLLVMIntrinsic(F, Ops);
+        value = convertValueType(Result, llvm_type_of(op->type));
+        return;
+      }
 
       if (zext_wordsize) {   // Widen splat value to 32bit word.
         splatval = builder->CreateZExt(codegen(op->value), llvm_type_of(UInt(32)));
@@ -2219,16 +2232,14 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
       }
 
       llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-      value = builder->CreateCall(F, splatval);
-
-      if (fill_wordsize) {   // If filled, convert back to matched type.
-        value = convertValueType(value, llvm_type_of(op->type));
-      }
+      std::vector<Value *> Ops;
+      Ops.push_back(splatval);
+      Value *Result = CallLLVMIntrinsic(F, Ops);
+      value = convertValueType(Result, llvm_type_of(op->type));
       return;
     } else {
       user_warning << "Unsupported type for vector broadcast ("
-                   << op->type
-                   << ")\n";
+                   << op->type << ")\n";
     }
 
     CodeGen_Posix::visit(op);
