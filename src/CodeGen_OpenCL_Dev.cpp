@@ -411,36 +411,40 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     cache.clear();
 }
 
-Type bool_to_int(Type result_type, Type input_type) {
+namespace {
+// OpenCL doesn't support vectors of bool, so we re-write them to use
+// signed integers. Binary operators produce a signed integer of the same width as the two input types, so we
+Type vec_bool_to_int(Type result_type, Type input_type) {
     if (result_type.is_vector() && result_type.bits == 1) {
         result_type.code = Type::Int;
         result_type.bits = input_type.bits;
     }
     return result_type;
 }
+}
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const EQ *op) {
-    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "==");
+    visit_binop(vec_bool_to_int(op->type, op->a.type()), op->a, op->b, "==");
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const NE *op) {
-    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "!=");
+    visit_binop(vec_bool_to_int(op->type, op->a.type()), op->a, op->b, "!=");
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const LT *op) {
-    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "<");
+    visit_binop(vec_bool_to_int(op->type, op->a.type()), op->a, op->b, "<");
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const LE *op) {
-    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, "<=");
+    visit_binop(vec_bool_to_int(op->type, op->a.type()), op->a, op->b, "<=");
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GT *op) {
-    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, ">");
+    visit_binop(vec_bool_to_int(op->type, op->a.type()), op->a, op->b, ">");
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GE *op) {
-    visit_binop(bool_to_int(op->type, op->a.type()), op->a, op->b, ">=");
+    visit_binop(vec_bool_to_int(op->type, op->a.type()), op->a, op->b, ">=");
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
