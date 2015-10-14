@@ -509,7 +509,7 @@ void CodeGen_X86::visit(const Div *op) {
             // val += (num - val)/2
             Value *diff = builder->CreateSub(num, val);
             diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
-            val = builder->CreateNSWAdd(val, diff);
+            val = builder->CreateNUWAdd(val, diff);
 
             // Do the final shift
             if (shift) {

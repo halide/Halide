@@ -28,6 +28,7 @@ int main(int argc, const char **argv) {
     cse_test();
     simplify_test();
     solve_test();
+    target_test();
 
     return 0;
 }
