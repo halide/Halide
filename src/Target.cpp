@@ -254,14 +254,14 @@ Target parse_target_string(const std::string &target) {
     if (!t.merge_string(target)) {
         const char *separator = "";
         std::string architectures;
-        for (auto arch_iter = arch_name_map.begin(); arch_iter != arch_name_map.end(); arch_iter++) {
-            architectures += separator + arch_iter->first;
+        for (auto const &arch_entry : arch_name_map) {
+            architectures += separator + arch_entry.first;
             separator = ", ";
         }
         separator = "";
         std::string oses;
-        for (auto os_iter = os_name_map.begin(); os_iter != os_name_map.end(); os_iter++) {
-            oses += separator + os_iter->first;
+        for (auto os_entry : os_name_map) {
+            oses += separator + os_entry.first;
             separator = ", ";
         }
         separator = "";
@@ -269,8 +269,8 @@ Target parse_target_string(const std::string &target) {
         // assume the first line starts with "Features are ".
         int line_char_start = -(int)sizeof("Features are");
         std::string features;
-        for (auto feature_iter = feature_name_map.begin(); feature_iter != feature_name_map.end(); feature_iter++) {
-            features += separator + feature_iter->first;
+        for (auto feature_entry : feature_name_map) {
+            features += separator + feature_entry.first;
             if (features.length() - line_char_start > 70) {
                 separator = "\n";
                 line_char_start = features.length();
