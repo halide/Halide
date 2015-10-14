@@ -463,7 +463,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
     if (op->condition.type().is_vector()) {
-        // We avoid boolean vectors in OpenCL C
+        // We avoid boolean vectors in OpenCL C. To avoid this, we've
+        // rewritten the condition to be bitwise instead of logical
+        // operations, and rewritten the condition 'x' to be 'x !=
+        // 0'. To generate valid OpenCL C, we just need to strip away
+        // the NE op, and use x directly.
         Expr condition = op->condition;
         const NE* cond_neq = condition.as<NE>();
         if (cond_neq) {
@@ -472,16 +476,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
             }
         }
 
-        ostringstream rhs;
         string true_val = print_expr(op->true_value);
         string false_val = print_expr(op->false_value);
         string cond = print_expr(condition);
 
-        rhs << "(" << print_type(op->type) << ")"
-            << "select(" << false_val
-            << ", " << true_val
-            << ", " << cond
-            << ")";
+        // Yes, you read this right. OpenCL's select function is declared
+        // 'select(false_case, true_case, condition)'.
+        ostringstream rhs;
+        rhs << "select(" << false_val << ", " << true_val << ", " << cond << ")";
         print_assignment(op->type, rhs.str());
     } else {
         CodeGen_C::visit(op);
