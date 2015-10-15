@@ -143,16 +143,10 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
         Expr ws_vector = Variable::make(ws, "*");
 
         // Bounds of the type stored in the wider vector type
-        Expr tmin = simplify(cast(w, t.imin()));
-        Expr tmax = simplify(cast(w, t.imax()));
-        Expr tsmin = simplify(cast(ws, t.imin()));
-        Expr tsmax = simplify(cast(ws, t.imax()));
-
-        // Can't fit uint32 max into an intimm
-        if (t.element_of() == UInt(32)) {
-            tmax = simplify(cast(w, t.max()));
-            tsmax = simplify(cast(ws, t.max()));
-        }
+        Expr tmin = simplify(cast(w, t.min()));
+        Expr tmax = simplify(cast(w, t.max()));
+        Expr tsmin = simplify(cast(ws, t.min()));
+        Expr tsmax = simplify(cast(ws, t.max()));
 
         Pattern p("", "", intrin_width, Expr(), Pattern::NarrowArgs);
 
@@ -315,45 +309,6 @@ Value *CodeGen_ARM::call_pattern(const Pattern &p, llvm::Type *t, const vector<l
     }
 }
 
-namespace {
-
-// Try to losslessly narrow an integer expression to the target type
-Expr try_narrow(Expr a, Type target) {
-    internal_assert(a.type().width == target.width);
-    if (const Cast *c = a.as<Cast>()) {
-        Type old_type = c->value.type();
-        if (old_type == target) {
-            return c->value;
-        } else if (target.can_represent(old_type)) {
-            return cast(target, c->value);
-        } else if (c->type.can_represent(target)) {
-            // We lose nothing by stripping off the cast and pressing onwards.
-            return try_narrow(c->value, target);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const Broadcast *b = a.as<Broadcast>()) {
-        Expr n = try_narrow(b->value, target.element_of());
-        if (n.defined()) {
-            return Broadcast::make(n, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = a.as<IntImm>()) {
-        if (i->value <= target.imax() &&
-            i->value >= target.imin()) {
-            return cast(target, a);
-        }
-    }
-
-    return Expr();
-}
-}
-
 void CodeGen_ARM::visit(const Cast *op) {
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
@@ -380,7 +335,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                     internal_assert(matches[i].type().bits == t.bits * 2);
                     internal_assert(matches[i].type().width == t.width);
                     // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
-                    matches[i] = try_narrow(matches[i], t);
+                    matches[i] = lossless_cast(t, matches[i]);
                     if (!matches[i].defined()) {
                         // debug(4) << "failed\n";
                         all_narrow = false;
@@ -533,12 +488,8 @@ void CodeGen_ARM::visit(const Div *op) {
     }
 
     // Detect if it's a small int division
-    const Broadcast *broadcast = op->b.as<Broadcast>();
-    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;
-    const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
-    if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
-    if (!int_imm) int_imm = op->b.as<IntImm>();
-    int const_divisor = int_imm ? int_imm->value : 0;
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
 
     // Check if the divisor is a power of two
     int shift_amount;
@@ -553,22 +504,23 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *numerator = codegen(op->a);
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateLShr(numerator, shift);
-    } else if (op->type.is_int() &&
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
                (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
-               const_divisor > 1 &&
-               ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
+               *const_int_divisor > 1 &&
+               ((op->type.bits > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
         int64_t multiplier, shift;
         if (op->type.bits == 32) {
-            multiplier = IntegerDivision::table_s32[const_divisor][2];
-            shift      = IntegerDivision::table_s32[const_divisor][3];
+            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
         } else if (op->type.bits == 16) {
-            multiplier = IntegerDivision::table_s16[const_divisor][2];
-            shift      = IntegerDivision::table_s16[const_divisor][3];
+            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[const_divisor][2];
-            shift      = IntegerDivision::table_s8[const_divisor][3];
+            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
         }
 
         Value *val = codegen(op->a);
@@ -593,23 +545,24 @@ void CodeGen_ARM::visit(const Div *op) {
         // Maybe flip the bits again
         value = builder->CreateXor(val, sign);
 
-    } else if (op->type.is_uint() &&
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
                (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
-               const_divisor > 1 && const_divisor < 256) {
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
 
         int64_t method, multiplier, shift;
         if (op->type.bits == 32) {
-            method     = IntegerDivision::table_u32[const_divisor][1];
-            multiplier = IntegerDivision::table_u32[const_divisor][2];
-            shift      = IntegerDivision::table_u32[const_divisor][3];
+            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
         } else if (op->type.bits == 16) {
-            method     = IntegerDivision::table_u16[const_divisor][1];
-            multiplier = IntegerDivision::table_u16[const_divisor][2];
-            shift      = IntegerDivision::table_u16[const_divisor][3];
+            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
         } else {
-            method     = IntegerDivision::table_u8[const_divisor][1];
-            multiplier = IntegerDivision::table_u8[const_divisor][2];
-            shift      = IntegerDivision::table_u8[const_divisor][3];
+            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
         }
 
         internal_assert(method != 0)
@@ -639,19 +592,19 @@ void CodeGen_ARM::visit(const Div *op) {
 
         // Average with original numerator
         if (method == 2) {
-            if (op->type.bits == 32) {
+            if (op->type.is_vector() && op->type.bits == 32) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", {val, num});
                 } else {
                     val = call_intrin(narrower, 2, "llvm.aarch64.neon.uhadd.v2i32", {val, num});
                 }
-            } else if (op->type.bits == 16) {
+            } else if (op->type.is_vector() && op->type.bits == 16) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", {val, num});
                 } else {
                     val = call_intrin(narrower, 4, "llvm.aarch64.neon.uhadd.v4i16", {val, num});
                 }
-            } else if (op->type.bits == 8) {
+            } else if (op->type.is_vector() && op->type.bits == 8) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", {val, num});
                 } else {
@@ -672,7 +625,6 @@ void CodeGen_ARM::visit(const Div *op) {
         }
 
         value = val;
-
     } else {
         CodeGen_Posix::visit(op);
     }
@@ -941,6 +893,9 @@ void CodeGen_ARM::visit(const Store *op) {
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
+#if LLVM_VERSION > 37
+                   << ".p0i8"
+#endif
                   << ".v"
                   << intrin_type.width
                   << (t.is_float() ? 'f' : 'i')
@@ -1089,9 +1044,6 @@ void CodeGen_ARM::visit(const Load *op) {
 
         Value *align = ConstantInt::get(i32, alignment);
 
-        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-
         // Decide what width to slice things into. If not a multiple
         // of 64 or 128 bits, then we can't safely slice it up into
         // some number of vlds, so we hand it over the base class.
@@ -1112,7 +1064,11 @@ void CodeGen_ARM::visit(const Load *op) {
                    << stride->value
                    << ".v" << intrin_width
                    << (op->type.is_float() ? 'f' : 'i')
-                   << op->type.bits;
+                   << op->type.bits
+#if LLVM_VERSION > 37
+                   << ".p0i8"
+#endif
+                   ;
         } else {
             intrin << "llvm.aarch64.neon.ld"
                    << stride->value
@@ -1190,14 +1146,14 @@ void CodeGen_ARM::visit(const Call *op) {
             if (sub) {
                 Expr a = sub->a, b = sub->b;
                 Type narrow = UInt(a.type().bits/2, a.type().width);
-                Expr na = try_narrow(a, narrow);
-                Expr nb = try_narrow(b, narrow);
+                Expr na = lossless_cast(narrow, a);
+                Expr nb = lossless_cast(narrow, b);
 
                 // Also try an unsigned narrowing
                 if (!na.defined() || !nb.defined()) {
                     narrow = Int(narrow.bits, narrow.width);
-                    na = try_narrow(a, narrow);
-                    nb = try_narrow(b, narrow);
+                    na = lossless_cast(narrow, a);
+                    nb = lossless_cast(narrow, b);
                 }
 
                 if (na.defined() && nb.defined()) {

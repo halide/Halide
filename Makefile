@@ -266,7 +266,6 @@ SOURCE_FILES = \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
-  Expr.cpp \
   ExprUsesVar.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -507,7 +506,6 @@ RUNTIME_CPP_COMPONENTS = \
   posix_error_handler \
   posix_get_symbol \
   posix_io \
-  posix_math \
   posix_print \
   posix_thread_pool \
   profiler \
@@ -1111,7 +1109,7 @@ Doxyfile: Doxyfile.in
 	     -e "s#@CMAKE_SOURCE_DIR@#$(shell pwd)#g" \
 	    $< > $@
 
-$(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
+$(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools $(DISTRIB_DIR)/tutorial/figures
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp $(INCLUDE_DIR)/Halide.h $(DISTRIB_DIR)/include

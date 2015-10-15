@@ -315,24 +315,38 @@ bool div_mod() {
             T ri = r(i, j);
 
             if (qi*bi + ri != ai && (ecount++) < 10) {
-              std::cout << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai << ", " << (int64_t)bi << "; q, r = " << (int64_t)qi << ", " << (int64_t)ri << " at " << i << ", " << j << "\n";
+                std::cout << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
+                          << ", " << (int64_t)bi
+                          << "; q, r = " << (int64_t)qi
+                          << ", " << (int64_t)ri << "\n";
                 success = false;
-            } else if (!(0 <= ri && (bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
-                std::cout << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai << ", " << (int64_t)bi << "; q, r = " << (int64_t)qi << ", " << (int64_t)ri << "\n";
+            } else if (!(0 <= ri &&
+                         (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
+                       (ecount++) < 10) {
+                std::cout << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
+                          << ", " << (int64_t)bi
+                          << "; q, r = " << (int64_t)qi
+                          << ", " << (int64_t)ri << "\n";
                 success = false;
             }
 
             if (i < SWIDTH && j < SHEIGHT) {
-                Expr ae = cast<T>((int)ai);
-                Expr be = cast<T>((int)bi);
+                Expr ae = Expr(ai);
+                Expr be = Expr(bi);
                 Expr qe = simplify(ae/be);
                 Expr re = simplify(ae%be);
 
-                if (!Internal::equal(qe, cast<T>((int)qi)) && (ecount++) < 10) {
-                    std::cout << "Compiled a/b != simplified a/b: " << (int64_t)ai << "/" << (int64_t)bi << " = " << (int64_t)qi << " != " << qe << "\n";
+                if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
+                    std::cout << "Compiled a/b != simplified a/b: " << (int64_t)ai
+                              << "/" << (int64_t)bi
+                              << " = " << (int64_t)qi
+                              << " != " << qe << "\n";
                     success = false;
-                } else if (!Internal::equal(re, cast<T>((int)ri)) && (ecount++) < 10) {
-                    std::cout << "Compiled a%b != simplified a%b: " << (int64_t)ai << "/" << (int64_t)bi << " = " << (int64_t)ri << " != " << re << "\n";
+                } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
+                    std::cout << "Compiled a%b != simplified a%b: " << (int64_t)ai
+                              << "/" << (int64_t)bi
+                              << " = " << (int64_t)ri
+                              << " != " << re << "\n";
                     success = false;
                 }
             }

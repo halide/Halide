@@ -104,7 +104,6 @@ string simt_intrinsic(const string &name) {
 }
 }
 
-
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
     if (op->type.is_int()) {
         print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), {op->a, op->b}, Call::Extern));
@@ -529,13 +528,10 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
     // Write out the Halide math functions.
-    src_stream << "float maxval_f32() {return FLT_MAX;}\n"
-               << "float minval_f32() {return -FLT_MAX;}\n"
+    src_stream << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
-               << "bool is_nan_f32(float x) {return x != x; }\n"
                << "float inf_f32() { return INFINITY; }\n"
-               << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << smod_def("char") << "\n"
                << smod_def("short") << "\n"
                << smod_def("int") << "\n"

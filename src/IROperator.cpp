@@ -49,28 +49,36 @@ Expr evaluate_polynomial(Expr x, float *coeff, int n) {
 namespace Internal {
 
 bool is_const(Expr e) {
-    if (e.as<IntImm>()) return true;
-    if (e.as<FloatImm>()) return true;
-    if (e.as<StringImm>()) return true;
-    if (const Cast *c = e.as<Cast>()) {
+    if (e.as<IntImm>() ||
+        e.as<UIntImm>() ||
+        e.as<FloatImm>() ||
+        e.as<StringImm>()) {
+        return true;
+    } else if (const Cast *c = e.as<Cast>()) {
         return is_const(c->value);
-    }
-    if (const Ramp *r = e.as<Ramp>()) {
+    } else if (const Ramp *r = e.as<Ramp>()) {
         return is_const(r->base) && is_const(r->stride);
-    }
-    if (const Broadcast *b = e.as<Broadcast>()) {
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
         return is_const(b->value);
+    } else {
+        return false;
     }
-    return false;
-
 }
 
-bool is_const(Expr e, int value) {
-    if (const IntImm *i = e.as<IntImm>()) return i->value == value;
-    if (const FloatImm *i = e.as<FloatImm>()) return i->value == value;
-    if (const Cast *c = e.as<Cast>()) return is_const(c->value, value);
-    if (const Broadcast *b = e.as<Broadcast>()) return is_const(b->value, value);
-    return false;
+bool is_const(Expr e, int64_t value) {
+    if (const IntImm *i = e.as<IntImm>()) {
+        return i->value == value;
+    } else if (const UIntImm *i = e.as<UIntImm>()) {
+        return (value >= 0) && (i->value == (uint64_t)value);
+    } else if (const FloatImm *i = e.as<FloatImm>()) {
+        return i->value == value;
+    } else if (const Cast *c = e.as<Cast>()) {
+        return is_const(c->value, value);
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_const(b->value, value);
+    } else {
+        return false;
+    }
 }
 
 bool is_no_op(Stmt s) {
@@ -79,18 +87,44 @@ bool is_no_op(Stmt s) {
     return e && is_const(e->value);
 }
 
-const int * as_const_int(Expr e) {
-    const IntImm *i = e.as<IntImm>();
-    return i ? &(i->value) : NULL;
+const int64_t *as_const_int(Expr e) {
+    if (!e.defined()) {
+        return NULL;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return as_const_int(b->value);
+    } else if (const IntImm *i = e.as<IntImm>()) {
+        return &(i->value);
+    } else {
+        return NULL;
+    }
 }
 
-const float * as_const_float(Expr e) {
-    const FloatImm *f = e.as<FloatImm>();
-    return f ? &(f->value) : NULL;
+const uint64_t *as_const_uint(Expr e) {
+    if (!e.defined()) {
+        return NULL;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return as_const_uint(b->value);
+    } else if (const UIntImm *i = e.as<UIntImm>()) {
+        return &(i->value);
+    } else {
+        return NULL;
+    }
+}
+
+const double *as_const_float(Expr e) {
+    if (!e.defined()) {
+        return NULL;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return as_const_float(b->value);
+    } else if (const FloatImm *f = e.as<FloatImm>()) {
+        return &(f->value);
+    } else {
+        return NULL;
+    }
 }
 
 bool is_const_power_of_two_integer(Expr e, int *bits) {
-  if (!(e.type().is_int() || e.type().is_uint())) return false;
+    if (!(e.type().is_int() || e.type().is_uint())) return false;
 
     const Broadcast *b = e.as<Broadcast>();
     if (b) return is_const_power_of_two_integer(b->value, bits);
@@ -98,23 +132,29 @@ bool is_const_power_of_two_integer(Expr e, int *bits) {
     const Cast *c = e.as<Cast>();
     if (c) return is_const_power_of_two_integer(c->value, bits);
 
-    const IntImm *int_imm = e.as<IntImm>();
-    if (int_imm && ((int_imm->value & (int_imm->value - 1)) == 0)) {
-        int bit_count = 0;
-        int tmp;
-        for (tmp = 1; tmp < int_imm->value; tmp *= 2) {
-            bit_count++;
-        }
-        if (tmp == int_imm->value) {
-            *bits = bit_count;
-            return true;
+    uint64_t val = 0;
+
+    if (const int64_t *i = as_const_int(e)) {
+        if (*i < 0) return false;
+        val = (uint64_t)(*i);
+    } else if (const uint64_t *u = as_const_uint(e)) {
+        val = *u;
+    }
+
+    if (val && ((val & (val - 1)) == 0)) {
+        *bits = 0;
+        for (; val; val >>= 1) {
+            if (val == 1) return true;
+            (*bits)++;
         }
     }
+
     return false;
 }
 
 bool is_positive_const(Expr e) {
     if (const IntImm *i = e.as<IntImm>()) return i->value > 0;
+    if (const UIntImm *u = e.as<UIntImm>()) return u->value > 0;
     if (const FloatImm *f = e.as<FloatImm>()) return f->value > 0.0f;
     if (const Cast *c = e.as<Cast>()) {
         return is_positive_const(c->value);
@@ -147,8 +187,7 @@ bool is_negative_const(Expr e) {
 
 bool is_negative_negatable_const(Expr e, Type T) {
     if (const IntImm *i = e.as<IntImm>()) {
-        return i->value < 0 &&
-               i->value != T.imin();
+        return (i->value < 0 && !T.is_min(i->value));
     }
     if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
     if (const Cast *c = e.as<Cast>()) {
@@ -170,7 +209,8 @@ bool is_negative_negatable_const(Expr e) {
 
 bool is_zero(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0.0f;
+    if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 0;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0.0;
     if (const Cast *c = e.as<Cast>()) return is_zero(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
     return false;
@@ -178,7 +218,8 @@ bool is_zero(Expr e) {
 
 bool is_one(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 1;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 1.0f;
+    if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 1;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 1.0;
     if (const Cast *c = e.as<Cast>()) return is_one(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_one(b->value);
     return false;
@@ -186,50 +227,54 @@ bool is_one(Expr e) {
 
 bool is_two(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 2;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 2.0f;
+    if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 2;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 2.0;
     if (const Cast *c = e.as<Cast>()) return is_two(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_two(b->value);
     return false;
 }
 
-int int_cast_constant(Type t, int val) {
-    // Unsigned of less than 32 bits is masked to select the appropriate bits
-    if (t.is_uint()) {
-        if (t.bits < 32) {
-            val = val & ((((unsigned int) 1) << t.bits) - 1);
-        }
-    }
-    else if (t.is_int()) {
-        if (t.bits < 32) {
-            // sign extend the lower bits
-            val = ((val << (32 - t.bits)) >> (32 - t.bits));
-        }
-    }
-    else {
-        internal_error << "Cast of integer to non-integer not available here";
-    }
-    return val;
-}
-
-Expr make_const(Type t, int val) {
-    if (t == Int(32)) return val;
-    if (t == Float(32)) return (float)val;
+namespace {
+template<typename T>
+Expr make_const_helper(Type t, T val) {
     if (t.is_vector()) {
         return Broadcast::make(make_const(t.element_of(), val), t.width);
+    } else if (t.is_int()) {
+        return IntImm::make(t, (int64_t)val);
+    } else if (t.is_uint()) {
+        return UIntImm::make(t, (uint64_t)val);
+    } else if (t.is_float()) {
+        return FloatImm::make(t, (double)val);
+    } else {
+        internal_error << "Can't make a constant of type " << t << "\n";
+        return Expr();
     }
-    // When constructing cast integer constants, use the canonical representation.
-    if (t.is_int() || t.is_uint()) {
-        val = int_cast_constant(t, val);
-    }
-    return Cast::make(t, val);
 }
+}
+
+Expr make_const(Type t, int64_t val) {
+    return make_const_helper(t, val);
+}
+
+Expr make_const(Type t, uint64_t val) {
+    return make_const_helper(t, val);
+}
+
+Expr make_const(Type t, double val) {
+    return make_const_helper(t, val);
+}
+
 
 Expr make_bool(bool val, int w) {
     return make_const(UInt(1, w), val);
 }
 
 Expr make_zero(Type t) {
-    return make_const(t, 0);
+    if (t.is_handle()) {
+        return Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
+    } else {
+        return make_const(t, 0);
+    }
 }
 
 Expr make_one(Type t) {
@@ -248,13 +293,71 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
+Expr lossless_cast(Type t, Expr e) {
+    if (t == e.type()) {
+        return e;
+    } else if (t.can_represent(e.type())) {
+        return cast(t, e);
+    }
 
-void check_representable(Type t, int x) {
-    int result = int_cast_constant(t, x);
-    user_assert(result == x)
-        << "Integer constant " << x
-        << " would be converted to " << result
-        << " because it will be implicitly coerced to type " << t << "\n";
+    if (const Cast *c = e.as<Cast>()) {
+        if (t.can_represent(c->value.type())) {
+            // We can recurse into widening casts.
+            return lossless_cast(t, c->value);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        Expr v = lossless_cast(t.element_of(), b->value);
+        if (v.defined()) {
+            return Broadcast::make(v, b->width);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const IntImm *i = e.as<IntImm>()) {
+        if (t.can_represent(i->value)) {
+            return make_const(t, i->value);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const UIntImm *i = e.as<UIntImm>()) {
+        if (t.can_represent(i->value)) {
+            return make_const(t, i->value);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const FloatImm *f = e.as<FloatImm>()) {
+        if (t.can_represent(f->value)) {
+            return make_const(t, f->value);
+        } else {
+            return Expr();
+        }
+    }
+
+    return Expr();
+}
+
+void check_representable(Type dst, int64_t x) {
+    if (dst.is_handle()) {
+        user_assert(dst.can_represent(x))
+            << "Integer constant " << x
+            << " will be implicitly coerced to type " << dst
+            << ", but Halide does not support pointer arithmetic.\n";
+    } else {
+        user_assert(dst.can_represent(x))
+            << "Integer constant " << x
+            << " will be implicitly coerced to type " << dst
+            << ", which changes its value to " << make_const(dst, x)
+            << ".\n";
+    }
 }
 
 void match_types(Expr &a, Expr &b) {
@@ -262,9 +365,6 @@ void match_types(Expr &a, Expr &b) {
         << "Can't do arithmetic on opaque pointer types\n";
 
     if (a.type() == b.type()) return;
-
-    const int *a_int_imm = as_const_int(a);
-    const int *b_int_imm = as_const_int(b);
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -290,13 +390,6 @@ void match_types(Expr &a, Expr &b) {
         // float(a) * float(b) -> float(max(a, b))
         if (ta.bits > tb.bits) b = cast(ta, b);
         else a = cast(tb, a);
-    } else if (!ta.is_float() && b_int_imm) {
-        // (u)int(a) * IntImm(b) -> (u)int(a)
-        check_representable(ta, *b_int_imm);
-        b = cast(ta, b);
-    } else if (!tb.is_float() && a_int_imm) {
-        check_representable(tb, *a_int_imm);
-        a = cast(tb, a);
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
         if (ta.bits > tb.bits) b = cast(ta, b);
@@ -341,36 +434,14 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
     Expr blended = (int_version & non_exponent_mask) | (new_biased_exponent << 23);
 
     *reduced = reinterpret(type, blended);
-
-    /*
-    // Floats represent exponents using 8 bits, which encode the range
-    // from [-127, 128]. Zero maps to 127.
-
-    // The reduced version is between 0.5 and 1.0, which means it has
-    // an exponent of -1. Floats encode this as 126.
-    int exponent_neg1 = 126 << 23;
-
-    // Grab the exponent bits from the input. We know the sign bit is
-    // zero because we're taking a log, and negative inputs are
-    // handled elsewhere.
-    Expr biased_exponent = int_version >> 23;
-
-    // Add one, to account for the fact that the reduced version has
-    // an exponent of -1.
-    Expr offset_exponent = biased_exponent + 1;
-    *exponent = offset_exponent - 127;
-
-    // Blend the offset_exponent with the original input.
-    Expr blended = (int_version & non_exponent_mask) | (exponent_neg1);
-    */
 }
 
 Expr halide_log(Expr x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
-    Expr nan = Call::make(type, "nan_f32", std::vector<Expr>(), Call::Extern);
-    Expr neg_inf = Call::make(type, "neg_inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr nan = Call::make(type, "nan_f32", {}, Call::Extern);
+    Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::Extern);
 
     Expr use_nan = x_full < 0.0f; // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
@@ -439,7 +510,7 @@ Expr halide_exp(Expr x_full) {
     int fpbias = 127;
     Expr biased = k + fpbias;
 
-    Expr inf = Call::make(type, "inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr inf = Call::make(type, "inf_f32", {}, Call::Extern);
 
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
@@ -503,7 +574,7 @@ Expr raise_to_integer_power(Expr e, int p) {
     } else if (p == 1) {
         result = e;
     } else if (p < 0) {
-        result = make_one(e.type())/raise_to_integer_power(e, -p);
+        result = make_one(e.type()) / raise_to_integer_power(e, -p);
     } else {
         // p is at least 2
         Expr y = raise_to_integer_power(e, p>>1);

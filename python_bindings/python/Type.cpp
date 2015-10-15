@@ -55,7 +55,8 @@ void defineType()
 
     using Halide::Type;
     namespace p = boost::python;
-    
+
+    bool (Type::*can_represent_other_type)(Type) const = &Type::can_represent;
 
     p::class_<Type>("Type",
                     "Default constructor initializes everything to predictable-but-unlikely values",
@@ -89,14 +90,10 @@ void defineType()
                  "Produce a vector of this type, with 'width' elements")
             .def("element_of", &Type::element_of, p::arg("self"),
                  "Produce the type of a single element of this vector type")
-            .def("can_represent", &Type::can_represent, p::arg("other"),
+            .def("can_represent", can_represent_other_type, p::arg("other"),
                  "Can this type represent all values of another type?")
-            .def("imax", &Type::imax, p::arg("self"),
-                 "Return an integer which is the maximum value of this type.")
             .def("max", &Type::max, p::arg("self"),
                  "Return an expression which is the maximum value of this type")
-            .def("imin", &Type::imin, p::arg("self"),
-                 "Return an integer which is the minimum value of this type")
             .def("min", &Type::min, p::arg("self"),
                  "Return an expression which is the minimum value of this type")
             .def("__repr__", &type_repr, p::arg("self"),

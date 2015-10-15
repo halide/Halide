@@ -65,6 +65,7 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
+    bool promote_indices() const {return false;}
 
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */

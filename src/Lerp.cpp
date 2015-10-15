@@ -17,12 +17,12 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     Type result_type = zero_val.type();
 
-    int bias_value = 0;
+    Expr bias_value = make_zero(result_type);
     Type computation_type = result_type;
 
     if (zero_val.type().is_int()) {
         computation_type = UInt(zero_val.type().bits, zero_val.type().width);
-        bias_value = result_type.imin();
+        bias_value = result_type.min();
     }
 
     // For signed integer types, just convert everything to unsigned
@@ -38,7 +38,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
         if (weight.type().is_float())
             half_weight = 0.5f;
         else {
-            half_weight = weight.type().imax() / 2;
+            half_weight = weight.type().max() / 2;
         }
 
         result = select(weight > half_weight, one_val, zero_val);
@@ -60,9 +60,9 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 } else {
                     typed_weight =
                         Cast::make(computation_type,
-                                   computation_type.imax() * typed_weight);
+                                   computation_type.max() * typed_weight);
                 }
-                inverse_typed_weight = computation_type.imax() - typed_weight;
+                inverse_typed_weight = computation_type.max() - typed_weight;
             } else {
                 inverse_typed_weight = 1.0f - typed_weight;
             }
@@ -121,7 +121,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 }
                 inverse_typed_weight =
                     Cast::make(computation_type,
-                               computation_type.imax() - typed_weight);
+                               computation_type.max() - typed_weight);
             }
         }
 
@@ -163,7 +163,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
             }
         }
 
-        if (bias_value != 0) {
+        if (!is_zero(bias_value)) {
             result = Cast::make(result_type, result) + bias_value;
         }
     }

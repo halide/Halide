@@ -55,7 +55,6 @@ set(RUNTIME_CPP
   posix_error_handler
   posix_get_symbol
   posix_io
-  posix_math
   posix_print
   posix_thread_pool
   profiler
@@ -369,7 +368,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DeviceInterface.cpp
   EarlyFree.cpp
   Error.cpp
-  Expr.cpp
   ExprUsesVar.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp

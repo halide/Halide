@@ -880,7 +880,8 @@ public:
      * vectorize the color channel dimension without the overhead of
      * splitting it up. If bounds inference decides that it requires
      * more of this function than the bounds you have stated, a
-     * runtime error will occur when you try to run your pipeline. */
+     * runtime error will occur when you try to run your pipeline.
+     */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
 
     /** Split two dimensions at once by the given factors, and then

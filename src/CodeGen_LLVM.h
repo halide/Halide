@@ -113,10 +113,12 @@ protected:
     virtual bool use_soft_float_abi() const = 0;
     // @}
 
-    // What's the natural vector bit-width to use for loads, stores, etc.
-    // @{
+    /** Should indexing math be promoted to 64-bit on platforms with
+     * 64-bit pointers? */
+    virtual bool promote_indices() const {return true;}
+
+    /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
-    // @}
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
@@ -314,6 +316,7 @@ protected:
      * optimizations. The result of each is stored in \ref value */
     // @{
     virtual void visit(const IntImm *);
+    virtual void visit(const UIntImm *);
     virtual void visit(const FloatImm *);
     virtual void visit(const StringImm *);
     virtual void visit(const Cast *);

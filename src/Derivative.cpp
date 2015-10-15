@@ -19,12 +19,16 @@ class FiniteDifference : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const IntImm *) {
-        expr = 0;
+    void visit(const IntImm *op) {
+        expr = make_zero(op->type);
     }
 
-    void visit(const FloatImm *) {
-        expr = 0.0f;
+    void visit(const UIntImm *op) {
+        expr = make_zero(op->type);
+    }
+
+    void visit(const FloatImm *op) {
+        expr = make_zero(op->type);
     }
 
     void visit(const Cast *op) {
@@ -101,6 +105,10 @@ class Monotonic : public IRVisitor {
     Scope<MonotonicResult> scope;
 
     void visit(const IntImm *) {
+        result = Constant;
+    }
+
+    void visit(const UIntImm *) {
         result = Constant;
     }
 
