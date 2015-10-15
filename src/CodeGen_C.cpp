@@ -628,10 +628,15 @@ void CodeGen_C::visit(const Div *op) {
     } else if (op->type.is_int()) {
         string a = print_expr(op->a);
         string b = print_expr(op->b);
+        // q = a / b
         string q = print_assignment(op->type, a + " / " + b);
+        // r = a - q * b
         string r = print_assignment(op->type, a + " - " + q + " * " + b);
+        // bs = b >> (8*sizeof(T) - 1)
         string bs = print_assignment(op->type, b + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits - 1));
+        // rs = r >> (8*sizeof(T) - 1)
         string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits - 1));
+        // id = q - (rs & bs) + (rs & bs)
         print_assignment(op->type, q + " - (" + rs + " & " + bs + ") + (" + rs + " & ~" + bs + ")");
     } else {
         visit_binop(op->type, op->a, op->b, "/");
@@ -647,9 +652,13 @@ void CodeGen_C::visit(const Mod *op) {
     } else if (op->type.is_int()) {
         string a = print_expr(op->a);
         string b = print_expr(op->b);
+        // r = a % b
         string r = print_assignment(op->type, a + " % " + b);
+        // rs = r >> (8*sizeof(T) - 1)
         string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits - 1));
+        // abs_b = abs(b)
         string abs_b = print_expr(cast(op->type, abs(op->b)));
+        // id = r + (abs_b & rs)
         print_assignment(op->type, r + " + (" + abs_b + " & " + rs + ")");
     } else {
         visit_binop(op->type, op->a, op->b, "%");
