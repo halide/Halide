@@ -20,6 +20,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
+#include "InjectOpenCLIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
 #include "IRMutator.h"
@@ -156,6 +157,12 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(1) << "Injecting image intrinsics...\n";
         s = inject_image_intrinsics(s);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
+    }
+
+    if (t.has_feature(Target::OpenCL) && t.has_feature(Target::CLImages)) {
+        debug(1) << "Injecting OpenCL image intrinsics...\n";
+        s = inject_opencl_intrinsics(s);
+        debug(2) << "Lowering after OpenCL image intrinsics:\n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";

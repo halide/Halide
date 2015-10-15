@@ -675,9 +675,9 @@ WEAK int halide_opencl_device_release(void *user_context) {
     return 0;
 }
 
-WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_device_image_malloc(void *user_context, buffer_t *buf) {
     debug(user_context)
-        << "CL: halide_opencl_device_malloc (user_context: " << user_context
+        << "CL: halide_opencl_device_image_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     ClContext ctx(user_context);
@@ -687,8 +687,154 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
 
     size_t size = buf_size(user_context, buf);
     if (buf->dev) {
+         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+        return 0;
+    }
+
+    // The zero-copy-enabled flag is currently in the padding
+    if (buf->_padding[0] == 1) {
+        debug(user_context) << "CL: halide_opencl_device_image_malloc -- about to inspect cl_mem\n";
+
+        // if the user passed in a host ptr that was already a cl_mem object, just wrap it
+        size_t real_size;
+        cl_int result = clGetMemObjectInfo((cl_mem)(buf->host), CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+        if ((result == CL_SUCCESS) && (real_size > 0)) {
+            // this test is to determine if host pointer is a cl_mem object.  It will fail if it is not
+            buf->dev = halide_new_device_wrapper((uint64_t)buf->host, &opencl_device_interface);
+            if (buf->dev == 0) {
+                error(user_context) << "CL: out of memory allocating device wrapper.\n";
+                return -1;
+            }
+            debug(user_context)
+                << "Wrapped an existing cl_mem object " << (void *)buf->dev
+                << " for image " << buf << "\n";
+            halide_assert(user_context, validate_device_pointer(user_context, buf));
+            return CL_SUCCESS;
+        }
+    }
+
+
+    halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
+                                buf->stride[2] >= 0 && buf->stride[3] >= 0);
+
+    debug(user_context)
+        << "    Allocating image buffer of " << (int)size << " bytes,"
+        << " extents: " << buf->extent[0] << "x" << buf->extent[1] << "x" << buf->extent[2] << "x" << buf->extent[3]
+        << " strides: " << buf->stride[0] << "x" << buf->stride[1] << "x" << buf->stride[2] << "x" << buf->stride[3]
+        << " (" << buf->elem_size << " bytes per element)\n";
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    cl_int err;
+    debug(user_context) << "    clCreateImage -> " << (int)size << " ";
+    cl_mem_object_type image_type = buf->extent[2] > 0
+        ? CL_MEM_OBJECT_IMAGE2D_ARRAY
+        : CL_MEM_OBJECT_IMAGE2D;
+    if (image_type == CL_MEM_OBJECT_IMAGE2D) {
+        debug(user_context) << "created 2D image ";
+    } else {
+        debug(user_context) << "created 2D image array ";
+    }
+    cl_channel_type channel_type = 0;
+    switch (buf->elem_size) {
+    case 1:
+        channel_type = CL_UNSIGNED_INT8;
+        break;
+    case 2:
+        channel_type = CL_UNSIGNED_INT16;
+        break;
+    case 4:
+        channel_type = CL_UNSIGNED_INT32;
+        break;
+    default:
+        error(user_context) << "Invalid buffer elem_size: " << buf->elem_size << "\n";
+    }
+    cl_image_format image_format = { CL_R, channel_type };
+    cl_image_desc image_desc = {
+        image_type, // image_type
+        buf->extent[0], // image_width
+        buf->extent[1], // image_height
+        0, // image_depth
+        buf->extent[2], // image_array_size
+        0, // image_row_pitch
+        0, // image_slice_pitch
+        0, // num_mip_levels
+        0, // num_samples
+        NULL // buffer
+    };
+    cl_mem dev_ptr = clCreateImage(ctx.context,
+                                   CL_MEM_READ_WRITE,
+                                   &image_format,
+                                   &image_desc,
+                                   NULL,
+                                   &err);
+    if (err != CL_SUCCESS || dev_ptr == 0) {
+        error(user_context) << "CL: clCreateImage failed: "
+                            << get_opencl_error_name(err);
+        return err;
+    } else {
+        debug(user_context) << (void *)dev_ptr << "\n";
+    }
+    buf->dev = halide_new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
+    if (buf->dev == 0) {
+        error(user_context) << "CL: out of memory allocating device wrapper.\n";
+        clReleaseMemObject(dev_ptr);
+        return -1;
+    }
+
+    debug(user_context)
+        << "    Allocated device buffer " << (void *)buf->dev
+        << " for buffer " << buf << "\n";
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return CL_SUCCESS;
+}
+
+WEAK int halide_opencl_device_buffer_malloc(void *user_context, buffer_t* buf) {
+    debug(user_context)
+        << "CL: halide_opencl_device_buffer_malloc (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        debug(user_context) << "CL: halide_opencl_device_buffer_malloc -- ctx constructor failed\n";
+        return ctx.error;
+    }
+
+    // if we have already allocated (or wrapped), we just return
+    size_t size = buf_size(user_context, buf);
+    if (buf->dev) {
+        debug(user_context) << "CL: halide_opencl_device_buffer_malloc -- buf->dev is non-NULL\n";
         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
+    }
+
+    // The zero-copy-enabled flag is currently in the padding
+    if (buf->_padding[0] == 1) {
+        debug(user_context) << "CL: halide_opencl_device_buffer_malloc -- about to inspect cl_mem\n";
+
+        // if the user passed in a host ptr that was already a cl_mem object, just wrap it
+        size_t real_size;
+        cl_int result = clGetMemObjectInfo((cl_mem)(buf->host), CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+        if ((result == CL_SUCCESS) && (real_size > 0)) {
+            // this test is to determine if host pointer is a cl_mem object.  It will fail if it is not
+            buf->dev = halide_new_device_wrapper((uint64_t)buf->host, &opencl_device_interface);
+            if (buf->dev == 0) {
+                error(user_context) << "CL: out of memory allocating device wrapper.\n";
+                return -1;
+            }
+            debug(user_context)
+                << "Wrapped an existing cl_mem object " << (void *)buf->dev
+                << " for buffer " << buf << "\n";
+            halide_assert(user_context, validate_device_pointer(user_context, buf));
+            return CL_SUCCESS;
+        }
     }
 
     halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
@@ -734,14 +880,22 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     return CL_SUCCESS;
 }
 
-WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
-    int err = halide_opencl_device_malloc(user_context, buf);
+WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
+    if ((buf->extent[1] != 0 && buf->extent[2] == 0)
+        || (buf->extent[2] != 0 && buf->extent[3] == 0)) {
+        return halide_opencl_device_image_malloc(user_context, buf);
+    }
+    return halide_opencl_device_buffer_malloc(user_context, buf);
+}
+
+WEAK int halide_opencl_copy_image_to_device(void *user_context, buffer_t* buf) {
+    int err = halide_opencl_device_image_malloc(user_context, buf);
     if (err) {
         return err;
     }
 
     debug(user_context)
-        << "CL: halide_opencl_copy_to_device (user_context: " << user_context
+        << "CL: halide_opencl_copy_image_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple
@@ -750,6 +904,105 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
         return ctx.error;
+    }
+
+    // The zero-copy-enabled flag is currently in the padding
+    if (buf->_padding[0] == 1) {
+        // if the user provided a cl_mem object, then we assume they are doing zero-copy, and return here
+        size_t real_size;
+        cl_int result = clGetMemObjectInfo((cl_mem)(buf->host), CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+        if ((result == CL_SUCCESS) && (real_size > 0)) {
+            // this test is to determine if host pointer is a cl_mem object.  It will fail if it is not
+            debug(user_context)
+                << "CL: halide_opencl_copy_image_to_device (user_context: " << user_context
+                << ", buf: " << buf << ") was ZERO COPY\n";
+            return 0;
+        }
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
+
+    device_copy c = make_host_to_device_copy(buf);
+
+    for (int w = 0; w < c.extent[3]; w++) {
+        uint64_t off = w * c.stride_bytes[3];
+        size_t offset[3] = { off, 0, 0 };
+        size_t region[3] = { buf->extent[0],
+                             buf->extent[1] > 0 ? buf->extent[1] : 1,
+                             buf->extent[2] > 0 ? buf->extent[2] : 1 };
+
+        debug(user_context)
+            << "    clEnqueueWriteImage (("<< w << "), "
+            << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
+            << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
+            << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
+
+        cl_int err = clEnqueueWriteImage(ctx.cmd_queue, // command_queue
+                                         (cl_mem)c.dst, // image
+                                         CL_FALSE,      // blocking_write
+                                         offset,        // origin
+                                         region,        // region
+                                         0,             // input_row_pitch
+                                         0,             // input_slice_pitch
+                                         (void *)c.src, // ptr
+                                         0,             // num_events_in_wait_list
+                                         NULL,          // event_wait_list
+                                         NULL);         // event
+
+        if (err != CL_SUCCESS) {
+            error(user_context) << "CL: clEnqueueWriteImage failed: "
+                                << get_opencl_error_name(err);
+            return err;
+        }
+    }
+
+    // The writes above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't write
+    // to the buffer while the above writes are still running.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
+WEAK int halide_opencl_copy_buffer_to_device(void *user_context, buffer_t* buf) {
+    int err = halide_opencl_device_malloc(user_context, buf);
+    if (err) {
+        debug(user_context)
+            << "CL: halide_opencl_copy_buffer_to_device (user_context: " << user_context
+            << ", buf: " << buf << ") failed after halide_opencl_device_malloc\n";
+        return err;
+    }
+
+    // Acquire the context so we can use the command queue. This also avoids multiple
+    // redundant calls to clEnqueueWriteBuffer when multiple threads are trying to copy
+    // the same buffer.
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
+
+    // The zero-copy-enabled flag is currently in the padding
+    if (buf->_padding[0] == 1) {
+        // if the user provided a cl_mem object, then we assume they are doing zero-copy, and return here
+        size_t real_size;
+        cl_int result = clGetMemObjectInfo((cl_mem)(buf->host), CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+        if ((result == CL_SUCCESS) && (real_size > 0)) {
+            // this test is to determine if host pointer is a cl_mem object.  It will fail if it is not
+            debug(user_context)
+                << "CL: halide_opencl_copy_buffer_to_device (user_context: " << user_context
+                << ", buf: " << buf << ") was ZERO COPY\n";
+            return 0;
+        }
     }
 
     #ifdef DEBUG_RUNTIME
@@ -829,9 +1082,17 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
+    if ((buf->extent[1] != 0 && buf->extent[2] == 0)
+        || (buf->extent[2] != 0 && buf->extent[3] == 0)) {
+        return halide_opencl_copy_image_to_device(user_context, buf);
+    }
+    return halide_opencl_copy_buffer_to_device(user_context, buf);
+}
+
+WEAK int halide_opencl_copy_image_to_host(void *user_context, buffer_t* buf) {
     debug(user_context)
-        << "CL: halide_copy_to_host (user_context: " << user_context
+        << "CL: halide_opencl_copy_image_to_host (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple
@@ -840,6 +1101,101 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
         return ctx.error;
+    }
+
+    // The zero-copy-enabled flag is currently in the padding
+    if (buf->_padding[0] == 1) {
+        // if the user provided a cl_mem object, then we assume they are doing zero-copy, and return here
+        size_t real_size;
+        cl_int result = clGetMemObjectInfo((cl_mem)(buf->host), CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+        if ((result == CL_SUCCESS) && (real_size > 0)) {
+            // this test is to determine if host pointer is a cl_mem object.  It will fail if it is not
+            debug(user_context)
+                << "CL: halide_opencl_copy_image_to_host (user_context: " << user_context
+                << ", buf: " << buf << ") was ZERO COPY\n";
+            return 0;
+        }
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
+
+    device_copy c = make_device_to_host_copy(buf);
+
+    for (int w = 0; w < c.extent[3]; w++) {
+        uint64_t off = w * c.stride_bytes[3];
+
+        size_t offset[3] = { off, 0, 0 };
+        size_t region[3] = { buf->extent[0],
+                             buf->extent[1] > 0 ? buf->extent[1] : 1,
+                             buf->extent[2] > 0 ? buf->extent[2] : 1 };
+
+        debug(user_context)
+            << "    clEnqueueReadImage ((" << w << "), "
+            << "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
+            << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
+            << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
+
+        cl_int err = clEnqueueReadImage(ctx.cmd_queue, // command_queue
+                                        (cl_mem)c.src, // image
+                                        CL_FALSE,      // blocking_read
+                                        offset,        // origin
+                                        region,        // region
+                                        0,             // row_pitch
+                                        0,             // slice_pitch
+                                        (void *)c.dst, // ptr
+                                        0,             // num_events_in_wait_list
+                                        NULL,          // event_wait_list
+                                        NULL);         // event
+
+        if (err != CL_SUCCESS) {
+            error(user_context) << "CL: clEnqueueReadImage failed: "
+                                << get_opencl_error_name(err);
+            return err;
+        }
+    }
+    // The writes above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't read
+    // bad data.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
+WEAK int halide_opencl_copy_buffer_to_host(void *user_context, buffer_t* buf) {
+    debug(user_context)
+        << "CL: halide_copy_buffer_to_host (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    // Acquire the context so we can use the command queue. This also avoids multiple
+    // redundant calls to clEnqueueReadBuffer when multiple threads are trying to copy
+    // the same buffer.
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
+
+    // The zero-copy-enabled flag is currently in the padding
+    if (buf->_padding[0] == 1) {
+        // if the user provided a cl_mem object, then we assume they are doing zero-copy, and return here
+        size_t real_size;
+        cl_int result = clGetMemObjectInfo((cl_mem)(buf->host), CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+        if ((result == CL_SUCCESS) && (real_size > 0)) {
+            // this test is to determine if host pointer is a cl_mem object.  It will fail if it is not
+            debug(user_context)
+                << "CL: halide_opencl_copy_buffer_to_host (user_context: " << user_context
+                << ", buf: " << buf << ") was ZERO COPY\n";
+            return 0;
+        }
     }
 
     #ifdef DEBUG_RUNTIME
@@ -917,6 +1273,14 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
     #endif
 
     return 0;
+}
+
+WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
+    if ((buf->extent[1] != 0 && buf->extent[2] == 0)
+        || (buf->extent[2] != 0 && buf->extent[3] == 0)) {
+        return halide_opencl_copy_image_to_host(user_context, buf);
+    }
+    return halide_opencl_copy_buffer_to_host(user_context, buf);
 }
 
 WEAK int halide_opencl_run(void *user_context,
@@ -1149,19 +1513,13 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     case CL_INVALID_BUFFER_SIZE: return "CL_INVALID_BUFFER_SIZE";
     case CL_INVALID_MIP_LEVEL: return "CL_INVALID_MIP_LEVEL";
     case CL_INVALID_GLOBAL_WORK_SIZE: return "CL_INVALID_GLOBAL_WORK_SIZE";
+    case CL_INVALID_IMAGE_DESCRIPTOR: return "CL_INVALID_IMAGE_DESCRIPTOR";
     default: return "<Unknown error>";
     }
 }
 
-WEAK halide_device_interface opencl_device_interface = {
-    halide_use_jit_module,
-    halide_release_jit_module,
-    halide_opencl_device_malloc,
-    halide_opencl_device_free,
-    halide_opencl_device_sync,
-    halide_opencl_device_release,
-    halide_opencl_copy_to_host,
-    halide_opencl_copy_to_device,
-};
+// opencl_device_interface is defined in
+// opencl_buffer_device_interface.cpp or opencl_image_device_interface.cpp.
+// Which one gets linked in depends on if Target::CLImages is set.
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL

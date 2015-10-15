@@ -104,6 +104,17 @@ typedef cl_uint             cl_event_info;
 typedef cl_uint             cl_command_type;
 typedef cl_uint             cl_profiling_info;
 
+typedef struct _cl_mem_ext_host_ptr
+{
+    // Type of external memory allocation.
+    // Legal values will be defined in layered extensions.
+    cl_uint  allocation_type;
+
+    // Host cache policy for this external memory allocation.
+    cl_uint  host_cache_policy;
+
+} cl_mem_ext_host_ptr;
+
 
 typedef struct _cl_image_format {
     cl_channel_order        image_channel_order;

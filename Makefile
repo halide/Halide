@@ -261,6 +261,7 @@ SOURCE_FILES = \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
+  InjectOpenCLIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -382,6 +383,7 @@ HEADER_FILES = \
   Image.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \
+  InjectOpenCLIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
@@ -476,6 +478,8 @@ RUNTIME_CPP_COMPONENTS = \
   module_jit_ref_count \
   nacl_host_cpu_count \
   opencl \
+  opencl_buffer_device_interface \
+  opencl_image_device_interface \
   opengl \
   openglcompute \
   osx_clock \

@@ -402,6 +402,8 @@ struct Call : public ExprNode<Call> {
         glsl_varying,
         image_load,
         image_store,
+        read_image,
+        write_image,
         make_struct,
         stringify,
         memoize_expr,

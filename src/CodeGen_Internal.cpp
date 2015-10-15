@@ -55,6 +55,34 @@ void Closure::visit(const Load *op) {
     }
 }
 
+void Closure::visit(const Call *op) {
+    if (op->call_type == Call::Intrinsic &&
+        (op->name == Call::read_image || op->name == Call::write_image)) {
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        if (!string_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(string_imm);
+        string bufname = string_imm->value;
+        if (!ignore.contains(bufname)) {
+            BufferRef &ref = buffers[bufname];
+            if (op->name == Call::read_image) {
+                ref.type = op->type;
+                ref.read = true;
+                ref.dimensions = op->args.size() - 1;
+            } else if (op->name == Call::write_image) {
+                ref.type = op->args.back().type();
+                ref.write = true;
+                ref.dimensions = op->args.size() - 2;
+            }
+            IRVisitor::visit(op);
+        }
+    } else {
+        IRVisitor::visit(op);
+    }
+}
+
 void Closure::visit(const Store *op) {
     op->index.accept(this);
     op->value.accept(this);

@@ -43,6 +43,16 @@ private:
     void visit(const Call *call) {
         if (call->name == func) {
             last_use = containing_stmt;
+        } else if (call->name == Call::read_image || call->name == Call::write_image) {
+            const StringImm *buffer_var = call->args[0].as<StringImm>();
+            if (!buffer_var) {
+                internal_assert(call->args[0].as<Broadcast>());
+                buffer_var = call->args[0].as<Broadcast>()->value.as<StringImm>();
+            }
+            internal_assert(buffer_var);
+            if (buffer_var->value == func) {
+                last_use = containing_stmt;
+            }
         }
         IRVisitor::visit(call);
     }

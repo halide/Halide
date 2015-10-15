@@ -17,7 +17,7 @@ using std::sort;
 static ostringstream nil;
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
-    clc(src_stream), target(t) {
+    clc(t, src_stream), target(t) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
@@ -183,6 +183,233 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf)
     return "__address_space_" + print_name(buf);
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
+    if (op->call_type != Call::Intrinsic) {
+        CodeGen_C::visit(op);
+        return;
+    }
+    if (op->name == Call::read_image) {
+        internal_assert(op->args.size() == 3 || op->args.size() == 4);
+        // string_imm is the name of the image being read from
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        if (!string_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(string_imm);
+        bool is_2d_array = op->args.size() == 4;
+        string arg1 = print_expr(op->args[1]);
+        string arg2 = print_expr(op->args[2]);
+        string arg3 = is_2d_array ? print_expr(op->args[3]) : "";
+        Type arg_type = op->args[1].type();
+        vector<string> results;
+        Type return_type(Type::TypeCode::Int, 32, 4);
+        // If doing a vector read_image, flatten into a sequence of
+        // read_image calls
+        for (int i = 0; i < arg_type.width; i++) {
+            string x = arg1;
+            string y = arg2;
+            string z = arg3;
+            if (arg_type.is_vector()) {
+                ostringstream x_i;
+                x_i << arg1 << ".s" << i;
+                x = print_assignment(arg_type.element_of(), x_i.str());
+                ostringstream y_i;
+                y_i << arg2 << ".s" << i;
+                y = print_assignment(arg_type.element_of(), y_i.str());
+                if (is_2d_array) {
+                    ostringstream z_i;
+                    z_i << arg3 << ".s" << i;
+                    z = print_assignment(arg_type.element_of(), z_i.str());
+                }
+            }
+            // Codegen the read_image call
+            ostringstream rhs;
+            rhs << "read_image";
+            if (op->type.is_float()) {
+                rhs << "f";
+                return_type.code = Type::TypeCode::Float;
+            } else if (op->type.is_int()) {
+                rhs << "i";
+                return_type.code = Type::TypeCode::Int;
+            } else if (op->type.is_uint()) {
+                rhs << "ui";
+                return_type.code = Type::TypeCode::UInt;
+            } else {
+                internal_error << "Unexpected type for read_image\n";
+            }
+            rhs << "(" << print_name(string_imm->value) << ", sampler, ";
+            if (is_2d_array) {
+                rhs << "(int4)(" << x << ", " << y << ", " << z << ", 0)";
+            } else {
+                rhs << "(int2)(" << x << ", " << y << ")";
+            }
+            rhs << ")";
+            print_assignment(return_type, rhs.str());
+            // Get the first value (because it returns a vector)
+            print_assignment(return_type.element_of(), id + ".x");
+            results.push_back(id);
+        }
+        // Convert to the correct type if necessary
+        if (return_type != op->type) {
+            string operand = id;
+            if (op->type.is_vector()) {
+                internal_assert(op->type.width == (int)results.size());
+                ostringstream operand_vector;
+                operand_vector << "("
+                               << print_type(return_type.vector_of(op->type.width))
+                               << ")(";
+                for (int i = 0; i < op->type.width; i++) {
+                    operand_vector << results[i];
+                    if (i < op->type.width - 1) {
+                        operand_vector << ", ";
+                    }
+                }
+                operand_vector << ")";
+                id = operand_vector.str();
+            }
+            print_assignment(op->type, "convert_" + print_type(op->type) + "(" + id + ")");
+        }
+    } else if (op->name == Call::write_image) {
+        internal_assert(op->args.size() == 4 || op->args.size() == 5);
+        // string_imm is the name of the image being written to
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        if (!string_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(string_imm);
+        bool is_2d_array = op->args.size() == 5;
+        string arg1 = print_expr(op->args[1]);
+        string arg2 = print_expr(op->args[2]);
+        string arg3 = print_expr(op->args[3]);
+        string arg4 = is_2d_array ? print_expr(op->args[4]) : arg3;
+        Type arg_type = op->args[1].type();
+        Type value_type = op->args.back().type();
+        internal_assert(arg_type.width == value_type.width);
+        // If doing a write_image with a vector, flatten into a
+        // sequence of write_image calls
+        for (int i = 0; i < arg_type.width; i++) {
+            string x = arg1;
+            string y = arg2;
+            string z = arg3;
+            string value = arg4;
+            if (arg_type.is_vector()) {
+                ostringstream x_i;
+                x_i << arg1 << ".s" << i;
+                x = print_assignment(arg_type.element_of(), x_i.str());
+                ostringstream y_i;
+                y_i << arg2 << ".s" << i;
+                y = print_assignment(arg_type.element_of(), y_i.str());
+                if (is_2d_array) {
+                    ostringstream z_i;
+                    z_i << arg3 << ".s" << i;
+                    z = print_assignment(arg_type.element_of(), z_i.str());
+                    ostringstream value_i;
+                    value_i << arg4 << ".s" << i;
+                    value = print_assignment(value_type.element_of(), value_i.str());
+                    if (value_type.bits != 32) {
+                        Type converted_value_type = value_type;
+                        converted_value_type.bits = 32;
+                        value = print_assignment(converted_value_type,
+                                                 "convert_"
+                                                 + print_type(converted_value_type)
+                                                 + "(" + value + ")");
+                    }
+                } else {
+                    ostringstream value_i;
+                    value_i << arg3 << ".s" << i;
+                    value = print_assignment(value_type.element_of(), value_i.str());
+                }
+            } else if (value_type.bits != 32) {
+                Type converted_value_type = value_type;
+                converted_value_type.bits = 32;
+                value = print_assignment(converted_value_type,
+                                         "convert_" + print_type(converted_value_type)
+                                         + "(" + value + ")");
+            }
+            // Codegen the write_image call
+            do_indent();
+            stream << "write_image";
+            Type color_type(Type::TypeCode::UInt, 32, 4);
+            if (value_type.is_float()) {
+                stream << "f";
+                color_type.code = Type::TypeCode::Float;
+            } else if (value_type.is_int()) {
+                stream << "i";
+                color_type.code = Type::TypeCode::Int;
+            } else if (value_type.is_uint()) {
+                stream << "ui";
+                color_type.code = Type::TypeCode::UInt;
+            } else {
+                internal_error << "Unexpected type for write_image\n";
+            }
+            stream << "(" << print_name(string_imm->value) << ", ";
+            if (is_2d_array) {
+                stream << "(int4)(" << x << ", " << y << ", " << z << ", 0)";
+            } else {
+                stream << "(int2)(" << x << ", " << y << ")";
+            }
+            stream << ", (" << print_type(color_type) << ")(" << value << ", 0, 0, 0));\n";
+        }
+    } else if (op->name == Call::interleave_vectors) {
+        int op_width = op->type.width;
+        internal_assert(op->args.size() > 0);
+        int arg_width = op->args[0].type().width;
+        if (op->args.size() == 1) {
+            // 1 argument, just do a simple assignment
+            internal_assert(op_width == arg_width);
+            print_assignment(op->type, print_expr(op->args[0]));
+        } else if (op->args.size() == 2) {
+            // 2 arguments, set the .even to the first arg and the
+            // .odd to the second arg
+            internal_assert(op->args[1].type().width == arg_width);
+            internal_assert(op_width / 2 == arg_width);
+            string a1 = print_expr(op->args[0]);
+            string a2 = print_expr(op->args[1]);
+            id = unique_name('_');
+            do_indent();
+            stream << print_type(op->type) << " " << id << ";\n";
+            do_indent();
+            stream << id << ".even = " << a1 << ";\n";
+            do_indent();
+            stream << id << ".odd = " << a2 << ";\n";
+        } else {
+            // 3+ arguments, interleave via a vector literal
+            // selecting the appropriate elements of the args
+            int dest_width = op->type.width;
+            int num_args = op->args.size();
+            vector<string> arg_exprs(num_args);
+            for (int i = 0; i < num_args; i++) {
+                internal_assert(op->args[i].type().width == arg_width);
+                arg_exprs[i] = print_expr(op->args[i]);
+            }
+            internal_assert(num_args * arg_width >= dest_width);
+            id = unique_name('_');
+            do_indent();
+            stream << print_type(op->type) << " " << id << ".s";
+            for (int i = 0; i < dest_width; i++) {
+                char c = i < 10 ? '0' + i : 'a' + (i - 10);
+                stream << c;
+            }
+            stream << " = (" << print_type(op->type) << ")(";
+            for (int i = 0; i < dest_width; i++) {
+                int arg = i % num_args;
+                int arg_idx = i / num_args;
+                internal_assert(arg_idx <= arg_width);
+                char arg_idxc = '0' + arg_idx;
+                stream << arg_exprs[arg] << ".s" << arg_idxc;
+                if (i != dest_width - 1) {
+                    stream << ", ";
+                }
+            }
+            stream << ");\n";
+        }
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = is_ramp1(op->index);
@@ -226,7 +453,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(op->type.is_vector());
 
-        id = unique_name('V');
+        id = "_" + unique_name('V');
         cache[rhs.str()] = id;
 
         do_indent();
@@ -454,10 +681,29 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
-            stream << print_type(args[i].type) << " *"
-                   << print_name(args[i].name);
+            if (target.has_feature(Target::CLImages)
+                && (args[i].dimensions == 2 || args[i].dimensions == 3)) {
+                if (args[i].read && args[i].write) {
+                    user_assert(target.has_feature(Target::OpenCL20))
+                        << "This kernel has a read-write image parameter \"" << args[i].name
+                        << "\", which is only supported in OpenCL 2.0 or later\n";
+                    stream << " __read_write ";
+                } else if (args[i].read) {
+                    stream << " __read_only ";
+                } else if (args[i].write) {
+                    stream << " __write_only ";
+                }
+                stream << "image2d";
+                if (args[i].dimensions == 3) {
+                    stream << "_array";
+                }
+                stream << "_t " << print_name(args[i].name);
+            } else {
+                stream << " " << get_memory_space(args[i].name) << " ";
+                if (!args[i].write) stream << "const ";
+                stream << print_type(args[i].type) << " *"
+                       << print_name(args[i].name);
+            }
             Allocation alloc;
             alloc.type = args[i].type;
             allocations.push(args[i].name, alloc);
@@ -531,7 +777,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
-               << "float inf_f32() { return INFINITY; }\n"
+               << "static float inf_f32() { return INFINITY; }\n"
                << smod_def("char") << "\n"
                << smod_def("short") << "\n"
                << smod_def("int") << "\n"
@@ -605,6 +851,8 @@ void CodeGen_OpenCL_Dev::init_module() {
     // without any GPU schedules.
     src_stream << "__kernel void _at_least_one_kernel(int x) { }\n";
 
+    src_stream << "__constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE"
+               << " | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;\n";
     cur_kernel_name = "";
 }
 

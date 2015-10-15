@@ -110,6 +110,23 @@ class FindBuffersToTrack : public IRVisitor {
         }
     }
 
+    void visit(const Call *op) {
+        if (op->name == Call::read_image || op->name == Call::write_image) {
+            const StringImm *buffer_var = op->args[0].as<StringImm>();
+            if (!buffer_var) {
+                internal_assert(op->args[0].as<Broadcast>());
+                buffer_var = op->args[0].as<Broadcast>()->value.as<StringImm>();
+            }
+            internal_assert(buffer_var);
+            string buf_name = buffer_var->value;
+            if (internal.find(buf_name) == internal.end() ||
+                different_device_api(device_api, internal[buf_name], target)) {
+                buffers_to_track.insert(buf_name);
+            }
+        }
+        IRVisitor::visit(op);
+    }
+
 public:
     set<string> buffers_to_track;
     FindBuffersToTrack(const Target &t) : target(t), device_api(DeviceAPI::Host) {}
@@ -412,6 +429,36 @@ class InjectBufferCopies : public IRMutator {
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
             debug(4) << "Adding image write via image_store for " << buffer_var->name << "\n";
             state[buf_name].devices_writing.insert(device_api);
+            IRMutator::visit(op);
+        } else if (op->name == Call::read_image && op->call_type == Call::Intrinsic) {
+            internal_assert(device_api == DeviceAPI::OpenCL);
+            internal_assert(op->args.size() >= 3);
+            const StringImm *buffer_var = op->args[0].as<StringImm>();
+            if (!buffer_var) {
+                internal_assert(op->args[0].as<Broadcast>());
+                buffer_var = op->args[0].as<Broadcast>()->value.as<StringImm>();
+            }
+            internal_assert(buffer_var);
+            string buf_name = buffer_var->value;
+            if (should_track(buf_name)) {
+                debug(4) << "Adding image read via read_image for " << buf_name << "\n";
+                state[buf_name].devices_reading.insert(device_api);
+            }
+            IRMutator::visit(op);
+        } else if (op->name == Call::write_image && op->call_type == Call::Intrinsic) {
+            internal_assert(device_api == DeviceAPI::OpenCL);
+            internal_assert(op->args.size() >= 4);
+            const StringImm *buffer_var = op->args[0].as<StringImm>();
+            if (!buffer_var) {
+                internal_assert(op->args[0].as<Broadcast>());
+                buffer_var = op->args[0].as<Broadcast>()->value.as<StringImm>();
+            }
+            internal_assert(buffer_var);
+            string buf_name = buffer_var->value;
+            if (should_track(buf_name)) {
+                debug(4) << "Adding image write via write_image for " << buf_name << "\n";
+                state[buf_name].devices_writing.insert(device_api);
+            }
             IRMutator::visit(op);
         } else {
             IRMutator::visit(op);

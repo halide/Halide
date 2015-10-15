@@ -57,7 +57,9 @@ struct Target {
         CUDACapability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
 
         OpenCL,  ///< Enable the OpenCL runtime.
+        OpenCL20,  ///< Enable OpenCL 2.0 features.
         CLDoubles,  ///< Enable double support on OpenCL targets
+        CLImages,  ///< Use OpenCL Images to represent image data instead of Buffers
 
         OpenGL,  ///< Enable the OpenGL runtime.
         OpenGLCompute, ///< Enable OpenGL Compute runtime.

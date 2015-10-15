@@ -89,6 +89,8 @@ DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(opencl)
+DECLARE_CPP_INITMOD(opencl_buffer_device_interface)
+DECLARE_CPP_INITMOD(opencl_image_device_interface)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
@@ -697,6 +699,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_windows_opencl(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
+            }
+            if (t.has_feature(Target::CLImages)) {
+              modules.push_back(get_initmod_opencl_image_device_interface(c, bits_64, debug));
+            } else {
+              modules.push_back(get_initmod_opencl_buffer_device_interface(c, bits_64, debug));
             }
         } else if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));

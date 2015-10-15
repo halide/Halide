@@ -32,6 +32,7 @@ protected:
     void visit(const LetStmt *op);
     void visit(const For *op);
     void visit(const Load *op);
+    void visit(const Call *op);
     void visit(const Store *op);
     void visit(const Allocate *op);
     void visit(const Variable *op);
