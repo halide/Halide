@@ -101,16 +101,20 @@ private:
         Expr false_value = mutate(op->false_value);
         Type cond_ty = cond.type();
         if (cond_ty.width > 1) {
-            // If the condition is a vector, it should be a vector of ints, so rewrite it to compare to 0.
+            // If the condition is a vector, it should be a vector of
+            // ints, so rewrite it to compare to 0.
             internal_assert(cond_ty.code == Type::Int);
 
-            // OpenCL's select function requires that all 3 operands have the same width.
+            // OpenCL's select function requires that all 3 operands
+            // have the same width.
             internal_assert(true_value.type().bits == false_value.type().bits);
             if (true_value.type().bits != cond_ty.bits) {
                 cond_ty.bits = true_value.type().bits;
                 cond = Cast::make(cond_ty, cond);
             }
 
+            // To make the Select op legal, convert it back to a
+            // vector of bool by comparing with zero.
             expr = Select::make(NE::make(cond, make_zero(cond_ty)), true_value, false_value);
         } else if (!cond.same_as(op->condition) ||
                    !true_value.same_as(op->true_value) ||
@@ -413,7 +417,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 
 namespace {
 // OpenCL doesn't support vectors of bool, so we re-write them to use
-// signed integers. Binary operators produce a signed integer of the same width as the two input types, so we
+// signed integers. Binary operators produce a signed integer of the
+// same width as the two input types. This function generates the "bool"
+// vector type, given an operand type.
 Type vec_bool_to_int(Type result_type, Type input_type) {
     if (result_type.is_vector() && result_type.bits == 1) {
         result_type.code = Type::Int;
@@ -449,13 +455,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GE *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
     if (op->type.is_vector()) {
-        if (op->value.type().bits == 1) {
-            // If this is a cast of a bool vector, then just print the
-            // value, overriding the type.
-            print_assignment(op->type, print_expr(op->value));
-        } else {
-            print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
-        }
+        print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
     } else {
         CodeGen_C::visit(op);
     }
@@ -463,11 +463,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
     if (op->condition.type().is_vector()) {
-        // We avoid boolean vectors in OpenCL C. To avoid this, we've
-        // rewritten the condition to be bitwise instead of logical
-        // operations, and rewritten the condition 'x' to be 'x !=
-        // 0'. To generate valid OpenCL C, we just need to strip away
-        // the NE op, and use x directly.
+        // We eliminated boolean vectors in OpenCL C. In the process
+        // of doing so, we replaced the vector conditions of selects
+        // with integer vectors, compared with 0. To make legal OpenCL
+        // C, we just need to grab the integer vector out of the
+        // comparison with zero.
         Expr condition = op->condition;
         const NE* cond_neq = condition.as<NE>();
         if (cond_neq) {
