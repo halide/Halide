@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
 
         const int N = 1000000;
 
-        Expr e = reinterpret(Float(32), random_int());
+        Expr e = reinterpret(Float(32), random_uint());
         // Make sure we cover some special values.
         e = select(x == 0, 0.0f,
                    x == 1, -0.0f,
@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
 
         messages.clear();
 
-        g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_int()) << 32) | random_int()));
+        g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_uint()) << 32) | random_uint()));
         g.set_custom_print(halide_print);
         Image<double> img = g.realize(N);
 
