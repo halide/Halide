@@ -33,14 +33,17 @@ using std::vector;
 
 namespace {
 
-// Things that we can constant fold: Immediates and broadcasts of
-// immediates.
+// Things that we can constant fold: Immediates, broadcasts of
+// immediates, and casts of immediates.
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
     if (e.as<FloatImm>()) return true;
     if (const Broadcast *b = e.as<Broadcast>()) {
         return is_simple_const(b->value);
+    }
+    if (const Cast *c = e.as<Cast>()) {
+        return is_simple_const(c->value);
     }
     return false;
 }
@@ -151,10 +154,69 @@ private:
         return add->a;
     }
 
+    bool can_simplify_cast_binop(Expr e) {
+        const Add *add = e.as<Add>();
+        const Sub *sub = e.as<Sub>();
+        const Mul *mul = e.as<Mul>();
+        const Div *div = e.as<Div>();
+        const Mod *mod = e.as<Mod>();
+        const Min *min = e.as<Min>();
+        const Max *max = e.as<Max>();
+        bool safe_to_simplify = add || sub || mul || div || mod || min || max;
+        if (add) {
+            return safe_to_simplify && no_overflow(add->a.type()) && no_overflow(add->b.type());
+        } else if (sub) {
+            return safe_to_simplify && no_overflow(sub->a.type()) && no_overflow(sub->b.type());
+        } else if (mul) {
+            return safe_to_simplify && no_overflow(mul->a.type()) && no_overflow(mul->b.type());
+        } else if (div) {
+            return safe_to_simplify && no_overflow(div->a.type()) && no_overflow(div->b.type());
+        } else if (mod) {
+            return safe_to_simplify && no_overflow(mod->a.type()) && no_overflow(mod->b.type());
+        } else if (min) {
+            return safe_to_simplify && no_overflow(min->a.type()) && no_overflow(min->b.type());
+        } else if (max) {
+            return safe_to_simplify && no_overflow(max->a.type()) && no_overflow(max->b.type());
+        } else {
+            return false;
+        }
+    }
+
+    // cast(a op b) -> cast(a) op cast(b). Argument e is 'a op b'.
+    Expr simplify_cast_binop(Type t, Expr e) {
+        const Add *add = e.as<Add>();
+        const Sub *sub = e.as<Sub>();
+        const Mul *mul = e.as<Mul>();
+        const Div *div = e.as<Div>();
+        const Mod *mod = e.as<Mod>();
+        const Min *min = e.as<Min>();
+        const Max *max = e.as<Max>();
+
+        if (add) {
+            return Add::make(cast(t, add->a), cast(t, add->b));
+        } else if (sub) {
+            return Sub::make(cast(t, sub->a), cast(t, sub->b));
+        } else if (mul) {
+            return Mul::make(cast(t, mul->a), cast(t, mul->b));
+        } else if (div) {
+            return Div::make(cast(t, div->a), cast(t, div->b));
+        } else if (mod) {
+            return Mod::make(cast(t, mod->a), cast(t, mod->b));
+        } else if (min) {
+            return Min::make(cast(t, min->a), cast(t, min->b));
+        } else if (max) {
+            return Max::make(cast(t, max->a), cast(t, max->b));
+        } else {
+            internal_assert(false);
+            return Expr();
+        }
+    }
+
     void visit(const Cast *op) {
         Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
+        const Ramp *ramp_value = value.as<Ramp>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
@@ -206,6 +268,19 @@ private:
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
             expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->width));
+        } else if (ramp_value &&
+                   no_overflow(op->type) &&
+                   no_overflow(ramp_value->base.type()) &&
+                   no_overflow(ramp_value->stride.type())) {
+            // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
+            expr = mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
+                                     Cast::make(op->type.element_of(), ramp_value->stride),
+                                     ramp_value->width));
+        } else if (!op->type.is_float() &&
+                   no_overflow(op->type) &&
+                   can_simplify_cast_binop(op->value)) {
+            // cast(a op b) -> cast(a) op cast(b)
+            expr = mutate(simplify_cast_binop(op->type, op->value));
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -3204,6 +3279,17 @@ void simplify_test() {
 
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
+
+    check(cast(Int(64).vector_of(3), ramp(x, 2, 3)),
+          ramp(cast(Int(64), x), cast(Int(64), 2), 3));
+
+    check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
+    // It is not safe to perform the same simplification on floats, as
+    // it may enable associativity to change:
+    check(cast(Float(32), x + 1) - cast(Float(32), x),
+          cast(Float(32), x + 1) - cast(Float(32), x));
+    check(cast(UInt(8), x + 1) - cast(UInt(8), x),
+          cast(UInt(8), x + 1) - cast(UInt(8), x));
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));

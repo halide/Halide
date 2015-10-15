@@ -120,16 +120,23 @@ class VectorizeLoops : public IRMutator {
             // Internal allocations always get vectorized.
             if (internal_allocations.contains(op->name)) {
                 int width = replacement.type().width;
+                Expr width64 = Expr((int64_t)width);
                 if (index.type().is_scalar()) {
                     if (scalarized) {
-                        index = Add::make(Mul::make(index, width), scalar_lane);
+                        index = Add::make(Mul::make(index, index.type().bits == 64 ? width64 : width),
+                                          scalar_lane);
                     } else {
-                        index = Ramp::make(Mul::make(index, width), 1, width);
+                        index = Ramp::make(Mul::make(index, index.type().bits == 64 ? width64 : width),
+                                           index.type().bits == 64 ? Expr((int64_t)1) : 1, width);
                     }
                 } else {
                     internal_assert(!scalarized);
-                    index = Mul::make(index, Broadcast::make(width, width));
-                    index = Add::make(index, Ramp::make(0, 1, width));
+                    index = Mul::make(index,
+                                      Broadcast::make(index.type().bits == 64 ? width64 : width, width));
+                    index = Add::make(index,
+                                      Ramp::make(index.type().bits == 64 ? Expr((int64_t)0) : 0,
+                                                 index.type().bits == 64 ? Expr((int64_t)1) : 1,
+                                                 width));
                 }
             }
 
@@ -378,16 +385,23 @@ class VectorizeLoops : public IRMutator {
             // Internal allocations always get vectorized.
             if (internal_allocations.contains(op->name)) {
                 int width = replacement.type().width;
+                Expr width64 = Expr((int64_t)width);
                 if (index.type().is_scalar()) {
                     if (scalarized) {
-                        index = Add::make(Mul::make(index, width), scalar_lane);
+                        index = Add::make(Mul::make(index, index.type().bits == 64 ? width64 : width),
+                                          scalar_lane);
                     } else {
-                        index = Ramp::make(Mul::make(index, width), 1, width);
+                        index = Ramp::make(Mul::make(index, index.type().bits == 64 ? width64 : width),
+                                           index.type().bits == 64 ? Expr((int64_t)1) : 1,
+                                           width);
                     }
                 } else {
                     internal_assert(!scalarized);
-                    index = Mul::make(index, Broadcast::make(width, width));
-                    index = Add::make(index, Ramp::make(0, 1, width));
+                    index = Mul::make(index,
+                                      Broadcast::make(index.type().bits == 64 ? width64 : width, width));
+                    index = Add::make(index,
+                                      Ramp::make(index.type().bits == 64 ? Expr((int64_t)0) : 0,
+                                                 index.type().bits == 64 ? Expr((int64_t)1) : 1, width));
                 }
             }
 
