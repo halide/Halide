@@ -41,6 +41,8 @@ set(RUNTIME_CPP
   module_jit_ref_count
   nacl_host_cpu_count
   opencl
+  opencl_buffer_device_interface
+  opencl_image_device_interface
   metal
   metal_objc_arm
   metal_objc_x86
@@ -243,6 +245,7 @@ set(HEADER_FILES
   Image.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
+  InjectOpenCLIntrinsics.h
   InjectOpenGLIntrinsics.h
   Inline.h
   InlineReductions.h
@@ -385,6 +388,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Image.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
+  InjectOpenCLIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp
   InlineReductions.cpp
