@@ -312,9 +312,7 @@ Stmt add_image_checks(Stmt s,
             if (t.bits < 64) {
                 max_size = cast<int64_t>(0x7fffffff);
             } else {
-                // The Halide compiler currently can't represent
-                // 64-bit immediate values.
-                max_size = (cast<int64_t>(1) << cast<int64_t>(63)) - cast<int64_t>(1);
+                max_size = Expr(0x7fffffffffffffff);
             }
             Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
