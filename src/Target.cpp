@@ -182,13 +182,16 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"f16c", Target::F16C},
     {"armv7s", Target::ARMv7s},
     {"no_neon", Target::NoNEON},
+    {"cl_doubles", Target::CLfp64},
+    {"cl_embedded", Target::CLEmbedded},
+    {"cl_fp64", Target::CLfp64},
+    {"cl_int64", Target::CLint64},
     {"cuda", Target::CUDA},
     {"cuda_capability_30", Target::CUDACapability30},
     {"cuda_capability_32", Target::CUDACapability32},
     {"cuda_capability_35", Target::CUDACapability35},
     {"cuda_capability_50", Target::CUDACapability50},
     {"opencl", Target::OpenCL},
-    {"cl_doubles", Target::CLDoubles},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
@@ -379,7 +382,7 @@ std::string Target::to_string() const {
     return result;
 }
 
-namespace Internal{ 
+namespace Internal{
 
 EXPORT void target_test() {
     Target t;

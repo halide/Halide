@@ -535,11 +535,9 @@ void CodeGen_OpenCL_Dev::init_module() {
                << smod_def("char") << "\n"
                << smod_def("short") << "\n"
                << smod_def("int") << "\n"
-               << smod_def("long") << "\n"
                << sdiv_def("char") << "\n"
                << sdiv_def("short") << "\n"
                << sdiv_def("int") << "\n"
-               << sdiv_def("long") << "\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
@@ -572,7 +570,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     // __shared always has address space __local.
     src_stream << "#define __address_space___shared __local\n";
 
-    if (target.has_feature(Target::CLDoubles)) {
+    if (target.has_feature(Target::CLfp64)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
                    << "bool is_nan_f64(double x) {return x != x; }\n"
                    << "#define sqrt_f64 sqrt\n"
@@ -597,6 +595,16 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "#define acosh_f64 acosh\n"
                    << "#define tanh_f64 tanh\n"
                    << "#define atanh_f64 atanh\n";
+    }
+
+    if (!target.has_feature(Target::CLEmbedded) || target.has_feature(Target::CLint64)) {
+        if (target.has_feature(Target::CLEmbedded)) {
+            src_stream << "#ifdef __EMBEDDED_PROFILE__\n"
+                       << "#pragma OPENCL EXTENSION cles_khr_int64 : enable\n"
+                       << "#endif\n";
+        }
+        src_stream << smod_def("long") << "\n"
+                   << sdiv_def("long") << "\n";
     }
 
     src_stream << '\n';
