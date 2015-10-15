@@ -9,6 +9,7 @@
 #include <map>
 
 #include "IR.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,7 +19,8 @@ namespace Internal {
  * Allocate, Store, and Load nodes respectively. */
 Stmt storage_flattening(Stmt s,
                         const std::vector<Function> &outputs,
-                        const std::map<std::string, Function> &env);
+                        const std::map<std::string, Function> &env,
+                        const Target &target);
 
 }
 }

@@ -659,7 +659,9 @@ class Interleaver : public IRMutator {
 
             // Generate a single interleaving store.
             t.width = width*stores.size();
-            Expr index = Ramp::make(base, make_one(Int(32)), t.width);
+            Expr index = Ramp::make(base,
+                                    base.type().bits == 64 ? make_one(Int(64)) : make_one(Int(32)),
+                                    t.width);
             Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
             Stmt new_store = Store::make(store->name, value, index);
 
