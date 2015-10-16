@@ -18,7 +18,13 @@ using std::sort;
 static ostringstream nil;
 
 // OpenCL doesn't support vectors of bools, this mutator rewrites IR
-// to use signed integer vectors instead.
+// to use signed integer vectors instead. This means that all logical
+// ops are re-written to be bitwise ops. This then requires that
+// condition of select nodes be converted back to boolean (by
+// comparing the rewritten expression with zero). The OpenCL C codegen
+// then just omits (via peepholing) the extra conversion ops (casts,
+// NE with zero, etc.) because OpenCL C's ops return/consume the types
+// these conversions produce.
 class EliminateBoolVectors : public IRMutator {
 private:
     using IRMutator::visit;
@@ -463,22 +469,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
     if (op->condition.type().is_vector()) {
-        // We eliminated boolean vectors in OpenCL C. In the process
-        // of doing so, we replaced the vector conditions of selects
-        // with integer vectors, compared with 0. To make legal OpenCL
-        // C, we just need to grab the integer vector out of the
-        // comparison with zero.
-        Expr condition = op->condition;
-        const NE* cond_neq = condition.as<NE>();
-        if (cond_neq) {
-            if (is_zero(cond_neq->b)) {
-                condition = cond_neq->a;
-            }
-        }
-
         string true_val = print_expr(op->true_value);
         string false_val = print_expr(op->false_value);
-        string cond = print_expr(condition);
+        string cond = print_expr(op->condition);
 
         // Yes, you read this right. OpenCL's select function is declared
         // 'select(false_case, true_case, condition)'.
