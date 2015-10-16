@@ -1659,25 +1659,30 @@ inline Expr random_float(Expr seed = Expr()) {
 }
 
 /** Return a random variable representing a uniformly distributed
- * 32-bit integer. See \ref random_float. Vectorizes cleanly. */
-inline Expr random_int(Expr seed = Expr()) {
+ * unsigned 32-bit integer. See \ref random_float. Vectorizes cleanly. */
+inline Expr random_uint(Expr seed = Expr()) {
     // Random ints get odd IDs
     static int counter = -1;
     counter += 2;
 
     std::vector<Expr> args;
     if (seed.defined()) {
-        user_assert(seed.type() == Int(32))
-            << "The seed passed to random_int must have type Int(32), but instead is "
+        user_assert(seed.type() == Int(32) || seed.type() == UInt(32))
+            << "The seed passed to random_int must have type Int(32) or UInt(32), but instead is "
             << seed << " of type " << seed.type() << "\n";
         args.push_back(seed);
     }
     args.push_back(counter);
 
-    return Internal::Call::make(Int(32), Internal::Call::random,
+    return Internal::Call::make(UInt(32), Internal::Call::random,
                                 args, Internal::Call::Intrinsic);
 }
 
+/** Return a random variable representing a uniformly distributed
+ * 32-bit integer. See \ref random_float. Vectorizes cleanly. */
+inline Expr random_int(Expr seed = Expr()) {
+    return cast<int32_t>(random_uint(seed));
+}
 
 // Secondary args to print can be Exprs or const char *
 namespace Internal {
