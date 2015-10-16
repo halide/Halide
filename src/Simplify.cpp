@@ -3299,6 +3299,7 @@ void simplify_test() {
     // it may enable associativity to change:
     check(cast(Float(32), x + 1) - cast(Float(32), x),
           cast(Float(32), x + 1) - cast(Float(32), x));
+    // Similarly, unsafe on types with defined overflow.
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
 
