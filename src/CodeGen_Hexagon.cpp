@@ -2141,7 +2141,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 void CodeGen_Hexagon::visit(const Broadcast *op) {
     bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
 
-    // int Width = op->width;
+    int Width = op->width;
     bool match32 = false;
     bool match16 = false;
     bool match8  = false;
@@ -2149,22 +2149,22 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
 
     int width_32 = CPICK(32,16);
     int width_16 = CPICK(64,32);
-    int width_8 = CPICK(128,64);
+    int width_8  = CPICK(128,64);
 
     // Look for supported broadcasts.
-    Expr match_i32 = Broadcast::make(wild_i32, width_32);
-    Expr match_u32 = Broadcast::make(wild_u32, width_32);
+    Expr match_i32 = Broadcast::make(wild_i32, -1);
+    Expr match_u32 = Broadcast::make(wild_u32, -1);
     match32 = expr_match(match_i32, op, Matches) ||
               expr_match(match_u32, op, Matches);
     if (!match32) {
-      Expr match_i16 = Broadcast::make(wild_i16, width_16);
-      Expr match_u16 = Broadcast::make(wild_u16, width_16);
+      Expr match_i16 = Broadcast::make(wild_i16, -1);
+      Expr match_u16 = Broadcast::make(wild_u16, -1);
       match16 = expr_match(match_i16, op, Matches) ||
                 expr_match(match_u16, op, Matches);
     }
-    if (!match16) {
-      Expr match_i8 = Broadcast::make(wild_i8, width_8);
-      Expr match_u8 = Broadcast::make(wild_u8, width_8);
+    if (!match32 && !match16) {
+      Expr match_i8 = Broadcast::make(wild_i8, -1);
+      Expr match_u8 = Broadcast::make(wild_u8, -1);
       match8 = expr_match(match_i8, op, Matches) ||
                expr_match(match_u8, op, Matches);
     }
@@ -2174,6 +2174,8 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     bool zext_wordsize = false;
     bool fill_wordsize = false;
     bool zero_bcast = false;
+    int NumOps   = 0;
+    int WidthOps = 0;
 
     if (match32 || match16 || match8) {
       if (is_zero(op->value)) {
@@ -2196,20 +2198,55 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
           fill_wordsize = true;
         }
       }
+
+      if (match32) {
+        WidthOps = width_32;
+      } else if (match16) {
+        WidthOps = width_16;
+      } else if (match8) {
+        WidthOps = width_8;
+      }
+      NumOps = Width / WidthOps;
+    }
+
+    if (ID == (Intrinsic::ID) 0) {  // Didn't find a matching intrinsic.
+      user_warning << "Unsupported type for vector broadcast ("
+                   << op->type
+                   << (match32 ? " m32" : "")
+                   << (match16 ? " m16" : "")
+                   << (match8  ? " m8"  : "")
+                   << " WidthOps:" << WidthOps
+                   << " NumOps:" << NumOps
+                   << ")\n";
+      CodeGen_Posix::visit(op);
+      return;
+    }
+
+    if (Width % WidthOps) {  // Check for integer multiple of vector.
+      user_warning << "Width not a supported multiple for vector broadcast ("
+                   << op->type
+                   << (match32 ? " m32" : "")
+                   << (match16 ? " m16" : "")
+                   << (match8  ? " m8"  : "")
+                   << " WidthOps:" << WidthOps
+                   << " NumOps:" << NumOps
+                   << ")\n";
+      CodeGen_Posix::visit(op);
+      return;
     }
 
     // Generate the broadcast code.
-    if (ID != (Intrinsic::ID) 0) {
-      Value *splatval = NULL;
+    debug(4) << "HexCG: Matched vector broadcast ("
+                 << op->type
+                 << (match32 ? " m32" : "")
+                 << (match16 ? " m16" : "")
+                 << (match8  ? " m8"  : "")
+                 << " WidthOps:" << WidthOps
+                 << " NumOps:" << NumOps
+                 << ")\n";
 
-      if (zero_bcast) {       // Broadcast of zero
-        llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-        std::vector<Value *> Ops;
-        Value *Result = CallLLVMIntrinsic(F, Ops);
-        value = convertValueType(Result, llvm_type_of(op->type));
-        return;
-      }
-
+    Value *splatval = NULL;
+    if (!zero_bcast) {
       if (zext_wordsize) {   // Widen splat value to 32bit word.
         splatval = builder->CreateZExt(codegen(op->value), llvm_type_of(UInt(32)));
       } else {
@@ -2230,19 +2267,21 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
           splatval = tempor;
         }
       }
-
-      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-      std::vector<Value *> Ops;
-      Ops.push_back(splatval);
-      Value *Result = CallLLVMIntrinsic(F, Ops);
-      value = convertValueType(Result, llvm_type_of(op->type));
-      return;
-    } else {
-      user_warning << "Unsupported type for vector broadcast ("
-                   << op->type << ")\n";
     }
 
-    CodeGen_Posix::visit(op);
+    std::vector<Value *> ResVec;
+    for (size_t numop = 0; numop < NumOps; ++numop) {
+      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      std::vector<Value *> Ops;
+      if (splatval) {
+         Ops.push_back(splatval);
+      }
+      Value *ResOne = CallLLVMIntrinsic(F, Ops);
+      ResVec.push_back(ResOne);
+    }
+
+    value = concat_vectors(ResVec);
+    value = convertValueType(value, llvm_type_of(op->type));
 }
 void CodeGen_Hexagon::visit(const Load *op) {
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
