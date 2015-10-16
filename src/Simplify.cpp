@@ -276,11 +276,6 @@ private:
             expr = mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
                                      Cast::make(op->type.element_of(), ramp_value->stride),
                                      ramp_value->width));
-        } else if (!op->type.is_float() &&
-                   no_overflow(op->type) &&
-                   can_simplify_cast_binop(op->value)) {
-            // cast(a op b) -> cast(a) op cast(b)
-            expr = mutate(simplify_cast_binop(op->type, op->value));
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -610,6 +605,9 @@ private:
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Cast *cast_a = a.as<Cast>();
+        const Cast *cast_b = b.as<Cast>();
+
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -662,6 +660,19 @@ private:
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
                                  broadcast_a->width);
+        } else if (cast_a && cast_b &&
+                   cast_a->type == cast_b->type &&
+                   cast_a->value.type() == cast_b->value.type() &&
+                   cast_a->type.is_int() &&
+                   cast_b->type.is_int() &&
+                   cast_a->value.type().is_int() &&
+                   cast_b->value.type().is_int() &&
+                   no_overflow(cast_a->type) &&
+                   no_overflow(cast_b->type) &&
+                   no_overflow(cast_a->value.type()) &&
+                   no_overflow(cast_b->value.type())) {
+            // cast(t, a) - cast(t, b) -> cast(t, a - b)
+            expr = mutate(Cast::make(cast_a->type, cast_a->value - cast_b->value));
         } else if (select_a && select_b &&
                    equal(select_a->condition, select_b->condition)) {
             // select(c, a, b) - select(c, d, e) -> select(c, a+d, b+e)

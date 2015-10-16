@@ -51,7 +51,7 @@ private:
 
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       bool internal) {
-        const bool upcast = false;
+        const bool upcast = true;
         Expr idx = target.bits == 64 && upcast ? Expr((int64_t)0) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
