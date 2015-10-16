@@ -127,16 +127,14 @@ class VectorizeLoops : public IRMutator {
                                           scalar_lane);
                     } else {
                         index = Ramp::make(Mul::make(index, index.type().bits == 64 ? width64 : width),
-                                           index.type().bits == 64 ? Expr((int64_t)1) : 1, width);
+                                           make_one(index.type()), width);
                     }
                 } else {
                     internal_assert(!scalarized);
                     index = Mul::make(index,
                                       Broadcast::make(index.type().bits == 64 ? width64 : width, width));
                     index = Add::make(index,
-                                      Ramp::make(index.type().bits == 64 ? Expr((int64_t)0) : 0,
-                                                 index.type().bits == 64 ? Expr((int64_t)1) : 1,
-                                                 width));
+                                      Ramp::make(make_zero(index.type()), make_one(index.type()), width));
                 }
             }
 
@@ -392,16 +390,14 @@ class VectorizeLoops : public IRMutator {
                                           scalar_lane);
                     } else {
                         index = Ramp::make(Mul::make(index, index.type().bits == 64 ? width64 : width),
-                                           index.type().bits == 64 ? Expr((int64_t)1) : 1,
-                                           width);
+                                           make_one(index.type()), width);
                     }
                 } else {
                     internal_assert(!scalarized);
                     index = Mul::make(index,
                                       Broadcast::make(index.type().bits == 64 ? width64 : width, width));
                     index = Add::make(index,
-                                      Ramp::make(index.type().bits == 64 ? Expr((int64_t)0) : 0,
-                                                 index.type().bits == 64 ? Expr((int64_t)1) : 1, width));
+                                      Ramp::make(make_zero(index.type()), make_one(index.type()), width));
                 }
             }
 

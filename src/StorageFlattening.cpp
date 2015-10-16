@@ -51,8 +51,7 @@ private:
 
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       bool internal) {
-        const bool upcast = true;
-        Expr idx = target.bits == 64 && upcast ? Expr((int64_t)0) : 0;
+        Expr idx = make_zero(Int(target.bits));
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
@@ -76,7 +75,7 @@ private:
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.bits == 64 && upcast) {
+                if (target.bits == 64) {
                     idx += cast<int64_t>(args[i] - mins[i]) * cast<int64_t>(strides[i]);
                 } else {
                     idx += (args[i] - mins[i]) * strides[i];
@@ -88,9 +87,9 @@ private:
             // will be pulled outside the inner loop. We use this for
             // external buffers, where the mins and strides are likely
             // to be symbolic
-            Expr base = target.bits == 64 && upcast ? Expr((int64_t)0) : 0;
+            Expr base = make_zero(Int(target.bits));
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.bits == 64 && upcast) {
+                if (target.bits == 64) {
                     idx += cast<int64_t>(args[i]) * cast<int64_t>(strides[i]);
                     base += cast<int64_t>(mins[i]) * cast<int64_t>(strides[i]);
                 } else {
