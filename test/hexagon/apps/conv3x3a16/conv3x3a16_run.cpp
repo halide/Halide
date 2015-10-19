@@ -4,6 +4,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+signed char mask[9] =
+{
+    1, -4, 7,
+    2, -5, 8,
+    3, -6, 9
+};
+
 #ifdef SYNTHETIC
 int main(int argc, char **argv) {
   // Create the Input.
@@ -57,8 +64,10 @@ int main(int argc, char **argv) {
 
   // The host pointers point to the start of the image data:
   buffer_t input1_buf = {0}, output_buf = {0};
+  buffer_t mask_buf = {0};
   input1_buf.host = (uint8_t *)&input[0];
   output_buf.host = (uint8_t *)&output[0];
+  mask_buf.host   = (uint8_t *)&mask[0];
 
   // To access pixel (x, y) in a two-dimensional buffer_t, Halide
   // looks at memory address:
@@ -69,17 +78,21 @@ int main(int argc, char **argv) {
   // because pixels that are adjacent in x are next to each other in
   // memory.
   input1_buf.stride[0] = output_buf.stride[0] = 1;
+  mask_buf.stride[0] = 1;
 
   // // stride[1] is the width of the image, because pixels that are
   // // adjacent in y are separated by a scanline's worth of pixels in
   // // memory.
   input1_buf.stride[1] = width;  output_buf.stride[1] = width;
+  mask_buf.stride[1] = 3;
 
   // The extent tells us how large the image is in each dimension.
   input1_buf.extent[0] = width;
   output_buf.extent[0] = width;
   input1_buf.extent[1] = height;
   output_buf.extent[1] = height;
+  mask_buf.extent[0] = 3;
+  mask_buf.extent[1] = 3;
 
   // We'll leave the mins as zero. This is what they typically
   // are. The host pointer points to the memory location of the min
@@ -89,6 +102,7 @@ int main(int argc, char **argv) {
   // The elem_size field tells us how many bytes each element
   // uses. For the 8-bit image we use in this test it's one.
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
+  mask_buf.elem_size = 1;
 
 
   SIM_ACQUIRE_HVX;
@@ -101,7 +115,7 @@ int main(int argc, char **argv) {
   RESET_PMU();
   start_time = READ_PCYCLES();
 
-  int error = conv3x3a16(&input1_buf, &output_buf);
+  int error = conv3x3a16(&input1_buf, &mask_buf, &output_buf);
 
   total_cycles = READ_PCYCLES() - start_time;
   DUMP_PMU();
@@ -230,10 +244,12 @@ int main(int argc, char **argv) {
   // important to zero-initialize them so you don't end up with
   // garbage fields that confuse Halide.
   buffer_t input1_buf = {0}, output_buf = {0};
+  buffer_t mask_buf = {0};
 
   // The host pointers point to the start of the image data:
   input1_buf.host = (uint8_t *)&input[0];
   output_buf.host = (uint8_t *)&output[0];
+  mask_buf.host   = (uint8_t *)&mask[0];
 
   // To access pixel (x, y) in a two-dimensional buffer_t, Halide
   // looks at memory address:
@@ -244,17 +260,21 @@ int main(int argc, char **argv) {
   // because pixels that are adjacent in x are next to each other in
   // memory.
   input1_buf.stride[0] = output_buf.stride[0] = 1;
+  mask_buf.stride[0] = 1;
 
   // // stride[1] is the width of the image, because pixels that are
   // // adjacent in y are separated by a scanline's worth of pixels in
   // // memory.
   input1_buf.stride[1] = width;  output_buf.stride[1] = width;
+  mask_buf.stride[1] = 3;
 
   // The extent tells us how large the image is in each dimension.
   input1_buf.extent[0] = width;
   output_buf.extent[0] = width;
   input1_buf.extent[1] = height;
   output_buf.extent[1] = height;
+  mask_buf.extent[0] = 3;
+  mask_buf.extent[1] = 3;
 
   // We'll leave the mins as zero. This is what they typically
   // are. The host pointer points to the memory location of the min
@@ -264,6 +284,7 @@ int main(int argc, char **argv) {
   // The elem_size field tells us how many bytes each element
   // uses. For the 8-bit image we use in this test it's one.
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
+  mask_buf.elem_size = 1;
 
   SIM_ACQUIRE_HVX;
 #if LOG2VLEN == 7
@@ -275,7 +296,7 @@ int main(int argc, char **argv) {
   RESET_PMU();
   start_time = READ_PCYCLES();
 
-  int error = conv3x3a16(&input1_buf, &output_buf);
+  int error = conv3x3a16(&input1_buf, &mask_buf, &output_buf);
 
   total_cycles = READ_PCYCLES() - start_time;
   DUMP_PMU();

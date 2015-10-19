@@ -19,20 +19,18 @@ int main(int argc, char **argv) {
   Var xo,xi;
 
   ImageParam In (type_of<uint8_t>(), 2);
+  ImageParam Mask (type_of<int8_t>(), 2);
   set_min(In, 0, 0);
   set_min(In, 1, 0);
   set_stride_multiple(In, 1, 1 << LOG2VLEN);
+  set_min(Mask, 0, 0);
+  set_min(Mask, 1, 0);
 
-  Halide::Func mask;
-  mask(x,y) = 0;
-  mask(-1,-1) =  1; mask( 0,-1) = -4; mask( 1,-1) =  7;
-  mask(-1, 0) =  2; mask( 0, 0) = -5; mask( 1, 0) =  8;
-  mask(-1, 1) =  3; mask( 0, 1) = -6; mask( 1, 1) =  9;
   Halide::RDom r(-1,3,-1,3);
 
   Halide::Func conv3x3;
   conv3x3(x, y) = cast<uint8_t>
-    (clamp(sum(cast<int16_t>(In(x+r.x, y+r.y)) * cast<int16_t>( mask(r.x, r.y))) >> 4, 0, 255));
+    (clamp(sum(cast<int16_t>(In(x+r.x, y+r.y)) * cast<int16_t>(Mask(1+r.x, 1+r.y))) >> 4, 0, 255));
 
 #ifndef NOVECTOR
   conv3x3.vectorize(x, 1 << LOG2VLEN);
@@ -40,8 +38,9 @@ int main(int argc, char **argv) {
   set_output_buffer_min(conv3x3, 0, 0);
   set_output_buffer_min(conv3x3, 1, 0);
   set_stride_multiple(conv3x3, 1, 1 << LOG2VLEN);
-  std::vector<Argument> args(1);
+  std::vector<Argument> args(2);
   args[0]  = In;
+  args[1]  = Mask;
 #ifdef BITCODE
   conv3x3.compile_to_bitcode("conv3x3a16.bc", args, target);
 #endif
