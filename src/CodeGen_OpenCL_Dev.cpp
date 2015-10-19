@@ -183,6 +183,69 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf)
     return "__address_space_" + print_name(buf);
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
+    if (op->call_type != Call::Intrinsic) {
+        CodeGen_C::visit(op);
+        return;
+    }
+    if (op->name == Call::interleave_vectors) {
+        int op_width = op->type.width;
+        internal_assert(op->args.size() > 0);
+        int arg_width = op->args[0].type().width;
+        if (op->args.size() == 1) {
+            // 1 argument, just do a simple assignment
+            internal_assert(op_width == arg_width);
+            print_assignment(op->type, print_expr(op->args[0]));
+        } else if (op->args.size() == 2) {
+            // 2 arguments, set the .even to the first arg and the
+            // .odd to the second arg
+            internal_assert(op->args[1].type().width == arg_width);
+            internal_assert(op_width / 2 == arg_width);
+            string a1 = print_expr(op->args[0]);
+            string a2 = print_expr(op->args[1]);
+            id = unique_name('_');
+            do_indent();
+            stream << print_type(op->type) << " " << id << ";\n";
+            do_indent();
+            stream << id << ".even = " << a1 << ";\n";
+            do_indent();
+            stream << id << ".odd = " << a2 << ";\n";
+        } else {
+            // 3+ arguments, interleave via a vector literal
+            // selecting the appropriate elements of the args
+            int dest_width = op->type.width;
+            int num_args = op->args.size();
+            vector<string> arg_exprs(num_args);
+            for (int i = 0; i < num_args; i++) {
+                internal_assert(op->args[i].type().width == arg_width);
+                arg_exprs[i] = print_expr(op->args[i]);
+            }
+            internal_assert(num_args * arg_width >= dest_width);
+            id = unique_name('_');
+            do_indent();
+            stream << print_type(op->type) << " " << id << ".s";
+            for (int i = 0; i < dest_width; i++) {
+                char c = i < 10 ? '0' + i : 'a' + (i - 10);
+                stream << c;
+            }
+            stream << " = (" << print_type(op->type) << ")(";
+            for (int i = 0; i < dest_width; i++) {
+                int arg = i % num_args;
+                int arg_idx = i / num_args;
+                internal_assert(arg_idx <= arg_width);
+                char arg_idxc = '0' + arg_idx;
+                stream << arg_exprs[arg] << ".s" << arg_idxc;
+                if (i != dest_width - 1) {
+                    stream << ", ";
+                }
+            }
+            stream << ");\n";
+        }
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = is_ramp1(op->index);
@@ -226,7 +289,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(op->type.is_vector());
 
-        id = unique_name('V');
+        id = "_" + unique_name('V');
         cache[rhs.str()] = id;
 
         do_indent();
