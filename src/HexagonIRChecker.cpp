@@ -50,7 +50,11 @@ private:
   bool is_invalid_type(Type t, HexagonIRChecker::HVX_mode m ) {
     if (!t.is_vector())
       return false;
-    if (t.bits * t.width != hexagon_vector_size_bits(m))
+    int vec_size_in_bits = t.bits * t.width;
+    int hex_vec_size_in_bits = hexagon_vector_size_bits(m);
+    if ((vec_size_in_bits != hex_vec_size_in_bits)
+        && (vec_size_in_bits != 2 * hex_vec_size_in_bits)
+        && (vec_size_in_bits != 4 * hex_vec_size_in_bits))
       return true;
     return false;
   }
