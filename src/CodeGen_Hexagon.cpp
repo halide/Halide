@@ -503,8 +503,11 @@ static bool canUseVadd(const Add *op) {
   return false;
 }
 #endif
-
-static bool enableVecAsserts = false;
+#ifdef HEX_CG_ASSERTS
+  static bool enableVecAsserts = true;
+#else
+  static bool enableVecAsserts = false;
+#endif
 static void
 checkVectorOp(Type t, string msg) {
   if (t.is_vector()) {
