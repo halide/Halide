@@ -330,6 +330,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
             // 3+ arguments, interleave via a vector literal
             // selecting the appropriate elements of the args
             int dest_width = op->type.width;
+            internal_assert(dest_width <= 16);
             int num_args = op->args.size();
             vector<string> arg_exprs(num_args);
             for (int i = 0; i < num_args; i++) {
@@ -341,8 +342,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
             do_indent();
             stream << print_type(op->type) << " " << id << ".s";
             for (int i = 0; i < dest_width; i++) {
-                char c = i < 10 ? '0' + i : 'a' + (i - 10);
-                stream << c;
+                stream << vector_elements[i];
             }
             stream << " = (" << print_type(op->type) << ")(";
             for (int i = 0; i < dest_width; i++) {
