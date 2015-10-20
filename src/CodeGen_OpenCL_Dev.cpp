@@ -224,17 +224,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
             internal_assert(num_args * arg_width >= dest_width);
             id = unique_name('_');
             do_indent();
-            stream << print_type(op->type) << " " << id << ".s";
-            for (int i = 0; i < dest_width; i++) {
-                stream << vector_elements[i];
-            }
+            stream << print_type(op->type) << " " << id;
             stream << " = (" << print_type(op->type) << ")(";
             for (int i = 0; i < dest_width; i++) {
                 int arg = i % num_args;
                 int arg_idx = i / num_args;
                 internal_assert(arg_idx <= arg_width);
-                char arg_idxc = '0' + arg_idx;
-                stream << arg_exprs[arg] << ".s" << arg_idxc;
+                stream << arg_exprs[arg] << ".s" << vector_elements[arg_idx];
                 if (i != dest_width - 1) {
                     stream << ", ";
                 }
