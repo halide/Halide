@@ -33,13 +33,29 @@ private:
     void visit_comparison(const T* op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        Type t = a.type();
+
+        // Ensure both a and b have the same type (if this is a vector
+        // comparison). This should only be necessary if the operands are
+        // integer vectors (promoted from bool vectors).
+        if (t.width > 1 && t.bits != b.type().bits) {
+            internal_assert(t.code == Type::Int && b.type().code == Type::Int);
+
+            t.bits = std::max(t.bits, b.type().bits);
+            if (t != a.type()) {
+                a = Cast::make(t, a);
+            }
+            if (t != b.type()) {
+                b = Cast::make(t, b);
+            }
+        }
+
         if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
         } else {
             expr = op;
         }
 
-        Type t = a.type();
         if (t.width > 1) {
             // To represent bool vectors, OpenCL uses vectors of signed
             // integers with the same width as the types being compared.
