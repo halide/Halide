@@ -61,6 +61,7 @@ protected:
         void visit(const For *);
         void visit(const Ramp *op);
         void visit(const Broadcast *op);
+        void visit(const Call *op);
         void visit(const Load *op);
         void visit(const Store *op);
         void visit(const Cast *op);
