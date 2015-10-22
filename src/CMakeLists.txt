@@ -296,6 +296,7 @@ set(HEADER_FILES
   UnifyDuplicateLets.h
   UniquifyVariableNames.h
   UnrollLoops.h
+  UpcastBufferIndices.h
   Util.h
   Var.h
   VaryingAttributes.h
@@ -435,6 +436,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UnifyDuplicateLets.cpp
   UniquifyVariableNames.cpp
   UnrollLoops.cpp
+  UpcastBufferIndices.cpp
   Util.cpp
   Var.cpp
   VaryingAttributes.cpp

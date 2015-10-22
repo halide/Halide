@@ -45,6 +45,7 @@
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnrollLoops.h"
+#include "UpcastBufferIndices.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 
@@ -242,6 +243,13 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     s = remove_trivial_for_loops(s);
     s = simplify(s);
+
+    if (t.bits == 64) {
+        debug(1) << "Upcasting buffer indices...\n";
+        s = upcast_buffer_indices(s);
+        s = simplify(s);
+    }
+
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     if (!custom_passes.empty()) {

@@ -3,13 +3,19 @@
 #include "Error.h"
 #include "JITModule.h"
 #include "runtime/HalideRuntime.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
 namespace {
 void check_buffer_size(uint64_t bytes, const std::string &name) {
-    user_assert(bytes < (1UL << 31)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
+    Target t = get_target_from_environment();
+    if (t.bits == 64) {
+        user_assert(bytes < (1UL << 63)) << "Total size of buffer " << name << " exceeds 2^63 - 1\n";
+    } else {
+        user_assert(bytes < (1UL << 31)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
+    }
 }
 }
 

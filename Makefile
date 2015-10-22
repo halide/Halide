@@ -318,6 +318,7 @@ SOURCE_FILES = \
   UnifyDuplicateLets.cpp \
   UniquifyVariableNames.cpp \
   UnrollLoops.cpp \
+  UpcastBufferIndices.cpp \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \
@@ -442,6 +443,7 @@ HEADER_FILES = \
   UnifyDuplicateLets.h \
   UniquifyVariableNames.h \
   UnrollLoops.h \
+  UpcastBufferIndices.h \
   Util.h \
   Var.h \
   VectorizeLoops.h
