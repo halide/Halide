@@ -154,64 +154,6 @@ private:
         return add->a;
     }
 
-    bool can_simplify_cast_binop(Expr e) {
-        const Add *add = e.as<Add>();
-        const Sub *sub = e.as<Sub>();
-        const Mul *mul = e.as<Mul>();
-        const Div *div = e.as<Div>();
-        const Mod *mod = e.as<Mod>();
-        const Min *min = e.as<Min>();
-        const Max *max = e.as<Max>();
-        bool safe_to_simplify = add || sub || mul || div || mod || min || max;
-        if (add) {
-            return safe_to_simplify && no_overflow(add->a.type()) && no_overflow(add->b.type());
-        } else if (sub) {
-            return safe_to_simplify && no_overflow(sub->a.type()) && no_overflow(sub->b.type());
-        } else if (mul) {
-            return safe_to_simplify && no_overflow(mul->a.type()) && no_overflow(mul->b.type());
-        } else if (div) {
-            return safe_to_simplify && no_overflow(div->a.type()) && no_overflow(div->b.type());
-        } else if (mod) {
-            return safe_to_simplify && no_overflow(mod->a.type()) && no_overflow(mod->b.type());
-        } else if (min) {
-            return safe_to_simplify && no_overflow(min->a.type()) && no_overflow(min->b.type());
-        } else if (max) {
-            return safe_to_simplify && no_overflow(max->a.type()) && no_overflow(max->b.type());
-        } else {
-            return false;
-        }
-    }
-
-    // cast(a op b) -> cast(a) op cast(b). Argument e is 'a op b'.
-    Expr simplify_cast_binop(Type t, Expr e) {
-        const Add *add = e.as<Add>();
-        const Sub *sub = e.as<Sub>();
-        const Mul *mul = e.as<Mul>();
-        const Div *div = e.as<Div>();
-        const Mod *mod = e.as<Mod>();
-        const Min *min = e.as<Min>();
-        const Max *max = e.as<Max>();
-
-        if (add) {
-            return Add::make(cast(t, add->a), cast(t, add->b));
-        } else if (sub) {
-            return Sub::make(cast(t, sub->a), cast(t, sub->b));
-        } else if (mul) {
-            return Mul::make(cast(t, mul->a), cast(t, mul->b));
-        } else if (div) {
-            return Div::make(cast(t, div->a), cast(t, div->b));
-        } else if (mod) {
-            return Mod::make(cast(t, mod->a), cast(t, mod->b));
-        } else if (min) {
-            return Min::make(cast(t, min->a), cast(t, min->b));
-        } else if (max) {
-            return Max::make(cast(t, max->a), cast(t, max->b));
-        } else {
-            internal_assert(false);
-            return Expr();
-        }
-    }
-
     void visit(const Cast *op) {
         Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
