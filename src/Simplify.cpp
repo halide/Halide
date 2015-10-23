@@ -600,7 +600,6 @@ private:
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
                                  broadcast_a->width);
         } else if (cast_a && cast_b &&
-                   cast_a->type == cast_b->type &&
                    cast_a->value.type() == cast_b->value.type() &&
                    cast_a->type.is_int() &&
                    cast_b->type.is_int() &&
@@ -3230,15 +3229,17 @@ void simplify_test() {
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
 
-    check(cast(Int(64).vector_of(3), ramp(x, 2, 3)),
+    check(cast(Int(64, 3), ramp(x, 2, 3)),
           ramp(cast(Int(64), x), cast(Int(64), 2), 3));
+    check(cast(Int(32, 3), ramp(cast(Int(64), x), make_const(Int(64), 2), 3)),
+          ramp(cast(Int(32), x), make_const(Int(32), 2), 3));
 
     check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
-    // It is not safe to perform the same simplification on floats, as
-    // it may enable associativity to change:
+    // We do not perform the same simplification on floats, as it may
+    // not always result in a performance gain.
     check(cast(Float(32), x + 1) - cast(Float(32), x),
           cast(Float(32), x + 1) - cast(Float(32), x));
-    // Similarly, unsafe on types with defined overflow.
+    // Also unsafe on types with defined overflow.
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
 
