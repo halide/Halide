@@ -11,7 +11,7 @@ void halide_error(void *ctx, const char *msg) {
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Target t = get_target_from_environment();
+    Target t = get_jit_target_from_environment();
 
     Image<uint8_t> image;
     ImageParam input(UInt(8), 3);
