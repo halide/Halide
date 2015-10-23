@@ -92,12 +92,6 @@ const int64_t *as_const_int(Expr e) {
         return NULL;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_int(b->value);
-    } else if (const Cast *c = e.as<Cast>()) {
-        if (c->type.is_int()) {
-            return as_const_int(c->value);
-        } else {
-            return NULL;
-        }
     } else if (const IntImm *i = e.as<IntImm>()) {
         return &(i->value);
     } else {
@@ -110,12 +104,6 @@ const uint64_t *as_const_uint(Expr e) {
         return NULL;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_uint(b->value);
-    } else if (const Cast *c = e.as<Cast>()) {
-        if (c->type.is_uint()) {
-            return as_const_uint(c->value);
-        } else {
-            return NULL;
-        }
     } else if (const UIntImm *i = e.as<UIntImm>()) {
         return &(i->value);
     } else {
@@ -128,12 +116,6 @@ const double *as_const_float(Expr e) {
         return NULL;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_float(b->value);
-    } else if (const Cast *c = e.as<Cast>()) {
-        if (c->type.is_float()) {
-            return as_const_float(c->value);
-        } else {
-            return NULL;
-        }
     } else if (const FloatImm *f = e.as<FloatImm>()) {
         return &(f->value);
     } else {
