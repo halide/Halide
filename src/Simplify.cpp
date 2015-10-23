@@ -34,16 +34,13 @@ using std::vector;
 namespace {
 
 // Things that we can constant fold: Immediates, broadcasts of
-// immediates, and casts of immediates.
+// immediates.
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
     if (e.as<FloatImm>()) return true;
     if (const Broadcast *b = e.as<Broadcast>()) {
         return is_simple_const(b->value);
-    }
-    if (const Cast *c = e.as<Cast>()) {
-        return is_simple_const(c->value);
     }
     return false;
 }
