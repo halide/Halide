@@ -111,6 +111,7 @@ void defineTarget()
             .value("UserContext", Target::Feature::UserContext)
             .value("RegisterMetadata", Target::Feature::RegisterMetadata)
             .value("Matlab", Target::Feature::Matlab)
+            .value("Metal", Target::Feature::Metal)
             .value("FeatureEnd", Target::Feature::FeatureEnd)
 
             .export_values()
