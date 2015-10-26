@@ -176,16 +176,16 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
                        sat_w_h(WPICK(wild_i32x32,wild_i32x16))),
                        IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
                        false));
-  combiners.push_back(Pattern(abs(WPICK(wild_u8x128,wild_u8x64) -
+  combiners.push_back(Pattern(absd(WPICK(wild_u8x128,wild_u8x64),
                                   WPICK(wild_u8x128,wild_u8x64)),
                                   IPICK(Intrinsic::hexagon_V6_vabsdiffub)));
-  combiners.push_back(Pattern(abs(WPICK(wild_u16x64,wild_u16x32) -
+  combiners.push_back(Pattern(absd(WPICK(wild_u16x64,wild_u16x32),
                                   WPICK(wild_u16x64,wild_u16x32)),
                                   IPICK(Intrinsic::hexagon_V6_vabsdiffuh)));
-  combiners.push_back(Pattern(abs(WPICK(wild_i16x64,wild_i16x32) -
+  combiners.push_back(Pattern(absd(WPICK(wild_i16x64,wild_i16x32),
                                   WPICK(wild_i16x64,wild_i16x32)),
                                   IPICK(Intrinsic::hexagon_V6_vabsdiffh)));
-  combiners.push_back(Pattern(abs(WPICK(wild_i32x32,wild_i32x16) -
+  combiners.push_back(Pattern(absd(WPICK(wild_i32x32,wild_i32x16),
                                   WPICK(wild_i32x32,wild_i32x16)),
                                   IPICK(Intrinsic::hexagon_V6_vabsdiffw)));
 
@@ -1765,18 +1765,22 @@ void CodeGen_Hexagon::visit(const Call *op) {
         // "combiners".
         std::vector<Pattern> doubleAbsDiff;
 
-        doubleAbsDiff.push_back(Pattern(
-          abs(WPICK(wild_u8x256 - wild_u8x256,wild_u8x128 - wild_u8x128)),
-              IPICK(Intrinsic::hexagon_V6_vabsdiffub)));
-        doubleAbsDiff.push_back(Pattern(
-          abs(WPICK(wild_u16x128 - wild_u16x128,wild_u16x64 - wild_u16x64)),
-              IPICK(Intrinsic::hexagon_V6_vabsdiffuh)));
-        doubleAbsDiff.push_back(Pattern(
-          abs(WPICK(wild_i16x128 - wild_i16x128,wild_i16x64 - wild_i16x64)),
-              IPICK(Intrinsic::hexagon_V6_vabsdiffh)));
-        doubleAbsDiff.push_back(Pattern(
-          abs(WPICK(wild_i32x64 - wild_i32x64,wild_i32x32 - wild_i32x32)),
-              IPICK(Intrinsic::hexagon_V6_vabsdiffw)));
+        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_u8x256, wild_u8x128),
+                                             WPICK(wild_u8x256, wild_u8x128)),
+                                        IPICK(Intrinsic::
+                                              hexagon_V6_vabsdiffub)));
+        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_u16x128, wild_u16x64),
+                                             WPICK(wild_u16x128, wild_u16x64)),
+                                        IPICK(Intrinsic::
+                                              hexagon_V6_vabsdiffuh)));
+        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_i16x128, wild_i16x64),
+                                             WPICK(wild_i16x128, wild_i16x64)),
+                                        IPICK(Intrinsic::
+                                              hexagon_V6_vabsdiffh)));
+        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_i32x64 ,wild_i32x32),
+                                             WPICK(wild_i32x64 ,wild_i32x32)),
+                                        IPICK(Intrinsic::
+                                              hexagon_V6_vabsdiffw)));
 
         matches.clear();
         for (size_t I = 0; I < doubleAbsDiff.size(); ++I) {
