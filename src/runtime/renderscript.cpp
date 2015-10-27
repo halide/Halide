@@ -726,6 +726,8 @@ WEAK int halide_renderscript_device_free(void *user_context, buffer_t *buf) {
     debug(user_context) << "    non-implemented RS device free "
                         << (void *)(dev_ptr) << "\n";
 
+    buf->dev = 0;
+
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
