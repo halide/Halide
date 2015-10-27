@@ -348,7 +348,7 @@ int main(int argc, char **argv) {
 
     // Splitting by factors that don't divide the extent.
     {
-        Func gradient("gradient_split_7x4");
+        Func gradient("gradient_split_7x2");
         gradient(x, y) = x + y;
         gradient.trace_stores();
 
@@ -357,24 +357,24 @@ int main(int argc, char **argv) {
         // above. So what happens when the total extent we wish to
         // evaluate x over isn't a multiple of the split factor? We'll
         // split by a factor three, and we'll evaluate gradient over a
-        // 7x4 box instead of the 4x4 box we've been using.
+        // 7x2 box instead of the 4x4 box we've been using.
         Var x_outer, x_inner;
         gradient.split(x, x_outer, x_inner, 3);
 
-        printf("Evaluating gradient over a 7x4 box with x split by three \n");
-        Image<int> output = gradient.realize(7, 4);
+        printf("Evaluating gradient over a 7x2 box with x split by three \n");
+        Image<int> output = gradient.realize(7, 2);
 
         // See figures/lesson_05_split_7_by_3.gif for a visualization
         // of what happened. Note that some points get evaluated more
         // than once!
 
         printf("Equivalent C:\n");
-        for (int y = 0; y < 4; y++) {
-            for (int x_outer = 0; x_outer < 3; x_outer++) { // Now runs from 0 to 3
+        for (int y = 0; y < 2; y++) {
+            for (int x_outer = 0; x_outer < 3; x_outer++) { // Now runs from 0 to 2
                 for (int x_inner = 0; x_inner < 3; x_inner++) {
                     int x = x_outer * 3;
                     // Before we add x_inner, make sure we don't
-                    // evaluate points outside of the 7x4 box. We'll
+                    // evaluate points outside of the 7x2 box. We'll
                     // clamp x to be at most 4 (7 minus the split
                     // factor).
                     if (x > 4) x = 4;

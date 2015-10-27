@@ -56,14 +56,20 @@ protected:
 
         std::string get_memory_space(const std::string &);
 
-        void visit(const Div *);
-        void visit(const Mod *);
         void visit(const For *);
         void visit(const Ramp *op);
         void visit(const Broadcast *op);
+        void visit(const Call *op);
         void visit(const Load *op);
         void visit(const Store *op);
         void visit(const Cast *op);
+        void visit(const Select *op);
+        void visit(const EQ *);
+        void visit(const NE *);
+        void visit(const LT *);
+        void visit(const LE *);
+        void visit(const GT *);
+        void visit(const GE *);
         void visit(const Allocate *op);
         void visit(const Free *op);
     };
