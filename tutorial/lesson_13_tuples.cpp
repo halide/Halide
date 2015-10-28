@@ -88,10 +88,10 @@ int main(int argc, char **argv) {
     {
         Realization r = multi_valued.realize(80, 60);
         assert(r.size() == 2);
-        Image<int> im1 = r[0];
-        Image<float> im2 = r[1];
-        assert(im1(30, 40) == 30 + 40);
-        assert(im2(30, 40) == sinf(30 * 40));
+        Image<int> im0 = r[0];
+        Image<float> im1 = r[1];
+        assert(im0(30, 40) == 30 + 40);
+        assert(im1(30, 40) == sinf(30 * 40));
     }
 
     // All Tuple elements are evaluated together over the same domain
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     // equivalent C++ code to the above is:
     {
         int multi_valued_0[80*60];
-        int multi_valued_1[80*60];
+        float multi_valued_1[80*60];
         for (int y = 0; y < 80; y++) {
             for (int x = 0; x < 60; x++) {
                 multi_valued_0[x + 60*y] = x + y;
@@ -144,8 +144,8 @@ int main(int argc, char **argv) {
         input_func(x) = sin(x);
         Image<float> input = input_func.realize(100);
 
-        // Then we defined a 2-valued Tuple which tracks the maximum value
-        // its index.
+        // Then we define a 2-valued Tuple which tracks the maximum
+        // value and its index.
         Func arg_max;
 
         // Pure definition.
