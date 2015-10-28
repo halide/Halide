@@ -31,3 +31,19 @@ void testSelectNotEqual(Target& target) {
   COMPILE(SelectNE, "SelectNE");
 
 }
+template<typename T1, typename T2>
+void testSelectNarrowing(Target &target) {
+  Halide::Var x("x"), y("y");
+  ImageParam inputOne (type_of<T1>(), 1);
+  ImageParam inputTwo (type_of<T1>(), 1);
+  ImageParam inputThree (type_of<T1>(), 1);
+  Halide::Func SelectNarrow, ResultNarrow;
+  SelectNarrow(x) = (select(inputOne(x) != inputTwo(x), cast<T2>(inputOne(x)), cast<T2>(inputTwo(x))));
+  ResultNarrow(x) = cast<T1>(cast<T2>(inputThree(x)) + SelectNarrow(x));
+  ResultNarrow.vectorize(x, (VECTORSIZE/sizeof(T1)));
+  std::vector<Argument> args(3);
+  args[0]  = inputOne;
+  args[1] = inputTwo;
+  args[2] = inputThree;
+  COMPILE(ResultNarrow, "ResultNarrow");
+}

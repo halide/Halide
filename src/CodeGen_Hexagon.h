@@ -87,7 +87,7 @@ protected:
                                             std::vector<Pattern> &, bool, bool);
     bool possiblyCodeGenWideningMultiply(const Mul *);
     bool possiblyGenerateVMPAAccumulate(const Add *);
-
+    bool possiblyCodeGenNarrowerType(const Select *);
 };
 
 }}

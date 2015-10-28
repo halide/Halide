@@ -25,7 +25,10 @@ int main(int argc, char **argv) {
   //CHECK: vcmp.eq(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
   //CHECK: vmux(q{{[0-3]+}},v{{[0-9]+}},v{{[0-9]+}})
   testSelectNotEqual<int32_t>(target);
-
+  //CHECK: Narrow
+  //CHECK: [[RES:v[0-9]+]] = vmux(
+  //CHECK: vzxt([[RES]].ub)
+  testSelectNarrowing<uint8_t, uint16_t>(target);
   printf ("Done\n");
 
   return 0;

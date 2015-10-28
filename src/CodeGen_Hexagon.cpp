@@ -610,6 +610,39 @@ Expr lossless_cast(Type t, Expr e) {
 
     return Expr();
 }
+
+Expr lossless_cast_cmp(Type t, Expr e) {
+  const EQ *eq = e.as<EQ>();
+  const NE *ne = e.as<NE>();
+  const LT *lt = e.as<LT>();
+  const LE *le = e.as<LE>();
+  const GT *gt = e.as<GT>();
+  const GE *ge = e.as<GE>();
+  Expr a = eq ? eq->a : (ne ? ne->a : (lt ? lt->a : (gt ? gt->a : (ge ? ge->a :
+                                                                   Expr()))));
+  Expr b = eq ? eq->b : (ne ? ne->b : (lt ? lt->b : (gt ? gt->b : (ge ? ge->b :
+                                                                   Expr()))));
+  if (!a.defined() || !b.defined())
+    return Expr();
+  a = lossless_cast(t, a);
+  b = lossless_cast(t, b);
+  if (!a.defined() || !b.defined())
+    return Expr();
+  if (eq)
+    return EQ::make(a, b);
+  else if (ne)
+    return NE::make(a, b);
+  else if (lt)
+    return LT::make(a, b);
+  else if (le)
+    return LE::make(a, b);
+  else if (gt)
+    return GT::make(a, b);
+  else if (ge)
+    return GE::make(a, b);
+  else
+    return Expr();
+}
 // Check to see if LoadA and LoadB are vectors of 'Width' elements and
 // that they form interleaved loads of even and odd elements
 //. i.e they are of the form.
@@ -2411,6 +2444,34 @@ void CodeGen_Hexagon::visit(const Load *op) {
     CodeGen_Posix::visit(op);
   return;
 }
+  // Sometimes, when we are dealing with vector selects of vector pairs,
+  // it is possible to do the select as vectors and then up-cast the
+  // result.
+  // For e.g.
+  // vector_pair_result = select(x128(s0) < x128(s1), cast<int16_t>(v0),
+  //                                                  cast<int16_t>(v1))
+  // where:
+  //       s0, s1 are 1 byte scalars.
+  //       v0 and v1 are vectors of 64 byte (single mode) or 128 bytes
+  //       (double mode)
+bool CodeGen_Hexagon::possiblyCodeGenNarrowerType(const Select *op) {
+  // At this point, we call possiblyCodeGenNarrowerType only for vector
+  // pairs and when the condition is also a vector pair.
+
+  Expr cond = op->condition;
+  Expr true_value = op->true_value;
+  Expr false_value = op->false_value;
+  Type t = op->type;
+  Type narrow = Type(t.code, (t.bits/2), t.width);
+  Expr n_cond = lossless_cast_cmp(narrow, cond);
+  Expr n_tv = lossless_cast(narrow, true_value);
+  Expr n_fv = lossless_cast(narrow, false_value);
+  if (n_cond.defined() && n_tv.defined() && n_fv.defined()) {
+    value = codegen(Cast::make(t, Select::make(n_cond, n_tv, n_fv)));
+    return true;
+  }
+  return false;
+}
 void CodeGen_Hexagon::visit(const Select *op) {
   if (!op->type.is_vector()) {
     CodeGen_Posix::visit(op);
@@ -2426,6 +2487,8 @@ void CodeGen_Hexagon::visit(const Select *op) {
 
   if (op->condition.type().is_vector()) {
       if (isValidHexagonVectorPair(op->type, native_vector_bits())) {
+        if (possiblyCodeGenNarrowerType(op))
+          return;
         std::vector<Expr> PairSelects;
         std::vector<Expr> matches;
         int PredVectorSize = CPICK(1024, 512);
