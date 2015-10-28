@@ -2,6 +2,8 @@
 #include "halide-hexagon-setup.h"
 #include <stdio.h>
 using namespace Halide;
+using namespace Halide::Internal;
+IRPrinter irp(std::cerr);
 #define COMPILE_OBJ(X)  ((X).compile_to_file("sobel", args, target))
 
 /*
@@ -36,12 +38,12 @@ void test_sobel(Target &target) {
   Halide::Func sobel_x_avg("sobel_x_avg");
   sobel_x_avg(x,y) = input_16(x-1, y)  + input_16(x+1,y) + 2*input_16(x, y);
   Halide::Func sobel_x("sobel_x");
-  sobel_x(x, y) = abs(sobel_x_avg(x, y-1) - sobel_x_avg(x, y+1));
+  sobel_x(x, y) = absd(sobel_x_avg(x, y-1), sobel_x_avg(x, y+1));
 
   Halide::Func sobel_y_avg("sobel_y_avg");
   sobel_y_avg(x,y) = input_16(x, y-1) + 2*input_16(x, y)  + input_16(x, y+1);
   Halide::Func sobel_y("sobel_y");
-  sobel_y(x, y) = abs(sobel_y_avg(x-1, y) - sobel_y_avg(x+1, y));
+  sobel_y(x, y) = absd(sobel_y_avg(x-1, y),  sobel_y_avg(x+1, y));
 
   Halide::Func Sobel("Sobel");
   Sobel(x, y) = cast<uint8_t>(clamp(sobel_y(x, y) + sobel_x(x, y), 0, 255));

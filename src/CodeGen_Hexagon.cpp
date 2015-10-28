@@ -1758,7 +1758,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
           value = Call;
         return;
       }
-    } else if (op->name == Call::abs) {
+    } else if (op->name == Call::absd) {
       if (op->type.is_vector() &&
           ((op->type.bytes() * op->type.width) == 2 * VecSize)) {
         // vector sized absdiff should have been covered by the look up table
