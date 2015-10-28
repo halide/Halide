@@ -82,18 +82,15 @@ public:
         curved.split(y, yo, yi, 16)
               .parallel(yo);
 
-        // Compute sharpen as needed per scanline of curved, reusing
-        // previous values computed within the same strip of 16
-        // scanlines.
-        sharpen.store_at(curved, yo)
-               .compute_at(curved, yi);
+        // Compute sharpen as needed per scanline of curved.
+        sharpen.compute_at(curved, yi);
 
         // Vectorize the sharpen. It's 16-bit so we'll vectorize it 8-wide.
         sharpen.vectorize(x, 8);
 
-        // Compute the padded input at the same granularity as the
-        // sharpen. We'll leave the cast to 16-bit inlined into
-        // sharpen.
+        // Compute the padded input as needed per scanline of curved,
+        // reusing previous values computed within the same strip of
+        // 16 scanlines.
         padded.store_at(curved, yo)
               .compute_at(curved, yi);
 
