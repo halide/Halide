@@ -86,6 +86,7 @@ void defineTarget()
             .value("Debug", Target::Feature::Debug)
             .value("NoAsserts", Target::Feature::NoAsserts)
             .value("NoBoundsQuery", Target::Feature::NoBoundsQuery)
+            .value("Profile", Target::Feature::Profile)
 
             .value("SSE41", Target::Feature::SSE41)
             .value("AVX", Target::Feature::AVX)
