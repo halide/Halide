@@ -84,6 +84,8 @@ class StoreForwarding : public IRMutator {
     void visit(const For *op) {
         Stmt body = mutate(op->body);
 
+        // TODO: skip parallel loops
+
         // Find all the unconditional loads and stores
         FindLoadsAndStores f;
         op->body.accept(&f);
