@@ -310,6 +310,7 @@ SOURCE_FILES = \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
+  StoreForwarding.cpp \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
