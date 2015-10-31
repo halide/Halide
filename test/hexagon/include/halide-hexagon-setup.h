@@ -37,3 +37,11 @@ void set_stride_multiple(Func &f, int dim, int m) {
   Expr stride = f.output_buffer().stride(dim);
   f.output_buffer().set_stride_multiple(dim, m);
 }
+
+Expr sat_8(Expr e) {
+  return clamp(e, -128, 127);
+}
+
+Expr usat_8(Expr e) {
+  return clamp(e, 0, 255);
+}
