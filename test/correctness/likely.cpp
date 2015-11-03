@@ -160,18 +160,6 @@ int main(int argc, char **argv) {
         count_sin_calls(g, 2);
     }
 
-    {
-
-        // The max here should simplify to 10 in the steady state,
-        // which means the select evaluates to 1.0f
-        Func g;
-        g(x) = select(min(x, likely(10)) > 0, 1.0f, sin(x));
-        // There should be two partitions
-        count_partitions(g, 2);
-        // With a call to sin in the steady-state
-        count_sin_calls(g, 1);
-    }
-
     // As a specialize case, we treat clamped ramps as likely to
     // simplify to the clamped expression. This handles the many
     // existing cases where people have written their boundary
