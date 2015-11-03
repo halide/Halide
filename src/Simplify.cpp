@@ -3029,8 +3029,6 @@ private:
                 alignment_info.push(new_name, mod_rem);
                 new_value_tracked = true;
             }
-            //Interval bounds = bounds_of_expr_in_scope(new_value, bounds_info);
-            //bounds_info.push(new_name, bounds);
         }
         bool value_tracked = false;
         if (no_overflow_scalar_int(value.type())) {
@@ -3039,19 +3037,15 @@ private:
                 alignment_info.push(op->name, mod_rem);
                 value_tracked = true;
             }
-            //Interval bounds = bounds_of_expr_in_scope(value, bounds_info);
-            //bounds_info.push(op->name, bounds);
         }
 
         body = mutate(body);
 
         if (value_tracked) {
             alignment_info.pop(op->name);
-            //bounds_info.pop(op->name);
         }
         if (new_value_tracked) {
             alignment_info.pop(new_name);
-            //bounds_info.pop(new_name);
         }
 
         info = var_info.get(op->name);
