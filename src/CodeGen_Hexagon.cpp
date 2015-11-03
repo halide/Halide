@@ -35,14 +35,24 @@ extern llvm::cl::opt<bool> ReserveR9;
 #define CPICK(c128, c64) (B128 ? c128 : c64)
 #define WPICK(w128, w64) (B128 ? w128 : w64)
 #define IPICK(i64) (B128 ? i64##_128B : i64)
-#define UINT_8_MAX UInt(8).imax()
-#define UINT_8_MIN UInt(8).imin()
-#define UINT_16_MAX UInt(16).imax()
-#define UINT_16_MIN UInt(16).imin()
-#define INT_8_MAX Int(8).imax()
-#define INT_8_MIN Int(8).imin()
-#define INT_16_MAX Int(16).imax()
-#define INT_16_MIN Int(16).imin()
+
+#define UINT_8_MAX UInt(8).max()
+#define UINT_8_MIN UInt(8).min()
+#define UINT_16_MAX UInt(16).max()
+#define UINT_16_MIN UInt(16).min()
+#define INT_8_MAX Int(8).max()
+#define INT_8_MIN Int(8).min()
+#define INT_16_MAX Int(16).max()
+#define INT_16_MIN Int(16).min()
+
+#define UINT_8_IMAX 255
+#define UINT_8_IMIN 0
+#define UINT_16_IMAX 65535
+#define UINT_16_IMIN 0
+#define INT_8_IMAX 127
+#define INT_8_IMIN -128
+#define INT_16_IMAX 32767
+#define INT_16_IMIN -32768
 
 namespace Halide {
 namespace Internal {
@@ -572,45 +582,6 @@ llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
   return NULL;
 }
 
-// Attempt to cast an expression to a smaller type while provably not
-// losing information. If it can't be done, return an undefined Expr.
-
-Expr lossless_cast(Type t, Expr e) {
-    if (t == e.type()) {
-        return e;
-    } else if (t.can_represent(e.type())) {
-        return cast(t, e);
-    }
-
-    if (const Cast *c = e.as<Cast>()) {
-        if (t == c->value.type()) {
-            return c->value;
-        } else {
-            return lossless_cast(t, c->value);
-        }
-    }
-
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value);
-        if (v.defined()) {
-            return Broadcast::make(v, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = e.as<IntImm>()) {
-        int x = int_cast_constant(t, i->value);
-        if (x == i->value) {
-            return cast(t, e);
-        } else {
-            return Expr();
-        }
-    }
-
-    return Expr();
-}
-
 Expr lossless_cast_cmp(Type t, Expr e) {
   const EQ *eq = e.as<EQ>();
   const NE *ne = e.as<NE>();
@@ -895,7 +866,7 @@ bool CodeGen_Hexagon::possiblyGenerateVMPAAccumulate(const Add *op) {
       Value *Operand1 = codegen(OpB);
       Value *Multiplicand = concatVectors(Operand0, Operand1);
       int ScalarValue = 0x01010101;
-      Expr ScalarImmExpr = IntImm::make(ScalarValue);
+      Expr ScalarImmExpr = IntImm::make(Int(32), ScalarValue);
       Value *Scalar = codegen(ScalarImmExpr);
       std::vector<Value *> Ops;
       Ops.push_back(Accumulator);
@@ -1367,11 +1338,11 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
     std::vector<Pattern> Patterns;
     std::vector<Expr> matches;
     Patterns.push_back(Pattern(u8_(min(WPICK(wild_u32x128, wild_u32x64),
-                                       UINT_8_MAX)),
+                                       UINT_8_IMAX)),
                                IPICK(Intrinsic::hexagon_V6_vsathub)));
     // Fixme: PDB: Shouldn't the signed version have a max in the pattern too?
     Patterns.push_back(Pattern(i8_(min(WPICK(wild_i32x128, wild_i32x64),
-                                       INT_8_MAX)),
+                                       INT_8_IMAX)),
                                IPICK(Intrinsic::hexagon_V6_vsathub)));
 
     for (size_t I = 0; I < Patterns.size(); ++I) {
@@ -1381,7 +1352,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
         Type FirstStepType = Type(op->type.code, 16, op->type.width);
         Value *FirstStep = codegen(cast(FirstStepType,
                                         (min(matches[0],
-                                             FirstStepType.imax()))));
+                                             FirstStepType.max()))));
         std::vector<Value *> Ops;
         Intrinsic::ID IntrinsID = P.ID;
         // Ops[0] is the higher vectors and Ops[1] the lower.
@@ -1397,10 +1368,10 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
     Patterns.clear();
     matches.clear();
     Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
-                                        UINT_16_MAX)),
+                                        UINT_16_IMAX)),
                                IPICK(Intrinsic::hexagon_V6_vsatwh)));
     Patterns.push_back(Pattern(i16_(min(WPICK(wild_i32x128, wild_i32x64),
-                                        INT_16_MAX)),
+                                        INT_16_IMAX)),
                                IPICK(Intrinsic::hexagon_V6_vsatwh)));
     for (size_t I = 0; I < Patterns.size(); ++I) {
       const Pattern &P = Patterns[I];
@@ -1624,22 +1595,22 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     SatAndPack.push_back(Pattern(u8_(max(min(WPICK(wild_i16x128, wild_i16x64)
                                              >> Broadcast::make(wild_i16,
                                                                 HWrdsInVP),
-                                             UINT_8_MAX), UINT_8_MIN)),
+                                             UINT_8_IMAX), UINT_8_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrhubsat)));
     SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_i16x128, wild_i16x64)
                                              >> Broadcast::make(wild_i16,
                                                                 HWrdsInVP),
-                                             INT_8_MAX), INT_8_MIN)),
+                                             INT_8_IMAX), INT_8_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrhbrndsat)));
     SatAndPack.push_back(Pattern(i16_(max(min(WPICK(wild_i32x64, wild_i32x32)
                                               >> Broadcast::make(wild_i32,
                                                                  WrdsInVP),
-                                              INT_16_MAX), INT_16_MIN)),
+                                              INT_16_IMAX), INT_16_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrwhsat)));
     SatAndPack.push_back(Pattern(u16_(max(min(WPICK(wild_i32x64, wild_i32x32)
                                               >> Broadcast::make(wild_i32,
                                                                  WrdsInVP),
-                                              UINT_16_MAX), UINT_16_MIN)),
+                                              UINT_16_IMAX), UINT_16_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrwuhsat)));
 
     for (size_t I = 0; I < SatAndPack.size(); ++I) {
@@ -1663,22 +1634,22 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     SatAndPack.push_back(Pattern(u8_(max(min(WPICK(wild_i16x128, wild_i16x64)
                                              / Broadcast::make(wild_i16,
                                                                HWrdsInVP),
-                                             UINT_8_MAX), UINT_8_MIN)),
+                                             UINT_8_IMAX), UINT_8_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrhubsat)));
     SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_i16x128, wild_i16x64)
                                              / Broadcast::make(wild_i16,
                                                                HWrdsInVP),
-                                             INT_8_MAX), INT_8_MIN)),
+                                             INT_8_IMAX), INT_8_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrhbrndsat)));
     SatAndPack.push_back(Pattern(i16_(max(min(WPICK(wild_i32x64, wild_i32x32)
                                               / Broadcast::make(wild_i32,
                                                                 WrdsInVP),
-                                              INT_16_MAX), INT_16_MIN)),
+                                              INT_16_IMAX), INT_16_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrwhsat)));
     SatAndPack.push_back(Pattern(u16_(max(min(WPICK(wild_i32x64, wild_i32x32)
                                               / Broadcast::make(wild_i32,
                                                                 WrdsInVP),
-                                              UINT_16_MAX), UINT_16_MIN)),
+                                              UINT_16_IMAX), UINT_16_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrwuhsat)));
 
     for (size_t I = 0; I < SatAndPack.size(); ++I) {
@@ -2026,7 +1997,7 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
     int A = ImmValue & 0xFFFF;
     ScalarValue = A | (A << 16);
   }
-  Expr ScalarImmExpr = IntImm::make(ScalarValue);
+  Expr ScalarImmExpr = IntImm::make(Int(32), ScalarValue);
   Value *Scalar = codegen(ScalarImmExpr);
   Ops.push_back(Vector);
   Ops.push_back(Scalar);
@@ -2121,18 +2092,18 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             unsigned int ScalarValue = 0;
             Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
             if (Vec.type().bits == 16
-                && ImmValue <= Int(8).imax()) {
+                && ImmValue <=  INT_8_IMAX) {
               unsigned int A = ImmValue & 0xFF;
               unsigned int B = A | (A << 8);
               ScalarValue = B | (B << 16);
               IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyihb);
             } else if (Vec.type().bits == 32) {
-              if (ImmValue <= Int(8).imax()) {
+              if (ImmValue <= INT_8_IMAX) {
                 unsigned int A = ImmValue & 0xFF;
                 unsigned int B = A | (A << 8);
                 ScalarValue = B | (B << 16);
                 IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwb);
-              } else if (ImmValue <= Int(16).imax()) {
+              } else if (ImmValue <= INT_16_IMAX) {
                 unsigned int A = ImmValue & 0xFFFF;
                 ScalarValue = (A << 16) | A;
                 IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwh);
@@ -2142,7 +2113,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
                   "bits in generating vmpyi\n";
             } else
               checkVectorOp(op->type, "Unhandled case in visit(Mul * Vector Scalar Imm)\n");
-            Expr ScalarImmExpr = IntImm::make(ScalarValue);
+            Expr ScalarImmExpr = IntImm::make(Int(32), ScalarValue);
             Value *Scalar = codegen(ScalarImmExpr);
             Value *VectorOp = codegen(Vec);
             std::vector<Value *> Ops;
@@ -2409,7 +2380,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
             Value *Scalar;
             if (bytes_off < 7) {
               IntrinsID = IPICK(Intrinsic::hexagon_V6_valignbi);
-              Expr ScalarImmExpr = IntImm::make(bytes_off);
+              Expr ScalarImmExpr = IntImm::make(Int(32), bytes_off);
               Scalar = codegen(ScalarImmExpr);
             }
             else {
@@ -2430,7 +2401,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
             Value *Scalar;
             if (bytes_off < 7) {
               IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignbi);
-              Expr ScalarImmExpr = IntImm::make(bytes_off);
+              Expr ScalarImmExpr = IntImm::make(Int(32), bytes_off);
               Scalar = codegen(ScalarImmExpr);
             }
             else {

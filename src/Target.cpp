@@ -158,6 +158,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arm", Target::ARM},
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
+    {"hexagon", Target::Hexagon},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -193,6 +194,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
+    {"hvx", Target::HVX},
+    {"hvx-double", Target::HVX_DOUBLE},
+    {"hvx-v62", Target::HVX_V62},
     {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
