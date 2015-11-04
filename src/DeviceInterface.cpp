@@ -80,7 +80,13 @@ int halide_copy_to_device(void *user_context, struct buffer_t *buf,
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 int halide_device_sync(void *user_context, struct buffer_t *buf) {
-    return false;
+    user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_sync\n";
+    Target target(get_host_target());
+    int (*fn)(void *user_context, struct buffer_t *buf);
+    if (lookup_runtime_routine("halide_device_sync", target, fn)) {
+      return (*fn)(user_context, buf);
+    }
+    return -1;
 }
 
 /** Allocate device memory to back a buffer_t. */
