@@ -471,8 +471,6 @@ class RenormalizeGPULoops : public IRMutator {
             return;
         }
 
-        // TODO: if the bounds of the loop depend on an outer gpu loop, expand them and use an if
-
         bool old_in_gpu_loop = in_gpu_loop;
 
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
