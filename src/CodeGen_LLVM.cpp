@@ -908,6 +908,10 @@ void CodeGen_LLVM::optimize_module() {
         module->dump();
     }
 
+    if (debug::debug_level >= 3) {
+        module->dump();
+    }
+
     #if LLVM_VERSION < 37
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;

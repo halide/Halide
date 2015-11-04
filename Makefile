@@ -258,7 +258,6 @@ SOURCE_FILES = \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
-  ExprUsesVar.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   Float16.cpp \

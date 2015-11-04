@@ -18,14 +18,15 @@ namespace Halide {
 /** A struct representing a target machine and os to generate code for. */
 struct Target {
     /** The operating system used by the target. Determines which
-     * system calls to generate. */
-  enum OS {OSUnknown = 0, Linux, Windows, OSX, Android,
-           IOS, NaCl, HexagonStandalone} os;
+     * system calls to generate.
+     * Corresponds to os_name_map in Target.cpp. */
+    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl, HexagonStandalone} os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
-     * set" is actually llvm bitcode. */
-  enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, Hexagon} arch;
+     * set" is actually llvm bitcode.
+     * Corresponds to arch_name_map in Target.cpp. */
+    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, Hexagon} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
