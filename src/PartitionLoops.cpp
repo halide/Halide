@@ -9,6 +9,8 @@
 #include "ExprUsesVar.h"
 #include "Substitute.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Var.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -17,741 +19,63 @@ using std::string;
 using std::vector;
 using std::pair;
 using std::make_pair;
+using std::map;
 
 namespace {
 
-// Simplify an expression by assuming that certain mins, maxes, and
-// select statements always evaluate down one path for the bulk of a
-// loop body - the "steady state". Also solves for the bounds of the
-// steady state. The likely path is deduced by looking for clamped
-// ramps, or the 'likely' intrinsic.
-class FindSteadyState : public IRMutator {
-public:
-
-    Expr min_steady_val() {
-        if (min_vals.empty()) {
-            return Expr();
-        }
-
-        // Lexicographically sort the vals, to help out the simplifier
-        std::sort(min_vals.begin(), min_vals.end(), IRDeepCompare());
-
-        Expr e = min_vals[0];
-        for (size_t i = 1; i < min_vals.size(); i++) {
-            e = max(e, min_vals[i]);
-        }
-        return e;
-    }
-
-    Expr max_steady_val() {
-        if (max_vals.empty()) {
-            return Expr();
-        }
-
-        std::sort(max_vals.begin(), max_vals.end(), IRDeepCompare());
-
-        Expr e = max_vals[0];
-        for (size_t i = 1; i < max_vals.size(); i++) {
-            e = min(e, max_vals[i]);
-        }
-        return e;
-    }
-
-    FindSteadyState(const string &l) : loop_var(l), likely(false) {
-        free_vars.push(l, 0);
-    }
-
-    Stmt simplify_prologue(Stmt s) {
-        if (min_vals.size() == 1 &&
-            prologue_replacements.size() == 1) {
-            // If there is more than one min_val, then the boundary
-            // between the prologue and steady state is not tight for
-            // the prologue. The steady state starts at the max of
-            // multiple min_vals, so is the intersection of multiple
-            // conditions, which means the prologue is the union of
-            // multiple negated conditions, so any individual one of
-            // them might not apply.
-            return substitute(prologue_replacements[0].old_expr,
-                              prologue_replacements[0].new_expr,
-                              s);
+// Loop partitioning only applies to things marked as 'likely'. Loads
+// through hand-written boundary conditions will produce clamped
+// ramps, which will turn into gathers. This pass injects likely
+// intrinsics so that these clamped ramps are picked up by loop
+// partitioning.
+class MarkClampedRampsAsLikely : public IRMutator {
+    using IRMutator::visit;
+    void visit(const Min *op) {
+        if (in_index && op->a.as<Ramp>()) {
+            // No point recursing into the ramp - it can't contain
+            // another ramp.
+            expr = min(likely(op->a), mutate(op->b));
+        } else if (in_index && op->b.as<Ramp>()) {
+            expr = min(mutate(op->a), likely(op->b));
         } else {
-            return s;
+            IRMutator::visit(op);
         }
     }
-
-    Stmt simplify_epilogue(Stmt s) {
-        if (max_vals.size() == 1 &&
-            epilogue_replacements.size() == 1) {
-            return substitute(epilogue_replacements[0].old_expr,
-                              epilogue_replacements[0].new_expr,
-                              s);
-        } else {
-            return s;
-        }
-    }
-
-    /** Wrap a statement in any common subexpressions used by the
-     * minvals or maxvals. */
-    Stmt add_containing_lets(Stmt s) {
-        for (size_t i = containing_lets.size(); i > 0; i--) {
-            const string &name = containing_lets[i-1].first;
-            Expr value = containing_lets[i-1].second;
-
-            // Subexpressions are commonly shared between minval
-            // expressions and the maxval expressions.
-            for (size_t j = 0; j < i-1; j++) {
-                // Just refer to the other let.
-                if (equal(containing_lets[j].second, value)) {
-                    value = Variable::make(value.type(), containing_lets[j].first);
-                    break;
-                }
-            }
-
-            s = LetStmt::make(name, value, s);
-        }
-        return s;
-    }
-
-private:
-
-    vector<Expr> min_vals, max_vals;
-
-    string loop_var;
-    Scope<Expr> bound_vars;
-    Scope<int> free_vars;
-    Scope<int> inner_loop_vars;
-
-    bool tight;
-
-    struct Replacement {
-        Expr old_expr, new_expr;
-    };
-    vector<Replacement> prologue_replacements, epilogue_replacements;
-
-    // A set of let statements for common subexpressions inside the
-    // min_vals and max_vals.
-    vector<pair<string, Expr>> containing_lets;
-
-    bool likely;
-
-    using IRVisitor::visit;
-
-    // The horizontal maximum of a vector expression. Returns an
-    // undefined Expr if it can't be statically determined.
-    Expr max_lane(Expr e) {
-        if (e.type().is_scalar()) return e;
-        if (const Broadcast *b = e.as<Broadcast>()) return b->value;
-        if (const Ramp *r = e.as<Ramp>()) {
-            if (is_positive_const(r->stride)) {
-                return r->base + (r->width-1)*r->stride;
-            } else if (is_negative_const(r->stride)) {
-                return r->base;
-            }
-        }
-        if (const Variable *v = e.as<Variable>()) {
-            if (bound_vars.contains(v->name)) {
-                return max_lane(bound_vars.get(v->name));
-            }
-        }
-        if (const Call *c = e.as<Call>()) {
-            if (c->name == Call::likely && c->call_type == Call::Intrinsic) {
-                return max_lane(c->args[0]);
-            }
-        }
-        return Expr();
-    }
-
-    // The horizontal minimum of a vector expression. Returns an
-    // undefined Expr if it can't be statically determined.
-    Expr min_lane(Expr e) {
-        if (e.type().is_scalar()) return e;
-        if (const Broadcast *b = e.as<Broadcast>()) return b->value;
-        if (const Ramp *r = e.as<Ramp>()) {
-            if (is_positive_const(r->stride)) {
-                return r->base;
-            } else if (is_negative_const(r->stride)) {
-                return r->base + (r->width-1)*r->stride;
-            }
-        }
-        if (const Variable *v = e.as<Variable>()) {
-            if (bound_vars.contains(v->name)) {
-                return min_lane(bound_vars.get(v->name));
-            }
-        }
-        if (const Call *c = e.as<Call>()) {
-            if (c->name == Call::likely && c->call_type == Call::Intrinsic) {
-                return min_lane(c->args[0]);
-            }
-        }
-        return Expr();
-    }
-
-    void visit(const Call *op) {
-        IRMutator::visit(op);
-        if (op->call_type == Call::Intrinsic && op->name == Call::likely) {
-            // We encountered a likely intrinsic, which means this
-            // branch of any selects or mins we're in is the
-            // steady-state one.
-            likely = true;
-        }
-    }
-
-    bool is_loop_var(Expr e) {
-        const Variable *v = e.as<Variable>();
-        return v && v->name == loop_var;
-    }
-
-    // Make boolean operators with some eager constant folding
-    Expr make_and(Expr a, Expr b) {
-        if (is_zero(a)) return a;
-        if (is_zero(b)) return b;
-        if (is_one(a)) return b;
-        if (is_one(b)) return a;
-        return a && b;
-    }
-
-    Expr make_or(Expr a, Expr b) {
-        if (is_zero(a)) return b;
-        if (is_zero(b)) return a;
-        if (is_one(a)) return a;
-        if (is_one(b)) return b;
-        return a || b;
-    }
-
-    Expr make_not(Expr a) {
-        if (is_one(a)) return const_false(a.type().width);
-        if (is_zero(a)) return const_true(a.type().width);
-        return !a;
-    }
-
-    // Try to make a condition false by limiting the range of the loop variable.
-    Expr simplify_to_false(Expr cond) {
-        if (const Broadcast *b = cond.as<Broadcast>()) {
-            return simplify_to_false(b->value);
-        } else if (const And *a = cond.as<And>()) {
-            // If we need an And to be false to make the
-            // simplification, then we take the union of the
-            // constraints even though taking either one of them would
-            // be sufficient. This makes the bound no longer tight.
-            tight = false;
-            return make_and(simplify_to_false(a->a), simplify_to_false(a->b));
-        } else if (const Or *o = cond.as<Or>()) {
-            return make_or(simplify_to_false(o->a), simplify_to_false(o->b));
-        } else if (const Not *n = cond.as<Not>()) {
-            return make_not(simplify_to_true(n->a));
-        } else if (const LT *lt = cond.as<LT>()) {
-            return make_not(simplify_to_true(lt->a >= lt->b));
-        } else if (const LE *le = cond.as<LE>()) {
-            return make_not(simplify_to_true(le->a > le->b));
-        } else if (const GT *gt = cond.as<GT>()) {
-            return make_not(simplify_to_true(gt->a <= gt->b));
-        } else if (const GE *ge = cond.as<GE>()) {
-            return make_not(simplify_to_true(ge->a > ge->b));
-        } else if (const Variable *v = cond.as<Variable>()) {
-            if (bound_vars.contains(v->name)) {
-                return simplify_to_false(bound_vars.get(v->name));
-            }
-        }
-
-        debug(3) << "Failed to apply constraint (1): " << cond << "\n";
-        return cond;
-    }
-
-    // Try to make a condition true by limiting the range of the loop variable
-    Expr simplify_to_true(Expr cond) {
-        if (const Broadcast *b = cond.as<Broadcast>()) {
-            return simplify_to_true(b->value);
-        } else if (const And *a = cond.as<And>()) {
-            return make_and(simplify_to_true(a->a), simplify_to_true(a->b));
-        } else if (const Or *o = cond.as<Or>()) {
-            // If we need an Or to be true to make the
-            // simplification, then we take the union of the
-            // constraints even though taking either one of them would
-            // be sufficient. This makes the bound no longer tight.
-            tight = false;
-            return make_or(simplify_to_true(o->a), simplify_to_true(o->b));
-        } else if (const Not *n = cond.as<Not>()) {
-            return make_not(simplify_to_false(n->a));
-        } else if (const Variable *v = cond.as<Variable>()) {
-            if (bound_vars.contains(v->name)) {
-                return simplify_to_true(bound_vars.get(v->name));
-            } else {
-                return cond;
-            }
-        }
-
-        // Convert vector conditions to scalar conditions. In general
-        // these are conservative, so they make the bound no longer
-        // tight.
-        Expr devectorized = cond;
-        if (cond.type().is_vector()) {
-            if (const LT *lt = cond.as<LT>()) {
-                Expr a = max_lane(lt->a), b = min_lane(lt->b);
-                if (a.defined() && b.defined()) {
-                    tight = false;
-                    devectorized = a < b;
-                } else {
-                    return cond;
-                }
-            } else if (const LE *le = cond.as<LE>()) {
-                Expr a = max_lane(le->a), b = min_lane(le->b);
-                if (a.defined() && b.defined()) {
-                    tight = false;
-                    devectorized = a <= b;
-                } else {
-                    return cond;
-                }
-            } else if (const GE *ge = cond.as<GE>()) {
-                Expr a = min_lane(ge->a), b = max_lane(ge->b);
-                if (a.defined() && b.defined()) {
-                    tight = false;
-                    devectorized = a >= b;
-                } else {
-                    return cond;
-                }
-            } else if (const GT *gt = cond.as<GT>()) {
-                Expr a = min_lane(gt->a), b = max_lane(gt->b);
-                if (a.defined() && b.defined()) {
-                    tight = false;
-                    devectorized = a > b;
-                } else {
-                    return cond;
-                }
-            } else {
-                debug(3) << "Failed to apply constraint (2): " << cond << "\n";
-                return cond;
-            }
-        }
-
-        // Determine the minimum or maximum value of the loop var for
-        // which this condition is true, and update min_max and
-        // max_val accordingly.
-
-        debug(3) << "Condition: " << devectorized << "\n";
-        Expr solved = solve_expression(devectorized, loop_var, bound_vars);
-        debug(3) << "Solved condition for " <<  loop_var << ": " << solved << "\n";
-
-        // The solve failed.
-        if (!solved.defined()) {
-            return cond;
-        }
-
-        // Conditions in terms of an inner loop var can't be pulled outside
-        if (expr_uses_vars(devectorized, inner_loop_vars)) {
-            return cond;
-        }
-
-        // Peel off lets.
-        vector<pair<string, Expr>> new_lets;
-        while (const Let *let = solved.as<Let>()) {
-            new_lets.push_back(make_pair(let->name, let->value) );
-            solved = let->body;
-        }
-
-
-        bool success = false;
-        if (const LT *lt = solved.as<LT>()) {
-            if (is_loop_var(lt->a)) {
-                max_vals.push_back(lt->b);
-                success = true;
-            }
-        } else if (const LE *le = solved.as<LE>()) {
-            if (is_loop_var(le->a)) {
-                max_vals.push_back(le->b + 1);
-                success = true;
-            }
-        } else if (const GE *ge = solved.as<GE>()) {
-            if (is_loop_var(ge->a)) {
-                min_vals.push_back(ge->b);
-                success = true;
-            }
-        } else if (const GT *gt = solved.as<GT>()) {
-            if (is_loop_var(gt->a)) {
-                min_vals.push_back(gt->b + 1);
-                success = true;
-            }
-        }
-
-        if (success) {
-            containing_lets.insert(containing_lets.end(), new_lets.begin(), new_lets.end());
-            return const_true();
-        } else {
-            debug(3) << "Failed to apply constraint (3): " << cond << "\n";
-            return cond;
-        }
-    }
-
-    void visit_min_or_max(Expr op, Expr op_a, Expr op_b, bool is_min) {
-        size_t orig_num_min_vals = min_vals.size();
-        size_t orig_num_max_vals = max_vals.size();
-
-        bool old_likely = likely;
-        likely = false;
-        Expr a = mutate(op_a);
-        bool a_likely = likely;
-        likely = false;
-        Expr b = mutate(op_b);
-        bool b_likely = likely;
-
-        bool found_simplification_in_children =
-            (min_vals.size() != orig_num_min_vals) ||
-            (max_vals.size() != orig_num_max_vals);
-
-        // To handle code that doesn't use the boundary condition
-        // helpers, but instead just clamps to edge with "clamp", we
-        // always consider a ramp inside a min or max to be likely.
-        if (op.type().element_of() == Int(32)) {
-            if (op_a.as<Ramp>()) {
-                a_likely = true;
-            }
-            if (op_b.as<Ramp>()) {
-                b_likely = true;
-            }
-        }
-
-        likely = old_likely || a_likely || b_likely;
-
-        if (b_likely && !a_likely) {
-            std::swap(op_a, op_b);
-            std::swap(a, b);
-            std::swap(b_likely, a_likely);
-        }
-
-        if (a_likely && !b_likely) {
-            // If the following condition is true, then we can
-            // simplify the min to just the case marked as likely.
-            Expr condition = (is_min ? a <= b : b <= a);
-
-            size_t old_num_min_vals = min_vals.size();
-            size_t old_num_max_vals = max_vals.size();
-
-            tight = true;
-            if (is_one(simplify_to_true(condition))) {
-                expr = a;
-
-                // If there were no inner mutations and we found a new
-                // min_val, then we have a simplification that we can
-                // apply to the prologue and/or epilogue. Not all
-                // simplifications of the condition produce tight
-                // bounds though (e.g. ors, vector conditions).
-                if (!found_simplification_in_children && tight) {
-                    Replacement r = {op, op_b};
-                    if (min_vals.size() > old_num_min_vals) {
-                        prologue_replacements.push_back(r);
-                    }
-                    if (max_vals.size() > old_num_max_vals) {
-                        epilogue_replacements.push_back(r);
-                    }
-                }
-            } else {
-                if (is_min) {
-                    expr = Min::make(a, b);
-                } else {
-                    expr = Max::make(a, b);
-                }
-            }
-        } else if (a.same_as(op_a) && b.same_as(op_b)) {
-            expr = op;
-        } else {
-            if (is_min) {
-                expr = Min::make(a, b);
-            } else {
-                expr = Max::make(a, b);
-            }
-        }
-    }
-
 
     void visit(const Max *op) {
-        visit_min_or_max(op, op->a, op->b, false);
-    }
-
-    void visit(const Min *op) {
-        visit_min_or_max(op, op->a, op->b, true);
-    }
-
-    template<typename SelectOrIf, typename StmtOrExpr>
-    StmtOrExpr visit_select_or_if(const SelectOrIf *op,
-                                  StmtOrExpr orig_true_value,
-                                  StmtOrExpr orig_false_value) {
-
-        size_t orig_num_min_vals = min_vals.size();
-        size_t orig_num_max_vals = max_vals.size();
-
-        Expr condition = mutate(op->condition);
-        bool old_likely = likely;
-        likely = false;
-        StmtOrExpr true_value = mutate(orig_true_value);
-        bool a_likely = likely;
-        likely = false;
-        StmtOrExpr false_value = mutate(orig_false_value);
-        bool b_likely = likely;
-        likely = old_likely || a_likely || b_likely;
-
-        bool found_simplification_in_children =
-            (min_vals.size() != orig_num_min_vals) ||
-            (max_vals.size() != orig_num_max_vals);
-
-        size_t old_num_min_vals = min_vals.size();
-        size_t old_num_max_vals = max_vals.size();
-
-        if (a_likely && !b_likely) {
-            // Figure out bounds on the loop var which makes the condition true.
-            debug(3) << "Attempting to make this condition true: " << condition << "\n";
-            tight = true;
-            Expr new_condition = simplify_to_true(condition);
-            debug(3) << "Attempted to make this condition true: " << condition << " Got: " << new_condition << "\n";
-            if (is_one(new_condition)) {
-                // We succeeded!
-                if (!found_simplification_in_children && tight) {
-                    Replacement r = {op->condition, const_false()};
-                    if (min_vals.size() > old_num_min_vals) {
-                        prologue_replacements.push_back(r);
-                    }
-                    if (max_vals.size() > old_num_max_vals) {
-                        epilogue_replacements.push_back(r);
-                    }
-                }
-                return true_value;
-            } else {
-                // Might have partially succeeded, so still use the new condition.
-                return SelectOrIf::make(new_condition, true_value, false_value);
-            }
-        } else if (b_likely && !a_likely) {
-            debug(3) << "Attempting to make this condition false: " << condition << "\n";
-            tight = true;
-            Expr new_condition = simplify_to_false(condition);
-            debug(3) << "Attempted to make this condition false: " << condition << " Got: " << new_condition << "\n";
-            if (is_zero(new_condition)) {
-                if (!found_simplification_in_children && tight) {
-                    Replacement r = {op->condition, const_true()};
-                    if (min_vals.size() > old_num_min_vals) {
-                        prologue_replacements.push_back(r);
-                    }
-                    if (max_vals.size() > old_num_max_vals) {
-                        epilogue_replacements.push_back(r);
-                    }
-                }
-                return false_value;
-            } else {
-                return SelectOrIf::make(new_condition, true_value, false_value);
-            }
-        } else if (condition.same_as(op->condition) &&
-                   true_value.same_as(orig_true_value) &&
-                   false_value.same_as(orig_false_value)) {
-            return op;
+        if (in_index && op->a.as<Ramp>()) {
+            expr = max(likely(op->a), mutate(op->b));
+        } else if (in_index && op->b.as<Ramp>()) {
+            expr = max(mutate(op->a), likely(op->b));
         } else {
-            return SelectOrIf::make(condition, true_value, false_value);
+            IRMutator::visit(op);
         }
     }
 
-    void visit(const Select *op) {
-        expr = visit_select_or_if(op, op->true_value, op->false_value);
+    void visit(const Load *op) {
+        bool old_in_index = in_index;
+        in_index = true;
+        IRMutator::visit(op);
+        in_index = old_in_index;
     }
 
-    void visit(const IfThenElse *op) {
-        stmt = visit_select_or_if(op, op->then_case, op->else_case);
-    }
-
-    void visit(const Let *op) {
+    void visit(const Store *op) {
+        bool old_in_index = in_index;
+        in_index = true;
+        Expr index = mutate(op->index);
+        in_index = old_in_index;
         Expr value = mutate(op->value);
-        Expr body;
-
-        bound_vars.push(op->name, value);
-        body = mutate(op->body);
-        bound_vars.pop(op->name);
-
-        if (value.same_as(op->value) && body.same_as(op->body)) {
-            expr = op;
-        } else {
-            expr = Let::make(op->name, value, body);
-        }
-    }
-
-    void visit(const LetStmt *op) {
-        Expr value = mutate(op->value);
-        Stmt body;
-
-        bound_vars.push(op->name, value);
-        body = mutate(op->body);
-        bound_vars.pop(op->name);
-
-        if (value.same_as(op->value) && body.same_as(op->body)) {
+        if (index.same_as(op->index) && value.same_as(op->value)) {
             stmt = op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            stmt = Store::make(op->name, value, index);
         }
     }
 
-    void visit(const For *op) {
-        Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
-        inner_loop_vars.push(op->name, 0);
-        Stmt body = mutate(op->body);
-        inner_loop_vars.pop(op->name);
-
-        if (min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
-            body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
-        }
-
-    }
+    bool in_index = false;
 };
 
-class PartitionLoops : public IRMutator {
-    using IRMutator::visit;
-
-    void visit(const For *op) {
-
-        Stmt body = mutate(op->body);
-
-        // We conservatively only apply this optimization at one loop
-        // level, which limits the expansion in code size to a factor
-        // of 3.  Comment out the check below to allow full expansion
-        // into 3^n cases for n loop levels.
-        //
-        // Another strategy is to not recursively call mutate on the
-        // body in the line above, but instead recursively call mutate
-        // only on simpler_body below. This results in a 2*n + 1
-        // expansion factor. Testing didn't reveal either of these
-        // strategies to be a performance win, so we'll just expand
-        // once.
-        if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->extent,
-                             op->for_type, op->device_api, body);
-            return;
-        }
-
-        // We can't inject logic at the loop over gpu blocks, or in
-        // between gpu thread loops.
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            stmt = For::make(op->name, op->min, op->extent,
-                             op->for_type, op->device_api, body);
-            return;
-        }
-
-        FindSteadyState f(op->name);
-        Stmt simpler_body = f.mutate(body);
-        // Ask for the start and end of the steady state.
-        Expr min_steady = f.min_steady_val();
-        Expr max_steady = f.max_steady_val();
-
-        if (min_steady.defined() || max_steady.defined()) {
-            debug(3) << "\nOld body: " << body << "\n";
-
-            // They're undefined if there's no prologue or epilogue.
-            bool make_prologue = min_steady.defined();
-            bool make_epilogue = max_steady.defined();
-
-            // Accrue a stack of let statements defining the steady state start and end.
-            vector<pair<string, Expr>> lets;
-
-            if (make_prologue) {
-                // Clamp the prologue end to within the existing loop bounds,
-                // then pull that out as a let statement.
-                min_steady = clamp(min_steady, op->min, op->min + op->extent);
-                string min_steady_name = op->name + ".prologue";
-                //min_steady = print(min_steady, min_steady_name);
-                lets.push_back(make_pair(min_steady_name, min_steady));
-                min_steady = Variable::make(Int(32), min_steady_name);
-            } else {
-                min_steady = op->min;
-            }
-
-            if (make_epilogue) {
-                // Clamp the epilogue start to be between the prologue
-                // end and the loop end, then pull it out as a let
-                // statement.
-                max_steady = clamp(max_steady, min_steady, op->min + op->extent);
-                string max_steady_name = op->name + ".epilogue";
-                //max_steady = print(max_steady, max_steady_name);
-                lets.push_back(make_pair(max_steady_name, max_steady));
-                max_steady = Variable::make(Int(32), max_steady_name);
-            } else {
-                max_steady = op->extent + op->min;
-            }
-
-
-            debug(3) << "\nSimpler body: " << simpler_body << "\n";
-
-            Stmt new_loop;
-
-            if (op->for_type == ForType::Serial) {
-                // Steady state.
-                new_loop = For::make(op->name, min_steady, max_steady - min_steady,
-                                     op->for_type, op->device_api, simpler_body);
-
-                if (make_prologue) {
-                    Stmt prologue = For::make(op->name, op->min, min_steady - op->min,
-                                              op->for_type, op->device_api, body);
-                    prologue = f.simplify_prologue(prologue);
-                    new_loop = Block::make(prologue, new_loop);
-                }
-
-                if (make_epilogue) {
-                    Stmt epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
-                                              op->for_type, op->device_api, body);
-                    epilogue = f.simplify_epilogue(epilogue);
-                    new_loop = Block::make(new_loop, epilogue);
-                }
-            } else {
-                // For parallel for loops, we inject an if statement
-                // instead of splitting up the loop.
-                //
-                // TODO: If we have task parallel blocks, then we
-                // could split out the different bodies as we do
-                // above. Could be a big win on the GPU (generating
-                // separate kernels for the nasty cases near the
-                // boundaries).
-                //
-                // Rather than having a three-way if for prologue,
-                // steady state, or epilogue, we have a two-way if
-                // (steady-state or not), and don't bother doing
-                // bounds-based simplification of the prologue and
-                // epilogue.
-                internal_assert(op->for_type == ForType::Parallel);
-                Expr loop_var = Variable::make(Int(32), op->name);
-                Expr in_steady;
-                if (make_prologue) {
-                    in_steady = loop_var >= min_steady;
-                }
-                if (make_epilogue) {
-                    Expr cond = loop_var < max_steady;
-                    in_steady = in_steady.defined() ? (in_steady && cond) : cond;
-                }
-                if (in_steady.defined()) {
-                    body = IfThenElse::make(in_steady, simpler_body, body);
-                }
-                new_loop = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
-
-            }
-
-            // Wrap the statements in the let expressions that define
-            // the steady state start and end.
-            while (!lets.empty()) {
-                new_loop = LetStmt::make(lets.back().first, lets.back().second, new_loop);
-                lets.pop_back();
-            }
-
-            // Wrap the statements in the lets that the steady state
-            // start and end depend on.
-            new_loop = f.add_containing_lets(new_loop);
-
-            stmt = new_loop;
-        } else if (body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = For::make(op->name, op->min, op->extent,
-                             op->for_type, op->device_api, body);
-        }
-    }
-};
-
-// Remove any remaining 'likely' intrinsics. There may be some left
-// behind if we didn't successfully simplify something.
+// Remove any 'likely' intrinsics.
 class RemoveLikelyTags : public IRMutator {
     using IRMutator::visit;
 
@@ -765,11 +89,599 @@ class RemoveLikelyTags : public IRMutator {
     }
 };
 
+class HasLikelyTag : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const Call *op) {
+        if (op->name == Call::likely &&
+            op->call_type == Call::Intrinsic) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    bool result = false;
+};
+
+bool has_likely_tag(Expr e) {
+    HasLikelyTag h;
+    e.accept(&h);
+    return h.result;
+}
+
+struct Simplification {
+    // This condition is sufficient for the simplification to occur.
+    Expr condition;
+    // The expression we're simplifying
+    Expr old_expr;
+    // The replacement if the condition is true
+    Expr likely_value;
+    // The replacement if the condition is false. Not useful
+    // unless it's tight.
+    Expr unlikely_value;
+    // Is the condition necessary (as well as sufficient)?
+    bool tight;
+    // The interval over which this simplification applies. Comes from solving the condition.
+    Interval interval;
+};
+
+class FindSimplifications : public IRVisitor {
+    using IRVisitor::visit;
+
+public:
+    vector<Simplification> simplifications;
+
+private:
+    void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
+        condition = RemoveLikelyTags().mutate(condition);
+        Simplification s = {condition, old, likely_val, unlikely_val, true};
+        if (s.condition.type().is_vector()) {
+            s.condition = simplify(s.condition);
+            if (const Broadcast *b = s.condition.as<Broadcast>()) {
+                s.condition = b->value;
+            } else {
+                // Devectorize the condition
+                s.condition = and_condition_over_domain(s.condition, Scope<Interval>::empty_scope());
+                s.tight = false;
+            }
+        }
+        internal_assert(s.condition.type().is_scalar()) << s.condition << "\n";
+        simplifications.push_back(s);
+    }
+
+    void visit(const Min *op) {
+        IRVisitor::visit(op);
+        bool likely_a = has_likely_tag(op->a);
+        bool likely_b = has_likely_tag(op->b);
+
+        if (likely_b && !likely_a) {
+            new_simplification(op->b <= op->a, op, op->b, op->a);
+        } else if (likely_a && !likely_b) {
+            new_simplification(op->a <= op->b, op, op->a, op->b);
+        }
+    }
+
+    void visit(const Max *op) {
+        IRVisitor::visit(op);
+        bool likely_a = has_likely_tag(op->a);
+        bool likely_b = has_likely_tag(op->b);
+
+        if (likely_b && !likely_a) {
+            new_simplification(op->b >= op->a, op, op->b, op->a);
+        } else if (likely_a && !likely_b) {
+            new_simplification(op->a >= op->b, op, op->a, op->b);
+        }
+    }
+
+    void visit(const Select *op) {
+        IRVisitor::visit(op);
+        bool likely_t = has_likely_tag(op->true_value);
+        bool likely_f = has_likely_tag(op->false_value);
+
+        if (likely_t && !likely_f) {
+            new_simplification(op->condition, op, op->true_value, op->false_value);
+        } else if (likely_f && !likely_t) {
+            new_simplification(!op->condition, op, op->false_value, op->true_value);
+        }
+    }
+
+    void visit(const For *op) {
+        vector<Simplification> old;
+        old.swap(simplifications);
+        IRVisitor::visit(op);
+
+        // Relax all the new conditions using the loop bounds
+        for (Simplification &s : simplifications) {
+            if (expr_uses_var(s.condition, op->name)) {
+                Scope<Interval> varying;
+                varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
+                Expr relaxed = and_condition_over_domain(s.condition, varying);
+                if (!equal(relaxed, s.condition)) {
+                    s.tight = false;
+                }
+                s.condition = relaxed;
+            }
+        }
+
+        simplifications.insert(simplifications.end(), old.begin(), old.end());
+    }
+
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op) {
+        vector<Simplification> old;
+        old.swap(simplifications);
+        IRVisitor::visit(op);
+        for (Simplification &s : simplifications) {
+            if (expr_uses_var(s.condition, op->name)) {
+                s.condition = Let::make(op->name, op->value, s.condition);
+            }
+        }
+        simplifications.insert(simplifications.end(), old.begin(), old.end());
+    }
+
+    void visit(const LetStmt *op) {
+        visit_let(op);
+    }
+
+    void visit(const Let *op) {
+        visit_let(op);
+    }
+};
+
+class MakeSimplifications : public IRMutator {
+    using IRMutator::visit;
+
+    const vector<Simplification> &simplifications;
+
+public:
+
+    MakeSimplifications(const vector<Simplification> &s) : simplifications(s) {}
+
+    using IRMutator::mutate;
+    Expr mutate(Expr e) {
+        for (auto const &s : simplifications) {
+            if (e.same_as(s.old_expr)) {
+                return mutate(s.likely_value);
+            }
+        }
+        return IRMutator::mutate(e);
+    }
+
+};
+
+class PartitionLoops : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        Stmt body = op->body;
+
+        FindSimplifications finder;
+        body.accept(&finder);
+
+        debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
+
+        vector<Expr> min_vals, max_vals;
+        vector<Simplification> middle_simps, prologue_simps, epilogue_simps;
+        bool lower_bound_is_tight = true, upper_bound_is_tight = true;
+        for (auto &s : finder.simplifications) {
+            s.interval = solve_for_inner_interval(s.condition, op->name);
+            if (s.tight) {
+                Interval outer = solve_for_outer_interval(s.condition, op->name);
+                s.tight &= equal(outer.min, s.interval.min) && equal(outer.max, s.interval.max);
+            }
+
+            debug(3) << "\nSimplification: \n"
+                     << "  condition: " << s.condition << "\n"
+                     << "  old: " << s.old_expr << "\n"
+                     << "  new: " << s.likely_value << "\n"
+                     << "  min: " << s.interval.min << "\n"
+                     << "  max: " << s.interval.max << "\n";
+
+            // Accept all non-empty intervals
+            if (!interval_is_empty(s.interval)) {
+                if (interval_has_lower_bound(s.interval)) {
+                    Expr m = s.interval.min;
+                    if (!s.tight) {
+                        lower_bound_is_tight = false;
+                    }
+                    if (min_vals.empty()) {
+                        min_vals.push_back(m);
+                    } else if (equal(m, min_vals.back())) {
+                        // We already have this min val
+                    } else {
+                        // This is a new distinct min val
+                        min_vals.push_back(m);
+                        lower_bound_is_tight = false;
+                    }
+                }
+                if (interval_has_upper_bound(s.interval)) {
+                    Expr m = s.interval.max;
+                    if (!s.tight) {
+                        upper_bound_is_tight = false;
+                    }
+                    if (max_vals.empty()) {
+                        max_vals.push_back(m);
+                    } else if (equal(m, max_vals.back())) {
+                        // We already have this max val
+                    } else {
+                        // This is a new distinct max val
+                        max_vals.push_back(m);
+                        upper_bound_is_tight = false;
+                    }
+                }
+
+                // We'll apply this simplification to the
+                // steady-state.
+                middle_simps.push_back(s);
+            }
+        }
+
+        // In general we can't simplify the prologue - it may run up
+        // to after the epilogue starts for small images. However if
+        // we can prove the epilogue starts after the prologue ends,
+        // we're OK.
+        bool can_simplify_prologue = true;
+        for (Expr min_val : min_vals) {
+            for (Expr max_val : max_vals) {
+                Expr test = simplify(common_subexpression_elimination(min_val - 1 < max_val + 1));
+                if (!is_one(test)) {
+                    can_simplify_prologue = false;
+                }
+            }
+        }
+
+        // Find simplifications we can apply to the prologue and epilogue.
+        for (auto const &s : middle_simps) {
+            // If it goes down to minus infinity, we can also
+            // apply it to the prologue
+            if (can_simplify_prologue &&
+                !interval_has_lower_bound(s.interval)) {
+                prologue_simps.push_back(s);
+            }
+
+            // If it goes up to positive infinity, we can also
+            // apply it to the epilogue
+            if (!interval_has_upper_bound(s.interval)) {
+                epilogue_simps.push_back(s);
+            }
+
+            // If our simplifications only contain one lower bound, and
+            // it's tight, then the reverse rule can be applied to the
+            // prologue.
+            if (can_simplify_prologue &&
+                interval_has_lower_bound(s.interval) &&
+                lower_bound_is_tight) {
+                internal_assert(s.tight);
+                Simplification s2 = s;
+                // This condition is never used (we already solved
+                // for the interval), but it's nice for it to be
+                // correct.
+                s2.condition = !s2.condition;
+                std::swap(s2.likely_value, s2.unlikely_value);
+                prologue_simps.push_back(s2);
+            }
+            if (interval_has_upper_bound(s.interval) &&
+                upper_bound_is_tight) {
+                internal_assert(s.tight);
+                Simplification s2 = s;
+                s2.condition = !s2.condition;
+                std::swap(s2.likely_value, s2.unlikely_value);
+                epilogue_simps.push_back(s2);
+            }
+        }
+
+        // Simplify each section of the loop.
+        Stmt simpler_body = MakeSimplifications(middle_simps).mutate(body);
+        Stmt prologue = MakeSimplifications(prologue_simps).mutate(body);
+        Stmt epilogue = MakeSimplifications(epilogue_simps).mutate(body);
+
+        bool make_prologue = !equal(prologue, simpler_body);
+        bool make_epilogue = !equal(epilogue, simpler_body);
+
+        // Recurse on the middle section.
+        simpler_body = mutate(simpler_body);
+
+        // Construct variables for the bounds of the simplified middle section
+        Expr min_steady = op->min, max_steady = op->extent + op->min;
+        Expr prologue_val, epilogue_val;
+        string prologue_name = unique_name(op->name + ".prologue", false);
+        string epilogue_name = unique_name(op->name + ".epilogue", false);
+
+        if (make_prologue) {
+            // They'll simplify better if you put them in lexicographic order
+            std::sort(min_vals.begin(), min_vals.end(), IRDeepCompare());
+            min_vals.push_back(op->min);
+            prologue_val = std::accumulate(min_vals.begin() + 1, min_vals.end(), min_vals[0], Max::make);
+            min_steady = Variable::make(Int(32), prologue_name);
+
+            internal_assert(!expr_uses_var(prologue_val, op->name));
+        }
+        if (make_epilogue) {
+            std::sort(max_vals.begin(), max_vals.end(), IRDeepCompare());
+            max_vals.push_back(op->min + op->extent - 1);
+            epilogue_val = std::accumulate(max_vals.begin() + 1, max_vals.end(), max_vals[0], Min::make) + 1;
+            if (make_prologue) {
+                epilogue_val = max(epilogue_val, prologue_val);
+            }
+            max_steady = Variable::make(Int(32), epilogue_name);
+
+            internal_assert(!expr_uses_var(epilogue_val, op->name));
+        }
+
+        if (op->for_type == ForType::Serial) {
+            stmt = For::make(op->name, min_steady, max_steady - min_steady,
+                             op->for_type, op->device_api, simpler_body);
+
+            if (make_prologue) {
+                prologue = For::make(op->name, op->min, min_steady - op->min,
+                                     op->for_type, op->device_api, prologue);
+                //prologue = Block::make(Evaluate::make(print(op->name, " prologue")), prologue);
+                stmt = Block::make(prologue, stmt);
+            }
+            if (make_epilogue) {
+                epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
+                                     op->for_type, op->device_api, epilogue);
+                //epilogue = Block::make(Evaluate::make(print(op->name, " epilogue")), epilogue);
+                stmt = Block::make(stmt, epilogue);
+            }
+        } else {
+            Expr loop_var = Variable::make(Int(32), op->name);
+            stmt = simpler_body;
+            if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
+                stmt = IfThenElse::make(min_steady < loop_var && loop_var < max_steady, stmt, prologue);
+            } else {
+                if (make_epilogue) {
+                    stmt = IfThenElse::make(loop_var < max_steady, stmt, epilogue);
+                }
+                if (make_prologue) {
+                    stmt = IfThenElse::make(loop_var < min_steady, prologue, stmt);
+                }
+            }
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, stmt);
+        }
+
+        if (make_epilogue) {
+            //epilogue_val = print(epilogue_val, op->name, "epilogue");
+            stmt = LetStmt::make(epilogue_name, epilogue_val, stmt);
+        }
+        if (make_prologue) {
+            //prologue_val = print(prologue_val, op->name, "prologue");
+            stmt = LetStmt::make(prologue_name, prologue_val, stmt);
+        }
+    }
+};
+
+// The loop partitioning logic can introduce if and let statements in
+// between GPU loop levels. This pass moves them inwards or outwards.
+class RenormalizeGPULoops : public IRMutator {
+    bool in_gpu_loop = false, in_thread_loop = false;
+
+    using IRMutator::visit;
+
+    // Track all vars that depend on GPU loop indices
+    Scope<int> gpu_vars;
+
+    vector<pair<string, Expr> > lifted_lets;
+
+    void visit(const For *op) {
+        if (ends_with(op->name, Var::gpu_threads().name())) {
+            in_thread_loop = true;
+            IRMutator::visit(op);
+            in_thread_loop = false;
+            return;
+        }
+
+        // TODO: if the bounds of the loop depend on an outer gpu loop, expand them and use an if
+
+        bool old_in_gpu_loop = in_gpu_loop;
+
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            gpu_vars.push(op->name, 0);
+            in_gpu_loop = true;
+        }
+
+        IRMutator::visit(op);
+
+        if (in_gpu_loop && !old_in_gpu_loop) {
+            // This was the outermost GPU loop. Dump any lifted lets here.
+            while (lifted_lets.size()) {
+                stmt = LetStmt::make(lifted_lets.back().first,
+                                     lifted_lets.back().second,
+                                     stmt);
+                lifted_lets.pop_back();
+            }
+        }
+
+        in_gpu_loop = old_in_gpu_loop;
+
+
+    }
+
+    void visit(const LetStmt *op) {
+        if (!in_gpu_loop) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        if (!expr_uses_vars(op->value, gpu_vars)) {
+            // This let value doesn't depend in the gpu vars. We
+            // should lift it outermost. Note that this might expand
+            // its scope to encompass other uses of the same name, so
+            // we'd better give it a new name.
+            string new_name = unique_name('t');
+            Expr new_var = Variable::make(op->value.type(), new_name);
+            lifted_lets.push_back(make_pair(new_name, op->value));
+            stmt = mutate(substitute(op->name, new_var, op->body));
+            return;
+        }
+
+        if (in_thread_loop) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        gpu_vars.push(op->name, 0);
+
+        Stmt body = mutate(op->body);
+        const For *f = body.as<For>();
+        const Allocate *a = body.as<Allocate>();
+        // Move lets in-between gpu loop levels inwards.
+        if (f && in_gpu_loop && !in_thread_loop) {
+            internal_assert(!expr_uses_var(f->min, op->name) &&
+                            !expr_uses_var(f->extent, op->name));
+            Stmt inner = LetStmt::make(op->name, op->value, f->body);
+            inner = For::make(f->name, f->min, f->extent, f->for_type, f->device_api, inner);
+            stmt = mutate(inner);
+        } else if (a && in_gpu_loop && !in_thread_loop) {
+            internal_assert(a->name == "__shared");
+            Stmt inner = LetStmt::make(op->name, op->value, a->body);
+            inner = Allocate::make(a->name, a->type, a->extents, a->condition, inner);
+            stmt = mutate(inner);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const IfThenElse *op) {
+        if (!in_gpu_loop || in_thread_loop) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        internal_assert(op->else_case.defined())
+            << "PartitionLoops should only introduce if statements with an else branch\n";
+
+        Stmt then_case = mutate(op->then_case);
+        Stmt else_case = mutate(op->else_case);
+
+        if (equal(then_case, else_case)) {
+            // This can happen if the only difference between the
+            // cases was a let statement that we pulled out of the if.
+            stmt = then_case;
+            return;
+        }
+
+        const Allocate *allocate_a = then_case.as<Allocate>();
+        const Allocate *allocate_b = else_case.as<Allocate>();
+        const For *for_a = then_case.as<For>();
+        const For *for_b = else_case.as<For>();
+        const LetStmt *let_a = then_case.as<LetStmt>();
+        const LetStmt *let_b = else_case.as<LetStmt>();
+        if (allocate_a && allocate_b &&
+            allocate_a->name == "__shared" &&
+            allocate_b->name == "__shared") {
+            Stmt inner = IfThenElse::make(op->condition, allocate_a->body, allocate_b->body);
+            inner = Allocate::make(allocate_a->name, allocate_a->type, allocate_a->extents, allocate_a->condition, inner);
+            stmt = mutate(inner);
+        } else if (let_a && let_b && let_a->name == let_b->name) {
+            string condition_name = unique_name('t');
+            Expr condition = Variable::make(op->condition.type(), condition_name);
+            Stmt inner = IfThenElse::make(condition, let_a->body, let_b->body);
+            inner = LetStmt::make(let_a->name, select(condition, let_a->value, let_b->value), inner);
+            inner = LetStmt::make(condition_name, op->condition, inner);
+            stmt = mutate(inner);
+        } else if (let_a) {
+            string new_name = unique_name(let_a->name, false);
+            Stmt inner = let_a->body;
+            inner = substitute(let_a->name, Variable::make(let_a->value.type(), new_name), inner);
+            inner = IfThenElse::make(op->condition, inner, else_case);
+            inner = LetStmt::make(new_name, let_a->value, inner);
+            stmt = mutate(inner);
+        } else if (let_b) {
+            string new_name = unique_name(let_b->name, false);
+            Stmt inner = let_b->body;
+            inner = substitute(let_b->name, Variable::make(let_b->value.type(), new_name), inner);
+            inner = IfThenElse::make(op->condition, then_case, inner);
+            inner = LetStmt::make(new_name, let_b->value, inner);
+            stmt = mutate(inner);
+        } else if (for_a && for_b &&
+                   for_a->name == for_b->name &&
+                   for_a->min.same_as(for_b->min) &&
+                   for_a->extent.same_as(for_b->extent)) {
+            Stmt inner = IfThenElse::make(op->condition, for_a->body, for_b->body);
+            inner = For::make(for_a->name, for_a->min, for_a->extent, for_a->for_type, for_a->device_api, inner);
+            stmt = mutate(inner);
+        } else {
+            internal_error << "Unexpected construct inside if statement: " << Stmt(op) << "\n";
+        }
+
+    }
+
+};
+
+
+// Expand selects of boolean conditions so that the partitioner can
+// consider them one-at-a-time.
+class ExpandSelects : public IRMutator {
+    using IRMutator::visit;
+
+    bool is_trivial(Expr e) {
+        return e.as<Variable>() || is_const(e);
+    }
+
+    void visit(const Select *op) {
+        Expr condition   = mutate(op->condition);
+        Expr true_value  = mutate(op->true_value);
+        Expr false_value = mutate(op->false_value);
+        if (const Or *o = condition.as<Or>()) {
+            if (is_trivial(true_value)) {
+                expr = mutate(Select::make(o->a, true_value, Select::make(o->b, true_value, false_value)));
+            } else {
+                string var_name = unique_name('t');
+                Expr var = Variable::make(true_value.type(), var_name);
+                expr = mutate(Select::make(o->a, var, Select::make(o->b, var, false_value)));
+                expr = Let::make(var_name, true_value, expr);
+            }
+        } else if (const And *a = condition.as<And>()) {
+            if (is_trivial(false_value)) {
+                expr = mutate(Select::make(a->a, Select::make(a->b, true_value, false_value), false_value));
+            } else {
+                string var_name = unique_name('t');
+                Expr var = Variable::make(false_value.type(), var_name);
+                expr = mutate(Select::make(a->a, Select::make(a->b, true_value, var), var));
+                expr = Let::make(var_name, false_value, expr);
+            }
+        } else if (const Not *n = condition.as<Not>()) {
+            expr = mutate(Select::make(n->a, false_value, true_value));
+        } else if (condition.same_as(op->condition) &&
+                   true_value.same_as(op->true_value) &&
+                   false_value.same_as(op->false_value)) {
+            expr = op;
+        } else {
+            expr = Select::make(condition, true_value, false_value);
+        }
+    }
+};
+
+// Collapse selects back together
+class CollapseSelects : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Select *op) {
+        const Select *t = op->true_value.as<Select>();
+        const Select *f = op->false_value.as<Select>();
+
+        if (t && equal(t->false_value, op->false_value)) {
+            // select(a, select(b, t, f), f) -> select(a && b, t, f)
+            expr = mutate(select(op->condition && t->condition, t->true_value, op->false_value));
+        } else if (f && equal(op->true_value, f->true_value)) {
+            // select(a, t, select(b, t, f)) -> select(a || b, t, f)
+            expr = mutate(select(op->condition || f->condition, op->true_value, f->false_value));
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+};
+
 }
 
 Stmt partition_loops(Stmt s) {
+    s = MarkClampedRampsAsLikely().mutate(s);
+    s = ExpandSelects().mutate(s);
     s = PartitionLoops().mutate(s);
+    s = RenormalizeGPULoops().mutate(s);
     s = RemoveLikelyTags().mutate(s);
+    s = CollapseSelects().mutate(s);
     return s;
 }
 
