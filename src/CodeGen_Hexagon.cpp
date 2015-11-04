@@ -1975,20 +1975,19 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
   }
   if (!Vec.defined() || !BC.defined())
     return false;
-  Value *Vector = codegen(Vec);
-  const IntImm *Imm = bc_value.as<IntImm>();
-  if (!Imm) {
-    const Cast *C = bc_value.as<Cast>();
-    if (C) {
-      Imm = C->value.as<IntImm>();
-    }
-  }
-  if (!Imm)
+  if (!is_const(BC))
     return false;
+  const int64_t *ImmValue_p = as_const_int(BC);
+  const uint64_t *UImmValue_p = as_const_uint(BC);
+  if (!ImmValue_p && !UImmValue_p)
+    return false;
+  int64_t ImmValue = ImmValue_p ? *ImmValue_p :
+    (int64_t) *UImmValue_p;
+
+  Value *Vector = codegen(Vec);
   //   Vdd.h=vmpy(Vu.ub,Rt.b)
   //   Vdd.w=vmpy(Vu.h,Rt.h)
   int ScalarValue = 0;
-  int ImmValue = Imm->value;
   if (Vec.type().bits == 8) {
     int A = ImmValue & 0xFF;
     int B = A | (A << 8);
@@ -1997,8 +1996,7 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
     int A = ImmValue & 0xFFFF;
     ScalarValue = A | (A << 16);
   }
-  Expr ScalarImmExpr = IntImm::make(Int(32), ScalarValue);
-  Value *Scalar = codegen(ScalarImmExpr);
+  Value *Scalar = codegen(ScalarValue);
   Ops.push_back(Vector);
   Ops.push_back(Scalar);
   Value *Vmpy =
@@ -2080,80 +2078,79 @@ void CodeGen_Hexagon::visit(const Mul *op) {
           debug(4) << "vector " << Vec << "\n";
           debug(4) << "Broadcast " << Other << "\n";
           debug(4) << "Other bits size : " << Other.type().bits << "\n";
-          const IntImm *Imm = Other.as<IntImm>();
-          if (!Imm) {
-            const Cast *C = Other.as<Cast>();
-            if (C) {
-              Imm = C->value.as<IntImm>();
-            }
-          }
-          if (Imm) {
-            int ImmValue = Imm->value;
-            unsigned int ScalarValue = 0;
-            Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
-            if (Vec.type().bits == 16
-                && ImmValue <=  INT_8_IMAX) {
-              unsigned int A = ImmValue & 0xFF;
-              unsigned int B = A | (A << 8);
-              ScalarValue = B | (B << 16);
-              IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyihb);
-            } else if (Vec.type().bits == 32) {
-              if (ImmValue <= INT_8_IMAX) {
+          if (is_const(Other)) {
+            const int64_t *ImmValue_p = as_const_int(Other);
+            const uint64_t *UImmValue_p = as_const_uint(Other);
+            if (ImmValue_p || UImmValue_p) {
+              int64_t ImmValue = ImmValue_p ? *ImmValue_p :
+                (int64_t) *UImmValue_p;
+              unsigned int ScalarValue = 0;
+              Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
+              if (Vec.type().bits == 16
+                  && ImmValue <=  INT_8_IMAX) {
                 unsigned int A = ImmValue & 0xFF;
                 unsigned int B = A | (A << 8);
                 ScalarValue = B | (B << 16);
-                IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwb);
-              } else if (ImmValue <= INT_16_IMAX) {
-                unsigned int A = ImmValue & 0xFFFF;
-                ScalarValue = (A << 16) | A;
-                IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwh);
+                IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyihb);
+              } else if (Vec.type().bits == 32) {
+                if (ImmValue <= INT_8_IMAX) {
+                  unsigned int A = ImmValue & 0xFF;
+                  unsigned int B = A | (A << 8);
+                  ScalarValue = B | (B << 16);
+                  IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwb);
+                } else if (ImmValue <= INT_16_IMAX) {
+                  unsigned int A = ImmValue & 0xFFFF;
+                  ScalarValue = (A << 16) | A;
+                  IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyiwh);
+                } else
+                  internal_error <<
+                    "Cannot deal with an Imm value greater than 16"
+                    "bits in generating vmpyi\n";
               } else
-                internal_error <<
-                  "Cannot deal with an Imm value greater than 16"
-                  "bits in generating vmpyi\n";
-            } else
-              checkVectorOp(op->type, "Unhandled case in visit(Mul * Vector Scalar Imm)\n");
-            Expr ScalarImmExpr = IntImm::make(Int(32), ScalarValue);
-            Value *Scalar = codegen(ScalarImmExpr);
-            Value *VectorOp = codegen(Vec);
-            std::vector<Value *> Ops;
-            debug(4) << "HexCG: Generating vmpyhss\n";
+                checkVectorOp(op->type, "Unhandled case in visit(Mul * Vector"
+                              " Scalar Imm)\n");
+              Expr ScalarImmExpr = IntImm::make(Int(32), ScalarValue);
+              Value *Scalar = codegen(ScalarImmExpr);
+              Value *VectorOp = codegen(Vec);
+              std::vector<Value *> Ops;
+              debug(4) << "HexCG: Generating vmpyhss\n";
 
-            getHighAndLowVectors(VectorOp, Ops);
-            Value *HiCall = Ops[0];  //Odd elements.
-            Value *LoCall = Ops[1];  //Even elements
-            Ops.clear();
-            Ops.push_back(HiCall);
-            Ops.push_back(Scalar);
-            Value *Call1 =  //Odd elements
-              CallLLVMIntrinsic(Intrinsic::
-                                getDeclaration(module, IntrinsID), Ops);
-            Ops.clear();
-            Ops.push_back(LoCall);
-            Ops.push_back(Scalar);
-            Value *Call2 =        // Even elements.
-              CallLLVMIntrinsic(Intrinsic::
-                                getDeclaration(module, IntrinsID), Ops);
-            Ops.clear();
-            Ops.push_back(Call1);
-            Ops.push_back(Call2);
-            IntrinsID = IPICK(Intrinsic::hexagon_V6_vcombine);
-            Value *CombineCall =
-              CallLLVMIntrinsic(Intrinsic::
-                                getDeclaration(module, IntrinsID), Ops);
-            Halide::Type DestType = op->type;
-            llvm::Type *DestLLVMType = llvm_type_of(DestType);
-            if (DestLLVMType != CombineCall->getType())
+              getHighAndLowVectors(VectorOp, Ops);
+              Value *HiCall = Ops[0];  //Odd elements.
+              Value *LoCall = Ops[1];  //Even elements
+              Ops.clear();
+              Ops.push_back(HiCall);
+              Ops.push_back(Scalar);
+              Value *Call1 =  //Odd elements
+                CallLLVMIntrinsic(Intrinsic::
+                                  getDeclaration(module, IntrinsID), Ops);
+              Ops.clear();
+              Ops.push_back(LoCall);
+              Ops.push_back(Scalar);
+              Value *Call2 =        // Even elements.
+                CallLLVMIntrinsic(Intrinsic::
+                                  getDeclaration(module, IntrinsID), Ops);
+              Ops.clear();
+              Ops.push_back(Call1);
+              Ops.push_back(Call2);
+              IntrinsID = IPICK(Intrinsic::hexagon_V6_vcombine);
+              Value *CombineCall =
+                CallLLVMIntrinsic(Intrinsic::
+                                  getDeclaration(module, IntrinsID), Ops);
+              Halide::Type DestType = op->type;
+              llvm::Type *DestLLVMType = llvm_type_of(DestType);
+              if (DestLLVMType != CombineCall->getType())
                 value = builder->CreateBitCast(CombineCall, DestLLVMType);
-            else
-              value = CombineCall;
-            return;
-          // It is Vector x Vector
-          } else  if (matches[0].type().is_vector() && matches[1].type().is_vector()) {
-            checkVectorOp(op->type, "Unhandled case in visit(Vector x Vector Mul *)\n");
-            internal_error << "Unhandled case in visit(Vector x Vector Mul *)\n";
+              else
+                value = CombineCall;
+              return;
+              // It is Vector x Vector
+            } else  if (matches[0].type().is_vector() && matches[1].type().is_vector()) {
+              checkVectorOp(op->type, "Unhandled case in visit(Vector x Vector Mul *)\n");
+              internal_error << "Unhandled case in visit(Vector x Vector Mul *)\n";
+            }
           }
-        }
+        } // expr_match
       }
       checkVectorOp(op->type, "Unhandled case in visit(Vector x Vector Mul * no match)\n");
       debug(4) << "HexCG: FAILED to generate a  vector multiply.\n";
