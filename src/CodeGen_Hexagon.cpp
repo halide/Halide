@@ -1556,40 +1556,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 
     // Lets look for saturate and pack.
     std::vector<Pattern> SatAndPack;
-    SatAndPack.push_back(Pattern(u8_(min(WPICK(wild_u16x128, wild_u16x64),
-                                         255)),
-                                 IPICK(Intrinsic::hexagon_V6_vsathub)));
-    SatAndPack.push_back(Pattern(u8_(max(min(WPICK(wild_i16x128, wild_i16x64),
-                                             255), 0)),
-                                 IPICK(Intrinsic::hexagon_V6_vsathub)));
-    SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_i16x128, wild_i16x64),
-                                             127), -128)),
-                                 Intrinsic::not_intrinsic));
-    // -128 when implicitly coerced to uint16 is 65408.
-    SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_u16x128, wild_u16x64),
-                                             127), 65408 /*uint16(-128)*/)),
-                                 Intrinsic::not_intrinsic));
     matches.clear();
-    for (size_t I = 0; I < SatAndPack.size(); ++I) {
-      const Pattern &P = SatAndPack[I];
-      if (expr_match(P.pattern, op, matches)) {
-        std::vector<Value *> Ops;
-        Value *DoubleVector = codegen(matches[0]);
-        getHighAndLowVectors(DoubleVector, Ops);
-        Intrinsic::ID ID = P.ID;
-        if (ID == Intrinsic::not_intrinsic) {
-          user_error << "Saturate and packing not supported when downcasting"
-            " shorts (signed and unsigned) to signed chars\n";
-        } else {
-          Value *SatAndPackInst =
-            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,ID), Ops);
-          value = convertValueType(SatAndPackInst, llvm_type_of(op->type));
-          return;
-        }
-      }
-    }
-    matches.clear();
-    SatAndPack.clear();
     int WrdsInVP  = 2 * (native_vector_bits() / 32);
     int HWrdsInVP = WrdsInVP * 2 ;
     SatAndPack.push_back(Pattern(u8_(max(min(WPICK(wild_i16x128, wild_i16x64)
@@ -1669,6 +1636,39 @@ void CodeGen_Hexagon::visit(const Cast *op) {
             value = convertValueType(Result, llvm_type_of(op->type));
             return;
           }
+      }
+    }
+    SatAndPack.clear();
+    matches.clear();
+    SatAndPack.push_back(Pattern(u8_(min(WPICK(wild_u16x128, wild_u16x64),
+                                         255)),
+                                 IPICK(Intrinsic::hexagon_V6_vsathub)));
+    SatAndPack.push_back(Pattern(u8_(max(min(WPICK(wild_i16x128, wild_i16x64),
+                                             255), 0)),
+                                 IPICK(Intrinsic::hexagon_V6_vsathub)));
+    SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_i16x128, wild_i16x64),
+                                             127), -128)),
+                                 Intrinsic::not_intrinsic));
+    // -128 when implicitly coerced to uint16 is 65408.
+    SatAndPack.push_back(Pattern(i8_(max(min(WPICK(wild_u16x128, wild_u16x64),
+                                             127), 65408 /*uint16(-128)*/)),
+                                 Intrinsic::not_intrinsic));
+    for (size_t I = 0; I < SatAndPack.size(); ++I) {
+      const Pattern &P = SatAndPack[I];
+      if (expr_match(P.pattern, op, matches)) {
+        std::vector<Value *> Ops;
+        Value *DoubleVector = codegen(matches[0]);
+        getHighAndLowVectors(DoubleVector, Ops);
+        Intrinsic::ID ID = P.ID;
+        if (ID == Intrinsic::not_intrinsic) {
+          user_error << "Saturate and packing not supported when downcasting"
+            " shorts (signed and unsigned) to signed chars\n";
+        } else {
+          Value *SatAndPackInst =
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,ID), Ops);
+          value = convertValueType(SatAndPackInst, llvm_type_of(op->type));
+          return;
+        }
       }
     }
     {
