@@ -19,7 +19,7 @@ struct halide_device_interface {
     int (*copy_to_device)(void *user_context, struct buffer_t *buf);
 };
 
-extern WEAK uint64_t halide_new_device_wrapper(uint64_t handle, const struct halide_device_interface *interface);
+extern WEAK uint64_t halide_new_device_wrapper(uint64_t handle, const struct halide_device_interface *device_interface);
 extern WEAK void halide_delete_device_wrapper(uint64_t dev_field);
 extern WEAK uint64_t halide_get_device_handle(uint64_t dev_field);
 extern WEAK const struct halide_device_interface *halide_get_device_interface(uint64_t dev_field);

@@ -36,12 +36,12 @@ extern "C" {
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-void halide_device_release(void *user_context, const halide_device_interface *interface) {
+void halide_device_release(void *user_context, const halide_device_interface *device_interface) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_release\n";
     Target target(get_host_target());
-    void (*fn)(void *user_context, const halide_device_interface *interface);
+    void (*fn)(void *user_context, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_device_release", target, fn)) {
-        (*fn)(user_context, interface);
+        (*fn)(user_context, device_interface);
     }
 }
 
@@ -67,12 +67,12 @@ int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
 int halide_copy_to_device(void *user_context, struct buffer_t *buf,
-                          const halide_device_interface *interface) {
+                          const halide_device_interface *device_interface) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_device\n";
     Target target(get_host_target());
-    int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
+    int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_copy_to_device", target, fn)) {
-      return (*fn)(user_context, buf, interface);
+      return (*fn)(user_context, buf, device_interface);
     }
     return -1;
 }
@@ -84,12 +84,12 @@ int halide_device_sync(void *user_context, struct buffer_t *buf) {
 }
 
 /** Allocate device memory to back a buffer_t. */
-int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
+int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_malloc\n";
     Target target(get_host_target());
-    int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
+    int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_device_malloc", target, fn)) {
-      return (*fn)(user_context, buf, interface);
+      return (*fn)(user_context, buf, device_interface);
     }
     return -1;
 }
