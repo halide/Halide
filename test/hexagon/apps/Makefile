@@ -16,7 +16,8 @@ NOT_READY4PRIMTIME = \
   conv3x3a32 \
   nv12torgb888 \
   sigma3x3 \
-  bilateral 
+  bilateral \
+  epsilon
 
 # Causes make error  camera_pipe
 
