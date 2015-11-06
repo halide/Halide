@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
   // uses. For the 8-bit image we use in this test it's one.
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
-  SIM_ACQUIRE_HVX
+  SIM_ACQUIRE_HVX;
 #if LOG2VLEN == 7
     SIM_SET_HVX_DOUBLE_MODE;
 #endif
