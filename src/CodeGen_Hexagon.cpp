@@ -1956,19 +1956,52 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+
+  // 32-bit
   Expr wild_u32x64_bc = Broadcast::make(wild_u32, 64);
   Expr wild_i32x64_bc = Broadcast::make(wild_i32, 64);
   Expr wild_u32x128_bc = Broadcast::make(wild_u32, 128);
   Expr wild_i32x128_bc = Broadcast::make(wild_i32, 128);
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+
   Patterns.push_back(WPICK(wild_u32x128, wild_u32x64) *
                      WPICK(wild_u32x128_bc, wild_u32x64_bc));
   Patterns.push_back(WPICK(wild_i32x128, wild_i32x64) *
                      WPICK(wild_i32x128_bc, wild_i32x64_bc));
-  Patterns.push_back(WPICK(wild_u32x128_bc, wild_u32x64_bc)
-                     * WPICK(wild_u32x128, wild_u32x64));
-  Patterns.push_back(WPICK(wild_i32x128_bc, wild_i32x64_bc)
-                     * WPICK(wild_i32x128, wild_i32x64));
+  Patterns.push_back(WPICK(wild_u32x128_bc, wild_u32x64_bc) *
+                     WPICK(wild_u32x128, wild_u32x64));
+  Patterns.push_back(WPICK(wild_i32x128_bc, wild_i32x64_bc) *
+                     WPICK(wild_i32x128, wild_i32x64));
+
+  // 16-bit
+  Expr wild_u16x128_bc = Broadcast::make(wild_u16, 128);
+  Expr wild_i16x128_bc = Broadcast::make(wild_i16, 128);
+  Expr wild_u16x256_bc = Broadcast::make(wild_u16, 256);
+  Expr wild_i16x256_bc = Broadcast::make(wild_i16, 256);
+
+  Patterns.push_back(WPICK(wild_u16x256, wild_u16x128) *
+                     WPICK(wild_u16x256_bc, wild_u16x128_bc));
+  Patterns.push_back(WPICK(wild_i16x256, wild_i16x128) *
+                     WPICK(wild_i16x256_bc, wild_i16x128_bc));
+  Patterns.push_back(WPICK(wild_u16x256_bc, wild_u16x128_bc) *
+                     WPICK(wild_u16x256, wild_u16x128));
+  Patterns.push_back(WPICK(wild_i16x256_bc, wild_i16x128_bc) *
+                     WPICK(wild_i16x256, wild_i16x128));
+
+  // 8-bit
+  Expr wild_u8x256_bc = Broadcast::make(wild_u8, 256);
+  Expr wild_i8x256_bc = Broadcast::make(wild_i8, 256);
+  Expr wild_u8x512_bc = Broadcast::make(wild_u8, 512);
+  Expr wild_i8x512_bc = Broadcast::make(wild_i8, 512);
+
+  Patterns.push_back(WPICK(wild_u8x512, wild_u8x256) *
+                     WPICK(wild_u8x512_bc, wild_u8x256_bc));
+  Patterns.push_back(WPICK(wild_i8x512, wild_i8x256) *
+                     WPICK(wild_i8x512_bc, wild_i8x256_bc));
+  Patterns.push_back(WPICK(wild_u8x512_bc, wild_u8x256_bc) *
+                     WPICK(wild_u8x512, wild_u8x256));
+  Patterns.push_back(WPICK(wild_i8x512_bc, wild_i8x256_bc) *
+                     WPICK(wild_i8x512, wild_i8x256));
 
   debug(4) << "HexCG: " << op->type <<  ", handleLargeVectors (Mul)\n";
   for (size_t I = 0; I < Patterns.size(); ++I) {
@@ -1998,7 +2031,73 @@ CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
       Ops.push_back(EvenLanes);
       Ops.push_back(OddLanes);
       Value *Result = concat_vectors(Ops);
-      return convertValueType(Result, llvm_type_of(op->type));    }
+      return convertValueType(Result, llvm_type_of(op->type));
+    }
+  }
+  return NULL;
+}
+// Break up double and quad vector x vector operations
+llvm::Value *
+CodeGen_Hexagon::handleLargeVectorVectors(const Mul *op) {
+  std::vector<Expr> Patterns;
+  std::vector<Expr> matches;
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+
+  // 4096-bit vector x vector
+  Patterns.push_back(wild_u32x128 * wild_u32x128);
+  Patterns.push_back(wild_i32x128 * wild_i32x128);
+  Patterns.push_back(wild_u16x256 * wild_u16x256);
+  Patterns.push_back(wild_i16x256 * wild_i16x256);
+  Patterns.push_back(wild_u8x512  * wild_u8x512);
+  Patterns.push_back(wild_i8x512  * wild_i8x512);
+
+  // 2048-bit vector x vector
+  Patterns.push_back(wild_u32x64  * wild_u32x64);
+  Patterns.push_back(wild_i32x64  * wild_i32x64);
+  // FIXME: DJP: avoid slice/shuffles when: (see sobel)
+  //   Unsupported type for vector multiply (uint16x128 * uint16x128 = uint16x128)
+  // when sliced results in shuffles and:
+  //   Unsupported type for vector multiply (uint16x64 * uint16x64 = uint16x64)
+  if (op->type.bits != 16)
+     Patterns.push_back(wild_u16x128 * wild_u16x128);
+  Patterns.push_back(wild_i16x128 * wild_i16x128);
+  Patterns.push_back(wild_u8x256  * wild_u8x256);
+  Patterns.push_back(wild_i8x256  * wild_i8x256);
+
+  // 1024-bit vector x vector - wide in single mode
+  if (!B128) {
+    Patterns.push_back(wild_u32x32  * wild_u32x32);
+    Patterns.push_back(wild_i32x32  * wild_u32x32);
+    Patterns.push_back(wild_u16x64  * wild_u16x64);
+    Patterns.push_back(wild_i16x64  * wild_u16x64);
+    Patterns.push_back(wild_u8x128  * wild_u8x128);
+    Patterns.push_back(wild_i8x128  * wild_i8x128);
+  }
+
+  debug(4) << "HexCG: " << op->type <<  ", handleLargeVectorVectors (Mul)\n";
+  for (size_t I = 0; I < Patterns.size(); ++I) {
+    Expr pat = Patterns[I];
+    if (expr_match(pat, op, matches)) {
+      std::vector<Expr> VectorRegisterPairsA;
+      std::vector<Expr> VectorRegisterPairsB;
+      slice_into_halves(matches[0], VectorRegisterPairsA);
+      slice_into_halves(matches[1], VectorRegisterPairsB);
+      Expr A_low = VectorRegisterPairsA[0];
+      Expr A_high = VectorRegisterPairsA[1];
+      Expr B_low = VectorRegisterPairsB[0];
+      Expr B_high = VectorRegisterPairsB[1];
+      Value *EvenLanes = codegen(A_low * B_low);
+      Value *OddLanes = codegen(A_high * B_high);
+      // FIXME: DJP:
+      // Make sure we generated a vector intrinsic
+      // if (EvenLanes(op) == mul || OddLanes(op) == mul)
+      //  return NULL;
+      std::vector<Value *>Ops;
+      Ops.push_back(EvenLanes);
+      Ops.push_back(OddLanes);
+      Value *Result = concatVectors(OddLanes, EvenLanes);
+      return convertValueType(Result, llvm_type_of(op->type));
+    }
   }
   return NULL;
 }
@@ -2127,6 +2226,11 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
   return true;
 }
 void CodeGen_Hexagon::visit(const Mul *op) {
+  if (!op->a.type().is_vector() && !op->b.type().is_vector()) {
+    // scalar x scalar multiply
+    CodeGen_Posix::visit(op);
+    return;
+  }
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
@@ -2279,11 +2383,23 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     }
   }
   value = emitBinaryOp(op, multiplies);
+  if (!value &&
+      isDblOrQuadVector(op->type, native_vector_bits())) {
+    value = handleLargeVectorVectors(op);
+    if (value)
+      return;
+  }
   if (!value) {
+    user_warning << "Unsupported type for vector multiply ("
+                 << op->a.type()
+                 << " * "
+                 << op->b.type()
+                 << " = "
+                 << op->type
+                 << ")\n";
     CodeGen_Posix::visit(op);
     return;
   }
-
 }
 void CodeGen_Hexagon::visit(const Broadcast *op) {
     bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);

@@ -183,6 +183,7 @@ protected:
     Expr wild_i8x256, wild_u8x256, wild_i16x128, wild_u16x128;
 
     Expr wild_i32x128, wild_u32x128;// 4096 bit signed ints.
+    Expr wild_i8x512, wild_u8x512, wild_i16x256, wild_u16x256;
 
     Expr wild_f32x2; // 64-bit floats
     Expr wild_f32x4, wild_f64x2; // 128-bit floats

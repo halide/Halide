@@ -219,6 +219,10 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     wild_i32x128(Variable::make(Int(32, 128), "*")),
     wild_u32x128(Variable::make(UInt(32, 128), "*")),
+    wild_i8x512(Variable::make(Int(8, 512), "*")),
+    wild_u8x512(Variable::make(UInt(8, 512), "*")),
+    wild_i16x256(Variable::make(Int(16, 256), "*")),
+    wild_u16x256(Variable::make(UInt(16, 256), "*")),
     wild_f32x2(Variable::make(Float(32, 2), "*")),
 
     wild_f32x4(Variable::make(Float(32, 4), "*")),

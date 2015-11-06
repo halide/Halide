@@ -73,6 +73,7 @@ protected:
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Cast *);
     llvm::Value *handleLargeVectors(const Max *);
+    llvm::Value *handleLargeVectorVectors(const Mul *);
     /* Ideally, we'd have liked to call compare with llvm::Intrinsic::ID
      as the last argument, but that means "llvm/IR/Intrinsics.h" would be needed
      to be included here. However, CodeGen_Hexagon.h is used to create Halide.h
