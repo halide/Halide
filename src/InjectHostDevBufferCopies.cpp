@@ -4,6 +4,7 @@
 #include "IRPrinter.h"
 #include "CodeGen_GPU_Dev.h"
 #include "IROperator.h"
+#include "SelectGPUAPI.h"
 #include <map>
 
 namespace Halide {
@@ -14,23 +15,6 @@ using std::map;
 using std::vector;
 using std::set;
 using std::pair;
-
-DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
-    if (device_api == DeviceAPI::Default_GPU) {
-        if (target.has_feature(Target::Metal)) {
-            return DeviceAPI::Metal;
-        } else if (target.has_feature(Target::OpenCL)) {
-            return DeviceAPI::OpenCL;
-        } else if (target.has_feature(Target::CUDA)) {
-            return DeviceAPI::CUDA;
-        } else if (target.has_feature(Target::OpenGLCompute)) {
-            return DeviceAPI::OpenGLCompute;
-        } else {
-            user_error << "Schedule uses Default_GPU without a valid GPU (Metal, OpenCL or CUDA) specified in target.\n";
-        }
-    }
-    return device_api;
-}
 
 static bool different_device_api(DeviceAPI device_api, DeviceAPI stmt_api, const Target &target) {
     device_api = fixup_device_api(device_api, target);
@@ -163,8 +147,14 @@ class InjectBufferCopies : public IRMutator {
           case DeviceAPI::OpenCL:
             interface_name = "halide_opencl_device_interface";
             break;
+          case DeviceAPI::OpenCLTextures:
+            interface_name = "halide_opencl_textures_device_interface";
+            break;
           case DeviceAPI::Metal:
             interface_name = "halide_metal_device_interface";
+            break;
+          case DeviceAPI::MetalTextures:
+            interface_name = "halide_metal_textures_device_interface";
             break;
           case DeviceAPI::GLSL:
             interface_name = "halide_opengl_device_interface";

@@ -262,10 +262,12 @@ enum class DeviceAPI {
     Default_GPU,
     CUDA,
     OpenCL,
+    OpenCLTextures,
     GLSL,
     Renderscript,
     OpenGLCompute,
-    Metal
+    Metal,
+    MetalTextures
 };
 
 namespace Internal {

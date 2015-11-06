@@ -198,6 +198,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
+    {"textures", Target::Textures},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {

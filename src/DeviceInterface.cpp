@@ -131,6 +131,19 @@ const struct halide_device_interface *halide_opencl_device_interface() {
     return NULL;
 }
 
+const struct halide_device_interface *halide_opencl_textures_device_interface() {
+    Target target(get_host_target());
+    // TODO(zalman): Decide if keeping separate runtimes for OpenCL with and without textures.
+    // At present the Textures flag here will not do anything, both types of OpenCL
+    // are always included.
+    target.set_features({ Target::OpenCL, Target::Textures });
+    struct halide_device_interface *(*fn)();
+    if (lookup_runtime_routine("halide_opencl_textures_device_interface", target, fn)) {
+        return (*fn)();
+    }
+    return NULL;
+}
+
 const struct halide_device_interface *halide_opengl_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::OpenGL);
@@ -166,6 +179,19 @@ const struct halide_device_interface *halide_metal_device_interface() {
     target.set_feature(Target::Metal);
     struct halide_device_interface *(*fn)();
     if (lookup_runtime_routine("halide_metal_device_interface", target, fn)) {
+        return (*fn)();
+    }
+    return NULL;
+}
+
+const struct halide_device_interface *halide_metal_textures_device_interface() {
+    Target target(get_host_target());
+    // TODO(zalman): Decide if keeping separate runtimes for Metal with and without textures.
+    // At present the Textures flag here will not do anything, both types of Metal
+    // are always included.
+    target.set_features({ Target::Metal, Target::Textures });
+    struct halide_device_interface *(*fn)();
+    if (lookup_runtime_routine("halide_metal_textures_device_interface", target, fn)) {
         return (*fn)();
     }
     return NULL;

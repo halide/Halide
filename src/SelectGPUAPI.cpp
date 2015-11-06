@@ -4,6 +4,31 @@
 namespace Halide {
 namespace Internal {
 
+DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target, bool must_be_compute) {
+    if (device_api == DeviceAPI::Default_GPU) {
+        if (target.has_feature(Target::Metal)) {
+            return target.has_feature(Target::Textures) ? DeviceAPI::MetalTextures : DeviceAPI::Metal;
+        } else if (target.has_feature(Target::OpenCL)) {
+            return target.has_feature(Target::Textures) ? DeviceAPI::OpenCLTextures : DeviceAPI::OpenCL;
+        } else if (target.has_feature(Target::CUDA)) {
+            return DeviceAPI::CUDA;
+        } else if (target.has_feature(Target::OpenGLCompute)) {
+            return DeviceAPI::OpenGLCompute;
+        } else if (must_be_compute) {
+            user_error << "Schedule uses Default_GPU without a valid GPU (Metal, OpenCL or CUDA) specified in target.\n";
+        } else if (target.has_feature(Target::OpenGLCompute)) {
+            return DeviceAPI::OpenGLCompute;
+        } else if (target.has_feature(Target::Renderscript)) {
+            return DeviceAPI::Renderscript;
+        } else if (target.has_feature(Target::OpenGL)) {
+            return DeviceAPI::GLSL;
+        } else {
+            return DeviceAPI::Host;
+        }
+    }
+    return device_api;
+}
+
 class SelectGPUAPI : public IRMutator {
     using IRMutator::visit;
 
@@ -35,21 +60,7 @@ class SelectGPUAPI : public IRMutator {
     }
 public:
     SelectGPUAPI(Target t) : target(t) {
-        if (target.has_feature(Target::Metal)) {
-            default_api = DeviceAPI::Metal;
-        } else if (target.has_feature(Target::OpenCL)) {
-            default_api = DeviceAPI::OpenCL;
-        } else if (target.has_feature(Target::CUDA)) {
-            default_api = DeviceAPI::CUDA;
-        } else if (target.has_feature(Target::OpenGLCompute)) {
-            default_api = DeviceAPI::OpenGLCompute;
-        } else if (target.has_feature(Target::Renderscript)) {
-            default_api = DeviceAPI::Renderscript;
-        } else if (target.has_feature(Target::OpenGL)) {
-            default_api = DeviceAPI::GLSL;
-        } else {
-            default_api = DeviceAPI::Host;
-        }
+        default_api = fixup_device_api(DeviceAPI::Default_GPU, target);
         parent_api = DeviceAPI::Host;
     };
 };
