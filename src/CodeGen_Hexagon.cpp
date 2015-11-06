@@ -149,6 +149,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   casts.push_back(Pattern(cast(UInt(16, CPICK(128,64)),
                                WPICK(wild_u8x128,wild_u8x64)),
                           IPICK(Intrinsic::hexagon_V6_vzb)));
+  casts.push_back(Pattern(cast(UInt(16, CPICK(128,64)),
+                               WPICK(wild_i8x128,wild_i8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vzb)));
   casts.push_back(Pattern(cast(Int(16, CPICK(128,64)),
                                WPICK(wild_u8x128,wild_u8x64)),
                           IPICK(Intrinsic::hexagon_V6_vzb)));
@@ -1281,6 +1284,12 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
     Patterns.push_back(Pattern(cast(UInt(32, CPICK(128, 64)),
                                     WPICK(wild_u8x128, wild_u8x64)),
                                IPICK(Intrinsic::hexagon_V6_vzh)));
+    Patterns.push_back(Pattern(cast(UInt(32, CPICK(128, 64)),
+                                    WPICK(wild_i8x128, wild_i8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzh)));
+    Patterns.push_back(Pattern(cast(Int(32, CPICK(128, 64)),
+                                    WPICK(wild_u8x128, wild_u8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzh)));
     Patterns.push_back(Pattern(cast(Int(32, CPICK(128, 64)),
                                     WPICK(wild_i8x128, wild_i8x64)),
                                IPICK(Intrinsic::hexagon_V6_vsh)));
@@ -1341,64 +1350,177 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
                                        UINT_8_IMAX)),
                                IPICK(Intrinsic::hexagon_V6_vsathub)));
     // Fixme: PDB: Shouldn't the signed version have a max in the pattern too?
-    Patterns.push_back(Pattern(i8_(min(WPICK(wild_i32x128, wild_i32x64),
-                                       INT_8_IMAX)),
+    // Yes it should. So adding it now.
+    Patterns.push_back(Pattern(i8_(max(min(WPICK(wild_i32x128, wild_i32x64),
+                                           INT_8_IMAX), INT_8_IMIN)),
+                               Intrinsic::not_intrinsic));
+    Patterns.push_back(Pattern(u8_(max(min(WPICK(wild_i32x128, wild_i32x64),
+                                           UINT_8_IMAX), UINT_8_IMIN)),
                                IPICK(Intrinsic::hexagon_V6_vsathub)));
 
     for (size_t I = 0; I < Patterns.size(); ++I) {
       const Pattern &P = Patterns[I];
       if (expr_match(P.pattern, op, matches)) {
-        internal_assert(matches.size() == 1);
-        Type FirstStepType = Type(op->type.code, 16, op->type.width);
-        Value *FirstStep = codegen(cast(FirstStepType,
-                                        (min(matches[0],
-                                             FirstStepType.max()))));
-        std::vector<Value *> Ops;
-        Intrinsic::ID IntrinsID = P.ID;
-        // Ops[0] is the higher vectors and Ops[1] the lower.
-        getHighAndLowVectors(FirstStep, Ops);
-        Value *V = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
-                                                               IntrinsID), Ops);
-        return convertValueType(V, llvm_type_of(op->type));
+        // At the present moment we barf when saturating to an i8 value.
+        // Once we fix this issue, make sure to get rid of the error
+        // below in the else part as well.
+        if (P.ID == Intrinsic::not_intrinsic) {
+          user_error << "Saturate and packing not supported when downcasting"
+            " words to signed chars\n";
+        } else {
+          internal_assert(matches.size() == 1);
+          bool operand_type_signed = matches[0].type().is_int();
+          Type FirstStepType = Type(matches[0].type().code, 16, op->type.width);
+          Value *FirstStep = NULL;
+          if (operand_type_signed) {
+            if (op->type.is_int()) {
+              // i32->i8.
+              // This is not supported currently.
+              user_error << "Saturate and packing not supported when"
+                "downcasting words to signed chars\n";
+            } else {
+              // i32->u8.
+              // FirstSteType is int16
+              FirstStep = codegen(cast(FirstStepType,
+                                       max(min(matches[0], INT_16_IMAX),
+                                           INT_16_IMIN)));
+            }
+          } else {
+            // u32->u8
+            // FirstStepType is uint16.
+            FirstStep = codegen(cast(FirstStepType,
+                                     (min(matches[0],
+                                          UINT_16_IMAX))));
+          }
+          std::vector<Value *> Ops;
+          Intrinsic::ID IntrinsID = P.ID;
+
+          // Ops[0] is the higher vectors and Ops[1] the lower.
+          getHighAndLowVectors(FirstStep, Ops);
+          Value *V = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                                                                 IntrinsID),
+                                       Ops);
+          return convertValueType(V, llvm_type_of(op->type));
+        }
       }
     }
-    // This lowers the first step of u32x64->u8x64, which is a two step
-    // saturate and pack. This first step converts a u32x64/i32x64 into u16x64/
-    // i16x64
-    Patterns.clear();
-    matches.clear();
-    Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
-                                        UINT_16_IMAX)),
-                               IPICK(Intrinsic::hexagon_V6_vsatwh)));
-    Patterns.push_back(Pattern(i16_(min(WPICK(wild_i32x128, wild_i32x64),
-                                        INT_16_IMAX)),
-                               IPICK(Intrinsic::hexagon_V6_vsatwh)));
-    for (size_t I = 0; I < Patterns.size(); ++I) {
-      const Pattern &P = Patterns[I];
-      if (expr_match(P.pattern, op, matches)) {
-        std::vector <Value *> Ops;
-        Value *Vector = codegen(matches[0]);
-        Intrinsic::ID IntrinsID = P.ID;
-        int bytes_in_vector = native_vector_bits() / 8;
-        int VectorSize = (2 * bytes_in_vector)/4;
-        // We now have a u32x64 vector, i.e. 2 vector register pairs.
-        Value *EvenRegPair = slice_vector(Vector, 0, VectorSize);
-        Value *OddRegPair = slice_vector(Vector, VectorSize, VectorSize);
-        // We now have the lower register pair in EvenRegPair.
-        getHighAndLowVectors(EvenRegPair, Ops);
-        // TODO: For v61 use hexagon_V6_vsathuwuh
-        Value *EvenHalf =
-          CallLLVMIntrinsic(Intrinsic::
-                            getDeclaration(module, IntrinsID), Ops);
-        Ops.clear();
-        getHighAndLowVectors(OddRegPair, Ops);
-        Value *OddHalf =
-          CallLLVMIntrinsic(Intrinsic::
-                            getDeclaration(module, IntrinsID), Ops);
+    {
+      // Truncate and pack.
+      Patterns.clear();
+      matches.clear();
 
-        // EvenHalf & OddHalf are each one vector wide.
-        Value *Result = concatVectors(OddHalf, EvenHalf);
-        return convertValueType(Result, llvm_type_of(op->type));
+      Patterns.push_back(Pattern(u8_(WPICK(wild_u32x128, wild_u32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+      Patterns.push_back(Pattern(i8_(WPICK(wild_u32x128, wild_u32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+      Patterns.push_back(Pattern(u8_(WPICK(wild_i32x128, wild_i32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+      Patterns.push_back(Pattern(i8_(WPICK(wild_i32x128, wild_i32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshuffeb)));
+      for (size_t I = 0; I < Patterns.size(); ++I) {
+        const Pattern &P = Patterns[I];
+        if (expr_match(P.pattern, op, matches)) {
+          Type FirstStepType = Type(matches[0].type().code, 16, op->type.width);
+          Value *FirstStep = codegen(cast(FirstStepType, matches[0]));
+          std::vector<Value *> Ops;
+          Intrinsic::ID IntrinsID = P.ID;
+          getHighAndLowVectors(FirstStep, Ops);
+          Value * V = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                                                                  IntrinsID),
+                                        Ops);
+          return convertValueType(V, llvm_type_of(op->type));
+        }
+      }
+    }
+    {
+      // This lowers the first step of u32x64->u8x64 with saturation, which is a
+      // two step saturate and pack. This first step converts a u32x64/i32x64
+      // into u16x64/i16x64
+      Patterns.clear();
+      matches.clear();
+      if (target.has_feature(Halide::Target::HVX_V62))
+        Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
+                                            UINT_16_IMAX)),
+                                   IPICK(Intrinsic::hexagon_V6_vsatuwuh)));
+      else
+        Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
+                                            UINT_16_IMAX)),
+                                   IPICK(Intrinsic::hexagon_V6_vsatwh)));
+
+      Patterns.push_back(Pattern(i16_(max(min(WPICK(wild_i32x128, wild_i32x64),
+                                              INT_16_IMAX), INT_16_IMIN)),
+                                 IPICK(Intrinsic::hexagon_V6_vsatwh)));
+      for (size_t I = 0; I < Patterns.size(); ++I) {
+        const Pattern &P = Patterns[I];
+        if (expr_match(P.pattern, op, matches)) {
+          std::vector <Value *> Ops;
+          Value *Vector = codegen(matches[0]);
+          Intrinsic::ID IntrinsID = P.ID;
+          int bytes_in_vector = native_vector_bits() / 8;
+          int VectorSize = (2 * bytes_in_vector)/4;
+          // We now have a u32x64 vector, i.e. 2 vector register pairs.
+          Value *EvenRegPair = slice_vector(Vector, 0, VectorSize);
+          Value *OddRegPair = slice_vector(Vector, VectorSize, VectorSize);
+          // We now have the lower register pair in EvenRegPair.
+          getHighAndLowVectors(EvenRegPair, Ops);
+          // TODO: For v61 use hexagon_V6_vsathuwuh
+          Value *EvenHalf =
+            CallLLVMIntrinsic(Intrinsic::
+                              getDeclaration(module, IntrinsID), Ops);
+          Ops.clear();
+          getHighAndLowVectors(OddRegPair, Ops);
+          Value *OddHalf =
+            CallLLVMIntrinsic(Intrinsic::
+                              getDeclaration(module, IntrinsID), Ops);
+
+          // EvenHalf & OddHalf are each one vector wide.
+          Value *Result = concatVectors(OddHalf, EvenHalf);
+          return convertValueType(Result, llvm_type_of(op->type));
+        }
+      }
+    }
+    {
+      // This lowers the first step of u32x64->u8x64 with truncation, which is a
+      // two step saturate and pack. This first step converts a u32x64/i32x64
+      // into u16x64/i16x64
+      Patterns.clear();
+      matches.clear();
+
+      Patterns.push_back(Pattern(u16_(WPICK(wild_u32x128, wild_u32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      Patterns.push_back(Pattern(i16_(WPICK(wild_u32x128, wild_u32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      Patterns.push_back(Pattern(u16_(WPICK(wild_i32x128, wild_i32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      Patterns.push_back(Pattern(i16_(WPICK(wild_i32x128, wild_i32x64)),
+                                 IPICK(Intrinsic::hexagon_V6_vshufeh)));
+      for (size_t I = 0; I < Patterns.size(); ++I) {
+        const Pattern &P = Patterns[I];
+        if (expr_match(P.pattern, op, matches)) {
+          std::vector <Value *> Ops;
+          Value *Vector = codegen(matches[0]);
+          Intrinsic::ID IntrinsID = P.ID;
+          int bytes_in_vector = native_vector_bits() / 8;
+          int VectorSize = (2 * bytes_in_vector)/4;
+          // We now have a u32x64 vector, i.e. 2 vector register pairs.
+          Value *EvenRegPair = slice_vector(Vector, 0, VectorSize);
+          Value *OddRegPair = slice_vector(Vector, VectorSize, VectorSize);
+          // We now have the lower register pair in EvenRegPair.
+          getHighAndLowVectors(EvenRegPair, Ops);
+
+          Value *EvenHalf =
+            CallLLVMIntrinsic(Intrinsic::
+                              getDeclaration(module, IntrinsID), Ops);
+          Ops.clear();
+          getHighAndLowVectors(OddRegPair, Ops);
+          Value *OddHalf =
+            CallLLVMIntrinsic(Intrinsic::
+                              getDeclaration(module, IntrinsID), Ops);
+
+          // EvenHalf & OddHalf are each one vector wide.
+          Value *Result = concatVectors(OddHalf, EvenHalf);
+          return convertValueType(Result, llvm_type_of(op->type));
+        }
       }
     }
   }
