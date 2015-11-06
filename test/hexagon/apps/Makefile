@@ -17,7 +17,8 @@ NOT_READY4PRIMTIME = \
   nv12torgb888 \
   sigma3x3 \
   bilateral \
-  epsilon
+  epsilon \
+  fast9
 
 # Causes make error  camera_pipe
 
