@@ -227,7 +227,7 @@ float16_t float16_t::mod(float16_t denominator, RoundingMode roundingMode) const
     // FIXME: Ignoring possible exceptions
     // LLVM removed the rounding mode as the operation is always exact.
     // TODO: change float16_t::mod to no take a rounding mode.
-    #if LLVM_VERSION < 38
+    #if LLVM_VERSION < 39
     result.mod(rhsAPF, getLLVMAPFRoundingMode(roundingMode));
     #else
     result.mod(rhsAPF);
