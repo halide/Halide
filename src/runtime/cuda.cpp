@@ -299,6 +299,14 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         cuCtxGetApiVersion(*ctx, &version);
         debug(user_context) << *ctx << "(" << version << ")\n";
     }
+    // Creation automatically pushes the context, but we'll pop to allow the caller
+    // to decide when to push.
+    err = cuCtxPopCurrent(&context);
+    if (err != CUDA_SUCCESS) {
+      error(user_context) << "CUDA: cuCtxPopCurrent failed: "
+                          << get_error_name(err);
+      return err;
+    }
 
     return CUDA_SUCCESS;
 }
