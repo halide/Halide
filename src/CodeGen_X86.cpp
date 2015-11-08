@@ -343,7 +343,7 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
 
-    #if LLVM_VERSION >= 38
+    #if LLVM_VERSION >= 39
     // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
     // LLVM uses a numerically unstable method for vector
     // uint32->float conversion before AVX.

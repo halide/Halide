@@ -1574,7 +1574,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
       // If the instruction has a debug location, emit it.
       DebugLoc DL = I->getDebugLoc();
 //#if LLVM_VERSION >= 37
-#if LLVM_VERSION > 37
+#if LLVM_VERSION > 38
       if (!DL) {
 #else
       if (DL.isUnknown()) {
@@ -1586,7 +1586,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
       } else {
 
 //#if LLVM_VERSION >= 37
-#if LLVM_VERSION > 37
+#if LLVM_VERSION > 38
         MDNode* Scope = DL.getScope();
         assert(Scope && "Expected valid scope");
         DILocation *IA = DL.getInlinedAt();
