@@ -80,8 +80,7 @@ WEAK double halide_float16_bits_to_double(uint16_t bits) {
 __attribute__((always_inline)) static uint16_t performRounding(uint16_t result,
                                                                bool roundBit,
                                                                bool stickyBit,
-                                                               uint16_t signMask,
-                                                               halide_rounding_mode_t rm) {
+                                                               uint16_t signMask) {
     // Computation of the successor in IEEE754 binary16 is very elegant. Simply
     // adding 1 will compute the successor and will handle incrementing the
     // exponent correctly. It should move into +/- Infinity correctly too.
@@ -89,76 +88,28 @@ __attribute__((always_inline)) static uint16_t performRounding(uint16_t result,
 
     /* Rounding: We now need to pick between ``result`` which is the input rounded
      * down (or the exact result) and the ``successor`` (rounded up) based on
-     * the rounding mode and sign.
+     * the rounding mode (round to nearest, ties to even).
      */
-
-    // For convenience for negative numbers for some rounding modes we pretend
-    // the rounding is something else using an identity to simplify the logic of
-    // subsequent code. By doing this we conceptually round in the region of
-    // positive numbers only and thus only need to think about the ``successor``
-    // and don't need to worry about the ``predecessor``. We don't actually
-    // bother changing the sign bit though because the rest of the logic doesn't
-    // depend on it.
-    if (signMask > 0) {
-        if (rm == halide_toward_positive_infinity) {
-            // if x < 0 : RU(x) == -RD(|x|)
-            rm = halide_toward_negative_infinity;
-        } else if ( rm == halide_toward_negative_infinity) {
-            // if x < 0: RD(x) == -RU(|x|)
-            rm = halide_toward_positive_infinity;
-        }
-    }
-
-    switch (rm) {
-        case halide_toward_zero: // RZ
-        case halide_toward_negative_infinity: // RD
-            // Alway returns the truncated result
-            return result;
-        case halide_to_nearest_ties_to_even: // RNE
-            if (!roundBit) {
-                // round down
-                return result;
-            } else {
-                if (stickyBit) {
-                    // round up
-                    return successor;
-                } else {
-                    // There is a tie
-                    // Pick the result with the even significand
-                    if ((successor & 0x0001) == 0) {
-                        return successor;
-                    } else {
-                        return result;
-                    }
-                }
-            }
-        case halide_to_nearest_ties_to_away: // RNA
-            if (!roundBit) {
-                // round down
-                return result;
-            } else {
-                if (stickyBit) {
-                    // round up
-                    return successor;
-                } else {
-                    // There is a tie
-                    // Pick the result that moves away from zero
-                    return successor;
-                }
-            }
-        case halide_toward_positive_infinity: // RU
-            if (roundBit | stickyBit) {
+    if (!roundBit) {
+        // round down
+        return result;
+    } else {
+        if (stickyBit) {
+            // round up
+            return successor;
+        } else {
+            // There is a tie
+            // Pick the result with the even significand
+            if ((successor & 0x0001) == 0) {
                 return successor;
             } else {
-                // exact result so don't pick successor
                 return result;
             }
-        default:
-            abort();
+        }
     }
 }
 
-WEAK uint16_t halide_float_to_float16_bits(float value, halide_rounding_mode_t rm) {
+WEAK uint16_t halide_float_to_float16_bits(float value) {
    union {
         float asFloat;
         uint32_t asUInt;
@@ -249,13 +200,13 @@ WEAK uint16_t halide_float_to_float16_bits(float value, halide_rounding_mode_t r
     reEncodedExponent <<= 10; // Move bits into right position
     uint16_t result = signMask | reEncodedExponent | truncatedSignificand;
 
-    return performRounding(result, roundBit, stickyBit, signMask, rm);
+    return performRounding(result, roundBit, stickyBit, signMask);
 }
 
 // FIXME: This function and halide_float_float16_bits() are very similar
 // they logic is the same but they have different types and constants.
 // We should refactor these some how...
-WEAK uint16_t halide_double_to_float16_bits(double value, halide_rounding_mode_t rm) {
+WEAK uint16_t halide_double_to_float16_bits(double value) {
    union {
         double asDouble;
         uint64_t asUInt;
@@ -346,7 +297,7 @@ WEAK uint16_t halide_double_to_float16_bits(double value, halide_rounding_mode_t
     reEncodedExponent <<= 10; // Move bits into right position
     uint16_t result = signMask | reEncodedExponent | truncatedSignificand;
 
-    return performRounding(result, roundBit, stickyBit, signMask, rm);
+    return performRounding(result, roundBit, stickyBit, signMask);
 }
 
 

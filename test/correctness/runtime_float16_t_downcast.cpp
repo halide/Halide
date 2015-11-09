@@ -18,39 +18,13 @@ void h_assert(bool condition, const char *msg) {
 }
 
 void test_float(float input, DownCastedValue r) {
-    uint16_t floatAsHalfRZ = halide_float_to_float16_bits(input,
-                                                          halide_toward_zero);
-    uint16_t floatAsHalfRU = halide_float_to_float16_bits(input,
-                                                          halide_toward_positive_infinity);
-    uint16_t floatAsHalfRD = halide_float_to_float16_bits(input,
-                                                          halide_toward_negative_infinity);
-    uint16_t floatAsHalfRNE = halide_float_to_float16_bits(input,
-                                                           halide_to_nearest_ties_to_even);
-    uint16_t floatAsHalfRNA = halide_float_to_float16_bits(input,
-                                                           halide_to_nearest_ties_to_away);
-    h_assert(floatAsHalfRZ == r.RZ, "Failed RZ round from float");
-    h_assert(floatAsHalfRU == r.RU, "Failed RU round from float");
-    h_assert(floatAsHalfRD == r.RD, "Failed RD round from float");
+    uint16_t floatAsHalfRNE = halide_float_to_float16_bits(input);
     h_assert(floatAsHalfRNE == r.RNE, "Failed RNE round from float");
-    h_assert(floatAsHalfRNA == r.RNA, "Failed RNA round from float");
 }
 
 void test_double(double input, DownCastedValue r) {
-    uint16_t doubleAsHalfRZ = halide_double_to_float16_bits(input,
-                                                            halide_toward_zero);
-    uint16_t doubleAsHalfRU = halide_double_to_float16_bits(input,
-                                                            halide_toward_positive_infinity);
-    uint16_t doubleAsHalfRD = halide_double_to_float16_bits(input,
-                                                            halide_toward_negative_infinity);
-    uint16_t doubleAsHalfRNE = halide_double_to_float16_bits(input,
-                                                             halide_to_nearest_ties_to_even);
-    uint16_t doubleAsHalfRNA = halide_double_to_float16_bits(input,
-                                                             halide_to_nearest_ties_to_away);
-    h_assert(doubleAsHalfRZ == r.RZ, "Failed RZ round from double");
-    h_assert(doubleAsHalfRU == r.RU, "Failed RU round from double");
-    h_assert(doubleAsHalfRD == r.RD, "Failed RD round from double");
+    uint16_t doubleAsHalfRNE = halide_double_to_float16_bits(input);
     h_assert(doubleAsHalfRNE == r.RNE, "Failed RNE round from double");
-    h_assert(doubleAsHalfRNA == r.RNA, "Failed RNA round from double");
 }
 
 int main() {
