@@ -757,7 +757,22 @@ extern float halide_float16_bits_to_float(uint16_t);
  *  the double that represents the same value */
 extern double halide_float16_bits_to_double(uint16_t);
 
-// TODO: Conversion functions to half
+/** Rounding modes (IEEE754 2008 4.3 Rounding-direction attributes) */
+typedef enum halide_rounding_mode_t {
+    halide_toward_zero, ///< Round towards zero (IEEE754 2008 4.3.2)
+    halide_to_nearest_ties_to_even, ///< Round to nearest, when there is a tie pick even integral significand (IEEE754 2008 4.3.1)
+    halide_to_nearest_ties_to_away, ///< Round to nearest, when there is a tie pick value furthest away from zero (IEEE754 2008 4.3.1)
+    halide_toward_positive_infinity, ///< Round towards positive infinity (IEEE754 2008 4.3.2)
+    halide_toward_negative_infinity ///< Round towards negative infinity (IEEE754 2008 4.3.2)
+} halide_rounding_mode_t;
+
+/** Convert a ``float`` to the bits representing a half precision floating point
+ * number using the specified rounding mode*/
+extern uint16_t halide_float_to_float16_bits(float, halide_rounding_mode_t);
+
+/** Convert a ``double`` to the bits representing a half precision floating point
+ * number using the specified rounding mode*/
+extern uint16_t halide_double_to_float16_bits(double, halide_rounding_mode_t);
 
 //@}
 
