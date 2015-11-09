@@ -435,11 +435,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-}}}} // namespace Halide::Runtime::Internal::OpenCL
-
-extern "C" {
-
-WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
+  WEAK int common_device_free(void *user_context, buffer_t* buf, bool textures) {
     // halide_opencl_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_opencl_device_free on any buffer_t
     // including ones that have never been used with a GPU.
@@ -450,7 +446,7 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
     cl_mem dev_ptr = (cl_mem)halide_get_device_handle(buf->dev);
 
     debug(user_context)
-        << "CL: halide_opencl_device_free (user_context: " << user_context
+      << "CL: halide_opencl" << (textures ? "_textures" : "") << "_device_free (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     ClContext ctx(user_context);
@@ -483,6 +479,17 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
     return 0;
 }
 
+}}}} // namespace Halide::Runtime::Internal::OpenCL
+
+extern "C" {
+
+WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
+    return common_device_free(user_context, buf, false);
+}
+
+WEAK int halide_opencl_textures_device_free(void *user_context, buffer_t* buf) {
+    return common_device_free(user_context, buf, true);
+}
 
 WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, const char* src, int size) {
     debug(user_context)
@@ -710,6 +717,101 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     if (err != CL_SUCCESS || dev_ptr == 0) {
         debug(user_context) << get_opencl_error_name(err) << "\n";
         error(user_context) << "CL: clCreateBuffer failed: "
+                            << get_opencl_error_name(err);
+        return err;
+    } else {
+        debug(user_context) << (void *)dev_ptr << "\n";
+    }
+    buf->dev = halide_new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
+    if (buf->dev == 0) {
+        error(user_context) << "CL: out of memory allocating device wrapper.\n";
+        clReleaseMemObject(dev_ptr);
+        return -1;
+    }
+
+    debug(user_context)
+        << "    Allocated device buffer " << (void *)buf->dev
+        << " for buffer " << buf << "\n";
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return CL_SUCCESS;
+}
+
+WEAK int halide_opencl_textures_device_malloc(void *user_context, buffer_t* buf) {
+     debug(user_context)
+         << "CL: halide_opencl_textures_device_malloc (user_context: " << user_context
+         << ", buf: " << buf << ")\n";
+                 
+     ClContext ctx(user_context);
+                 
+     size_t size = buf_size(user_context, buf);
+     if (buf->dev) {
+         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+        return 0;
+    }
+
+    halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
+                                buf->stride[2] >= 0 && buf->stride[3] >= 0);
+
+    debug(user_context)
+        << "    Allocating image buffer of " << (int)size << " bytes,"
+        << " extents: " << buf->extent[0] << "x" << buf->extent[1] << "x" << buf->extent[2] << "x" << buf->extent[3]
+        << " strides: " << buf->stride[0] << "x" << buf->stride[1] << "x" << buf->stride[2] << "x" << buf->stride[3]
+        << " (" << buf->elem_size << " bytes per element)\n";
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    cl_int err;
+    debug(user_context) << "    clCreateImage -> " << (int)size << " ";
+    cl_mem_object_type image_type = buf->extent[2] > 0
+        ? CL_MEM_OBJECT_IMAGE2D_ARRAY
+        : CL_MEM_OBJECT_IMAGE2D;
+    if (image_type == CL_MEM_OBJECT_IMAGE2D) {
+        debug(user_context) << "created 2D image ";
+    } else {
+        debug(user_context) << "created 2D image array ";
+    }
+    cl_channel_type channel_type = 0;
+    switch (buf->elem_size) {
+    case 1:
+        channel_type = CL_UNSIGNED_INT8;
+        break;
+    case 2:
+        channel_type = CL_UNSIGNED_INT16;
+        break;
+    case 4:
+        channel_type = CL_UNSIGNED_INT32;
+        break;
+    default:
+        error(user_context) << "Invalid buffer elem_size: " << buf->elem_size << "\n";
+    }
+    cl_image_format image_format = { CL_R, channel_type };
+    cl_image_desc image_desc = {
+        image_type, // image_type
+        buf->extent[0], // image_width
+        buf->extent[1], // image_height
+        0, // image_depth
+        buf->extent[2], // image_array_size
+        0, // image_row_pitch
+        0, // image_slice_pitch
+        0, // num_mip_levels
+        0, // num_samples
+        NULL // buffer
+    };
+    cl_mem dev_ptr = clCreateImage(ctx.context,
+                                   CL_MEM_READ_WRITE,
+                                   &image_format,
+                                   &image_desc,
+                                   NULL,
+                                   &err);
+    if (err != CL_SUCCESS || dev_ptr == 0) {
+        error(user_context) << "CL: clCreateImage failed: "
                             << get_opencl_error_name(err);
         return err;
     } else {
@@ -1158,6 +1260,17 @@ WEAK halide_device_interface opencl_device_interface = {
     halide_release_jit_module,
     halide_opencl_device_malloc,
     halide_opencl_device_free,
+    halide_opencl_device_sync,
+    halide_opencl_device_release,
+    halide_opencl_copy_to_host,
+    halide_opencl_copy_to_device,
+};
+
+WEAK halide_device_interface opencl_textures_device_interface = {
+    halide_use_jit_module,
+    halide_release_jit_module,
+    halide_opencl_textures_device_malloc,
+    halide_opencl_textures_device_free,
     halide_opencl_device_sync,
     halide_opencl_device_release,
     halide_opencl_copy_to_host,

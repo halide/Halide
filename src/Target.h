@@ -75,7 +75,7 @@ struct Target {
 
         Metal, ///< Enable the (Apple) Metal runtime.
 
-	Textures, ///< Default to using textures for GPU buffers. Only usable with Metal and OpenCL
+        Textures, ///< Default to using textures for GPU buffers. Only usable with Metal and OpenCL
 
         FeatureEnd
     };

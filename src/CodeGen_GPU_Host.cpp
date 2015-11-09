@@ -241,8 +241,8 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
     for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
         // TODO(zalman): This is a special kind of ugly. Probably worth uniq'ing the collection of pointers.
         if (i.first != DeviceAPI::MetalTextures && i.first != DeviceAPI::OpenCLTextures) {
-	    delete i.second;
-	}
+            delete i.second;
+        }
     }
 }
 

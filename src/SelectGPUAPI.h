@@ -20,7 +20,7 @@ namespace Internal {
  * is true, an error is generated if the result is not Metal, OpenCL,
  * CUDA, or OpenGLCompute. */
 DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target,
-			   bool must_be_compute = false);
+                           bool must_be_compute = false);
 
 /** Replace for loops with GPU_Default device_api with an actual
  * device API depending on what's enabled in the target. Choose the
