@@ -10,10 +10,10 @@ SUBDIRS = median \
   dilate3x3 \
   gaussian5x5 \
   histogram \
-  conv3x3a16
+  conv3x3a16 \
+  conv3x3a32
 
 NOT_READY4PRIMTIME = \
-  conv3x3a32 \
   nv12torgb888 \
   sigma3x3 \
   bilateral \
