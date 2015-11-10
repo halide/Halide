@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
   conv3x3(x, y) = cast<uint8_t>
     (clamp(sum(cast<int32_t>(cast<int16_t>(In(x+r.x, y+r.y)) * cast<int16_t>(Mask(1+r.x, 1+r.y)))) >> 4, 0, 255));
 
-#if VECTOR
+#ifndef NOVECTOR
   conv3x3.vectorize(x, 1 << LOG2VLEN);
 #endif
   set_output_buffer_min(conv3x3, 0, 0);

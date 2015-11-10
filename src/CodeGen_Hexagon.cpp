@@ -1347,39 +1347,84 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
     std::vector<Pattern> Patterns;
     debug(4) << "Entered handleLargeVectors (Cast)\n";
     std::vector<Expr> matches;
+
+    // 8-bit -> 16-bit (2x widening)
+    Patterns.push_back(Pattern(cast(UInt(16, CPICK(128, 64)),
+                                    WPICK(wild_u8x128, wild_u8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzb)));
+    Patterns.push_back(Pattern(cast(UInt(16, CPICK(128, 64)),
+                                    WPICK(wild_i8x128, wild_i8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzb)));
+
+    Patterns.push_back(Pattern(cast(Int(16, CPICK(128, 64)),
+                                    WPICK(wild_u8x128, wild_u8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzb)));
+    Patterns.push_back(Pattern(cast(Int(16, CPICK(128, 64)),
+                                    WPICK(wild_i8x128, wild_i8x64)),
+                               IPICK(Intrinsic::hexagon_V6_vsb)));
+
+    // 16-bit -> 32-bit (2x widening)
+    Patterns.push_back(Pattern(cast(UInt(32, CPICK(128, 64)),
+                                    WPICK(wild_u16x128, wild_u16x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzh)));
+    Patterns.push_back(Pattern(cast(UInt(32, CPICK(128, 64)),
+                                    WPICK(wild_i16x128, wild_i16x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzh)));
+
+    Patterns.push_back(Pattern(cast(Int(32, CPICK(128, 64)),
+                                    WPICK(wild_u16x128, wild_u16x64)),
+                               IPICK(Intrinsic::hexagon_V6_vzh)));
+    Patterns.push_back(Pattern(cast(Int(32, CPICK(128, 64)),
+                                    WPICK(wild_i16x128, wild_i16x64)),
+                               IPICK(Intrinsic::hexagon_V6_vsh)));
+
+    // 8-bit -> 32-bit (4x widening)
+    // Note: listed intrinsic is the second step (16->32bit) widening
     Patterns.push_back(Pattern(cast(UInt(32, CPICK(128, 64)),
                                     WPICK(wild_u8x128, wild_u8x64)),
                                IPICK(Intrinsic::hexagon_V6_vzh)));
     Patterns.push_back(Pattern(cast(UInt(32, CPICK(128, 64)),
                                     WPICK(wild_i8x128, wild_i8x64)),
                                IPICK(Intrinsic::hexagon_V6_vzh)));
+
     Patterns.push_back(Pattern(cast(Int(32, CPICK(128, 64)),
                                     WPICK(wild_u8x128, wild_u8x64)),
                                IPICK(Intrinsic::hexagon_V6_vzh)));
     Patterns.push_back(Pattern(cast(Int(32, CPICK(128, 64)),
                                     WPICK(wild_i8x128, wild_i8x64)),
                                IPICK(Intrinsic::hexagon_V6_vsh)));
+
+
     for (size_t I = 0; I < Patterns.size(); ++I) {
         const Pattern &P = Patterns[I];
         if (expr_match(P.pattern, op, matches)) {
           // You have a vector that is u8x64 in matches. Extend this to u32x64.
           debug(4) << "HexCG::" << op->type <<
             " handleLargeVectors(const Cast *)\n";
-          debug(4) << "HexCG::First widening to 16bit elements\n";
           Intrinsic::ID IntrinsID = P.ID;
-          Type NewT = Type(op->type.code, 16, op->type.width);
-          Value *DoubleVector = codegen(cast(NewT, op->value));
+
+          Value *DoubleVector = NULL;
+          // First, check to see if we are widening 4x.
+          if ((op->value.type().bits == 8) && (op->type.bits == 32))
+          {
+            debug(4) << "HexCG::First widening 2x to 16bit elements\n";
+            Type NewT = Type(op->type.code, 16, op->type.width);
+            DoubleVector = codegen(cast(NewT, op->value));
+          } else {
+            DoubleVector = codegen(op->value);
+          }
+
           // We now have a vector is that u16x64/i16x64. Get the lower half of
           // this vector which contains the events elements of A and extend that
           // to 32 bits. Similarly, deal with the upper half of the double
           // vector.
           std::vector<Value *> Ops;
-          debug(4) << "HexCG::" << "Widening lower vector reg elements(even)"
-            " elements to 32 bit\n";
           getHighAndLowVectors(DoubleVector, Ops);
           Value *HiVecReg = Ops[0];
           Value *LowVecReg = Ops[1];
 
+          debug(4) << "HexCG::" << "Widening lower vector reg elements(even)"
+            " elements to 32 bit\n";
           Ops.clear();
           Ops.push_back(LowVecReg);
           Value *EvenRegisterPair =
