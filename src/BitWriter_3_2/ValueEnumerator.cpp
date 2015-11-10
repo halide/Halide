@@ -47,30 +47,30 @@ ValueEnumerator::ValueEnumerator(const llvm::Module &M,
          "not supported UseListOrders = predictUseListOrder(M)");
 
   // Enumerate the global variables.
-  for (llvm::Module::const_global_iterator I = M.global_begin(), E = M.global_end();
-       I != E; ++I)
-    EnumerateValue(I);
+  for (auto &I : M.globals()) {
+    EnumerateValue(&I);
+  }
 
   // Enumerate the functions.
-  for (llvm::Module::const_iterator I = M.begin(), E = M.end(); I != E; ++I) {
-    EnumerateValue(I);
-    EnumerateAttributes(cast<Function>(I)->getAttributes());
+  for (auto &I : M) {
+    EnumerateValue(&I);
+    EnumerateAttributes(cast<Function>(&I)->getAttributes());
   }
 
   // Enumerate the aliases.
-  for (llvm::Module::const_alias_iterator I = M.alias_begin(), E = M.alias_end();
-       I != E; ++I)
-    EnumerateValue(I);
+  for (auto &I : M.aliases()) {
+    EnumerateValue(&I);
+  }
 
   // Remember what is the cutoff between globalvalue's and other constants.
   unsigned FirstConstant = Values.size();
 
   // Enumerate the global variable initializers.
-  for (llvm::Module::const_global_iterator I = M.global_begin(), E = M.global_end();
-       I != E; ++I)
-    if (I->hasInitializer())
-      EnumerateValue(I->getInitializer());
-
+  for (auto &I : M.globals()) {
+    if (I.hasInitializer()) {
+      EnumerateValue(I.getInitializer());
+    }
+  }
   // Enumerate the aliasees.
   for (llvm::Module::const_alias_iterator I = M.alias_begin(), E = M.alias_end();
        I != E; ++I)
@@ -259,10 +259,9 @@ void ValueEnumerator::EnumerateValueSymbolTable(const ValueSymbolTable &VST) {
 /// EnumerateNamedMetadata - Insert all of the values referenced by
 /// named metadata in the specified module.
 void ValueEnumerator::EnumerateNamedMetadata(const llvm::Module &M) {
-  for (llvm::Module::const_named_metadata_iterator I = M.named_metadata_begin(),
-                                             E = M.named_metadata_end();
-       I != E; ++I)
-    EnumerateNamedMDNode(I);
+  for (auto &I : M.named_metadata()) {
+    EnumerateNamedMDNode(&I);
+  }
 }
 
 void ValueEnumerator::EnumerateNamedMDNode(const NamedMDNode *MD) {
@@ -489,23 +488,22 @@ void ValueEnumerator::incorporateFunction(const Function &F) {
   NumModuleMDs = MDs.size();
 
   // Adding function arguments to the value table.
-  for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();
-       I != E; ++I)
-    EnumerateValue(I);
+  for (auto &I : F.args()) {
+    EnumerateValue(&I);
+  }
 
   FirstFuncConstantID = Values.size();
 
   // Add all function-level constants to the value table.
-  for (Function::const_iterator BB = F.begin(), E = F.end(); BB != E; ++BB) {
-    for (BasicBlock::const_iterator I = BB->begin(), E = BB->end(); I!=E; ++I)
-      for (User::const_op_iterator OI = I->op_begin(), E = I->op_end();
-           OI != E; ++OI) {
-        if ((isa<Constant>(*OI) && !isa<GlobalValue>(*OI)) ||
-            isa<InlineAsm>(*OI))
-          EnumerateValue(*OI);
+  for (auto &BB : F) {
+    for (auto &I : BB)
+      for (auto &OI : I.operands()) {
+        if ((isa<Constant>(OI) && !isa<GlobalValue>(OI)) ||
+            isa<InlineAsm>(OI))
+          EnumerateValue(OI);
       }
-    BasicBlocks.push_back(BB);
-    ValueMap[BB] = BasicBlocks.size();
+    BasicBlocks.push_back(&BB);
+    ValueMap[&BB] = BasicBlocks.size();
   }
 
   // Optimize the constant layout.
@@ -519,18 +517,20 @@ void ValueEnumerator::incorporateFunction(const Function &F) {
 
   SmallVector<llvm::LocalAsMetadata *, 8> FnLocalMDVector;
   // Add all of the instructions.
-  for (Function::const_iterator BB = F.begin(), E = F.end(); BB != E; ++BB) {
-    for (BasicBlock::const_iterator I = BB->begin(), E = BB->end(); I!=E; ++I) {
-      for (User::const_op_iterator OI = I->op_begin(), E = I->op_end();
-           OI != E; ++OI) {
-        if (auto *MD = dyn_cast<llvm::MetadataAsValue>(&*OI))
-          if (auto *Local = dyn_cast<LocalAsMetadata>(MD->getMetadata()))
+  for (auto &BB : F) {
+    for (auto &I : BB) {
+      for (auto &OI : I.operands()) {
+        if (auto *MD = dyn_cast<llvm::MetadataAsValue>(&OI)) {
+          if (auto *Local = dyn_cast<LocalAsMetadata>(MD->getMetadata())) {
             // Enumerate metadata after the instructions they might refer to.
             FnLocalMDVector.push_back(Local);
+          }
+        }
       }
 
-      if (!I->getType()->isVoidTy())
-        EnumerateValue(I);
+      if (!I.getType()->isVoidTy()) {
+        EnumerateValue(&I);
+      }
     }
   }
 
@@ -557,8 +557,9 @@ void ValueEnumerator::purgeFunction() {
 static void IncorporateFunctionInfoGlobalBBIDs(const Function *F,
                                  DenseMap<const BasicBlock*, unsigned> &IDMap) {
   unsigned Counter = 0;
-  for (Function::const_iterator BB = F->begin(), E = F->end(); BB != E; ++BB)
-    IDMap[BB] = ++Counter;
+  for (auto &BB : *F) {
+    IDMap[&BB] = ++Counter;
+  }
 }
 
 /// getGlobalBasicBlockID - This returns the function-specific ID for the
