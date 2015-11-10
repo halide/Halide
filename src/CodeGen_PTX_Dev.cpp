@@ -420,7 +420,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     PM.run(*module);
 
-    #if LLVM_VERSION < 39
+    #if LLVM_VERSION < 38
     ostream.flush();
     #endif
 

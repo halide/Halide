@@ -122,7 +122,7 @@ ValueEnumerator::ValueEnumerator(const llvm::Module &M,
           EnumerateMetadata(MDs[i].second);
 
 //#if LLVM_VERSION >= 37
-#if LLVM_VERSION > 38
+#if LLVM_VERSION > 37
         if (I.getDebugLoc()) {
           MDNode* Scope = I.getDebugLoc().getScope();
           if (Scope) EnumerateMetadata(Scope);
@@ -301,7 +301,7 @@ void ValueEnumerator::EnumerateMetadata(const llvm::Metadata *MD) {
 
   HasMDString |= isa<MDString>(MD);
   //#if LLVM_VERSION >= 37
-  #if LLVM_VERSION > 38
+  #if LLVM_VERSION > 37
   HasDILocation |= isa<DILocation>(MD);
   #else
   HasDILocation |= isa<MDLocation>(MD);

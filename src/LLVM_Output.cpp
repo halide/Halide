@@ -214,7 +214,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     llvm::TargetMachine *target_machine = get_target_machine(module);
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
-    #if LLVM_VERSION >= 37
+    #if LLVM_VERSION == 37
     #ifdef NEWER
         llvm::DataLayout target_data_layout(target_machine->createDataLayout());
     #else
