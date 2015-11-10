@@ -1190,17 +1190,82 @@ CodeGen_Hexagon::handleLargeVectors(const Div *op) {
   }
   return NULL;
 }
+llvm::Value *
+CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  std::vector<Expr> Patterns, matches;
+  int num_hw_pair = (bytes_in_vector() / 2) * 2; // num half words in a pair.
+  int num_w_quad = (bytes_in_vector() / 4) * 4;
+  Patterns.push_back(((WPICK(wild_i32x128, wild_i32x64) *
+                      WPICK(wild_i32x128, wild_i32x64)) + (1 << 14))
+                     / Broadcast::make(wild_i32, num_w_quad));
+  Patterns.push_back(((WPICK(wild_i16x128, wild_i16x64) *
+                      WPICK(wild_i16x128, wild_i16x64)) + (1 << 14))
+                     / Broadcast::make(wild_i16, num_hw_pair));
+  for (size_t I = 0; I < Patterns.size(); ++I) {
+    Expr pat = Patterns[I];
+    if (expr_match(pat, op, matches)) {
+      Type t = matches[0].type();
+      if (t.bits == 32) {
+        Type narrow = Type(t.code, (t.bits/2), t.width);
+        matches[0] = lossless_cast(narrow, matches[0]);
+        matches[1] = lossless_cast(narrow, matches[1]);
+        if (!matches[0].defined() || !matches[1].defined())
+          return NULL;
+      }
+      int rt_shift_by = 0;
+      if (is_const_power_of_two_integer(matches[2], &rt_shift_by)
+          && rt_shift_by == 15) {
+        Intrinsic::ID IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyhvsrs);
+        std::vector<Value *> Ops, OpsA, OpsB;
+        Value *DoubleVecA = codegen(matches[0]);
+        Value *DoubleVecB = codegen(matches[1]);
+        getHighAndLowVectors(DoubleVecA, OpsA);
+        getHighAndLowVectors(DoubleVecB, OpsB);
+        Ops.push_back(OpsA[0]);
+        Ops.push_back(OpsB[0]);
+        Value *HighRes = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                                                                     IntrinsID),
+                                           Ops);
+        Ops.clear();
+        Ops.push_back(OpsA[1]);
+        Ops.push_back(OpsB[1]);
+        Value *LowRes = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+                                                                    IntrinsID),
+                                           Ops);
+        Ops.clear();
+        Ops.push_back(LowRes);
+        Ops.push_back(HighRes);
+        if (t.bits != 32)
+          return convertValueType(concat_vectors(Ops), llvm_type_of(op->type));
+        else
+          return convertValueType(concat_vectors(Ops),
+                                  llvm_type_of(matches[0].type()));
+      } else
+        return NULL;
+    }
+  }
+  return NULL;
+}
 void CodeGen_Hexagon::visit(const Div *op) {
   debug(1) << "HexCG: " << op->type <<  ", visit(Div)\n";
+  if (!op->type.is_vector()) {
+    CodeGen_Posix::visit(op);
+    return;
+  }
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
   value = emitBinaryOp(op, averages);
   if (!value) {
+    std::vector<Pattern> Patterns;
+    std::vector<Expr> matches;
     if (isLargeVector(op->type, native_vector_bits()))
       value = handleLargeVectors(op);
+    else if (isValidHexagonVectorPair(op->type, native_vector_bits())) {
+      if (possiblyCodeGenWideningMultiplySatRndSat(op))
+        return;
+    }
     else {
-      // If the Divisor is a multiple of 2, simply generate right shifts.
-      std::vector<Pattern> Patterns;
-      std::vector<Expr> matches;
+      // If the Divisor is a power of 2, simply generate right shifts.
       int WordsInVector  = native_vector_bits() / 32;
       int HalfWordsInVector = WordsInVector * 2;
       Patterns.push_back(Pattern(WPICK(wild_u32x32, wild_u32x16)
@@ -1236,10 +1301,11 @@ void CodeGen_Hexagon::visit(const Div *op) {
       }
     }
   }
-  checkVectorOp(op->type, "Unhandled case in visit(Div * , vector case)\n");
 
-  if (!value)
+  if (!value) {
+    checkVectorOp(op->type, "Unhandled case in visit(Div * , vector case)\n");
     CodeGen_Posix::visit(op);
+  }
   return;
 }
 
@@ -1380,10 +1446,16 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
                 "downcasting words to signed chars\n";
             } else {
               // i32->u8.
+              const Div *d = matches[0].as<Div>();
+              if (d) {
+                FirstStep = possiblyCodeGenWideningMultiplySatRndSat(d);
+              }
               // FirstSteType is int16
-              FirstStep = codegen(cast(FirstStepType,
-                                       max(min(matches[0], INT_16_IMAX),
-                                           INT_16_IMIN)));
+              if (!FirstStep) {
+                FirstStep = codegen(cast(FirstStepType,
+                                         max(min(matches[0], INT_16_IMAX),
+                                             INT_16_IMIN)));
+              }
             }
           } else {
             // u32->u8
