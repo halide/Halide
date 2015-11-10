@@ -22,8 +22,8 @@ struct ComplexExpr {
   // imaginary part of zero.
   ComplexExpr(Halide::Expr x, Halide::Expr y = 0.0f) : x(x), y(y) {}
 
-  Halide::Expr Re() { return x; }
-  Halide::Expr Im() { return y; }
+  Halide::Expr re() { return x; }
+  Halide::Expr im() { return y; }
 
   operator Halide::Tuple() const { return Halide::Tuple(x, y); }
 
@@ -36,90 +36,84 @@ struct ComplexExpr {
 
 // Define a typed Func for complex numbers.
 typedef FuncT<ComplexExpr> ComplexFunc;
-typedef FuncRefExprT<ComplexExpr> ComplexFuncRefExpr;
 
 // Function style real/imaginary part of a complex number (and real
 // numbers too).
-inline Halide::Expr Re(ComplexExpr z) { return z.Re(); }
-inline Halide::Expr Im(ComplexExpr z) { return z.Im(); }
-inline Halide::Expr Re(Halide::Expr x) { return x; }
-inline Halide::Expr Im(Halide::Expr x) { return 0.0f; }
+inline Halide::Expr re(ComplexExpr z) { return z.re(); }
+inline Halide::Expr im(ComplexExpr z) { return z.im(); }
+inline Halide::Expr re(Halide::Expr x) { return x; }
+inline Halide::Expr im(Halide::Expr x) { return 0.0f; }
 
-inline ComplexExpr Conjugate(ComplexExpr z) {
-  return ComplexExpr(Re(z), -Im(z));
+inline ComplexExpr conj(ComplexExpr z) {
+  return ComplexExpr(re(z), -im(z));
 }
 
 // Unary negation.
 inline ComplexExpr operator-(ComplexExpr z) {
-  return ComplexExpr(-Re(z), -Im(z));
+  return ComplexExpr(-re(z), -im(z));
 }
 // Complex arithmetic.
 inline ComplexExpr operator+(ComplexExpr a, ComplexExpr b) {
-  return ComplexExpr(Re(a) + Re(b), Im(a) + Im(b));
+  return ComplexExpr(re(a) + re(b), im(a) + im(b));
 }
 inline ComplexExpr operator+(ComplexExpr a, Halide::Expr b) {
-  return ComplexExpr(Re(a) + b, Im(a));
+  return ComplexExpr(re(a) + b, im(a));
 }
 inline ComplexExpr operator+(Halide::Expr a, ComplexExpr b) {
-  return ComplexExpr(a + Re(b), Im(b));
+  return ComplexExpr(a + re(b), im(b));
 }
 inline ComplexExpr operator-(ComplexExpr a, ComplexExpr b) {
-  return ComplexExpr(Re(a) - Re(b), Im(a) - Im(b));
+  return ComplexExpr(re(a) - re(b), im(a) - im(b));
 }
 inline ComplexExpr operator-(ComplexExpr a, Halide::Expr b) {
-  return ComplexExpr(Re(a) - b, Im(a));
+  return ComplexExpr(re(a) - b, im(a));
 }
 inline ComplexExpr operator-(Halide::Expr a, ComplexExpr b) {
-  return ComplexExpr(a - Re(b), -Im(b));
+  return ComplexExpr(a - re(b), -im(b));
 }
 inline ComplexExpr operator*(ComplexExpr a, ComplexExpr b) {
-  return ComplexExpr(Re(a) * Re(b) - Im(a) * Im(b),
-                     Re(a) * Im(b) + Im(a) * Re(b));
+  return ComplexExpr(re(a) * re(b) - im(a) * im(b),
+                     re(a) * im(b) + im(a) * re(b));
 }
 inline ComplexExpr operator*(ComplexExpr a, Halide::Expr b) {
-  return ComplexExpr(Re(a) * b, Im(a) * b);
+  return ComplexExpr(re(a) * b, im(a) * b);
 }
 inline ComplexExpr operator*(Halide::Expr a, ComplexExpr b) {
-  return ComplexExpr(a * Re(b), a * Im(b));
+  return ComplexExpr(a * re(b), a * im(b));
 }
 inline ComplexExpr operator/(ComplexExpr a, Halide::Expr b) {
-  return ComplexExpr(Re(a) / b, Im(a) / b);
+  return ComplexExpr(re(a) / b, im(a) / b);
 }
 
 // Compute exp(j*x)
-inline ComplexExpr Expj(Halide::Expr x) {
+inline ComplexExpr expj(Halide::Expr x) {
   return ComplexExpr(Halide::cos(x), Halide::sin(x));
-}
-
-// Compute |z|^2.
-inline Halide::Expr AbsSq(ComplexExpr z) {
-  return Re(z) * Re(z) + Im(z) * Im(z);
 }
 
 // Some helpers for doing basic Halide operations with complex numbers.
 inline ComplexExpr sum(ComplexExpr z, const std::string &s = "sum") {
-  return ComplexExpr(Halide::sum(Re(z), s + "_re"),
-                     Halide::sum(Im(z), s + "_im"));
+  return ComplexExpr(Halide::sum(re(z), s + "_re"),
+                     Halide::sum(im(z), s + "_im"));
 }
 inline ComplexExpr select(Halide::Expr c, ComplexExpr t, ComplexExpr f) {
-  return ComplexExpr(Halide::select(c, Re(t), Re(f)),
-                     Halide::select(c, Im(t), Im(f)));
+  return ComplexExpr(Halide::select(c, re(t), re(f)),
+                     Halide::select(c, im(t), im(f)));
 }
 inline ComplexExpr select(Halide::Expr c1, ComplexExpr t1,
                           Halide::Expr c2, ComplexExpr t2,
                           ComplexExpr f) {
-  return ComplexExpr(Halide::select(c1, Re(t1), c2, Re(t2), Re(f)),
-                     Halide::select(c1, Im(t1), c2, Im(t2), Im(f)));
+  return ComplexExpr(Halide::select(c1, re(t1), c2, re(t2), re(f)),
+                     Halide::select(c1, im(t1), c2, im(t2), im(f)));
 }
 template <typename T>
-inline ComplexExpr Cast(ComplexExpr z) {
-  return ComplexExpr(Halide::cast<T>(Re(z)), Halide::cast<T>(Im(z)));
+inline ComplexExpr cast(ComplexExpr z) {
+  return ComplexExpr(Halide::cast<T>(re(z)), Halide::cast<T>(im(z)));
 }
-inline ComplexExpr Cast(Halide::Type type, ComplexExpr z) {
-  return ComplexExpr(Halide::cast(type, Re(z)), Halide::cast(type, Im(z)));
+inline ComplexExpr cast(Halide::Type type, ComplexExpr z) {
+  return ComplexExpr(Halide::cast(type, re(z)), Halide::cast(type, im(z)));
 }
 inline ComplexExpr likely(ComplexExpr z) {
-  return ComplexExpr(Halide::likely(Re(z)), Halide::likely(Im(z)));
+  return ComplexExpr(Halide::likely(re(z)), Halide::likely(im(z)));
 }
 
 #endif

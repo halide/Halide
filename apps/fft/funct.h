@@ -53,6 +53,7 @@ class FuncT : public Halide::Func {
   explicit FuncT(const std::string &name) : Func(name) {}
   FuncT() {}
   explicit FuncT(Expr e) : Func(e) {}
+  explicit FuncT(Func f) : Func(f) {}
   explicit FuncT(Halide::Internal::Function f) : Func(f) {}
 
   FuncRefVarT<T> operator()() const { return Func::operator()(); }
