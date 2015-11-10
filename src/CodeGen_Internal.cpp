@@ -141,8 +141,6 @@ void Closure::pack_struct(llvm::Type *
     vector<string> nm = names();
     vector<llvm::Type*> ty = llvm_types(&context);
     for (size_t i = 0; i < nm.size(); i++) {
-#undef LLVM_VERSION
-#define LLVM_VERSION 36
 #if LLVM_VERSION >= 37
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
 #else

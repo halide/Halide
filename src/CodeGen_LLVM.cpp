@@ -1097,8 +1097,7 @@ Value *CodeGen_LLVM::buffer_elem_size(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -1109,8 +1108,7 @@ Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -1121,8 +1119,7 @@ Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -1133,8 +1130,7 @@ Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -1149,8 +1145,7 @@ Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -1164,8 +1159,7 @@ Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -1179,8 +1173,7 @@ Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -1190,8 +1183,7 @@ Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
 
 Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
         buffer_t_type,
 #endif
         buffer,
@@ -2450,8 +2442,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 for (int i = 0; i < int_args; i++) {
                     Value *coord_ptr =
                         builder->CreateConstInBoundsGEP1_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
                             coords_type,
 #endif
                             coords,
@@ -2482,8 +2473,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
                 Value *field_ptr =
                     builder->CreateConstInBoundsGEP2_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
                         trace_event_type,
 #endif
                         trace_event,
@@ -2588,8 +2578,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 for (size_t i = 0; i < args.size(); i++) {
                     Value *field_ptr =
                         builder->CreateConstInBoundsGEP2_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
                             struct_t,
 #endif
                             ptr,
@@ -2929,8 +2918,7 @@ Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, co
 
     Constant *zero = ConstantInt::get(i32, 0);
     Constant *zeros[] = {zero, zero};
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
 #else
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, zeros);
@@ -3209,8 +3197,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     // Use a constant offset from the base pointer
                     Value *p =
                         builder->CreateConstInBoundsGEP1_32(
-//#if LLVM_VERSION >= 37
-#if LLVM_VERSION >= 38
+#if LLVM_VERSION >= 37
                             llvm_type_of(ptr_type),
 #endif
                             ptr,

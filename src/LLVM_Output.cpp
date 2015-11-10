@@ -250,7 +250,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
-#ifndef NEW_PASS_MGR
+#ifdef OLD_PASS_MGR
     llvm::formatted_raw_ostream nout(*out);
     target_machine->addPassesToEmitFile(pass_manager, nout, file_type);
 #else

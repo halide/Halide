@@ -658,7 +658,7 @@ llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
         }
         if (T1 != Rt->getType())
           Rt = builder->CreateBitCast(Rt, T1);
-        Value *Call = builder->CreateCall2(F, Lt, Rt);
+        Value *Call = builder->CreateCall(F, Lt, Rt);
         if (BitCastNeeded)
           return builder->CreateBitCast(Call, BitCastBackTo);
         else
@@ -994,7 +994,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
 
     Halide::Type DestType = op->type;
     llvm::Type *DestLLVMType = llvm_type_of(DestType);
-    Value *Call = builder->CreateCall2(F, Lt, Rt);
+    Value *Call = builder->CreateCall(F, Lt, Rt);
     if (DestLLVMType != Call->getType())
       value = builder->CreateBitCast(Call, DestLLVMType);
     else
@@ -1019,7 +1019,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
 
     Halide::Type DestType = op->type;
     llvm::Type *DestLLVMType = llvm_type_of(DestType);
-    Value *Call = builder->CreateCall2(F, Lt, Rt);
+    Value *Call = builder->CreateCall(F, Lt, Rt);
     if (DestLLVMType != Call->getType())
       value = builder->CreateBitCast(Call, DestLLVMType);
     else
@@ -1654,7 +1654,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 
           Halide::Type DestType = op->type;
           llvm::Type *DestLLVMType = llvm_type_of(DestType);
-          Value *Call = builder->CreateCall2(F, Lt, Rt);
+          Value *Call = builder->CreateCall(F, Lt, Rt);
 
           if (DestLLVMType != Call->getType())
             value = builder->CreateBitCast(Call, DestLLVMType);
@@ -1976,9 +1976,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
       }
       Value *Call;
       if (InvertOperands)
-        Call = builder->CreateCall2(F, Op1, Op0);
+        Call = builder->CreateCall(F, Op1, Op0);
       else
-        Call = builder->CreateCall2(F, Op0, Op1);
+        Call = builder->CreateCall(F, Op0, Op1);
       value = builder->CreateBitCast(Call, DestLLVMType);
       return;
     }
