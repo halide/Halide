@@ -21,4 +21,4 @@ bench_64x64: bench_fft
 	./bench_fft 64 64
 
 clean:
-	rm -f bench_fft
+	rm -f bench_fft c2c.html r2c.html c2r.html

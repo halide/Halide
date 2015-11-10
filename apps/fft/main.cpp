@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         dft_out.compute_root();
 
         // Extract the real component and normalize.
-        filtered_c2c(x, y) = Re(dft_out(x, y));
+        filtered_c2c(x, y) = re(dft_out(x, y));
     }
 
     Func filtered_r2c;

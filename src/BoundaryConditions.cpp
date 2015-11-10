@@ -37,7 +37,7 @@ Func repeat_edge(const Func &source,
     return bounded;
 }
 
-Func constant_exterior(const Func &source, Expr value,
+Func constant_exterior(const Func &source, Tuple value,
                        const std::vector<std::pair<Expr, Expr>> &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
@@ -62,11 +62,23 @@ Func constant_exterior(const Func &source, Expr value,
     }
 
     Func bounded("constant_exterior");
-    bounded(args) = select(out_of_bounds, value, repeat_edge(source, bounds)(args));
+    if (value.as_vector().size() > 1) {
+        std::vector<Expr> def;
+        for (size_t i = 0; i < value.as_vector().size(); i++) {
+            def.push_back(select(out_of_bounds, value[i], repeat_edge(source, bounds)(args)[i]));
+        }
+        bounded(args) = Tuple(def);
+    } else {
+        bounded(args) = select(out_of_bounds, value[0], repeat_edge(source, bounds)(args));
+    }
 
     return bounded;
 }
 
+Func constant_exterior(const Func &source, Expr value,
+                       const std::vector<std::pair<Expr, Expr>> &bounds) {
+    return constant_exterior(source, Tuple({value}), bounds);
+}
 
 
 Func repeat_image(const Func &source,
