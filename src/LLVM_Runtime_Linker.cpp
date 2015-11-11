@@ -521,7 +521,7 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
 
     for (auto &fn : *m) {
         for (auto &basic_block : fn) {
-	    for (auto &instruction : basic_block) {
+            for (auto &instruction : basic_block) {
                 if (llvm::CallInst *call = llvm::dyn_cast<llvm::CallInst>(&instruction)) {
                     if (llvm::Function *called_fn = call->getCalledFunction()) {
                         if (std::find(posix_fns_begin, posix_fns_end, called_fn->getName()) != posix_fns_end) {
