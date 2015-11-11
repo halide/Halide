@@ -2670,7 +2670,7 @@ private:
                     ib = -ib;
                 }
 
-                if (ib >= 0 && ib < std::min(t.bits, 64)) {
+                if (ib >= 0 && ib < std::min(t.bits, 64U)) {
                     ib = 1LL << ib;
                     b = make_const(t, ib);
 

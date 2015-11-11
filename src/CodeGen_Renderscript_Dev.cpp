@@ -351,13 +351,13 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_GetElement_func(Type type) {
     std::string func_name;
     debug(2) << "fetch_GetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
     switch (type.code) {
-        case Type::TypeCode::UInt:
+        case Type::UInt:
             switch (type.width) {
                 case 1: func_name = "_Z20rsGetElementAt_uchar13rs_allocationjjj"; break;
                 case 4: func_name = "_Z21rsGetElementAt_uchar413rs_allocationjj"; break;
             }
             break;
-        case Type::TypeCode::Float:
+        case Type::Float:
             switch (type.width) {
                 case 1: func_name = "_Z20rsGetElementAt_float13rs_allocationjjj"; break;
                 case 4: func_name = "_Z21rsGetElementAt_float413rs_allocationjj"; break;
@@ -378,13 +378,13 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(Type type) {
     std::string func_name;
     debug(2) << "fetch_SetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
     switch (type.code) {
-        case Type::TypeCode::UInt:
+        case Type::UInt:
             switch (type.width) {
                 case 1: func_name = "_Z20rsSetElementAt_uchar13rs_allocationhjjj"; break;
                 case 4: func_name = "_Z21rsSetElementAt_uchar413rs_allocationDv4_hjj"; break;
             }
             break;
-        case Type::TypeCode::Float:
+        case Type::Float:
             switch (type.width) {
                 case 1: func_name = "_Z20rsSetElementAt_float13rs_allocationfjjj"; break;
                 case 4: func_name = "_Z21rsSetElementAt_float413rs_allocationDv4_fjj"; break;
