@@ -19,42 +19,28 @@ struct Expr;
  * be vectors of the same (by setting the 'width' field to something
  * larger than one). Front-end code shouldn't use vector
  * types. Instead vectorize a function. */
-struct Type {
-    /** The basic type code: signed integer, unsigned integer, or floating point.
-     *
-     * Note that TypeCode is guaranteed to have values identical to those of
-     * halide_type_code_t (HalideRuntime.h), but exists as a separate typedef
-     * to preserve source code compatibility.
-     */
-    enum TypeCode {
-        Int = halide_type_int,
-        UInt = halide_type_uint,
-        Float = halide_type_float,
-        Handle = halide_type_handle
-    } code;
+struct Type : halide_type_t {
 
-    /** The number of bits of precision of a single scalar value of this type. */
-    int bits;
+    /** Aliases for halide_type_code_t values for legacy compatibility
+     * and to match the Halide internal C++ style. */
+    // @{
+    static constexpr halide_type_code_t Int = halide_type_int;
+    static constexpr halide_type_code_t UInt = halide_type_uint;
+    static constexpr halide_type_code_t Float = halide_type_float;
+    static constexpr halide_type_code_t Handle = halide_type_handle;
+    // @}
 
     /** The number of bytes required to store a single scalar value of this type. Ignores vector width. */
     int bytes() const {return (bits + 7) / 8;}
 
-    /** How many elements (if a vector type). Should be 1 for scalar types. */
-    int width;
-
     // Default ctor initializes everything to predictable-but-unlikely values
-    Type() : code(Handle), bits(0), width(0) {}
+    Type() : halide_type_t((halide_type_code_t)Handle, 0, 0) {}
 
-    Type(TypeCode _code, int _bits, int _width) : code(_code), bits(_bits), width(_width) {}
+    Type(halide_type_code_t code, int bits, int width) : halide_type_t((halide_type_code_t)code, bits, width) {}
 
-    Type(const Type &that) : code(that.code), bits(that.bits), width(that.width) {}
+    Type(const Type &that) : halide_type_t(that) {}
 
-    Type& operator=(const Type& that) {
-        this->code = that.code;
-        this->bits = that.bits;
-        this->width = that.width;
-        return *this;
-    }
+    Type(const halide_type_t &that) : halide_type_t(that) {}
 
     /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code == UInt && bits == 1;}
@@ -164,81 +150,9 @@ inline Type Handle(int width = 1) {
     return t;
 }
 
-namespace {
-template<typename T>
-struct type_of_helper;
-
-template<typename T>
-struct type_of_helper<T *> {
-    operator Type() {
-        return Handle();
-    }
-};
-
-template<>
-struct type_of_helper<Halide::float16_t> {
-    operator Type() {return Float(16);}
-};
-
-template<>
-struct type_of_helper<float> {
-    operator Type() {return Float(32);}
-};
-
-template<>
-struct type_of_helper<double> {
-    operator Type() {return Float(64);}
-};
-
-template<>
-struct type_of_helper<uint8_t> {
-    operator Type() {return UInt(8);}
-};
-
-template<>
-struct type_of_helper<uint16_t> {
-    operator Type() {return UInt(16);}
-};
-
-template<>
-struct type_of_helper<uint32_t> {
-    operator Type() {return UInt(32);}
-};
-
-template<>
-struct type_of_helper<uint64_t> {
-    operator Type() {return UInt(64);}
-};
-
-template<>
-struct type_of_helper<int8_t> {
-    operator Type() {return Int(8);}
-};
-
-template<>
-struct type_of_helper<int16_t> {
-    operator Type() {return Int(16);}
-};
-
-template<>
-struct type_of_helper<int32_t> {
-    operator Type() {return Int(32);}
-};
-
-template<>
-struct type_of_helper<int64_t> {
-    operator Type() {return Int(64);}
-};
-
-template<>
-struct type_of_helper<bool> {
-    operator Type() {return Bool();}
-};
-}
-
 /** Construct the halide equivalent of a C type */
 template<typename T> Type type_of() {
-    return Type(type_of_helper<T>());
+    return Type(halide_type_of<T>());
 }
 
 }

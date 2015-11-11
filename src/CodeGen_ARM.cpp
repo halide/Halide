@@ -129,7 +129,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
 
         // For the 128-bit versions, we want to match any vector width.
         if (t.bits * t.width == 128) {
-            t.width = -1;
+            t.width = 0;
         }
 
         // Wider versions of the type
