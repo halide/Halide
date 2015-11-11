@@ -185,3 +185,4 @@ void YuvBufferT::rotate180() {
         break;
     };
 }
+
