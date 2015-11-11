@@ -152,3 +152,36 @@ const buffer_t &YuvBufferT::interleavedChromaView() const {
 const buffer_t &YuvBufferT::packedPlanarChromaView() const {
     return packedPlanarChromaView_;
 }
+
+namespace {
+void rotate_buffer_t(buffer_t *buf) {
+    buf->host += (buf->extent[0] - 1) * buf->stride[0] + (buf->extent[1] - 1) * buf->stride[1];
+    buf->stride[0] = -buf->stride[0];
+    buf->stride[1] = -buf->stride[1];
+}
+};
+
+void YuvBufferT::rotate180() {
+    rotate_buffer_t(&luma_);
+    rotate_buffer_t(&chromaU_);
+    rotate_buffer_t(&chromaV_);
+
+    rotate_buffer_t(&packedPlanarChromaView_);
+    rotate_buffer_t(&interleavedChromaView_);
+    
+    // Rotating the above two views effectively swaps U and V.
+    switch(chromaStorage_) {
+    case ChromaStorage::kPlanarPackedUFirst:
+        chromaStorage_ = ChromaStorage::kPlanarPackedVFirst;
+        break;
+    case ChromaStorage::kPlanarPackedVFirst:
+        chromaStorage_ = ChromaStorage::kPlanarPackedUFirst;
+        break;
+    case ChromaStorage::kInterleavedUFirst:
+        chromaStorage_ = ChromaStorage::kInterleavedVFirst;
+        break;
+    case ChromaStorage::kInterleavedVFirst:
+        chromaStorage_ = ChromaStorage::kInterleavedUFirst;
+        break;
+    };
+}

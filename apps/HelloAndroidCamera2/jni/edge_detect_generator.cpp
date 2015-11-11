@@ -36,7 +36,12 @@ public:
             .compute_root()
             .vectorize(x, 8)
             .parallel(y, 8);
-        
+
+        // Cope with rotated inputs
+        input.set_stride(0, Expr());
+        result.specialize(input.stride(0) == 1);
+        result.specialize(input.stride(0) == -1);
+
         return result;
     }
 };

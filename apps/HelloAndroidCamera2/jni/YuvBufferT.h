@@ -74,6 +74,9 @@ public:
     // Otherwise, returns a buffer_t pointing to nullptr.
     const buffer_t &packedPlanarChromaView() const;
 
+    // Rotate the buffer 180 degrees. Cheap. Just messes with the strides.
+    void rotate180();
+
 private:
 
     buffer_t luma_;

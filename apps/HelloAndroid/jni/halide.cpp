@@ -46,6 +46,15 @@ int main(int argc, char **argv) {
       result.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, Device_OpenCL);
     */
 
+    // We want to handle inputs that may be rotated 180 due to camera module placement.
+
+    // Unset the default stride constraint
+    input.set_stride(0, Expr());
+
+    // Make specialized versions for input stride +/-1 to get dense vector loads
+    curved.specialize(input.stride(0) == 1);
+    curved.specialize(input.stride(0) == -1);
+        
     std::vector<Argument> args;
     args.push_back(input);
     result.compile_to_file("halide_generated", args);
