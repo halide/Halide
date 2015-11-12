@@ -199,21 +199,21 @@ int main(int argc, char **argv) {
             // TODO: Add JavaScript support for 64-bit integers
             printf("Skipping uint64_t based print test for target which does not have 64-bit integer support.\n");
         } else {
-	    g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_uint()) << 32) | random_uint()));
-	    g.set_custom_print(halide_print);
-	    Image<double> img = g.realize(N);
+            g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_uint()) << 32) | random_uint()));
+            g.set_custom_print(halide_print);
+            Image<double> img = g.realize(N);
 
-	    assert(messages.size() == (size_t)N);
+            assert(messages.size() == (size_t)N);
 
-	    for (int i = 0; i < N; i++) {
-		snprintf(correct, sizeof(correct), "%e\n", img(i));
-		#ifdef __APPLE__
-		if (messages[i] == "-nan\n") messages[i] = "nan\n";
-		#endif
-		if (messages[i] != correct) {
-		    printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
-		    return -1;
-		}
+            for (int i = 0; i < N; i++) {
+                snprintf(correct, sizeof(correct), "%e\n", img(i));
+                #ifdef __APPLE__
+                if (messages[i] == "-nan\n") messages[i] = "nan\n";
+                #endif
+                if (messages[i] != correct) {
+                    printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
+                    return -1;
+                }
             }
         }
     }
