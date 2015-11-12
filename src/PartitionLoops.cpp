@@ -283,12 +283,13 @@ private:
         // Convert vector conditions to scalar conditions. In general
         // these are conservative, so they make the bound no longer
         // tight.
+        Expr devectorized = cond;
         if (cond.type().is_vector()) {
             if (const LT *lt = cond.as<LT>()) {
                 Expr a = max_lane(lt->a), b = min_lane(lt->b);
                 if (a.defined() && b.defined()) {
                     tight = false;
-                    cond = a < b;
+                    devectorized = a < b;
                 } else {
                     return cond;
                 }
@@ -296,7 +297,7 @@ private:
                 Expr a = max_lane(le->a), b = min_lane(le->b);
                 if (a.defined() && b.defined()) {
                     tight = false;
-                    cond = a <= b;
+                    devectorized = a <= b;
                 } else {
                     return cond;
                 }
@@ -304,7 +305,7 @@ private:
                 Expr a = min_lane(ge->a), b = max_lane(ge->b);
                 if (a.defined() && b.defined()) {
                     tight = false;
-                    cond = a >= b;
+                    devectorized = a >= b;
                 } else {
                     return cond;
                 }
@@ -312,7 +313,7 @@ private:
                 Expr a = min_lane(gt->a), b = max_lane(gt->b);
                 if (a.defined() && b.defined()) {
                     tight = false;
-                    cond = a > b;
+                    devectorized = a > b;
                 } else {
                     return cond;
                 }
@@ -326,8 +327,8 @@ private:
         // which this condition is true, and update min_max and
         // max_val accordingly.
 
-        debug(3) << "Condition: " << cond << "\n";
-        Expr solved = solve_expression(cond, loop_var, bound_vars);
+        debug(3) << "Condition: " << devectorized << "\n";
+        Expr solved = solve_expression(devectorized, loop_var, bound_vars);
         debug(3) << "Solved condition for " <<  loop_var << ": " << solved << "\n";
 
         // The solve failed.
@@ -336,7 +337,7 @@ private:
         }
 
         // Conditions in terms of an inner loop var can't be pulled outside
-        if (expr_uses_vars(cond, inner_loop_vars)) {
+        if (expr_uses_vars(devectorized, inner_loop_vars)) {
             return cond;
         }
 
@@ -653,6 +654,7 @@ class PartitionLoops : public IRMutator {
                 // then pull that out as a let statement.
                 min_steady = clamp(min_steady, op->min, op->min + op->extent);
                 string min_steady_name = op->name + ".prologue";
+                //min_steady = print(min_steady, min_steady_name);
                 lets.push_back(make_pair(min_steady_name, min_steady));
                 min_steady = Variable::make(Int(32), min_steady_name);
             } else {
@@ -665,6 +667,7 @@ class PartitionLoops : public IRMutator {
                 // statement.
                 max_steady = clamp(max_steady, min_steady, op->min + op->extent);
                 string max_steady_name = op->name + ".epilogue";
+                //max_steady = print(max_steady, max_steady_name);
                 lets.push_back(make_pair(max_steady_name, max_steady));
                 max_steady = Variable::make(Int(32), max_steady_name);
             } else {

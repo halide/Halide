@@ -30,6 +30,8 @@ int32_t buffer_total_size(const buffer_t *buf) {
 
 }
 
+#endif
+
 namespace Halide { namespace Internal {
 
 // TODO: Filter math routines, runtime routines, etc.
@@ -40,8 +42,6 @@ std::map<std::string, Halide::JITExtern> filter_externs(const std::map<std::stri
 }
 
 }} // close Halide::Internal namespace
-
-#endif
 
 #if WITH_JAVASCRIPT_V8
 

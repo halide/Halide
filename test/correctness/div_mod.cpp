@@ -267,13 +267,13 @@ Image<T> init(Type t, int unique, int width, int height) {
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
-bool div_mod() {
+bool div_mod(int vector_width) {
     int i, j;
     Type t = type_of<T>();
     BIG minval = minimum<T,BIG,bits>();
     bool success = true;
 
-    std::cout << "Test division of " << t << '\n';
+    std::cout << "Test division of " << t << 'x' << vector_width << '\n';
     t.bits = bits; // Override the bits
 
     // The parameter bits can be used to control the maximum data value.
@@ -299,6 +299,9 @@ bool div_mod() {
     Var x, y;
     f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
     Target target = get_jit_target_from_environment();
+    if (vector_width > 1) {
+        f.vectorize(x, vector_width);
+    }
     if (target.has_gpu_feature()) {
         f.compute_root().gpu_tile(x, y, 16, 16);
     }
@@ -414,19 +417,23 @@ bool f_mod() {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+
     bool success = true;
-#if 0
     success &= f_mod<float,double,32>();
 
-    success &= div_mod<uint8_t,uint64_t,8>();
-    success &= div_mod<uint16_t,uint64_t,16>();
-#endif
-    success &= div_mod<uint32_t,uint64_t,32>();
-#if 0
-    success &= div_mod<int8_t,int64_t,8>();
-    success &= div_mod<int16_t,int64_t,16>();
-    success &= div_mod<int32_t,int64_t,32>();
-#endif
+    for (int vector_width = 1; vector_width <= 4; vector_width *= 2) {
+        if (!target.supports_type(UInt(64))) {
+	    success &= div_mod<uint8_t,uint64_t,8>(vector_width);
+	    success &= div_mod<uint16_t,uint64_t,16>(vector_width);
+	    success &= div_mod<uint32_t,uint64_t,32>(vector_width);
+	}
+        if (!target.supports_type(Int(64))) {
+	    success &= div_mod<int8_t,int64_t,8>(vector_width);
+	    success &= div_mod<int16_t,int64_t,16>(vector_width);
+	    success &= div_mod<int32_t,int64_t,32>(vector_width);
+	}
+    }
 
     if (! success) {
         printf ("Failure!\n");

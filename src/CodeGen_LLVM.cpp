@@ -467,7 +467,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn, const std::st
     llvm::IRBuilder<> builder(module->getContext());
     builder.SetInsertPoint(block);
 
-    llvm::Value *arg_array = wrapper->arg_begin();
+    llvm::Value *arg_array = iterator_to_pointer(wrapper->arg_begin());
 
     std::vector<llvm::Value *> wrapper_args;
     for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
@@ -545,13 +545,10 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // Put the arguments in the symbol table
     {
         size_t i = 0;
-        for (llvm::Function::arg_iterator iter = function->arg_begin();
-             iter != function->arg_end();
-             iter++) {
-
-            sym_push(args[i].name, iter);
+        for (auto &arg : function->args()) {
+            sym_push(args[i].name, &arg);
             if (args[i].is_buffer()) {
-                push_buffer(args[i].name, iter);
+                push_buffer(args[i].name, &arg);
             }
 
             i++;
@@ -2967,16 +2964,17 @@ void CodeGen_LLVM::visit(const For *op) {
         // since the LLVM function has a random auto-generated name for
         // this argument.
         llvm::Function::arg_iterator iter = function->arg_begin();
-        sym_push("__user_context", iter);
+        sym_push("__user_context", iterator_to_pointer(iter));
 
         // Next is the loop variable.
         ++iter;
-        sym_push(op->name, iter);
+        sym_push(op->name, iterator_to_pointer(iter));
 
         // The closure pointer is the third and last argument.
         ++iter;
         iter->setName("closure");
-        Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
+        Value *closure_handle = builder->CreatePointerCast(iterator_to_pointer(iter),
+                                                           closure_t->getPointerTo());
         // Load everything from the closure into the new scope
         closure.unpack_struct(symbol_table, closure_t, closure_handle, builder);
 
@@ -3155,7 +3153,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     if (entry->empty()) {
         builder->SetInsertPoint(entry);
     } else {
-        builder->SetInsertPoint(entry->getFirstInsertionPt());
+        builder->SetInsertPoint(entry, entry->getFirstInsertionPt());
     }
     Value *size = ConstantInt::get(i32, n);
     Value *ptr = builder->CreateAlloca(t, size, name);

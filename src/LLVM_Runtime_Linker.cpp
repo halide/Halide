@@ -481,9 +481,8 @@ void undo_win32_name_mangling(llvm::Module *m) {
             builder.SetInsertPoint(block);
 
             vector<llvm::Value *> args;
-            for (llvm::Function::arg_iterator iter = f->arg_begin();
-                 iter != f->arg_end(); ++iter) {
-                args.push_back(iter);
+            for (auto &arg : f->args()) {
+                args.push_back(&arg);
             }
 
             llvm::CallInst *c = builder.CreateCall(unmangled, args);
@@ -520,14 +519,13 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
     string *posix_fns_begin = posix_fns;
     string *posix_fns_end = posix_fns + sizeof(posix_fns) / sizeof(posix_fns[0]);
 
-    for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
-        for (llvm::Function::iterator f_iter = iter->begin(); f_iter != iter->end(); ++f_iter) {
-            for (llvm::BasicBlock::iterator b_iter = f_iter->begin(); b_iter != f_iter->end(); ++b_iter) {
-                llvm::Value *inst = (llvm::Value *)b_iter;
-                if (llvm::CallInst *call = llvm::dyn_cast<llvm::CallInst>(inst)) {
-                    if (llvm::Function *fn = call->getCalledFunction()) {
-                        if (std::find(posix_fns_begin, posix_fns_end, fn->getName()) != posix_fns_end) {
-                            add_underscore_to_posix_call(call, fn, m);
+    for (auto &fn : *m) {
+        for (auto &basic_block : fn) {
+            for (auto &instruction : basic_block) {
+                if (llvm::CallInst *call = llvm::dyn_cast<llvm::CallInst>(&instruction)) {
+                    if (llvm::Function *called_fn = call->getCalledFunction()) {
+                        if (std::find(posix_fns_begin, posix_fns_end, called_fn->getName()) != posix_fns_end) {
+                            add_underscore_to_posix_call(call, called_fn, m);
                         }
                     }
                 }
