@@ -647,7 +647,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_win32_math_ll(c));
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
-            } else if (t.arch != Target::Hexagon) {
+            // } else if (t.arch != Target::Hexagon) {
+            } else {
                 //PDB: disabling posix math for hexagon. for now, at least.
                 modules.push_back(get_initmod_posix_math_ll(c));
             }
