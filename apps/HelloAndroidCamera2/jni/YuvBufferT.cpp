@@ -154,7 +154,7 @@ const buffer_t &YuvBufferT::packedPlanarChromaView() const {
 }
 
 namespace {
-void rotateBuffer(buffer_t *buf) {
+void rotateBuffer180(buffer_t *buf) {
     buf->host += (buf->extent[0] - 1) * buf->stride[0] + (buf->extent[1] - 1) * buf->stride[1];
     buf->stride[0] = -buf->stride[0];
     buf->stride[1] = -buf->stride[1];
@@ -162,12 +162,12 @@ void rotateBuffer(buffer_t *buf) {
 };
 
 void YuvBufferT::rotate180() {
-    rotateBuffer(&luma_);
-    rotateBuffer(&chromaU_);
-    rotateBuffer(&chromaV_);
+    rotateBuffer180(&luma_);
+    rotateBuffer180(&chromaU_);
+    rotateBuffer180(&chromaV_);
 
-    rotateBuffer(&packedPlanarChromaView_);
-    rotateBuffer(&interleavedChromaView_);
+    rotateBuffer180(&packedPlanarChromaView_);
+    rotateBuffer180(&interleavedChromaView_);
     
     // Rotating the above two views effectively swaps U and V.
     switch(chromaStorage_) {

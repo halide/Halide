@@ -37,7 +37,7 @@ public class AndroidBufferUtilities {
      * messes with the strides, doesn't actually move pixels around.
      * @return false if handle is 0L.
      */
-    public static native boolean rotateNativeYuvBufferT(long handle);
+    public static native boolean rotateNativeYuvBufferT180(long handle);
 
     /**
      * Lock a Surface, returning a native handle. It needs to be unlocked with unlockSurface().
