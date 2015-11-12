@@ -16,6 +16,9 @@ namespace Internal {
  */
 Stmt hexagon_ir_checker(Stmt);
 
+/* Lowering pass for Hexagon
+ */
+Stmt hexagon_lower(Stmt s);
 }
 }
 

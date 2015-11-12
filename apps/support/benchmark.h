@@ -36,18 +36,26 @@ double benchmark(int samples, int iterations, F op) {
 
 #else
 
+#ifndef NOCHRONO
 #include <chrono>
+#endif
 
 template <typename F>
 double benchmark(int samples, int iterations, F op) {
     double best = std::numeric_limits<double>::infinity();
     for (int i = 0; i < samples; i++) {
+#ifndef NOCHRONO
         auto t1 = std::chrono::high_resolution_clock::now();
+#endif
         for (int j = 0; j < iterations; j++) {
             op();
         }
+#ifndef NOCHRONO
         auto t2 = std::chrono::high_resolution_clock::now();
         double dt = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
+#else
+        double dt = 0;
+#endif
         if (dt < best) best = dt;
     }
     return best / iterations;

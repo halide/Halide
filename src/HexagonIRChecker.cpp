@@ -9,6 +9,30 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+/////////////////////////////////////////////////////////////////////////////
+class Hexagon_Lower : public IRMutator {
+    using IRMutator::visit;
+public:
+    void visit(const For *op) {
+        ForType for_type = op->for_type;
+
+        // .parallel() schedule run-time support not yet implemented
+        if (op->for_type == ForType::Parallel) {
+            user_warning << "Lowering parallel loop\n";
+            for_type = ForType::Serial;
+            stmt = For::make(op->name, op->min, op->extent, for_type, op->device_api, op->body);
+            return;
+        }
+        IRMutator::visit(op);
+    }
+};
+
+Stmt hexagon_lower(Stmt s) {
+    s = Hexagon_Lower().mutate(s);
+    return s;
+}
+
+/////////////////////////////////////////////////////////////////////////////
 class HexagonIRChecker  : public IRMutator {
   using IRMutator::visit;
 public:

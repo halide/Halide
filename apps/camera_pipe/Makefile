@@ -6,26 +6,51 @@ else
   SCHEDULE=0
 endif
 
+ifdef HEX_TOOLS
+  TGT_CXX=${HEX_TOOLS}/bin/hexagon-clang++
+  TGT_CXXFLAGS=${HEXAGON_CXXFLAGS}
+else
+  TGT_CXX=${CXX}
+  TGT_CXXFLAGS=${CXXFLAGS}
+endif
+
 all: process
 
 camera_pipe: ../../ camera_pipe.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g ../../$(LIB_HALIDE) -o camera_pipe -ldl -lpthread -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe -ldl -lpthread -lz $(LDFLAGS)
 
 curved.o: camera_pipe
-	./camera_pipe 8 0 # 8-bit output,
+	${GDB} ./camera_pipe 8 ${SCHEDULE} # 8-bit output,
 
 fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
-	$(CXX) $(CXXFLAGS) -c -Wall -fopenmp -O3 $< -o $@
+	$(TGT_CXX) $(TGT_CXXFLAGS) -c -Wall -fopenmp -O3 $< -o $@
 
 fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
-	$(CXX) $(CXXFLAGS) -c -Wall -fopenmp -O3 $< -o $@
+	$(TGT_CXX) $(TGT_CXXFLAGS) -c -Wall -fopenmp -O3 $< -o $@
 
+ifdef HEX_TOOLS
+process: process.cpp curved.o fcam/Demosaic.o
+	$(TGT_CXX) $(TGT_CXXFLAGS) -Wall -O3 $^ -o $@ -lhexagon
+else
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(PNGFLAGS)
+endif
 
 out.png: process
 	./process ../images/bayer_raw.png 3700 2.0 50 5 out.png
+
+ifdef HEX_TOOLS
+out.ppm: process
+	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_raw.pgm 3700 2.0 50 1 out.ppm
+	diff fcam_c.ppm ref_raw/fcam_c.ppm
+	diff out.ppm ref_raw/out.ppm
+
+out_small.ppm: process
+	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_small.pgm 3700 2.0 50 1 out_small.ppm
+	cmp fcam_c.ppm ref_small/fcam_c.ppm
+	cmp out_small.ppm ref_small/out_small.ppm
+endif
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz
@@ -34,4 +59,5 @@ camera_pipe.avi: camera_pipe.cpp viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTrac
 	bash viz.sh
 
 clean:
-	rm -f out.png process curved.o camera_pipe fcam/*.o
+	rm -f out.png out.ppm out_small.ppm fcam_c.ppm pmu_statsfile.txt pmu_stats.txt \
+	      process curved.o curved.s curved.h camera_pipe fcam/*.o
