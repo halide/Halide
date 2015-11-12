@@ -49,7 +49,7 @@ JNIEXPORT jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUti
 }
 
 JNIEXPORT
-jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_rotateNativeYuvBufferT(    
+jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_rotateNativeYuvBufferT180(    
     JNIEnv *env, jobject obj, jlong handle) {
     if (handle == 0L) {
         return false;

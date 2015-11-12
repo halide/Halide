@@ -44,7 +44,7 @@ public class HalideYuvBufferT implements AutoCloseable {
     }
 
     public void rotate180() {
-        AndroidBufferUtilities.rotateNativeYuvBufferT(mHandle);
+        AndroidBufferUtilities.rotateNativeYuvBufferT180(mHandle);
     }
 
     @Override
