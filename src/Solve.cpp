@@ -819,6 +819,7 @@ public:
 };
 
 class AndConditionOverDomain : public IRMutator {
+
     using IRMutator::visit;
 
     Scope<Interval> scope;
@@ -859,9 +860,9 @@ class AndConditionOverDomain : public IRMutator {
         }
         if (!a.defined() || !b.defined()) {
             if (flipped) {
-                expr = make_one(op->type.element_of());
+                expr = const_true();
             } else {
-                expr = make_zero(op->type.element_of());
+                expr = const_false();
             }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -889,9 +890,9 @@ class AndConditionOverDomain : public IRMutator {
     void visit(const EQ *op) {
         if (op->type.is_vector()) {
             if (flipped) {
-                expr = make_one(op->type.element_of());
+                expr = const_true();
             } else {
-                expr = make_zero(op->type.element_of());
+                expr = const_false();
             }
         } else {
             IRMutator::visit(op);
@@ -912,18 +913,25 @@ class AndConditionOverDomain : public IRMutator {
         if (scope.contains(op->name) && op->type.is_bool()) {
             Interval i = scope.get(op->name);
             if (!flipped) {
-                if (interval_has_lower_bound(i)) {
+                if (interval_has_lower_bound(i) && i.min.defined()) {
                     // Be conservative
                     expr = i.min;
                 } else {
                     expr = const_false();
                 }
             } else {
-                if (interval_has_upper_bound(i)) {
+                if (interval_has_upper_bound(i) && i.max.defined()) {
                     expr = i.max;
                 } else {
                     expr = const_true();
                 }
+            }
+        } else if (op->type.is_vector()) {
+            // Be conservative
+            if (!flipped) {
+                expr = const_false();
+            } else {
+                expr = const_true();
             }
         } else {
             expr = op;
@@ -1218,7 +1226,7 @@ void solve_test() {
     check_and_condition(x <= 0 || y > 2, const_true(), Interval(-100, 0));
     check_and_condition(x > 0 || y > 2, 2 < y, Interval(-100, 0));
 
-    debug(3) << "Solve test passed\n";
+    debug(0) << "Solve test passed\n";
 
 }
 
