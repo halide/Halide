@@ -143,10 +143,10 @@ bool load_png(const std::string &filename, ImageType *im) {
     /* initialize stuff */
     png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 
-    if (!check(png_ptr != NULL, "png_create_read_struct failed\n")) return false;
+    if (!check(png_ptr != nullptr, "png_create_read_struct failed\n")) return false;
 
     info_ptr = png_create_info_struct(png_ptr);
-    if (!check(info_ptr, "png_create_info_struct failed\n")) return false;
+    if (!check(info_ptr != nullptr, "png_create_info_struct failed\n")) return false;
 
     if (!check(!setjmp(png_jmpbuf(png_ptr)), "Error during init_io\n")) return false;
 
@@ -239,10 +239,10 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     // initialize stuff
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!check(png_ptr, "[write_png_file] png_create_write_struct failed\n")) return false;
+    if (!check(png_ptr != nullptr, "[write_png_file] png_create_write_struct failed\n")) return false;
 
     info_ptr = png_create_info_struct(png_ptr);
-    if (!check(info_ptr, "[write_png_file] png_create_info_struct failed\n")) return false;
+    if (!check(info_ptr != nullptr, "[write_png_file] png_create_info_struct failed\n")) return false;
 
     if (!check(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during init_io\n")) return false;
 

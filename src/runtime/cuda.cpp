@@ -88,11 +88,11 @@ extern "C" {
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
-// - halide_acquire_cl_context should always store a valid context/command
+// - halide_cuda_acquire_context should always store a valid context/command
 //   queue in ctx/q, or return an error code.
-// - A call to halide_acquire_cl_context is followed by a matching call to
-//   halide_release_cl_context. halide_acquire_cl_context should block while a
-//   previous call (if any) has not yet been released via halide_release_cl_context.
+// - A call to halide_cuda_acquire_context is followed by a matching call to
+//   halide_cuda_release_context. halide_cuda_acquire_context should block while a
+//   previous call (if any) has not yet been released via halide_cuda_release_context.
 WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
     // TODO: Should we use a more "assertive" assert? these asserts do
     // not block execution on failure.
@@ -298,6 +298,14 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         unsigned int version = 0;
         cuCtxGetApiVersion(*ctx, &version);
         debug(user_context) << *ctx << "(" << version << ")\n";
+    }
+    // Creation automatically pushes the context, but we'll pop to allow the caller
+    // to decide when to push.
+    err = cuCtxPopCurrent(&context);
+    if (err != CUDA_SUCCESS) {
+      error(user_context) << "CUDA: cuCtxPopCurrent failed: "
+                          << get_error_name(err);
+      return err;
     }
 
     return CUDA_SUCCESS;

@@ -99,6 +99,11 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
     private String mCameraId;
 
     /**
+     * Whether or not the camera is rotated 180 relative to the display.
+     */
+    private boolean mCameraRotated;
+
+    /**
      * An {@link SurfaceView} and its associated {@link Surface} for camera
      * preview.
      */
@@ -166,7 +171,12 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
                 NativeSurfaceHandle dstSurface = NativeSurfaceHandle.lockSurface(mSurface);
                 if (dstSurface != null) {
                     HalideYuvBufferT srcYuv = HalideYuvBufferT.fromImage(image);
+
                     if (srcYuv != null) {
+                        if (mCameraRotated) {
+                            srcYuv.rotate180();
+                        }
+
                         HalideYuvBufferT dstYuv = dstSurface.allocNativeYuvBufferT();
 
                         if (mUseEdgeDetector) {
@@ -318,6 +328,9 @@ public class Camera2BasicFragment extends Fragment implements View.OnClickListen
                         == CameraCharacteristics.LENS_FACING_FRONT) {
                     continue;
                 }
+
+                // Check if the sensor is rotated relative to what we expect.
+                mCameraRotated = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) >= 180;
 
                 StreamConfigurationMap map = characteristics.get(
                         CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
