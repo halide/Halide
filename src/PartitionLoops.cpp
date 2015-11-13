@@ -89,6 +89,7 @@ class RemoveLikelyTags : public IRMutator {
     }
 };
 
+// Check if an expression or statement uses a likely tag
 class HasLikelyTag : public IRVisitor {
     using IRVisitor::visit;
     void visit(const Call *op) {
@@ -109,6 +110,97 @@ bool has_likely_tag(Expr e) {
     return h.result;
 }
 
+// The goal of loop partitioning is to split loops up into a prologue,
+// a clean steady state, and an epilogue. The next visitor
+// (FindSimplifications) finds a list of simplifications that can be
+// applied to produce that clean steady-state version of the loop
+// body. It tries to simplify selects, mins, and maxes to just their
+// likely branch. For example:
+//
+//   select(a, likely(b), c)     -> b
+//   select(a, b, 5 + likely(c)) -> 5 + c
+//   max(a, likely(b))           -> b
+//
+// These three simplifications are only valid if a is true, false, or
+// less than b, respectively. So we visit the loop body looking for
+// these sort of things, record the associated conditions, and try to
+// solve for a range of the loop variable for which all of our
+// conditions are true (by solving for each one and then taking the
+// intersection). That gives us the clean steady state.
+//
+// It may be that we can also make some simplifications to the
+// prologue or epilogue. For example, consider the case:
+//
+//   select(x > 0, likely(expr_t), expr_f)
+//
+// It can simplify to expr_t when x > 0. However, if this is the sole
+// simplification which gives us a lower bound on x for the steady
+// state, we can also simplify this select in the prologue to just be
+// expr_f.
+//
+// Now consider this case:
+//
+//   (select(x > a, likely(expr_t1), expr_f1) +
+//    select(x > b, likely(expr_t2), expr_f2))
+//
+// The steady state starts at x == max(a, b), which we get from the
+// intersection of the intervals derived from each condition: x > a
+// and x > b. In the steady state, the expression simplifies to
+// expr_t1 + expr_t2. In the prologue we know that either x <= a or x
+// <= b, but we don't know which one might be true, so we can't make
+// any simplifications to the prologue.
+//
+// We may also encounter single conditions where we can simplify the
+// steady-state but not the prologue. Say we're splitting up a loop
+// over x and we encounter a condition that depends on a variable
+// introduced in some inner loop:
+//
+// for x:
+//   for z from 0 to 10:
+//     ... select(x > z, likely(expr_t), expr_f) ...
+//
+// This select definitely simplifies to expr_t when x > 9, because
+// that's the maximum value z could be, so we'll start the steady
+// state at x == 10. This means the prologue covers values like x ==
+// 5, where the select could be either true or false, so we can't make
+// any simplifications to the prologue.
+//
+// There are some simplifications that we won't be able to do. For
+// example, if we're partitioning the loop over x, and we encounter:
+//
+// for x:
+//   for z from 0 to 10:
+//     ... select(z < 5, likely(expr_t), expr_f)
+//
+// Restricting the range of x isn't going to simplify that expression
+// - it doesn't even depend on x. We just make all the simplifications
+// that we can, and take the intersection of the resulting regions. In
+// this case, we'll make that simplification later, when we do loop
+// partitioning over the loop in z. Some cases we'll never
+// handle. E.g. consider:
+//
+// for x:
+//   ... select(a + x*(b + x*(c + x*(d + x*e))) > 0, likely(expr_t), expr_f)
+//
+// In order to simplify that we'd have to come up with a formula that
+// tells us an interval where a quintic is strictly positive. No such
+// general formula exists (because no formula exists for the roots),
+// so there's no programmatic way we can partition the loop over x to
+// make that condition simplify. Finally my Galois theory course pays
+// off. For failures like this, we just drop the likely tag. So loop
+// partitioning is best-effort, but it should always work for things
+// like x > a. A simpler case for which we bail is:
+//
+// for x:
+//   ... select(x == 5, expr_t, likely(expr_f))
+//
+// This simplifies to the likely case in two disjoint ranges, but
+// we're only producing one steady state, and we have no reason to
+// believe one side is better than the other, so we just bail and drop
+// the likely tag.
+
+// First we define the struct that represents a single simplification
+// that can be applied to the steady state of the loop.
 struct Simplification {
     // This condition is sufficient for the simplification to occur.
     Expr condition;
@@ -125,6 +217,7 @@ struct Simplification {
     Interval interval;
 };
 
+// Then we define the visitor that hunts for them.
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
@@ -228,6 +321,7 @@ private:
     }
 };
 
+// Blindly apply a list of simplifications.
 class MakeSimplifications : public IRMutator {
     using IRMutator::visit;
 
@@ -255,6 +349,7 @@ class PartitionLoops : public IRMutator {
     void visit(const For *op) {
         Stmt body = op->body;
 
+        // Find simplifications in this loop body
         FindSimplifications finder;
         body.accept(&finder);
 
@@ -264,8 +359,11 @@ class PartitionLoops : public IRMutator {
         vector<Simplification> middle_simps, prologue_simps, epilogue_simps;
         bool lower_bound_is_tight = true, upper_bound_is_tight = true;
         for (auto &s : finder.simplifications) {
+            // Solve for the interval over which this simplification is true.
             s.interval = solve_for_inner_interval(s.condition, op->name);
             if (s.tight) {
+                // Check if the solve is tight. I.e. the condition is
+                // definitely false outside of the interval.
                 Interval outer = solve_for_outer_interval(s.condition, op->name);
                 s.tight &= equal(outer.min, s.interval.min) && equal(outer.max, s.interval.max);
             }
@@ -388,7 +486,10 @@ class PartitionLoops : public IRMutator {
         string epilogue_name = unique_name(op->name + ".epilogue", false);
 
         if (make_prologue) {
-            // They'll simplify better if you put them in lexicographic order
+            // They'll simplify better if you put them in
+            // lexicographic order. This puts things like (x+1) and
+            // (x+3) next to each other so that the simplifier sees
+            // them together and can drop one of them.
             std::sort(min_vals.begin(), min_vals.end(), IRDeepCompare());
             min_vals.push_back(op->min);
             prologue_val = std::accumulate(min_vals.begin() + 1, min_vals.end(), min_vals[0], Max::make);
@@ -408,6 +509,7 @@ class PartitionLoops : public IRMutator {
             internal_assert(!expr_uses_var(epilogue_val, op->name));
         }
 
+        // Bust serial for loops up into three.
         if (op->for_type == ForType::Serial) {
             stmt = For::make(op->name, min_steady, max_steady - min_steady,
                              op->for_type, op->device_api, simpler_body);
@@ -415,16 +517,17 @@ class PartitionLoops : public IRMutator {
             if (make_prologue) {
                 prologue = For::make(op->name, op->min, min_steady - op->min,
                                      op->for_type, op->device_api, prologue);
-                //prologue = Block::make(Evaluate::make(print(op->name, " prologue")), prologue);
                 stmt = Block::make(prologue, stmt);
             }
             if (make_epilogue) {
                 epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
                                      op->for_type, op->device_api, epilogue);
-                //epilogue = Block::make(Evaluate::make(print(op->name, " epilogue")), epilogue);
                 stmt = Block::make(stmt, epilogue);
             }
         } else {
+            // We don't have task parallelism. So for parallel for
+            // loops just put an if-then-else in the loop body. It
+            // should branch-predict to the steady state pretty well.
             Expr loop_var = Variable::make(Int(32), op->name);
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
@@ -441,10 +544,12 @@ class PartitionLoops : public IRMutator {
         }
 
         if (make_epilogue) {
+            // Uncomment to include code that prints the epilogue value
             //epilogue_val = print(epilogue_val, op->name, "epilogue");
             stmt = LetStmt::make(epilogue_name, epilogue_val, stmt);
         }
         if (make_prologue) {
+            // Uncomment to include code that prints the prologue value
             //prologue_val = print(prologue_val, op->name, "prologue");
             stmt = LetStmt::make(prologue_name, prologue_val, stmt);
         }
