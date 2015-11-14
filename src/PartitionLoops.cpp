@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <numeric>
 
 #include "PartitionLoops.h"
 #include "IRMutator.h"
