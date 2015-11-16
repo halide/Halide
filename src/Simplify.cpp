@@ -1675,7 +1675,6 @@ private:
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
         } else if (no_overflow_scalar_int(op->type) &&
-                   a.as<Variable>() &&
                    is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
@@ -2670,7 +2669,7 @@ private:
                     ib = -ib;
                 }
 
-                if (ib >= 0 && ib < std::min(t.bits, 64U)) {
+                if (ib >= 0 && ib < std::min(t.bits, 64U) - 1) {
                     ib = 1LL << ib;
                     b = make_const(t, ib);
 

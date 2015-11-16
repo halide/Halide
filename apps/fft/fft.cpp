@@ -876,12 +876,12 @@ Func fft2d_c2r(ComplexFunc c,
     // Unzip the DC and Nyquist DFTs.
     ComplexFunc dft0_unzipped("dft0_unzipped"); {
         dft0_unzipped(A({n0, n1}, args)) =
-                select(n1 == 0,      re(dft0(A({n0, 0}, args))),
-                       n1 == N1 / 2, im(dft0(A({n0, 0}, args))),
+                select(n1 <= 0,      re(dft0(A({n0, 0}, args))),
+                       n1 >= N1 / 2, im(dft0(A({n0, 0}, args))),
                                      likely(dft0(A({n0, min(n1, (N1 / 2) - 1)}, args))));
     }
 
-    ComplexFunc dft0_bounded = 
+    ComplexFunc dft0_bounded =
         ComplexFunc(repeat_edge((Func)dft0_unzipped, Expr(0), Expr(N0), Expr(0), Expr((N1 + 1) / 2 + 1)));
 
     // Zip two real DFTs X and Y into one complex DFT Z = X + j Y. For more
@@ -936,9 +936,6 @@ Func fft2d_c2r(ComplexFunc c,
     // Schedule the transpose step.
     if (cT_tiled.defined()) {
         cT_tiled.compute_at(dft0T, group);
-    } else {
-        c_zipped.compute_at(dft, outer)
-            .vectorize(n0);
     }
     dft0_tiled.compute_at(dft, outer);
 
@@ -951,17 +948,6 @@ Func fft2d_c2r(ComplexFunc c,
     }
 
     dft0T.compute_at(dft, outer);
-
-    // The zip operation simplifies around n1 = N1 / 2 (due to the conjugate
-    // symmetry property), and in each zip group, so we unroll around these two
-    // points.
-    Var n1o("n1o"), n1i("n1i");
-    zipped.compute_at(dft, outer)
-        .split(n1, n1o, n1i, N1 / 2)
-        .reorder(n0, n1o, n1i)
-        .unroll(n1o)
-        .vectorize(n0, zip_width)
-        .unroll(n0, 2);
 
     dft.compute_at(unzipped, outer);
 

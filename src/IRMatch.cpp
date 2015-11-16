@@ -32,9 +32,10 @@ void expr_match_test() {
 
     internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
                                (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(x + 4.5f)), matches) &&
+                    matches.size() == 3 &&
                     equal(matches[0], 81.0f * fy) &&
                     equal(matches[1], x/2) &&
-                    equal(matches[2], x + 4.5f)) << matches[0] << ", " << matches[1] << ", " << matches[2] << "\n";
+                    equal(matches[2], x + 4.5f));
 
     internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
                     matches.empty());
