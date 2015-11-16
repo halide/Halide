@@ -118,6 +118,7 @@ public:
         map<pair<string, int>, Box> bounds;
         vector<Expr> exprs;
         string stage_prefix;
+        bool is_output;
 
         // Computed expressions on the left and right-hand sides
         void compute_exprs() {
@@ -446,10 +447,21 @@ public:
         // Compute the intrinsic relationships between the stages of
         // the functions.
 
+        // Figure out which functions are outputs
+        vector<bool> is_output(f.size());
+        for (size_t i = 0; i < f.size(); i++) {
+            is_output[i] = false;
+            for (Function out : outputs) {
+                if (out.same_as(f[i])) {
+                    is_output[i] = true;
+                }
+            }
+        }
+
         // Figure out which functions will be inlined away
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
-            if (i < f.size() - 1 &&
+            if (!is_output[i] &&
                 f[i].schedule().compute_level().is_inline() &&
                 f[i].is_pure()) {
                 inlined[i] = true;
@@ -471,6 +483,7 @@ public:
             s.name = s.func.name();
             s.compute_exprs();
             s.stage_prefix = s.name + ".s0.";
+            s.is_output = is_output[i];
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
@@ -498,7 +511,8 @@ public:
         // Remove the inlined stages
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (!stages[i].func.schedule().compute_level().is_inline() ||
+            if (stages[i].is_output ||
+                !stages[i].func.schedule().compute_level().is_inline() ||
                 !stages[i].func.is_pure()) {
                 new_stages.push_back(stages[i]);
             }

@@ -1160,6 +1160,12 @@ Func &Func::trace_realizations() {
     return *this;
 }
 
+Func &Func::reset_schedule() {
+    invalidate_cache();
+    func.reset_schedule();
+    return *this;
+}
+
 void Func::debug_to_file(const string &filename) {
     invalidate_cache();
     func.debug_file() = filename;

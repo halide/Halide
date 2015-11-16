@@ -1498,6 +1498,11 @@ public:
      * halide_trace. */
     EXPORT Func &trace_realizations();
 
+    /** Reset the schedule on this Func to the default. Undoes all
+     * calls to compute_at, store_at, vectorize, reorder, split,
+     * bound, specialize, etc. */
+    EXPORT Func &reset_schedule();
+
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */
