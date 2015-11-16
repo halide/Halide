@@ -634,12 +634,12 @@ class RenormalizeGPULoops : public IRMutator {
             return;
         }
 
+        gpu_vars.push(op->name, 0);
+
         if (in_thread_loop) {
             IRMutator::visit(op);
             return;
         }
-
-        gpu_vars.push(op->name, 0);
 
         Stmt body = mutate(op->body);
         const For *f = body.as<For>();
@@ -652,10 +652,19 @@ class RenormalizeGPULoops : public IRMutator {
             inner = For::make(f->name, f->min, f->extent, f->for_type, f->device_api, inner);
             stmt = mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
-            internal_assert(a->name == "__shared");
-            Stmt inner = LetStmt::make(op->name, op->value, a->body);
-            inner = Allocate::make(a->name, a->type, a->extents, a->condition, inner);
-            stmt = mutate(inner);
+            internal_assert(a->name == "__shared" && a->extents.size() == 1);
+            if (expr_uses_var(a->extents[0], op->name)) {
+                // This var depends on the block index, and is used to
+                // define the size of shared memory. Can't move it
+                // inwards or outwards. Codegen will have to deal with
+                // it when it deduces how much shared memory to
+                // allocate.
+                IRMutator::visit(op);
+            } else {
+                Stmt inner = LetStmt::make(op->name, op->value, a->body);
+                inner = Allocate::make(a->name, a->type, a->extents, a->condition, inner);
+                stmt = mutate(inner);
+            }
         } else {
             IRMutator::visit(op);
         }
