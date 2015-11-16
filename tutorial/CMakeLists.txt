@@ -1,3 +1,5 @@
+include(../HalideGenerator.cmake)
+
 include_directories("${CMAKE_BINARY_DIR}/tools")
 macro(use_libpng TARGET)
   target_compile_definitions(${TARGET} PRIVATE ${PNG_DEFINITIONS})
