@@ -557,6 +557,23 @@ class PartitionLoops : public IRMutator {
     }
 };
 
+class ExprContainsLoad : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Load *op) {
+        result = true;
+    }
+
+public:
+    bool result = false;
+};
+
+bool expr_contains_load(Expr e) {
+    ExprContainsLoad l;
+    e.accept(&l);
+    return l.result;
+}
+
 // The loop partitioning logic can introduce if and let statements in
 // between GPU loop levels. This pass moves them inwards or outwards.
 class RenormalizeGPULoops : public IRMutator {
@@ -564,7 +581,7 @@ class RenormalizeGPULoops : public IRMutator {
 
     using IRMutator::visit;
 
-    // Track all vars that depend on GPU loop indices
+    // Track all vars that depend on GPU loop indices or loops inside GPU kernels.
     Scope<int> gpu_vars;
 
     vector<pair<string, Expr> > lifted_lets;
@@ -579,7 +596,7 @@ class RenormalizeGPULoops : public IRMutator {
 
         bool old_in_gpu_loop = in_gpu_loop;
 
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (in_gpu_loop || CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             gpu_vars.push(op->name, 0);
             in_gpu_loop = true;
         }
@@ -597,8 +614,6 @@ class RenormalizeGPULoops : public IRMutator {
         }
 
         in_gpu_loop = old_in_gpu_loop;
-
-
     }
 
     void visit(const LetStmt *op) {
@@ -607,7 +622,7 @@ class RenormalizeGPULoops : public IRMutator {
             return;
         }
 
-        if (!expr_uses_vars(op->value, gpu_vars)) {
+        if (!expr_uses_vars(op->value, gpu_vars) && !expr_contains_load(op->value)) {
             // This let value doesn't depend in the gpu vars. We
             // should lift it outermost. Note that this might expand
             // its scope to encompass other uses of the same name, so
