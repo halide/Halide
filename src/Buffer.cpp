@@ -238,6 +238,10 @@ int Buffer::copy_to_host() {
     return halide_copy_to_host(NULL, raw_buffer());
 }
 
+int Buffer::device_sync() {
+    return halide_device_sync(NULL, raw_buffer());
+}
+
 int Buffer::copy_to_device() {
   return halide_copy_to_device(NULL, raw_buffer(), NULL);
 }
