@@ -25,7 +25,9 @@ typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
  * maximum possible value)), compute two expressions that give the
  * minimum possible value and the maximum possible value of this
  * expression. Max or min may be undefined expressions if the value is
- * not bounded above or below.
+ * not bounded above or below. If the expression is a vector, also
+ * takes the bounds across the vector lanes and returns a scalar
+ * result.
  *
  * This is for tasks such as deducing the region of a buffer
  * loaded by a chunk of code.
