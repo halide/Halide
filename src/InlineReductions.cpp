@@ -4,6 +4,7 @@
 #include "IROperator.h"
 #include "IRMutator.h"
 #include "Debug.h"
+#include "CSE.h"
 
 namespace Halide {
 
@@ -106,7 +107,7 @@ Expr sum(Expr e, const std::string &name) {
 
 Expr sum(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
-    e = v.mutate(e);
+    e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to sum must reference a reduction domain";
 
@@ -121,7 +122,7 @@ Expr product(Expr e, const std::string &name) {
 
 Expr product(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
-    e = v.mutate(e);
+    e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to product must reference a reduction domain";
 
@@ -136,7 +137,7 @@ Expr maximum(Expr e, const std::string &name) {
 
 Expr maximum(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
-    e = v.mutate(e);
+    e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to maximum must reference a reduction domain";
 
@@ -152,7 +153,7 @@ Expr minimum(Expr e, const std::string &name) {
 
 Expr minimum(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
-    e = v.mutate(e);
+    e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to minimum must reference a reduction domain";
 
@@ -168,7 +169,7 @@ Tuple argmax(Expr e, const std::string &name) {
 
 Tuple argmax(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
-    e = v.mutate(e);
+    e = v.mutate(common_subexpression_elimination(e));
 
     Func f(name);
 
@@ -197,7 +198,7 @@ Tuple argmin(Expr e, const std::string &name) {
 
 Tuple argmin(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
-    e = v.mutate(e);
+    e = v.mutate(common_subexpression_elimination(e));
 
     Func f(name);
 

@@ -8,6 +8,7 @@
 #include "IRMutator.h"
 #include "Target.h"
 #include "Inline.h"
+#include "CodeGen_GPU_Dev.h"
 
 namespace Halide {
 namespace Internal {
@@ -117,6 +118,15 @@ Stmt build_provide_loop_nest(Function f,
         }
     }
 
+    Dim innermost_non_trivial_loop;
+    for (const Dim &d : s.dims()) {
+        if (d.for_type != ForType::Vectorized &&
+            d.for_type != ForType::Unrolled) {
+            innermost_non_trivial_loop = d;
+            break;
+        }
+    }
+
     // Define the function args in terms of the loop variables using the splits
     map<string, pair<string, Expr>> base_values;
     for (const Split &split : splits) {
@@ -150,8 +160,16 @@ Stmt build_provide_loop_nest(Function f,
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
-                base = Min::make(likely(base), old_max + (1 - split.factor));
+                // Only mark the base as likely (triggering a loop
+                // partition) if the outer var is the innermost
+                // non-trivial loop and it's a serial loop. This
+                // usually is due to an unroll or vectorize call.
+                if (split.outer == innermost_non_trivial_loop.var &&
+                    innermost_non_trivial_loop.for_type == ForType::Serial) {
+                    base = likely(base);
+                }
 
+                base = Min::make(base, old_max + (1 - split.factor));
             }
 
             string base_name = prefix + split.inner + ".base";
