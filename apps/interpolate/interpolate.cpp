@@ -20,6 +20,9 @@ int main(int argc, char **argv) {
 
     ImageParam input(Float(32), 3);
 
+    // Input must have four color channels - rgba
+    input.set_bounds(2, 0, 4);
+
     const int levels = 10;
 
     Func downsampled[levels];
@@ -108,14 +111,28 @@ int main(int argc, char **argv) {
         Var xi, yi;
         std::cout << "Flat schedule with parallelization + vectorization." << std::endl;
         for (int l = 1; l < levels-1; ++l) {
-            if (l > 0) downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
-            interpolated[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
-            interpolated[l].unroll(x, 2).unroll(y, 2);
+            downsampled[l]
+                .compute_root()
+                .parallel(y, 8)
+                .vectorize(x, 4);
+            interpolated[l]
+                .compute_root()
+                .parallel(y, 8)
+                .unroll(x, 2)
+                .unroll(y, 2)
+                .vectorize(x, 8);
         }
-        final.reorder(c, x, y).bound(c, 0, 3).parallel(y);
-        final.tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi);
-        final.bound(x, 0, input.width());
-        final.bound(y, 0, input.height());
+        final
+            .reorder(c, x, y)
+            .bound(c, 0, 3)
+            .unroll(c)
+            .tile(x, y, xi, yi, 2, 2)
+            .unroll(xi)
+            .unroll(yi)
+            .parallel(y, 8)
+            .vectorize(x, 8)
+            .bound(x, 0, input.width())
+            .bound(y, 0, input.height());
         break;
     }
     case 3:
