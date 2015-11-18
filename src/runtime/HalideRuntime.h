@@ -501,22 +501,28 @@ typedef enum halide_type_code_t
 struct halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
 #if __cplusplus >= 201103L
-  HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
+    HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
 #else
-  HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
 #endif
 
     /** The number of bits of precision of a single scalar value of this type. */
-  HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
 
     /** How many elements (if a vector type). Should be 1 for scalar types. */
-  HALIDE_ATTRIBUTE_ALIGN(2) uint16_t width;
+    HALIDE_ATTRIBUTE_ALIGN(2) uint16_t width;
 
 #ifdef __cplusplus
-    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t width = 1) : code(code), bits(bits), width(width) { }
+    /** Construct a runtime representation of a Halide type from:
+     * code: The fundamental type from an enum.
+     * bits: The bit size of one element.
+     * width: The number of vector elements in the type. */
+    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t width = 1)
+        : code(code), bits(bits), width(width) {
+    }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-  size_t bytes() { return (bits + 7) / 8; };
+    size_t bytes() { return (bits + 7) / 8; };
 #endif
 };
 

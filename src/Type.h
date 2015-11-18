@@ -39,16 +39,34 @@ struct Type {
     // Default ctor initializes everything to predictable-but-unlikely values
     Type() : type(Handle, 0, 0) {}
 
-    Type(halide_type_code_t code, uint8_t bits, int width) : type(code, (uint8_t)bits, (uint16_t)width) {}
+    
+    /** Construct a runtime representation of a Halide type from:
+     * code: The fundamental type from an enum.
+     * bits: The bit size of one element.
+     * width: The number of vector elements in the type. */
+    Type(halide_type_code_t code, uint8_t bits, int width) 
+        : type(code, (uint8_t)bits, (uint16_t)width) {
+    }
 
-    Type(const Type &that) : type(that) {}
+    /** Trivial copy constructor. */
+    Type(const Type &that) = default;
 
+    /** Type is a wrapper around halide_type_t with more methods for use
+     * inside the compiler. This simply constructs the wrapper around
+     * the runtime value. */
     Type(const halide_type_t &that) : type(that) {}
 
+    /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
+     * Representation is exactly equivalent. */
     operator halide_type_t() const { return type; }
 
+    /** Return the underlying data type of an element as an enum value. */
     halide_type_code_t code() const { return type.code; }
+
+    /** Return the bit size of a single element of this type. */
     int bits() const { return type.bits; }
+
+    /** Return the number of vector elements in this type. */
     int width() const { return type.width; }
 
     /** Return Type with same number of bits and width, but new_codefor a type code. */
@@ -100,7 +118,7 @@ struct Type {
 
     /** Produce a vector of this type, with 'width' elements */
     Type vector_of(int w) const {
-        return Type(code(), bits(), w);
+        return with_width(w);
     }
 
     /** Produce the type of a single element of this vector type */
