@@ -47,7 +47,7 @@ bool is_simple_const(Expr e) {
 
 // Returns true iff t is a scalar integral type where overflow is undefined
 bool no_overflow_scalar_int(Type t) {
-    return (t.is_scalar() && t.is_int() && t.bits >= 32);
+    return (t.is_scalar() && t.is_int() && t.bits() >= 32);
 }
 
 // Returns true iff t does not have a well defined overflow behavior.
@@ -197,8 +197,8 @@ private:
             // uint -> float
             expr = FloatImm::make(op->type, (double)u);
         } else if (cast &&
-                   op->type.code == cast->type.code &&
-                   op->type.bits < cast->type.bits) {
+                   op->type.code() == cast->type.code() &&
+                   op->type.bits() < cast->type.bits()) {
             // If this is a cast of a cast of the same type, where the
             // outer cast is narrower, the inner cast can be
             // eliminated.
@@ -1927,12 +1927,12 @@ private:
         Expr zero = make_zero(delta.type());
 
         if (is_zero(delta)) {
-            expr = const_true(op->type.width);
+            expr = const_true(op->type.width());
             return;
         } else if (is_const(delta)) {
             bool t = true;
             bool f = true;
-            for (int i = 0; i < delta.type().width; i++) {
+            for (int i = 0; i < delta.type().width(); i++) {
                 Expr deltai = extract_lane(delta, i);
                 if (is_zero(deltai)) {
                     f = false;
@@ -1941,10 +1941,10 @@ private:
                 }
             }
             if (t) {
-                expr = const_true(op->type.width);
+                expr = const_true(op->type.width());
                 return;
             } else if (f) {
-                expr = const_false(op->type.width);
+                expr = const_false(op->type.width());
                 return;
             }
         } else if (no_overflow_scalar_int(delta.type())) {
@@ -2068,25 +2068,25 @@ private:
         // Explicit comparison is preferred.
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
-            expr = make_bool(ia < ib, op->type.width);
+            expr = make_bool(ia < ib, op->type.width());
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
-            expr = make_bool(ua < ub, op->type.width);
+            expr = make_bool(ua < ub, op->type.width());
         } else if (const_int(a, &ia) &&
                    a.type().is_max(ia)) {
             // Comparing maximum of type < expression of type.  This can never be true.
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if (const_int(b, &ib) &&
                    b.type().is_min(ib)) {
             // Comparing expression of type < minimum of type.  This can never be true.
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if (is_zero(delta) ||
                    (no_overflow(delta.type()) &&
                     is_positive_const(delta))) {
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if (no_overflow(delta.type()) &&
                    is_negative_const(delta)) {
-            expr = const_true(op->type.width);
+            expr = const_true(op->type.width());
         } else if (broadcast_a &&
                    broadcast_b) {
             // Push broadcasts outwards
@@ -2323,29 +2323,29 @@ private:
                    ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
                     (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
             // a == b && a != b
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if (eq_b &&
                    neq_a &&
                    ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
                     (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
             // a != b && a == b
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if ((not_a && equal(not_a->a, b)) ||
                    (not_b && equal(not_b->a, a))) {
             // a && !a
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if (le_a &&
                    lt_b &&
                    equal(le_a->a, lt_b->b) &&
                    equal(le_a->b, lt_b->a)) {
             // a <= b && b < a
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if (lt_a &&
                    le_b &&
                    equal(lt_a->a, le_b->b) &&
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
-            expr = const_false(op->type.width);
+            expr = const_false(op->type.width());
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->width == broadcast_b->width) {
@@ -2391,29 +2391,29 @@ private:
                    ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
                     (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
             // a == b || a != b
-            expr = const_true(op->type.width);
+            expr = const_true(op->type.width());
         } else if (neq_a &&
                    eq_b &&
                    ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
                     (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
             // a != b || a == b
-            expr = const_true(op->type.width);
+            expr = const_true(op->type.width());
         } else if ((not_a && equal(not_a->a, b)) ||
                    (not_b && equal(not_b->a, a))) {
             // a || !a
-            expr = const_true(op->type.width);
+            expr = const_true(op->type.width());
         } else if (le_a &&
                    lt_b &&
                    equal(le_a->a, lt_b->b) &&
                    equal(le_a->b, lt_b->a)) {
             // a <= b || b < a
-            expr = const_true(op->type.width);
+            expr = const_true(op->type.width());
         } else if (lt_a &&
                    le_b &&
                    equal(lt_a->a, le_b->b) &&
                    equal(lt_a->b, le_b->a)) {
             // a < b || b <= a
-            expr = const_true(op->type.width);
+            expr = const_true(op->type.width());
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->width == broadcast_b->width) {
@@ -2669,7 +2669,7 @@ private:
                     ib = -ib;
                 }
 
-                if (ib >= 0 && ib < std::min(t.bits, 64U) - 1) {
+                if (ib >= 0 && ib < std::min(t.bits(), 64U) - 1) {
                     ib = 1LL << ib;
                     b = make_const(t, ib);
 
@@ -2802,13 +2802,12 @@ private:
                 }
 
                 if ((int)load_indices.size() == terms) {
-                    Type t = load_indices[0].type();
-                    t.width *= terms;
+                    Type t = load_indices[0].type().with_width(load_indices[0].type().width() * terms);
                     Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::Intrinsic);
                     interleaved_index = mutate(interleaved_index);
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
-                        t.width *= terms;
+                        t = t.with_width(t.width() * terms);
                         expr = Load::make(t, first_load->name, interleaved_index, first_load->image, first_load->param);
                         return;
                     }
@@ -2992,7 +2991,7 @@ private:
                 new_var = Variable::make(new_value.type().element_of(), new_name);
                 replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
                 new_value = broadcast->value;
-            } else if (cast && cast->type.bits > cast->value.type().bits) {
+            } else if (cast && cast->type.bits() > cast->value.type().bits()) {
                 // Widening casts get pushed inwards, narrowing casts
                 // stay outside. This keeps the temporaries small, and
                 // helps with peephole optimizations in codegen that
@@ -3303,8 +3302,7 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
-    Type t = e[0].type();
-    t.width *= e.size();
+    Type t = e[0].type().with_width(e[0].type().width() * e.size());
     return Call::make(t, Call::interleave_vectors, e, Call::Intrinsic);
 }
 

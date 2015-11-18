@@ -24,23 +24,23 @@ static string print_type_maybe_storage(Type type, bool storage) {
     ostringstream oss;
 
     // Storage uses packed vector types.
-    if (storage && type.width != 1) {
+    if (storage && type.width() != 1) {
         oss << "packed_";
     }
     if (type.is_float()) {
-        if (type.bits == 16) {
+        if (type.bits() == 16) {
             oss << "half";
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
             oss << "float";
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             oss << "double";
         } else {
             user_error << "Can't represent a float with this many bits in Metal C: " << type << "\n";
         }
 
     } else {
-        if (type.is_uint() && type.bits > 1) oss << 'u';
-        switch (type.bits) {
+        if (type.is_uint() && type.bits() > 1) oss << 'u';
+        switch (type.bits()) {
         case 1:
             oss << "bool";
             break;
@@ -60,14 +60,14 @@ static string print_type_maybe_storage(Type type, bool storage) {
             user_error << "Can't represent an integer with this many bits in Metal C: " << type << "\n";
         }
     }
-    if (type.width != 1) {
-        switch (type.width) {
+    if (type.width() != 1) {
+        switch (type.width()) {
         case 2:
         case 3:
         case 4:
         case 8:
         case 16:
-            oss << type.width;
+            oss << type.width();
             break;
         default:
             user_error <<  "Unsupported vector width in Metal C: " << type << "\n";
@@ -252,7 +252,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         stream << print_type(op->type)
                << " " << id << ";\n";
 
-        for (int i = 0; i < op->type.width; ++i) {
+        for (int i = 0; i < op->type.width(); ++i) {
             do_indent();
             stream
               << id << "[" << i << "]"
@@ -286,7 +286,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
 
         string id_index = print_expr(op->index);
 
-        for (int i = 0; i < t.width; ++i) {
+        for (int i = 0; i < t.width(); ++i) {
             do_indent();
             stream << "((" << get_memory_space(op->name) << " "
                    << print_storage_type(t.element_of()) << " *)"

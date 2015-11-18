@@ -30,7 +30,7 @@ Type random_type(int width) {
 }
 
 Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
-    if (T.is_int() && T.bits == 32) {
+    if (T.is_int() && T.bits() == 32) {
         overflow_undef = true;
     }
     if (T.is_scalar()) {
@@ -51,9 +51,9 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
         if (rand() % 2 == 0) {
             return Ramp::make(random_leaf(T.element_of(), overflow_undef),
                               random_leaf(T.element_of(), overflow_undef),
-                              T.width);
+                              T.width());
         } else {
-            return Broadcast::make(random_leaf(T.element_of(), overflow_undef), T.width);
+            return Broadcast::make(random_leaf(T.element_of(), overflow_undef), T.width());
         }
     }
 }
@@ -72,7 +72,7 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
     };
     const int op_count = sizeof(make_bin_op)/sizeof(make_bin_op[0]);
 
-    if (maybe_scalar && rand() % T.width == 0) {
+    if (maybe_scalar && rand() % T.width() == 0) {
         T = T.element_of();
     }
 
@@ -99,7 +99,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         Or::make,
     };
 
-    if (T.is_int() && T.bits == 32) {
+    if (T.is_int() && T.bits() == 32) {
         overflow_undef = true;
     }
 
@@ -119,16 +119,16 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
                                 random_expr(T, depth, overflow_undef));
 
     case 2:
-        if (T.width != 1) {
+        if (T.width() != 1) {
             return Broadcast::make(random_expr(T.element_of(), depth, overflow_undef),
-                                   T.width);
+                                   T.width());
         }
         break;
     case 3:
-        if (T.width != 1) {
+        if (T.width() != 1) {
             return Ramp::make(random_expr(T.element_of(), depth, overflow_undef),
                               random_expr(T.element_of(), depth, overflow_undef),
-                              T.width);
+                              T.width());
         }
         break;
 
@@ -150,8 +150,8 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         // Get a random type that isn't T or int32 (int32 can overflow and we don't care about that).
         Type subT;
         do {
-            subT = random_type(T.width);
-        } while (subT == T || (subT.is_int() && subT.bits == 32));
+            subT = random_type(T.width());
+        } while (subT == T || (subT.is_int() && subT.bits() == 32));
         return Cast::make(T, random_expr(subT, depth, overflow_undef));
     }
 
@@ -171,10 +171,10 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
 }
 
 bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) {
-    for (int j = 0; j < T.width; j++) {
+    for (int j = 0; j < T.width(); j++) {
         Expr a_j = a;
         Expr b_j = b;
-        if (T.width != 1) {
+        if (T.width() != 1) {
             a_j = extract_lane(a, j);
             b_j = extract_lane(b, j);
         }

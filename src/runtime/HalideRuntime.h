@@ -467,7 +467,6 @@ extern int halide_error_debug_to_file_failed(void *user_context, const char *fun
                                              const char *filename, int error_code);
 // @}
 
-
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always pointer-sized).
  * Note that the int/uint/float values do not imply a specific bit width
@@ -502,26 +501,22 @@ typedef enum halide_type_code_t
 struct halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
 #if __cplusplus >= 201103L
-    HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
+  HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
 #else
-  HALIDE_ATTRIBUTE_ALIGN(1) unsigned int code : 8; // halide_type_code_t
+  HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
 #endif
 
     /** The number of bits of precision of a single scalar value of this type. */
-  HALIDE_ATTRIBUTE_ALIGN(1) unsigned int bits : 8;
+  HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
 
     /** How many elements (if a vector type). Should be 1 for scalar types. */
-  HALIDE_ATTRIBUTE_ALIGN(2) unsigned int width : 16;
+  HALIDE_ATTRIBUTE_ALIGN(2) uint16_t width;
 
 #ifdef __cplusplus
     halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t width = 1) : code(code), bits(bits), width(width) { }
-    halide_type_t(const halide_type_t &rhs) : code(rhs.code), bits(rhs.bits), width(rhs.width) {}
-    halide_type_t &operator=(const halide_type_t &rhs) {
-        code = rhs.code;
-        bits = rhs.bits;
-        width = rhs.width;
-        return *this;
-    }
+
+    /** Size in bytes for a single element, even if width is not 1, of this type. */
+  size_t bytes() { return (bits + 7) / 8; };
 #endif
 };
 

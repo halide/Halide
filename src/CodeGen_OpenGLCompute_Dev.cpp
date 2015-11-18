@@ -30,10 +30,10 @@ Type map_type(const Type &type) {
     Type result = type;
     if (type.is_scalar()) {
         if (type.is_float()) {
-            user_assert(type.bits <= 32)
-                << "GLSL: Can't represent a float with " << type.bits << " bits.\n";
+            user_assert(type.bits() <= 32)
+                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
             result = Float(32);
-        } else if (type.bits == 1) {
+        } else if (type.bits() == 1) {
             result = Bool();
         } else if (type == Int(32) || type == UInt(32)) {
             // Keep unchanged
@@ -41,14 +41,12 @@ Type map_type(const Type &type) {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
     } else {
-        user_assert(type.width <= 4)
+        user_assert(type.width() <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
         user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
             << "GLSL: Can't represent vector type '"<< type << "'.\n";
-        Type scalar_type = type;
-        scalar_type.width = 1;
-        result = map_type(scalar_type);
-        result.width = type.width;
+        Type scalar_type = type.element_of();
+        result = map_type(scalar_type).with_width(type.width());
     }
     return result;
 }
@@ -57,7 +55,7 @@ Type map_type(const Type &type) {
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {
-        return mapped_type.is_scalar()? "uint": "uvec"  + std::to_string(mapped_type.width);
+        return mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.width());
     } else {
         return CodeGen_GLSLBase::print_type(type);
     }
