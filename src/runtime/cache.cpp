@@ -62,9 +62,14 @@ WEAK size_t full_extent(const buffer_t &buf) {
     size_t result = 1;
     for (int i = 0; i < 4; i++) {
         int32_t stride = buf.stride[i];
-        if (stride < 0) stride = -stride;
-        if ((buf.extent[i] * stride) > result) {
-            result = buf.extent[i] * stride;
+        size_t positive_stride;
+        if (stride < 0) {
+            positive_stride = (size_t)-stride;
+        } else {
+            positive_stride = (size_t)stride;
+        }
+        if ((buf.extent[i] * positive_stride) > result) {
+            result = buf.extent[i] * positive_stride;
         }
     }
     return result;
@@ -139,7 +144,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     for (size_t i = 0; i < key_size; i++) {
         key[i] = cache_key[i];
     }
-    for (int32_t i = 0; i < tuple_count; i++) {
+    for (uint32_t i = 0; i < tuple_count; i++) {
         buffer(i) = *tuple_buffers[i];
     }
     return true;
@@ -147,7 +152,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 
 WEAK void CacheEntry::destroy() {
     halide_free(NULL, key);
-    for (int32_t i = 0; i < tuple_count; i++) {
+    for (uint32_t i = 0; i < tuple_count; i++) {
         halide_device_free(NULL, &buffer(i));
         halide_free(NULL, buffer(i).host - extra_bytes_host_bytes);
     }
@@ -268,7 +273,7 @@ WEAK void prune_cache() {
             }
 
             // Decrease cache used amount.
-            for (int32_t i = 0; i < prune_candidate->tuple_count; i++) {
+            for (uint32_t i = 0; i < prune_candidate->tuple_count; i++) {
                 current_cache_size -= full_extent(prune_candidate->buffer(i));
             }
 
@@ -321,10 +326,10 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
-        if (entry->hash == h && entry->key_size == size &&
+        if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size) &&
             bounds_equal(entry->computed_bounds, *computed_bounds) &&
-            entry->tuple_count == tuple_count) {
+            entry->tuple_count == (uint32_t)tuple_count) {
 
             bool all_bounds_equal = true;
 
@@ -416,10 +421,10 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
-        if (entry->hash == h && entry->key_size == size &&
+        if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size) &&
             bounds_equal(entry->computed_bounds, *computed_bounds) &&
-            entry->tuple_count == tuple_count) {
+            entry->tuple_count == (uint32_t)tuple_count) {
 
             bool all_bounds_equal = true;
             bool no_host_pointers_equal = true;
@@ -518,7 +523,7 @@ WEAK void halide_memoization_cache_release(void *user_context, void *host) {
         halide_assert(user_context, entry->in_use_count > 0);
         entry->in_use_count--;
 #if CACHE_DEBUGGING
-    validate_cache();
+        validate_cache();
 #endif
     }
 
@@ -526,8 +531,8 @@ WEAK void halide_memoization_cache_release(void *user_context, void *host) {
 }
 
 WEAK void halide_memoization_cache_cleanup() {
-  debug(NULL) << "halide_memoization_cache_cleanup\n";
-    for (int i = 0; i < kHashTableSize; i++) {
+    debug(NULL) << "halide_memoization_cache_cleanup\n";
+    for (size_t i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
         cache_entries[i] = NULL;
         while (entry != NULL) {
