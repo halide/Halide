@@ -766,16 +766,15 @@ static void WriteMetadataAttachment(const Function &F,
   // METADATA_ATTACHMENT - [m x [value, [n x [id, mdnode]]]
   SmallVector<std::pair<unsigned, MDNode *>, 4> MDs;
 
-  for (Function::const_iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
-    for (BasicBlock::const_iterator I = BB->begin(), E = BB->end();
-         I != E; ++I) {
+  for (auto &BB : F)
+    for (auto &I : BB) {
       MDs.clear();
-      I->getAllMetadataOtherThanDebugLoc(MDs);
+      I.getAllMetadataOtherThanDebugLoc(MDs);
 
       // If no metadata, ignore instruction.
       if (MDs.empty()) continue;
 
-      Record.push_back(VE.getInstructionID(I));
+      Record.push_back(VE.getInstructionID(&I));
 
       for (unsigned i = 0, e = MDs.size(); i != e; ++i) {
         Record.push_back(MDs[i].first);

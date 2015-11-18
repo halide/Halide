@@ -38,7 +38,7 @@ public class HalideFilters {
 
     /**
      * A Halide-accelerated edge detector on the luminance channel. Chroma is set to 128.
-     * @eturns true if it succeeded.
+     * @return true if it succeeded.
      */
     private static native boolean edgeDetectHalide(long srcYuvHandle, long dstYuvHandle);
 }

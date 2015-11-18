@@ -305,7 +305,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
             // The user context is first argument of the function.
             // We retrieve it here so it's available for subsequent calls of
             // get_user_context().
-            sym_push("__user_context", function->arg_begin());
+            sym_push("__user_context", iterator_to_pointer(function->arg_begin()));
         }
 
         Value *user_context = get_user_context();

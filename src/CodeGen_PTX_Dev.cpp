@@ -71,9 +71,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     vector<string> arg_sym_names;
     {
         size_t i = 0;
-        for (llvm::Function::arg_iterator iter = function->arg_begin();
-             iter != function->arg_end();
-             iter++) {
+        for (auto &fn_arg : function->args()) {
 
             string arg_sym_name = args[i].name;
             if (args[i].is_buffer) {
@@ -82,8 +80,8 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                 // as foo.host in this scope.
                 arg_sym_name += ".host";
             }
-            sym_push(arg_sym_name, iter);
-            iter->setName(arg_sym_name);
+            sym_push(arg_sym_name, &fn_arg);
+            fn_arg.setName(arg_sym_name);
             arg_sym_names.push_back(arg_sym_name);
 
             i++;

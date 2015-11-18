@@ -18,12 +18,13 @@ public class CameraPreview extends SurfaceView
     private Camera mCamera;
     private SurfaceView mFiltered;
     private byte[] mPreviewData;
+    private int mCameraOrientation;
 
     // Link to native Halide code
     static {
         System.loadLibrary("native");
     }
-    private static native void processFrame(byte[] src, int w, int h, Surface dst);
+    private static native void processFrame(byte[] src, int w, int h, int orientation, Surface dst);
 
     public CameraPreview(Context context, SurfaceView filtered) {
         super(context);
@@ -43,7 +44,7 @@ public class CameraPreview extends SurfaceView
         }
         if (mFiltered.getHolder().getSurface().isValid()) {
             Camera.Size s = camera.getParameters().getPreviewSize();
-            processFrame(data, s.width, s.height, mFiltered.getHolder().getSurface());
+            processFrame(data, s.width, s.height, mCameraOrientation, mFiltered.getHolder().getSurface());
         } else {
             Log.d(TAG, "Invalid Surface!");
         }
@@ -116,6 +117,11 @@ public class CameraPreview extends SurfaceView
             mCamera.stopPreview();
         }
         mCamera = c;
+        android.hardware.Camera.CameraInfo info =
+            new android.hardware.Camera.CameraInfo();
+        // Assume that we opened camera 0
+        android.hardware.Camera.getCameraInfo(0, info); 
+        mCameraOrientation = info.orientation;
         if (mCamera != null) {
             startPreview(getHolder());
         }

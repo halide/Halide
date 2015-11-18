@@ -172,7 +172,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         string bounds_name = bounds_names.names[i];
         if (!bounds_name.empty()) {
             input_arg->setName(bounds_name);
-            sym_push(bounds_name, input_arg);
+            sym_push(bounds_name, iterator_to_pointer(input_arg));
             debug(2) << "  adding kernel function parameter " << bounds_name
                      << " with type ";
             if (debug::debug_level >= 2) {
