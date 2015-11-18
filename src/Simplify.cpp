@@ -1927,12 +1927,12 @@ private:
         Expr zero = make_zero(delta.type());
 
         if (is_zero(delta)) {
-            expr = const_true(op->type.width());
+            expr = const_true(op->type.lanes());
             return;
         } else if (is_const(delta)) {
             bool t = true;
             bool f = true;
-            for (int i = 0; i < delta.type().width(); i++) {
+            for (int i = 0; i < delta.type().lanes(); i++) {
                 Expr deltai = extract_lane(delta, i);
                 if (is_zero(deltai)) {
                     f = false;
@@ -1941,10 +1941,10 @@ private:
                 }
             }
             if (t) {
-                expr = const_true(op->type.width());
+                expr = const_true(op->type.lanes());
                 return;
             } else if (f) {
-                expr = const_false(op->type.width());
+                expr = const_false(op->type.lanes());
                 return;
             }
         } else if (no_overflow_scalar_int(delta.type())) {
@@ -2068,25 +2068,25 @@ private:
         // Explicit comparison is preferred.
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
-            expr = make_bool(ia < ib, op->type.width());
+            expr = make_bool(ia < ib, op->type.lanes());
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
-            expr = make_bool(ua < ub, op->type.width());
+            expr = make_bool(ua < ub, op->type.lanes());
         } else if (const_int(a, &ia) &&
                    a.type().is_max(ia)) {
             // Comparing maximum of type < expression of type.  This can never be true.
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if (const_int(b, &ib) &&
                    b.type().is_min(ib)) {
             // Comparing expression of type < minimum of type.  This can never be true.
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if (is_zero(delta) ||
                    (no_overflow(delta.type()) &&
                     is_positive_const(delta))) {
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if (no_overflow(delta.type()) &&
                    is_negative_const(delta)) {
-            expr = const_true(op->type.width());
+            expr = const_true(op->type.lanes());
         } else if (broadcast_a &&
                    broadcast_b) {
             // Push broadcasts outwards
@@ -2323,29 +2323,29 @@ private:
                    ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
                     (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
             // a == b && a != b
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if (eq_b &&
                    neq_a &&
                    ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
                     (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
             // a != b && a == b
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if ((not_a && equal(not_a->a, b)) ||
                    (not_b && equal(not_b->a, a))) {
             // a && !a
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if (le_a &&
                    lt_b &&
                    equal(le_a->a, lt_b->b) &&
                    equal(le_a->b, lt_b->a)) {
             // a <= b && b < a
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if (lt_a &&
                    le_b &&
                    equal(lt_a->a, le_b->b) &&
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
-            expr = const_false(op->type.width());
+            expr = const_false(op->type.lanes());
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->width == broadcast_b->width) {
@@ -2391,29 +2391,29 @@ private:
                    ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
                     (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
             // a == b || a != b
-            expr = const_true(op->type.width());
+            expr = const_true(op->type.lanes());
         } else if (neq_a &&
                    eq_b &&
                    ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
                     (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
             // a != b || a == b
-            expr = const_true(op->type.width());
+            expr = const_true(op->type.lanes());
         } else if ((not_a && equal(not_a->a, b)) ||
                    (not_b && equal(not_b->a, a))) {
             // a || !a
-            expr = const_true(op->type.width());
+            expr = const_true(op->type.lanes());
         } else if (le_a &&
                    lt_b &&
                    equal(le_a->a, lt_b->b) &&
                    equal(le_a->b, lt_b->a)) {
             // a <= b || b < a
-            expr = const_true(op->type.width());
+            expr = const_true(op->type.lanes());
         } else if (lt_a &&
                    le_b &&
                    equal(lt_a->a, le_b->b) &&
                    equal(lt_a->b, le_b->a)) {
             // a < b || b <= a
-            expr = const_true(op->type.width());
+            expr = const_true(op->type.lanes());
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->width == broadcast_b->width) {
@@ -2802,12 +2802,12 @@ private:
                 }
 
                 if ((int)load_indices.size() == terms) {
-                    Type t = load_indices[0].type().with_width(load_indices[0].type().width() * terms);
+                    Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
                     Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::Intrinsic);
                     interleaved_index = mutate(interleaved_index);
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
-                        t = t.with_width(t.width() * terms);
+                        t = t.with_lanes(t.lanes() * terms);
                         expr = Load::make(t, first_load->name, interleaved_index, first_load->image, first_load->param);
                         return;
                     }
@@ -3302,7 +3302,7 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
-    Type t = e[0].type().with_width(e[0].type().width() * e.size());
+    Type t = e[0].type().with_lanes(e[0].type().lanes() * e.size());
     return Call::make(t, Call::interleave_vectors, e, Call::Intrinsic);
 }
 

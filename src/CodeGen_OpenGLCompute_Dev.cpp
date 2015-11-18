@@ -41,12 +41,12 @@ Type map_type(const Type &type) {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
     } else {
-        user_assert(type.width() <= 4)
+        user_assert(type.lanes() <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
         user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
             << "GLSL: Can't represent vector type '"<< type << "'.\n";
         Type scalar_type = type.element_of();
-        result = map_type(scalar_type).with_width(type.width());
+        result = map_type(scalar_type).with_lanes(type.lanes());
     }
     return result;
 }
@@ -55,7 +55,7 @@ Type map_type(const Type &type) {
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {
-        return mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.width());
+        return mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.lanes());
     } else {
         return CodeGen_GLSLBase::print_type(type);
     }
@@ -170,8 +170,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
     ostringstream oss;
-    oss << print_type(op->type.vector_of(op->width)) << "(" << id_value << ")";
-    print_assignment(op->type.vector_of(op->width), oss.str());
+    oss << print_type(op->type.with_lanes(op->width)) << "(" << id_value << ")";
+    print_assignment(op->type.with_lanes(op->width), oss.str());
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {

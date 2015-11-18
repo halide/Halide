@@ -198,7 +198,7 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
 
     compare_scalar(a.code(), b.code());
     compare_scalar(a.bits(), b.bits());
-    compare_scalar(a.width(), b.width());
+    compare_scalar(a.lanes(), b.lanes());
 
     return result;
 }

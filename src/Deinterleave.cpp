@@ -171,7 +171,7 @@ private:
         if (op->type.is_scalar()) {
             expr = op;
         } else {
-            Type t = op->type.with_width(new_width);
+            Type t = op->type.with_lanes(new_width);
             expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
         }
     }
@@ -189,7 +189,7 @@ private:
             expr = op;
         } else {
 
-            Type t = op->type.with_width(new_width);
+            Type t = op->type.with_lanes(new_width);
             if (internal.contains(op->name)) {
                 expr = internal.get(op->name);
             } else if (external_lets.contains(op->name) &&
@@ -229,13 +229,13 @@ private:
         if (op->type.is_scalar()) {
             expr = op;
         } else {
-            Type t = op->type.with_width(new_width);
+            Type t = op->type.with_lanes(new_width);
             expr = Cast::make(t, mutate(op->value));
         }
     }
 
     void visit(const Call *op) {
-        Type t = op->type.with_width(new_width);
+        Type t = op->type.with_lanes(new_width);
 
         // Don't mutate scalars
         if (op->type.is_scalar()) {
@@ -324,43 +324,43 @@ private:
 };
 
 Expr extract_odd_lanes(Expr e, const Scope<int> &lets) {
-    internal_assert(e.type().width() % 2 == 0);
+    internal_assert(e.type().lanes() % 2 == 0);
     Deinterleaver d(lets);
     d.starting_lane = 1;
     d.lane_stride = 2;
-    d.new_width = e.type().width()/2;
+    d.new_width = e.type().lanes()/2;
     e = d.mutate(e);
     return simplify(e);
 }
 
 Expr extract_even_lanes(Expr e, const Scope<int> &lets) {
-    internal_assert(e.type().width() % 2 == 0);
+    internal_assert(e.type().lanes() % 2 == 0);
     Deinterleaver d(lets);
     d.starting_lane = 0;
     d.lane_stride = 2;
-    d.new_width = (e.type().width()+1)/2;
+    d.new_width = (e.type().lanes()+1)/2;
     e = d.mutate(e);
     return simplify(e);
 }
 
 Expr extract_even_lanes(Expr e) {
-    internal_assert(e.type().width() % 2 == 0);
+    internal_assert(e.type().lanes() % 2 == 0);
     Scope<int> lets;
     return extract_even_lanes(e, lets);
 }
 
 Expr extract_odd_lanes(Expr e) {
-    internal_assert(e.type().width() % 2 == 0);
+    internal_assert(e.type().lanes() % 2 == 0);
     Scope<int> lets;
     return extract_odd_lanes(e, lets);
 }
 
 Expr extract_mod3_lanes(Expr e, int lane, const Scope<int> &lets) {
-    internal_assert(e.type().width() % 3 == 0);
+    internal_assert(e.type().lanes() % 3 == 0);
     Deinterleaver d(lets);
     d.starting_lane = lane;
     d.lane_stride = 3;
-    d.new_width = (e.type().width()+2)/3;
+    d.new_width = (e.type().lanes()+2)/3;
     e = d.mutate(e);
     return simplify(e);
 }
@@ -369,7 +369,7 @@ Expr extract_lane(Expr e, int lane) {
     Scope<int> lets;
     Deinterleaver d(lets);
     d.starting_lane = lane;
-    d.lane_stride = e.type().width();
+    d.lane_stride = e.type().lanes();
     d.new_width = 1;
     e = d.mutate(e);
     return simplify(e);
@@ -386,7 +386,7 @@ class Interleaver : public IRMutator {
     int num_lanes;
 
     Expr deinterleave_expr(Expr e) {
-        if (e.type().width() <= num_lanes) {
+        if (e.type().lanes() <= num_lanes) {
             // Just scalarize
             return e;
         } else if (num_lanes == 2) {
@@ -442,11 +442,11 @@ class Interleaver : public IRMutator {
 
         // For vector lets, we may additionally need a let defining the even and odd lanes only
         if (value.type().is_vector()) {
-            if (value.type().width() % 2 == 0) {
+            if (value.type().lanes() % 2 == 0) {
                 result = T::make(op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
                 result = T::make(op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
             }
-            if (value.type().width() % 3 == 0) {
+            if (value.type().lanes() % 3 == 0) {
                 result = T::make(op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
                 result = T::make(op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
                 result = T::make(op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
@@ -654,8 +654,8 @@ class Interleaver : public IRMutator {
             internal_assert(base.defined());
 
             // Generate a single interleaving store.
-            t = t.with_width(width*stores.size());
-            Expr index = Ramp::make(base, make_one(Int(32)), t.width());
+            t = t.with_lanes(width*stores.size());
+            Expr index = Ramp::make(base, make_one(Int(32)), t.lanes());
             Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
             Stmt new_store = Store::make(store->name, value, index);
 

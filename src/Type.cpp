@@ -26,7 +26,7 @@ int64_t min_int(int bits) {
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
     if (is_vector()) {
-        return Internal::Broadcast::make(element_of().max(), width());
+        return Internal::Broadcast::make(element_of().max(), lanes());
     } else if (is_int()) {
         return Internal::IntImm::make(*this, max_int(bits()));
     } else if (is_uint()) {
@@ -50,7 +50,7 @@ Halide::Expr Type::max() const {
 /** Return an expression which is the minimum value of this type */
 Halide::Expr Type::min() const {
     if (is_vector()) {
-        return Internal::Broadcast::make(element_of().min(), width());
+        return Internal::Broadcast::make(element_of().min(), lanes());
     } else if (is_int()) {
         return Internal::IntImm::make(*this, min_int(bits()));
     } else if (is_uint()) {
@@ -100,7 +100,7 @@ bool Type::is_min(uint64_t x) const {
 }
 
 bool Type::can_represent(Type other) const {
-    if (width() != other.width()) return false;
+    if (lanes() != other.lanes()) return false;
     if (is_int()) {
         return ((other.is_int() && other.bits() <= bits()) ||
                 (other.is_uint() && other.bits() < bits()));

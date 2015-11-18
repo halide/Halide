@@ -528,7 +528,7 @@ protected:
     }
 
     Type float_type(Expr e) {
-        return Float(e.type().bits(), e.type().width());
+        return Float(e.type().bits(), e.type().lanes());
     }
 
     template<typename T>
