@@ -28,9 +28,9 @@ class VectorizeLoops : public IRMutator {
         int scalar_lane;
 
         Expr widen(Expr e, int width) {
-            if (e.type().width == width) {
+            if (e.type().width() == width) {
                 return e;
-            } else if (e.type().width == 1) {
+            } else if (e.type().width() == 1) {
                 return Broadcast::make(e, width);
             } else {
                 internal_error << "Mismatched vector widths in VectorSubs\n";
@@ -45,7 +45,7 @@ class VectorizeLoops : public IRMutator {
             if (value.same_as(op->value)) {
                 expr = op;
             } else {
-                Type t = op->type.vector_of(value.type().width);
+                Type t = op->type.vector_of(value.type().width());
                 expr = Cast::make(t, value);
             }
         }
@@ -75,7 +75,7 @@ class VectorizeLoops : public IRMutator {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
-                int w = std::max(a.type().width, b.type().width);
+                int w = std::max(a.type().width(), b.type().width());
                 expr = T::make(widen(a, w), widen(b, w));
             }
         }
@@ -105,8 +105,8 @@ class VectorizeLoops : public IRMutator {
                 false_value.same_as(op->false_value)) {
                 expr = op;
             } else {
-                unsigned int width = std::max(true_value.type().width, false_value.type().width);
-                width = std::max(width, condition.type().width);
+                unsigned int width = std::max(true_value.type().width(), false_value.type().width());
+                width = std::max(width, condition.type().width());
                 // Widen the true and false values, but we don't have to widen the condition
                 true_value = widen(true_value, width);
                 false_value = widen(false_value, width);
@@ -119,7 +119,7 @@ class VectorizeLoops : public IRMutator {
 
             // Internal allocations always get vectorized.
             if (internal_allocations.contains(op->name)) {
-                int width = replacement.type().width;
+                int width = replacement.type().width();
                 if (index.type().is_scalar()) {
                     if (scalarized) {
                         index = Add::make(Mul::make(index, width), scalar_lane);
@@ -136,7 +136,7 @@ class VectorizeLoops : public IRMutator {
             if (index.same_as(op->index)) {
                 expr = op;
             } else {
-                int w = index.type().width;
+                int w = index.type().width();
                 expr = Load::make(op->type.vector_of(w), op->name, index, op->image, op->param);
             }
         }
@@ -150,8 +150,8 @@ class VectorizeLoops : public IRMutator {
             if (op->name == Call::shuffle_vector &&
                 op->call_type == Call::Intrinsic) {
 
-                int replacement_width = replacement.type().width;
-                int shuffle_width = op->type.width;
+                int replacement_width = replacement.type().width();
+                int shuffle_width = op->type.width();
 
                 internal_assert(shuffle_width == (int)op->args.size() - 1);
 
@@ -174,9 +174,9 @@ class VectorizeLoops : public IRMutator {
                     // Otherwise, the shuffle produces a scalar result and has
                     // only one channel selector argument which must be scalar
                     internal_assert(op->args.size() == 2);
-                    internal_assert(op->args[1].type().width == 1);
+                    internal_assert(op->args[1].type().width() == 1);
                     Expr mutated_channel = mutate(op->args[1]);
-                    int mutated_width = mutated_channel.type().width;
+                    int mutated_width = mutated_channel.type().width();
 
                     // Determine how to mutate the intrinsic. If the mutated
                     // channel expression matches the for-loop variable
@@ -185,7 +185,7 @@ class VectorizeLoops : public IRMutator {
                     // shuffle_vector intrinisic and return the vector
                     // expression it contains directly.
                     if (equal(replacement,mutated_channel) &&
-                        (shuffled_expr.type().width == replacement_width)) {
+                        (shuffled_expr.type().width() == replacement_width)) {
 
                         // Note that we stop mutating at this expression. Any
                         // unvectorized variables inside this argument may
@@ -249,7 +249,7 @@ class VectorizeLoops : public IRMutator {
                     Expr new_arg = mutate(old_arg);
                     if (!new_arg.same_as(old_arg)) changed = true;
                     new_args[i] = new_arg;
-                    max_width = std::max(new_arg.type().width, max_width);
+                    max_width = std::max(new_arg.type().width(), max_width);
                 }
 
                 if (!changed) {
@@ -347,7 +347,7 @@ class VectorizeLoops : public IRMutator {
                 Expr new_arg = mutate(old_arg);
                 if (!new_arg.same_as(old_arg)) changed = true;
                 new_args[i] = new_arg;
-                max_width = std::max(new_arg.type().width, max_width);
+                max_width = std::max(new_arg.type().width(), max_width);
             }
 
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -355,7 +355,7 @@ class VectorizeLoops : public IRMutator {
                 Expr new_value = mutate(old_value);
                 if (!new_value.same_as(old_value)) changed = true;
                 new_values[i] = new_value;
-                max_width = std::max(new_value.type().width, max_width);
+                max_width = std::max(new_value.type().width(), max_width);
             }
 
             if (!changed) {
@@ -377,7 +377,7 @@ class VectorizeLoops : public IRMutator {
             Expr index = mutate(op->index);
             // Internal allocations always get vectorized.
             if (internal_allocations.contains(op->name)) {
-                int width = replacement.type().width;
+                int width = replacement.type().width();
                 if (index.type().is_scalar()) {
                     if (scalarized) {
                         index = Add::make(Mul::make(index, width), scalar_lane);
@@ -394,13 +394,13 @@ class VectorizeLoops : public IRMutator {
             if (value.same_as(op->value) && index.same_as(op->index)) {
                 stmt = op;
             } else {
-                int width = std::max(value.type().width, index.type().width);
+                int width = std::max(value.type().width(), index.type().width());
                 stmt = Store::make(op->name, widen(value, width), widen(index, width));
             }
         }
 
         void visit(const AssertStmt *op) {
-            if (op->condition.type().width > 1) {
+            if (op->condition.type().width() > 1) {
                 stmt = scalarize(op);
             } else {
                 stmt = op;
@@ -409,7 +409,7 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const IfThenElse *op) {
             Expr cond = mutate(op->condition);
-            int width = cond.type().width;
+            int width = cond.type().width();
             debug(3) << "Vectorizing over " << var << "\n"
                      << "Old: " << op->condition << "\n"
                      << "New: " << cond << "\n";
@@ -457,7 +457,7 @@ class VectorizeLoops : public IRMutator {
                 //   let x = vector_min + broadcast(scalar_extent)
                 // }
                 Expr var = Variable::make(Int(32), op->name + ".scalar");
-                Expr value = Add::make(min, Broadcast::make(var, min.type().width));
+                Expr value = Add::make(min, Broadcast::make(var, min.type().width()));
                 scope.push(op->name, value);
                 Stmt body = mutate(op->body);
                 scope.pop(op->name);
@@ -484,7 +484,7 @@ class VectorizeLoops : public IRMutator {
             Expr new_expr;
 
             // The new expanded dimension is innermost.
-            new_extents.push_back(replacement.type().width);
+            new_extents.push_back(Expr(replacement.type().width()));
 
             for (size_t i = 0; i < op->extents.size(); i++) {
                 new_extents.push_back(mutate(op->extents[i]));
@@ -513,7 +513,7 @@ class VectorizeLoops : public IRMutator {
 
         Stmt scalarize(Stmt s) {
             Stmt result;
-            int width = replacement.type().width;
+            int width = replacement.type().width();
             Expr old_replacement = replacement;
             internal_assert(!scalarized);
             scalarized = true;
@@ -560,7 +560,7 @@ class VectorizeLoops : public IRMutator {
 
             Expr result;
 
-            int width = replacement.type().width;
+            int width = replacement.type().width();
             Expr old_replacement = replacement;
             internal_assert(!scalarized);
             scalarized = true;
@@ -605,7 +605,7 @@ class VectorizeLoops : public IRMutator {
                                        scalarized(false), scalar_lane(0) {
 
             std::ostringstream oss;
-            widening_suffix = ".x" + std::to_string(replacement.type().width);
+            widening_suffix = ".x" + std::to_string(replacement.type().width());
         }
     };
 

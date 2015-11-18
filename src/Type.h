@@ -19,8 +19,11 @@ struct Expr;
  * be vectors of the same (by setting the 'width' field to something
  * larger than one). Front-end code shouldn't use vector
  * types. Instead vectorize a function. */
-struct Type : halide_type_t {
+struct Type {
+  private:
+    halide_type_t type;
 
+  public:
     /** Aliases for halide_type_code_t values for legacy compatibility
      * and to match the Halide internal C++ style. */
     // @{
@@ -31,56 +34,78 @@ struct Type : halide_type_t {
     // @}
 
     /** The number of bytes required to store a single scalar value of this type. Ignores vector width. */
-    int bytes() const {return (bits + 7) / 8;}
+    int bytes() const {return (bits() + 7) / 8;}
 
     // Default ctor initializes everything to predictable-but-unlikely values
-    Type() : halide_type_t((halide_type_code_t)Handle, 0, 0) {}
+    Type() : type(Handle, 0, 0) {}
 
-    Type(halide_type_code_t code, int bits, int width) : halide_type_t((halide_type_code_t)code, bits, width) {}
+    Type(halide_type_code_t code, int bits, int width) : type(code, bits, width) {}
 
-    Type(const Type &that) : halide_type_t(that) {}
+    Type(const Type &that) : type(that) {}
 
-    Type(const halide_type_t &that) : halide_type_t(that) {}
+    Type(const halide_type_t &that) : type(that) {}
+
+    operator halide_type_t() const { return type; }
+
+    halide_type_code_t code() const { return type.code; }
+    uint32_t bits() const { return type.bits; }
+    uint32_t width() const { return type.width; }
+
+    /** Return Type with same number of bits and width, but new_codefor a type code. */
+    Type with_code(halide_type_code_t new_code) const {
+        return Type(new_code, bits(), width());
+    }
+
+    /** Return Type with same type code and width, but new_bits for the number of bits. */
+    Type with_bits(uint8_t new_bits) const {
+        return Type(code(), new_bits, width());
+    }
+
+    /** Return Type with same type code and number of bits, but new_width for the vector width. */
+    // TODO(zalman): Should this be called broadcast?
+    Type with_width(uint16_t new_width) const {
+        return Type(code(), bits(), new_width);
+    }
 
     /** Is this type boolean (represented as UInt(1))? */
-    bool is_bool() const {return code == UInt && bits == 1;}
+    bool is_bool() const {return code() == UInt && bits() == 1;}
 
     /** Is this type a vector type? (width > 1) */
-    bool is_vector() const {return width != 1;}
+    bool is_vector() const {return width() != 1;}
 
-    /** Is this type a scalar type? (width == 1) */
-    bool is_scalar() const {return width == 1;}
+    /** Is this type a scalar type? (width() == 1) */
+    bool is_scalar() const {return width() == 1;}
 
     /** Is this type a floating point type (float or double). */
-    bool is_float() const {return code == Float;}
+    bool is_float() const {return code() == Float;}
 
     /** Is this type a signed integer type? */
-    bool is_int() const {return code == Int;}
+    bool is_int() const {return code() == Int;}
 
     /** Is this type an unsigned integer type? */
-    bool is_uint() const {return code == UInt;}
+    bool is_uint() const {return code() == UInt;}
 
     /** Is this type an opaque handle type (void *) */
-    bool is_handle() const {return code == Handle;}
+    bool is_handle() const {return code() == Handle;}
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return code == other.code && bits == other.bits && width == other.width;
+        return code() == other.code() && bits() == other.bits() && width() == other.width();
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return code != other.code || bits != other.bits || width != other.width;
+        return code() != other.code() || bits() != other.bits() || width() != other.width();
     }
 
     /** Produce a vector of this type, with 'width' elements */
     Type vector_of(int w) const {
-        return Type(code, bits, w);
+        return Type(code(), bits(), w);
     }
 
     /** Produce the type of a single element of this vector type */
     Type element_of() const {
-        return Type(code, bits, 1);
+        return Type(code(), bits(), 1);
     }
 
     /** Can this type represent all values of another type? */
@@ -111,29 +136,17 @@ struct Type : halide_type_t {
 
 /** Constructing a signed integer type */
 inline Type Int(int bits, int width = 1) {
-    Type t;
-    t.code = Type::Int;
-    t.bits = bits;
-    t.width = width;
-    return t;
+    return Type(Type::Int, bits, width);
 }
 
 /** Constructing an unsigned integer type */
 inline Type UInt(int bits, int width = 1) {
-    Type t;
-    t.code = Type::UInt;
-    t.bits = bits;
-    t.width = width;
-    return t;
+    return Type(Type::UInt, bits, width);
 }
 
 /** Construct a floating-point type */
 inline Type Float(int bits, int width = 1) {
-    Type t;
-    t.code = Type::Float;
-    t.bits = bits;
-    t.width = width;
-    return t;
+    return Type(Type::Float, bits, width);
 }
 
 /** Construct a boolean type */
@@ -143,11 +156,7 @@ inline Type Bool(int width = 1) {
 
 /** Construct a handle type */
 inline Type Handle(int width = 1) {
-    Type t;
-    t.code = Type::Handle;
-    t.bits = 64; // All handles are 64-bit for now
-    t.width = width;
-    return t;
+    return Type(Type::Handle, 64, width);
 }
 
 /** Construct the halide equivalent of a C type */

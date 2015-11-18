@@ -13,7 +13,7 @@ using std::string;
 using std::ostringstream;
 
 ostream &operator<<(ostream &out, const Type &type) {
-    switch (type.code) {
+    switch (type.code()) {
     case Type::Int:
         out << "int";
         break;
@@ -27,8 +27,8 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "handle";
         break;
     }
-    out << type.bits;
-    if (type.width > 1) out << 'x' << type.width;
+    out << type.bits();
+    if (type.width() > 1) out << 'x' << type.width();
     return out;
 }
 
@@ -222,7 +222,7 @@ void IRPrinter::visit(const UIntImm *op) {
 }
 
 void IRPrinter::visit(const FloatImm *op) {
-    switch (op->type.bits) {
+  switch (op->type.bits()) {
     case 64:
         stream << op->value;
         break;

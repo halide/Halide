@@ -568,7 +568,7 @@ bool test(int vec_width) {
     if (t.is_float()) {
         weight = clamp(weight, cast<A>(0), cast<A>(1));
     } else if (t.is_int()) {
-        weight = cast(UInt(t.bits, t.width), max(0, weight));
+        weight = cast(UInt(t.bits(), t.width()), max(0, weight));
     }
     f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
     Image<A> im21 = f21.realize(W, H);
@@ -581,7 +581,7 @@ bool test(int vec_width) {
             if (w < 0) w = 0;
             if (!t.is_float()) {
                 uint64_t divisor = 1;
-                divisor <<= t.bits;
+                divisor <<= t.bits();
                 divisor -= 1;
                 w /= divisor;
             }

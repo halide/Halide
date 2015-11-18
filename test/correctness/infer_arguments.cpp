@@ -91,17 +91,17 @@ int main(int argc, char **argv) {
         EXPECT(0, args[5].dimensions);
         EXPECT(0, args[6].dimensions);
 
-        EXPECT(Type::Float, args[2].type.code);
-        EXPECT(Type::Int, args[3].type.code);
-        EXPECT(Type::UInt, args[4].type.code);
-        EXPECT(Type::Int, args[5].type.code);
-        EXPECT(Type::UInt, args[6].type.code);
+        EXPECT(Type::Float, args[2].type.code());
+        EXPECT(Type::Int, args[3].type.code());
+        EXPECT(Type::UInt, args[4].type.code());
+        EXPECT(Type::Int, args[5].type.code());
+        EXPECT(Type::UInt, args[6].type.code());
 
-        EXPECT(32, args[2].type.bits);
-        EXPECT(32, args[3].type.bits);
-        EXPECT(8, args[4].type.bits);
-        EXPECT(32, args[5].type.bits);
-        EXPECT(64, args[6].type.bits);
+        EXPECT(32, args[2].type.bits());
+        EXPECT(32, args[3].type.bits());
+        EXPECT(8, args[4].type.bits());
+        EXPECT(32, args[5].type.bits());
+        EXPECT(64, args[6].type.bits());
 
         Func f_a("f_a"), f_b("f_b");
         f_a(x, y, c) = input1(x, y, c) * frac;
@@ -124,11 +124,11 @@ int main(int argc, char **argv) {
         EXPECT(0, args[1].dimensions);
         EXPECT(0, args[2].dimensions);
 
-        EXPECT(Type::Float, args[1].type.code);
-        EXPECT(Type::UInt, args[2].type.code);
+        EXPECT(Type::Float, args[1].type.code());
+        EXPECT(Type::UInt, args[2].type.code());
 
-        EXPECT(32, args[1].type.bits);
-        EXPECT(8, args[2].type.bits);
+        EXPECT(32, args[1].type.bits());
+        EXPECT(8, args[2].type.bits());
     }
 
 

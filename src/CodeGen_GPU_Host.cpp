@@ -518,7 +518,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // store the size of the argument. Buffer arguments get
             // the dev field, which is 64-bits.
-            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits;
+            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
