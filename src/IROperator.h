@@ -156,7 +156,7 @@ EXPORT Expr halide_erf(Expr a);
 
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
-EXPORT Expr raise_to_integer_power(Expr a, int b);
+EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
 
 
 }
