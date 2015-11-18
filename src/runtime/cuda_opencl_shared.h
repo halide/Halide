@@ -73,7 +73,8 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     // the extents and strides from the buffer_t. Dimensions are added
     // to the copy by inserting it s.t. the stride is in ascending order.
     for (int i = 0; i < 4 && buf->extent[i]; i++) {
-        int stride_bytes = buf->stride[i] * buf->elem_size;
+        // TODO: deal with negative strides.
+        uint64_t stride_bytes = buf->stride[i] * buf->elem_size;
         // Insert the dimension sorted into the buffer copy.
         int insert;
         for (insert = 0; insert < i; insert++) {
