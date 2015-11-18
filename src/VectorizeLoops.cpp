@@ -105,7 +105,7 @@ class VectorizeLoops : public IRMutator {
                 false_value.same_as(op->false_value)) {
                 expr = op;
             } else {
-                unsigned int width = std::max(true_value.type().width(), false_value.type().width());
+                int width = std::max(true_value.type().width(), false_value.type().width());
                 width = std::max(width, condition.type().width());
                 // Widen the true and false values, but we don't have to widen the condition
                 true_value = widen(true_value, width);
@@ -243,7 +243,7 @@ class VectorizeLoops : public IRMutator {
                 bool changed = false;
 
                 // Mutate the args
-                unsigned int max_width = 0;
+                int max_width = 0;
                 for (size_t i = 0; i < op->args.size(); i++) {
                     Expr old_arg = op->args[i];
                     Expr new_arg = mutate(old_arg);
@@ -341,7 +341,7 @@ class VectorizeLoops : public IRMutator {
             bool changed = false;
 
             // Mutate the args
-            unsigned int max_width = 0;
+            int max_width = 0;
             for (size_t i = 0; i < op->args.size(); i++) {
                 Expr old_arg = op->args[i];
                 Expr new_arg = mutate(old_arg);

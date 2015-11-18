@@ -567,7 +567,7 @@ Expr halide_erf(Expr x_full) {
     return result;
 }
 
-Expr raise_to_integer_power(Expr e, int p) {
+Expr raise_to_integer_power(Expr e, int64_t p) {
     Expr result;
     if (p == 0) {
         result = make_one(e.type());

@@ -39,7 +39,7 @@ struct Type {
     // Default ctor initializes everything to predictable-but-unlikely values
     Type() : type(Handle, 0, 0) {}
 
-    Type(halide_type_code_t code, int bits, int width) : type(code, bits, width) {}
+    Type(halide_type_code_t code, uint8_t bits, int width) : type(code, (uint8_t)bits, (uint16_t)width) {}
 
     Type(const Type &that) : type(that) {}
 
@@ -48,8 +48,8 @@ struct Type {
     operator halide_type_t() const { return type; }
 
     halide_type_code_t code() const { return type.code; }
-    uint32_t bits() const { return type.bits; }
-    uint32_t width() const { return type.width; }
+    int bits() const { return type.bits; }
+    int width() const { return type.width; }
 
     /** Return Type with same number of bits and width, but new_codefor a type code. */
     Type with_code(halide_type_code_t new_code) const {
