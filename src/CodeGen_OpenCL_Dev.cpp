@@ -149,9 +149,9 @@ private:
     void visit(const Broadcast *op) {
         Expr value = mutate(op->value);
         if (op->type.bits() == 1) {
-            expr = Broadcast::make(-Cast::make(Int(8), value), op->width);
+            expr = Broadcast::make(-Cast::make(Int(8), value), op->lanes);
         } else if (!value.same_as(op->value)) {
-            expr = Broadcast::make(value, op->width);
+            expr = Broadcast::make(value, op->lanes);
         } else {
             expr = op;
         }
@@ -274,19 +274,19 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
 
     ostringstream rhs;
     rhs << id_base << " + " << id_stride << " * ("
-        << print_type(op->type.with_lanes(op->width)) << ")(0";
+        << print_type(op->type.with_lanes(op->lanes)) << ")(0";
     // Note 0 written above.
-    for (int i = 1; i < op->width; ++i) {
+    for (int i = 1; i < op->lanes; ++i) {
         rhs << ", " << i;
     }
     rhs << ")";
-    print_assignment(op->type.with_lanes(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
 
-    print_assignment(op->type.with_lanes(op->width), id_value);
+    print_assignment(op->type.with_lanes(op->lanes), id_value);
 }
 
 namespace {
@@ -320,18 +320,18 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         return;
     }
     if (op->name == Call::interleave_vectors) {
-        int op_width = op->type.lanes();
+        int op_lanes = op->type.lanes();
         internal_assert(op->args.size() > 0);
-        int arg_width = op->args[0].type().lanes();
+        int arg_lanes = op->args[0].type().lanes();
         if (op->args.size() == 1) {
             // 1 argument, just do a simple assignment
-            internal_assert(op_width == arg_width);
+            internal_assert(op_lanes == arg_lanes);
             print_assignment(op->type, print_expr(op->args[0]));
         } else if (op->args.size() == 2) {
             // 2 arguments, set the .even to the first arg and the
             // .odd to the second arg
-            internal_assert(op->args[1].type().lanes() == arg_width);
-            internal_assert(op_width / 2 == arg_width);
+            internal_assert(op->args[1].type().lanes() == arg_lanes);
+            internal_assert(op_lanes / 2 == arg_lanes);
             string a1 = print_expr(op->args[0]);
             string a2 = print_expr(op->args[1]);
             id = unique_name('_');
@@ -344,25 +344,25 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         } else {
             // 3+ arguments, interleave via a vector literal
             // selecting the appropriate elements of the args
-            int dest_width = op->type.lanes();
-            internal_assert(dest_width <= 16);
+            int dest_lanes = op->type.lanes();
+            internal_assert(dest_lanes <= 16);
             int num_args = op->args.size();
             vector<string> arg_exprs(num_args);
             for (int i = 0; i < num_args; i++) {
-                internal_assert(op->args[i].type().lanes() == arg_width);
+                internal_assert(op->args[i].type().lanes() == arg_lanes);
                 arg_exprs[i] = print_expr(op->args[i]);
             }
-            internal_assert(num_args * arg_width >= dest_width);
+            internal_assert(num_args * arg_lanes >= dest_lanes);
             id = unique_name('_');
             do_indent();
             stream << print_type(op->type) << " " << id;
             stream << " = (" << print_type(op->type) << ")(";
-            for (int i = 0; i < dest_width; i++) {
+            for (int i = 0; i < dest_lanes; i++) {
                 int arg = i % num_args;
                 int arg_idx = i / num_args;
-                internal_assert(arg_idx <= arg_width);
+                internal_assert(arg_idx <= arg_lanes);
                 stream << arg_exprs[arg] << ".s" << vector_elements[arg_idx];
-                if (i != dest_width - 1) {
+                if (i != dest_lanes - 1) {
                     stream << ", ";
                 }
             }

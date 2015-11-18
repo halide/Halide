@@ -160,22 +160,22 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Ramp *op) {
 
     ostringstream rhs;
     rhs << id_base << " + " << id_stride << " * "
-        << print_type(op->type.with_lanes(op->width)) << "(0";
+        << print_type(op->type.with_lanes(op->lanes)) << "(0";
     // Note 0 written above.
-    for (int i = 1; i < op->width; ++i) {
+    for (int i = 1; i < op->lanes; ++i) {
         rhs << ", " << i;
     }
     rhs << ")";
-    print_assignment(op->type.with_lanes(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
 
     ostringstream rhs;
-    rhs << print_type(op->type.with_lanes(op->width)) << "(" << id_value << ")";
+    rhs << print_type(op->type.with_lanes(op->lanes)) << "(" << id_value << ")";
 
-    print_assignment(op->type.with_lanes(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
 namespace {

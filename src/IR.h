@@ -24,8 +24,7 @@ namespace Internal {
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
 
-/** Cast a node from one type to another. Can't change vector
- * widths. */
+/** Cast a node from one type to another. Can't change vector widths. */
 struct Cast : public ExprNode<Cast> {
     Expr value;
 
@@ -173,26 +172,26 @@ struct Load : public ExprNode<Load> {
     EXPORT static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param);
 };
 
-/** A linear ramp vector node. This is vector with 'width' elements,
+/** A linear ramp vector node. This is vector with 'lanes' elements,
  * where element i is 'base' + i*'stride'. This is a convenient way to
  * pass around vectors without busting them up into individual
  * elements. E.g. a dense vector load from a buffer can use a ramp
  * node with stride 1 as the index. */
 struct Ramp : public ExprNode<Ramp> {
     Expr base, stride;
-    int width;
+    int lanes;
 
-    EXPORT static Expr make(Expr base, Expr stride, int width);
+    EXPORT static Expr make(Expr base, Expr stride, int lanes);
 };
 
-/** A vector with 'width' elements, in which every element is
+/** A vector with 'lanes' elements, in which every element is
  * 'value'. This is a special case of the ramp node above, in which
  * the stride is zero. */
 struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
-    int width;
+    int lanes;
 
-    EXPORT static Expr make(Expr value, int width);
+    EXPORT static Expr make(Expr value, int lanes);
 };
 
 /** A let expression, like you might find in a functional

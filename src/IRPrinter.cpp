@@ -428,11 +428,11 @@ void IRPrinter::visit(const Ramp *op) {
     print(op->base);
     stream << ", ";
     print(op->stride);
-    stream << ", " << op->width << ")";
+    stream << ", " << op->lanes << ")";
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << "x" << op->width << "(";
+    stream << "x" << op->lanes << "(";
     print(op->value);
     stream << ")";
 }

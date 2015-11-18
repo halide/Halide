@@ -312,7 +312,7 @@ Expr lossless_cast(Type t, Expr e) {
     if (const Broadcast *b = e.as<Broadcast>()) {
         Expr v = lossless_cast(t.element_of(), b->value);
         if (v.defined()) {
-            return Broadcast::make(v, b->width);
+            return Broadcast::make(v, b->lanes);
         } else {
             return Expr();
         }

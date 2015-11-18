@@ -122,9 +122,9 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     for (size_t i = 0; i < sizeof(types)/sizeof(types[0]); i++) {
         Type t = types[i];
 
-        int intrin_width = t.lanes();
+        int intrin_lanes = t.lanes();
         std::ostringstream oss;
-        oss << ".v" << intrin_width << "i" << t.bits();
+        oss << ".v" << intrin_lanes << "i" << t.bits();
         string t_str = oss.str();
 
         // For the 128-bit versions, we want to match any vector width.
@@ -147,7 +147,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
         Expr tsmin = simplify(cast(ws, t.min()));
         Expr tsmax = simplify(cast(ws, t.max()));
 
-        Pattern p("", "", intrin_width, Expr(), Pattern::NarrowArgs);
+        Pattern p("", "", intrin_lanes, Expr(), Pattern::NarrowArgs);
 
         // Rounding-up averaging
         if (t.is_int()) {
@@ -294,17 +294,17 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
     if (target.bits == 32) {
-        return call_intrin(t, p.intrin_width, p.intrin32, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin32, args);
     } else {
-        return call_intrin(t, p.intrin_width, p.intrin64, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin64, args);
     }
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, llvm::Type *t, const vector<llvm::Value *> &args) {
     if (target.bits == 32) {
-        return call_intrin(t, p.intrin_width, p.intrin32, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin32, args);
     } else {
-        return call_intrin(t, p.intrin_width, p.intrin64, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin64, args);
     }
 }
 
@@ -402,9 +402,9 @@ void CodeGen_ARM::visit(const Cast *op) {
         const Call *c = op->value.as<Call>();
         if (c && c->name == Call::absd && c->call_type == Call::Intrinsic) {
             ostringstream ss;
-            int intrin_width = 128 / t.bits();
-            ss << "vabdl_" << (c->args[0].type().is_int() ? 'i' : 'u') << t.bits() / 2 << 'x' << intrin_width;
-            value = call_intrin(t, intrin_width, ss.str(), c->args);
+            int intrin_lanes = 128 / t.bits();
+            ss << "vabdl_" << (c->args[0].type().is_int() ? 'i' : 'u') << t.bits() / 2 << 'x' << intrin_lanes;
+            value = call_intrin(t, intrin_lanes, ss.str(), c->args);
             return;
         }
     }
@@ -1061,11 +1061,11 @@ void CodeGen_ARM::visit(const Load *op) {
         // of 64 or 128 bits, then we can't safely slice it up into
         // some number of vlds, so we hand it over the base class.
         int bit_width = op->type.bits() * op->type.lanes();
-        int intrin_width = 0;
+        int intrin_lanes = 0;
         if (bit_width % 128 == 0) {
-            intrin_width = 128 / op->type.bits();
+            intrin_lanes = 128 / op->type.bits();
         } else if (bit_width % 64 == 0) {
-            intrin_width = 64 / op->type.bits();
+            intrin_lanes = 64 / op->type.bits();
         } else {
             CodeGen_Posix::visit(op);
             return;
@@ -1075,7 +1075,7 @@ void CodeGen_ARM::visit(const Load *op) {
         if (target.bits == 32) {
             intrin << "llvm.arm.neon.vld"
                    << stride->value
-                   << ".v" << intrin_width
+                   << ".v" << intrin_lanes
                    << (op->type.is_float() ? 'f' : 'i')
                    << op->type.bits()
 #if LLVM_VERSION > 37
@@ -1085,7 +1085,7 @@ void CodeGen_ARM::visit(const Load *op) {
         } else {
             intrin << "llvm.aarch64.neon.ld"
                    << stride->value
-                   << ".v" << intrin_width
+                   << ".v" << intrin_lanes
                    << (op->type.is_float() ? 'f' : 'i')
                    << op->type.bits()
                    << ".p0"
@@ -1099,9 +1099,9 @@ void CodeGen_ARM::visit(const Load *op) {
 
         // Load each slice.
         vector<Value *> results;
-        for (int i = 0; i < op->type.lanes(); i += intrin_width) {
+        for (int i = 0; i < op->type.lanes(); i += intrin_lanes) {
             Expr slice_base = simplify(base + i*ramp->stride);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_width);
+            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
             CallInst *call = NULL;
             if (target.bits == 32) {
