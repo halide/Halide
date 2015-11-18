@@ -28,7 +28,7 @@ ostream &operator<<(ostream &out, const Type &type) {
         break;
     }
     out << type.bits();
-    if (type.width() > 1) out << 'x' << type.width();
+    if (type.lanes() > 1) out << 'x' << type.lanes();
     return out;
 }
 

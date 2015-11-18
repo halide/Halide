@@ -53,12 +53,12 @@ Type map_type(const Type &type) {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
     } else {
-        user_assert(type.width() <= 4)
+        user_assert(type.lanes() <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
         user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
             << "GLSL: Can't represent vector type '"<< type << "'.\n";
         Type scalar_type = type.element_of();
-        result = map_type(scalar_type).with_width(type.width());
+        result = map_type(scalar_type).with_lanes(type.lanes());
     }
     return result;
 }
@@ -67,7 +67,7 @@ Type map_type(const Type &type) {
 // introduce type casts around the arguments and the entire function call.
 Expr call_builtin(const Type &result_type, const std::string &func,
                   const std::vector<Expr> &args) {
-    Type float_type = Float(32, result_type.width());
+    Type float_type = Float(32, result_type.lanes());
     std::vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (!args[i].type().is_float()) {
@@ -165,7 +165,7 @@ void CodeGen_GLSLBase::visit(const Div *op) {
         // Halide's integer division is defined to round down. Since the
         // rounding behavior of GLSL's integer division is undefined, emulate
         // the correct behavior using floating point arithmetic.
-        Type float_type = Float(32, op->type.width());
+        Type float_type = Float(32, op->type.lanes());
         Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
         print_expr(call_builtin(op->type, "floor_f32", {val}));
     } else {
@@ -215,7 +215,7 @@ string CodeGen_GLSLBase::print_type(Type type) {
         } else {
             internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
         }
-        oss << "vec" << type.width();
+        oss << "vec" << type.lanes();
     }
     return oss.str();
 }
@@ -304,7 +304,7 @@ void CodeGen_GLSL::visit(const For *loop) {
 }
 
 std::vector<Expr> evaluate_vector_select(const Select *op) {
-    const int width = op->type.width();
+    const int width = op->type.lanes();
     std::vector<Expr> result(width);
     for (int i = 0; i < width; i++) {
         Expr cond = extract_lane(op->condition, i);
@@ -351,8 +351,8 @@ void CodeGen_GLSL::visit(const Select *op) {
         // vector types. If the select condition can be evaluated at
         // compile-time (which is often the case), we can built the vector
         // directly without lowering to a sequence of "if" statements.
-        internal_assert(op->condition.type().width() == op->type.width());
-        int width = op->type.width();
+        internal_assert(op->condition.type().lanes() == op->type.lanes());
+        int width = op->type.lanes();
         std::vector<Expr> result = evaluate_vector_select(op);
         std::vector<std::string> ids(width);
         for (int i = 0; i < width; i++) {
@@ -426,10 +426,10 @@ void CodeGen_GLSL::visit(const Call *op) {
         string buffername = string_imm->value;
 
         internal_assert((op->type.code() == Type::UInt || op->type.code() == Type::Float) &&
-                        (op->type.width() >= 1 && op->type.width() <= 4));
+                        (op->type.lanes() >= 1 && op->type.lanes() <= 4));
 
-        internal_assert(op->args[2].type().width() == 1) << "glsl_texture_load argument 2 is not scalar";
-        internal_assert(op->args[3].type().width() == 1) << "glsl_texture_load argument 3 is not scalar";
+        internal_assert(op->args[2].type().lanes() == 1) << "glsl_texture_load argument 2 is not scalar";
+        internal_assert(op->args[3].type().lanes() == 1) << "glsl_texture_load argument 3 is not scalar";
 
         rhs << "texture2D(" << print_name(buffername) << ", vec2("
             << print_expr(op->args[2]) << ", "
@@ -466,7 +466,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         // shufflevector, however, for GLSL its use is limited to swizzling
         // up to a four channel vec type.
 
-        int shuffle_width = op->type.width();
+        int shuffle_width = op->type.lanes();
         internal_assert(shuffle_width <= 4);
 
         string expr = print_expr(op->args[0]);
@@ -545,7 +545,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             weight = floor(weight * op->type.max()) / op->type.max();
         }
 
-        Type result_type = Float(32, op->type.width());
+        Type result_type = Float(32, op->type.lanes());
         Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
 
         if (!op->type.is_float()) {

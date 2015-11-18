@@ -195,10 +195,10 @@ inline Expr cast(Type t, Expr a) {
 
     if (t.is_vector()) {
         if (a.type().is_scalar()) {
-            return Internal::Broadcast::make(cast(t.element_of(), a), t.width());
+            return Internal::Broadcast::make(cast(t.element_of(), a), t.lanes());
         } else if (const Internal::Broadcast *b = a.as<Internal::Broadcast>()) {
-            internal_assert(b->width == t.width());
-            return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width());
+            internal_assert(b->width == t.lanes());
+            return Internal::Broadcast::make(cast(t.element_of(), b->value), t.lanes());
         }
     }
     return Internal::Cast::make(t, a);
@@ -1264,7 +1264,7 @@ inline Expr floor(Expr x) {
         return Internal::Call::make(Float(16), "floor_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width());
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "floor_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1282,7 +1282,7 @@ inline Expr ceil(Expr x) {
         return Internal::Call::make(Float(16), "ceil_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width());
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "ceil_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1301,7 +1301,7 @@ inline Expr round(Expr x) {
         return Internal::Call::make(Float(16), "round_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width());
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "round_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1318,7 +1318,7 @@ inline Expr trunc(Expr x) {
         return Internal::Call::make(Float(16), "trunc_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width());
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "trunc_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1328,7 +1328,7 @@ inline Expr trunc(Expr x) {
 inline Expr is_nan(Expr x) {
     user_assert(x.defined()) << "is_nan of undefined Expr\n";
     user_assert(x.type().is_float()) << "is_nan only works for float";
-    Type t = Bool(x.type().width());
+    Type t = Bool(x.type().lanes());
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(t, "is_nan_f64", {x}, Internal::Call::Extern);
     }
@@ -1336,7 +1336,7 @@ inline Expr is_nan(Expr x) {
         return Internal::Call::make(t, "is_nan_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type ft = Float(32, x.type().width());
+        Type ft = Float(32, x.type().lanes());
         return Internal::Call::make(t, "is_nan_f32", {cast(ft, x)}, Internal::Call::Extern);
     }
 }
@@ -1352,8 +1352,8 @@ inline Expr fract(Expr x) {
 /** Reinterpret the bits of one value as another type. */
 inline Expr reinterpret(Type t, Expr e) {
     user_assert(e.defined()) << "reinterpret of undefined Expr\n";
-    int from_bits = e.type().bits() * e.type().width();
-    int to_bits = t.bits() * t.width();
+    int from_bits = e.type().bits() * e.type().lanes();
+    int to_bits = t.bits() * t.lanes();
     user_assert(from_bits == to_bits)
         << "Reinterpret cast from type " << e.type()
         << " which has " << from_bits
@@ -1559,7 +1559,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     user_assert((weight.type().is_uint() || weight.type().is_float()))
         << "A lerp weight must be an unsigned integer or a float, but "
         << "lerp weight " << weight << " has type " << weight.type() << ".\n";
-    user_assert((zero_val.type().is_float() || zero_val.type().width() <= 32))
+    user_assert((zero_val.type().is_float() || zero_val.type().lanes() <= 32))
         << "Lerping between 64-bit integers is not supported\n";
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.

@@ -44,8 +44,8 @@ struct Type {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * width: The number of vector elements in the type. */
-    Type(halide_type_code_t code, uint8_t bits, int width) 
-        : type(code, (uint8_t)bits, (uint16_t)width) {
+    Type(halide_type_code_t code, uint8_t bits, int lanes) 
+        : type(code, (uint8_t)bits, (uint16_t)lanes) {
     }
 
     /** Trivial copy constructor. */
@@ -67,32 +67,34 @@ struct Type {
     int bits() const { return type.bits; }
 
     /** Return the number of vector elements in this type. */
-    int width() const { return type.width; }
+    int lanes() const { return type.lanes; }
 
-    /** Return Type with same number of bits and width, but new_codefor a type code. */
+    /** Return Type with same number of bits and lanes, but new_code for a type code. */
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), width());
+        return Type(new_code, bits(), lanes());
     }
 
-    /** Return Type with same type code and width, but new_bits for the number of bits. */
+    /** Return Type with same type code and lanes, but new_bits for the number of bits. */
     Type with_bits(uint8_t new_bits) const {
-        return Type(code(), new_bits, width());
+        return Type(code(), new_bits, lanes());
     }
 
-    /** Return Type with same type code and number of bits, but new_width for the vector width. */
-    // TODO(zalman): Should this be called broadcast?
-    Type with_width(uint16_t new_width) const {
-        return Type(code(), bits(), new_width);
+    /** Return Type with same type code and number of bits,
+     * but new_lanes for the number of vector lanes. */
+    Type with_lanes(uint16_t new_lanes) const {
+        return Type(code(), bits(), new_lanes);
     }
 
     /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code() == UInt && bits() == 1;}
 
-    /** Is this type a vector type? (width > 1) */
-    bool is_vector() const {return width() != 1;}
+    /** Is this type a vector type? (lanes() != 1).
+     * TODO(abadams): Decide what to do for lanes() == 0. */
+    bool is_vector() const {return lanes() != 1;}
 
-    /** Is this type a scalar type? (width() == 1) */
-    bool is_scalar() const {return width() == 1;}
+    /** Is this type a scalar type? (lanes() == 1).
+     * TODO(abadams): Decide what to do for lanes() == 0. */
+    bool is_scalar() const {return lanes() == 1;}
 
     /** Is this type a floating point type (float or double). */
     bool is_float() const {return code() == Float;}
@@ -108,20 +110,15 @@ struct Type {
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return code() == other.code() && bits() == other.bits() && width() == other.width();
+        return code() == other.code() && bits() == other.bits() && lanes() == other.lanes();
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return code() != other.code() || bits() != other.bits() || width() != other.width();
+        return code() != other.code() || bits() != other.bits() || lanes() != other.lanes();
     }
 
-    /** Produce a vector of this type, with 'width' elements */
-    Type vector_of(int w) const {
-        return with_width(w);
-    }
-
-    /** Produce the type of a single element of this vector type */
+    /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
         return Type(code(), bits(), 1);
     }

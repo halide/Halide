@@ -38,7 +38,7 @@ private:
         // Ensure both a and b have the same type (if this is a vector
         // comparison). This should only be necessary if the operands are
         // integer vectors (promoted from bool vectors).
-        if (t.width() > 1 && t.bits() != b.type().bits()) {
+        if (t.lanes() > 1 && t.bits() != b.type().bits()) {
             internal_assert(t.is_int() && b.type().is_int());
 
             t = t.with_bits(std::max(t.bits(), b.type().bits()));
@@ -56,7 +56,7 @@ private:
             expr = op;
         }
 
-        if (t.width() > 1) {
+        if (t.lanes() > 1) {
             // To represent bool vectors, OpenCL uses vectors of signed
             // integers with the same width as the types being compared.
             t = t.with_code(Type::Int);
@@ -78,7 +78,7 @@ private:
 
         Type ta = a.type();
         Type tb = b.type();
-        if (ta.width() > 1) {
+        if (ta.lanes() > 1) {
             // Ensure that both a and b have the same type.
             Type t = ta.with_bits(std::max(ta.bits(), tb.bits()));
             if (t != a.type()) {
@@ -106,7 +106,7 @@ private:
 
     void visit(const Not *op) {
         Expr a = mutate(op->a);
-        if (a.type().width() > 1) {
+        if (a.type().lanes() > 1) {
             // Replace logical operation with bitwise operation.
             expr = Call::make(a.type(), Call::bitwise_not, {a}, Call::Intrinsic);
         } else if (!a.same_as(op->a)) {
@@ -121,7 +121,7 @@ private:
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
         Type cond_ty = cond.type();
-        if (cond_ty.width() > 1) {
+        if (cond_ty.lanes() > 1) {
             // If the condition is a vector, it should be a vector of
             // ints, so rewrite it to compare to 0.
             internal_assert(cond_ty.code() == Type::Int);
@@ -184,7 +184,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
         if (type.is_uint() && type.bits() > 1) oss << 'u';
         switch (type.bits()) {
         case 1:
-            internal_assert(type.width() == 1) << "Encountered vector of bool\n";
+            internal_assert(type.lanes() == 1) << "Encountered vector of bool\n";
             oss << "bool";
             break;
         case 8:
@@ -203,14 +203,14 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
             user_error << "Can't represent an integer with this many bits in OpenCL C: " << type << "\n";
         }
     }
-    if (type.width() != 1) {
-        switch (type.width()) {
+    if (type.lanes() != 1) {
+        switch (type.lanes()) {
         case 2:
         case 3:
         case 4:
         case 8:
         case 16:
-            oss << type.width();
+            oss << type.lanes();
             break;
         default:
             user_error <<  "Unsupported vector width in OpenCL C: " << type << "\n";
@@ -274,19 +274,19 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
 
     ostringstream rhs;
     rhs << id_base << " + " << id_stride << " * ("
-        << print_type(op->type.vector_of(op->width)) << ")(0";
+        << print_type(op->type.with_lanes(op->width)) << ")(0";
     // Note 0 written above.
     for (int i = 1; i < op->width; ++i) {
         rhs << ", " << i;
     }
     rhs << ")";
-    print_assignment(op->type.vector_of(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->width), rhs.str());
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
 
-    print_assignment(op->type.vector_of(op->width), id_value);
+    print_assignment(op->type.with_lanes(op->width), id_value);
 }
 
 namespace {
@@ -320,9 +320,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         return;
     }
     if (op->name == Call::interleave_vectors) {
-        int op_width = op->type.width();
+        int op_width = op->type.lanes();
         internal_assert(op->args.size() > 0);
-        int arg_width = op->args[0].type().width();
+        int arg_width = op->args[0].type().lanes();
         if (op->args.size() == 1) {
             // 1 argument, just do a simple assignment
             internal_assert(op_width == arg_width);
@@ -330,7 +330,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         } else if (op->args.size() == 2) {
             // 2 arguments, set the .even to the first arg and the
             // .odd to the second arg
-            internal_assert(op->args[1].type().width() == arg_width);
+            internal_assert(op->args[1].type().lanes() == arg_width);
             internal_assert(op_width / 2 == arg_width);
             string a1 = print_expr(op->args[0]);
             string a2 = print_expr(op->args[1]);
@@ -344,12 +344,12 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         } else {
             // 3+ arguments, interleave via a vector literal
             // selecting the appropriate elements of the args
-            int dest_width = op->type.width();
+            int dest_width = op->type.lanes();
             internal_assert(dest_width <= 16);
             int num_args = op->args.size();
             vector<string> arg_exprs(num_args);
             for (int i = 0; i < num_args; i++) {
-                internal_assert(op->args[i].type().width() == arg_width);
+                internal_assert(op->args[i].type().lanes() == arg_width);
                 arg_exprs[i] = print_expr(op->args[i]);
             }
             internal_assert(num_args * arg_width >= dest_width);
@@ -381,7 +381,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
-        rhs << "vload" << op->type.width()
+        rhs << "vload" << op->type.lanes()
             << "(0, (" << get_memory_space(op->name) << " "
             << print_type(op->type.element_of()) << "*)"
             << print_name(op->name) << " + " << id_ramp_base << ")";
@@ -423,7 +423,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         stream << print_type(op->type)
                << " " << id << ";\n";
 
-        for (int i = 0; i < op->type.width(); ++i) {
+        for (int i = 0; i < op->type.lanes(); ++i) {
             do_indent();
             stream
                 << id << ".s" << vector_elements[i]
@@ -448,7 +448,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         string id_ramp_base = print_expr(ramp_base);
 
         do_indent();
-        stream << "vstore" << t.width() << "("
+        stream << "vstore" << t.lanes() << "("
                << id_value << ","
                << 0 << ", (" << get_memory_space(op->name) << " "
                << print_type(t.element_of()) << "*)"
@@ -461,7 +461,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 
         string id_index = print_expr(op->index);
 
-        for (int i = 0; i < t.width(); ++i) {
+        for (int i = 0; i < t.lanes(); ++i) {
             do_indent();
             stream << "((" << get_memory_space(op->name) << " "
                    << print_type(t.element_of()) << " *)"

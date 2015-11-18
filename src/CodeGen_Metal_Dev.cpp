@@ -24,7 +24,7 @@ static string print_type_maybe_storage(Type type, bool storage) {
     ostringstream oss;
 
     // Storage uses packed vector types.
-    if (storage && type.width() != 1) {
+    if (storage && type.lanes() != 1) {
         oss << "packed_";
     }
     if (type.is_float()) {
@@ -60,14 +60,14 @@ static string print_type_maybe_storage(Type type, bool storage) {
             user_error << "Can't represent an integer with this many bits in Metal C: " << type << "\n";
         }
     }
-    if (type.width() != 1) {
-        switch (type.width()) {
+    if (type.lanes() != 1) {
+        switch (type.lanes()) {
         case 2:
         case 3:
         case 4:
         case 8:
         case 16:
-            oss << type.width();
+            oss << type.lanes();
             break;
         default:
             user_error <<  "Unsupported vector width in Metal C: " << type << "\n";
@@ -160,22 +160,22 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Ramp *op) {
 
     ostringstream rhs;
     rhs << id_base << " + " << id_stride << " * "
-        << print_type(op->type.vector_of(op->width)) << "(0";
+        << print_type(op->type.with_lanes(op->width)) << "(0";
     // Note 0 written above.
     for (int i = 1; i < op->width; ++i) {
         rhs << ", " << i;
     }
     rhs << ")";
-    print_assignment(op->type.vector_of(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->width), rhs.str());
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
 
     ostringstream rhs;
-    rhs << print_type(op->type.vector_of(op->width)) << "(" << id_value << ")";
+    rhs << print_type(op->type.with_lanes(op->width)) << "(" << id_value << ")";
 
-    print_assignment(op->type.vector_of(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->width), rhs.str());
 }
 
 namespace {
@@ -252,7 +252,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         stream << print_type(op->type)
                << " " << id << ";\n";
 
-        for (int i = 0; i < op->type.width(); ++i) {
+        for (int i = 0; i < op->type.lanes(); ++i) {
             do_indent();
             stream
               << id << "[" << i << "]"
@@ -286,7 +286,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
 
         string id_index = print_expr(op->index);
 
-        for (int i = 0; i < t.width(); ++i) {
+        for (int i = 0; i < t.lanes(); ++i) {
             do_indent();
             stream << "((" << get_memory_space(op->name) << " "
                    << print_storage_type(t.element_of()) << " *)"

@@ -220,7 +220,7 @@ CodeGen_C::~CodeGen_C() {
 namespace {
 string type_to_c_type(Type type) {
     ostringstream oss;
-    user_assert(type.width() == 1) << "Can't use vector types when compiling to C (yet)\n";
+    user_assert(type.lanes() == 1) << "Can't use vector types when compiling to C (yet)\n";
     if (type.is_float()) {
         if (type.bits() == 32) {
             oss << "float";
