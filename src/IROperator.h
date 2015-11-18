@@ -97,7 +97,7 @@ EXPORT void check_representable(Type t, int64_t val);
  * is that C++ does not have a real bool type - it is in fact
  * close enough to char that C++ does not know how to distinguish them.
  * make_bool is the explicit coercion. */
-EXPORT Expr make_bool(bool val, int width = 1);
+EXPORT Expr make_bool(bool val, int lanes = 1);
 
 /** Construct the representation of zero in the given type */
 EXPORT Expr make_zero(Type t);
@@ -109,12 +109,12 @@ EXPORT Expr make_one(Type t);
 EXPORT Expr make_two(Type t);
 
 /** Construct the constant boolean true. May also be a vector of
- * trues, if a width argument is given. */
-EXPORT Expr const_true(int width = 1);
+ * trues, if a lanes argument is given. */
+EXPORT Expr const_true(int lanes = 1);
 
 /** Construct the constant boolean false. May also be a vector of
- * falses, if a width argument is given. */
-EXPORT Expr const_false(int width = 1);
+ * falses, if a lanes argument is given. */
+EXPORT Expr const_false(int lanes = 1);
 
 /** Attempt to cast an expression to a smaller type while provably not
  * losing information. If it can't be done, return an undefined
@@ -197,7 +197,7 @@ inline Expr cast(Type t, Expr a) {
         if (a.type().is_scalar()) {
             return Internal::Broadcast::make(cast(t.element_of(), a), t.lanes());
         } else if (const Internal::Broadcast *b = a.as<Internal::Broadcast>()) {
-            internal_assert(b->width == t.lanes());
+            internal_assert(b->lanes == t.lanes());
             return Internal::Broadcast::make(cast(t.element_of(), b->value), t.lanes());
         }
     }

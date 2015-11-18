@@ -16,7 +16,7 @@ struct Expr;
 
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats of various bit-widths (the 'bits' field). They can also
- * be vectors of the same (by setting the 'width' field to something
+ * be vectors of the same (by setting the 'lanes' field to something
  * larger than one). Front-end code shouldn't use vector
  * types. Instead vectorize a function. */
 struct Type {
@@ -33,7 +33,7 @@ struct Type {
     static constexpr halide_type_code_t Handle = halide_type_handle;
     // @}
 
-    /** The number of bytes required to store a single scalar value of this type. Ignores vector width. */
+    /** The number of bytes required to store a single scalar value of this type. Ignores vector lanes. */
     int bytes() const {return (bits() + 7) / 8;}
 
     // Default ctor initializes everything to predictable-but-unlikely values
@@ -43,7 +43,7 @@ struct Type {
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
-     * width: The number of vector elements in the type. */
+     * lanes: The number of vector elements in the type. */
     Type(halide_type_code_t code, uint8_t bits, int lanes) 
         : type(code, (uint8_t)bits, (uint16_t)lanes) {
     }
@@ -150,28 +150,28 @@ struct Type {
 };
 
 /** Constructing a signed integer type */
-inline Type Int(int bits, int width = 1) {
-    return Type(Type::Int, bits, width);
+inline Type Int(int bits, int lanes = 1) {
+    return Type(Type::Int, bits, lanes);
 }
 
 /** Constructing an unsigned integer type */
-inline Type UInt(int bits, int width = 1) {
-    return Type(Type::UInt, bits, width);
+inline Type UInt(int bits, int lanes = 1) {
+    return Type(Type::UInt, bits, lanes);
 }
 
 /** Construct a floating-point type */
-inline Type Float(int bits, int width = 1) {
-    return Type(Type::Float, bits, width);
+inline Type Float(int bits, int lanes = 1) {
+    return Type(Type::Float, bits, lanes);
 }
 
 /** Construct a boolean type */
-inline Type Bool(int width = 1) {
-    return UInt(1, width);
+inline Type Bool(int lanes = 1) {
+    return UInt(1, lanes);
 }
 
 /** Construct a handle type */
-inline Type Handle(int width = 1) {
-    return Type(Type::Handle, 64, width);
+inline Type Handle(int lanes = 1) {
+    return Type(Type::Handle, 64, lanes);
 }
 
 /** Construct the halide equivalent of a C type */

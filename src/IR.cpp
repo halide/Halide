@@ -250,7 +250,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
     internal_assert(condition.type().is_scalar() ||
                     condition.type().lanes() == true_value.type().lanes())
-        << "In Select, vector width of condition must either be 1, or equal to vector width of arguments\n";
+        << "In Select, vector lanes of condition must either be 1, or equal to vector lanes of arguments\n";
 
     Select *node = new Select;
     node->type = true_value.type();
@@ -262,7 +262,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
 
 Expr Load::make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
     internal_assert(index.defined()) << "Load of undefined\n";
-    internal_assert(type.lanes() == index.type().lanes()) << "Vector width of Load must match vector width of index\n";
+    internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
 
     Load *node = new Load;
     node->type = type;
@@ -273,31 +273,31 @@ Expr Load::make(Type type, std::string name, Expr index, Buffer image, Parameter
     return node;
 }
 
-Expr Ramp::make(Expr base, Expr stride, int width) {
+Expr Ramp::make(Expr base, Expr stride, int lanes) {
     internal_assert(base.defined()) << "Ramp of undefined\n";
     internal_assert(stride.defined()) << "Ramp of undefined\n";
     internal_assert(base.type().is_scalar()) << "Ramp with vector base\n";
     internal_assert(stride.type().is_scalar()) << "Ramp with vector stride\n";
-    internal_assert(width > 1) << "Ramp of width <= 1\n";
+    internal_assert(lanes > 1) << "Ramp of lanes <= 1\n";
     internal_assert(stride.type() == base.type()) << "Ramp of mismatched types\n";
 
     Ramp *node = new Ramp;
-    node->type = base.type().with_lanes(width);
+    node->type = base.type().with_lanes(lanes);
     node->base = base;
     node->stride = stride;
-    node->width = width;
+    node->lanes = lanes;
     return node;
 }
 
-Expr Broadcast::make(Expr value, int width) {
+Expr Broadcast::make(Expr value, int lanes) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
     internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
-    internal_assert(width != 1) << "Broadcast of width 1\n";
+    internal_assert(lanes != 1) << "Broadcast of lanes 1\n";
 
     Broadcast *node = new Broadcast;
-    node->type = value.type().with_lanes(width);
+    node->type = value.type().with_lanes(lanes);
     node->value = value;
-    node->width = width;
+    node->lanes = lanes;
     return node;
 }
 

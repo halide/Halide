@@ -408,7 +408,7 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
     if (b_name != NULL && b_x != NULL && b_y != NULL && ramp_c != NULL) {
         // vectorized over c, use x and y to retrieve 4-byte RGBA chunk.
         const IntImm *stride = ramp_c->stride.IRHandle::as<IntImm>();
-        user_assert(stride->value == 1 && ramp_c->width == 4)
+        user_assert(stride->value == 1 && ramp_c->lanes == 4)
             << "Only vectorized RGBA format is supported at present.\n";
         user_assert(b_x->value.type().lanes() == 1)
             << "image_load/store x coordinate is not scalar.\n";

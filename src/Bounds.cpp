@@ -674,7 +674,7 @@ private:
         Expr var = Variable::make(op->base.type(), var_name);
         Expr lane = op->base + var * op->stride;
         scope.push(var_name, Interval(make_const(var.type(), 0),
-                                      make_const(var.type(), op->width-1)));
+                                      make_const(var.type(), op->lanes-1)));
         lane.accept(this);
         scope.pop(var_name);
     }

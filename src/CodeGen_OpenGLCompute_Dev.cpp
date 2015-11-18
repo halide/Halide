@@ -154,12 +154,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
 
-    if (op->width > 4)
-        internal_error << "GLSL: ramp width " << op->width << " is not supported\n";
+    if (op->lanes > 4)
+        internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
 
     rhs << print_expr(op->base);
 
-    for (int i = 1; i < op->width; ++i) {
+    for (int i = 1; i < op->lanes; ++i) {
         rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
     }
 
@@ -170,8 +170,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
     ostringstream oss;
-    oss << print_type(op->type.with_lanes(op->width)) << "(" << id_value << ")";
-    print_assignment(op->type.with_lanes(op->width), oss.str());
+    oss << print_type(op->type.with_lanes(op->lanes)) << "(" << id_value << ")";
+    print_assignment(op->type.with_lanes(op->lanes), oss.str());
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
@@ -179,11 +179,11 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp) {
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-        user_assert(stride && stride->value == 1 && ramp->width == 4) <<
-            "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
+        user_assert(stride && stride->value == 1 && ramp->lanes == 4) <<
+            "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute.";
 
-        // Buffer type is 4-elements wide, that's why we divide by ramp->width.
-        id_index = print_expr(Div::make(ramp->base, ramp->width));
+        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
+        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
     } else {
         id_index = print_expr(op->index);
     }
@@ -202,14 +202,14 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp) {
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-        user_assert(stride && stride->value == 1 && ramp->width == 4)
-            << "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute."
+        user_assert(stride && stride->value == 1 && ramp->lanes == 4)
+            << "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute."
             << " Got integer stride "
             << (stride ? std::to_string(stride->value): "undefined")
-            << " and width " << ramp->width << " instead.";
+            << " and lanes " << ramp->lanes << " instead.";
 
-        // Buffer type is 4-elements wide, that's why we divide by ramp->width.
-        id_index = print_expr(Div::make(ramp->base, ramp->width));
+        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
+        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
     } else {
         id_index = print_expr(op->index);
     }

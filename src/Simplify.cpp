@@ -205,7 +205,7 @@ private:
             expr = mutate(Cast::make(op->type, cast->value));
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
-            expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->width));
+            expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->lanes));
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -311,22 +311,22 @@ private:
                    ramp_b) {
             // Ramp + Ramp
             expr = mutate(Ramp::make(ramp_a->base + ramp_b->base,
-                                     ramp_a->stride + ramp_b->stride, ramp_a->width));
+                                     ramp_a->stride + ramp_b->stride, ramp_a->lanes));
         } else if (ramp_a &&
                    broadcast_b) {
             // Ramp + Broadcast
             expr = mutate(Ramp::make(ramp_a->base + broadcast_b->value,
-                                     ramp_a->stride, ramp_a->width));
+                                     ramp_a->stride, ramp_a->lanes));
         } else if (broadcast_a &&
                    ramp_b) {
             // Broadcast + Ramp
             expr = mutate(Ramp::make(broadcast_a->value + ramp_b->base,
-                                     ramp_b->stride, ramp_b->width));
+                                     ramp_b->stride, ramp_b->lanes));
         } else if (broadcast_a &&
                    broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value + broadcast_b->value),
-                                   broadcast_a->width);
+                                   broadcast_a->lanes);
 
         } else if (select_a &&
                    select_b &&
@@ -605,20 +605,20 @@ private:
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
-                                   ramp_a->stride - ramp_b->stride, ramp_a->width));
+                                   ramp_a->stride - ramp_b->stride, ramp_a->lanes));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
             expr = mutate(Ramp::make(ramp_a->base - broadcast_b->value,
-                                   ramp_a->stride, ramp_a->width));
+                                   ramp_a->stride, ramp_a->lanes));
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
             expr = mutate(Ramp::make(broadcast_a->value - ramp_b->base,
                                    make_zero(ramp_b->stride.type())- ramp_b->stride,
-                                   ramp_b->width));
+                                   ramp_b->lanes));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
-                                 broadcast_a->width);
+                                 broadcast_a->lanes);
         } else if (select_a && select_b &&
                    equal(select_a->condition, select_b->condition)) {
             // select(c, a, b) - select(c, d, e) -> select(c, a+d, b+e)
@@ -927,13 +927,13 @@ private:
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = FloatImm::make(a.type(), fa * fb);
         } else if (broadcast_a && broadcast_b) {
-            expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->width);
+            expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
-            expr = mutate(Ramp::make(ramp_a->base * m, ramp_a->stride * m, ramp_a->width));
+            expr = mutate(Ramp::make(ramp_a->base * m, ramp_a->stride * m, ramp_a->lanes));
         } else if (broadcast_a && ramp_b) {
             Expr m = broadcast_a->value;
-            expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
+            expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->lanes));
         } else if (add_a && !(add_a->b.as<Ramp>() && ramp_b) && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
         } else if (sub_a && is_negative_negatable_const(b)) {
@@ -1021,7 +1021,7 @@ private:
                    fb != 0.0f) {
             expr = FloatImm::make(op->type, fa / fb);
         } else if (broadcast_a && broadcast_b) {
-            expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
+            expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
         } else if (ramp_a &&
                    no_overflow_scalar_int(ramp_a->base.type()) &&
                    const_int(ramp_a->stride, &ia) &&
@@ -1033,7 +1033,7 @@ private:
             Type t = op->type.element_of();
             expr = mutate(Ramp::make(ramp_a->base / broadcast_b->value,
                                      IntImm::make(t, div_imp(ia, ib)),
-                                     ramp_a->width));
+                                     ramp_a->lanes));
         } else if (ramp_a &&
                    no_overflow_scalar_int(ramp_a->base.type()) &&
                    const_int(ramp_a->stride, &ia) &&
@@ -1041,9 +1041,9 @@ private:
                    const_int(broadcast_b->value, &ib) &&
                    ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
-                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
+                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ib)) {
             // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
-            expr = mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->width));
+            expr = mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->lanes));
         } else if (no_overflow(op->type) &&
                    div_a &&
                    const_int(div_a->b, &ia) &&
@@ -1179,7 +1179,7 @@ private:
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = FloatImm::make(op->type, mod_imp(fa, fb));
         } else if (broadcast_a && broadcast_b) {
-            expr = mutate(Broadcast::make(Mod::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
+            expr = mutate(Broadcast::make(Mod::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
         } else if (no_overflow(op->type) &&
                    mul_a &&
                    const_int(b, &ib) &&
@@ -1228,7 +1228,7 @@ private:
                    ib &&
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
-            expr = mutate(Broadcast::make(ramp_a->base % broadcast_b->value, ramp_a->width));
+            expr = mutate(Broadcast::make(ramp_a->base % broadcast_b->value, ramp_a->lanes));
         } else if (ramp_a &&
                    no_overflow_scalar_int(ramp_a->base.type()) &&
                    const_int(ramp_a->stride, &ia) &&
@@ -1236,10 +1236,10 @@ private:
                    const_int(broadcast_b->value, &ib) &&
                    ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
-                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
+                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ib)) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) if x/z == (x + (w-1)*y)/z
             Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
-            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width));
+            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->lanes));
         } else if (ramp_a &&
                    no_overflow_scalar_int(ramp_a->base.type()) &&
                    const_int(ramp_a->stride, &ia) &&
@@ -1251,7 +1251,7 @@ private:
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) % z
             Type t = ramp_a->base.type();
             Expr new_base = make_const(t, mod_imp((int64_t)mod_rem.remainder, ib));
-            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->width) % b);
+            expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->lanes) % b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1336,7 +1336,7 @@ private:
             return;
         } else if (broadcast_a &&
                    broadcast_b) {
-            expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
+            expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
             return;
         } else if (no_overflow_scalar_int(op->type) &&
                    a.as<Variable>() &&
@@ -1360,7 +1360,7 @@ private:
                    const_int(broadcast_b->value, &ic)) {
             // min(ramp(a, b, n), broadcast(c, n))
             int ramp_start = ia;
-            int ramp_end = ia + ib * (ramp_a->width - 1);
+            int ramp_end = ia + ib * (ramp_a->lanes - 1);
             if (ramp_start <= ic && ramp_end <= ic) {
                 // ramp dominates
                 expr = a;
@@ -1672,7 +1672,7 @@ private:
             expr = b;
             return;
         } else if (broadcast_a && broadcast_b) {
-            expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
+            expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
             return;
         } else if (no_overflow_scalar_int(op->type) &&
                    is_simple_const(b)) {
@@ -1696,7 +1696,7 @@ private:
                    const_int(broadcast_b->value, &ic)) {
             // max(ramp(a, b, n), broadcast(c, n))
             int ramp_start = ia;
-            int ramp_end = ia + ib * (ramp_a->width - 1);
+            int ramp_end = ia + ib * (ramp_a->lanes - 1);
             if (ramp_start >= ic && ramp_end >= ic) {
                 // ramp dominates
                 expr = a;
@@ -1975,7 +1975,7 @@ private:
             // Push broadcasts outwards
             expr = Broadcast::make(mutate(broadcast->value ==
                                           make_zero(broadcast->value.type())),
-                                   broadcast->width);
+                                   broadcast->lanes);
         } else if (add && is_const(add->b)) {
             // x + const = 0 -> x = -const
             expr = (add->a == mutate(make_zero(delta.type()) - add->b));
@@ -2090,14 +2090,14 @@ private:
         } else if (broadcast_a &&
                    broadcast_b) {
             // Push broadcasts outwards
-            expr = mutate(Broadcast::make(broadcast_a->value < broadcast_b->value, broadcast_a->width));
+            expr = mutate(Broadcast::make(broadcast_a->value < broadcast_b->value, broadcast_a->lanes));
         } else if (no_overflow(delta.type())) {
             if (ramp_a &&
                 ramp_b &&
                 equal(ramp_a->stride, ramp_b->stride)) {
                 // Ramps with matching stride
                 Expr bases_lt = (ramp_a->base < ramp_b->base);
-                expr = mutate(Broadcast::make(bases_lt, ramp_a->width));
+                expr = mutate(Broadcast::make(bases_lt, ramp_a->lanes));
             } else if (add_a &&
                        add_b &&
                        equal(add_a->a, add_b->a)) {
@@ -2226,26 +2226,26 @@ private:
                 expr = const_false();
             } else if (delta_ramp &&
                        is_positive_const(delta_ramp->stride) &&
-                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
-                expr = const_true(delta_ramp->width);
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) < 0))) {
+                expr = const_true(delta_ramp->lanes);
             } else if (delta_ramp &&
                        is_positive_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base >= 0))) {
-                expr = const_false(delta_ramp->width);
+                expr = const_false(delta_ramp->lanes);
             } else if (delta_ramp &&
                        is_negative_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base < 0))) {
-                expr = const_true(delta_ramp->width);
+                expr = const_true(delta_ramp->lanes);
             } else if (delta_ramp &&
                        is_negative_const(delta_ramp->stride) &&
-                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
-                expr = const_false(delta_ramp->width);
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) >= 0))) {
+                expr = const_false(delta_ramp->lanes);
             } else if (delta_ramp && mod_rem.modulus > 0 &&
                        const_int(delta_ramp->stride, &ia) &&
-                       0 <= ia * (delta_ramp->width - 1) + mod_rem.remainder &&
-                       ia * (delta_ramp->width - 1) + mod_rem.remainder < mod_rem.modulus) {
+                       0 <= ia * (delta_ramp->lanes - 1) + mod_rem.remainder &&
+                       ia * (delta_ramp->lanes - 1) + mod_rem.remainder < mod_rem.modulus) {
                 // ramp(x, a, b) < 0 -> broadcast(x < 0, b)
-                expr = Broadcast::make(mutate(LT::make(delta_ramp->base / mod_rem.modulus, 0)), delta_ramp->width);
+                expr = Broadcast::make(mutate(LT::make(delta_ramp->base / mod_rem.modulus, 0)), delta_ramp->lanes);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -2348,9 +2348,9 @@ private:
             expr = const_false(op->type.lanes());
         } else if (broadcast_a &&
                    broadcast_b &&
-                   broadcast_a->width == broadcast_b->width) {
+                   broadcast_a->lanes == broadcast_b->lanes) {
             // x8(a) && x8(b) -> x8(a && b)
-            expr = Broadcast::make(mutate(And::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
+            expr = Broadcast::make(mutate(And::make(broadcast_a->value, broadcast_b->value)), broadcast_a->lanes);
         } else if (a.same_as(op->a) &&
                    b.same_as(op->b)) {
             expr = op;
@@ -2416,9 +2416,9 @@ private:
             expr = const_true(op->type.lanes());
         } else if (broadcast_a &&
                    broadcast_b &&
-                   broadcast_a->width == broadcast_b->width) {
+                   broadcast_a->lanes == broadcast_b->lanes) {
             // x8(a) || x8(b) -> x8(a || b)
-            expr = Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value)), broadcast_a->width);
+            expr = Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value)), broadcast_a->lanes);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2449,7 +2449,7 @@ private:
         } else if (const EQ *n = a.as<EQ>()) {
             expr = NE::make(n->a, n->b);
         } else if (const Broadcast *n = a.as<Broadcast>()) {
-            expr = mutate(Broadcast::make(!n->value, n->width));
+            expr = mutate(Broadcast::make(!n->value, n->lanes));
         } else if (a.same_as(op->a)) {
             expr = op;
         } else {
@@ -2504,12 +2504,12 @@ private:
         Expr stride = mutate(op->stride);
 
         if (is_zero(stride)) {
-            expr = Broadcast::make(base, op->width);
+            expr = Broadcast::make(base, op->lanes);
         } else if (base.same_as(op->base) &&
                    stride.same_as(op->stride)) {
             expr = op;
         } else {
-            expr = Ramp::make(base, stride, op->width);
+            expr = Ramp::make(base, stride, op->lanes);
         }
     }
 
@@ -2623,7 +2623,7 @@ private:
         Expr index = mutate(op->index);
         if (const Broadcast *b = index.as<Broadcast>()) {
             Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
-            expr = Broadcast::make(load, b->width);
+            expr = Broadcast::make(load, b->lanes);
         } else if (index.same_as(op->index)) {
             expr = op;
         } else {
@@ -2785,7 +2785,7 @@ private:
                     }
                 }
                 if (can_collapse) {
-                    expr = Ramp::make(r->base, mutate(r->stride / terms), r->width * terms);
+                    expr = Ramp::make(r->base, mutate(r->stride / terms), r->lanes * terms);
                     return;
                 }
             }
@@ -2985,11 +2985,11 @@ private:
                 new_value = mod->a;
             } else if (ramp && is_const(ramp->stride)) {
                 new_var = Variable::make(new_value.type().element_of(), new_name);
-                replacement = substitute(new_name, Ramp::make(new_var, ramp->stride, ramp->width), replacement);
+                replacement = substitute(new_name, Ramp::make(new_var, ramp->stride, ramp->lanes), replacement);
                 new_value = ramp->base;
             } else if (broadcast) {
                 new_var = Variable::make(new_value.type().element_of(), new_name);
-                replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
+                replacement = substitute(new_name, Broadcast::make(new_var, broadcast->lanes), replacement);
                 new_value = broadcast->value;
             } else if (cast && cast->type.bits() > cast->value.type().bits()) {
                 // Widening casts get pushed inwards, narrowing casts

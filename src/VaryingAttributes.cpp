@@ -302,7 +302,7 @@ protected:
             order = 2;
         }
 
-        expr = Broadcast::make(a, op->width);
+        expr = Broadcast::make(a, op->lanes);
     }
 
     virtual void visit(const Select *op) {
