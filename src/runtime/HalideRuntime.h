@@ -522,7 +522,7 @@ struct halide_type_t {
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() { return (bits + 7) / 8; };
+    size_t bytes() { return (bits + 7) / 8; }
 #endif
 };
 
