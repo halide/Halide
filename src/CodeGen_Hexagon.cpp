@@ -1460,6 +1460,16 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
     Patterns.push_back(Pattern(u8_(min(WPICK(wild_u32x128, wild_u32x64),
                                        UINT_8_IMAX)),
                                IPICK(Intrinsic::hexagon_V6_vsathub)));
+    // Due to aggressive simplification introduced by the patch below
+    // the max operator is removed when saturating a signed value down
+    // to an unsigned value.
+    // commit 23c461ce6cc50e22becbd38e6217c7e9e9b4dd98
+    //  Author: Andrew Adams <andrew.b.adams@gmail.com>
+    //  Date:   Mon Jun 16 15:38:13 2014 -0700
+    // Weaken some simplification rules due to horrible compile times.
+    Patterns.push_back(Pattern(u8_(min(WPICK(wild_i32x128, wild_i32x64),
+                                       UINT_8_IMAX)),
+                               IPICK(Intrinsic::hexagon_V6_vsathub)));
     // Fixme: PDB: Shouldn't the signed version have a max in the pattern too?
     // Yes it should. So adding it now.
     Patterns.push_back(Pattern(i8_(max(min(WPICK(wild_i32x128, wild_i32x64),
