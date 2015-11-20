@@ -470,7 +470,7 @@ extern int halide_error_debug_to_file_failed(void *user_context, const char *fun
 // @}
 
 /** Types in the halide type system. They can be ints, unsigned ints,
- * or floats (of various bit-widths), or a handle (which is always pointer-sized).
+ * or floats (of various bit-widths), or a handle (which is always 64-bits).
  * Note that the int/uint/float values do not imply a specific bit width
  * (the bit width is expected to be encoded in a separate value).
  */
