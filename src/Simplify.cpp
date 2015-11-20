@@ -1675,7 +1675,6 @@ private:
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
         } else if (no_overflow_scalar_int(op->type) &&
-                   a.as<Variable>() &&
                    is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);

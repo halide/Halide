@@ -128,6 +128,10 @@ public:
      * you. */
     EXPORT int copy_to_device();
 
+    /** If this buffer exists on a GPU, then finish any currently
+     * running computation on that GPU. Useful for benchmarking. */
+    EXPORT int device_sync();
+
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then free the device-side
      * allocation, if there is one. Done automatically when the last
