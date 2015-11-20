@@ -138,6 +138,7 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_end_pipeline = 9};
 
 // TODO: Update to use halide_type_t
+// Tracking issue filed here: https://github.com/halide/Halide/issues/980
 #pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
