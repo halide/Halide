@@ -516,7 +516,7 @@ struct halide_type_t {
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
-     * width: The number of vector elements in the type. */
+     * lanes: The number of vector elements in the type. */
     halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
