@@ -1,8 +1,6 @@
-// A currentTime function for use in the tests.
-// Returns time in milliseconds.
-
 #include <iomanip>
 #include <sstream>
+#include <chrono>
 
 std::string items_per_second(int N, double elapsed) {
     double ips = N * 1000 / elapsed;
@@ -21,4 +19,9 @@ std::string items_per_second(int N, double elapsed) {
     std::ostringstream sout;
     sout << std::setprecision(3) << ips << postfix << "(items/s)";
     return sout.str();
+}
+
+double current_time() {
+    auto now = std::chrono::system_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::microseconds>(now).count() / 1e3;
 }
