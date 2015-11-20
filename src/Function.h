@@ -52,7 +52,7 @@ namespace Internal {
 
 struct UpdateDefinition {
     std::vector<Expr> values, args;
-    Schedule schedule;
+    Schedule schedule, default_schedule;
     ReductionDomain domain;
 };
 
@@ -135,6 +135,10 @@ public:
 
     /** Get a const handle to the schedule for inspecting it */
     EXPORT const Schedule &schedule() const;
+
+    /** Revert the schedule for all stages of this Function to its
+     * default initial state. */
+    EXPORT void reset_schedule();
 
     /** Get a handle on the output buffer used for setting constraints
      * on it. */

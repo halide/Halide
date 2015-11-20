@@ -349,7 +349,7 @@ Stmt build_provide_loop_nest(Function f,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(Function f) {
+Stmt build_produce(Function f, bool is_output) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -399,7 +399,7 @@ Stmt build_produce(Function f) {
         // already injected by allocation bounds inference. If it's
         // the output to the pipeline then it will similarly be in the
         // symbol table.
-        if (f.schedule().store_level() == f.schedule().compute_level()) {
+        if (f.schedule().store_level() == f.schedule().compute_level() || is_output) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
                 if (f.outputs() > 1) {
@@ -532,8 +532,8 @@ vector<Stmt> build_update(Function f) {
     return updates;
 }
 
-pair<Stmt, Stmt> build_production(Function func) {
-    Stmt produce = build_produce(func);
+pair<Stmt, Stmt> build_production(Function func, bool is_output) {
+    Stmt produce = build_produce(func, is_output);
     vector<Stmt> updates = build_update(func);
 
     // Build it from the last stage backwards.
@@ -612,10 +612,11 @@ bool function_is_used_in_stmt(Function f, Stmt s) {
 class InjectRealization : public IRMutator {
 public:
     const Function &func;
+    LoopLevel store_at, compute_at;
     bool is_output, found_store_level, found_compute_level, inject_asserts;
 
-    InjectRealization(const Function &f, bool o, bool asserts) :
-        func(f), is_output(o),
+    InjectRealization(const Function &f, const LoopLevel &s, const LoopLevel &c, bool o, bool asserts) :
+        func(f), store_at(s), compute_at(c), is_output(o),
         found_store_level(false), found_compute_level(false),
         inject_asserts(asserts) {}
 
@@ -624,7 +625,7 @@ private:
     string producing;
 
     Stmt build_pipeline(Stmt s) {
-        pair<Stmt, Stmt> realization = build_production(func);
+        pair<Stmt, Stmt> realization = build_production(func, is_output);
 
         return ProducerConsumer::make(func.name(), realization.first, realization.second, s);
     }
@@ -676,8 +677,6 @@ private:
 
     void visit(const For *for_loop) {
         debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
-        const LoopLevel &compute_level = func.schedule().compute_level();
-        const LoopLevel &store_level = func.schedule().store_level();
 
         Stmt body = for_loop->body;
 
@@ -690,7 +689,7 @@ private:
 
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
-            func.schedule().compute_level().is_inline() &&
+            compute_at.is_inline() &&
             for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
@@ -703,7 +702,7 @@ private:
 
         body = mutate(body);
 
-        if (compute_level.match(for_loop->name)) {
+        if (compute_at.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
             if (function_is_used_in_stmt(func, body) || is_output) {
                 body = build_pipeline(body);
@@ -711,7 +710,7 @@ private:
             found_compute_level = true;
         }
 
-        if (store_level.match(for_loop->name)) {
+        if (store_at.match(for_loop->name)) {
             debug(3) << "Found store level\n";
             internal_assert(found_compute_level)
                 << "The compute loop level was not found within the store loop level!\n";
@@ -744,7 +743,7 @@ private:
     virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
             !func.is_pure() &&
-            func.schedule().compute_level().is_inline() &&
+            compute_at.is_inline() &&
             function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
@@ -942,14 +941,14 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
-void validate_schedule(Function f, Stmt s, bool is_output) {
+void validate_schedule(Function f, Stmt s, LoopLevel store_at, LoopLevel compute_at, bool is_output) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
-                if (g.schedule().compute_level().is_inline()) {
+                if (compute_at.is_inline()) {
                     user_error
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
@@ -977,9 +976,6 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
             }
         }
     }
-
-    LoopLevel store_at = f.schedule().store_level();
-    LoopLevel compute_at = f.schedule().compute_level();
 
     // Outputs must be compute_root and store_root. They're really
     // store_in_user_code, but store_root is close enough.
@@ -1129,16 +1125,24 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
-        validate_schedule(f, s, is_output);
+        // Explicitly pull out the store level and compute_level and use them in the functions below
+        LoopLevel store_at = f.schedule().store_level();
+        LoopLevel compute_at = f.schedule().compute_level();
+        if (is_output) {
+            store_at = LoopLevel::root();
+            compute_at = LoopLevel::root();
+        }
+
+        validate_schedule(f, s, store_at, compute_at, is_output);
 
         if (f.has_pure_definition() &&
             !f.has_update_definition() &&
-            f.schedule().compute_level().is_inline()) {
+            compute_at.is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
-            InjectRealization injector(f, is_output, inject_asserts);
+            InjectRealization injector(f, store_at, compute_at, is_output, inject_asserts);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }

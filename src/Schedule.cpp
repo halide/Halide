@@ -5,6 +5,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::vector;
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
@@ -12,11 +13,11 @@ struct ScheduleContents {
     mutable RefCount ref_count;
 
     LoopLevel store_level, compute_level;
-    std::vector<Split> splits;
-    std::vector<Dim> dims;
-    std::vector<std::string> storage_dims;
-    std::vector<Bound> bounds;
-    std::vector<Specialization> specializations;
+    vector<Split> splits;
+    vector<Dim> dims;
+    vector<std::string> storage_dims;
+    vector<Bound> bounds;
+    vector<Specialization> specializations;
     ReductionDomain reduction_domain;
     bool memoized;
     bool touched;
@@ -38,6 +39,31 @@ EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
 
 Schedule::Schedule() : contents(new ScheduleContents) {}
 
+Schedule Schedule::copy() const {
+    IntrusivePtr<ScheduleContents> c(new ScheduleContents);
+
+    // Copy over everything but the ref count
+    c.ptr->store_level      = contents.ptr->store_level;
+    c.ptr->compute_level    = contents.ptr->compute_level;
+    c.ptr->splits           = contents.ptr->splits;
+    c.ptr->dims             = contents.ptr->dims;
+    c.ptr->storage_dims     = contents.ptr->storage_dims;
+    c.ptr->bounds           = contents.ptr->bounds;
+    c.ptr->reduction_domain = contents.ptr->reduction_domain;
+    c.ptr->memoized         = contents.ptr->memoized;
+    c.ptr->touched          = contents.ptr->touched;
+    c.ptr->allow_race_conditions = contents.ptr->allow_race_conditions;
+
+    // Recursively copy the specializations
+    for (Specialization &s : contents.ptr->specializations) {
+        Specialization s_copy = s;
+        s_copy.schedule = Schedule(s.schedule).copy().contents;
+        c.ptr->specializations.push_back(s_copy);
+    }
+
+    return Schedule(c);
+}
+
 bool &Schedule::memoized() {
     return contents.ptr->memoized;
 }
@@ -54,50 +80,50 @@ bool Schedule::touched() const {
     return contents.ptr->touched;
 }
 
-const std::vector<Split> &Schedule::splits() const {
+const vector<Split> &Schedule::splits() const {
     return contents.ptr->splits;
 }
 
-std::vector<Split> &Schedule::splits() {
+vector<Split> &Schedule::splits() {
     return contents.ptr->splits;
 }
 
-std::vector<Dim> &Schedule::dims() {
+vector<Dim> &Schedule::dims() {
     return contents.ptr->dims;
 }
 
-const std::vector<Dim> &Schedule::dims() const {
+const vector<Dim> &Schedule::dims() const {
     return contents.ptr->dims;
 }
 
-std::vector<std::string> &Schedule::storage_dims() {
+vector<std::string> &Schedule::storage_dims() {
     return contents.ptr->storage_dims;
 }
 
-const std::vector<std::string> &Schedule::storage_dims() const {
+const vector<std::string> &Schedule::storage_dims() const {
     return contents.ptr->storage_dims;
 }
 
-std::vector<Bound> &Schedule::bounds() {
+vector<Bound> &Schedule::bounds() {
     return contents.ptr->bounds;
 }
 
-const std::vector<Bound> &Schedule::bounds() const {
+const vector<Bound> &Schedule::bounds() const {
     return contents.ptr->bounds;
 }
 
-const std::vector<Specialization> &Schedule::specializations() const {
+const vector<Specialization> &Schedule::specializations() const {
     return contents.ptr->specializations;
 }
 
 const Specialization &Schedule::add_specialization(Expr condition) {
     Specialization s;
     s.condition = condition;
-    s.schedule = IntrusivePtr<ScheduleContents>(new ScheduleContents);
-
     // The sub-schedule inherits everything about its parent except for its specializations.
-    *s.schedule.ptr = *contents.ptr;
-    s.schedule.ptr->specializations.clear();
+    vector<Specialization> tmp;
+    contents.ptr->specializations.swap(tmp);
+    s.schedule = copy().contents;
+    contents.ptr->specializations.swap(tmp);
     contents.ptr->specializations.push_back(s);
     return contents.ptr->specializations.back();
 }

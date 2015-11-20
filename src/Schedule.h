@@ -114,6 +114,11 @@ public:
     Schedule(const Schedule &other) : contents(other.contents) {}
     EXPORT Schedule();
 
+    /** Make a deep copy of this schedule (The regular copy
+     * constructor just makes a new reference to the same
+     * schedule). */
+    EXPORT Schedule copy() const;
+
     /** This flag is set to true if the schedule is memoized. */
     // @{
     bool &memoized();

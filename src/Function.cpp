@@ -25,7 +25,7 @@ struct FunctionContents {
     std::vector<std::string> args;
     std::vector<Expr> values;
     std::vector<Type> output_types;
-    Schedule schedule;
+    Schedule schedule, default_schedule;
 
     std::vector<UpdateDefinition> updates;
 
@@ -310,6 +310,9 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents.ptr->schedule.dims().push_back(d);
     }
 
+    // Make a copy of this default schedule in case we want to reset it later
+    contents.ptr->default_schedule = contents.ptr->schedule.copy();
+
     for (size_t i = 0; i < values.size(); i++) {
         string buffer_name = name();
         if (values.size() > 1) {
@@ -493,6 +496,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         r.schedule.dims().push_back(d);
     }
 
+    // Make a copy of this default schedule in case we want to reset it later
+    r.default_schedule = r.schedule.copy();
+
     // If there's no recursive reference, no reduction domain, and all
     // the args are pure, then this definition completely hides
     // earlier ones!
@@ -572,6 +578,13 @@ Schedule &Function::schedule() {
 
 const Schedule &Function::schedule() const {
     return contents.ptr->schedule;
+}
+
+void Function::reset_schedule() {
+    contents.ptr->schedule = contents.ptr->default_schedule.copy();
+    for (UpdateDefinition &update : contents.ptr->updates) {
+        update.schedule = update.default_schedule.copy();
+    }
 }
 
 const std::vector<Parameter> &Function::output_buffers() const {
