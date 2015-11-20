@@ -498,7 +498,7 @@ typedef enum halide_type_code_t
 /** A runtime tag for a type in the halide type system. Can be ints,
  * unsigned ints, or floats of various bit-widths (the 'bits'
  * field). Can also be vectors of the same (by setting the 'lanes'
- * field to something larger than one). This struct is should be
+ * field to something larger than one). This struct should be
  * exactly 32-bits in size. */
 struct halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
