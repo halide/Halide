@@ -252,7 +252,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     if (t.arch == Target::Hexagon) {
-        s = hexagon_ir_checker(s);
+        s = hexagon_ir_checker(s, t);
         debug(1) << "Lowering after hexagon_ir_checker: \n" << s << "\n\n";
     }
 

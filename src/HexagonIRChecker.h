@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -14,7 +15,7 @@ namespace Internal {
  * them into single statements that operate on vectors. The loops in
  * question must have constant extent.
  */
-Stmt hexagon_ir_checker(Stmt);
+Stmt hexagon_ir_checker(Stmt s, const Target &t);
 
 /* Lowering pass for Hexagon
  */

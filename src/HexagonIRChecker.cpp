@@ -36,6 +36,8 @@ Stmt hexagon_lower(Stmt s) {
 class HexagonIRChecker  : public IRMutator {
   using IRMutator::visit;
 public:
+  bool is_double;
+
   enum HVX_mode {
     Single,
     Double
@@ -70,8 +72,10 @@ public:
     expr = check_type (cast_op);
   }
 
+  HexagonIRChecker(bool has_double) : is_double(has_double) {}
+
 private:
-  bool is_invalid_type(Type t, HexagonIRChecker::HVX_mode m ) {
+  bool is_unsupported_type(Type t, HexagonIRChecker::HVX_mode m ) {
     if (!t.is_vector())
       return false;
     int vec_size_in_bits = t.bits * t.width;
@@ -96,24 +100,29 @@ private:
     }
   }
   Expr check_type(const BaseExprNode *op) {
-    if(is_invalid_type(op->type, HexagonIRChecker::Single)) {
-      user_warning << "Invalid type:{SINGLE_MODE}: (" << op->type << "): " << (Expr) op << "\n";
+    if (!is_double &&
+        is_unsupported_type(op->type, HexagonIRChecker::Single)) {
+      user_warning << "Unsupported type (Single mode): " << op->type << " in " << (Expr) op << "\n";
     }
-    if(is_invalid_type(op->type, HexagonIRChecker::Double)) {
-      user_warning << "Invalid type:{DOUBLE_MODE}: (" << op->type << "): " << (Expr) op << "\n";
+    if (is_double &&
+        is_unsupported_type(op->type, HexagonIRChecker::Double)) {
+      user_warning << "Unsupported type (Double mode): " << op->type << " in " << (Expr) op << "\n";
     }
-    if(is_vector_quad(op->type, HexagonIRChecker::Single)) {
-      user_warning << "Vector Quad:{SINGLE_MODE}: (" << op->type << "): " << (Expr) op << "\n";
+    if (!is_double &&
+        is_vector_quad(op->type, HexagonIRChecker::Single)) {
+      user_warning << "Vector Quad (Single mode): " << op->type << " in " << (Expr) op << "\n";
     }
-    if(is_vector_quad(op->type, HexagonIRChecker::Double)) {
-      user_warning << "Vector Quad:{DOUBLE_MODE}: (" << op->type << "): " << (Expr) op << "\n";
+    if (is_double &&
+        is_vector_quad(op->type, HexagonIRChecker::Double)) {
+      user_warning << "Vector Quad (Double mode): " << op->type << " in " << (Expr) op << "\n";
     }
     return op;
   }
 };
 
-Stmt hexagon_ir_checker(Stmt s) {
-    return HexagonIRChecker().mutate(s);
+Stmt hexagon_ir_checker(Stmt s, const Target &t) {
+    bool has_double = t.has_feature(Target::HVX_DOUBLE);
+    return HexagonIRChecker(has_double).mutate(s);
 }
 
 }
