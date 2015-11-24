@@ -349,23 +349,23 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_GetElement_func(Type type) {
     // The symbols will be resolved once the code compiles on the target
     // Android device.
     std::string func_name;
-    debug(2) << "fetch_GetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
-    switch (type.code) {
-        case Type::TypeCode::UInt:
-            switch (type.width) {
+    debug(2) << "fetch_GetElement_func type.code()=" << type.code() << " type.lanes()=" << type.lanes() << "\n";
+    switch (type.code()) {
+        case Type::UInt:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsGetElementAt_uchar13rs_allocationjjj"; break;
                 case 4: func_name = "_Z21rsGetElementAt_uchar413rs_allocationjj"; break;
             }
             break;
-        case Type::TypeCode::Float:
-            switch (type.width) {
+        case Type::Float:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsGetElementAt_float13rs_allocationjjj"; break;
                 case 4: func_name = "_Z21rsGetElementAt_float413rs_allocationjj"; break;
             }
             break;
         default: break;
     }
-    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";
+    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code()=" << type.code() << ", type.lanes()=" << type.lanes() << "\n";
     llvm::Function *func = module->getFunction(func_name);
     internal_assert(func) << "Cant' find " << func_name << "function\n";
     return func;
@@ -376,23 +376,23 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(Type type) {
     // The symbols will be resolved once the code compiles on the target
     // Android device.
     std::string func_name;
-    debug(2) << "fetch_SetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
-    switch (type.code) {
-        case Type::TypeCode::UInt:
-            switch (type.width) {
+    debug(2) << "fetch_SetElement_func type.code()=" << type.code() << " type.lanes()=" << type.lanes() << "\n";
+    switch (type.code()) {
+        case Type::UInt:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsSetElementAt_uchar13rs_allocationhjjj"; break;
                 case 4: func_name = "_Z21rsSetElementAt_uchar413rs_allocationDv4_hjj"; break;
             }
             break;
-        case Type::TypeCode::Float:
-            switch (type.width) {
+        case Type::Float:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsSetElementAt_float13rs_allocationfjjj"; break;
                 case 4: func_name = "_Z21rsSetElementAt_float413rs_allocationDv4_fjj"; break;
             }
             break;
         default: break;
     }
-    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";
+    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code()=" << type.code() << ", type.lanes()=" << type.lanes() << "\n";
     llvm::Function *func = module->getFunction(func_name);
     internal_assert(func) << "Cant' find " << func_name << "function\n";
     return func;
@@ -408,11 +408,11 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
     if (b_name != NULL && b_x != NULL && b_y != NULL && ramp_c != NULL) {
         // vectorized over c, use x and y to retrieve 4-byte RGBA chunk.
         const IntImm *stride = ramp_c->stride.IRHandle::as<IntImm>();
-        user_assert(stride->value == 1 && ramp_c->width == 4)
+        user_assert(stride->value == 1 && ramp_c->lanes == 4)
             << "Only vectorized RGBA format is supported at present.\n";
-        user_assert(b_x->value.type().width == 1)
+        user_assert(b_x->value.type().lanes() == 1)
             << "image_load/store x coordinate is not scalar.\n";
-        user_assert(b_y->value.type().width == 1)
+        user_assert(b_y->value.type().lanes() == 1)
             << "image_load/store y coordinate is not scalar.\n";
         args.push_back(sym_get(b_name->value.as<StringImm>()->value));
         args.push_back(codegen(b_x->value));
@@ -449,7 +449,7 @@ void CodeGen_Renderscript_Dev::visit(const Call *op) {
                 args.insert(args.begin() + 1, codegen(op->args[5]));
             }
 
-            debug(2) << "Generating " << op->type.width
+            debug(2) << "Generating " << op->type.lanes()
                      << "byte-wide call with " << args.size() << " args:\n";
             if (debug::debug_level >= 2) {
                 int i = 1;

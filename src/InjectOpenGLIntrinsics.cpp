@@ -73,8 +73,7 @@ private:
             Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
             args[4] = c_coordinate;
 
-            Type load_type = call->type;
-            load_type.width = 4;
+            Type load_type = call->type.with_lanes(4);
 
             Expr load_call = Call::make(load_type, Call::glsl_texture_load,
                                         vector<Expr>(&args[0], &args[4]),
