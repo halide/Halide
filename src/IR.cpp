@@ -38,7 +38,7 @@ IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
 
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
-    internal_assert(t.width == v.type().width) << "Cast may not change vector widths\n";
+    internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
 
     Cast *node = new Cast;
     node->type = t;
@@ -136,7 +136,7 @@ Expr EQ::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "EQ of mismatched types\n";
 
     EQ *node = new EQ;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -148,7 +148,7 @@ Expr NE::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "NE of mismatched types\n";
 
     NE *node = new NE;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -160,7 +160,7 @@ Expr LT::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "LT of mismatched types\n";
 
     LT *node = new LT;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -173,7 +173,7 @@ Expr LE::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "LE of mismatched types\n";
 
     LE *node = new LE;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -185,7 +185,7 @@ Expr GT::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "GT of mismatched types\n";
 
     GT *node = new GT;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -198,7 +198,7 @@ Expr GE::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "GE of mismatched types\n";
 
     GE *node = new GE;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -212,7 +212,7 @@ Expr And::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "And of mismatched types\n";
 
     And *node = new And;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -226,7 +226,7 @@ Expr Or::make(Expr a, Expr b) {
     internal_assert(a.type() == b.type()) << "Or of mismatched types\n";
 
     Or *node = new Or;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     node->b = b;
     return node;
@@ -237,7 +237,7 @@ Expr Not::make(Expr a) {
     internal_assert(a.type().is_bool()) << "argument of Not is not a bool\n";
 
     Not *node = new Not;
-    node->type = Bool(a.type().width);
+    node->type = Bool(a.type().lanes());
     node->a = a;
     return node;
 }
@@ -249,8 +249,8 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool: " << condition.type() << "\n";
     internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
     internal_assert(condition.type().is_scalar() ||
-                    condition.type().width == true_value.type().width)
-        << "In Select, vector width of condition must either be 1, or equal to vector width of arguments\n";
+                    condition.type().lanes() == true_value.type().lanes())
+        << "In Select, vector lanes of condition must either be 1, or equal to vector lanes of arguments\n";
 
     Select *node = new Select;
     node->type = true_value.type();
@@ -262,7 +262,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
 
 Expr Load::make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
     internal_assert(index.defined()) << "Load of undefined\n";
-    internal_assert(type.width == index.type().width) << "Vector width of Load must match vector width of index\n";
+    internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
 
     Load *node = new Load;
     node->type = type;
@@ -273,31 +273,31 @@ Expr Load::make(Type type, std::string name, Expr index, Buffer image, Parameter
     return node;
 }
 
-Expr Ramp::make(Expr base, Expr stride, int width) {
+Expr Ramp::make(Expr base, Expr stride, int lanes) {
     internal_assert(base.defined()) << "Ramp of undefined\n";
     internal_assert(stride.defined()) << "Ramp of undefined\n";
     internal_assert(base.type().is_scalar()) << "Ramp with vector base\n";
     internal_assert(stride.type().is_scalar()) << "Ramp with vector stride\n";
-    internal_assert(width > 1) << "Ramp of width <= 1\n";
+    internal_assert(lanes > 1) << "Ramp of lanes <= 1\n";
     internal_assert(stride.type() == base.type()) << "Ramp of mismatched types\n";
 
     Ramp *node = new Ramp;
-    node->type = base.type().vector_of(width);
+    node->type = base.type().with_lanes(lanes);
     node->base = base;
     node->stride = stride;
-    node->width = width;
+    node->lanes = lanes;
     return node;
 }
 
-Expr Broadcast::make(Expr value, int width) {
+Expr Broadcast::make(Expr value, int lanes) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
     internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
-    internal_assert(width != 1) << "Broadcast of width 1\n";
+    internal_assert(lanes != 1) << "Broadcast of lanes 1\n";
 
     Broadcast *node = new Broadcast;
-    node->type = value.type().vector_of(width);
+    node->type = value.type().with_lanes(lanes);
     node->value = value;
-    node->width = width;
+    node->lanes = lanes;
     return node;
 }
 
