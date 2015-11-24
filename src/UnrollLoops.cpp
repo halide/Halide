@@ -28,7 +28,11 @@ class UnrollLoops : public IRMutator {
             // Make n copies of the body, each wrapped in a let that defines the loop var for that body
             for (int i = e->value-1; i >= 0; i--) {
                 Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
-                block = Block::make(iter, block);
+                if (block.defined()) {
+                    block = Block::make(iter, block);
+                } else {
+                    block = iter;
+                }
             }
             stmt = block;
 

@@ -407,8 +407,6 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         copy_memory,
         likely,
-        make_int64,
-        make_float64,
         register_destructor;
 
     // If it's a call to another halide function, this call node

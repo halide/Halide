@@ -1,5 +1,4 @@
 #include "Deinterleave.h"
-#include "BlockFlattening.h"
 #include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -688,7 +687,6 @@ class Interleaver : public IRMutator {
 };
 
 Stmt rewrite_interleavings(Stmt s) {
-    s = flatten_blocks(s);
     return Interleaver().mutate(s);
 }
 
@@ -728,4 +726,3 @@ void deinterleave_vector_test() {
 
 }
 }
-
