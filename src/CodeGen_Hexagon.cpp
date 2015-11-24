@@ -553,8 +553,8 @@ checkVectorOp(const Expr op, string msg) {
       internal_error << "VEC-EXPECT " << msg;
     if (show_chk > 0) {
       user_warning << "Unsupported vector op: "
-                   << op.type() << " " << msg << "  "
-                   << op << " (" << &op << ")\n";
+                   << op.type() << " " << msg
+                   << "  " << op << "\n";
     }
   }
 }
@@ -979,7 +979,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
   if (!value)
     value = emitBinaryOp(op, varith);
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(Add * , vector case)\n");
+    checkVectorOp(op, "in visit(Add *)\n");
     CodeGen_Posix::visit(op);
   }
   return;
@@ -1332,7 +1332,7 @@ void CodeGen_Hexagon::visit(const Div *op) {
   }
 
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(Div * , vector case)\n");
+    checkVectorOp(op, "in visit(Div *)\n");
     CodeGen_Posix::visit(op);
   }
   return;
@@ -1341,7 +1341,7 @@ void CodeGen_Hexagon::visit(const Div *op) {
 void CodeGen_Hexagon::visit(const Sub *op) {
   value = emitBinaryOp(op, varith);
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(Sub * , vector case)\n");
+    checkVectorOp(op, "in visit(Sub *)\n");
     CodeGen_Posix::visit(op);
   }
   return;
@@ -1355,7 +1355,7 @@ void CodeGen_Hexagon::visit(const Max *op) {
 
   value = emitBinaryOp(op, varith);
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(Max * , vector case)\n");
+    checkVectorOp(op, "in visit(Max *)\n");
     CodeGen_Posix::visit(op);
   }
   return;
@@ -1363,7 +1363,7 @@ void CodeGen_Hexagon::visit(const Max *op) {
 void CodeGen_Hexagon::visit(const Min *op) {
   value = emitBinaryOp(op, varith);
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(Mix * , vector case)\n");
+    checkVectorOp(op, "in visit(Min *)\n");
     CodeGen_Posix::visit(op);
   }
   return;
@@ -1993,7 +1993,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     }
   }
   // ******** End Part 2: Down casts (Narrowing)* ***************
-  checkVectorOp(op, "Unhandled case in visit(Cast * , vector case)\n");
+  checkVectorOp(op, "in visit(Cast *)\n");
   CodeGen_Posix::visit(op);
   return;
 }
@@ -2110,7 +2110,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
       }
     }
-    checkVectorOp(op, "Unhandled case in visit(Call * , vector case)\n");
+    checkVectorOp(op, "in visit(Call *)\n");
     CodeGen_Posix::visit(op);
   }
 }
@@ -2496,8 +2496,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
                     "Cannot deal with an Imm value greater than 16"
                     "bits in generating vmpyi\n";
               } else
-                checkVectorOp(op, "Unhandled case in visit(Mul * Vector"
-                              " Scalar Imm)\n");
+                checkVectorOp(op, "in visit(Mul *) Vector Scalar Imm\n");
               Expr ScalarImmExpr = IntImm::make(Int(32), ScalarValue);
               Value *Scalar = codegen(ScalarImmExpr);
               Value *VectorOp = codegen(Vec);
@@ -2535,13 +2534,13 @@ void CodeGen_Hexagon::visit(const Mul *op) {
               return;
               // It is Vector x Vector
             } else  if (matches[0].type().is_vector() && matches[1].type().is_vector()) {
-              checkVectorOp(op, "Unhandled case in visit(Vector x Vector Mul *)\n");
-              internal_error << "Unhandled case in visit(Vector x Vector Mul *)\n";
+              checkVectorOp(op, "in visit(Mul *) Vector x Vector\n");
+              internal_error << "in visit(Mul *) Vector x Vector\n";
             }
           }
         } // expr_match
       }
-      checkVectorOp(op, "Unhandled case in visit(Vector x Vector Mul * no match)\n");
+      checkVectorOp(op, "in visit(Mul *) Vector x Vector no match)\n");
       debug(4) << "HexCG: FAILED to generate a  vector multiply.\n";
     }
   }
@@ -2560,7 +2559,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
                  << " = "
                  << op->type
                  << ")\n";
-    checkVectorOp(op, "Unhandled case in visit(Mul * , vector case)\n");
+    checkVectorOp(op, "in visit(Mul *)\n");
     CodeGen_Posix::visit(op);
     return;
   }
@@ -2645,7 +2644,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
                    << " WidthOps:" << WidthOps
                    << " NumOps:" << NumOps
                    << ")\n";
-      checkVectorOp(op, "Unhandled type in visit(Broadcast * , vector case)\n");
+      checkVectorOp(op, "Unhandled type in visit(Broadcast *)\n");
       CodeGen_Posix::visit(op);
       return;
     }
@@ -2659,7 +2658,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
                    << " WidthOps:" << WidthOps
                    << " NumOps:" << NumOps
                    << ")\n";
-      checkVectorOp(op, "Unhandled width in visit(Broadcast * , vector case)\n");
+      checkVectorOp(op, "Unhandled width in visit(Broadcast *)\n");
       CodeGen_Posix::visit(op);
       return;
     }
@@ -2990,7 +2989,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
       }
   }
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(Select *, vector case)\n");
+    checkVectorOp(op, "in visit(Select *)\n");
     CodeGen_Posix::visit(op);
   }
 }
@@ -3124,7 +3123,7 @@ void CodeGen_Hexagon::visit(const LE *op) {
                                      true);
 
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(LE * , vector case)\n");
+    checkVectorOp(op, "in visit(LE *)\n");
     CodeGen_Posix::visit(op);
   }
 }
@@ -3177,7 +3176,7 @@ void CodeGen_Hexagon::visit(const LT *op) {
                                      false);
 
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(LE * , vector case)\n");
+    checkVectorOp(op, "in visit(LT *)\n");
     CodeGen_Posix::visit(op);
   }
 }
@@ -3230,7 +3229,7 @@ void CodeGen_Hexagon::visit(const NE *op) {
                                      true);
 
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(LE * , vector case)\n");
+    checkVectorOp(op, "in visit(NE *)\n");
     CodeGen_Posix::visit(op);
   }
 }
@@ -3283,7 +3282,7 @@ void CodeGen_Hexagon::visit(const GT *op) {
                                      false);
 
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(LE * , vector case)\n");
+    checkVectorOp(op, "in visit(GT *)\n");
     CodeGen_Posix::visit(op);
   }
 }
@@ -3336,7 +3335,7 @@ void CodeGen_Hexagon::visit(const EQ *op) {
                                      false);
 
   if (!value) {
-    checkVectorOp(op, "Unhandled case in visit(LE * , vector case)\n");
+    checkVectorOp(op, "in visit(EQ *)\n");
     CodeGen_Posix::visit(op);
   }
 }
