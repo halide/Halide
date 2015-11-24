@@ -493,7 +493,7 @@ class PartitionLoops : public IRMutator {
             // them together and can drop one of them.
             std::sort(min_vals.begin(), min_vals.end(), IRDeepCompare());
             min_vals.push_back(op->min);
-            prologue_val = std::accumulate(min_vals.begin() + 1, min_vals.end(), min_vals[0], Max::make);
+            prologue_val = fold_left(min_vals, Max::make);
             min_steady = Variable::make(Int(32), prologue_name);
 
             internal_assert(!expr_uses_var(prologue_val, op->name));
@@ -501,7 +501,7 @@ class PartitionLoops : public IRMutator {
         if (make_epilogue) {
             std::sort(max_vals.begin(), max_vals.end(), IRDeepCompare());
             max_vals.push_back(op->min + op->extent - 1);
-            epilogue_val = std::accumulate(max_vals.begin() + 1, max_vals.end(), max_vals[0], Min::make) + 1;
+            epilogue_val = fold_left(max_vals, Min::make) + 1;
             if (make_prologue) {
                 epilogue_val = max(epilogue_val, prologue_val);
             }
