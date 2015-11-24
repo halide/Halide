@@ -61,7 +61,7 @@ struct Type {
     operator halide_type_t() const { return type; }
 
     /** Return the underlying data type of an element as an enum value. */
-    halide_type_code_t code() const { return type.code; }
+    halide_type_code_t code() const { return (halide_type_code_t)type.code; }
 
     /** Return the bit size of a single element of this type. */
     int bits() const { return type.bits; }
