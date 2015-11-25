@@ -68,6 +68,65 @@ vector<Expr> let_vars(const vector<pair<string, Expr>> &l) {
     return result;
 }
 
+
+Expr extreme_lane(Expr e, bool max) {
+    if (e.type().is_scalar()) {
+        return e;
+    }
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        return b->value;
+    }
+    if (const Ramp *r = e.as<Ramp>()) {
+        Expr last_lane = r->base + r->stride * (r->width - 1);
+        Expr first_lane = r->base;
+        if (is_positive_const(r->stride)) {
+            if (max) {
+                return last_lane;
+            } else {
+                return first_lane;
+            }
+        } else if (is_negative_const(r->stride) ^ max) {
+            if (max) {
+                return first_lane;
+            } else {
+                return last_lane;
+            }
+        }
+    }
+    internal_error << "max_lane/min_lane should only be called on constants\n";
+    return Expr();
+}
+
+Expr max_lane(Expr e) {
+    return extreme_lane(e, true);
+}
+
+Expr min_lane(Expr e) {
+    return extreme_lane(e, false);
+}
+
+// Is it possible that one of the vector lanes of a equals one of the
+// vector lanes of b.
+bool might_overlap(Expr a, Expr b) {
+    if (a.type().is_scalar() && b.type().is_scalar()) {
+        return !is_one(simplify(a != b));
+    } else if (is_const(a) && is_const(b)) {
+        Expr no_overlap = (max_lane(a) < min_lane(b) ||
+                           min_lane(a) > max_lane(b));
+        return !is_one(simplify(no_overlap));
+    } else {
+        return true;
+    }
+}
+
+Expr scratch_index(Type t) {
+    if (t.width == 1) {
+        return 0;
+    } else {
+        return Ramp::make(0, 1, t.width);
+    }
+}
+
 }
 
 class IRUsesAlloc : public IRVisitor {
@@ -164,16 +223,6 @@ public:
     vector<const Store *> stores;
 };
 
-namespace {
-Expr scratch_index(Type t) {
-    if (t.width == 1) {
-        return 0;
-    } else {
-        return Ramp::make(0, 1, t.width);
-    }
-}
-}
-
 // Check if a load or store node might alias with another distinct
 // store node.
 class MightAliasWithAStore : public IRVisitor {
@@ -181,30 +230,14 @@ class MightAliasWithAStore : public IRVisitor {
     const Load *load = nullptr;
 
     void visit(const Store *op) {
-        Expr test;
-        // If the expressions are vectors, it's not enough that they
-        // are not equal - they also have to not overlap. Maybe
-        // convert the vector lane into a free var? Just give up
-        // (TODO: improve this).
-
         if (store && op->name == store->name && op != store) {
-            if (op->index.type().is_vector() || store->index.type().is_vector()) {
+            if (might_overlap(op->index, store->index)) {
                 result = true;
-                return;
             }
-            test = op->index == store->index;
         } else if (load && op->name == load->name) {
-            if (op->index.type().is_vector() || load->index.type().is_vector()) {
+            if (might_overlap(op->index, load->index)) {
                 result = true;
-                return;
             }
-            test = op->index == load->index;
-        } else {
-            test = const_false();
-        }
-
-        if (!is_zero(simplify(test))) {
-            result = true;
         }
 
         // No need to visit the index or value, because an Expr can't
@@ -702,6 +735,86 @@ class LoopCarry : public IRMutator {
     }
 };
 
+class ForwardSingleStore : public IRMutator {
+
+    using IRMutator::visit;
+
+    // The store we're forwarding.
+    const Store *store;
+
+    // The traversal happens in the same order as execution. This flag
+    // is set to true if we encounter another store that might alias
+    // the one we're forwarding. If that happens we can make no
+    // further changes.
+    bool found_aliasing_store = false;
+
+    void visit(const Load *op) {
+        Expr index = mutate(op->index);
+        if (op->name == store->name &&
+            equal(index, store->index)) {
+            // Forward the store! Instead of loading, reuse the value that was stored.
+            expr = store->value;
+        } else if (index.same_as(op->index)) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, op->index, Buffer(), Parameter());
+        }
+    }
+
+    void visit(const Store *op) {
+        if (op->name == store->name && might_overlap(op->index, store->index)) {
+            found_aliasing_store = true;
+        }
+        IRMutator::visit(op);
+    }
+
+    void visit(const For *op) {
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        Stmt body = mutate(op->body);
+        if (found_aliasing_store) {
+            // Back out any changes to the body that might have
+            // occured before we hit the aliasing part.
+            body = op->body;
+        }
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
+        }
+    }
+
+    void visit(const Call *op) {
+        if (op->name == Call::address_of &&
+            op->call_type == Call::Intrinsic) {
+            // address_of expects a load. Don't replace it with a value.
+            expr = op;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+public:
+    Expr mutate(Expr e) {
+        if (found_aliasing_store) {
+            return e;
+        }
+        return IRMutator::mutate(e);
+    }
+
+    Stmt mutate(Stmt s) {
+        if (found_aliasing_store) {
+            return s;
+        }
+        return IRMutator::mutate(s);
+    }
+
+    ForwardSingleStore(const Store *s) : store(s) {
+    }
+};
+
 class StoreForwarding2 : public IRMutator {
     using IRMutator::visit;
 
@@ -718,39 +831,33 @@ class StoreForwarding2 : public IRMutator {
         }
 
         if (const Store *store = first.as<Store>()) {
-            // Check there are no aliasing stores in rest
-            MightAliasWithAStore alias_tester(store);
-            rest.accept(&alias_tester);
-            if (!alias_tester.result) {
-                // Now look for matching loads in rest
-                Expr equivalent_load =
-                    Load::make(store->value.type(), store->name, store->index, Buffer(), Parameter());
+            if (store->value.as<Variable>()) {
+                // If it's a var, we can just move it forwards to the
+                // loads. It'll still be in scope in 'rest'.
+                ForwardSingleStore forwarder(store);
+                rest = forwarder.mutate(rest);
+                stmt = Block::make(first, rest);
+            } else {
+                // Otherwise, make it a var. We wouldn't want it to
+                // contain a load, or other piece of IR whose value
+                // can change if we move it.
                 string var_name = unique_name('t');
-                bool need_let = true;
-                if (const Variable *v = store->value.as<Variable>()) {
-                    // No point introducing a new let stmt
-                    need_let = false;
-                    var_name = v->name;
-                }
                 Expr var = Variable::make(store->value.type(), var_name);
-                Stmt new_rest = substitute(equivalent_load, var, rest);
-                if (!new_rest.same_as(rest)) {
-                    Stmt new_first = Store::make(store->name, var, store->index);
-                    stmt = Block::make(new_first, new_rest);
-                    if (need_let) {
-                        stmt = LetStmt::make(var_name, store->value, stmt);
-                    }
-                    return;
+                Stmt new_store = Store::make(store->name, var, store->index);
+                ForwardSingleStore forwarder(new_store.as<Store>());
+                Stmt new_rest = forwarder.mutate(rest);
+                if (new_rest.same_as(rest)) {
+                    stmt = Block::make(first, rest);
+                } else {
+                    stmt = Block::make(new_store, new_rest);
+                    stmt = LetStmt::make(var_name, store->value, stmt);
                 }
             }
+        } else {
+            stmt = Block::make(first, rest);
         }
-
-        stmt = Block::make(first, rest);
     }
-
-
 };
-
 
 class ContainsAliasedLoad : public IRVisitor {
     using IRVisitor::visit;
@@ -823,8 +930,46 @@ bool contains_side_effecting_call(Expr e) {
     return c.result;
 }
 
+namespace {
+// A term in a summation
+struct Term {
+    Expr expr;
+    bool positive;
+};
+
+// Lift an add or subtract node into a list of the terms and their signs
+void gather_summation(Expr e, bool positive, vector<Term> &result) {
+    if (const Add *add = e.as<Add>()) {
+        gather_summation(add->a, positive, result);
+        gather_summation(add->b, positive, result);
+    } else if (const Sub *sub = e.as<Sub>()) {
+        gather_summation(sub->a, positive, result);
+        gather_summation(sub->b, !positive, result);
+    } else {
+        result.push_back({e, positive});
+    }
+}
+
+// Recombine two terms in a summation
+Term combine_terms(Term a, Term b) {
+    if (!a.expr.defined()) {
+        return b;
+    } else if (!b.expr.defined()) {
+        return a;
+    } else if (a.positive == b.positive) {
+        return {a.expr + b.expr, a.positive};
+    } else if (a.positive) {
+        return {a.expr - b.expr, true};
+    } else {
+        return {b.expr - a.expr, true};
+    }
+}
+}
+
 class LiftFixedExpressionsSingleLoop : public IRMutator {
     Scope<int> inner_vars, inner_allocs;
+
+    map<Expr, string, IRDeepCompare> lifted_expr_names;
 
     using IRMutator::visit;
 
@@ -848,14 +993,13 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
     template<typename LetStmtOrLet, typename StmtOrExpr>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {
         Expr value = mutate(op->value);
-        if (!expr_is_liftable(value)) {
+        if (const Variable *v = value.as<Variable>()) {
+            return mutate(substitute(op->name, value, op->body));
+        } else {
             inner_vars.push(op->name, 0);
             StmtOrExpr body = mutate(op->body);
             inner_vars.pop(op->name);
             return LetStmtOrLet::make(op->name, value, body);
-        } else {
-            exprs.push_back(make_pair(op->name, value));
-            return mutate(op->body);
         }
     }
 
@@ -872,6 +1016,48 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
         in_conditional = true;
         IRMutator::visit(op);
         in_conditional = old_in_conditional;
+    }
+
+    void visit_add_or_sub(Expr e) {
+        // We're in an add node that couldn't be naively lifted. It
+        // must contain some liftable components and some not-liftable
+        // components.
+        vector<Term> terms;
+        gather_summation(e, true, terms);
+
+        // Try to lift each term
+        Term lifted_term, not_lifted_term;
+        for (Term t : terms) {
+            t.expr = mutate(t.expr);
+            if (t.expr.as<Variable>()) {
+                lifted_term = combine_terms(lifted_term, t);
+            } else {
+                not_lifted_term = combine_terms(not_lifted_term, t);
+            }
+        }
+
+        if (not_lifted_term.expr.defined() &&
+            lifted_term.expr.defined() &&
+            !lifted_term.expr.as<Variable>()) {
+            // Lift the combination of the liftable terms
+            lifted_term.expr = mutate(lifted_term.expr);
+        }
+
+        Term both = combine_terms(lifted_term, not_lifted_term);
+
+        // If either arg to combine_terms is positive, the result is
+        // positive, so at this point we should really be positive
+        // because we started with at least one positive term.
+        internal_assert(both.positive) << "This shouldn't be possible\n";
+        expr = both.expr;
+    }
+
+    void visit(const Add *op) {
+        visit_add_or_sub(Expr(op));
+    }
+
+    void visit(const Sub *op) {
+        visit_add_or_sub(Expr(op));
     }
 
     void visit(const Allocate *op) {
@@ -905,9 +1091,16 @@ public:
         } else if (e.as<Variable>()) {
             return e;
         } else {
-            string name = unique_name('t');
-            exprs.push_back(make_pair(name, e));
-            return Variable::make(e.type(), name);
+            auto it = lifted_expr_names.find(e);
+            if (it != lifted_expr_names.end()) {
+                // We already lifted this expression and gave it a name
+                return Variable::make(e.type(), it->second);
+            } else {
+                string name = unique_name('t');
+                exprs.push_back(make_pair(name, e));
+                lifted_expr_names[e] = name;
+                return Variable::make(e.type(), name);
+            }
         }
     }
 
@@ -930,45 +1123,7 @@ class LiftFixedExpressions : public IRMutator {
 
         LiftFixedExpressionsSingleLoop lifter(op->body);
         Stmt body = lifter.mutate(op->body);
-
-        debug(3) << "Lifter mutated body: " << body << "\n";
-
-        /*
-        // Coalesce duplicate lifted expressions
-        vector<pair<string, Expr> > exprs;
-        for (size_t i = 0; i < lifter.exprs.size(); i++) {
-            bool useful = true;
-            for (size_t j = 0; j < i; j++) {
-                if (equal(lifter.exprs[i].second, lifter.exprs[j].second)) {
-                    useful = false;
-                    Expr var_j = Variable::make(lifter.exprs[j].second.type(), lifter.exprs[j].first);
-                    body = substitute(lifter.exprs[i].first, var_j, body);
-                }
-            }
-            if (useful) {
-                exprs.push_back(lifter.exprs[i]);
-            }
-        }
-        */
-        vector<pair<string, Expr>> lets = lifter.exprs;
-
-        // We now want to run CSE on the nest of lifted exprs
-        vector<pair<string, Expr>> old_lets = lets;
-        Expr bundle = wrap_lets(pack_bundle(let_vars(lets)), lets);
-        bundle = common_subexpression_elimination(bundle);
-        vector<Expr> csed = unpack_bundle(unwrap_lets(bundle, lets));
-
-        internal_assert(csed.size() == old_lets.size());
-        for (size_t i = 0; i < old_lets.size(); i++) {
-            if (csed[i].as<Variable>()) {
-                body = substitute(old_lets[i].first, csed[i], body);
-            } else {
-                body = LetStmt::make(old_lets[i].first, csed[i], body);
-            }
-        }
-
-        body = wrap_lets(body, lets);
-
+        body = wrap_lets(body, lifter.exprs);
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 };
