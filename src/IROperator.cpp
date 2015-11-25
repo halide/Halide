@@ -238,7 +238,7 @@ namespace {
 template<typename T>
 Expr make_const_helper(Type t, T val) {
     if (t.is_vector()) {
-        return Broadcast::make(make_const(t.element_of(), val), t.width);
+        return Broadcast::make(make_const(t.element_of(), val), t.lanes());
     } else if (t.is_int()) {
         return IntImm::make(t, (int64_t)val);
     } else if (t.is_uint()) {
@@ -312,7 +312,7 @@ Expr lossless_cast(Type t, Expr e) {
     if (const Broadcast *b = e.as<Broadcast>()) {
         Expr v = lossless_cast(t.element_of(), b->value);
         if (v.defined()) {
-            return Broadcast::make(v, b->width);
+            return Broadcast::make(v, b->lanes);
         } else {
             return Expr();
         }
@@ -368,11 +368,11 @@ void match_types(Expr &a, Expr &b) {
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
-        a = Broadcast::make(a, b.type().width);
+        a = Broadcast::make(a, b.type().lanes());
     } else if (a.type().is_vector() && b.type().is_scalar()) {
-        b = Broadcast::make(b, a.type().width);
+        b = Broadcast::make(b, a.type().lanes());
     } else {
-        internal_assert(a.type().width == b.type().width) << "Can't match types of differing widths";
+        internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
     }
 
     Type ta = a.type(), tb = b.type();
@@ -388,15 +388,15 @@ void match_types(Expr &a, Expr &b) {
         b = cast(ta, b);
     } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
-        if (ta.bits > tb.bits) b = cast(ta, b);
+        if (ta.bits() > tb.bits()) b = cast(ta, b);
         else a = cast(tb, a);
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
-        if (ta.bits > tb.bits) b = cast(ta, b);
+        if (ta.bits() > tb.bits()) b = cast(ta, b);
         else a = cast(tb, a);
     } else if (!ta.is_float() && !tb.is_float()) {
         // int(a) * (u)int(b) -> int(max(a, b))
-        int bits = std::max(ta.bits, tb.bits);
+        int bits = std::max(ta.bits(), tb.bits());
         a = cast(Int(bits), a);
         b = cast(Int(bits), b);
     } else {
@@ -409,7 +409,7 @@ void match_types(Expr &a, Expr &b) {
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
     Type type = input.type();
-    Type int_type = Int(32, type.width);
+    Type int_type = Int(32, type.lanes());
     Expr int_version = reinterpret(int_type, input);
 
     // single precision = SEEE EEEE EMMM MMMM MMMM MMMM MMMM MMMM
@@ -490,7 +490,7 @@ Expr halide_exp(Expr x_full) {
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
-    Expr k = cast(Int(32, type.width), k_real);
+    Expr k = cast(Int(32, type.lanes()), k_real);
 
     Expr x = x_full - k_real * ln2_part1;
     x -= k_real * ln2_part2;
@@ -567,7 +567,7 @@ Expr halide_erf(Expr x_full) {
     return result;
 }
 
-Expr raise_to_integer_power(Expr e, int p) {
+Expr raise_to_integer_power(Expr e, int64_t p) {
     Expr result;
     if (p == 0) {
         result = make_one(e.type());

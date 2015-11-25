@@ -114,12 +114,12 @@ private:
 
     void bounds_of_type(Type t) {
         t = t.element_of();
-        if (t.is_uint() && t.bits <= 16) {
-            max = cast(t, (1 << t.bits) - 1);
+        if (t.is_uint() && t.bits() <= 16) {
+            max = cast(t, (1 << t.bits()) - 1);
             min = cast(t, 0);
-        } else if (t.is_int() && t.bits <= 16) {
-            max = cast(t, (1 << (t.bits-1)) - 1);
-            min = cast(t, -(1 << (t.bits-1)));
+        } else if (t.is_int() && t.bits() <= 16) {
+            max = cast(t, (1 << (t.bits()-1)) - 1);
+            min = cast(t, -(1 << (t.bits()-1)));
         } else {
             max = Expr();
             min = Expr();
@@ -166,7 +166,7 @@ private:
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (to.is_int() && to.bits >= 32) {
+        } else if (to.is_int() && to.bits() >= 32) {
             // If we cast to an int32 or greater, assume that it won't
             // overflow. Signed 32-bit integer overflow is undefined.
             could_overflow = false;
@@ -247,7 +247,7 @@ private:
         }
 
         // Check for overflow for (u)int8 and (u)int16
-        if (!op->type.is_float() && op->type.bits < 32) {
+        if (!op->type.is_float() && op->type.bits() < 32) {
             if (max.defined()) {
                 Expr test = (cast<int>(max_a) + cast<int>(max_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
@@ -288,7 +288,7 @@ private:
         }
 
         // Check for overflow for (u)int8 and (u)int16
-        if (!op->type.is_float() && op->type.bits < 32) {
+        if (!op->type.is_float() && op->type.bits() < 32) {
             if (max.defined()) {
                 Expr test = (cast<int>(max_a) - cast<int>(min_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
@@ -388,7 +388,7 @@ private:
             max = Max::make(Max::make(a, b), Max::make(c, d));
         }
 
-        if (op->type.bits < 32 && !op->type.is_float()) {
+        if (op->type.bits() < 32 && !op->type.is_float()) {
             // Try to prove it can't overflow
             Expr test1 = (cast<int>(min_a) * cast<int>(min_b) - cast<int>(min_a * min_b));
             Expr test2 = (cast<int>(min_a) * cast<int>(max_b) - cast<int>(min_a * max_b));
@@ -674,7 +674,7 @@ private:
         Expr var = Variable::make(op->base.type(), var_name);
         Expr lane = op->base + var * op->stride;
         scope.push(var_name, Interval(make_const(var.type(), 0),
-                                      make_const(var.type(), op->width-1)));
+                                      make_const(var.type(), op->lanes-1)));
         lane.accept(this);
         scope.pop(var_name);
     }
@@ -718,7 +718,7 @@ private:
                     min = max = Call::make(t, Call::abs, {max_a}, Call::Intrinsic);
                 } else {
                     min = make_zero(t);
-                    if (op->args[0].type().is_int() && op->args[0].type().bits == 32) {
+                    if (op->args[0].type().is_int() && op->args[0].type().bits() == 32) {
                         max = Max::make(Cast::make(t, -min_a), Cast::make(t, max_a));
                     } else {
                         min_a = Call::make(t, Call::abs, {min_a}, Call::Intrinsic);

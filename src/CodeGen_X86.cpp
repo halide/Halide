@@ -34,42 +34,42 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 }
 
 Expr _i64(Expr e) {
-    return cast(Int(64, e.type().width), e);
+    return cast(Int(64, e.type().lanes()), e);
 }
 
 Expr _u64(Expr e) {
-    return cast(UInt(64, e.type().width), e);
+    return cast(UInt(64, e.type().lanes()), e);
 }
 Expr _i32(Expr e) {
-    return cast(Int(32, e.type().width), e);
+    return cast(Int(32, e.type().lanes()), e);
 }
 
 Expr _u32(Expr e) {
-    return cast(UInt(32, e.type().width), e);
+    return cast(UInt(32, e.type().lanes()), e);
 }
 
 Expr _i16(Expr e) {
-    return cast(Int(16, e.type().width), e);
+    return cast(Int(16, e.type().lanes()), e);
 }
 
 Expr _u16(Expr e) {
-    return cast(UInt(16, e.type().width), e);
+    return cast(UInt(16, e.type().lanes()), e);
 }
 
 Expr _i8(Expr e) {
-    return cast(Int(8, e.type().width), e);
+    return cast(Int(8, e.type().lanes()), e);
 }
 
 Expr _u8(Expr e) {
-    return cast(UInt(8, e.type().width), e);
+    return cast(UInt(8, e.type().lanes()), e);
 }
 
 Expr _f32(Expr e) {
-    return cast(Float(32, e.type().width), e);
+    return cast(Float(32, e.type().lanes()), e);
 }
 
 Expr _f64(Expr e) {
-    return cast(Float(64, e.type().width), e);
+    return cast(Float(64, e.type().lanes()), e);
 }
 
 
@@ -85,12 +85,11 @@ bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
     const Mul *ma = a.as<Mul>();
     const Mul *mb = b.as<Mul>();
 
-    if (!(ma && mb && t.is_int() && t.bits == 32 && (t.width >= 4))) {
+    if (!(ma && mb && t.is_int() && t.bits() == 32 && (t.lanes() >= 4))) {
         return false;
     }
 
-    Type narrow = t;
-    narrow.bits = 16;
+    Type narrow = t.with_bits(16);
     vector<Expr> args = {lossless_cast(narrow, ma->a),
                          lossless_cast(narrow, ma->b),
                          lossless_cast(narrow, mb->a),
@@ -134,8 +133,8 @@ void CodeGen_X86::visit(const Sub *op) {
 
 void CodeGen_X86::visit(const GT *op) {
     Type t = op->a.type();
-    int bits = t.width * t.bits;
-    if (t.width == 1 || bits % 128 == 0) {
+    int bits = t.lanes() * t.bits();
+    if (t.lanes() == 1 || bits % 128 == 0) {
         // LLVM is fine for native vector widths or scalars
         CodeGen_Posix::visit(op);
     } else {
@@ -143,13 +142,13 @@ void CodeGen_X86::visit(const GT *op) {
         // split it up ourselves.
         Value *a = codegen(op->a), *b = codegen(op->b);
 
-        int slice_size = 128 / t.bits;
+        int slice_size = 128 / t.bits();
         if (target.has_feature(Target::AVX) && bits > 128) {
-            slice_size = 256 / t.bits;
+            slice_size = 256 / t.bits();
         }
 
         vector<Value *> result;
-        for (int i = 0; i < op->type.width; i += slice_size) {
+        for (int i = 0; i < op->type.lanes(); i += slice_size) {
             Value *sa = slice_vector(a, i, slice_size);
             Value *sb = slice_vector(b, i, slice_size);
             Value *slice_value;
@@ -164,14 +163,14 @@ void CodeGen_X86::visit(const GT *op) {
         }
 
         value = concat_vectors(result);
-        value = slice_vector(value, 0, t.width);
+        value = slice_vector(value, 0, t.lanes());
     }
 }
 
 void CodeGen_X86::visit(const EQ *op) {
     Type t = op->a.type();
-    int bits = t.width * t.bits;
-    if (t.width == 1 || bits % 128 == 0) {
+    int bits = t.lanes() * t.bits();
+    if (t.lanes() == 1 || bits % 128 == 0) {
         // LLVM is fine for native vector widths or scalars
         CodeGen_Posix::visit(op);
     } else {
@@ -179,13 +178,13 @@ void CodeGen_X86::visit(const EQ *op) {
         // split it up ourselves.
         Value *a = codegen(op->a), *b = codegen(op->b);
 
-        int slice_size = 128 / t.bits;
+        int slice_size = 128 / t.bits();
         if (target.has_feature(Target::AVX) && bits > 128) {
-            slice_size = 256 / t.bits;
+            slice_size = 256 / t.bits();
         }
 
         vector<Value *> result;
-        for (int i = 0; i < op->type.width; i += slice_size) {
+        for (int i = 0; i < op->type.lanes(); i += slice_size) {
             Value *sa = slice_vector(a, i, slice_size);
             Value *sb = slice_vector(b, i, slice_size);
             Value *slice_value;
@@ -198,7 +197,7 @@ void CodeGen_X86::visit(const EQ *op) {
         }
 
         value = concat_vectors(result);
-        value = slice_vector(value, 0, t.width);
+        value = slice_vector(value, 0, t.lanes());
     }
 }
 
@@ -250,8 +249,8 @@ void CodeGen_X86::visit(const Select *op) {
 
     if (target.has_feature(Target::SSE41) &&
         op->condition.type().is_vector() &&
-        op->type.bits == 8 &&
-        op->type.width != 16) {
+        op->type.bits() == 8 &&
+        op->type.lanes() != 16) {
 
         vector<Expr> matches;
         for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
@@ -336,7 +335,7 @@ void CodeGen_X86::visit(const Cast *op) {
                 }
             }
             if (match) {
-                value = call_intrin(op->type, pattern.type.width, pattern.intrin, matches);
+                value = call_intrin(op->type, pattern.type.lanes(), pattern.intrin, matches);
                 return;
             }
         }
@@ -351,7 +350,7 @@ void CodeGen_X86::visit(const Cast *op) {
         op->type.is_float() &&
         op->type.is_vector() &&
         !target.has_feature(Target::AVX)) {
-        Type signed_type = Int(32, op->type.width);
+        Type signed_type = Int(32, op->type.lanes());
 
         // Convert the top 31 bits to float using the signed version
         Expr top_bits = cast(signed_type, op->value / 2);
@@ -393,15 +392,15 @@ void CodeGen_X86::visit(const Div *op) {
         value = builder->CreateLShr(numerator, shift);
     } else if (const_int_divisor &&
                op->type.is_int() &&
-               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
                *const_int_divisor > 1 &&
-               ((op->type.bits > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
         int64_t multiplier, shift;
-        if (op->type.bits == 32) {
+        if (op->type.bits() == 32) {
             multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
             shift      = IntegerDivision::table_s32[*const_int_divisor][3];
-        } else if (op->type.bits == 16) {
+        } else if (op->type.bits() == 16) {
             multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
             shift      = IntegerDivision::table_s16[*const_int_divisor][3];
         } else {
@@ -413,12 +412,12 @@ void CodeGen_X86::visit(const Div *op) {
         Value *val = codegen(op->a);
 
         // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));
+        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits()-1)));
         // Flip the numerator bits if the mask is high.
         Value *flipped = builder->CreateXor(sign, val);
 
         llvm::Type *narrower = llvm_type_of(op->type);
-        llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
+        llvm::Type *wider = llvm_type_of(Int(op->type.bits()*2, op->type.lanes()));
 
         // Grab the multiplier.
         Value *mult = ConstantInt::get(narrower, multiplier);
@@ -436,7 +435,7 @@ void CodeGen_X86::visit(const Div *op) {
             Value *mult_wide = builder->CreateIntCast(mult, wider, false);
             Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
             // Do the shift (add 8 or 16 or 32 to narrow back down)
-            Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits));
+            Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits()));
             val = builder->CreateLShr(wide_val, shift_amount);
             val = builder->CreateIntCast(val, narrower, true);
         }
@@ -446,15 +445,15 @@ void CodeGen_X86::visit(const Div *op) {
 
     } else if (const_uint_divisor &&
                op->type.is_uint() &&
-               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
                *const_uint_divisor > 1 && *const_uint_divisor < 256) {
 
         int64_t method, multiplier, shift;
-        if (op->type.bits == 32) {
+        if (op->type.bits() == 32) {
             method     = IntegerDivision::table_u32[*const_uint_divisor][1];
             multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
             shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
-        } else if (op->type.bits == 16) {
+        } else if (op->type.bits() == 16) {
             method     = IntegerDivision::table_u16[*const_uint_divisor][1];
             multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
             shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
@@ -471,7 +470,7 @@ void CodeGen_X86::visit(const Div *op) {
 
         // Widen, multiply, narrow
         llvm::Type *narrower = llvm_type_of(op->type);
-        llvm::Type *wider = llvm_type_of(UInt(op->type.bits*2, op->type.width));
+        llvm::Type *wider = llvm_type_of(UInt(op->type.bits()*2, op->type.lanes()));
 
         Value *mult = ConstantInt::get(narrower, multiplier);
         Value *val = num;
@@ -492,7 +491,7 @@ void CodeGen_X86::visit(const Div *op) {
             val = builder->CreateMul(val, mult);
 
             // Keep high half
-            int shift_bits = op->type.bits;
+            int shift_bits = op->type.bits();
             // For method 1, we can do the final shift here too
             if (method == 1) {
                 shift_bits += (int)shift;
@@ -544,7 +543,7 @@ void CodeGen_X86::visit(const Min *op) {
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
         value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {
-        if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
+        if (op->type.lanes() % 8 == 0 && target.has_feature(Target::AVX)) {
             // This condition should possibly be > 4, rather than a
             // multiple of 8, but shuffling in undefs seems to work
             // poorly with avx.
@@ -553,7 +552,7 @@ void CodeGen_X86::visit(const Min *op) {
             value = call_intrin(op->type, 4, "min_f32x4", {op->a, op->b});
         }
     } else if (op->type.element_of() == Float(64)) {
-        if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
+         if (op->type.lanes() % 4 == 0 && target.has_feature(Target::AVX)) {
             value = call_intrin(op->type, 4, "min_f64x4", {op->a, op->b});
         } else {
             value = call_intrin(op->type, 2, "min_f64x2", {op->a, op->b});
@@ -583,13 +582,13 @@ void CodeGen_X86::visit(const Max *op) {
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
         value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {
-        if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
+        if (op->type.lanes() % 8 == 0 && target.has_feature(Target::AVX)) {
             value = call_intrin(op->type, 8, "max_f32x8", {op->a, op->b});
         } else {
             value = call_intrin(op->type, 4, "max_f32x4", {op->a, op->b});
         }
     } else if (op->type.element_of() == Float(64)) {
-        if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
+      if (op->type.lanes() % 4 == 0 && target.has_feature(Target::AVX)) {
             value = call_intrin(op->type, 4, "max_f64x4", {op->a, op->b});
         } else {
             value = call_intrin(op->type, 2, "max_f64x2", {op->a, op->b});

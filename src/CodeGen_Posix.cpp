@@ -30,7 +30,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // does not work with NaCl at the moment.
 
     Expr no_overflow = const_true(1);
-    Expr total_size = cast<int64_t>(type.width * type.bytes());
+    Expr total_size = Expr((int64_t)(type.lanes() * type.bytes()));
     Expr max_size = cast<int64_t>(0x7fffffff);
     for (size_t i = 0; i < extents.size(); i++) {
         total_size *= extents[i];

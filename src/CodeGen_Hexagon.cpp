@@ -119,21 +119,21 @@ Expr shiftRight(Expr A, Expr B) {
 #endif
 
 Expr u8_(Expr E) {
-  return cast (UInt(8, E.type().width), E);
+  return cast (UInt(8, E.type().lanes()), E);
 }
 Expr i8_(Expr E) {
-  return cast (Int(8, E.type().width), E);
+  return cast (Int(8, E.type().lanes()), E);
 }Expr u16_(Expr E) {
-  return cast (UInt(16, E.type().width), E);
+  return cast (UInt(16, E.type().lanes()), E);
 }
 Expr i16_(Expr E) {
-  return cast (Int(16, E.type().width), E);
+  return cast (Int(16, E.type().lanes()), E);
 }
 Expr u32_(Expr E) {
-  return cast (UInt(32, E.type().width), E);
+  return cast (UInt(32, E.type().lanes()), E);
 }
 Expr i32_(Expr E) {
-  return cast (Int(32, E.type().width), E);
+  return cast (Int(32, E.type().lanes()), E);
 }
 }
 
@@ -445,12 +445,12 @@ CodeGen_Hexagon::slice_into_halves(Expr a, std::vector<Expr> &Res) {
     return;
   Expr A_low, A_high;
   Type t = a.type();
-  Type NewT = Type(t.code, t.bits, t.width/2);
-  int NumElements = NewT.width;
+  Type NewT = Type(t.code(), t.bits(), t.lanes()/2);
+  int NumElements = NewT.lanes();
   const Broadcast *B = a.as<Broadcast>();
   if (B) {
-    A_low = Broadcast::make(B->value, NewT.width);
-    A_high = Broadcast::make(B->value, NewT.width);
+    A_low = Broadcast::make(B->value, NewT.lanes());
+    A_high = Broadcast::make(B->value, NewT.lanes());
   } else {
     std::vector<Expr> ShuffleArgsALow, ShuffleArgsAHigh;
     ShuffleArgsALow.push_back(a);
@@ -560,23 +560,23 @@ checkVectorOp(const Expr op, string msg) {
 }
 static bool isDblOrQuadVector(Type t, int vec_bits) {
   return t.is_vector() && (
-    ((t.bits * t.width) == (2 * vec_bits)) ||
-    ((t.bits * t.width) == (4 * vec_bits)));
+    ((t.bits() * t.lanes()) == (2 * vec_bits)) ||
+    ((t.bits() * t.lanes()) == (4 * vec_bits)));
 }
 static bool
 isLargeVector(Type t, int vec_bits) {
   return t.is_vector() &&
-    (t.bits * t.width) > (2 * vec_bits);
+    (t.bits() * t.lanes()) > (2 * vec_bits);
 }
 static bool
 isValidHexagonVector(Type t, int vec_bits) {
   return t.is_vector() &&
-    ((t.bits * t.width) == vec_bits);
+    ((t.bits() * t.lanes()) == vec_bits);
 }
 static bool
 isValidHexagonVectorPair(Type t, int vec_bits) {
   return t.is_vector() &&
-    ((t.bits * t.width) == 2*vec_bits);
+    ((t.bits() * t.lanes()) == 2*vec_bits);
 }
 int CodeGen_Hexagon::bytes_in_vector() const {
   return native_vector_bits() / 8;
@@ -671,7 +671,7 @@ bool checkInterleavedLoadPair(const Load *LoadA, const Load*LoadC, int Width) {
     return false;
   }
 
-  if (RampA->width != Width || RampC->width != Width) {
+  if (RampA->lanes != Width || RampC->lanes != Width) {
       debug(4) << "checkInterleavedLoadPair: Not all widths are 64\n";
       return false;
   }
@@ -1077,9 +1077,9 @@ CodeGen_Hexagon::handleLargeVectors(const Max *op) {
       // operands of the add and then put them together using concat_vectors.
       Value *Op0 = codegen(matches[0]);
       Value *Op1 = codegen(matches[1]);
-      bool isQuadVec = (op->type.bits *op->type.width)  == native_vector_bits()*4;
+      bool isQuadVec = (op->type.bits() *op->type.lanes())  == native_vector_bits()*4;
       if (isQuadVec) {
-        int VectorSize = op->type.width / 4;
+        int VectorSize = op->type.lanes() / 4;
         // We now have a u32x64 vector, i.e. 2 vector register pairs.
         Value *Op0p0 = slice_vector(Op0, 0, VectorSize);
         Value *Op1p0 = slice_vector(Op1, 0, VectorSize);
@@ -1126,7 +1126,7 @@ CodeGen_Hexagon::handleLargeVectors(const Max *op) {
         Value *Result = concat_vectors(Ops);
         return convertValueType(Result, llvm_type_of(op->type));
       } else {
-        int VectorSize = op->type.width / 2;
+        int VectorSize = op->type.lanes() / 2;
         Value *Op0p0 = slice_vector(Op0, 0, VectorSize);
         Value *Op1p0 = slice_vector(Op1, 0, VectorSize);
         Value *Op0p1 = slice_vector(Op0, VectorSize, VectorSize);
@@ -1235,8 +1235,8 @@ CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
     Expr pat = Patterns[I];
     if (expr_match(pat, op, matches)) {
       Type t = matches[0].type();
-      if (t.bits == 32) {
-        Type narrow = Type(t.code, (t.bits/2), t.width);
+      if (t.bits() == 32) {
+        Type narrow = Type(t.code(), (t.bits()/2), t.lanes());
         matches[0] = lossless_cast(narrow, matches[0]);
         matches[1] = lossless_cast(narrow, matches[1]);
         if (!matches[0].defined() || !matches[1].defined())
@@ -1265,7 +1265,7 @@ CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
         Ops.clear();
         Ops.push_back(LowRes);
         Ops.push_back(HighRes);
-        if (t.bits != 32)
+        if (t.bits() != 32)
           return convertValueType(concat_vectors(Ops), llvm_type_of(op->type));
         else
           return convertValueType(concat_vectors(Ops),
@@ -1373,7 +1373,7 @@ bool isWideningVectorCast(const Cast *op) {
   Type t = op->type;
   Type e_type = op->value.type();
   return (t.is_vector() && e_type.is_vector() &&
-          t.bits > e_type.bits);
+          t.bits() > e_type.bits());
 }
 llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
@@ -1440,10 +1440,10 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 
           Value *DoubleVector = NULL;
           // First, check to see if we are widening 4x.
-          if ((op->value.type().bits == 8) && (op->type.bits == 32))
+          if ((op->value.type().bits() == 8) && (op->type.bits() == 32))
           {
             debug(4) << "HexCG::First widening 2x to 16bit elements\n";
-            Type NewT = Type(op->type.code, 16, op->type.width);
+            Type NewT = Type(op->type.code(), 16, op->type.lanes());
             DoubleVector = codegen(cast(NewT, op->value));
           } else {
             DoubleVector = codegen(op->value);
@@ -1526,7 +1526,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
         } else {
           internal_assert(matches.size() == 1);
           bool operand_type_signed = matches[0].type().is_int();
-          Type FirstStepType = Type(matches[0].type().code, 16, op->type.width);
+          Type FirstStepType = Type(matches[0].type().code(), 16, op->type.lanes());
           Value *FirstStep = NULL;
           if (operand_type_signed) {
             if (op->type.is_int()) {
@@ -1582,7 +1582,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
       for (size_t I = 0; I < Patterns.size(); ++I) {
         const Pattern &P = Patterns[I];
         if (expr_match(P.pattern, op, matches)) {
-          Type FirstStepType = Type(matches[0].type().code, 16, op->type.width);
+          Type FirstStepType = Type(matches[0].type().code(), 16, op->type.lanes());
           Value *FirstStep = codegen(cast(FirstStepType, matches[0]));
           std::vector<Value *> Ops;
           Intrinsic::ID IntrinsID = P.ID;
@@ -2040,7 +2040,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
   if (!value) {
     if (op->name == Call::bitwise_not) {
       if (op->type.is_vector() &&
-          ((op->type.bytes() * op->type.width) == VecSize)) {
+          ((op->type.bytes() * op->type.lanes()) == VecSize)) {
         llvm::Function *F =
           Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_vnot));
         llvm::FunctionType *FType = F->getFunctionType();
@@ -2060,7 +2060,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
       }
     } else if (op->name == Call::absd) {
       if (op->type.is_vector() &&
-          ((op->type.bytes() * op->type.width) == 2 * VecSize)) {
+          ((op->type.bytes() * op->type.lanes()) == 2 * VecSize)) {
         // vector sized absdiff should have been covered by the look up table
         // "combiners".
         std::vector<Pattern> doubleAbsDiff;
@@ -2220,7 +2220,7 @@ CodeGen_Hexagon::handleLargeVectorVectors(const Mul *op) {
   //   Unsupported type for vector multiply (uint16x128 * uint16x128 = uint16x128)
   // when sliced results in shuffles and:
   //   Unsupported type for vector multiply (uint16x64 * uint16x64 = uint16x64)
-  if (op->type.bits != 16)
+  if (op->type.bits() != 16)
      Patterns.push_back(wild_u16x128 * wild_u16x128);
   Patterns.push_back(wild_i16x128 * wild_i16x128);
   Patterns.push_back(wild_u8x256  * wild_u8x256);
@@ -2303,13 +2303,13 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
         bc_value = bc_b->value;
       }
       Type t_vec, t_bc;
-      if (Vec.type().bits == 16) {
-        t_vec = UInt(8, Vec.type().width);
-        t_bc = Int(8, Vec.type().width);
+      if (Vec.type().bits() == 16) {
+        t_vec = UInt(8, Vec.type().lanes());
+        t_bc = Int(8, Vec.type().lanes());
       }
-      else if (Vec.type().bits == 32) {
-        t_vec = Int(16, Vec.type().width);
-        t_bc = Int(16, Vec.type().width);
+      else if (Vec.type().bits() == 32) {
+        t_vec = Int(16, Vec.type().lanes());
+        t_bc = Int(16, Vec.type().lanes());
       }
       Vec  = lossless_cast(t_vec, Vec);
       BC = lossless_cast(t_bc, BC);
@@ -2342,13 +2342,13 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
           bc_value = bc_b->value;
         }
         Type t_vec, t_bc;
-        if (Vec.type().bits == 16) {
-          t_vec = UInt(8, Vec.type().width);
-          t_bc = UInt(8, Vec.type().width);
+        if (Vec.type().bits() == 16) {
+          t_vec = UInt(8, Vec.type().lanes());
+          t_bc = UInt(8, Vec.type().lanes());
         }
-        else if (Vec.type().bits == 32) {
-          t_vec = UInt(16, Vec.type().width);
-          t_bc = UInt(16, Vec.type().width);
+        else if (Vec.type().bits() == 32) {
+          t_vec = UInt(16, Vec.type().lanes());
+          t_bc = UInt(16, Vec.type().lanes());
         }
         Vec  = lossless_cast(t_vec, Vec);
         BC = lossless_cast(t_bc, BC);
@@ -2372,7 +2372,7 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
   //   Vdd.h=vmpy(Vu.ub,Rt.b)
   //   Vdd.w=vmpy(Vu.h,Rt.h)
   int ScalarValue = 0;
-  if (Vec.type().bits == 8) {
+  if (Vec.type().bits() == 8) {
     int A = ImmValue & 0xFF;
     int B = A | (A << 8);
     ScalarValue = B | (B << 16);
@@ -2420,7 +2420,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     Expr A = op->a;
 
     if (A.type().is_vector() &&
-          ((A.type().bytes() * A.type().width) ==
+          ((A.type().bytes() * A.type().lanes()) ==
            2*VecSize)) {
       // If it is twice the hexagon vector width, then try
       // splitting into two vector multiplies.
@@ -2466,7 +2466,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
           }
           debug(4) << "vector " << Vec << "\n";
           debug(4) << "Broadcast " << Other << "\n";
-          debug(4) << "Other bits size : " << Other.type().bits << "\n";
+          debug(4) << "Other bits size : " << Other.type().bits() << "\n";
           if (is_const(Other)) {
             const int64_t *ImmValue_p = as_const_int(Other);
             const uint64_t *UImmValue_p = as_const_uint(Other);
@@ -2475,13 +2475,13 @@ void CodeGen_Hexagon::visit(const Mul *op) {
                 (int64_t) *UImmValue_p;
               unsigned int ScalarValue = 0;
               Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
-              if (Vec.type().bits == 16
+              if (Vec.type().bits() == 16
                   && ImmValue <=  INT_8_IMAX) {
                 unsigned int A = ImmValue & 0xFF;
                 unsigned int B = A | (A << 8);
                 ScalarValue = B | (B << 16);
                 IntrinsID = IPICK(Intrinsic::hexagon_V6_vmpyihb);
-              } else if (Vec.type().bits == 32) {
+              } else if (Vec.type().bits() == 32) {
                 if (ImmValue <= INT_8_IMAX) {
                   unsigned int A = ImmValue & 0xFF;
                   unsigned int B = A | (A << 8);
@@ -2567,7 +2567,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 void CodeGen_Hexagon::visit(const Broadcast *op) {
     bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
 
-    int Width = op->width;
+    int Width = op->lanes;
     bool match32 = false;
     bool match16 = false;
     bool match8  = false;
@@ -2578,19 +2578,19 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     int width_8  = CPICK(128,64);
 
     // Look for supported broadcasts.
-    Expr match_i32 = Broadcast::make(wild_i32, -1);
-    Expr match_u32 = Broadcast::make(wild_u32, -1);
+    Expr match_i32 = Broadcast::make(wild_i32, width_32);
+    Expr match_u32 = Broadcast::make(wild_u32, width_32);
     match32 = expr_match(match_i32, op, Matches) ||
               expr_match(match_u32, op, Matches);
     if (!match32) {
-      Expr match_i16 = Broadcast::make(wild_i16, -1);
-      Expr match_u16 = Broadcast::make(wild_u16, -1);
+      Expr match_i16 = Broadcast::make(wild_i16, width_16);
+      Expr match_u16 = Broadcast::make(wild_u16, width_16);
       match16 = expr_match(match_i16, op, Matches) ||
                 expr_match(match_u16, op, Matches);
     }
     if (!match32 && !match16) {
-      Expr match_i8 = Broadcast::make(wild_i8, -1);
-      Expr match_u8 = Broadcast::make(wild_u8, -1);
+      Expr match_i8 = Broadcast::make(wild_i8, width_8);
+      Expr match_u8 = Broadcast::make(wild_u8, width_8);
       match8 = expr_match(match_i8, op, Matches) ||
                expr_match(match_u8, op, Matches);
     }
@@ -2600,7 +2600,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     bool zext_wordsize = false;
     bool fill_wordsize = false;
     bool zero_bcast = false;
-    int NumOps   = 0;
+    size_t NumOps   = 0;
     int WidthOps = 0;
 
     if (match32 || match16 || match8) {
@@ -2720,7 +2720,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
     if (ramp && stride && stride->value == 1) {
-      int width = ramp->width;
+      int width = ramp->lanes;
       ModulusRemainder mod_rem = getAlignmentInfo(ramp->base);
       int alignment_required = CPICK(128, 64);
       if (width != alignment_required) {
@@ -2762,7 +2762,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
             CodeGen_Posix::visit(op);
             return;
           }
-          int bytes_off = std::abs(offset) * (op->type.bits / 8);
+          int bytes_off = std::abs(offset) * (op->type.bits() / 8);
           Expr base_low = offset > 0 ? add->a : simplify(add->a - width);
           Expr base_high = offset > 0 ? simplify(add->a + width) : add->a;
           Expr ramp_low = Ramp::make(base_low, 1, width);
@@ -2845,7 +2845,7 @@ bool CodeGen_Hexagon::possiblyCodeGenNarrowerType(const Select *op) {
   Expr true_value = op->true_value;
   Expr false_value = op->false_value;
   Type t = op->type;
-  Type narrow = Type(t.code, (t.bits/2), t.width);
+  Type narrow = Type(t.code(), (t.bits()/2), t.lanes());
   Expr n_cond = lossless_cast_cmp(narrow, cond);
   Expr n_tv = lossless_cast(narrow, true_value);
   Expr n_fv = lossless_cast(narrow, false_value);

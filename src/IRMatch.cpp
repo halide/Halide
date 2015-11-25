@@ -64,10 +64,10 @@ public:
     using IRVisitor::visit;
 
     bool types_match(Type pattern_type, Type expr_type) {
-        bool bits_matches  = (pattern_type.bits  == -1) || (pattern_type.bits  == expr_type.bits);
-        bool width_matches = (pattern_type.width == -1) || (pattern_type.width == expr_type.width);
-        bool code_matches  = (pattern_type.code  == expr_type.code);
-        return bits_matches && width_matches && code_matches;
+        bool bits_matches  = (pattern_type.bits()  == 0) || (pattern_type.bits()  == expr_type.bits());
+        bool lanes_matches = (pattern_type.lanes() == 0) || (pattern_type.lanes() == expr_type.lanes());
+        bool code_matches  = (pattern_type.code()  == expr_type.code());
+        return bits_matches && lanes_matches && code_matches;
     }
 
     void visit(const IntImm *op) {
@@ -199,7 +199,7 @@ public:
 
     void visit(const Ramp *op) {
         const Ramp *e = expr.as<Ramp>();
-        if (result && e && e->width == op->width) {
+        if (result && e && e->lanes == op->lanes) {
             expr = e->base;
             op->base.accept(this);
             expr = e->stride;

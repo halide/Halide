@@ -78,7 +78,7 @@ private:
   bool is_unsupported_type(Type t, HexagonIRChecker::HVX_mode m ) {
     if (!t.is_vector())
       return false;
-    int vec_size_in_bits = t.bits * t.width;
+    int vec_size_in_bits = t.bits() * t.lanes();
     int hex_vec_size_in_bits = hexagon_vector_size_bits(m);
     if ((vec_size_in_bits != hex_vec_size_in_bits)
         && (vec_size_in_bits != 2 * hex_vec_size_in_bits)
@@ -89,7 +89,7 @@ private:
   bool is_vector_quad(Type t, HexagonIRChecker::HVX_mode m) {
     if (!t.is_vector())
       return false;
-    if (t.bits * t.width == 4 * hexagon_vector_size_bits(m))
+    if (t.bits() * t.lanes() == 4 * hexagon_vector_size_bits(m))
       return true;
     return false;
   }

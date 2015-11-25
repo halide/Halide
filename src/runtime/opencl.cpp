@@ -36,7 +36,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
         "/System/Library/Frameworks/OpenCL.framework/OpenCL",
 #endif
     };
-    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+    for (size_t i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
         lib_opencl = halide_load_library(lib_names[i]);
         if (lib_opencl) {
             debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
@@ -343,7 +343,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         device = deviceCount - 1;
     }
 
-    if (device < 0 || device >= deviceCount) {
+    if (device < 0 || device >= (int)deviceCount) {
         error(user_context) << "CL: Failed to get device: " << device;
         return CL_DEVICE_NOT_FOUND;
     }
@@ -761,8 +761,10 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
 
     device_copy c = make_host_to_device_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
             // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
             // can deal with the 2 innermost strides with OpenCL.
@@ -790,8 +792,8 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
                 return err;
             }
 #else
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
@@ -851,8 +853,10 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
             // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
             // can deal with the 2 innermost strides with OpenCL.
@@ -880,8 +884,8 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
                 return err;
             }
 #else
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
