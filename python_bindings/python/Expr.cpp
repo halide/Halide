@@ -23,7 +23,7 @@ std::string expr_repr(const h::Expr &expr)
     boost::format f("<halide.Expr of type '%s(%i)'>");
 
     const h::Type &t = expr.type();
-    repr = boost::str(f % type_code_to_string(t) % t.bits);
+    repr = boost::str(f % type_code_to_string(t) % t.bits());
     return repr;
 }
 
