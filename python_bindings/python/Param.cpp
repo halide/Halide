@@ -53,7 +53,7 @@ std::string imageparam_repr(h::ImageParam &param) // non-const due to a Halide b
     {
         boost::format f("<halide.ImageParam named '%s' of type '%s(%i)' and dimensions %i %i %i %i>");
         repr = boost::str(f % param.name()
-                          % type_code_to_string(t) % t.bits
+                          % type_code_to_string(t) % t.bits()
                           % param.extent(0) % param.extent(1) % param.extent(2) % param.extent(3));
     }
     return repr;
@@ -64,7 +64,7 @@ std::string imageparam_repr(h::ImageParam &param) // non-const due to a Halide b
 void defineImageParam()
 {
     using Halide::ImageParam;
-    
+
 
     auto image_param_class =
             p::class_<ImageParam>("ImageParam",
@@ -275,7 +275,7 @@ std::string param_repr(const h::Param<T> &param)
     std::string repr;
     const h::Type &t = param.type();
     boost::format f("<halide.Param named '%s' of type '%s(%i)'>");
-    repr = boost::str(f % param.name() % type_code_to_string(t) % t.bits);
+    repr = boost::str(f % param.name() % type_code_to_string(t) % t.bits());
 
     return repr;
 }
@@ -284,7 +284,7 @@ template<typename T>
 void defineParam_impl(const std::string suffix, const h::Type type)
 {
     using Halide::Param;
-    
+
     auto param_class =
             p::class_<Param<T>>(("Param"+ suffix).c_str(),
                                 "A scalar parameter to a halide pipeline. If you're jitting, this "
