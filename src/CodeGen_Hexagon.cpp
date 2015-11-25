@@ -2578,19 +2578,19 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     int width_8  = CPICK(128,64);
 
     // Look for supported broadcasts.
-    Expr match_i32 = Broadcast::make(wild_i32, width_32);
-    Expr match_u32 = Broadcast::make(wild_u32, width_32);
+    Expr match_i32 = Broadcast::make(wild_i32, 0);
+    Expr match_u32 = Broadcast::make(wild_u32, 0);
     match32 = expr_match(match_i32, op, Matches) ||
               expr_match(match_u32, op, Matches);
     if (!match32) {
-      Expr match_i16 = Broadcast::make(wild_i16, width_16);
-      Expr match_u16 = Broadcast::make(wild_u16, width_16);
+      Expr match_i16 = Broadcast::make(wild_i16, 0);
+      Expr match_u16 = Broadcast::make(wild_u16, 0);
       match16 = expr_match(match_i16, op, Matches) ||
                 expr_match(match_u16, op, Matches);
     }
     if (!match32 && !match16) {
-      Expr match_i8 = Broadcast::make(wild_i8, width_8);
-      Expr match_u8 = Broadcast::make(wild_u8, width_8);
+      Expr match_i8 = Broadcast::make(wild_i8, 0);
+      Expr match_u8 = Broadcast::make(wild_u8, 0);
       match8 = expr_match(match_i8, op, Matches) ||
                expr_match(match_u8, op, Matches);
     }
