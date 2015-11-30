@@ -1214,58 +1214,66 @@ CodeGen_Hexagon::handleLargeVectors(const Div *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
-  Expr wild_u32x64_bc = Broadcast::make(wild_u32, 64);
-  Expr wild_i32x64_bc = Broadcast::make(wild_i32, 64);
-  Expr wild_u32x128_bc = Broadcast::make(wild_u32, 128);
-  Expr wild_i32x128_bc = Broadcast::make(wild_i32, 128);
+
+  // 4096-bit vector x vector
+  Patterns.push_back(wild_u32x128 / wild_u32x128);
+  Patterns.push_back(wild_i32x128 / wild_i32x128);
+  Patterns.push_back(wild_u16x256 / wild_u16x256);
+  Patterns.push_back(wild_i16x256 / wild_i16x256);
+  Patterns.push_back(wild_u8x512  / wild_u8x512);
+  Patterns.push_back(wild_i8x512  / wild_i8x512);
+
+  // 2048-bit vector x vector
+  Patterns.push_back(wild_u32x64  / wild_u32x64);
+  Patterns.push_back(wild_i32x64  / wild_i32x64);
+  Patterns.push_back(wild_u16x128 / wild_u16x128);
+  Patterns.push_back(wild_i16x128 / wild_i16x128);
+  Patterns.push_back(wild_u8x256  / wild_u8x256);
+  Patterns.push_back(wild_i8x256  / wild_i8x256);
+
+  // 1024-bit vector x vector
+  // the following are only wide in single mode
+  if (!B128) {
+    Patterns.push_back(wild_u32x32  / wild_u32x32);
+    Patterns.push_back(wild_i32x32  / wild_i32x32);
+    Patterns.push_back(wild_u16x64  / wild_u16x64);
+    Patterns.push_back(wild_i16x64  / wild_i16x64);
+    Patterns.push_back(wild_u8x128  / wild_u8x128);
+    Patterns.push_back(wild_i8x128  / wild_i8x128);
+  }
 
   debug(4) << "HexCG: " << op->type <<  ", handleLargeVectors (Div)\n";
-
-  Patterns.push_back(WPICK(wild_u32x128, wild_u32x64)
-                     / WPICK(wild_u32x128_bc, wild_u32x64_bc));
-  Patterns.push_back(WPICK(wild_i32x128, wild_i32x64)
-                     / WPICK(wild_i32x128_bc, wild_i32x64_bc));
-
   for (size_t I = 0; I < Patterns.size(); ++I) {
     Expr pat = Patterns[I];
     if (expr_match(pat, op, matches)) {
-      int rt_shift_by = 0;
-      if (is_const_power_of_two_integer(matches[1], &rt_shift_by)) {
-        std::vector<Expr> VectorRegisterPairs;
-        std::vector<Expr> VectorRegisters;
-        // matches[0] is a vector of type u32x64 or i32x64.
-        // 1. Slice it into halves, so we get two register pairs.
-        slice_into_halves(matches[0], VectorRegisterPairs);
-        // 2. Slice the first register pair that should form the
-        //    even elements.
-        slice_into_halves(VectorRegisterPairs[0], VectorRegisters);
-        int num_words_in_vector = (native_vector_bits() / 8) / 4;
-        Expr Divisor = Broadcast::make(matches[1], num_words_in_vector);
-        // 3. Operate on each pair and then use hexagon_V6_combine
-        //    to get u32x32 or i32x32 result.
-        Value *LowEvenRegister = codegen(VectorRegisters[0]/Divisor);
-        Value *HighEvenRegister = codegen(VectorRegisters[1]/Divisor);
-        Value *EvenRegisterPair = concatVectors(HighEvenRegister,
-                                                LowEvenRegister);
-        VectorRegisters.clear();
-        // 4. Slice the other half to get the lower lanes in two vector
-        //    registers.
-        slice_into_halves(VectorRegisterPairs[1], VectorRegisters);
-        // 5. Operate on each pair and then use hexagon_V6_combine
-        //    to get u32x32 or i32x32 result.
-        Value *LowOddRegister = codegen(VectorRegisters[0]/Divisor);
-        Value *HighOddRegister = codegen(VectorRegisters[1]/Divisor);
-        Value *OddRegisterPair = concatVectors(HighOddRegister,
-                                               LowOddRegister);
-        std::vector<Value *> Ops;
-        Ops.push_back(EvenRegisterPair);
-        Ops.push_back(OddRegisterPair);
-        // 6. Concatenate the two pairs to get a u32x64 or i32x64 result.
-        Value *Result = concat_vectors(Ops);
-        return convertValueType(Result, llvm_type_of(op->type));
+      // 1. Slice the two operands into halves to get four operands
+      std::vector<Expr> VectorRegisterPairsA;
+      std::vector<Expr> VectorRegisterPairsB;
+      slice_into_halves(matches[0], VectorRegisterPairsA);
+      slice_into_halves(matches[1], VectorRegisterPairsB);
+
+      // 2. Operate on the halves
+      Expr A_low = VectorRegisterPairsA[0];
+      Expr A_high = VectorRegisterPairsA[1];
+      Expr B_low = VectorRegisterPairsB[0];
+      Expr B_high = VectorRegisterPairsB[1];
+      Value *EvenLanes = codegen(A_low / B_low);
+      Value *OddLanes = codegen(A_high / B_high);
+
+      // 3. Combine the results
+      Value *Result = NULL;
+      if (isDblVector(op->type, native_vector_bits())) {
+        Result = concatVectors(OddLanes, EvenLanes);
+      } else {
+        std::vector<Value *>Ops;
+        Ops.push_back(EvenLanes);
+        Ops.push_back(OddLanes);
+        Result = concat_vectors(Ops);
       }
+      return convertValueType(Result, llvm_type_of(op->type));
     }
   }
+
   return NULL;
 }
 llvm::Value *
@@ -1380,6 +1388,12 @@ void CodeGen_Hexagon::visit(const Div *op) {
     }
   }
 
+  if (!value &&
+      isDblOrQuadVector(op->type, native_vector_bits())) {
+    value = handleLargeVectors(op);
+    if (value)
+      return;
+  }
   if (!value) {
     checkVectorOp(op, "in visit(Div *)\n");
     CodeGen_Posix::visit(op);
@@ -1739,7 +1753,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 }
 void CodeGen_Hexagon::visit(const Cast *op) {
   vector<Expr> matches;
-  debug(1) << "HexCG: " << op->type << ", " << "visit(Cast)\n";
+  debug(1) << "HexCG: " << op->type << " <- " << op->value.type() << ", " << "visit(Cast)\n";
   if (isWideningVectorCast(op)) {
       // ******** Part 1: Up casts (widening) ***************
       // Two step extensions.
@@ -2042,6 +2056,8 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     }
   }
   // ******** End Part 2: Down casts (Narrowing)* ***************
+
+  debug(1) << "HexCG: " << op->type << " <- " << op->value.type() << ", " << "visit(Cast) Posix\n";
   checkVectorOp(op, "in visit(Cast *)\n");
   CodeGen_Posix::visit(op);
   return;
@@ -2159,97 +2175,17 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
       }
     }
-    checkVectorOp(op, "in visit(Call *)\n");
+    // Suppress warning on the calls where it is OK to use CodeGen_Posix
+    if ((op->name != Call::interleave_vectors) &&
+        (op->name != Call::shuffle_vector)) {
+      checkVectorOp(op, "in visit(Call *)\n");
+    }
     CodeGen_Posix::visit(op);
   }
 }
-llvm::Value *
-CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
-  std::vector<Expr> Patterns;
-  std::vector<Expr> matches;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
-
-  // 32-bit
-  Expr wild_u32x64_bc = Broadcast::make(wild_u32, 64);
-  Expr wild_i32x64_bc = Broadcast::make(wild_i32, 64);
-  Expr wild_u32x128_bc = Broadcast::make(wild_u32, 128);
-  Expr wild_i32x128_bc = Broadcast::make(wild_i32, 128);
-
-  Patterns.push_back(WPICK(wild_u32x128, wild_u32x64) *
-                     WPICK(wild_u32x128_bc, wild_u32x64_bc));
-  Patterns.push_back(WPICK(wild_i32x128, wild_i32x64) *
-                     WPICK(wild_i32x128_bc, wild_i32x64_bc));
-  Patterns.push_back(WPICK(wild_u32x128_bc, wild_u32x64_bc) *
-                     WPICK(wild_u32x128, wild_u32x64));
-  Patterns.push_back(WPICK(wild_i32x128_bc, wild_i32x64_bc) *
-                     WPICK(wild_i32x128, wild_i32x64));
-
-  // 16-bit
-  Expr wild_u16x128_bc = Broadcast::make(wild_u16, 128);
-  Expr wild_i16x128_bc = Broadcast::make(wild_i16, 128);
-  Expr wild_u16x256_bc = Broadcast::make(wild_u16, 256);
-  Expr wild_i16x256_bc = Broadcast::make(wild_i16, 256);
-
-  Patterns.push_back(WPICK(wild_u16x256, wild_u16x128) *
-                     WPICK(wild_u16x256_bc, wild_u16x128_bc));
-  Patterns.push_back(WPICK(wild_i16x256, wild_i16x128) *
-                     WPICK(wild_i16x256_bc, wild_i16x128_bc));
-  Patterns.push_back(WPICK(wild_u16x256_bc, wild_u16x128_bc) *
-                     WPICK(wild_u16x256, wild_u16x128));
-  Patterns.push_back(WPICK(wild_i16x256_bc, wild_i16x128_bc) *
-                     WPICK(wild_i16x256, wild_i16x128));
-
-  // 8-bit
-  Expr wild_u8x256_bc = Broadcast::make(wild_u8, 256);
-  Expr wild_i8x256_bc = Broadcast::make(wild_i8, 256);
-  Expr wild_u8x512_bc = Broadcast::make(wild_u8, 512);
-  Expr wild_i8x512_bc = Broadcast::make(wild_i8, 512);
-
-  Patterns.push_back(WPICK(wild_u8x512, wild_u8x256) *
-                     WPICK(wild_u8x512_bc, wild_u8x256_bc));
-  Patterns.push_back(WPICK(wild_i8x512, wild_i8x256) *
-                     WPICK(wild_i8x512_bc, wild_i8x256_bc));
-  Patterns.push_back(WPICK(wild_u8x512_bc, wild_u8x256_bc) *
-                     WPICK(wild_u8x512, wild_u8x256));
-  Patterns.push_back(WPICK(wild_i8x512_bc, wild_i8x256_bc) *
-                     WPICK(wild_i8x512, wild_i8x256));
-
-  debug(4) << "HexCG: " << op->type <<  ", handleLargeVectors (Mul)\n";
-  for (size_t I = 0; I < Patterns.size(); ++I) {
-    Expr pat = Patterns[I];
-    if (expr_match(pat, op, matches)) {
-      std::vector<Expr> VectorRegisterPairsA;
-      std::vector<Expr> VectorRegisterPairsB;
-      Expr Vector, Other;
-      // 1. Slice the two operands into halves, so we get four register pairs.
-      // One of them is a broadcast. Make it half the width.
-      if (matches[0].type().is_vector()) {
-        Vector = matches[0];
-        Other = op->b;
-      } else {
-        Vector = matches[1];
-        Other = op->a;
-      }
-      slice_into_halves(Vector, VectorRegisterPairsA);
-      slice_into_halves(Other, VectorRegisterPairsB);
-      Expr A_low = VectorRegisterPairsA[0];
-      Expr A_high = VectorRegisterPairsA[1];
-      Expr B_low = VectorRegisterPairsB[0];
-      Expr B_high = VectorRegisterPairsB[1];
-      Value *EvenLanes = codegen(A_low * B_low);
-      Value *OddLanes = codegen(A_high * B_high);
-      std::vector<Value *>Ops;
-      Ops.push_back(EvenLanes);
-      Ops.push_back(OddLanes);
-      Value *Result = concat_vectors(Ops);
-      return convertValueType(Result, llvm_type_of(op->type));
-    }
-  }
-  return NULL;
-}
 // Break up double and quad vector x vector operations
 llvm::Value *
-CodeGen_Hexagon::handleLargeVectorVectors(const Mul *op) {
+CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
   bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
@@ -2602,7 +2538,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
   value = emitBinaryOp(op, multiplies);
   if (!value &&
       isDblOrQuadVector(op->type, native_vector_bits())) {
-    value = handleLargeVectorVectors(op);
+    value = handleLargeVectors(op);
     if (value)
       return;
   }
