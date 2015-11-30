@@ -68,11 +68,13 @@ protected:
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
     llvm::Value *getLoVectorFromPair(llvm::Value *Vec);
     void slice_into_halves(Expr, std::vector<Expr> &);
-    llvm::Value *handleLargeVectors(const Div *);
     llvm::Value *handleLargeVectors(const Add *);
-    llvm::Value *handleLargeVectors(const Mul *);
-    llvm::Value *handleLargeVectors(const Cast *);
+    llvm::Value *handleLargeVectors(const Sub *);
+    llvm::Value *handleLargeVectors(const Min *);
     llvm::Value *handleLargeVectors(const Max *);
+    llvm::Value *handleLargeVectors(const Mul *);
+    llvm::Value *handleLargeVectors(const Div *);
+    llvm::Value *handleLargeVectors(const Cast *);
     /* Ideally, we'd have liked to call compare with llvm::Intrinsic::ID
      as the last argument, but that means "llvm/IR/Intrinsics.h" would be needed
      to be included here. However, CodeGen_Hexagon.h is used to create Halide.h
