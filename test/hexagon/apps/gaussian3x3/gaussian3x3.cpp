@@ -65,6 +65,7 @@ void test_gaussian3x3(Target& target) {
 int main(int argc, char **argv) {
 	Target target;
 	setupHexagonTarget(target);
+        commonPerfSetup(target);
 	test_gaussian3x3(target);
 	printf ("Done\n");
 	return 0;

@@ -8,6 +8,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
 
   /* Test variants of vector add */
   //CHECK: vadd(v{{[0-9]+}}.b,v{{[0-9]+}}.b)

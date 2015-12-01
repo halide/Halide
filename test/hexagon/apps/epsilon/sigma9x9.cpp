@@ -209,6 +209,7 @@ void test_sigma9x9(Target& target) {
 int main(int argc, char **argv) {
     Target target;
     setupHexagonTarget(target);
+    commonPerfSetup(target);
     test_sigma9x9(target);
     printf("Done\n");
     return 0;

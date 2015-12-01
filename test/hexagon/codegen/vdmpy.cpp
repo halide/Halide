@@ -44,6 +44,7 @@ void testTwo(Target &target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
   testOne(target);
   testTwo(target);
   return 0;

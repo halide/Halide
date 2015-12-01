@@ -9,7 +9,7 @@ IRPrinter irp(std::cerr);
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
-
+  commonTestSetup(target);
   /* Test variants of vector add */
   //CHECK: vcmp.gt(v{{[0-9]+}}.b,v{{[0-9]+}}.b)
   //CHECK: vmux(q{{[0-3]+}},v{{[0-9]+}},v{{[0-9]+}})

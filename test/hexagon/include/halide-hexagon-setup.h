@@ -10,13 +10,28 @@ using namespace Halide;
 #define COMPILE(X, Y)  ((X).compile_to_assembly(OFILE_AS, args, Y, target))
 #define COMPILE_BC(X, Y)  ((X).compile_to_bitcode(OFILE_BC, args, Y, target))
 
+void disableBounds(Target &target) {
+    target.set_feature(Target::NoBoundsQuery);
+}
+
+void disableAsserts(Target &target) {
+    target.set_feature(Target::NoAsserts);
+}
+
+void commonTestSetup(Target &target) {
+    disableAsserts(target);
+}
+
+void commonPerfSetup(Target &target) {
+    disableAsserts(target);
+    disableBounds(target);
+}
+
 void setupHexagonTarget(Target &target) {
         target.os = Target::OSUnknown; // The operating system
         target.arch = Target::Hexagon;   // The CPU architecture
         target.bits = 32;            // The bit-width of the architecture
         target.set_feature(Target::HVX_64);
-        target.set_feature(Target::NoAsserts);
-        target.set_feature(Target::NoBoundsQuery);
 }
 
 Expr sat_i32(Expr e) {

@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
   Target target;
   bool isDbl = false;
   setupHexagonTarget(target);
+  commonTestSetup(target);
      target.set_feature(Target::HVX_128);
   testOne(target,isDbl);
   return 0;

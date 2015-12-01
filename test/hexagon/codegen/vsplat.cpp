@@ -8,6 +8,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
 
   /* Test variants of vector splat */
   //CHECK: v{{[0-9]+}}{{[ ]*}}={{[ ]*}}vsplat

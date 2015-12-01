@@ -30,6 +30,7 @@ IRPrinter irp(std::cerr);
 int main(int argc, char **argv) {
     Target target;
     setupHexagonTarget(target);
+    commonPerfSetup(target);
     Halide::Var x("x"), y("y"), k;
     Var xo, xi;
 

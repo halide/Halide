@@ -21,6 +21,7 @@ void testVabsdiff(Target& target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
   testVabsdiff(target);
   printf ("Done\n");
   return 0;

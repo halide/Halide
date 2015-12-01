@@ -64,6 +64,7 @@ void test_gaussian5x5(Target& target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonPerfSetup(target);
 #if LOG2VLEN == 7
   target.set_feature(Target::HVX_128);
 #endif

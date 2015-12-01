@@ -12,6 +12,7 @@ IRPrinter irp(std::cerr);
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
 
   //CHECK: vmpy(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
   testVMPY<uint8_t, uint8_t, uint16_t>(target);

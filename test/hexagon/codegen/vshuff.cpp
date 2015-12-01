@@ -40,6 +40,7 @@ void testVshuffe(Target& target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
   testVshuffo(target);
   testVshuffe(target);
   printf ("Done\n");

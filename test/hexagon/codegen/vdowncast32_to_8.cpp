@@ -132,6 +132,7 @@ void testall(Target &target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
   testall(target);
   printf ("Done\n");
   return 0;

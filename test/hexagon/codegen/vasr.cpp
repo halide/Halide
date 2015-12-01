@@ -27,6 +27,7 @@ void test_vasr(Target& target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
   test_vasr(target);
   printf ("Done\n");
   return 0;

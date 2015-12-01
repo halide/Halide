@@ -12,6 +12,7 @@ IRPrinter irp(std::cerr);
 int main(int argc, char **argv) {
     Target target;
     setupHexagonTarget(target);
+    commonPerfSetup(target);
     Halide::Var x("x");
 
     ImageParam In(type_of<uint8_t>(), 2);

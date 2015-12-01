@@ -30,6 +30,7 @@ void test_vmpyhvsrs(Target& target) {
 int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
+  commonTestSetup(target);
   test_vmpyhvsrs(target);
   printf ("Done\n");
   return 0;
