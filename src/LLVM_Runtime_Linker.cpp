@@ -647,9 +647,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 modules.push_back(get_initmod_win32_math_ll(c));
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
-            // } else if (t.arch != Target::Hexagon) {
             } else {
-                //PDB: disabling posix math for hexagon. for now, at least.
                 modules.push_back(get_initmod_posix_math_ll(c));
             }
         }
@@ -662,10 +660,12 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
             // write_debug_image soon, at the very least.
 
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-            modules.push_back(get_initmod_tracing(c, bits_64, debug));
-            modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+          }
+          modules.push_back(get_initmod_tracing(c, bits_64, debug));
+          modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+          modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+          modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+          if (t.arch != Target::Hexagon) {
             modules.push_back(get_initmod_posix_print(c, bits_64, debug));
           } else {
             modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
