@@ -14,7 +14,7 @@ void setupHexagonTarget(Target &target) {
         target.os = Target::OSUnknown; // The operating system
         target.arch = Target::Hexagon;   // The CPU architecture
         target.bits = 32;            // The bit-width of the architecture
-        target.set_feature(Target::HVX);
+        target.set_feature(Target::HVX_64);
         target.set_feature(Target::NoAsserts);
         target.set_feature(Target::NoBoundsQuery);
 }

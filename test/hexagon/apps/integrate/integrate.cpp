@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     Target target;
     setupHexagonTarget(target);
 #if LOG2VLEN == 7
-    target.set_feature(Target::HVX_DOUBLE);
+    target.set_feature(Target::HVX_128);
 #endif
 
     Halide::Var x("x"), y("y");

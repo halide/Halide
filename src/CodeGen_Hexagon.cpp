@@ -146,7 +146,7 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     wild_u16(Variable::make(UInt(16), "*")),
     wild_i8(Variable::make(Int(8), "*")),
     wild_u8(Variable::make(UInt(8), "*")) {
-  bool B128 = t.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = t.has_feature(Halide::Target::HVX_128);
   casts.push_back(Pattern(cast(UInt(16, CPICK(128,64)),
                                WPICK(wild_u8x128,wild_u8x64)),
                           IPICK(Intrinsic::hexagon_V6_vzb)));
@@ -437,7 +437,7 @@ CodeGen_Hexagon::convertValueType(llvm::Value *V, llvm::Type *T) {
 void
 CodeGen_Hexagon::getHighAndLowVectors(llvm::Value *DoubleVec,
                                       std::vector<llvm::Value *> &Res) {
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Value *> Ops;
   Ops.push_back(DoubleVec);
   Value *Hi =
@@ -451,7 +451,7 @@ CodeGen_Hexagon::getHighAndLowVectors(llvm::Value *DoubleVec,
 }
 llvm::Value *
 CodeGen_Hexagon::concatVectors(Value *High, Value *Low) {
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Value *>Ops;
   Ops.push_back(High);
   Ops.push_back(Low);
@@ -508,7 +508,7 @@ static bool EmittedOnce = false;
 int CodeGen_Hexagon::native_vector_bits() const {
   bool DoTrace = ! EmittedOnce;
   EmittedOnce = true;
-  if (target.has_feature(Halide::Target::HVX_DOUBLE)) {
+  if (target.has_feature(Halide::Target::HVX_128)) {
     if (DoTrace) debug(1) << "128 Byte mode\n";
     return 128*8;
   } else {
@@ -812,7 +812,7 @@ bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op,
                                      std::vector<Value *> &LLVMValues){
   Expr pattern;
   int I;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
 
   pattern = WPICK( ((wild_i32x32 * wild_i32x32) + (wild_i32x32 * wild_i32x32)),
                    ((wild_i32x16 * wild_i32x16) + (wild_i32x16 * wild_i32x16)));
@@ -849,7 +849,7 @@ bool CodeGen_Hexagon::shouldUseVDMPY(const Add *op,
 }
 bool CodeGen_Hexagon::shouldUseVMPA(const Add *op,
                                     std::vector<Value *> &LLVMValues){
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   Expr pattern;
   // pattern = (cast(Int(16, 64), wild_u8x64) * cast(Int(16, 64), wild_u8x64)) +
   //   (cast(Int(16, 64), wild_u8x64) * cast(Int(16, 64), wild_u8x64));
@@ -884,7 +884,7 @@ bool CodeGen_Hexagon::shouldUseVMPA(const Add *op,
   return false;
 }
 bool CodeGen_Hexagon::possiblyGenerateVMPAAccumulate(const Add *op) {
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> Patterns;
 
   // Convert A:zxt(a:u8x64) + B:zxt(bu8x64) + C:i16x64 ->
@@ -1028,7 +1028,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
 
 llvm::Value *
 CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Expr> Patterns, matches;
   int num_hw_pair = (bytes_in_vector() / 2) * 2; // num half words in a pair.
   int num_w_quad = (bytes_in_vector() / 4) * 4;
@@ -1089,7 +1089,7 @@ void CodeGen_Hexagon::visit(const Div *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   value = emitBinaryOp(op, averages);
   if (!value) {
     std::vector<Pattern> Patterns;
@@ -1204,7 +1204,7 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Add *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
 
   // 4096-bit vector + vector
   Patterns.push_back(wild_u32x128 + wild_u32x128);
@@ -1273,7 +1273,7 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Sub *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
 
   // 4096-bit vector - vector
   Patterns.push_back(wild_u32x128 - wild_u32x128);
@@ -1342,7 +1342,7 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Min *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
 
   // 4096-bit min(vector, vector)
   Patterns.push_back(min(wild_u32x128, wild_u32x128));
@@ -1411,7 +1411,7 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Max *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
 
   // 4096-bit max(vector, vector)
   Patterns.push_back(max(wild_u32x128, wild_u32x128));
@@ -1480,7 +1480,7 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
 
   // 4096-bit vector x vector
   Patterns.push_back(wild_u32x128 * wild_u32x128);
@@ -1553,7 +1553,7 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Div *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
 
   // 4096-bit vector / vector
   Patterns.push_back(wild_u32x128 / wild_u32x128);
@@ -1641,7 +1641,7 @@ bool isNarrowingVectorCast(const Cast *op) {
 }
 llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   if (isWideningVectorCast(op)) {
     std::vector<Pattern> Patterns;
     debug(4) << "Entered handleLargeVectors (Cast)\n";
@@ -2045,7 +2045,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         if (value)
           return;
       }
-    bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
     // Looking for shuffles
     {
       std::vector<Pattern> Shuffles;
@@ -2303,7 +2303,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
     }
   }
 
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
 
@@ -2400,7 +2400,7 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
   //   Vdd.w=vmpy(Vu.h,Rt.h)
   //   Vdd.uh=vmpy(Vu.ub,Rt.ub)
   //   Vdd.uw=vmpy(Vu.uh,Rt.uh)
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern>Patterns;
   std::vector<Expr> matches;
   std::vector<Value *> Ops;
@@ -2519,7 +2519,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
   debug(1) << "HexCG: " << op->type << ", " << "visit(Mul)\n";
@@ -2690,7 +2690,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
   }
 }
 void CodeGen_Hexagon::visit(const Broadcast *op) {
-    bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
 
     int Width = op->lanes;
     bool match32 = false;
@@ -2837,7 +2837,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     value = convertValueType(value, llvm_type_of(op->type));
 }
 void CodeGen_Hexagon::visit(const Load *op) {
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   if (op->type.is_vector() && isValidHexagonVector(op->type,
                                                    native_vector_bits())) {
 
@@ -2985,7 +2985,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   Expr char_cmp_vector =  Variable::make(Bool(CPICK(128, 64)), "*");
   Expr short_cmp_vector =  Variable::make(Bool(CPICK(64, 32)), "*");
   Expr word_cmp_vector =  Variable::make(Bool(CPICK(32, 16)), "*");
@@ -3130,7 +3130,7 @@ CodeGen_Hexagon::compare(llvm::Value *a, llvm::Value *b,
 }
 llvm::Value *
 CodeGen_Hexagon::negate(llvm::Value *a) {
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   Intrinsic::ID PredNot = IPICK(Intrinsic::hexagon_V6_pred_not);
   llvm::Function *PredNotF = Intrinsic::getDeclaration(module, PredNot);
   std::vector<Value*> Ops;
@@ -3204,7 +3204,7 @@ void CodeGen_Hexagon::visit(const LE *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> VecPairCompares;
   VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) <=
                                     WPICK(wild_i8x256, wild_i8x128),
@@ -3257,7 +3257,7 @@ void CodeGen_Hexagon::visit(const LT *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> VecPairCompares;
   VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) <
                                     WPICK(wild_i8x256, wild_i8x128),
@@ -3310,7 +3310,7 @@ void CodeGen_Hexagon::visit(const NE *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> VecPairCompares;
   VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) !=
                                     WPICK(wild_i8x256, wild_i8x128),
@@ -3363,7 +3363,7 @@ void CodeGen_Hexagon::visit(const GT *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> VecPairCompares;
   VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) >
                                     WPICK(wild_i8x256, wild_i8x128),
@@ -3416,7 +3416,7 @@ void CodeGen_Hexagon::visit(const EQ *op) {
     CodeGen_Posix::visit(op);
     return;
   }
-  bool B128 = target.has_feature(Halide::Target::HVX_DOUBLE);
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> VecPairCompares;
   VecPairCompares.push_back(Pattern(WPICK(wild_i8x256, wild_i8x128) ==
                                     WPICK(wild_i8x256, wild_i8x128),

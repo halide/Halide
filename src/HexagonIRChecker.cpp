@@ -121,7 +121,7 @@ private:
 };
 
 Stmt hexagon_ir_checker(Stmt s, const Target &t) {
-    bool has_double = t.has_feature(Target::HVX_DOUBLE);
+    bool has_double = t.has_feature(Target::HVX_128);
     return HexagonIRChecker(has_double).mutate(s);
 }
 

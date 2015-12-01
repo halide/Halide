@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target);
 #if LOG2VLEN == 7
-  target.set_feature(Target::HVX_DOUBLE);
+  target.set_feature(Target::HVX_128);
 #endif
   target.set_cgoption(Target::BuffersAligned);
   test_gaussian3x3(target);

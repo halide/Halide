@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
   bool isDbl = false;
   setupHexagonTarget(target);
   if (argc>1) {
-   target.set_feature(Target::HVX_DOUBLE);
+   target.set_feature(Target::HVX_128);
    isDbl = true;
   }
   testOne(target,isDbl);

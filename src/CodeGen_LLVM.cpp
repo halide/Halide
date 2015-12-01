@@ -478,7 +478,7 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
 
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                 "Halide HVX internal compiler\n");
-    if (target.has_feature(Halide::Target::HVX_DOUBLE)) {
+    if (target.has_feature(Halide::Target::HVX_128)) {
       char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
       ::putenv(s);
       cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",

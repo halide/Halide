@@ -41,7 +41,7 @@ void test_nv12torgb888(Target& target) {
 int main(int argc, char **argv) {
 	Target target;
 	setupHexagonTarget(target);
-        target.set_feature(Target::HVX_DOUBLE);
+        target.set_feature(Target::HVX_128);
 	test_nv12torgb888(target);
 	printf ("Done\n");
 	return 0;
