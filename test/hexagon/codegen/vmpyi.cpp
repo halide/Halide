@@ -9,7 +9,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
 
   //CHECK: vmpyi(v{{[0-9]+}}.h,v{{[0-9]+}}.h)

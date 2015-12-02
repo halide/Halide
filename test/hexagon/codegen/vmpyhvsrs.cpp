@@ -29,7 +29,7 @@ void test_vmpyhvsrs(Target& target) {
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   test_vmpyhvsrs(target);
   printf ("Done\n");

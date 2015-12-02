@@ -89,11 +89,8 @@ void test_median(Target& target) {
 
 int main(int argc, char **argv) {
 	Target target;
-	setupHexagonTarget(target);
+        setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
         commonPerfSetup(target);
-#if LOG2VLEN == 7
-        target.set_feature(Target::HVX_128);
-#endif
         target.set_cgoption(Target::BuffersAligned);
 	test_median(target);
 	printf ("Done\n");

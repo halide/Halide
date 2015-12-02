@@ -20,7 +20,7 @@ void testVabsdiff(Target& target) {
 }
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   testVabsdiff(target);
   printf ("Done\n");

@@ -122,7 +122,7 @@ void testall(Target &target) {
 // unsigned) to signed chars"
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   testall(target);
   printf ("Done\n");

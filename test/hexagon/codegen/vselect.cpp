@@ -8,7 +8,7 @@ IRPrinter irp(std::cerr);
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   /* Test variants of vector add */
   //CHECK: vcmp.gt(v{{[0-9]+}}.b,v{{[0-9]+}}.b)

@@ -63,11 +63,9 @@ void test_nv12torgb888(Target& target) {
 
 int main(int argc, char **argv) {
 	Target target;
-	setupHexagonTarget(target);
+        setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
+
         commonPerfSetup(target);
-#if LOG2VLEN == 7
-        target.set_feature(Target::HVX_128);
-#endif
 	test_nv12torgb888(target);
 	printf ("Done\n");
 	return 0;

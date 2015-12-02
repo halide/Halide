@@ -1,5 +1,6 @@
 using namespace Halide;
 #include <Halide.h>
+#include <assert.h>
 #ifdef NOSTDOUT
 #define OFILE_AS "x.s"
 #else
@@ -26,12 +27,24 @@ void commonPerfSetup(Target &target) {
     disableAsserts(target);
     disableBounds(target);
 }
+void setupHVXSize(Target &target, Target::Feature F)  {
+    if (F == Target::HVX_128) {
+      target.set_feature(Target::HVX_128);
+      target = target.without_feature(Target::HVX_64);
+    } else if (F == Target::HVX_64) {
+      target.set_feature(Target::HVX_64);
+      target = target.without_feature(Target::HVX_128);
+    } else {
+      fprintf(stderr, "Bad Target vec size feature\n");
+      assert(0);
+    }
+}
 
-void setupHexagonTarget(Target &target) {
+void setupHexagonTarget(Target &target, Target::Feature F=Target::HVX_128) {
         target.os = Target::HexagonStandalone; // The operating system
         target.arch = Target::Hexagon;   // The CPU architecture
         target.bits = 32;            // The bit-width of the architecture
-        target.set_feature(Target::HVX_64);
+        setupHVXSize(target, F);
 }
 
 Expr sat_i32(Expr e) {

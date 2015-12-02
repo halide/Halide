@@ -29,7 +29,7 @@ IRPrinter irp(std::cerr);
 
 int main(int argc, char **argv) {
     Target target;
-    setupHexagonTarget(target);
+    setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
     commonPerfSetup(target);
     Halide::Var x("x"), y("y"), k;
     Var xo, xi;

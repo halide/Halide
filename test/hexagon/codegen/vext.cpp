@@ -7,7 +7,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   //CHECK: vzxt(v{{[0-9]+}}.ub)
   testZeroExtend<uint8_t>(target);

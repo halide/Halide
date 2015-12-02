@@ -7,7 +7,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
 
   /* Test variants of vector splat */
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
   testBcast<uint32_t>(target);
 
 
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   target.set_feature(Target::HVX_V62);
 
   /* Test variants of vector splat */

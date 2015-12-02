@@ -23,7 +23,7 @@ void testVsat(Target& target) {
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   testVsat(target);
   printf ("Done\n");

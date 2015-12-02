@@ -483,6 +483,8 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
       ::putenv(s);
       cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",
                                   "Halide HVX internal options\n");
+      if (target.has_feature(Halide::Target::HVX_64))
+         internal_error << "Both HVX_64 and HVX_128 set at same time\n";
     }
 
 //  compile_for_device(stmt, name, args,images_to_embed);

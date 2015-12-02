@@ -131,7 +131,7 @@ void testall(Target &target) {
 // "Saturate and packing not supported when downcasting words to signed chars"
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   testall(target);
   printf ("Done\n");

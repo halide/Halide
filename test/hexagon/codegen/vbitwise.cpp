@@ -7,7 +7,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, Target::HVX_64);
   commonTestSetup(target);
   // CHECK: vor(v{{[0-9]+}},v{{[0-9]+}})
   testOr<uint8_t>(target);

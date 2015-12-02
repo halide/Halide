@@ -401,11 +401,9 @@ Func process(Func raw, Type result_type,
 int main(int argc, char **argv) {
 #ifdef HEXAGON
     Target target;
-    setupHexagonTarget(target);
+    setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
+
     commonPerfSetup(target);
-#if LOG2VLEN == 7
-    target.set_feature(Target::HVX_128);
-#endif
 #endif
 
     // The camera pipe is specialized on the 2592x1968 images that

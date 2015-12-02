@@ -40,10 +40,9 @@ void testTwo(Target &target, bool isDbl) {
 int main(int argc, char **argv) {
   Target target;
   bool isDbl = false;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, argc>1 ? Target::HVX_128 : Target::HVX_64);
   commonTestSetup(target);
   if (argc>1) {
-   target.set_feature(Target::HVX_128);
    isDbl = true;
   }
   testOne(target,isDbl);

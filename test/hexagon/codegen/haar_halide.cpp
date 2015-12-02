@@ -5,12 +5,8 @@ using namespace Halide;
 //RUN: ./haar_halide.out | FileCheck %s
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
+  setupHexagonTarget(target, argc>1 ? Target::HVX_128 : Target::HVX_64);
   commonTestSetup(target);
-  if (argc>1) {
-   printf( "argc %d\n", argc);
-   target.set_feature(Target::HVX_128);
-  }
   Halide::Var x("x"), y("y");
   Var xo,xi;
 
