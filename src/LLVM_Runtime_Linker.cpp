@@ -397,7 +397,8 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
         string err_msg;
-        #if LLVM_VERSION >= 38
+//      #if LLVM_VERSION >= 38
+        #if LLVM_VERSION >  38
         bool failed = llvm::Linker::linkModules(*modules[0], *modules[i]);
         #elif LLVM_VERSION >= 36
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
