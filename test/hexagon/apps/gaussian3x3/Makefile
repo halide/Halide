@@ -58,6 +58,7 @@ run: gaussian3x3.out
         else \
           echo FAIL > ${CURR_DIR}/result; \
 	  echo FAIL;\
+	  exit 1; \
         fi
 
 

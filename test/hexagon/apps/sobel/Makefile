@@ -60,9 +60,11 @@ bmark-report:
 			grep "cycles/pixel" ${CURR_DIR}/run.stdout | awk '{print $$6"("$$4"):",$$7 " cycles/pixel"}'; \
 		else \
 			echo "${TEST_NAME}: FAIL";\
+			exit 1; \
 		fi \
 	else \
 		echo "run.stdout not found; please run make run first"; \
+		exit 1; \
 	fi
 
 run: sobel.out
@@ -81,6 +83,7 @@ run: sobel.out
 	else \
           echo FAIL > ${CURR_DIR}/result; \
 	  echo FAIL;\
+	  exit 1; \
         fi
 
 
