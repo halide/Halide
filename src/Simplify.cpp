@@ -2137,10 +2137,10 @@ private:
                        equal(add_b->b, a)) {
                 expr = mutate(make_zero(add_b->a.type()) < add_b->a);
             } else if (add_b &&
-                       const_int(a, &ia) &&
-                       const_int(add_b->b, &ib)) {
-                // ia < x + ib
-                expr = mutate(make_const(a.type(), ia - ib) < add_b->a);
+                       is_const(a) &&
+                       is_const(add_b->b)) {
+                // a < x + b -> (a - b) < x
+                expr = mutate((a - add_b->b) < add_b->a);
             } else if (sub_b &&
                        equal(sub_b->a, a)) {
                 // Subtract a term from both sides
@@ -2160,8 +2160,13 @@ private:
             } else if (mul_a &&
                        is_positive_const(mul_a->b) &&
                        is_const(b)) {
-                // (a * c1 < c2) <=> (a < (c2 - 1) / c1 + 1)
-                expr = mutate(mul_a->a < (((b - 1) / mul_a->b) + 1));
+                if (mul_a->type.is_int()) {
+                    // (a * c1 < c2) <=> (a < (c2 - 1) / c1 + 1)
+                    expr = mutate(mul_a->a < (((b - 1) / mul_a->b) + 1));
+                } else {
+                    // (a * c1 < c2) <=> (a < c2 / c1)
+                    expr = mutate(mul_a->a < (b / mul_a->b));
+                }
             } else if (mul_b &&
                        is_positive_const(mul_b->b) &&
                        is_const(a)) {
@@ -3561,6 +3566,8 @@ void simplify_test() {
 
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
+
+    check((1 - xf)*6 < 3, 0.5f < xf);
 
     // Check that simplifier can recognise instances where the extremes of the
     // datatype appear as constants in comparisons, Min and Max expressions.
