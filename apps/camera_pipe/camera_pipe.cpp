@@ -1,9 +1,16 @@
 #include "Halide.h"
 #include <stdint.h>
+#ifdef HEXAGON
+#include "halide-hexagon-setup.h"
+#endif
 
 using namespace Halide;
 
 int schedule;
+
+#ifndef FIXPT
+#define FIXPT  32        // use 32-bit fixed point
+#endif
 
 Var x, y, tx("tx"), ty("ty"), c("c");
 Func processed("processed");
@@ -178,7 +185,68 @@ Func demosaic(Func deinterleaved) {
         // These interleave in x and y, so unrolling them helps
         output.compute_at(processed, tx).unroll(x, 2).unroll(y, 2)
             .reorder(c, x, y).bound(c, 0, 3).unroll(c);
-
+    } else if (schedule == 2) {
+        // optimized for Hexagon
+        // Compute these in chunks over tiles, vectorized by 32
+        g_r.compute_at(processed, tx).vectorize(x, 32);
+        g_b.compute_at(processed, tx).vectorize(x, 32);
+        r_gr.compute_at(processed, tx).vectorize(x, 32);
+        b_gr.compute_at(processed, tx).vectorize(x, 32);
+        r_gb.compute_at(processed, tx).vectorize(x, 32);
+        b_gb.compute_at(processed, tx).vectorize(x, 32);
+        r_b.compute_at(processed, tx).vectorize(x, 32);
+        b_r.compute_at(processed, tx).vectorize(x, 32);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .vectorize(x, 32)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 3) {
+        // optimized for Hexagon
+        // Compute these in chunks over tiles, scalar
+        g_r.compute_at(processed, tx);
+        g_b.compute_at(processed, tx);
+        r_gr.compute_at(processed, tx);
+        b_gr.compute_at(processed, tx);
+        r_gb.compute_at(processed, tx);
+        b_gb.compute_at(processed, tx);
+        r_b.compute_at(processed, tx);
+        b_r.compute_at(processed, tx);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 4) {
+        // optimized for Hexagon
+        // Compute these in chunks over tiles, vectorized by 64
+        g_r.compute_at(processed, tx).vectorize(x, 64);
+        g_b.compute_at(processed, tx).vectorize(x, 64);
+        r_gr.compute_at(processed, tx).vectorize(x, 64);
+        b_gr.compute_at(processed, tx).vectorize(x, 64);
+        r_gb.compute_at(processed, tx).vectorize(x, 64);
+        b_gb.compute_at(processed, tx).vectorize(x, 64);
+        r_b.compute_at(processed, tx).vectorize(x, 64);
+        b_r.compute_at(processed, tx).vectorize(x, 64);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .vectorize(x, 64)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 5) {
+        // optimized for Hexagon
+        // Compute these in chunks over tiles, scalar
+        g_r.compute_at(processed, tx);
+        g_b.compute_at(processed, tx);
+        r_gr.compute_at(processed, tx);
+        b_gr.compute_at(processed, tx);
+        r_gb.compute_at(processed, tx);
+        b_gb.compute_at(processed, tx);
+        r_b.compute_at(processed, tx);
+        b_r.compute_at(processed, tx);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
     } else {
         // Basic naive schedule
         g_r.compute_root();
@@ -202,21 +270,37 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
     Func matrix;
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
-    matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point
+#if (FIXPT == 32)
+    matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point (32b Q24.8)
+#else
+    matrix(x, y) = cast<int16_t>(val * 8.0f);   // Q13.3 fixed point in 16b
+#endif
     matrix.compute_root();
 
     Func corrected;
+#if (FIXPT == 32)
     Expr ir = cast<int32_t>(input(x, y, 0));
     Expr ig = cast<int32_t>(input(x, y, 1));
     Expr ib = cast<int32_t>(input(x, y, 2));
+#else
+    Expr ir = cast<int16_t>(input(x, y, 0));
+    Expr ig = cast<int16_t>(input(x, y, 1));
+    Expr ib = cast<int16_t>(input(x, y, 2));
+#endif
 
     Expr r = matrix(3, 0) + matrix(0, 0) * ir + matrix(1, 0) * ig + matrix(2, 0) * ib;
     Expr g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
     Expr b = matrix(3, 2) + matrix(0, 2) * ir + matrix(1, 2) * ig + matrix(2, 2) * ib;
 
+#if (FIXPT == 32)
     r = cast<int16_t>(r/256);
     g = cast<int16_t>(g/256);
     b = cast<int16_t>(b/256);
+#else
+    r = cast<int16_t>(r >> 3);
+    g = cast<int16_t>(g >> 3);
+    b = cast<int16_t>(b >> 3);
+#endif
     corrected(x, y, c) = select(c == 0, r,
                                 select(c == 1, g, b));
 
@@ -276,6 +360,34 @@ Func process(Func raw, Type result_type,
         corrected.compute_at(processed, tx);
         processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
+    } else if (schedule == 2) {
+        // optimized for Hexagon
+        // Compute in chunks over 32x32 tiles, vectorized by 32
+        denoised.compute_at(processed, tx).vectorize(x, 32);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+    } else if (schedule == 3) {
+        // optimized for Hexagon
+        // Compute in chunks over 32x32 tiles, scalar
+        denoised.compute_at(processed, tx);
+        deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+    } else if (schedule == 4) {
+        // optimized for Hexagon
+        // Compute in chunks over 64x64 tiles, vectorized by 64
+        denoised.compute_at(processed, tx).vectorize(x, 64);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
+    } else if (schedule == 5) {
+        // optimized for Hexagon
+        // Compute in chunks over 64x64 tiles, scalar
+        denoised.compute_at(processed, tx);
+        deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
     } else {
         denoised.compute_root();
         deinterleaved.compute_root();
@@ -287,6 +399,13 @@ Func process(Func raw, Type result_type,
 }
 
 int main(int argc, char **argv) {
+#ifdef HEXAGON
+    Target target;
+    setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
+
+    commonPerfSetup(target);
+#endif
+
     // The camera pipe is specialized on the 2592x1968 images that
     // come in, so we'll just use an image instead of a uniform image.
     ImageParam input(UInt(16), 2);
@@ -324,8 +443,14 @@ int main(int argc, char **argv) {
     //printf("%s\n", s.c_str());
 
     std::vector<Argument> args = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
+#ifdef HEXAGON
+    processed.compile_to_file("curved", args, target);
+    processed.compile_to_bitcode("curved.bc", args, target);
+//    processed.compile_to_assembly("curved.s", args, target);
+#else
     processed.compile_to_file("curved", args);
     processed.compile_to_assembly("curved.s", args);
+#endif
 
     return 0;
 }

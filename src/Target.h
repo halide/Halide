@@ -20,13 +20,13 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl} os;
+    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl, HexagonStandalone, HexagonQurt} os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
      * set" is actually llvm bitcode.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS} arch;
+    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, Hexagon} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -65,6 +65,9 @@ struct Target {
         Renderscript, ///< Enable the Renderscript runtime.
 
         UserContext,  ///< Generated code takes a user_context pointer as first argument
+        HVX_64, /// Enable HVX 64 Byte mode (hexagon) intrinsics
+        HVX_128, /// Enable HVX 128 Byte mode (hexagon) intrinsics
+        HVX_V62, /// Enable HVX v62, default is v60
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
@@ -77,7 +80,10 @@ struct Target {
 
         FeatureEnd
     };
-
+  enum CGOption {
+    BuffersAligned,
+    CGOptionEnd
+  };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
     Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
@@ -169,12 +175,22 @@ struct Target {
         }
         return true;
     }
+    void set_cgoption(CGOption c, bool value = true) {
+        user_assert(c < CGOptionEnd) << "Invalid Target CGOption.\n";
+        cgoptions.set(c, value);
+    }
+
+    bool has_cgoption(CGOption c) const {
+        user_assert(c < CGOptionEnd) << "Invalid Target CGOption.\n";
+        return cgoptions[c];
+    }
 
     bool operator==(const Target &other) const {
       return os == other.os &&
           arch == other.arch &&
           bits == other.bits &&
-          features == other.features;
+          features == other.features &&
+          cgoptions == other.cgoptions;
     }
 
     bool operator!=(const Target &other) const {
@@ -252,6 +268,7 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
+    std::bitset<CGOptionEnd> cgoptions;
 };
 
 /** Return the target corresponding to the host machine. */
