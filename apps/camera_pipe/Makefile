@@ -6,14 +6,6 @@ else
   SCHEDULE=0
 endif
 
-ifdef HEX_TOOLS
-  TGT_CXX=${HEX_TOOLS}/bin/hexagon-clang++
-  TGT_CXXFLAGS=${HEXAGON_CXXFLAGS}
-else
-  TGT_CXX=${CXX}
-  TGT_CXXFLAGS=${CXXFLAGS}
-endif
-
 all: process
 
 camera_pipe: ../../ camera_pipe.cpp
