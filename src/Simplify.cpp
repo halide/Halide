@@ -223,9 +223,10 @@ private:
             }
         } else if (const Mod *mod = e.as<Mod>()) {
             int64_t min_b, max_b;
-            if (const_int_bounds(mod->b, &min_b, &max_b)) {
+            if (const_int_bounds(mod->b, &min_b, &max_b) &&
+                (min_b > 0 || max_b < 0)) {
                 *min_val = 0;
-                *max_val = max_b;
+                *max_val = std::abs(max_b) - 1;
                 return true;
             }
         } else if (const Div *div = e.as<Div>()) {
