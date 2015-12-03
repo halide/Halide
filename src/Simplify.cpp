@@ -158,9 +158,8 @@ private:
             return false;
         }
 
-        int64_t i;
-        if (const_int(e, &i)) {
-            *min_val = *max_val = i;
+        if (const int64_t *i = as_const_int(e)) {
+            *min_val = *max_val = *i;
             return true;
         } else if (const Variable *v = e.as<Variable>()) {
             if (bounds_info.contains(v->name)) {
@@ -205,8 +204,11 @@ private:
             int64_t min_a, min_b, max_a, max_b;
             if (const_int_bounds(mul->a, &min_a, &max_a) &&
                 const_int_bounds(mul->b, &min_b, &max_b)) {
-                int64_t t0 = min_a*min_b, t1 = min_a*max_b,
-                        t2 = max_a*min_b, t3 = max_a*max_b;
+                int64_t
+                    t0 = min_a*min_b,
+                    t1 = min_a*max_b,
+                    t2 = max_a*min_b,
+                    t3 = max_a*max_b;
                 *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
                 *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
                 return true;
@@ -217,6 +219,27 @@ private:
                 const_int_bounds(sel->false_value, &min_b, &max_b)) {
                 *min_val = std::min(min_a, min_b);
                 *max_val = std::max(max_a, max_b);
+                return true;
+            }
+        } else if (const Mod *mod = e.as<Mod>()) {
+            int64_t min_b, max_b;
+            if (const_int_bounds(mod->b, &min_b, &max_b)) {
+                *min_val = 0;
+                *max_val = max_b;
+                return true;
+            }
+        } else if (const Div *div = e.as<Div>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(div->a, &min_a, &max_a) &&
+                const_int_bounds(div->b, &min_b, &max_b) &&
+                (min_b > 0 || max_b < 0)) {
+                int64_t
+                    t0 = div_imp(min_a, min_b),
+                    t1 = div_imp(min_a, max_b),
+                    t2 = div_imp(max_a, min_b),
+                    t3 = div_imp(max_a, max_b);
+                *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
+                *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
                 return true;
             }
         }
