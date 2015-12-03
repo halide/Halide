@@ -85,6 +85,7 @@
  * Pipeline object.
  */
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -218,7 +219,7 @@ public:
     }
 
     operator T() const { return value; }
-    operator Expr() const { return Expr(value); }
+    operator Expr() const { return Internal::make_const(type_of<T>(), value); }
 
 private:
     T value;
@@ -332,227 +333,133 @@ private:
 /** Addition between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 + (T2)0) operator+(T1 a, const GeneratorParam<T2> &b) { return a + (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 + (T1)0) operator+(const GeneratorParam<T2> &a, T1 b) { return (T2)a + b; }
 // @}
 
 /** Subtraction between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 - (T2)0) operator-(T1 a, const GeneratorParam<T2> &b) { return a - (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 - (T1)0)  operator-(const GeneratorParam<T2> &a, T1 b) { return (T2)a - b; }
 // @}
 
 /** Multiplication between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 * (T2)0) operator*(T1 a, const GeneratorParam<T2> &b) { return a * (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 * (T2)0) operator*(const GeneratorParam<T2> &a, T1 b) { return (T2)a * b; }
 // @}
 
 /** Division between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 / (T2)1) operator/(T1 a, const GeneratorParam<T2> &b) { return a / (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 / (T1)1) operator/(const GeneratorParam<T2> &a, T1 b) { return (T2)a / b; }
 // @}
 
 /** Modulo between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 % (T2)1) operator%(T1 a, const GeneratorParam<T2> &b) { return a % (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 % (T1)1) operator%(const GeneratorParam<T2> &a, T1 b) { return (T2)a % b; }
 // @}
 
 /** Greater than comparison between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 > (T2)1) operator>(T1 a, const GeneratorParam<T2> &b) { return a > (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 > (T1)1) operator>(const GeneratorParam<T2> &a, T1 b) { return (T2)a > b; }
 // @}
 
 /** Less than comparison between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 < (T2)1) operator<(T1 a, const GeneratorParam<T2> &b) { return a < (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 < (T1)1) operator<(const GeneratorParam<T2> &a, T1 b) { return (T2)a < b; }
 // @}
 
 /** Greater than or equal comparison between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 >= (T2)1) operator>=(T1 a, const GeneratorParam<T2> &b) { return a >= (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 >= (T1)1) operator>=(const GeneratorParam<T2> &a, T1 b) { return (T2)a >= b; }
 // @}
 
 /** Less than or equal comparison between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 <= (T2)1) operator<=(T1 a, const GeneratorParam<T2> &b) { return a <= (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 <= (T1)1) operator<=(const GeneratorParam<T2> &a, T1 b) { return (T2)a <= b; }
 // @}
 
 /** Equality comparison between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 == (T2)1) operator==(T1 a, const GeneratorParam<T2> &b) { return a == (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 == (T1)1) operator==(const GeneratorParam<T2> &a, T1 b) { return (T2)a == b; }
 // @}
 
 /** Inequality comparison between between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T1)0 != (T2)1) operator!=(T1 a, const GeneratorParam<T2> &b) { return a != (T2)b; }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype((T2)0 != (T1)1) operator!=(const GeneratorParam<T2> &a, T1 b) { return (T2)a != b; }
 // @}
+
+namespace Internal { namespace GeneratorMinMax {
+
+using std::max;
+using std::min;
 
 /** Compute minimum between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype(min((T1)0, (T2)1)) min(T1 a, const GeneratorParam<T2> &b) { return min(a, (T2)b); }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype(min((T2)0, (T1)1)) min(const GeneratorParam<T2> &a, T1 b) { return min((T2)a, b); }
 // @}
 
 /** Compute the maximum value between GeneratorParam and arithmetic/enum types.
  * Returns arithmetic type. */
 // @{
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype(max((T1)0, (T2)1)) max(T1 a, const GeneratorParam<T2> &b) { return max(a, (T2)b); }
-template <typename T1, typename T2, typename std::enable_if<std::is_arithmetic<T1>::value || std::is_enum<T1>::value>::type * = nullptr>
+template <typename T1, typename T2>
 decltype(max((T2)0, (T1)1)) max(const GeneratorParam<T2> &a, T1 b) { return max((T2)a, b); }
 // @}
 
+}}
+
+using Internal::GeneratorMinMax::max;
+using Internal::GeneratorMinMax::min;
+
 /** Not operator for GeneratorParam */
 template <typename T>
-T operator!(const GeneratorParam<T> &a) { return !(T)a; }
-
-/** Addition between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator+(Expr a, const GeneratorParam<T2> &b) { return a + (T2)b; }
-template <typename T2>
-Expr operator+(const GeneratorParam<T2> &a, Expr b) { return (T2)a + b; }
-// @}
-
-/** Subtraction between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator-(Expr a, const GeneratorParam<T2> &b) { return a - (T2)b; }
-template <typename T2>
-Expr operator-(const GeneratorParam<T2> &a, Expr b) { return (T2)a - b; }
-// @}
-
-/** Multiplication between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator*(Expr a, const GeneratorParam<T2> &b) { return a * (T2)b; }
-template <typename T2>
-Expr operator*(const GeneratorParam<T2> &a, Expr b) { return (T2)a * b; }
-// @}
-
-/** Division between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator/(Expr a, const GeneratorParam<T2> &b) { return a / (T2)b; }
-template <typename T2>
-Expr operator/(const GeneratorParam<T2> &a, Expr b) { return (T2)a / b; }
-// @}
-
-/** Modulo between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator%(Expr a, const GeneratorParam<T2> &b) { return a % (T2)b; }
-template <typename T2>
-Expr operator%(const GeneratorParam<T2> &a, Expr b) { return (T2)a % b; }
-// @}
-
-/** Greater than comparison between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator>(Expr a, const GeneratorParam<T2> &b) { return a > (T2)b; }
-template <typename T2>
-Expr operator>(const GeneratorParam<T2> &a, Expr b) { return (T2)a > b; }
-// @}
-
-/** Less than comparison between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator<(Expr a, const GeneratorParam<T2> &b) { return a < (T2)b; }
-template <typename T2>
-Expr operator<(const GeneratorParam<T2> &a, Expr b) { return (T2)a < b; }
-// @}
-
-/** Greater than or equal comparison between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator>=(Expr a, const GeneratorParam<T2> &b) { return a >= (T2)b; }
-template <typename T2>
-Expr operator>=(const GeneratorParam<T2> &a, Expr b) { return (T2)a >= b; }
-// @}
-
-/** Less than or equal comparison between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator<=(Expr a, const GeneratorParam<T2> &b) { return a <= (T2)b; }
-template <typename T2>
-Expr operator<=(const GeneratorParam<T2> &a, Expr b) { return (T2)a <= b; }
-// @}
-
-/** Equality between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator==(Expr a, const GeneratorParam<T2> &b) { return a == (T2)b; }
-template <typename T2>
-Expr operator==(const GeneratorParam<T2> &a, Expr b) { return (T2)a == b; }
-// @}
-
-/** Inequality comparison between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr operator!=(Expr a, const GeneratorParam<T2> &b) { return a != (T2)b; }
-template <typename T2>
-Expr operator!=(const GeneratorParam<T2> &a, Expr b) { return (T2)a != b; }
-// @}
-
-/** Compute the minimum value between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr min(Expr a, const GeneratorParam<T2> &b) { return min(a, (T2)b); }
-template <typename T2>
-Expr min(const GeneratorParam<T2> &a, Expr b) { return min((T2)a, b); }
-// @}
-
-/** Compute the maximum value between GeneratorParam and Expr */
-// @{
-template <typename T2>
-Expr max(Expr a, const GeneratorParam<T2> &b) { return max(a, (T2)b); }
-template <typename T2>
-Expr max(const GeneratorParam<T2> &a, Expr b) { return max((T2)a, b); }
-// @}
+decltype(!(T)0) operator!(const GeneratorParam<T> &a) { return !(T)a; }
 
 class NamesInterface {
     // Names in this class are only intended for use in derived classes.
