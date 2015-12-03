@@ -101,6 +101,7 @@ protected:
     static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
+    static bool llvm_Hexagon_enabled;
     static bool llvm_AArch64_enabled;
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
@@ -158,6 +159,7 @@ protected:
     llvm::Type *i64x2, *i64x4;
     llvm::Type *f32x2, *f32x4, *f32x8;
     llvm::Type *f64x2, *f64x4;
+    llvm::Type *i32x16;
     // @}
 
     /** Some wildcard variables used for peephole optimizations in
@@ -169,6 +171,20 @@ protected:
     Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
     Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4; // 256-bit signed ints
     Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4; // 256-bit unsigned ints
+
+    Expr wild_i32x16; // 512 bit signed ints.
+    Expr wild_u32x16;
+    Expr wild_i8x64, wild_u8x64, wild_i16x32, wild_u16x32;
+
+    Expr wild_i32x32, wild_u32x32;// 1024 bit signed ints.
+    Expr wild_i8x128, wild_u8x128, wild_i16x64, wild_u16x64;
+
+    Expr wild_i32x64, wild_u32x64;// 2048 bit signed ints.
+    Expr wild_i8x256, wild_u8x256, wild_i16x128, wild_u16x128;
+
+    Expr wild_i32x128, wild_u32x128;// 4096 bit signed ints.
+    Expr wild_i8x512, wild_u8x512, wild_i16x256, wild_u16x256;
+
     Expr wild_f32x2; // 64-bit floats
     Expr wild_f32x4, wild_f64x2; // 128-bit floats
     Expr wild_f32x8, wild_f64x4; // 256-bit floats
@@ -177,7 +193,6 @@ protected:
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
     Expr wild_f32x_, wild_f64x_;
-
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;
@@ -407,7 +422,7 @@ protected:
      * If there's no match, returns (NULL, 0).
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
-
+    ModulusRemainder getAlignmentInfo(Expr e);
 private:
 
     /** All the values in scope at the current code location during

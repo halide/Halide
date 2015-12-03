@@ -11,18 +11,35 @@
 #include <cstdlib>
 #include <cassert>
 
+#if defined(__hexagon__)
+#include "hexagon_standalone.h"
+#include "io.h"
+#define IMGEXT_IN ".pgm"
+#define IMGEXT    ".ppm"
+#else
+#define IMGEXT_IN ".png"
+#define IMGEXT    ".png"
+#endif
+
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc < 7) {
-        printf("Usage: ./process raw.png color_temp gamma contrast timing_iterations output.png\n"
-               "e.g. ./process raw.png 3200 2 50 5 output.png");
+        printf("Usage: ./process raw" IMGEXT_IN " color_temp gamma contrast timing_iterations output" IMGEXT "\n"
+               "e.g. ./process raw" IMGEXT_IN " 3200 2 50 5 output" IMGEXT);
         return 0;
     }
 
+    fprintf(stderr, "input: %s\n", argv[1]);
     Image<uint16_t> input = load_image(argv[1]);
-    fprintf(stderr, "%d %d\n", input.width(), input.height());
-    Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
+    fprintf(stderr, "       %d %d\n", input.width(), input.height());
+    // save_image(input, "input.pgm");
+    // fprintf(stderr, "       input.pgm\n");
+
+    Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 48)/32)*32, 3);
+    // The ref output will have a width that is a multiple of 40, and a height
+    // which is a multiple of 24.
+    Image<uint8_t> outref(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
 
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
@@ -48,24 +65,69 @@ int main(int argc, char **argv) {
 
     double best;
 
+#if defined(__hexagon__)
+    SIM_ACQUIRE_HVX;
+#if LOG2VLEN == 7
+    SIM_SET_HVX_DOUBLE_MODE;
+#endif
+#endif
+
+#ifdef PCYCLES
+    RESET_PMU();
+    long long start_time = READ_PCYCLES();
+#endif
     best = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast,
                input, matrix_3200, matrix_7000, output);
     });
+#ifdef PCYCLES
+    long long total_cycles = READ_PCYCLES() - start_time;
+    DUMP_PMU();
+    fprintf(stderr, "Halide:\t%0.4f cycles/pixel\n",
+            (float)total_cycles/output.height()/output.width()/timing_iterations);
+#else
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
+#endif
+    fprintf(stderr, "output: %s\n", argv[6]);
     save_image(output, argv[6]);
+    fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
+#if defined(__hexagon__)
+    SIM_RELEASE_HVX;
+#if DEBUG
+    printf ("Done calling the halide func. and released the vector context\n");
+#endif
+#endif
+
+#ifdef PCYCLES
+    RESET_PMU();
+    start_time = READ_PCYCLES();
+#endif
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
+        FCam::demosaic(input, outref, color_temp, contrast, true, 25, gamma);
     });
+#ifdef PCYCLES
+    total_cycles = READ_PCYCLES() - start_time;
+    DUMP_PMU();
+    fprintf(stderr, "C++:\t%0.4f cycles/pixel\n",
+            (float)total_cycles/outref.height()/outref.width()/timing_iterations);
+#else
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
-    save_image(output, "fcam_c.png");
+#endif
+    fprintf(stderr, "outref: fcam_c" IMGEXT "\n");
+    save_image(outref, "fcam_c" IMGEXT);
+    fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
 
+#if not defined(__hexagon__)
+    Image<uint8_t> outarm(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
     best = benchmark(timing_iterations, 1, [&]() {;
-        FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
+        FCam::demosaic_ARM(input, outarm, color_temp, contrast, true, 25, gamma);
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    save_image(output, "fcam_arm.png");
+    fprintf(stderr, "outarm: fcam_arm" IMGEXT "\n");
+    save_image(outarm, "fcam_arm" IMGEXT);
+    fprintf(stderr, "        %d %d\n", outarm.width(), outarm.height());
+#endif
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms

@@ -141,6 +141,8 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"android", Target::Android},
     {"ios", Target::IOS},
     {"nacl", Target::NaCl},
+    {"HexagonStandalone", Target::HexagonStandalone},
+    {"HexagonQurt", Target::HexagonQurt},
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
@@ -158,6 +160,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arm", Target::ARM},
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
+    {"hexagon", Target::Hexagon},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -193,6 +196,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
+    {"hvx-64", Target::HVX_64},
+    {"hvx-128", Target::HVX_128},
+    {"hvx-v62", Target::HVX_V62},
     {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},

@@ -12,14 +12,17 @@
 // #include <FCam/Sensor.h>
 // #include <FCam/Time.h>
 
-static unsigned char o[3*1024*2*1024*3];
+// If not using Halide output
+// static unsigned char o[3*1024*2*1024*3];
+
+#define MAXRAW  1023
 
 namespace FCam {
 
 // Make a linear luminance -> pixel value lookup table
 void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut) {
     unsigned short minRaw = 0 + blackLevel; //f.platform().minRawValue()+blackLevel;
-    unsigned short maxRaw = 4095; //f.platform().maxRawValue();
+    unsigned short maxRaw = MAXRAW; //f.platform().maxRawValue();
 
     for (int i = 0; i <= minRaw; i++) {
         lut[i] = 0;
@@ -134,8 +137,8 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     outHeight /= BLOCK_HEIGHT;
     outHeight *= BLOCK_HEIGHT;
 
-    int WIDTH = outWidth, HEIGHT = outHeight;
-    //fprintf(stderr, "Got outWidth=%d, outHeight=%d\n", outWidth, outHeight);
+    // int WIDTH = outWidth, HEIGHT = outHeight;
+    // fprintf(stderr, "FCam outWidth=%d, outHeight=%d\n", outWidth, outHeight);
 
 #if 0
     Image out(outWidth, outHeight, RGB24);
@@ -410,9 +413,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > MAXRAW ? MAXRAW : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > MAXRAW ? MAXRAW : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > MAXRAW ? MAXRAW : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
 #if 0
@@ -420,7 +423,7 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     out(bx+(x-2)*2, by+(y-2)*2)[1] = lut[gi];
                     out(bx+(x-2)*2, by+(y-2)*2)[2] = lut[bi];
 #else
-#if 0 // halide image
+#if 1 // halide image
                     out(bx+(x-2)*2, by+(y-2)*2, 0) = lut[ri];
                     out(bx+(x-2)*2, by+(y-2)*2, 1) = lut[gi];
                     out(bx+(x-2)*2, by+(y-2)*2, 2) = lut[bi];
@@ -448,9 +451,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > MAXRAW ? MAXRAW : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > MAXRAW ? MAXRAW : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > MAXRAW ? MAXRAW : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
 #if 0
@@ -458,7 +461,7 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     out(bx+(x-2)*2+1, by+(y-2)*2)[1] = lut[gi];
                     out(bx+(x-2)*2+1, by+(y-2)*2)[2] = lut[bi];
 #else
-#if 0 // halide image
+#if 1 // halide image
                     out(bx+(x-2)*2+1, by+(y-2)*2, 0) = lut[ri];
                     out(bx+(x-2)*2+1, by+(y-2)*2, 1) = lut[gi];
                     out(bx+(x-2)*2+1, by+(y-2)*2, 2) = lut[bi];
@@ -485,17 +488,17 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > MAXRAW ? MAXRAW : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > MAXRAW ? MAXRAW : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > MAXRAW ? MAXRAW : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
-                    #if 0
+#if 0
                     out(bx+(x-2)*2, by+(y-2)*2+1)[0] = lut[ri];
                     out(bx+(x-2)*2, by+(y-2)*2+1)[1] = lut[gi];
                     out(bx+(x-2)*2, by+(y-2)*2+1)[2] = lut[bi];
-                    #else
-#if 0 // halide image
+#else
+#if 1 // halide image
                     out(bx+(x-2)*2, by+(y-2)*2+1, 0) = lut[ri];
                     out(bx+(x-2)*2, by+(y-2)*2+1, 1) = lut[gi];
                     out(bx+(x-2)*2, by+(y-2)*2+1, 2) = lut[bi];
@@ -504,7 +507,7 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*1] = lut[gi];
                     o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*2] = lut[bi];
 #endif
-                    #endif
+#endif
 
                     // Convert from sensor rgb to srgb
                     r = colorMatrix[0]*linear[R][GB][y][x] +
@@ -523,9 +526,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > MAXRAW ? MAXRAW : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > MAXRAW ? MAXRAW : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > MAXRAW ? MAXRAW : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
 #if 0
@@ -533,7 +536,7 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     out(bx+(x-2)*2+1, by+(y-2)*2+1)[1] = lut[gi];
                     out(bx+(x-2)*2+1, by+(y-2)*2+1)[2] = lut[bi];
 #else
-#if 0 // halide image
+#if 1 // halide image
                     out(bx+(x-2)*2+1, by+(y-2)*2+1, 0) = lut[ri];
                     out(bx+(x-2)*2+1, by+(y-2)*2+1, 1) = lut[gi];
                     out(bx+(x-2)*2+1, by+(y-2)*2+1, 2) = lut[bi];

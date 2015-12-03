@@ -40,6 +40,7 @@ set(RUNTIME_CPP
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
+  nogpu
   opencl
   metal
   metal_objc_arm

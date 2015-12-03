@@ -15,15 +15,13 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     #else
     llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
     #endif
-
     #if LLVM_VERSION >= 37
-    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
+      llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
     #elif LLVM_VERSION >= 35
     llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get();
     #else
     llvm::Module *mod = llvm::ParseBitcodeFile(bitcode_buffer, *context);
     #endif
-
     #if LLVM_VERSION < 36
     delete bitcode_buffer;
     #endif
@@ -88,6 +86,7 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
+DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -113,6 +112,7 @@ DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
+DECLARE_CPP_INITMOD(hexagon_standalone)
 DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(posix_get_symbol)
@@ -176,6 +176,11 @@ DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
 #endif
+#ifdef WITH_HEXAGON
+DECLARE_LL_INITMOD(hexagon)
+#else
+DECLARE_NO_INITMOD(hexagon)
+#endif
 
 namespace {
 
@@ -231,6 +236,11 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         }
     } else if (target.arch == Target::PNaCl) {
         return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
+    } else if (target.arch == Target::Hexagon) {
+      return llvm::DataLayout(
+         "e-p:32:32:32-i64:64:64-i32:32:32-i16:16:16-i1:32:32"
+         "-f64:64:64-f32:32:32-v64:64:64-v32:32:32-a:0-n16:32");
+
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
         return llvm::DataLayout("unreachable");
@@ -346,7 +356,11 @@ llvm::Triple get_triple_for_target(Target target) {
         #else
         user_error << "This version of Halide was compiled without nacl support.\n";
         #endif
-    } else {
+    } else if (target.arch == Target::Hexagon) {
+      triple.setVendor(llvm::Triple::UnknownVendor);
+      triple.setArch(llvm::Triple::hexagon);
+      triple.setObjectFormat(llvm::Triple::ELF);
+ } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
     }
 
@@ -365,6 +379,9 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     // llvm doesn't complain while combining them.
     for (size_t i = 0; i < modules.size(); i++) {
         #if LLVM_VERSION >= 37
+        //modules[i]->setDataLayout(*data_layout);
+        modules[i]->setDataLayout(data_layout);
+        #elif LLVM_VERSION >= 35
         modules[i]->setDataLayout(data_layout);
         #else
         modules[i]->setDataLayout(&data_layout);
@@ -634,18 +651,35 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
+          if (t.arch != Target::Hexagon)
+          {
+            //PDB: Disabling all that is posix for the time being. We'll need to deal with
+            // write_debug_image soon, at the very least.
+
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-            modules.push_back(get_initmod_tracing(c, bits_64, debug));
-            modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+          }
+          modules.push_back(get_initmod_tracing(c, bits_64, debug));
+          modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+          modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+          modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+          if (t.arch != Target::Hexagon) {
             modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-            modules.push_back(get_initmod_cache(c, bits_64, debug));
+          } else {
+            modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
+          }
+          modules.push_back(get_initmod_cache(c, bits_64, debug));
+          // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
+          // from the tutorials.
+          if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
+          
+          if (t.arch != Target::Hexagon) {
+            // RL: treating same as above ...
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-            modules.push_back(get_initmod_metadata(c, bits_64, debug));
-            modules.push_back(get_initmod_profiler(c, bits_64, debug));
-            modules.push_back(get_initmod_float16_t(c, bits_64, debug));
+          }
+          modules.push_back(get_initmod_metadata(c, bits_64, debug));
+          modules.push_back(get_initmod_profiler(c, bits_64, debug));
+          modules.push_back(get_initmod_float16_t(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
@@ -734,6 +768,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
         }
+    } else {
+        modules.push_back(get_initmod_nogpu(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
