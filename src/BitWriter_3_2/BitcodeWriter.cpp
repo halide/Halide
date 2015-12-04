@@ -585,7 +585,6 @@ static void WriteValueAsMetadata(const ValueAsMetadata *MD,
   Record.clear();
 }
 
-#ifdef THESE_ARE_UNUSED
 static void WriteMDTuple(const MDTuple *N, const llvm_3_2::ValueEnumerator &VE,
                          BitstreamWriter &Stream,
                          SmallVectorImpl<uint64_t> &Record, unsigned Abbrev) {
@@ -609,7 +608,6 @@ static void WriteMDTuple(const MDTuple *N, const llvm_3_2::ValueEnumerator &VE,
   Stream.EmitRecord(bitc::METADATA_OLD_NODE, Record, Abbrev);
   Record.clear();
 }
-#endif
 
 #if LLVM_VERSION < 37
 static void WriteMDLocation(const MDLocation *N, const llvm_3_2::ValueEnumerator &VE,
@@ -634,7 +632,6 @@ static void WriteGenericDebugNode(const GenericDebugNode *,
   llvm_unreachable("unimplemented");
 }*/
 
-#ifdef FIXME
 static void WriteModuleMetadata(const Module *M,
                                 const llvm_3_2::ValueEnumerator &VE,
                                 BitstreamWriter &Stream) {
@@ -684,7 +681,6 @@ static void WriteModuleMetadata(const Module *M,
 #if LLVM_VERSION < 37
   unsigned MDLocationAbbrev = 0;
 #endif
-  unsigned MDLocationAbbrev = 0;
   //unsigned GenericDebugNodeAbbrev = 0;
   SmallVector<uint64_t, 64> Record;
   for (const Metadata *MD : MDs) {
@@ -737,7 +733,6 @@ static void WriteModuleMetadata(const Module *M,
 
   Stream.ExitBlock();
 }
-#endif
 
 static void WriteFunctionLocalMetadata(const Function &F,
                                        const llvm_3_2::ValueEnumerator &VE,
@@ -791,7 +786,6 @@ static void WriteMetadataAttachment(const Function &F,
   Stream.ExitBlock();
 }
 
-#ifdef FIXME
 static void WriteModuleMetadataStore(const Module *M, BitstreamWriter &Stream) {
   SmallVector<uint64_t, 64> Record;
 
@@ -815,7 +809,6 @@ static void WriteModuleMetadataStore(const Module *M, BitstreamWriter &Stream) {
 
   Stream.ExitBlock();
 }
-#endif
 
 static void emitSignedInt64(SmallVectorImpl<uint64_t> &Vals, uint64_t V) {
   if ((int64_t)V >= 0)
@@ -1566,7 +1559,6 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
 
       // If the instruction has a debug location, emit it.
       DebugLoc DL = I->getDebugLoc();
-//#if LLVM_VERSION >= 37
 #if LLVM_VERSION > 37
       if (!DL) {
 #else
@@ -1578,7 +1570,6 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
         Stream.EmitRecord(bitc::FUNC_CODE_DEBUG_LOC_AGAIN, Vals);
       } else {
 
-//#if LLVM_VERSION >= 37
 #if LLVM_VERSION > 37
         MDNode* Scope = DL.getScope();
         assert(Scope && "Expected valid scope");
@@ -1805,13 +1796,11 @@ static void WriteModule(const Module *M, BitstreamWriter &Stream,
   // Emit constants.
   WriteModuleConstants(VE, Stream);
 
-#ifdef FIXME
   // Emit metadata.
   WriteModuleMetadata(M, VE, Stream);
 
   // Emit metadata.
   WriteModuleMetadataStore(M, Stream);
-#endif
 
   // Emit names for globals/functions etc.
   WriteValueSymbolTable(M->getValueSymbolTable(), VE, Stream);
