@@ -215,11 +215,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     #if LLVM_VERSION == 37
-    #ifdef NEWER
-        llvm::DataLayout target_data_layout(target_machine->createDataLayout());
-    #else
         llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
-    #endif
     #else
         llvm::DataLayout target_data_layout(target_machine->createDataLayout());
     #endif
@@ -232,6 +228,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
                            << module->getDataLayout().getStringRepresentation() << "\n";
         module->setDataLayout(target_data_layout);
     }
+
     std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
 
     // Build up all of the passes that we want to do to the module.
@@ -250,12 +247,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
-#ifdef OLD_PASS_MGR
-    llvm::formatted_raw_ostream nout(*out);
-    target_machine->addPassesToEmitFile(pass_manager, nout, file_type);
-#else
     target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
-#endif
     pass_manager.run(*module);
 
     delete target_machine;

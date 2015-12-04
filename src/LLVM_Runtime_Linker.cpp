@@ -15,13 +15,15 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     #else
     llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
     #endif
+
     #if LLVM_VERSION >= 37
-      llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
+    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
     #elif LLVM_VERSION >= 35
     llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get();
     #else
     llvm::Module *mod = llvm::ParseBitcodeFile(bitcode_buffer, *context);
     #endif
+
     #if LLVM_VERSION < 36
     delete bitcode_buffer;
     #endif
@@ -672,7 +674,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
           // from the tutorials.
           if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
-          
+
           if (t.arch != Target::Hexagon) {
             // RL: treating same as above ...
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
