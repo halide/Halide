@@ -140,7 +140,12 @@ foreach (i ${RUNTIME_CPP} )
     add_custom_command(OUTPUT "${LL_D}"
                        DEPENDS "${SOURCE}"
                        COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
-                       COMMENT "${SOURCE} -> ${LL_D}")
+                       COMMENT "${SOURCE} -> ${LL_D}"
+                       # Make sure that the output of this command also depends
+                       # on the header files that ${SOURCE} uses
+                       # FIXME: Only works for makefile generator
+                       IMPLICIT_DEPENDS CXX "${SOURCE}"
+                      )
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
                        COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
