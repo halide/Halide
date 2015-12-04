@@ -18,7 +18,7 @@ public:
 
         // .parallel() schedule run-time support not yet implemented
         if (op->for_type == ForType::Parallel) {
-            user_warning << "Lowering parallel loop\n";
+            user_warning << "Not parallelizing loop over " << op->name << "\n";
             for_type = ForType::Serial;
             stmt = For::make(op->name, op->min, op->extent, for_type, op->device_api, op->body);
             return;
@@ -97,7 +97,10 @@ private:
     switch(m) {
     case HexagonIRChecker::Single: return 64 * 8;
     case HexagonIRChecker::Double: return 128 * 8;
+    default: user_warning << "Unknown HVX mode " << m << "\n"; return 0;
     }
+
+    return 0;
   }
   Expr check_type(const BaseExprNode *op) {
     if (!is_double &&

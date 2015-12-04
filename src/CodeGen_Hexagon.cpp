@@ -2044,8 +2044,8 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
   std::vector<Pattern>Patterns;
   std::vector<Expr> matches;
   std::vector<Value *> Ops;
-  Expr Vec, BC, bc_value;;
-  Intrinsic::ID IntrinsID;
+  Expr Vec, BC, bc_value;
+  Intrinsic::ID IntrinsID = Intrinsic::not_intrinsic;
   //   Deal with these first.
   //   Vdd.h=vmpy(Vu.ub,Rt.b)
   //   Vdd.w=vmpy(Vu.h,Rt.h)
@@ -3095,4 +3095,3 @@ void CodeGen_Hexagon::visit(const EQ *op) {
   }
 }
 }}
-
