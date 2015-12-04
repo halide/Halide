@@ -381,9 +381,6 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     // llvm doesn't complain while combining them.
     for (size_t i = 0; i < modules.size(); i++) {
         #if LLVM_VERSION >= 37
-        //modules[i]->setDataLayout(*data_layout);
-        modules[i]->setDataLayout(data_layout);
-        #elif LLVM_VERSION >= 35
         modules[i]->setDataLayout(data_layout);
         #else
         modules[i]->setDataLayout(&data_layout);
