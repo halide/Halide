@@ -334,8 +334,9 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
           && target.os != Target::HexagonStandalone)
         user_error << "Hexagon not setup yet" << target.os << "\n";
       return make_codegen<CodeGen_Hexagon>(target, context);
-    }
 #endif
+    }
+
     user_error << "Unknown target architecture: "
                << target.to_string() << "\n";
     return NULL;
