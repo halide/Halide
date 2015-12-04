@@ -677,6 +677,7 @@ static void WriteModuleMetadata(const Module *M,
     Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8));
     NameAbbrev = Stream.EmitAbbrev(Abbv);
   }
+
   unsigned MDTupleAbbrev = 0;
 #if LLVM_VERSION < 37
   unsigned MDLocationAbbrev = 0;
@@ -1559,7 +1560,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
 
       // If the instruction has a debug location, emit it.
       DebugLoc DL = I->getDebugLoc();
-#if LLVM_VERSION > 37
+#if LLVM_VERSION >= 37
       if (!DL) {
 #else
       if (DL.isUnknown()) {
@@ -1570,7 +1571,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
         Stream.EmitRecord(bitc::FUNC_CODE_DEBUG_LOC_AGAIN, Vals);
       } else {
 
-#if LLVM_VERSION > 37
+#if LLVM_VERSION >= 37
         MDNode* Scope = DL.getScope();
         assert(Scope && "Expected valid scope");
         DILocation *IA = DL.getInlinedAt();
