@@ -80,7 +80,7 @@ using namespace llvm;
             bool Invert = false) : pattern(p), ID(id), type(t),
                                    InvertOperands(Invert) {}
   };
-  std::vector<Pattern> casts, varith, averages, combiners, vbitwise, multiplies;
+  std::vector<Pattern> casts, typecasts, varith, averages, combiners, vbitwise, multiplies;
 
 namespace {
 Expr sat_h_ub(Expr A) {
@@ -168,6 +168,26 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   casts.push_back(Pattern(cast(Int(32, CPICK(64,32)),
                                WPICK(wild_i16x64,wild_i16x32)),
                           IPICK(Intrinsic::hexagon_V6_vsh)));
+
+  // same size typecasts
+  typecasts.push_back(Pattern(cast(Int(32, CPICK(32,16)),
+                               WPICK(wild_u32x32,wild_u32x16)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(Int(16, CPICK(64,32)),
+                               WPICK(wild_u16x64,wild_u16x32)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(Int(8, CPICK(128,64)),
+                               WPICK(wild_u8x128,wild_u8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(UInt(32, CPICK(32,16)),
+                               WPICK(wild_i32x32,wild_i32x16)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(UInt(16, CPICK(64,32)),
+                               WPICK(wild_i16x64,wild_i16x32)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(UInt(8, CPICK(128,64)),
+                               WPICK(wild_i8x128,wild_i8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
 
   // "shift_left (x, 8)" is converted to x*256 by Simplify.cpp
   combiners.push_back(
@@ -1671,8 +1691,8 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         }
       }
       // ******** End Part 1: Up casts (widening) ***************
-    } else {
-      // ******** Part 2: Down casts (Narrowing)* ***************
+  } else if (isNarrowingVectorCast(op)) {
+      // ******** Part 2: Down casts (Narrowing) ****************
       // Two step downcasts.
       // std::vector<Expr> Patterns;
       //  Patterns.push_back(u8_(min(wild_u32x64, 255)));
@@ -1894,8 +1914,33 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         }
       }
     }
+      // ******** End Part 2: Down casts (Narrowing) ************
+  } else if (isSameSizeVectorCast(op)) {
+      // ******** Part 3: Same size casts (typecast) ************
+      matches.clear();
+      for (size_t I = 0; I < typecasts.size(); ++I) {
+        const Pattern &P = typecasts[I];
+        if (expr_match(P.pattern, op, matches)) {
+          Intrinsic::ID ID = P.ID;
+          llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+          llvm::FunctionType *FType = F->getFunctionType();
+          Value *Op0 = codegen(matches[0]);
+          const Cast *C = P.pattern.as<Cast>();
+          internal_assert (C);
+          internal_assert(FType->getNumParams() == 1);
+          Halide::Type DestType = C->type;
+          llvm::Type *DestLLVMType = llvm_type_of(DestType);
+          llvm::Type *T0 = FType->getParamType(0);
+          if (T0 != Op0->getType()) {
+            Op0 = builder->CreateBitCast(Op0, T0);
+          }
+          Value *Call = builder->CreateCall(F, Op0);
+          value = builder->CreateBitCast(Call, DestLLVMType);
+          return;
+        }
+      }
+      // ******** End Part 3: Same size casts (typecast) ********
   }
-  // ******** End Part 2: Down casts (Narrowing)* ***************
 
   ostringstream msgbuf;
   msgbuf << "<- " << op->value.type();
@@ -2019,7 +2064,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
     }
     // Suppress warning on the calls where it is OK to use CodeGen_Posix
     if ((op->name != Call::interleave_vectors) &&
-        (op->name != Call::shuffle_vector)) {
+        (op->name != Call::shuffle_vector))
+    {
       checkVectorOp(op, "in visit(Call *)\n");
     }
     CodeGen_Posix::visit(op);
