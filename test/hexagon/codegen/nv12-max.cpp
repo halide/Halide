@@ -8,7 +8,7 @@ IRPrinter irp(std::cerr);
 
 
 // RUN: rm -f stdout; ./nv12-max.out; llvm-dis -o stdout nv12torgb888.bc ;FileCheck %s < stdout
-//CHECK-NOT: vmax
+//CHECK: vmax
 
 
 #define COMPILE_OBJ(X)  ((X).compile_to_file("nv12torgb888", args, target))
