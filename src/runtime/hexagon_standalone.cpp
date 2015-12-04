@@ -1,6 +1,6 @@
 #include "HalideRuntime.h"
-#include <stdio.h>
 #include "printer.h"
+#include "runtime_internal.h"
 #ifdef __cplusplus
 extern "C" {
   WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
@@ -11,7 +11,7 @@ extern "C" {
   WEAK void halide_mutex_unlock(struct halide_mutex *mutex) {}
   WEAK void halide_mutex_cleanup(struct halide_mutex *mutex_arg) {}
   WEAK void halide_error(void *user_context, const char *s) {
-    fprintf(stderr, "%s\n", s);
+        write(STDERR_FILENO, s, strlen(s));
   }
   WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                              int min, int size, uint8_t *closure) {
@@ -105,7 +105,7 @@ typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
 namespace Halide { namespace Runtime { namespace Internal {
 
       WEAK void halide_print_impl(void *user_context, const char * str) {
-        fprintf(stderr, "%s\n", str);
+        write(STDERR_FILENO, str, strlen(str));
       }
 
       WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
