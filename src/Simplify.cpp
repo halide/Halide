@@ -62,7 +62,16 @@ public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
         simplify_lets(r) {
         alignment_info.set_containing_scope(ai);
-        bounds_info.set_containing_scope(bi);
+
+        // Only respect the constant bounds from the containing scope.
+        for (Scope<Interval>::const_iterator iter = bi->cbegin(); iter != bi->cend(); ++iter) {
+            int64_t i_min, i_max;
+            if (const_int(iter.value().min, &i_min) &&
+                const_int(iter.value().max, &i_max)) {
+                bounds_info.push(iter.name(), make_pair(i_min, i_max));
+            }
+        }
+
     }
 
     // Uncomment to debug all Expr mutations.
@@ -95,8 +104,9 @@ private:
     };
 
     Scope<VarInfo> var_info;
-    Scope<Interval> bounds_info;
+    Scope<pair<int64_t, int64_t>> bounds_info;
     Scope<ModulusRemainder> alignment_info;
+
 
     using IRMutator::visit;
 
@@ -136,6 +146,107 @@ private:
             return false;
         }
     }
+
+    // Similar to bounds_of_expr_in_scope, but gives up immediately if
+    // anything isn't a constant. This stops rules from taking the
+    // bounds of something then having to simplify it to see whether
+    // it constant-folds. For some expressions the bounds of the
+    // expression is at least as complex as the expression, so
+    // recursively mutating the bounds causes havoc.
+    bool const_int_bounds(Expr e, int64_t *min_val, int64_t *max_val) {
+        if (!no_overflow_scalar_int(e.type())) {
+            return false;
+        }
+
+        if (const int64_t *i = as_const_int(e)) {
+            *min_val = *max_val = *i;
+            return true;
+        } else if (const Variable *v = e.as<Variable>()) {
+            if (bounds_info.contains(v->name)) {
+                pair<int64_t, int64_t> b = bounds_info.get(v->name);
+                *min_val = b.first;
+                *max_val = b.second;
+                return true;
+            }
+        } else if (const Add *add = e.as<Add>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(add->a, &min_a, &max_a) &&
+                const_int_bounds(add->b, &min_b, &max_b)) {
+                *min_val = min_a + min_b;
+                *max_val = max_a + max_b;
+                return true;
+            }
+        } else if (const Sub *sub = e.as<Sub>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(sub->a, &min_a, &max_a) &&
+                const_int_bounds(sub->b, &min_b, &max_b)) {
+                *min_val = min_a - max_b;
+                *max_val = max_a - min_b;
+                return true;
+            }
+        } else if (const Max *max = e.as<Max>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(max->a, &min_a, &max_a) &&
+                const_int_bounds(max->b, &min_b, &max_b)) {
+                *min_val = std::max(min_a, min_b);
+                *max_val = std::max(max_a, max_b);
+                return true;
+            }
+        } else if (const Min *min = e.as<Min>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(min->a, &min_a, &max_a) &&
+                const_int_bounds(min->b, &min_b, &max_b)) {
+                *min_val = std::min(min_a, min_b);
+                *max_val = std::min(max_a, max_b);
+                return true;
+            }
+        } else if (const Mul *mul = e.as<Mul>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(mul->a, &min_a, &max_a) &&
+                const_int_bounds(mul->b, &min_b, &max_b)) {
+                int64_t
+                    t0 = min_a*min_b,
+                    t1 = min_a*max_b,
+                    t2 = max_a*min_b,
+                    t3 = max_a*max_b;
+                *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
+                *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
+                return true;
+            }
+        } else if (const Select *sel = e.as<Select>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(sel->true_value, &min_a, &max_a) &&
+                const_int_bounds(sel->false_value, &min_b, &max_b)) {
+                *min_val = std::min(min_a, min_b);
+                *max_val = std::max(max_a, max_b);
+                return true;
+            }
+        } else if (const Mod *mod = e.as<Mod>()) {
+            int64_t min_b, max_b;
+            if (const_int_bounds(mod->b, &min_b, &max_b) &&
+                (min_b > 0 || max_b < 0)) {
+                *min_val = 0;
+                *max_val = std::abs(max_b) - 1;
+                return true;
+            }
+        } else if (const Div *div = e.as<Div>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(div->a, &min_a, &max_a) &&
+                const_int_bounds(div->b, &min_b, &max_b) &&
+                (min_b > 0 || max_b < 0)) {
+                int64_t
+                    t0 = div_imp(min_a, min_b),
+                    t1 = div_imp(min_a, max_b),
+                    t2 = div_imp(max_a, min_b),
+                    t3 = div_imp(max_a, max_b);
+                *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
+                *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     Expr is_round_up(Expr e, int64_t *factor) {
         if (!no_overflow(e.type())) return Expr();
@@ -979,22 +1090,14 @@ private:
             mul_a_a = ramp_a->base.as<Mul>();
         }
 
-        if (no_overflow_scalar_int(op->type) && const_int(b, &ib) && ib && !is_const(a)) {
-            // Check for bounded numerators divided by constant
-            // denominators.
-            Interval bounds = bounds_of_expr_in_scope(a, bounds_info);
-            if (bounds.min.defined() &&
-                bounds.max.defined()) {
-                bounds.min = mutate(bounds.min);
-                bounds.max = mutate(bounds.max);
-                int64_t num_min = 0, num_max = 0;
-                if (const_int(bounds.min, &num_min) &&
-                    const_int(bounds.max, &num_max) &&
-                    div_imp(num_max, ib) == div_imp(num_min, ib)) {
-                    expr = make_const(op->type, div_imp(num_max, ib));
-                    return;
-                }
-            }
+        // Check for bounded numerators divided by constant
+        // denominators.
+        int64_t num_min, num_max;
+        if (const_int(b, &ib) && ib &&
+            const_int_bounds(a, &num_min, &num_max) &&
+            div_imp(num_max, ib) == div_imp(num_min, ib)) {
+            expr = make_const(op->type, div_imp(num_max, ib));
+            return;
         }
 
         ModulusRemainder mod_rem(0, 1);
@@ -1146,13 +1249,15 @@ private:
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
+
         if (const_int(b, &ib) &&
             ib &&
             no_overflow_scalar_int(op->type)) {
+
             // If the LHS is bounded, we can possibly bail out early
-            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            if (ia.max.defined() && ia.min.defined() &&
-                is_one(mutate((ia.max < b) && (ia.min >= 0)))) {
+            int64_t a_min, a_max;
+            if (const_int_bounds(a, &a_min, &a_max) &&
+                a_max < ib && a_min >= 0) {
                 expr = a;
                 return;
             }
@@ -1271,6 +1376,7 @@ private:
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
+        int64_t a_min, a_max, b_min, b_max;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -1338,17 +1444,12 @@ private:
                    broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
             return;
-        } else if (no_overflow_scalar_int(op->type) &&
-                   a.as<Variable>() &&
-                   is_simple_const(b)) {
-            Expr delta = mutate(a - b);
-            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
-            id.min = mutate(id.min);
-            id.max = mutate(id.max);
-            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
+        } else if (const_int_bounds(a, &a_min, &a_max) &&
+                   const_int_bounds(b, &b_min, &b_max)) {
+            if (a_min >= b_max) {
                 expr = b;
                 return;
-            } else if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
+            } else if (b_min >= a_max) {
                 expr = a;
                 return;
             }
@@ -1615,6 +1716,7 @@ private:
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
+        int64_t a_min, a_max, b_min, b_max;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -1674,17 +1776,12 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
             return;
-        } else if (no_overflow_scalar_int(op->type) &&
-                   is_simple_const(b)) {
-            Expr delta = mutate(a - b);
-            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
-            id.min = mutate(id.min);
-            id.max = mutate(id.max);
-            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
+        } else if (const_int_bounds(a, &a_min, &a_max) &&
+                   const_int_bounds(b, &b_min, &b_max)) {
+            if (a_min >= b_max) {
                 expr = a;
                 return;
-            }
-            if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
+            } else if (b_min >= a_max) {
                 expr = b;
                 return;
             }
@@ -1701,7 +1798,8 @@ private:
                 // ramp dominates
                 expr = a;
                 return;
-            } if (ramp_start <= ic && ramp_end <= ic) {
+            }
+            if (ramp_start <= ic && ramp_end <= ic) {
                 // broadcast dominates
                 expr = b;
                 return;
@@ -1956,18 +2054,11 @@ private:
             }
 
             // Attempt to disprove using bounds analysis
-            Interval i = bounds_of_expr_in_scope(delta, bounds_info);
-            if (i.min.defined() && i.max.defined()) {
-                i.min = mutate(i.min);
-                i.max = mutate(i.max);
-                if (is_positive_const(i.min)) {
-                    expr = const_false();
-                    return;
-                }
-                if (is_negative_const(i.max)) {
-                    expr = const_false();
-                    return;
-                }
+            int64_t delta_min, delta_max;
+            if (const_int_bounds(delta, &delta_min, &delta_max) &&
+                (delta_min > 0 || delta_max < 0)) {
+                expr = const_false();
+                return;
             }
         }
 
@@ -2016,6 +2107,20 @@ private:
 
     void visit(const LT *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
+
+        int64_t a_min, a_max, b_min, b_max;
+        if (const_int_bounds(a, &a_min, &a_max) &&
+            const_int_bounds(b, &b_min, &b_max)) {
+            if (a_max < b_min) {
+                expr = const_true();
+                return;
+            }
+            if (a_min >= b_max) {
+                expr = const_false();
+                return;
+            }
+        }
+
         Expr delta = mutate(a - b);
 
         const Ramp *ramp_a = a.as<Ramp>();
@@ -2037,23 +2142,6 @@ private:
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
-
-        if (no_overflow_scalar_int(delta.type()) &&
-            !is_const(delta)) {
-            Interval i = bounds_of_expr_in_scope(delta, bounds_info);
-            i.max = mutate(i.max);
-            i.min = mutate(i.min);
-            if (i.max.defined() &&
-                is_negative_const(i.max)) {
-                expr = const_true();
-                return;
-            }
-            if (i.min.defined() &&
-                (is_zero(i.min) || is_positive_const(i.min))) {
-                expr = const_false();
-                return;
-            }
-        }
 
         ModulusRemainder mod_rem(0, 1);
         if (delta_ramp &&
@@ -3025,30 +3113,46 @@ private:
         var_info.push(op->name, info);
 
         // Before we enter the body, track the alignment info
-        bool new_value_tracked = false;
+        bool new_value_alignment_tracked = false, new_value_bounds_tracked = false;
         if (new_value.defined() && no_overflow_scalar_int(new_value.type())) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(new_name, mod_rem);
-                new_value_tracked = true;
+                new_value_alignment_tracked = true;
+            }
+            int64_t val_min, val_max;
+            if (const_int_bounds(new_value, &val_min, &val_max)) {
+                bounds_info.push(new_name, make_pair(val_min, val_max));
+                new_value_bounds_tracked = true;
             }
         }
-        bool value_tracked = false;
+        bool value_alignment_tracked = false, value_bounds_tracked = false;;
         if (no_overflow_scalar_int(value.type())) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             if (mod_rem.modulus > 1) {
                 alignment_info.push(op->name, mod_rem);
-                value_tracked = true;
+                value_alignment_tracked = true;
+            }
+            int64_t val_min, val_max;
+            if (const_int_bounds(value, &val_min, &val_max)) {
+                bounds_info.push(op->name, make_pair(val_min, val_max));
+                value_bounds_tracked = true;
             }
         }
 
         body = mutate(body);
 
-        if (value_tracked) {
+        if (value_alignment_tracked) {
             alignment_info.pop(op->name);
         }
-        if (new_value_tracked) {
+        if (value_bounds_tracked) {
+            bounds_info.pop(op->name);
+        }
+        if (new_value_alignment_tracked) {
             alignment_info.pop(new_name);
+        }
+        if (new_value_bounds_tracked) {
+            bounds_info.pop(new_name);
         }
 
         info = var_info.get(op->name);
@@ -3114,13 +3218,13 @@ private:
         Expr new_min = mutate(op->min);
         Expr new_extent = mutate(op->extent);
 
-        const IntImm *new_min_int = new_min.as<IntImm>();
-        const IntImm *new_extent_int = new_extent.as<IntImm>();
-        bool bounds_tracked = new_min_int && new_extent_int;
-        if (bounds_tracked) {
-            Expr new_max = make_const(new_min.type(), new_min_int->value + new_extent_int->value - 1);
-            Interval i = Interval(new_min, new_max);
-            bounds_info.push(op->name, i);
+        int64_t new_min_int, new_extent_int;
+        bool bounds_tracked = false;
+        if (const_int(new_min, &new_min_int) &&
+            const_int(new_extent, &new_extent_int)) {
+            bounds_tracked = true;
+            int64_t new_max_int = new_min_int + new_extent_int - 1;
+            bounds_info.push(op->name, make_pair(new_min_int, new_max_int));
         }
 
         Stmt new_body = mutate(op->body);
@@ -3993,6 +4097,16 @@ void simplify_test() {
         e = interleave_vectors({load1, load3});
         check(e, e);
 
+    }
+
+    // This expression doesn't simplify, but it did cause exponential
+    // slowdown at one stage.
+    {
+        Expr e = x;
+        for (int i = 0; i < 100; i++) {
+            e = max(e, 1)/2;
+        }
+        check(e, e);
     }
 
     std::cout << "Simplify test passed" << std::endl;
