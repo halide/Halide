@@ -11,6 +11,7 @@
 
 SHELL = bash
 CXX ?= g++
+PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
@@ -571,7 +572,7 @@ $(INCLUDE_DIR)/HalideRuntime%: $(SRC_DIR)/runtime/HalideRuntime%
 	cp $< $(INCLUDE_DIR)/
 
 $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
-	g++ $< -o $@
+	$(CXX) $< -o $@
 
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
@@ -1092,6 +1093,23 @@ Doxyfile: Doxyfile.in
 	@sed -e "s#@CMAKE_BINARY_DIR@#$(shell pwd)#g" \
 	     -e "s#@CMAKE_SOURCE_DIR@#$(shell pwd)#g" \
 	    $< > $@
+
+install: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+	mkdir -p $(PREFIX)/include $(PREFIX)/bin $(PREFIX)/lib $(PREFIX)/share/halide/tutorial/images $(PREFIX)/share/halide/tools $(PREFIX)/share/halide/tutorial/figures
+	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(PREFIX)/lib
+	cp $(INCLUDE_DIR)/Halide.h $(PREFIX)/include
+	cp $(INCLUDE_DIR)/HalideRuntim*.h $(PREFIX)/include
+	cp $(ROOT_DIR)/tutorial/images/*.png $(PREFIX)/share/halide/tutorial/images
+	cp $(ROOT_DIR)/tutorial/figures/*.gif $(PREFIX)/share/halide/tutorial/figures
+	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(PREFIX)/share/halide/tutorial/figures
+	cp $(ROOT_DIR)/tutorial/figures/*.mp4 $(PREFIX)/share/halide/tutorial/figures
+	cp $(ROOT_DIR)/tutorial/*.cpp $(PREFIX)/share/halide/tutorial
+	cp $(ROOT_DIR)/tutorial/*.h $(PREFIX)/share/halide/tutorial
+	cp $(ROOT_DIR)/tutorial/*.sh $(PREFIX)/share/halide/tutorial
+	cp $(ROOT_DIR)/tools/mex_halide.m $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 
 $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools $(DISTRIB_DIR)/tutorial/figures
