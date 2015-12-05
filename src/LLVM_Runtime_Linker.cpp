@@ -88,7 +88,6 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
-DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -767,8 +766,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
         }
-    } else {
-        modules.push_back(get_initmod_nogpu(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
