@@ -330,103 +330,103 @@ private:
     }
 };
 
-/** Addition between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Addition between GeneratorParam<T> and any type that supports operator+ with T.
+ * Returns type of underlying operator+. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 + (T2)0) operator+(T1 a, const GeneratorParam<T2> &b) { return a + (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 + (T1)0) operator+(const GeneratorParam<T2> &a, T1 b) { return (T2)a + b; }
+template <typename Other, typename T>
+decltype((Other)0 + (T)0) operator+(Other a, const GeneratorParam<T> &b) { return a + (T)b; }
+template <typename Other, typename T>
+decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, Other b) { return (T)a + b; }
 // @}
 
-/** Subtraction between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Subtraction between GeneratorParam<T> and any type that supports operator- with T.
+ * Returns type of underlying operator-. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 - (T2)0) operator-(T1 a, const GeneratorParam<T2> &b) { return a - (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 - (T1)0)  operator-(const GeneratorParam<T2> &a, T1 b) { return (T2)a - b; }
+template <typename Other, typename T>
+decltype((Other)0 - (T)0) operator-(Other a, const GeneratorParam<T> &b) { return a - (T)b; }
+template <typename Other, typename T>
+decltype((T)0 - (Other)0)  operator-(const GeneratorParam<T> &a, Other b) { return (T)a - b; }
 // @}
 
-/** Multiplication between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Multiplication between GeneratorParam<T> and any type that supports operator* with T.
+ * Returns type of underlying operator*. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 * (T2)0) operator*(T1 a, const GeneratorParam<T2> &b) { return a * (T2)b; }
-template <typename T1, typename T2>
-decltype((T1)0 * (T2)0) operator*(const GeneratorParam<T2> &a, T1 b) { return (T2)a * b; }
+template <typename Other, typename T>
+decltype((Other)0 * (T)0) operator*(Other a, const GeneratorParam<T> &b) { return a * (T)b; }
+template <typename Other, typename T>
+decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, Other b) { return (T)a * b; }
 // @}
 
-/** Division between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Division between GeneratorParam<T> and any type that supports operator/ with T.
+ * Returns type of underlying operator/. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 / (T2)1) operator/(T1 a, const GeneratorParam<T2> &b) { return a / (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 / (T1)1) operator/(const GeneratorParam<T2> &a, T1 b) { return (T2)a / b; }
+template <typename Other, typename T>
+decltype((Other)0 / (T)1) operator/(Other a, const GeneratorParam<T> &b) { return a / (T)b; }
+template <typename Other, typename T>
+decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, Other b) { return (T)a / b; }
 // @}
 
-/** Modulo between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Modulo between GeneratorParam<T> and any type that supports operator% with T.
+ * Returns type of underlying operator%. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 % (T2)1) operator%(T1 a, const GeneratorParam<T2> &b) { return a % (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 % (T1)1) operator%(const GeneratorParam<T2> &a, T1 b) { return (T2)a % b; }
+template <typename Other, typename T>
+decltype((Other)0 % (T)1) operator%(Other a, const GeneratorParam<T> &b) { return a % (T)b; }
+template <typename Other, typename T>
+decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, Other b) { return (T)a % b; }
 // @}
 
-/** Greater than comparison between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Greater than comparison between GeneratorParam<T> and any type that supports operator> with T.
+ * Returns type of underlying operator>. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 > (T2)1) operator>(T1 a, const GeneratorParam<T2> &b) { return a > (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 > (T1)1) operator>(const GeneratorParam<T2> &a, T1 b) { return (T2)a > b; }
+template <typename Other, typename T>
+decltype((Other)0 > (T)1) operator>(Other a, const GeneratorParam<T> &b) { return a > (T)b; }
+template <typename Other, typename T>
+decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, Other b) { return (T)a > b; }
 // @}
 
-/** Less than comparison between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Less than comparison between GeneratorParam<T> and any type that supports operator< with T.
+ * Returns type of underlying operator<. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 < (T2)1) operator<(T1 a, const GeneratorParam<T2> &b) { return a < (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 < (T1)1) operator<(const GeneratorParam<T2> &a, T1 b) { return (T2)a < b; }
+template <typename Other, typename T>
+decltype((Other)0 < (T)1) operator<(Other a, const GeneratorParam<T> &b) { return a < (T)b; }
+template <typename Other, typename T>
+decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, Other b) { return (T)a < b; }
 // @}
 
-/** Greater than or equal comparison between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Greater than or equal comparison between GeneratorParam<T> and any type that supports operator>= with T.
+ * Returns type of underlying operator>=. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 >= (T2)1) operator>=(T1 a, const GeneratorParam<T2> &b) { return a >= (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 >= (T1)1) operator>=(const GeneratorParam<T2> &a, T1 b) { return (T2)a >= b; }
+template <typename Other, typename T>
+decltype((Other)0 >= (T)1) operator>=(Other a, const GeneratorParam<T> &b) { return a >= (T)b; }
+template <typename Other, typename T>
+decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, Other b) { return (T)a >= b; }
 // @}
 
-/** Less than or equal comparison between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Less than or equal comparison between GeneratorParam<T> and any type that supports operator<= with T.
+ * Returns type of underlying operator<=. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 <= (T2)1) operator<=(T1 a, const GeneratorParam<T2> &b) { return a <= (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 <= (T1)1) operator<=(const GeneratorParam<T2> &a, T1 b) { return (T2)a <= b; }
+template <typename Other, typename T>
+decltype((Other)0 <= (T)1) operator<=(Other a, const GeneratorParam<T> &b) { return a <= (T)b; }
+template <typename Other, typename T>
+decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, Other b) { return (T)a <= b; }
 // @}
 
-/** Equality comparison between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Equality comparison between GeneratorParam<T> and any type that supports operator== with T.
+ * Returns type of underlying operator==. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 == (T2)1) operator==(T1 a, const GeneratorParam<T2> &b) { return a == (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 == (T1)1) operator==(const GeneratorParam<T2> &a, T1 b) { return (T2)a == b; }
+template <typename Other, typename T>
+decltype((Other)0 == (T)1) operator==(Other a, const GeneratorParam<T> &b) { return a == (T)b; }
+template <typename Other, typename T>
+decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, Other b) { return (T)a == b; }
 // @}
 
-/** Inequality comparison between between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Inequality comparison between between GeneratorParam<T> and any type that supports operator!= with T.
+ * Returns type of underlying operator!=. */
 // @{
-template <typename T1, typename T2>
-decltype((T1)0 != (T2)1) operator!=(T1 a, const GeneratorParam<T2> &b) { return a != (T2)b; }
-template <typename T1, typename T2>
-decltype((T2)0 != (T1)1) operator!=(const GeneratorParam<T2> &a, T1 b) { return (T2)a != b; }
+template <typename Other, typename T>
+decltype((Other)0 != (T)1) operator!=(Other a, const GeneratorParam<T> &b) { return a != (T)b; }
+template <typename Other, typename T>
+decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, Other b) { return (T)a != b; }
 // @}
 
 namespace Internal { namespace GeneratorMinMax {
@@ -434,22 +434,22 @@ namespace Internal { namespace GeneratorMinMax {
 using std::max;
 using std::min;
 
-/** Compute minimum between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Compute minimum between GeneratorParam<T> and any type that supports min with T.
+ * Returns type of underlying min call. */
 // @{
-template <typename T1, typename T2>
-decltype(min((T1)0, (T2)1)) min(T1 a, const GeneratorParam<T2> &b) { return min(a, (T2)b); }
-template <typename T1, typename T2>
-decltype(min((T2)0, (T1)1)) min(const GeneratorParam<T2> &a, T1 b) { return min((T2)a, b); }
+template <typename Other, typename T>
+decltype(min((Other)0, (T)1)) min(Other a, const GeneratorParam<T> &b) { return min(a, (T)b); }
+template <typename Other, typename T>
+decltype(min((T)0, (Other)1)) min(const GeneratorParam<T> &a, Other b) { return min((T)a, b); }
 // @}
 
-/** Compute the maximum value between GeneratorParam and arithmetic/enum types.
- * Returns arithmetic type. */
+/** Compute the maximum value between GeneratorParam<T> and any type that supports max with T.
+ * Returns type of underlying max call. */
 // @{
-template <typename T1, typename T2>
-decltype(max((T1)0, (T2)1)) max(T1 a, const GeneratorParam<T2> &b) { return max(a, (T2)b); }
-template <typename T1, typename T2>
-decltype(max((T2)0, (T1)1)) max(const GeneratorParam<T2> &a, T1 b) { return max((T2)a, b); }
+template <typename Other, typename T>
+decltype(max((Other)0, (T)1)) max(Other a, const GeneratorParam<T> &b) { return max(a, (T)b); }
+template <typename Other, typename T>
+decltype(max((T)0, (Other)1)) max(const GeneratorParam<T> &a, Other b) { return max((T)a, b); }
 // @}
 
 }}
