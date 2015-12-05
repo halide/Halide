@@ -3,9 +3,6 @@
 #include "runtime_internal.h"
 #ifdef __cplusplus
 extern "C" {
-  WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
-    return 0;
-  }
   WEAK void halide_mutex_lock(struct halide_mutex *mutex) {
   }
   WEAK void halide_mutex_unlock(struct halide_mutex *mutex) {}
@@ -16,9 +13,6 @@ extern "C" {
   WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                              int min, int size, uint8_t *closure) {
     return -1;
-  } 
-  WEAK int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
-    return 0;
   }
 
   namespace Halide { namespace Runtime { namespace Internal {
@@ -79,7 +73,7 @@ WEAK void *halide_spawn_thread_helper(void *arg) {
     return NULL;
 }
 
-    
+
 WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
 #if 0
     // Note that we don't pass the user_context through to the
