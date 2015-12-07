@@ -429,6 +429,24 @@ template <typename Other, typename T>
 decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, Other b) { return (T)a != b; }
 // @}
 
+/** Logical and between between GeneratorParam<T> and any type that supports operator&& with T.
+ * Returns type of underlying operator&&. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 && (T)1) operator&&(Other a, const GeneratorParam<T> &b) { return a && (T)b; }
+template <typename Other, typename T>
+decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, Other b) { return (T)a && b; }
+// @}
+
+/** Logical or between between GeneratorParam<T> and any type that supports operator&& with T.
+ * Returns type of underlying operator||. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 || (T)1) operator||(Other a, const GeneratorParam<T> &b) { return a || (T)b; }
+template <typename Other, typename T>
+decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, Other b) { return (T)a || b; }
+// @}
+
 /* min and max are tricky as the language support for these is in the std
  * namespace. In order to make this work, forwarding functions are used that
  * are declared in a namespace that has std::min and std::max in scope.
