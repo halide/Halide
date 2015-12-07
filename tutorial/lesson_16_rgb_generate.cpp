@@ -6,9 +6,9 @@
 
 /* On linux or os x, you can compile and run it like so:
 
-g++ lesson_16_rgb_generator.cpp ../tools/GenGen.cpp -g -std=c++11 -fno-rtti -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_16_generate
-export LD_LIBRARY_PATH=../bin
-export DYLD_LIBRARY_PATH=../bin
+g++ lesson_16_rgb_generate.cpp ../tools/GenGen.cpp -g -std=c++11 -fno-rtti -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_16_generate
+export LD_LIBRARY_PATH=../bin   # For linux
+export DYLD_LIBRARY_PATH=../bin # For OS X
 ./lesson_16_generate -o . -f brighten_planar      target=host layout=planar
 ./lesson_16_generate -o . -f brighten_interleaved target=host layout=interleaved
 ./lesson_16_generate -o . -f brighten_either      target=host layout=either
@@ -69,21 +69,60 @@ public:
         // several different ways, depending on the 'layout' generator
         // param.
         if (layout == Layout::Planar) {
-            // This pipeline as written will work with planar images only,
-            // meaning images in which each color channel is its own
-            // densely-packed array in memory. In terms of the strides
-            // described in lesson 10, the stride in x is one, the stride
-            // in y is the width of the image, and the stride in c is the
-            // width times the height.
+            // This pipeline as written will only work with images in
+            // which each scanline is densely-packed single color
+            // channel. In terms of the strides described in lesson
+            // 10, Halide assumes and asserts that the stride in x is
+            // one.
+
+            // This constraint permits planar images, where the red,
+            // green, and blue channels are laid out in memory like
+            // this:
+
+            // RRRRRRRR
+            // RRRRRRRR
+            // RRRRRRRR
+            // RRRRRRRR
+            // GGGGGGGG
+            // GGGGGGGG
+            // GGGGGGGG
+            // GGGGGGGG
+            // BBBBBBBB
+            // BBBBBBBB
+            // BBBBBBBB
+            // BBBBBBBB
+
+            // It also works with the less-commonly used line-by-line
+            // layout, in which scanlines of red, green, and blue
+            // alternate.
+
+            // RRRRRRRR
+            // GGGGGGGG
+            // BBBBBBBB
+            // RRRRRRRR
+            // GGGGGGGG
+            // BBBBBBBB
+            // RRRRRRRR
+            // GGGGGGGG
+            // BBBBBBBB
+            // RRRRRRRR
+            // GGGGGGGG
+            // BBBBBBBB
 
         } else if (layout == Layout::Interleaved) {
             // Another common format is 'interleaved', in which the
             // red, green, and blue values for each pixel occur next
-            // to each other in memory. In this case the stride in x
-            // is three, the stride in y is three times the width of
-            // the image, and the stride in c is one. We can tell
-            // Halide to assume (and assert) that this is the case
-            // for the input and output like so:
+            // to each other in memory:
+
+            // RGBRGBRGBRGBRGBRGBRGBRGB
+            // RGBRGBRGBRGBRGBRGBRGBRGB
+            // RGBRGBRGBRGBRGBRGBRGBRGB
+            // RGBRGBRGBRGBRGBRGBRGBRGB
+
+            // In this case the stride in x is three, the stride in y
+            // is three times the width of the image, and the stride
+            // in c is one. We can tell Halide to assume (and assert)
+            // that this is the case for the input and output like so:
 
             input
                 .set_stride(0, 3) // stride in dimension 0 (x) is three
@@ -106,6 +145,11 @@ public:
             // it.
             brighter.reorder(c, x, y).unroll(c);
 
+            // Note that if we were dealing with an image with an
+            // alpha channel (RGBA), then the stride in x and the
+            // bounds of the channels dimension would both be four
+            // instead of three.
+
         } else if (layout == Layout::Either) {
             // We can also remove all constraints and compile a
             // pipeline that will work with any memory layout. It will
@@ -121,7 +165,7 @@ public:
             // We can accept any memory layout with good performance
             // by telling Halide to inspect the memory layout at
             // runtime, and branch to different code depending on the
-            // strides it finds. First we relax the default constraint
+            // strides it find. First we relax the default constraint
             // that stride(0) == 1:
 
             input.set_stride(0, Expr()); // Use an undefined Expr to
