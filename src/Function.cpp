@@ -321,10 +321,12 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 }
 
 void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
+    int update_idx = static_cast<int>(contents.ptr->updates.size());
+
     user_assert(!name().empty())
         << "Func has an empty name.\n";
     user_assert(has_pure_definition())
-        << "In update definition of Func \"" << name() << "\":\n"
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Can't add an update definition without a pure definition first.\n";
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new update definition, "
@@ -332,18 +334,18 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     for (size_t i = 0; i < values.size(); i++) {
         user_assert(values[i].defined())
-            << "In update definition of Func \"" << name() << "\":\n"
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of update.\n";
 
     }
 
     // Check the dimensionality matches
     user_assert((int)_args.size() == dimensions())
-        << "In update definition of Func \"" << name() << "\":\n"
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Dimensionality of update definition must match dimensionality of pure definition.\n";
 
     user_assert(values.size() == contents.ptr->values.size())
-        << "In update definition of Func \"" << name() << "\":\n"
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Number of tuple elements for update definition must "
         << "match number of tuple elements for pure definition.\n";
 
@@ -354,7 +356,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         Type pure_type = contents.ptr->values[i].type();
         if (pure_type != values[i].type()) {
             std::ostringstream err;
-            err << "In update definition of Func \"" << name() << "\":\n";
+            err << "In update definition " << update_idx << " of Func \"" << name() << "\":\n";
             if (values.size()) {
                 err << "Tuple element " << i << " of update definition has type ";
             } else {
@@ -379,7 +381,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
         user_assert(args[i].defined())
-            << "In update definition of Func \"" << name() << "\":\n"
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Argument " << i
             << " in left-hand-side of update definition is undefined.\n";
         if (const Variable *var = args[i].as<Variable>()) {
@@ -500,7 +502,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         counter.count == 0 &&
         pure) {
         user_warning
-            << "In update definition of Func \"" << name() << "\":\n"
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Update definition completely hides earlier definitions, "
             << " because all the arguments are pure, it contains no self-references, "
             << " and no reduction domain. This may be an accidental re-definition of "
