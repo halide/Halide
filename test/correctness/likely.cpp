@@ -71,12 +71,12 @@ public:
 
 void count_partitions(Func g, int correct) {
     g.add_custom_lowering_pass(new CheckStoreCount(g.name(), correct));
-    g.compile_jit();
+    g.compile_to_module(g.infer_arguments());
 }
 
 void count_sin_calls(Func g, int correct) {
     g.add_custom_lowering_pass(new CheckSinCount(correct));
-    g.compile_jit();
+    g.compile_to_module(g.infer_arguments());
 }
 
 int main(int argc, char **argv) {
@@ -106,16 +106,19 @@ int main(int argc, char **argv) {
         count_partitions(g, 2);
     }
 
-    // The slicing only applies to a single loop level - the
-    // innermost one where it can be applied. So adding a boundary
-    // condition to a 2D computation will produce 3 code paths, not 9.
+    // The slicing applies to every loop level starting from the
+    // outermost one, but only recursively simplifies the clean steady
+    // state. It either splits things three (start, middle, end). So
+    // adding a boundary condition to a 2D computation will produce 5
+    // code paths for the top, bottom, left, right, and center of the
+    // image.
     {
         Var y;
         Func g;
         g(x, y) = x + y;
         g.compute_root();
         Func h = BoundaryConditions::mirror_image(g, 0, 10, 0, 10);
-        count_partitions(h, 3);
+        count_partitions(h, 5);
     }
 
     // If you split and also have a boundary condition, or have
@@ -160,18 +163,6 @@ int main(int argc, char **argv) {
         count_sin_calls(g, 2);
     }
 
-    {
-
-        // The max here should simplify to 10 in the steady state,
-        // which means the select evaluates to 1.0f
-        Func g;
-        g(x) = select(min(x, likely(10)) > 0, 1.0f, sin(x));
-        // There should be two partitions
-        count_partitions(g, 2);
-        // With a call to sin in the steady-state
-        count_sin_calls(g, 1);
-    }
-
     // As a specialize case, we treat clamped ramps as likely to
     // simplify to the clamped expression. This handles the many
     // existing cases where people have written their boundary
@@ -190,28 +181,49 @@ int main(int argc, char **argv) {
     {
         Func g;
         Var y;
+
+        // Have an inner reduction loop that the comparisons depend on
+        // to make things harder.
+        RDom r(0, 5);
+
+        const int N = 25;
+
         // Make some nasty expressions to compare to.
-        Expr e[10];
+        Expr e[N];
         e[0] = y;
-        for (int i = 1; i < 6; i++) {
-            e[i] = e[i-1] * e[i-1] + y;
+        for (int i = 1; i < N; i++) {
+            e[i] = e[i-1] * e[i-1] + y + r;
         }
         // Make a nasty condition that uses all of these.
         Expr nasty = cast<bool>(1);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < N; i++) {
             nasty = nasty && (x*(i+1) < e[i]);
         }
-        // Have an innermost loop over c to complicate things.
+
+        // Have an innermost loop over c to complicate things further.
         Var c;
-        g(c, x, y) = select(nasty, likely(10), c);
+        g(c, x, y) = sum(select(nasty, likely(10), c + r));
 
         // Check that it doesn't take the age of the world to compile,
         // and that it produces the right number of partitions.
-        count_partitions(g, 2);
+        count_partitions(g, 3);
+    }
 
-        // Note: The loops above would be larger, but the above code
-        // sails through Halide then triggers exponential behavior
-        // inside of LLVM :(
+    // Make sure partitions that occur outside of the actual bounds
+    // don't mess things up.
+    {
+        Func g;
+        Var x;
+        Param<int> limit;
+        g(x) = select(x > limit, likely(3), 2);
+
+        // If either of these realize calls iterates from 0 to limit,
+        // and then from limit to 10, we'll have a nice segfault.
+        limit.set(10000000);
+        Image<int> result = g.realize(10);
+
+        limit.set(-10000000);
+        result = g.realize(10);
     }
 
     // The performance of this behavior is tested in

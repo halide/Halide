@@ -12,15 +12,6 @@
 namespace Halide {
 namespace Internal {
 
-/** Test if an expression references the given variable. */
-EXPORT bool expr_uses_var(Expr e, const std::string &v);
-
-/** Test if an expression references the given variable, additionally
- *  considering variables bound to Expr's in the scope provided in the
- *  final argument.
- */
-EXPORT bool expr_uses_var(Expr e, const std::string &v, const Scope<Expr> &s);
-
 template<typename T>
 class ExprUsesVars : public IRGraphVisitor {
     using IRGraphVisitor::visit;
@@ -42,22 +33,56 @@ public:
     bool result;
 };
 
-/** Test if an expression references any of the variables in a scope. */
-template<typename T>
-inline bool expr_uses_vars(Expr e, const Scope<T> &v) {
-    ExprUsesVars<T> uses(v);
+/** Test if a statement or expression references the given variable. */
+template<typename StmtOrExpr>
+inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v) {
+    Scope<int> s;
+    s.push(v, 0);
+    ExprUsesVars<int> uses(s);
     e.accept(&uses);
     return uses.result;
 }
 
-/** Test if an expression references any of the variables in a scope, additionally
- *  considering variables bound to Expr's in the scope provided in the final argument.
+/** Test if a statement or expression references any of the variables
+ *  in a scope, additionally considering variables bound to Expr's in
+ *  the scope provided in the final argument.
  */
-template<typename T>
-inline bool expr_uses_vars(Expr e, const Scope<T> &v, const Scope<Expr> &s) {
+template<typename StmtOrExpr, typename T>
+inline bool stmt_or_expr_uses_vars(StmtOrExpr e, const Scope<T> &v,
+                                   const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     ExprUsesVars<T> uses(v, &s);
     e.accept(&uses);
     return uses.result;
+}
+
+/** Test if an expression references the given variable. */
+inline bool expr_uses_var(Expr e, const std::string &v) {
+    return stmt_or_expr_uses_var(e, v);
+}
+
+/** Test if a statement references the given variable. */
+inline bool stmt_uses_var(Stmt s, const std::string &v) {
+    return stmt_or_expr_uses_var(s, v);
+}
+
+/** Test if an expression references any of the variables in a scope,
+ *  additionally considering variables bound to Expr's in the scope
+ *  provided in the final argument.
+ */
+template<typename T>
+inline bool expr_uses_vars(Expr e, const Scope<T> &v,
+                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
+    return stmt_or_expr_uses_vars(e, v, s);
+}
+
+/** Test if a statement references any of the variables in a scope,
+ *  additionally considering variables bound to Expr's in the scope
+ *  provided in the final argument.
+ */
+template<typename T>
+inline bool stmt_uses_vars(Stmt e, const Scope<T> &v,
+                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
+    return stmt_or_expr_uses_vars(e, v, s);
 }
 
 }

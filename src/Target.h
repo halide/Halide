@@ -159,7 +159,7 @@ struct Target {
      * all backends.
      */
     bool supports_type(const Type &t) {
-        if (t.bits == 64) {
+        if (t.bits() == 64) {
             if (t.is_float()) {
                 return !has_feature(Metal) &&
                        (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
@@ -238,7 +238,7 @@ struct Target {
         // better performance. (AVX2 does have good integer operations for 256-bit
         // registers.)
         const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
-        const int data_size = t.bits / 8;
+        const int data_size = t.bits() / 8;
         return vector_byte_size / data_size;
     }
 

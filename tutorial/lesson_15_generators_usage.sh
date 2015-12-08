@@ -151,7 +151,7 @@ nm my_second_generator_1.o | grep "[SW] _\?halide_"
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime()
 {
-    if !(nm $1 | grep "[SW] _\?halide_" > /dev/null); then
+    if !(nm $1 | grep "[TSW] _\?halide_" > /dev/null); then
         echo "Halide runtime not found in $1"
 	exit -1
     fi
@@ -159,7 +159,7 @@ check_runtime()
 
 check_no_runtime()
 {
-    if nm $1 | grep "[SW] _\?halide_" > /dev/null; then
+    if nm $1 | grep "[TSW] _\?halide_" > /dev/null; then
         echo "Halide runtime found in $1"
 	exit -1
     fi
