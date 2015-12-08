@@ -87,7 +87,13 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.destructor = NULL;
     allocation.destructor_function = NULL;
 
-    if (!new_expr.defined() && stack_bytes != 0) {
+    if (!new_expr.defined() && extents.empty()) {
+        // If it's a scalar allocation, don't try anything clever. We
+        // want llvm to be able to promote it to a register.
+        allocation.ptr = create_alloca_at_entry(llvm_type_of(type), 1, false, name);
+        allocation.stack_bytes = stack_bytes;
+    } else if (!new_expr.defined() && stack_bytes != 0) {
+
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
         for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
