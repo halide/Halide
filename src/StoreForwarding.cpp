@@ -46,10 +46,15 @@ StmtOrExpr unwrap_lets(StmtOrExpr e, vector<pair<string, Expr>> &l) {
 }
 
 template<typename StmtOrExpr, typename LetStmtOrLet = typename LetForType<StmtOrExpr>::type>
-StmtOrExpr wrap_lets(StmtOrExpr e, const vector<pair<string, Expr>> &l, bool only_if_used = false) {
+StmtOrExpr wrap_lets(StmtOrExpr e, const vector<pair<string, Expr>> &l,
+                     bool only_if_used = false,
+                     bool make_substitutions = false) {
     for (size_t i = l.size(); i > 0; i--) {
-        if (!only_if_used || stmt_or_expr_uses_var(e, l[i-1].first)) {
-            e = LetStmtOrLet::make(l[i-1].first, l[i-1].second, e);
+        pair<string, Expr> let = l[i-1];
+        if (make_substitutions && (let.second.as<Variable>() || is_const(let.second))) {
+            e = substitute(let.first, let.second, e);
+        } else if (!only_if_used || stmt_or_expr_uses_var(e, let.first)) {
+            e = LetStmtOrLet::make(let.first, let.second, e);
         }
     }
     return e;
@@ -57,7 +62,12 @@ StmtOrExpr wrap_lets(StmtOrExpr e, const vector<pair<string, Expr>> &l, bool onl
 
 template<typename StmtOrExpr>
 StmtOrExpr wrap_used_lets(StmtOrExpr e, const vector<pair<string, Expr>> &l) {
-    return wrap_lets(e, l, true);
+    return wrap_lets(e, l, true, false);
+}
+
+template<typename StmtOrExpr>
+StmtOrExpr wrap_or_substitute_used_lets(StmtOrExpr e, const vector<pair<string, Expr>> &l) {
+    return wrap_lets(e, l, true, true);
 }
 
 vector<Expr> let_vars(const vector<pair<string, Expr>> &l) {
@@ -435,7 +445,7 @@ class LoopCarryOverLoop : public IRMutator {
             Expr together = Call::make(Int(32), dummy, {prev_val, val}, Call::Intrinsic);
 
             debug(3) << "Entering cse\n";
-            together = common_subexpression_elimination(together);
+            together = common_subexpression_elimination(together, false);
 
             debug(3) << together << "\n";
 
@@ -557,7 +567,7 @@ class LoopCarryOverLoop : public IRMutator {
 
             debug(3) << " Rewrapped: " << together << "\n";
 
-            together = common_subexpression_elimination(simplify(together));
+            together = common_subexpression_elimination(simplify(together), false);
 
             debug(3) << " Gathered and CSE'd: " << together << "\n";
 
@@ -903,8 +913,10 @@ class ContainsSideEffectingCall : public IRVisitor {
     using IRVisitor::visit;
     void visit(const Call *op) {
         IRVisitor::visit(op);
-        if (op->call_type == Call::Extern) {
-            result = true;
+        for (Expr e : op->args) {
+            if (e.type().is_handle()) {
+                result = true;
+            }
         }
         if (op->call_type == Call::Intrinsic) {
             if (op->name == Call::rewrite_buffer ||
@@ -992,10 +1004,21 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
 
     template<typename LetStmtOrLet, typename StmtOrExpr>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {
-        Expr value = mutate(op->value);
+        Expr value;
+        if (expr_can_be_lifted(op->value) &&
+            op->value.template as<Variable>() == nullptr) {
+            value = lift(op->value);
+        } else {
+            value = mutate(op->value);
+        }
+        debug(3) << "Visiting let: " << op->name << ", " << op->value << ", " << value << "\n";
         if (const Variable *v = value.as<Variable>()) {
+            // The value was successfully lifted into a var
             return mutate(substitute(op->name, value, op->body));
         } else {
+            // It was not lifted. We can't lift expressions outside
+            // this var, so poison it.
+            debug(3) << "Poisoning " << op->name << "\n";
             inner_vars.push(op->name, 0);
             StmtOrExpr body = mutate(op->body);
             inner_vars.pop(op->name);
@@ -1018,6 +1041,8 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
         in_conditional = old_in_conditional;
     }
 
+    /*
+      // TODO: this code is apparently buggy
     void visit_add_or_sub(Expr e) {
         // We're in an add node that couldn't be naively lifted. It
         // must contain some liftable components and some not-liftable
@@ -1036,11 +1061,10 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
             }
         }
 
-        if (not_lifted_term.expr.defined() &&
-            lifted_term.expr.defined() &&
+        if (lifted_term.expr.defined() &&
             !lifted_term.expr.as<Variable>()) {
             // Lift the combination of the liftable terms
-            lifted_term.expr = mutate(lifted_term.expr);
+            lifted_term.expr = lift(lifted_term.expr);
         }
 
         Term both = combine_terms(lifted_term, not_lifted_term);
@@ -1059,6 +1083,7 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
     void visit(const Sub *op) {
         visit_add_or_sub(Expr(op));
     }
+    */
 
     void visit(const Allocate *op) {
         inner_allocs.push(op->name, 0);
@@ -1066,12 +1091,8 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
         inner_allocs.pop(op->name);
     }
 
-    bool expr_is_liftable(Expr e) {
-        const Add *add = e.as<Add>();
+    bool expr_can_be_lifted(Expr e) {
         return !(
-            e.type().is_handle() ||
-            e.type().is_bool() ||
-            (add && is_const(add->b)) ||
             (in_conditional && contains_load(e)) ||
             contains_aliased_load(e, loop_body) ||
             contains_side_effecting_call(e) ||
@@ -1080,27 +1101,44 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
             );
     }
 
+    bool expr_should_be_lifted(Expr e) {
+        const Add *add = e.as<Add>();
+        const Ramp *ramp = e.as<Ramp>();
+        const Broadcast *broadcast = e.as<Broadcast>();
+        const Call *call = e.as<Call>();
+        return
+            !is_const(e) &&
+            e.as<Variable>() == nullptr &&
+            !e.type().is_handle() &&
+            !e.type().is_bool() &&
+            !ramp &&
+            !broadcast &&
+            !(add && is_const(add->b)) &&
+            !(call && call->name == Call::interleave_vectors) &&
+            expr_can_be_lifted(e);
+    }
+
+    Expr lift(Expr e) {
+        auto it = lifted_expr_names.find(e);
+        if (false && it != lifted_expr_names.end()) {
+            // We already lifted this expression and gave it a name
+            return Variable::make(e.type(), it->second);
+        } else {
+            string name = unique_name('t');
+            exprs.push_back(make_pair(name, e));
+            lifted_expr_names[e] = name;
+            return Variable::make(e.type(), name);
+        }
+    }
+
 public:
     using IRMutator::mutate;
 
     Expr mutate(const Expr e) {
-        if (!expr_is_liftable(e)) {
+        if (!expr_should_be_lifted(e)) {
             return IRMutator::mutate(e);
-        } else if (is_const(e)) {
-            return e;
-        } else if (e.as<Variable>()) {
-            return e;
         } else {
-            auto it = lifted_expr_names.find(e);
-            if (it != lifted_expr_names.end()) {
-                // We already lifted this expression and gave it a name
-                return Variable::make(e.type(), it->second);
-            } else {
-                string name = unique_name('t');
-                exprs.push_back(make_pair(name, e));
-                lifted_expr_names[e] = name;
-                return Variable::make(e.type(), name);
-            }
+            return lift(e);
         }
     }
 
@@ -1108,6 +1146,36 @@ public:
 
     LiftFixedExpressionsSingleLoop(Stmt b) : loop_body(b) {}
 };
+
+namespace {
+Stmt cse_initial_lets(Stmt s) {
+    vector<pair<string, Expr>> lets;
+    s = unwrap_lets(s, lets);
+    // Make a bundle of the values and run CSE
+    vector<Expr> vars = let_vars(lets);
+    Expr bundle = pack_bundle(vars);
+    bundle = wrap_lets(bundle, lets);
+    bundle = common_subexpression_elimination(bundle, false);
+
+    vector<pair<string, Expr>> new_lets;
+    bundle = unwrap_lets(bundle, new_lets);
+
+    set<string> let_names;
+    for (pair<string, Expr> l : new_lets) {
+        let_names.insert(l.first);
+    }
+
+    // Make sure the new lets define all the same variables
+    vector<Expr> values = unpack_bundle(bundle);
+    internal_assert(values.size() == lets.size());
+    for (size_t i = 0; i < values.size(); i++) {
+        pair<string, Expr> l = lets[i];
+        new_lets.push_back(make_pair(l.first, values[i]));
+    }
+
+    return wrap_or_substitute_used_lets(s, new_lets);
+}
+}
 
 // Pull expressions that don't change over the course of a single iteration to the top of the loop body.
 class LiftFixedExpressions : public IRMutator {
@@ -1121,9 +1189,18 @@ class LiftFixedExpressions : public IRMutator {
         // 4) Can't lift loads out of if statements or for loops -
         // they might not have run, and be in danger of segfaulting.
 
-        LiftFixedExpressionsSingleLoop lifter(op->body);
-        Stmt body = lifter.mutate(op->body);
+        Stmt body = op->body;
+        LiftFixedExpressionsSingleLoop lifter(body);
+        vector<pair<string, Expr>> lets;
+        body = unwrap_lets(body, lets);
+        body = lifter.mutate(body);
+        body = mutate(body);
         body = wrap_lets(body, lifter.exprs);
+        body = wrap_lets(body, lets);
+
+        // The resulting lets probably have a bunch of common subexpressions.
+        body = cse_initial_lets(body);
+
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 };
@@ -1168,10 +1245,15 @@ class LoopCarry2 : public IRMutator {
     void visit(const For *op) {
         Stmt body = mutate(op->body);
 
+        debug(0) << "\n** Considering loop over " << op->name << "\n";
+
         if (op->for_type != ForType::Serial) {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             return;
         }
+
+        Expr prev_var = Variable::make(Int(32), op->name) - 1;
+        Expr next_var = Variable::make(Int(32), op->name) + 1;
 
         // Thanks to the previous passes, at the top of every for loop
         // there's a block of let statements. We want to mine it for
@@ -1182,6 +1264,16 @@ class LoopCarry2 : public IRMutator {
         body = unwrap_lets(body, lets);
         orig_lets = lets;
 
+        // Also make loads equivalent to the stores this loop body
+        // will do. It will follow along with our rewriting of lets.
+        vector<Store> stores = find_non_aliasing_stores(body);
+        vector<Expr> values_stored, equivalent_loads;
+        for (Store s : stores) {
+            Expr equivalent_load = Load::make(s.value.type(), s.name, s.index, Buffer(), Parameter());
+            values_stored.push_back(s.value);
+            equivalent_loads.push_back(equivalent_load);
+        }
+
         // Make a single expr containing all the lets, and also the
         // values those will take on in the next iteration. Then run
         // CSE on these two things together to find useful
@@ -1190,16 +1282,19 @@ class LoopCarry2 : public IRMutator {
         vector<Expr> curr_bundle_values = let_vars(lets);
         Expr curr_bundle = wrap_lets(pack_bundle(curr_bundle_values), lets);
         Expr next_bundle = wrap_lets(pack_bundle(curr_bundle_values), lets);
-        next_bundle = simplify(substitute(op->name, Variable::make(Int(32), op->name) + 1, next_bundle));
+        Expr stores_bundle = wrap_lets(pack_bundle(values_stored), lets);
+        Expr loads_bundle = wrap_lets(pack_bundle(equivalent_loads), lets);
+
+        next_bundle = simplify(substitute(op->name, next_var, next_bundle));
         next_bundle = RenameVars().mutate(next_bundle);
 
-        debug(3) << "Current: " << curr_bundle << "\n";
-        debug(3) << "Next   : " << next_bundle << "\n";
+        debug(0) << "Current: " << curr_bundle << "\n";
+        debug(0) << "Next   : " << next_bundle << "\n";
 
-        Expr together = pack_bundle({curr_bundle, next_bundle});
+        Expr together = pack_bundle({curr_bundle, next_bundle, stores_bundle, loads_bundle});
 
-        together = common_subexpression_elimination(together);
-        debug(3) << "\n After CSE: \n" << together << "\n\n";
+        together = common_subexpression_elimination(together, false);
+        debug(0) << "\n After CSE: \n" << together << "\n\n";
 
         // The Let nodes on 'together' now contains good candidates of
         // things to save for the next loop iteration. However, they
@@ -1209,23 +1304,41 @@ class LoopCarry2 : public IRMutator {
         // variables in the previous loop iteration and this one.
 
         together = unwrap_lets(together, lets);
+        vector<Expr> unpacked = unpack_bundle(together);
         vector<Expr> curr_bundle2_values = let_vars(lets);
         vector<Expr> prev_bundle2_values = curr_bundle2_values;
+        curr_bundle = unpacked[0];
+        values_stored = unpack_bundle(unpacked[2]);
+        equivalent_loads = unpack_bundle(unpacked[3]);
+
+        // The values stored in the previous iteration are equivalent
+        // to loading from the same buffers at their old store indices
+        // in the current iteration.
+        curr_bundle2_values.insert(curr_bundle2_values.end(), values_stored.begin(), values_stored.end());
+        prev_bundle2_values.insert(prev_bundle2_values.end(), equivalent_loads.begin(), equivalent_loads.end());
+
         Expr curr_bundle2 = wrap_lets(pack_bundle(curr_bundle2_values), lets);
         Expr prev_bundle2 = wrap_lets(pack_bundle(prev_bundle2_values), lets);
 
         // Look back one loop iteration.
-        prev_bundle2 = simplify(substitute(op->name, Variable::make(Int(32), op->name) - 1, prev_bundle2));
+        prev_bundle2 = simplify(substitute(op->name, prev_var, prev_bundle2));
         prev_bundle2 = RenameVars().mutate(prev_bundle2);
 
-        debug(3) << "Prev bundle2 : " << prev_bundle2 << "\n";
-        debug(3) << "Curr bundle2 : " << curr_bundle2 << "\n";
+        // Pair the values we need for the original let statements
+        // with the values we'll be storing in the non-aliasing stores
+        // we found and their equivalent loads. These are the terms
+        // we'll definitely compute each loop iteration.
+        curr_bundle = pack_bundle({curr_bundle, pack_bundle(values_stored)});
+        curr_bundle = wrap_lets(curr_bundle, lets);
+
+        debug(0) << "Prev bundle2 : " << prev_bundle2 << "\n";
+        debug(0) << "Curr bundle2 : " << curr_bundle2 << "\n";
 
         together = pack_bundle({curr_bundle2, prev_bundle2, curr_bundle});
 
-        debug(3) << "Together: " << together << "\n";
-        together = common_subexpression_elimination(simplify(together));
-        debug(3) << "Together: " << together << "\n";
+        debug(0) << "Together: " << together << "\n";
+        together = common_subexpression_elimination(simplify(together), false);
+        debug(0) << "Together: " << together << "\n";
 
         // We now have an expression where the mapping between
         // curr_bundle2 and prev_bundle2 tells us the next iteration's
@@ -1251,7 +1364,18 @@ class LoopCarry2 : public IRMutator {
         internal_assert(exprs.size() == 3);
         curr_bundle2_values = unpack_bundle(exprs[0]);
         prev_bundle2_values = unpack_bundle(exprs[1]);
-        curr_bundle_values  = unpack_bundle(exprs[2]);
+        curr_bundle_values = unpack_bundle(exprs[2]);
+        curr_bundle = wrap_used_lets(exprs[2], lets);
+
+        debug(0) << "Stuff we need to compute: " << curr_bundle << "\n";
+
+        debug(0) << "Lets:\n";
+
+        for (pair<string, Expr> l : lets) {
+            debug(0) << " " << l.first << " = " << l.second << "\n";
+        }
+
+        debug(0) << "Loop carry mapping:\n";
 
         for (size_t i = 0; i < curr_bundle2_values.size(); i++) {
             Expr curr_expr = curr_bundle2_values[i];
@@ -1259,17 +1383,38 @@ class LoopCarry2 : public IRMutator {
             const Variable *prev = prev_expr.as<Variable>();
             const Variable *curr = curr_expr.as<Variable>();
 
-            debug(3) << curr_expr << " --> " << prev_expr << "\n";
+            // debug(0) << " " << curr_expr << " --> " << prev_expr << "\n";
+
+            // Force them to be variables
+            /*
+            if (!curr) {
+                string name = unique_name('t');
+                Expr var = Variable::make(curr_expr.type(), name);
+                //lets.push_back(make_pair(name, curr_expr));
+                //curr_bundle = substitute(curr_expr, var, curr_bundle);
+                curr_expr = var;
+                curr = var.as<Variable>();
+            }
+
+            if (!prev) {
+                string name = unique_name('t');
+                Expr var = Variable::make(prev_expr.type(), name);
+                //lets.push_back(make_pair(name, prev_expr));
+                //curr_bundle = substitute(prev_expr, var, curr_bundle);
+                prev_expr = var;
+                prev = var.as<Variable>();
+            }
+            */
 
             if (!curr || !prev) {
-                // If the values we want to compute (curr_bundle_values)
-                // needed them, they'd be variables.
                 continue;
             }
 
-            // The current bundle has to use both the old value and the new value for this to make sense.
-            if (!expr_uses_var(exprs[2], prev->name) ||
-                !expr_uses_var(exprs[2], curr->name)) {
+            // The current bundle has to actually need to compute the
+            // previous value and also use the next one for it to make
+            // sense for us to save it.
+            if (!expr_uses_var(curr_bundle, prev->name) ||
+                !expr_uses_var(curr_bundle, curr->name)) {
                 continue;
             }
 
@@ -1278,17 +1423,26 @@ class LoopCarry2 : public IRMutator {
                 continue;
             }
 
+            debug(0) << "*** " << curr_expr << " --> " << prev_expr << "\n";
+
             CarriedValue cv {curr->name, prev->name, unique_name('b')};
             carried_values_by_reuse_name[prev->name] = cv;
             carried_values_by_save_name[curr->name] = cv;
-            debug(3) << " Carried value: " << curr->name
+            debug(0) << " Carried value: " << curr->name
                      << " in iteration i-1 becomes " << prev->name
                      << " in iteration i\n";
         }
 
+        debug(0) << "Values we need in terms of lets:\n";
 
-        // The original lets are the values in curr_bundle.
+        //vector<pair<string, Expr>> junk_lets;
+        //curr_bundle = unwrap_lets(curr_bundle, junk_lets);
+
+        // The original lets are the values in the first half of curr_bundle.
+        //curr_bundle_values = unpack_bundle(curr_bundle);
+        curr_bundle_values = unpack_bundle(curr_bundle_values[0]);
         for (size_t i = 0; i < curr_bundle_values.size(); i++) {
+            debug(0) << " " << curr_bundle_values[i] << "\n";
             // They're probably vars - don't introduce pointless let statements.
             if (curr_bundle_values[i].as<Variable>()) {
                 body = substitute(orig_lets[i].first, curr_bundle_values[i], body);
@@ -1377,13 +1531,15 @@ class LoopCarry2 : public IRMutator {
 };
 
 Stmt store_forwarding(Stmt s) {
-    debug(3) << "\n\n ************* BEFORE: " << s << "\n";
+    debug(0) << "\n\n ************* BEFORE: " << s << "\n";
     s = LiftFixedExpressions().mutate(s);
-    debug(3) << "\n\n ************* AFTER: " << s << "\n";
+    debug(0) << "\n\n ************* Lift fixed exprs: " << s << "\n";
     s = StoreForwarding2().mutate(s);
-    debug(3) << "\n\n ************* AFTER: " << s << "\n";
+    debug(0) << "\n\n ************* Store forwarding: " << s << "\n";
+    s = LiftFixedExpressions().mutate(s);
+    debug(0) << "\n\n ************* Lift fixed exprs: " << s << "\n";
     s = LoopCarry2().mutate(s);
-    debug(3) << "\n\n ************* AFTER: " << s << "\n";
+    debug(0) << "\n\n ************* Loop carry: " << s << "\n";
     return s;
 }
 
