@@ -894,10 +894,10 @@ $(BIN_DIR)/tutorial_lesson_16_rgb_generate: $(ROOT_DIR)/tutorial/lesson_16_rgb_g
 $(BIN_DIR)/tutorial_lesson_16_rgb_run: $(ROOT_DIR)/tutorial/lesson_16_rgb_run.cpp $(BIN_DIR)/tutorial_lesson_16_rgb_generate
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
-	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_generate -o $(TMP_DIR) -f brighten_planar      target=host layout=planar
-	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_generate -o $(TMP_DIR) -f brighten_interleaved target=host layout=interleaved
-	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_generate -o $(TMP_DIR) -f brighten_either      target=host layout=either
-	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_generate -o $(TMP_DIR) -f brighten_specialized target=host layout=specialized
+	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_planar      target=host layout=planar
+	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_interleaved target=host layout=interleaved
+	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_either      target=host layout=either
+	$(LD_PATH_SETUP) $(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_specialized target=host layout=specialized
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/brighten_*.o \
