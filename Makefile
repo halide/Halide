@@ -11,6 +11,7 @@
 
 SHELL = bash
 CXX ?= g++
+PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
@@ -90,7 +91,7 @@ AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
-CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment
+CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare
 CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual -fPIC $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
@@ -250,7 +251,6 @@ SOURCE_FILES = \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
-  ExprUsesVar.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   Float16.cpp \
@@ -572,7 +572,7 @@ $(INCLUDE_DIR)/HalideRuntime%: $(SRC_DIR)/runtime/HalideRuntime%
 	cp $< $(INCLUDE_DIR)/
 
 $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
-	g++ $< -o $@
+	$(CXX) $< -o $@
 
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
@@ -992,6 +992,7 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.
 	        $(ROOT_DIR)/apps/c_backend \
 	        $(ROOT_DIR)/apps/modules \
 	        $(ROOT_DIR)/apps/HelloMatlab \
+	        $(ROOT_DIR)/apps/fft \
 	        $(ROOT_DIR)/apps/images \
 	        $(ROOT_DIR)/apps/support \
                 apps; \
@@ -1013,6 +1014,9 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.
 	make -C apps/c_backend test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/modules clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/modules out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/fft bench_16x16  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/fft bench_32x32  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/fft bench_48x48  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	cd apps/HelloMatlab; HALIDE_PATH=$(CURDIR) ./run_blur.sh
 
 .PHONY: test_python
@@ -1089,6 +1093,23 @@ Doxyfile: Doxyfile.in
 	@sed -e "s#@CMAKE_BINARY_DIR@#$(shell pwd)#g" \
 	     -e "s#@CMAKE_SOURCE_DIR@#$(shell pwd)#g" \
 	    $< > $@
+
+install: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+	mkdir -p $(PREFIX)/include $(PREFIX)/bin $(PREFIX)/lib $(PREFIX)/share/halide/tutorial/images $(PREFIX)/share/halide/tools $(PREFIX)/share/halide/tutorial/figures
+	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(PREFIX)/lib
+	cp $(INCLUDE_DIR)/Halide.h $(PREFIX)/include
+	cp $(INCLUDE_DIR)/HalideRuntim*.h $(PREFIX)/include
+	cp $(ROOT_DIR)/tutorial/images/*.png $(PREFIX)/share/halide/tutorial/images
+	cp $(ROOT_DIR)/tutorial/figures/*.gif $(PREFIX)/share/halide/tutorial/figures
+	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(PREFIX)/share/halide/tutorial/figures
+	cp $(ROOT_DIR)/tutorial/figures/*.mp4 $(PREFIX)/share/halide/tutorial/figures
+	cp $(ROOT_DIR)/tutorial/*.cpp $(PREFIX)/share/halide/tutorial
+	cp $(ROOT_DIR)/tutorial/*.h $(PREFIX)/share/halide/tutorial
+	cp $(ROOT_DIR)/tutorial/*.sh $(PREFIX)/share/halide/tutorial
+	cp $(ROOT_DIR)/tools/mex_halide.m $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 
 $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools $(DISTRIB_DIR)/tutorial/figures

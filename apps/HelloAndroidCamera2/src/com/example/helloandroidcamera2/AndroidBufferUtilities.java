@@ -32,6 +32,12 @@ public class AndroidBufferUtilities {
      */
     public static native boolean freeNativeYuvBufferT(long handle);
 
+    /**
+     * Rotate a native Halide YuvBufferT by 180 degrees. Cheap (just
+     * messes with the strides, doesn't actually move pixels around.
+     * @return false if handle is 0L.
+     */
+    public static native boolean rotateNativeYuvBufferT180(long handle);
 
     /**
      * Lock a Surface, returning a native handle. It needs to be unlocked with unlockSurface().

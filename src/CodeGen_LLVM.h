@@ -243,7 +243,7 @@ protected:
     llvm::Constant *create_constant_binary_blob(const std::vector<char> &data, const std::string &name);
 
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
-    llvm::Value *create_broadcast(llvm::Value *, int width);
+    llvm::Value *create_broadcast(llvm::Value *, int lanes);
 
     /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
      * The *_ptr variants return a pointer to the struct element, while the basic variants
@@ -370,16 +370,16 @@ protected:
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
-     * given by 'intrin_vector_width', the intrinsic is called on each
+     * given by 'intrin_lanes', the intrinsic is called on each
      * piece, then the results (if any) are concatenated back together
      * into the original type 't'. For the version that takes an
      * llvm::Type *, the type may be void, so the vector width of the
      * arguments must be specified explicitly as
-     * 'called_vector_width'. */
+     * 'called_lanes'. */
     // @{
-    llvm::Value *call_intrin(Type t, int intrin_vector_width,
+    llvm::Value *call_intrin(Type t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, int intrin_vector_width,
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);
     // @}
 
@@ -406,7 +406,7 @@ protected:
      *
      * If there's no match, returns (NULL, 0).
      */
-    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
+    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
 private:
 
