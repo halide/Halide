@@ -1,6 +1,6 @@
 // Halide tutorial lesson 16: RGB images and memory layouts part 2
 
-// Before reading this file, see lesson_16_rgb_generator.cpp
+// Before reading this file, see lesson_16_rgb_generate.cpp
 
 // This is the code that actually uses the Halide pipeline we've
 // compiled. It does not depend on libHalide, so we won't be including
