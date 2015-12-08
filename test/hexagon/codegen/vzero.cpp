@@ -7,8 +7,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
   Target target;
-  setupHexagonTarget(target);
-  target.set_feature(Target::HVX_64);
+  setupHexagonTarget(target, Target::HVX_64);
   //CHECK: call{{.*}}@llvm.hexagon.V6.vd0
   testBzero<uint32_t>(target);
 
