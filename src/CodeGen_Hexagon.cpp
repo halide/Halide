@@ -658,7 +658,10 @@ llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
         }
         if (T1 != Rt->getType())
           Rt = builder->CreateBitCast(Rt, T1);
-        Value *Call = builder->CreateCall(F, Lt, Rt);
+        std::vector<Value *> Ops;
+        Ops.push_back(Lt);
+        Ops.push_back(Rt);
+        Value *Call = builder->CreateCall(F, Ops);
         if (BitCastNeeded)
           return builder->CreateBitCast(Call, BitCastBackTo);
         else
@@ -994,7 +997,10 @@ void CodeGen_Hexagon::visit(const Add *op) {
 
     Halide::Type DestType = op->type;
     llvm::Type *DestLLVMType = llvm_type_of(DestType);
-    Value *Call = builder->CreateCall(F, Lt, Rt);
+    std::vector<Value *> Ops;
+    Ops.push_back(Lt);
+    Ops.push_back(Rt);
+    Value *Call = builder->CreateCall(F, Ops);
     if (DestLLVMType != Call->getType())
       value = builder->CreateBitCast(Call, DestLLVMType);
     else
@@ -1019,7 +1025,10 @@ void CodeGen_Hexagon::visit(const Add *op) {
 
     Halide::Type DestType = op->type;
     llvm::Type *DestLLVMType = llvm_type_of(DestType);
-    Value *Call = builder->CreateCall(F, Lt, Rt);
+    std::vector<Value *> Ops;
+    Ops.push_back(Lt);
+    Ops.push_back(Rt);
+    Value *Call = builder->CreateCall(F, Ops);
     if (DestLLVMType != Call->getType())
       value = builder->CreateBitCast(Call, DestLLVMType);
     else
