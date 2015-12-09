@@ -84,7 +84,7 @@ WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_
     return halide_error_code_access_out_of_bounds;
 }
 
-WEAK int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name, int64_t allocation_size, int64_t max_size) {
+WEAK int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name, uint64_t allocation_size, uint64_t max_size) {
     error(user_context)
         << "Total allocation for buffer " << buffer_name
         << " is " << allocation_size

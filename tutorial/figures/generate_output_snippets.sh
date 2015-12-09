@@ -1,6 +1,6 @@
 for f in ../lesson_*.cpp; do
-    # Figure out which source lines contain a realize call
-    LINES=$(egrep -n '[.]realize\(|print_loop_nest\(\)|Printing a complex Expr' $f  | grep -v ": *//" | cut -d':' -f1)
+    # Figure out which source lines contain a realize call or other print we want to capture
+    LINES=$(egrep -n 'tick\(|[.]realize\(|print_loop_nest\(\)|Printing a complex Expr' $f  | grep -v ": *//" | cut -d':' -f1)
 
     echo $LINES
 
