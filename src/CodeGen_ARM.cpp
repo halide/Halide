@@ -1100,7 +1100,8 @@ void CodeGen_ARM::visit(const Load *op) {
             // The intrinsic takes an i8 pointer and an alignment, and
             // returns a struct of stride->value vectors of width
             // intrin_lanes.
-            fn_type = llvm::FunctionType::get(return_type, {i8->getPointerTo(), i32}, false);
+            llvm::Type *arg_types[] = {i8->getPointerTo(), i32};
+            fn_type = llvm::FunctionType::get(return_type, arg_types, false);
         } else {
             intrin << "llvm.aarch64.neon.ld"
                    << stride->value
@@ -1114,7 +1115,8 @@ void CodeGen_ARM::visit(const Load *op) {
             // returns a struct of stride->value vectors of width
             // intrin_lanes.
             llvm::Type *arg_type = llvm_type_of(op->type.element_of())->getPointerTo();
-            fn_type = llvm::FunctionType::get(return_type, {arg_type}, false);
+            llvm::Type *arg_types[] = {arg_type};
+            fn_type = llvm::FunctionType::get(return_type, arg_types, false);
         }
 
         // Get the intrinsic
