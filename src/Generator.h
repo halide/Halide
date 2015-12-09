@@ -85,6 +85,7 @@
  * Pipeline object.
  */
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <mutex>
