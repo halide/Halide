@@ -901,8 +901,9 @@ void CodeGen_ARM::visit(const Store *op) {
             args[i] = codegen(call->args[i]);
         }
 
-        // Grab the function
+        // Declare the function
         std::ostringstream instr;
+        vector<llvm::Type *> arg_types;
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
@@ -913,6 +914,9 @@ void CodeGen_ARM::visit(const Store *op) {
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits();
+            arg_types = vector<llvm::Type *>(num_vecs + 2, llvm_type_of(intrin_type));
+            arg_types.front() = i8->getPointerTo();
+            arg_types.back() = i32;
         } else {
             instr << "llvm.aarch64.neon.st"
                   << num_vecs
@@ -923,8 +927,11 @@ void CodeGen_ARM::visit(const Store *op) {
                   << ".p0"
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits();
+            arg_types = vector<llvm::Type *>(num_vecs + 1, llvm_type_of(intrin_type));
+            arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
-        llvm::Function *fn = module->getFunction(instr.str());
+        llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
+        llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
         internal_assert(fn);
 
         // How many vst instructions do we need to generate?
@@ -1071,7 +1078,15 @@ void CodeGen_ARM::visit(const Load *op) {
             return;
         }
 
+        // Declare the intrinsic
         ostringstream intrin;
+        llvm::FunctionType *fn_type;
+        llvm::Type *return_type;
+        {
+            llvm::Type *one_vec = llvm_type_of(op->type.with_lanes(intrin_lanes));
+            vector<llvm::Type *> elements(stride->value, one_vec);
+            return_type = StructType::get(*context, elements);
+        }
         if (target.bits == 32) {
             intrin << "llvm.arm.neon.vld"
                    << stride->value
@@ -1082,6 +1097,10 @@ void CodeGen_ARM::visit(const Load *op) {
                    << ".p0i8"
 #endif
                    ;
+            // The intrinsic takes an i8 pointer and an alignment, and
+            // returns a struct of stride->value vectors of width
+            // intrin_lanes.
+            fn_type = llvm::FunctionType::get(return_type, {i8->getPointerTo(), i32}, false);
         } else {
             intrin << "llvm.aarch64.neon.ld"
                    << stride->value
@@ -1091,10 +1110,15 @@ void CodeGen_ARM::visit(const Load *op) {
                    << ".p0"
                    << (op->type.is_float() ? 'f' : 'i')
                    << op->type.bits();
+            // The intrinsic takes a pointer to the element type and
+            // returns a struct of stride->value vectors of width
+            // intrin_lanes.
+            llvm::Type *arg_type = llvm_type_of(op->type.element_of())->getPointerTo();
+            fn_type = llvm::FunctionType::get(return_type, {arg_type}, false);
         }
 
         // Get the intrinsic
-        llvm::Function *fn = module->getFunction(intrin.str());
+        llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(intrin.str(), fn_type));
         internal_assert(fn);
 
         // Load each slice.
