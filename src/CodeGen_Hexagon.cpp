@@ -528,6 +528,9 @@ static bool EmittedOnce = false;
 int CodeGen_Hexagon::native_vector_bits() const {
   bool DoTrace = ! EmittedOnce;
   EmittedOnce = true;
+  if (DoTrace)
+    debug(1) << (target.has_feature(Halide::Target::HVX_V62)
+             ? "V62\n" : "V60\n");
   if (target.has_feature(Halide::Target::HVX_128)) {
     if (DoTrace) debug(1) << "128 Byte mode\n";
     return 128*8;
@@ -2392,6 +2395,8 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     int width_32 = CPICK(32,16);
     int width_16 = CPICK(64,32);
     int width_8  = CPICK(128,64);
+
+    debug(4) << "HexCG: Entering vector broadcast\n";
 
     // Look for supported broadcasts.
     Expr match_i32 = Broadcast::make(wild_i32, 0);
