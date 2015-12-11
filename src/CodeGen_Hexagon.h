@@ -51,6 +51,8 @@ protected:
                               std::vector<Pattern> &Patterns);
     llvm::Value *CallLLVMIntrinsic(llvm::Function *F,
                                    std::vector<llvm::Value *> &Ops);
+    void getHighAndLowVectors(Expr DoubleVec,
+                               std::vector<Expr> &Res);
     void getHighAndLowVectors(llvm::Value *DoubleVec,
                                std::vector<llvm::Value *> &Res);
     llvm::Value *concatVectors(llvm::Value *High, llvm::Value *Low);
@@ -74,6 +76,7 @@ protected:
     llvm::Value *handleLargeVectors(const Max *);
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Div *);
+    llvm::Value *handleLargeVectors_absd(const Call *);
     llvm::Value *handleLargeVectors(const Cast *);
     /* Ideally, we'd have liked to call compare with llvm::Intrinsic::ID
      as the last argument, but that means "llvm/IR/Intrinsics.h" would be needed

@@ -408,7 +408,9 @@ struct Call : public ExprNode<Call> {
         likely,
         make_int64,
         make_float64,
-        register_destructor;
+        register_destructor,
+        get_high_register,
+        get_low_register;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

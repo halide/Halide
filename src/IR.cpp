@@ -641,6 +641,8 @@ Call::ConstString Call::likely = "likely";
 Call::ConstString Call::make_int64 = "make_int64";
 Call::ConstString Call::make_float64 = "make_float64";
 Call::ConstString Call::register_destructor = "register_destructor";
+Call::ConstString Call::get_high_register = "get_high_register";
+Call::ConstString Call::get_low_register = "get_low_register";
 
 }
 }
