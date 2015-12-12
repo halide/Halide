@@ -443,7 +443,7 @@ extern int halide_error_access_out_of_bounds(void *user_context, const char *fun
                                              int dimension, int min_touched, int max_touched,
                                              int min_valid, int max_valid);
 extern int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name,
-                                                    int64_t allocation_size, int64_t max_size);
+                                                    uint64_t allocation_size, uint64_t max_size);
 extern int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name,
                                                  int64_t actual_size, int64_t max_size);
 extern int halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
@@ -475,7 +475,7 @@ extern int halide_error_debug_to_file_failed(void *user_context, const char *fun
  * Note that the int/uint/float values do not imply a specific bit width
  * (the bit width is expected to be encoded in a separate value).
  */
-typedef enum halide_type_code_t 
+typedef enum halide_type_code_t
 #if __cplusplus >= 201103L
 : uint8_t
 #endif
