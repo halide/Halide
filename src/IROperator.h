@@ -573,11 +573,46 @@ inline Expr operator&&(Expr a, Expr b) {
     return Internal::And::make(a, b);
 }
 
+/** Logical and of an Expr and a bool. Either returns the Expr or an
+ * Expr representing false, depending on the bool. */
+// @{
+inline Expr operator&&(Expr a, bool b) {
+    internal_assert(a.defined()) << "operator&& of undefined Expr\n";
+    internal_assert(a.type().is_bool()) << "operator&& of Expr of type " << a.type() << "\n";
+    if (b) {
+        return a;
+    } else {
+        return Internal::make_zero(a.type());
+    }
+}
+inline Expr operator&&(bool a, Expr b) {
+    return b && a;
+}
+// @}
+
 /** Returns the logical or of the two arguments */
 inline Expr operator||(Expr a, Expr b) {
     Internal::match_types(a, b);
     return Internal::Or::make(a, b);
 }
+
+/** Logical or of an Expr and a bool. Either returns the Expr or an
+ * Expr representing true, depending on the bool. */
+// @{
+inline Expr operator||(Expr a, bool b) {
+    internal_assert(a.defined()) << "operator|| of undefined Expr\n";
+    internal_assert(a.type().is_bool()) << "operator|| of Expr of type " << a.type() << "\n";
+    if (b) {
+        return Internal::make_one(a.type());
+    } else {
+        return a;
+    }
+}
+inline Expr operator||(bool a, Expr b) {
+    return b || a;
+}
+// @}
+
 
 /** Returns the logical not the argument */
 inline Expr operator!(Expr a) {
