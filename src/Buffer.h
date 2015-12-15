@@ -24,29 +24,61 @@ struct JITModule;
  * memory, or some other memory space (e.g. a gpu). If you want to use
  * this as an Image, see the Image class. Casting a Buffer to an Image
  * will do any appropriate copy-back. This class is a fairly thin
- * wrapper on a buffer_t, which is the C-style type Halide uses for
- * passing buffers around.
+ * wrapper on a halide_buffer_t, which is the C-style type Halide uses
+ * for passing buffers around.
  */
 class Buffer {
 private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
 
 public:
-    Buffer() : contents(NULL) {}
+    class Dimension {
+        halide_dimension_t d;
+    public:
 
-    EXPORT Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-                  uint8_t* data = NULL, const std::string &name = "");
+        Dimension() : d {0, 0, 0, 0} {}
+        Dimension(const halide_dimension_t d) : d(d) {}
+
+        /** Get the minimum coordinate of this buffer along this
+         * dimension. This corresponds to the coordinate of the base
+         * address of the buffer. */
+        int min() const {
+            return d.min;
+        }
+
+        /** Get the extent of this buffer along this dimension. */
+        int extent() const {
+            return d.extent;
+        }
+
+        /** Get the maximum coordinate of this buffer along this
+         * dimension. This corresponds to the coordinate of the base
+         * address of the buffer. */
+        int max() const {
+            return d.min + d.extent - 1;
+        }
+
+        /** Get the distance in memory (measured in the type of the
+         * buffer elements, not bytes) between adjacent elements of
+         * this buffer along this dimension. For the innermost
+         * dimension, this will usually be one. */
+        int stride() const {
+            return d.stride;
+        }
+    };
+
+    Buffer() : contents(NULL) {}
 
     EXPORT Buffer(Type t, const std::vector<int32_t> &sizes,
                   uint8_t* data = NULL, const std::string &name = "");
 
-    EXPORT Buffer(Type t, const buffer_t *buf, const std::string &name = "");
+    EXPORT Buffer(const halide_buffer_t *buf, const std::string &name = "");
 
     /** Get a pointer to the host-side memory. */
     EXPORT void *host_ptr() const;
 
-    /** Get a pointer to the raw buffer_t struct that this class wraps. */
-    EXPORT buffer_t *raw_buffer() const;
+    /** Get a pointer to the raw halide_buffer_t struct that this class wraps. */
+    EXPORT halide_buffer_t *raw_buffer() const;
 
     /** Get the device-side pointer/handle for this buffer. Will be
      * zero if no device was involved in the creation of this
@@ -74,27 +106,15 @@ public:
      * the host in a halide pipeline. */
     EXPORT void set_device_dirty(bool dirty = true);
 
-    /** Get the dimensionality of this buffer. Uses the convention
-     * that the extent field of a buffer_t should contain zero when
-     * the dimensions end. */
+    /** Get the dimensionality of this buffer. */
     EXPORT int dimensions() const;
 
-    /** Get the extent of this buffer in the given dimension. */
-    EXPORT int extent(int dim) const;
-
-    /** Get the distance in memory (measured in the type of the buffer
-     * elements, not bytes) between adjacent elements of this buffer
-     * along the given dimension. For the innermost dimension, this
-     * will usually be one. */
-    EXPORT int stride(int dim) const;
-
-    /** Get the coordinate in the function that this buffer represents
-     * that corresponds to the base address of the buffer. */
-    EXPORT int min(int dim) const;
+    /** Get the min, stride, and extent of a dimension of the buffer. */
+    EXPORT Dimension dim(int d) const;
 
     /** Set the coordinate in the function that this buffer represents
      * that corresponds to the base address of the buffer. */
-    EXPORT void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0);
+    EXPORT void set_min(const std::vector<int> &m);
 
     /** Get the Halide type of the contents of this buffer. */
     EXPORT Type type() const;
@@ -136,7 +156,7 @@ public:
      * device-aware target (e.g. PTX), then free the device-side
      * allocation, if there is one. Done automatically when the last
      * reference to this buffer dies. */
-    EXPORT int free_dev_buffer();
+    EXPORT int free_device_buffer();
 
 };
 

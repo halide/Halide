@@ -218,7 +218,7 @@ extern void halide_device_release(void *user_context, const halide_device_interf
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
-extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
+extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
 
 /** Copy image data from host memory to device memory. This should not
  * be called directly; Halide handles copying to the device
@@ -226,17 +226,17 @@ extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
  * field, the device associated with the dev handle will be
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
-extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
+extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                  const halide_device_interface *device_interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-extern int halide_device_sync(void *user_context, struct buffer_t *buf);
+extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
 
-/** Allocate device memory to back a buffer_t. */
-extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
+/** Allocate device memory to back a halide_buffer_t. */
+extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const halide_device_interface *device_interface);
 
-extern int halide_device_free(void *user_context, struct buffer_t *buf);
+extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
@@ -266,9 +266,9 @@ extern void halide_memoization_cache_set_size(int64_t size);
  *  considered opaque by this function.) If this routine returns true,
  *  it is a cache miss. Otherwise, it will return false and the
  *  buffers passed in will be filled, via copying, with memoized
- *  data. The last argument is a list if buffer_t pointers which
+ *  data. The last argument is a list if halide_buffer_t pointers which
  *  represents the outputs of the memoized Func. If the Func does not
- *  return a Tuple, there will only be one buffer_t in the list. The
+ *  return a Tuple, there will only be one halide_buffer_t in the list. The
  *  tuple_count parameters determines the length of the list.
  *
  * The return values are:
@@ -277,7 +277,7 @@ extern void halide_memoization_cache_set_size(int64_t size);
  *  1: Success and cache miss.
  */
 extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                           buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+                                           halide_buffer_t *realized_bounds, int32_t tuple_count, halide_buffer_t **tuple_buffers);
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
@@ -285,16 +285,16 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
  *  halide_memoization_cache_lookup. (The internals of the cache key
  *  should be considered opaque by this function.) Data is copied out
  *  from the inputs and inputs are unmodified. The last argument is a
- *  list if buffer_t pointers which represents the outputs of the
+ *  list if halide_buffer_t pointers which represents the outputs of the
  *  memoized Func. If the Func does not return a Tuple, there will
- *  only be one buffer_t in the list. The tuple_count parameters
+ *  only be one halide_buffer_t in the list. The tuple_count parameters
  *  determines the length of the list.
  *
  * If there is a memory allocation failure, the store does not store
  * the data into the cache.
  */
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                           buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+                                           halide_buffer_t *realized_bounds, int32_t tuple_count, halide_buffer_t **tuple_buffers);
 
 /** If halide_memoization_cache_lookup succeeds,
  * halide_memoization_cache_release must be called to signal the
@@ -331,18 +331,18 @@ enum halide_error_code_t {
      * the Func by the rest of the pipeline. */
     halide_error_code_explicit_bounds_too_small = -2,
 
-    /** The elem_size field of a buffer_t does not match the size in
+    /** The elem_size field of a halide_buffer_t does not match the size in
      * bytes of the type of that ImageParam. Probable type mismatch. */
     halide_error_code_bad_elem_size = -3,
 
-    /** A pipeline would access memory outside of the buffer_t passed
+    /** A pipeline would access memory outside of the halide_buffer_t passed
      * in. */
     halide_error_code_access_out_of_bounds = -4,
 
-    /** A buffer_t was given that spans more than 2GB of memory. */
+    /** A halide_buffer_t was given that spans more than 2GB of memory. */
     halide_error_code_buffer_allocation_too_large = -5,
 
-    /** A buffer_t was given with extents that multiply to a number
+    /** A halide_buffer_t was given with extents that multiply to a number
      * greater than 2^31-1 */
     halide_error_code_buffer_extents_too_large = -6,
 
@@ -352,7 +352,7 @@ enum halide_error_code_t {
     halide_error_code_constraints_make_required_region_smaller = -7,
 
     /** A constraint on a size or stride of an input or output buffer
-     * was not met by the buffer_t passed in. */
+     * was not met by the halide_buffer_t passed in. */
     halide_error_code_constraint_violated = -8,
 
     /** A scalar parameter passed in was smaller than its minimum
@@ -366,7 +366,7 @@ enum halide_error_code_t {
     /** A call to halide_malloc returned NULL. */
     halide_error_code_out_of_memory = -11,
 
-    /** A buffer_t pointer passed in was NULL. */
+    /** A halide_buffer_t pointer passed in was NULL. */
     halide_error_code_buffer_argument_is_null = -12,
 
     /** debug_to_file failed to open or write to the specified
@@ -523,19 +523,30 @@ struct halide_type_t {
         : code(code), bits(bits), lanes(lanes) {
     }
 
+    halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() { return (bits + 7) / 8; }
+    size_t bytes() const { return (bits + 7) / 8; }
+
+    /** Compare two types for equality */
+    bool operator==(const halide_type_t &other) const {
+        return (code == other.code &&
+                bits == other.bits &&
+                lanes == other.lanes);
+    }
+
+    bool operator!=(const halide_type_t &other) const {
+        return !(*this == other);
+    }
 #endif
 };
 
-#ifndef BUFFER_T_DEFINED
-#define BUFFER_T_DEFINED
+#ifndef HALIDE_BUFFER_T_DEFINED
+#define HALIDE_BUFFER_T_DEFINED
 
 /**
- * The raw representation of an image passed around by generated
- * Halide code. It includes some stuff to track whether the image is
- * not actually in main memory, but instead on a device (like a
- * GPU). */
+ * The old raw representation of a buffer, included for legacy support.
+ */
 typedef struct buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t dev;
@@ -584,6 +595,86 @@ typedef struct buffer_t {
     // there is no ambiguity.
     HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
+
+
+typedef struct halide_dimension_t {
+    int32_t min, extent, stride;
+    uint32_t flags;
+} halide_dimension_t;
+
+/**
+ * The raw representation of an image passed around by generated
+ * Halide code. It includes some stuff to track whether the image is
+ * not actually in main memory, but instead on a device (like a
+ * GPU). */
+typedef struct halide_buffer_t {
+    /** A device-handle for e.g. GPU memory used to back this buffer. */
+    uint64_t device;
+
+    /** The interface used to interpret the above handle. */
+    const halide_device_interface *device_interface;
+
+    /** A pointer to the start of the data in main memory. In terms of
+     * the Halide coordinate system, this is the address of the min
+     * coordinates (defined below). */
+    uint8_t* host;
+
+    /** The type of each buffer element. */
+    halide_type_t type;
+
+    enum buffer_flags {flag_host_dirty = 0, flag_device_dirty = 1};
+    uint32_t flags;
+    int32_t dimensions;
+    halide_dimension_t dim[8];
+
+#ifdef __cplusplus
+    // Convenience methods for accessing the flags
+    bool get_flag(buffer_flags flag) const {
+        return flags & (1 << flag);
+    }
+    void set_flag(buffer_flags flag, bool value) {
+        if (value) {
+            flags |= (1 << flag);
+        } else {
+            flags &= ~(1 << flag);
+        }
+    }
+    bool host_dirty() const {
+        return get_flag(flag_host_dirty);
+    }
+    bool device_dirty() const {
+        return get_flag(flag_device_dirty);
+    }
+    void set_host_dirty(bool v) {
+        set_flag(flag_host_dirty, v);
+    }
+    void set_device_dirty(bool v) {
+        set_flag(flag_device_dirty, v);
+    }
+#endif
+} halide_buffer_t;
+
+inline void halide_upgrade_buffer_t(const buffer_t *buf, halide_type_t type, int dimensions, halide_buffer_t *new_buf) {
+    new_buf->device = 0; // Don't try to unwrap old-style device wrappers
+    new_buf->host = buf->host;
+    new_buf->type = type;
+    new_buf->dimensions = dimensions;
+    for (int i = 0; i < 4; i++) {
+        new_buf->dim[i].min = buf->min[i];
+        new_buf->dim[i].extent = buf->extent[i];
+        new_buf->dim[i].stride = buf->stride[i];
+        new_buf->dim[i].flags = 0;
+    }
+    for (int i = 4; i < 8; i++) {
+        new_buf->dim[i].min = 0;
+        new_buf->dim[i].extent = 0;
+        new_buf->dim[i].stride = 0;
+        new_buf->dim[i].flags = 0;
+    }
+    new_buf->flags = 0;
+    new_buf->set_host_dirty(buf->host_dirty);
+    new_buf->set_device_dirty(buf->dev_dirty);
+}
 
 #endif
 

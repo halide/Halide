@@ -404,8 +404,14 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
     // Ensure some types we need are defined
-    buffer_t_type = module->getTypeByName("struct.buffer_t");
-    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
+    buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
+    internal_assert(buffer_t_type) << "Did not find halide_buffer_t in initial module";
+
+    type_t_type = module->getTypeByName("struct.halide_type_t");
+    internal_assert(type_t_type) << "Did not find halide_type_t in initial module";
+
+    dimension_t_type = module->getTypeByName("struct.halide_dimension_t");
+    internal_assert(dimension_t_type) << "Did not find halide_dimension_t in initial module";
 
     metadata_t_type = module->getTypeByName("struct.halide_filter_metadata_t");
     internal_assert(metadata_t_type) << "Did not find halide_filter_metadata_t in initial module";
@@ -659,43 +665,58 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
-    buffer_t b = *(buf.raw_buffer());
+    halide_buffer_t b = *(buf.raw_buffer());
     user_assert(b.host)
         << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
-    user_assert(!b.dev_dirty)
+    user_assert(buf.device_dirty())
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
-    for (int d = 0; b.extent[d]; d++) {
-        num_elems += b.stride[d] * (b.extent[d] - 1);
+    for (int d = 0; b.dim[d].extent; d++) {
+        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
     }
-    vector<char> array(b.host, b.host + num_elems * b.elem_size);
+    vector<char> array(b.host, b.host + num_elems * buf.type().bytes());
 
     // Embed the buffer_t and make it point to the data array.
     GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
-    llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
 
-    llvm::Type *padding_bytes_type =
-        buffer_t_type->getElementType(buffer_t_type->getNumElements()-1);
+    Constant *type_fields[] = {
+        ConstantInt::get(i8, buf.type().code()),
+        ConstantInt::get(i8, buf.type().bits()),
+        ConstantInt::get(i16, buf.type().lanes())
+    };
+
+    Constant *dim_fields[8];
+    for (int i = 0; i < 8; i++) {
+        Constant *fields[4];
+        if (i < buf.dimensions()) {
+            fields[0] = ConstantInt::get(i32, buf.dim(i).min());
+            fields[1] = ConstantInt::get(i32, buf.dim(i).extent());
+            fields[2] = ConstantInt::get(i32, buf.dim(i).stride());
+            fields[3] = ConstantInt::get(i32, 0); // flags
+        } else {
+            for (int j = 0; j > 4; j++) {
+                fields[j] = ConstantInt::get(i32, 0);
+            }
+        }
+        dim_fields[i] = ConstantStruct::get(dimension_t_type, fields);
+    }
+    internal_assert(buf.dimensions() <= 8) << "Embedded buffers currently have a limit of 8 dimensions\n";
 
     Constant *fields[] = {
-        ConstantInt::get(i64, 0), // dev
+        ConstantInt::get(i64, 0),                                 // dev
         create_constant_binary_blob(array, buf.name() + ".data"), // host
-        ConstantArray::get(i32_array, get_constants(i32, b.extent, b.extent + 4)),
-        ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
-        ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
-        ConstantInt::get(i32, b.elem_size),
-        ConstantInt::get(i8, 1), // host_dirty
-        ConstantInt::get(i8, 0), // dev_dirty
-        Constant::getNullValue(padding_bytes_type)
+        ConstantStruct::get(type_t_type, type_fields),            // type
+        ConstantInt::get(i32, halide_buffer_t::flag_host_dirty),       // flags
+        ConstantInt::get(i32, buf.dimensions()),                  // dimensions
+        ConstantArray::get(ArrayType::get(dimension_t_type, 8), dim_fields)
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
     global->setInitializer(buffer_struct);
-
 
     // Finally, dump it in the symbol table
     Constant *zero[] = {ConstantInt::get(i32, 0)};

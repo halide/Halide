@@ -214,12 +214,12 @@ struct module_state {
 };
 WEAK module_state *state_list = NULL;
 
-WEAK bool validate_device_pointer(void *user_context, buffer_t* buf, size_t size=0) {
-    if (buf->dev == 0) {
+WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size_t size=0) {
+    if (buf->device == 0) {
         return true;
     }
 
-    cl_mem dev_ptr = (cl_mem)halide_get_device_handle(buf->dev);
+    cl_mem dev_ptr = (cl_mem)buf->device;
 
     size_t real_size;
     cl_int result = clGetMemObjectInfo(dev_ptr, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
@@ -439,15 +439,15 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
 extern "C" {
 
-WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
     // halide_opencl_device_free, at present, can be exposed to clients and they
-    // should be allowed to call halide_opencl_device_free on any buffer_t
+    // should be allowed to call halide_opencl_device_free on any halide_buffer_t
     // including ones that have never been used with a GPU.
-    if (buf->dev == 0) {
+    if (buf->device == 0) {
       return 0;
     }
 
-    cl_mem dev_ptr = (cl_mem)halide_get_device_handle(buf->dev);
+    cl_mem dev_ptr = (cl_mem)buf->device;
 
     debug(user_context)
         << "CL: halide_opencl_device_free (user_context: " << user_context
@@ -467,8 +467,9 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
     cl_int result = clReleaseMemObject((cl_mem)dev_ptr);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
-    halide_delete_device_wrapper(buf->dev);
-    buf->dev = 0;
+    buf->device = 0;
+    buf->device_interface->release_module();
+    buf->device_interface = NULL;
     if (result != CL_SUCCESS) {
         error(user_context) << "CL: clReleaseMemObject failed: "
                             << get_opencl_error_name(result);
@@ -597,7 +598,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
 }
 
 // Used to generate correct timings when tracing
-WEAK int halide_opencl_device_sync(void *user_context, struct buffer_t *) {
+WEAK int halide_opencl_device_sync(void *user_context, halide_buffer_t *) {
     debug(user_context) << "CL: halide_opencl_device_sync (user_context: " << user_context << ")\n";
 
     ClContext ctx(user_context);
@@ -675,7 +676,7 @@ WEAK int halide_opencl_device_release(void *user_context) {
     return 0;
 }
 
-WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
     debug(user_context)
         << "CL: halide_opencl_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -686,19 +687,23 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     }
 
     size_t size = buf_size(user_context, buf);
-    if (buf->dev) {
+    if (buf->device) {
         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
     }
 
-    halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
-                                buf->stride[2] >= 0 && buf->stride[3] >= 0);
+    for (int i = 0; i < buf->dimensions; i++) {
+        halide_assert(user_context, buf->dim[i].stride >= 0);
+    }
+
 
     debug(user_context)
         << "    Allocating buffer of " << (int)size << " bytes,"
-        << " extents: " << buf->extent[0] << "x" << buf->extent[1] << "x" << buf->extent[2] << "x" << buf->extent[3]
-        << " strides: " << buf->stride[0] << "x" << buf->stride[1] << "x" << buf->stride[2] << "x" << buf->stride[3]
-        << " (" << buf->elem_size << " bytes per element)\n";
+        << " extents: " << buf->dim[0].extent << "x" << buf->dim[1].extent
+        << "x" << buf->dim[2].extent << "x" << buf->dim[3].extent
+        << " strides: " << buf->dim[0].stride << "x" << buf->dim[1].stride
+        << "x" << buf->dim[2].stride << "x" << buf->dim[3].stride
+        << " (type: " << buf->type << ")\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -715,15 +720,13 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     } else {
         debug(user_context) << (void *)dev_ptr << "\n";
     }
-    buf->dev = halide_new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
-    if (buf->dev == 0) {
-        error(user_context) << "CL: out of memory allocating device wrapper.\n";
-        clReleaseMemObject(dev_ptr);
-        return -1;
-    }
+
+    buf->device = (uint64_t)dev_ptr;
+    buf->device_interface = &opencl_device_interface;
+    buf->device_interface->use_module();
 
     debug(user_context)
-        << "    Allocated device buffer " << (void *)buf->dev
+        << "    Allocated device buffer " << (void *)buf->device
         << " for buffer " << buf << "\n";
 
     #ifdef DEBUG_RUNTIME
@@ -734,7 +737,85 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     return CL_SUCCESS;
 }
 
-WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
+namespace {
+int do_multidimensional_copy(void *user_context, const ClContext &ctx,
+                             const device_copy &c,
+                             uint64_t off, int d, bool d_to_h) {
+    if (d > MAX_COPY_DIMS) {
+        error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
+        return -1;
+    } else if (d == 0) {
+        cl_int err = 0;
+        const char *copy_name = d_to_h ? "clEnqueueReadBuffer" : "clEnqueueWriteBuffer";
+        debug(user_context) << "    " << copy_name << " "
+                            << (void *)c.src << " -> " << (void *)c.dst << ", " << c.chunk_size << " bytes\n";
+        if (d_to_h) {
+            err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
+                                      CL_FALSE, off, c.chunk_size, (void *)c.dst,
+                                      0, NULL, NULL);
+        } else {
+            err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
+                                       CL_FALSE, off, c.chunk_size, (void *)c.src,
+                                       0, NULL, NULL);
+        }
+        if (err) {
+            error(user_context) << "CL: " << copy_name << " failed: " << get_opencl_error_name(err);
+            return (int)err;
+        }
+    }
+#ifdef ENABLE_OPENCL_11
+    else if (d == 2) {
+        // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
+        // can deal with the 2 innermost strides with OpenCL.
+
+        cl_int err = 0;
+
+        size_t offset[3] = { off, 0, 0 };
+        size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+
+        const char *copy_name = d_to_h ? "clEnqueueReadBufferRect" : "clEnqueueWriteBufferRect";
+        debug(user_context) << "    " << copy_name << " "
+                            << (void *)c.src << " -> " << (void *)c.dst
+                            << ", " << c.chunk_size << " bytes\n";
+
+        if (d_to_h) {
+            err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
+                                          offset, offset, region,
+                                          c.stride_bytes[0], c.stride_bytes[1],
+                                          c.stride_bytes[0], c.stride_bytes[1],
+                                          (void *)c.dst,
+                                          0, NULL, NULL);
+        } else {
+
+            err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
+                                           offset, offset, region,
+                                           c.stride_bytes[0], c.stride_bytes[1],
+                                           c.stride_bytes[0], c.stride_bytes[1],
+                                           (void *)c.src,
+                                           0, NULL, NULL);
+
+
+        }
+        if (err) {
+            error(user_context) << "CL: " << copy_name << " failed: " << get_opencl_error_name(err);
+            return (int)err;
+        }
+    }
+#endif
+    else {
+        for (int i = 0; i < (int)c.extent[d-1]; i++) {
+            off += i * c.stride_bytes[d-1];
+            int err = do_multidimensional_copy(user_context, ctx, c, off, d-1, d_to_h);
+            if (err) {
+                return err;
+            }
+        }
+    }
+    return 0;
+}
+}
+
+WEAK int halide_opencl_copy_to_device(void *user_context, halide_buffer_t* buf) {
     int err = halide_opencl_device_malloc(user_context, buf);
     if (err) {
         return err;
@@ -756,68 +837,13 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, buf->host && buf->device);
     halide_assert(user_context, validate_device_pointer(user_context, buf));
 
     device_copy c = make_host_to_device_copy(buf);
 
-    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-    // in case negative strides.
-    for (int w = 0; w < (int)c.extent[3]; w++) {
-        for (int z = 0; z < (int)c.extent[2]; z++) {
-#ifdef ENABLE_OPENCL_11
-            // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
-            // can deal with the 2 innermost strides with OpenCL.
-            uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
+    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, false);
 
-            size_t offset[3] = { off, 0, 0 };
-            size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
-
-            debug(user_context)
-                << "    clEnqueueWriteBufferRect ((" << z << ", " << w << "), "
-                << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
-                << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
-                << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
-
-            cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
-                                                  offset, offset, region,
-                                                  c.stride_bytes[0], c.stride_bytes[1],
-                                                  c.stride_bytes[0], c.stride_bytes[1],
-                                                  (void *)c.src,
-                                                  0, NULL, NULL);
-
-            if (err != CL_SUCCESS) {
-                error(user_context) << "CL: clEnqueueWriteBufferRect failed: "
-                                    << get_opencl_error_name(err);
-                return err;
-            }
-#else
-            for (int y = 0; y < (int)c.extent[1]; y++) {
-                for (int x = 0; x < (int)c.extent[0]; x++) {
-                    uint64_t off = (x * c.stride_bytes[0] +
-                                    y * c.stride_bytes[1] +
-                                    z * c.stride_bytes[2] +
-                                    w * c.stride_bytes[3]);
-                    void *src = (void *)(c.src + off);
-                    void *dst = (void *)(c.dst + off);
-                    uint64_t size = c.chunk_size;
-
-                    debug(user_context)
-                        << "    clEnqueueWriteBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
-                        << size << " bytes, " << src << " -> " << (void *)dst << ")\n";
-
-                    cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
-                                                      CL_FALSE, off, size, src, 0, NULL, NULL);
-                    if (err != CL_SUCCESS) {
-                        error(user_context) << "CL: clEnqueueWriteBuffer failed: "
-                                            << get_opencl_error_name(err);
-                        return err;
-                    }
-                }
-            }
-#endif
-        }
-    }
     // The writes above are all non-blocking, so empty the command
     // queue before we proceed so that other host code won't write
     // to the buffer while the above writes are still running.
@@ -831,7 +857,7 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_copy_to_host(void *user_context, halide_buffer_t* buf) {
     debug(user_context)
         << "CL: halide_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -848,69 +874,14 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, buf->host && buf->device);
     halide_assert(user_context, validate_device_pointer(user_context, buf));
 
     device_copy c = make_device_to_host_copy(buf);
 
-    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-    // in case negative strides.
-    for (int w = 0; w < (int)c.extent[3]; w++) {
-        for (int z = 0; z < (int)c.extent[2]; z++) {
-#ifdef ENABLE_OPENCL_11
-            // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
-            // can deal with the 2 innermost strides with OpenCL.
-            uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
+    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, true);
 
-            size_t offset[3] = { off, 0, 0 };
-            size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
-
-            debug(user_context)
-                << "    clEnqueueReadBufferRect ((" << z << ", " << w << "), "
-                << "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
-                << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes, "
-                << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
-
-            cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
-                                                 offset, offset, region,
-                                                 c.stride_bytes[0], c.stride_bytes[1],
-                                                 c.stride_bytes[0], c.stride_bytes[1],
-                                                 (void *)c.dst,
-                                                 0, NULL, NULL);
-
-            if (err != CL_SUCCESS) {
-                error(user_context) << "CL: clEnqueueReadBufferRect failed: "
-                                    << get_opencl_error_name(err);
-                return err;
-            }
-#else
-            for (int y = 0; y < (int)c.extent[1]; y++) {
-                for (int x = 0; x < (int)c.extent[0]; x++) {
-                    uint64_t off = (x * c.stride_bytes[0] +
-                                    y * c.stride_bytes[1] +
-                                    z * c.stride_bytes[2] +
-                                    w * c.stride_bytes[3]);
-                    void *src = (void *)(c.src + off);
-                    void *dst = (void *)(c.dst + off);
-                    uint64_t size = c.chunk_size;
-
-                    debug(user_context)
-                        << "    clEnqueueReadBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
-                        << size << " bytes, " << src << " -> " << dst << ")\n";
-
-                    cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
-                                                     CL_FALSE, off, size, dst, 0, NULL, NULL);
-                    if (err != CL_SUCCESS) {
-                        error(user_context) << "CL: clEnqueueReadBuffer failed: "
-                                            << get_opencl_error_name(err);
-                        return err;
-                    }
-                }
-            }
-#endif
-        }
-    }
-    // The writes above are all non-blocking, so empty the command
+    // The reads above are all non-blocking, so empty the command
     // queue before we proceed so that other host code won't read
     // bad data.
     clFinish(ctx.cmd_queue);
@@ -989,7 +960,7 @@ WEAK int halide_opencl_run(void *user_context,
 
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            uint64_t opencl_handle = halide_get_device_handle(*(uint64_t *)this_arg);
+            uint64_t opencl_handle = *((uint64_t *)this_arg);
             debug(user_context) << "Mapped dev handle is: " << (void *)opencl_handle << "\n";
             // In 32-bit mode, opencl only wants the bottom 32 bits of
             // the handle, so use sizeof(void *) instead of
@@ -1051,43 +1022,43 @@ WEAK int halide_opencl_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct buffer_t *buf, uintptr_t mem) {
-    halide_assert(user_context, buf->dev == 0);
-    if (buf->dev != 0) {
+WEAK int halide_opencl_wrap_cl_mem(void *user_context, halide_buffer_t *buf, uintptr_t mem) {
+    halide_assert(user_context, buf->device == 0);
+    if (buf->device != 0) {
         return -2;
     }
-    buf->dev = halide_new_device_wrapper(mem, &opencl_device_interface);
-    if (buf->dev == 0) {
-        return -1;
-    }
+    buf->device = mem;
+    buf->device_interface = &opencl_device_interface;
+    buf->device_interface->use_module();
 #if DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
-        halide_delete_device_wrapper(buf->dev);
-        buf->dev = 0;
+        buf->device = 0;
+        buf->device_interface->release_module();
+        buf->device_interface = NULL;
         return -3;
     }
 #endif
     return 0;
 }
 
-WEAK uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct buffer_t *buf) {
-    if (buf->dev == NULL) {
+WEAK uintptr_t halide_opencl_detach_cl_mem(void *user_context, halide_buffer_t *buf) {
+    if (buf->device == NULL) {
         return 0;
     }
-    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opencl_device_interface);
-    uint64_t mem = halide_get_device_handle(buf->dev);
-    halide_delete_device_wrapper(buf->dev);
-    buf->dev = 0;
+    halide_assert(user_context, buf->device_interface == &opencl_device_interface);
+    uint64_t mem = buf->device;
+    buf->device = 0;
+    buf->device_interface->release_module();
+    buf->device_interface = NULL;
     return (uintptr_t)mem;
 }
 
-WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, struct buffer_t *buf) {
-    if (buf->dev == NULL) {
+WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf) {
+    if (buf->device == NULL) {
         return 0;
     }
-    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opencl_device_interface);
-    uint64_t mem = halide_get_device_handle(buf->dev);
-    return (uintptr_t)mem;
+    halide_assert(user_context, buf->device_interface == &opencl_device_interface);
+    return (uintptr_t)buf->device;
 }
 
 WEAK const struct halide_device_interface *halide_opencl_device_interface() {

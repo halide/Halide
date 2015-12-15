@@ -15,19 +15,30 @@ void ImageBase::prepare_for_direct_pixel_access() {
     buffer.set_host_dirty(true);
 
     if (buffer.defined()) {
+        // Cache some of the things we need to do to get efficient
+        // (low-dimensional) pixel access.
         origin = buffer.host_ptr();
-        stride_0 = buffer.stride(0);
-        stride_1 = buffer.stride(1);
-        stride_2 = buffer.stride(2);
-        stride_3 = buffer.stride(3);
+        ssize_t offset = 0;
+        if (buffer.dimensions() > 0) {
+            stride_0 = buffer.dim(0).stride();
+            offset += buffer.dim(0).min() * stride_0;
+        }
+        if (buffer.dimensions() > 1) {
+            stride_1 = buffer.dim(1).stride();
+            offset += buffer.dim(1).min() * stride_1;
+        }
+        if (buffer.dimensions() > 2) {
+            stride_2 = buffer.dim(2).stride();
+            offset += buffer.dim(2).min() * stride_2;
+        }
+        if (buffer.dimensions() > 3) {
+            stride_3 = buffer.dim(3).stride();
+            offset += buffer.dim(3).min() * stride_3;
+        }
         elem_size = buffer.type().bytes();
+        offset *= elem_size;
         // The host pointer points to the mins vec, but we want to
         // point to the origin of the coordinate system.
-        size_t offset = (buffer.min(0) * stride_0 +
-                         buffer.min(1) * stride_1 +
-                         buffer.min(2) * stride_2 +
-                         buffer.min(3) * stride_3);
-        offset *= elem_size;
         origin = (void *)((uint8_t *)origin - offset);
         dims = buffer.dimensions();
     } else {
@@ -76,8 +87,8 @@ std::string make_image_name(const std::string &name, ImageBase *im) {
 }
 }
 
-ImageBase::ImageBase(Type t, int x, int y, int z, int w, const std::string &name) :
-    buffer(Buffer(t, x, y, z, w, NULL, make_image_name(name, this))) {
+ImageBase::ImageBase(Type t, const std::vector<int> &size, const std::string &name) :
+    buffer(Buffer(t, size, NULL, make_image_name(name, this))) {
     prepare_for_direct_pixel_access();
 }
 
@@ -99,8 +110,13 @@ ImageBase::ImageBase(Type t, const Realization &r) : buffer(r) {
     prepare_for_direct_pixel_access();
 }
 
-ImageBase::ImageBase(Type t, const buffer_t *b, const std::string &name) :
-    buffer(t, b, make_image_name(name, this)) {
+ImageBase::ImageBase(Type t, const halide_buffer_t *b, const std::string &name) :
+    buffer(b, make_image_name(name, this)) {
+    if (t != buffer.type()) {
+        user_error << "Can't construct Image of type " << t
+                   << " from halide_buffer_t of type "
+                   << Type(b->type) << '\n';
+    }
     prepare_for_direct_pixel_access();
 }
 
@@ -124,73 +140,50 @@ int ImageBase::dimensions() const {
     return dims;
 }
 
-int ImageBase::extent(int dim) const {
-    user_assert(defined()) << "extent of undefined Image\n";
-    user_assert(dim >= 0 && dim < dims)
-        << "Requested extent of dimension " << dim
-        << " in " << dims << "-dimensional Image \""
-        << buffer.name() << "\".\n";
-    return buffer.extent(dim);
+Buffer::Dimension ImageBase::dim(int idx) const {
+    return buffer.dim(idx);
 }
 
-int ImageBase::min(int dim) const {
-    user_assert(defined()) << "min of undefined Image\n";
-    user_assert(dim >= 0 && dim < dims)
-        << "Requested min of dimension " << dim
-        << " in " << dims << "-dimensional Image \""
-        << buffer.name() << "\".\n";
-    return buffer.min(dim);
-}
-
-void ImageBase::set_min(int m0, int m1, int m2, int m3) {
+void ImageBase::set_min(const std::vector<int> &m) {
     user_assert(defined()) << "set_min of undefined Image\n";
-    buffer.set_min(m0, m1, m2, m3);
+    buffer.set_min(m);
     // Move the origin
     prepare_for_direct_pixel_access();
 }
 
-int ImageBase::stride(int dim) const {
-    user_assert(defined()) << "stride of undefined Image\n";
-    user_assert(dim >= 0 && dim < dims)
-        << "Requested stride of dimension " << dim
-        << " in " << dims << "-dimensional Image \""
-        << buffer.name() << "\".\n";
-    return buffer.stride(dim);
-}
-
 int ImageBase::width() const {
     if (dimensions() < 1) return 1;
-    return extent(0);
+    return dim(0).extent();
 }
 
 int ImageBase::height() const {
     if (dimensions() < 2) return 1;
-    return extent(1);
+    return dim(1).extent();
 }
 
 int ImageBase::channels() const {
     if (dimensions() < 3) return 1;
-    return extent(2);
+    return dim(2).extent();
 }
 
 int ImageBase::left() const {
     if (dimensions() < 1) return 0;
-    return min(0);
+    return dim(0).min();
 }
 
 int ImageBase::right() const {
     if (dimensions() < 1) return 0;
-    return min(0) + extent(0) - 1;
+    return dim(0).max();
 }
 
 int ImageBase::top() const {
     if (dimensions() < 2) return 0;
-    return min(1);
+    return dim(1).min();
 }
 
 int ImageBase::bottom() const {
     if (dimensions() < 2) return 0;
-    return min(1) + extent(1) - 1;
+    return dim(1).max();
 }
 
 Expr ImageBase::operator()() const {
@@ -272,7 +265,7 @@ Expr ImageBase::operator()(std::vector<Var> args_passed) const {
     return Internal::Call::make(buffer, args);
 }
 
-buffer_t *ImageBase::raw_buffer() const {
+halide_buffer_t *ImageBase::raw_buffer() const {
     return buffer.raw_buffer();
 }
 

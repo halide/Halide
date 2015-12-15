@@ -17,16 +17,20 @@ struct ParameterContents {
     std::string name;
     Buffer buffer;
     uint64_t data;
-    Expr min_constraint[4];
-    Expr extent_constraint[4];
-    Expr stride_constraint[4];
+    std::vector<Expr> min_constraint;
+    std::vector<Expr> extent_constraint;
+    std::vector<Expr> stride_constraint;
     Expr min_value, max_value;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r), name(n), buffer(Buffer()), data(0) {
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r),
+          name(n), buffer(Buffer()), data(0),
+          min_constraint(d), extent_constraint(d), stride_constraint(d) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
-        stride_constraint[0] = 1;
+        if (d > 0) {
+            stride_constraint[0] = 1;
+        }
     }
 };
 

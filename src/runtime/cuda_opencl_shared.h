@@ -8,10 +8,10 @@ namespace Halide { namespace Runtime { namespace Internal {
 // Compute the total amount of memory we'd need to allocate on gpu to
 // represent a given buffer (using the same strides as the host
 // allocation).
-WEAK size_t buf_size(void *user_context, buffer_t *buf) {
-    size_t size = buf->elem_size;
-    for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
-        size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
+WEAK size_t buf_size(void *user_context, halide_buffer_t *buf) {
+    size_t size = buf->type.bytes();
+    for (int i = 0; i < buf->dimensions; i++) {
+        size_t total_dim_size = buf->type.bytes() * buf->dim[i].extent * buf->dim[i].stride;
         if (total_dim_size > size) {
             size = total_dim_size;
         }
@@ -21,16 +21,16 @@ WEAK size_t buf_size(void *user_context, buffer_t *buf) {
 }
 
 // A host <-> dev copy should be done with the fewest possible number
-// of contiguous copies to minimize driver overhead. If our buffer_t
-// has strides larger than its extents (e.g. because it represents a
-// sub-region of a larger buffer_t) we can't safely copy it back and
-// forth using a single contiguous copy, because we'd clobber
-// in-between values that another thread might be using.  In the best
-// case we can do a single contiguous copy, but in the worst case we
-// need to individually copy over every pixel.
+// of contiguous copies to minimize driver overhead. If our
+// halide_buffer_t has strides larger than its extents (e.g. because
+// it represents a sub-region of a larger halide_buffer_t) we can't
+// safely copy it back and forth using a single contiguous copy,
+// because we'd clobber in-between values that another thread might be
+// using.  In the best case we can do a single contiguous copy, but in
+// the worst case we need to individually copy over every pixel.
 //
 // This problem is made extra difficult by the fact that the ordering
-// of the dimensions in a buffer_t doesn't relate to memory layout at
+// of the dimensions in a halide_buffer_t doesn't relate to memory layout at
 // all, so the strides could be in any order.
 //
 // We solve it by representing a copy job we need to perform as a
@@ -40,7 +40,7 @@ WEAK size_t buf_size(void *user_context, buffer_t *buf) {
 // be coalesced into a single larger copy.
 
 // The struct that describes a host <-> dev copy to perform.
-#define MAX_COPY_DIMS 4
+#define MAX_COPY_DIMS 16
 struct device_copy {
     uint64_t src, dst;
     // The multidimensional array of contiguous copy tasks that need to be done.
@@ -51,18 +51,24 @@ struct device_copy {
     uint64_t chunk_size;
 };
 
-WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
+WEAK device_copy make_host_to_device_copy(const halide_buffer_t *buf) {
     // Make a copy job representing copying the first pixel only.
     device_copy c;
     c.src = (uint64_t)buf->host;
-    c.dst = halide_get_device_handle(buf->dev);
-    c.chunk_size = buf->elem_size;
+    c.dst = buf->device;
+    c.chunk_size = buf->type.bytes();
     for (int i = 0; i < MAX_COPY_DIMS; i++) {
         c.extent[i] = 1;
         c.stride_bytes[i] = 0;
     }
 
-    if (buf->elem_size == 0) {
+    if (buf->dimensions <= MAX_COPY_DIMS) {
+        // This condition should also be checked for outside this fn.
+        device_copy zero = {0};
+        return zero;
+    }
+
+    if (buf->type.bits == 0) {
         // This buffer apparently represents no memory. Return a zero'd copy
         // task.
         device_copy zero = {0};
@@ -70,11 +76,12 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     }
 
     // Now expand it to copy all the pixels (one at a time) by taking
-    // the extents and strides from the buffer_t. Dimensions are added
-    // to the copy by inserting it s.t. the stride is in ascending order.
-    for (int i = 0; i < 4 && buf->extent[i]; i++) {
+    // the extents and strides from the halide_buffer_t. Dimensions
+    // are added to the copy by inserting it such that the stride is
+    // in ascending order.
+    for (int i = 0; i < buf->dimensions; i++) {
         // TODO: deal with negative strides.
-        uint64_t stride_bytes = buf->stride[i] * buf->elem_size;
+        uint64_t stride_bytes = buf->dim[i].stride * buf->type.bytes();
         // Insert the dimension sorted into the buffer copy.
         int insert;
         for (insert = 0; insert < i; insert++) {
@@ -89,7 +96,7 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
             c.stride_bytes[j] = c.stride_bytes[j - 1];
         }
         // If the stride is 0, only copy it once.
-        c.extent[insert] = stride_bytes != 0 ? buf->extent[i] : 1;
+        c.extent[insert] = stride_bytes != 0 ? buf->dim[i].extent : 1;
         c.stride_bytes[insert] = stride_bytes;
     };
 
@@ -113,7 +120,7 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     return c;
 }
 
-WEAK device_copy make_device_to_host_copy(const buffer_t *buf) {
+WEAK device_copy make_device_to_host_copy(const halide_buffer_t *buf) {
     // Just make a host to dev copy and swap src and dst
     device_copy c = make_host_to_device_copy(buf);
     uint64_t tmp = c.src;

@@ -15,7 +15,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 #define CACHE_DEBUGGING 0
 
 #if CACHE_DEBUGGING
-WEAK void debug_print_buffer(void *user_context, const char *buf_name, const buffer_t &buf) {
+WEAK void debug_print_buffer(void *user_context, const char *buf_name, const halide_buffer_t &buf) {
     debug(user_context) << buf_name
                         << ": elem_size " << buf.elem_size << ", "
                         << "(" << buf.min[0] << ", " << buf.extent[0] << ", " << buf.stride[0] << ") "
@@ -58,18 +58,18 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
 }
 #endif
 
-WEAK size_t full_extent(const buffer_t &buf) {
+WEAK size_t full_extent(const halide_buffer_t &buf) {
     size_t result = 1;
-    for (int i = 0; i < 4; i++) {
-        int32_t stride = buf.stride[i];
+    for (int i = 0; i < buf.dimensions; i++) {
+        int32_t stride = buf.dim[i].stride;
         size_t positive_stride;
         if (stride < 0) {
-            positive_stride = (size_t)-stride;
+            positive_stride = (size_t)(-stride);
         } else {
             positive_stride = (size_t)stride;
         }
-        if ((buf.extent[i] * positive_stride) > result) {
-            result = buf.extent[i] * positive_stride;
+        if ((buf.dim[i].extent * positive_stride) > result) {
+            result = buf.dim[i].extent * positive_stride;
         }
     }
     return result;
@@ -79,13 +79,14 @@ WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) 
     return memcmp(key1, key2, key_size) == 0;
 }
 
-WEAK bool bounds_equal(const buffer_t &buf1, const buffer_t &buf2) {
-    if (buf1.elem_size != buf2.elem_size)
+WEAK bool bounds_equal(const halide_buffer_t &buf1, const halide_buffer_t &buf2) {
+    if (buf1.type != buf2.type) {
         return false;
-    for (size_t i = 0; i < 4; i++) {
-        if (buf1.min[i] != buf2.min[i] ||
-            buf1.extent[i] != buf2.extent[i] ||
-            buf1.stride[i] != buf2.stride[i]) {
+    }
+    for (int i = 0; i < buf1.dimensions; i++) {
+        if (buf1.dim[i].min    != buf2.dim[i].min ||
+            buf1.dim[i].extent != buf2.dim[i].extent ||
+            buf1.dim[i].stride != buf2.dim[i].stride) {
             return false;
         }
     }
@@ -111,21 +112,22 @@ struct CacheEntry {
     uint32_t hash;
     uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
     uint32_t tuple_count;
-    buffer_t computed_bounds;
-    buffer_t buf[1];
-    // ADDITIONAL buffer_t STRUCTS HERE
+    // TODO: What about >8 dimensions
+    halide_buffer_t computed_bounds;
+    halide_buffer_t buf[1];
+    // ADDITIONAL halide_buffer_t STRUCTS HERE
 
     bool init(const uint8_t *cache_key, size_t cache_key_size,
-              uint32_t key_hash, const buffer_t &computed_buf,
-              int32_t tuples, buffer_t **tuple_buffers);
+              uint32_t key_hash, const halide_buffer_t &computed_buf,
+              int32_t tuples, halide_buffer_t **tuple_buffers);
     void destroy();
-    buffer_t &buffer(int32_t i);
+    halide_buffer_t &buffer(int32_t i);
 
 };
 
 WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
-                           uint32_t key_hash, const buffer_t &computed_buf,
-                           int32_t tuples, buffer_t **tuple_buffers) {
+                           uint32_t key_hash, const halide_buffer_t &computed_buf,
+                           int32_t tuples, halide_buffer_t **tuple_buffers) {
     next = NULL;
     more_recent = NULL;
     less_recent = NULL;
@@ -140,7 +142,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     }
     computed_bounds = computed_buf;
     computed_bounds.host = NULL;
-    computed_bounds.dev = 0;
+    computed_bounds.device = 0;
     for (size_t i = 0; i < key_size; i++) {
         key[i] = cache_key[i];
     }
@@ -158,8 +160,8 @@ WEAK void CacheEntry::destroy() {
     }
 }
 
-WEAK buffer_t &CacheEntry::buffer(int32_t i) {
-    buffer_t *buf_ptr = &buf[0];
+WEAK halide_buffer_t &CacheEntry::buffer(int32_t i) {
+    halide_buffer_t *buf_ptr = &buf[0];
     return buf_ptr[i];
 }
 
@@ -239,7 +241,7 @@ WEAK void prune_cache() {
     while (current_cache_size > max_cache_size &&
            prune_candidate != NULL) {
         CacheEntry *more_recent = prune_candidate->more_recent;
-        
+
         if (prune_candidate->in_use_count == 0) {
             uint32_t h = prune_candidate->hash;
             uint32_t index = h % kHashTableSize;
@@ -305,7 +307,7 @@ WEAK void halide_memoization_cache_set_size(int64_t size) {
 }
 
 WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                         buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
+                                         halide_buffer_t *computed_bounds, int32_t tuple_count, halide_buffer_t **tuple_buffers) {
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -318,7 +320,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
     {
         for (int32_t i = 0; i < tuple_count; i++) {
-            buffer_t *buf = tuple_buffers[i];
+            halide_buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
     }
@@ -335,7 +337,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
             {
                 for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
-                    buffer_t *buf = tuple_buffers[i];
+                    halide_buffer_t *buf = tuple_buffers[i];
                     all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
                 }
             }
@@ -361,7 +363,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
                 }
 
                 for (int32_t i = 0; i < tuple_count; i++) {
-                    buffer_t *buf = tuple_buffers[i];
+                    halide_buffer_t *buf = tuple_buffers[i];
                     *buf = entry->buffer(i);
                 }
 
@@ -374,11 +376,11 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
     }
 
     for (int32_t i = 0; i < tuple_count; i++) {
-        buffer_t *buf = tuple_buffers[i];
+        halide_buffer_t *buf = tuple_buffers[i];
         size_t buffer_size = full_extent(*buf);
 
         // See documentation on extra_bytes_host_bytes
-        buf->host = ((uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size + extra_bytes_host_bytes));
+        buf->host = ((uint8_t *)halide_malloc(user_context, buffer_size * buf->type.bytes() + extra_bytes_host_bytes));
         if (buf->host == NULL) {
             for (int32_t j = i; j > 0; j--) {
                 halide_free(user_context, tuple_buffers[j - 1]->host  - extra_bytes_host_bytes);
@@ -398,7 +400,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 }
 
 WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                        buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
+                                        halide_buffer_t *computed_bounds, int32_t tuple_count, halide_buffer_t **tuple_buffers) {
     debug(user_context) << "halide_memoization_cache_store\n";
 
     uint32_t h = *(uint32_t *)(tuple_buffers[0]->host - extra_bytes_host_bytes);
@@ -413,7 +415,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 
     {
         for (int32_t i = 0; i < tuple_count; i++) {
-            buffer_t *buf = tuple_buffers[i];
+            halide_buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
     }
@@ -430,7 +432,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
             bool no_host_pointers_equal = true;
             {
                 for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
-                    buffer_t *buf = tuple_buffers[i];
+                    halide_buffer_t *buf = tuple_buffers[i];
                     all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
                     if (entry->buffer(i).host == buf->host) {
                         no_host_pointers_equal = false;
@@ -453,14 +455,15 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     uint64_t added_size = 0;
     {
         for (int32_t i = 0; i < tuple_count; i++) {
-            buffer_t *buf = tuple_buffers[i];
+            halide_buffer_t *buf = tuple_buffers[i];
             added_size += full_extent(*buf);
         }
     }
     current_cache_size += added_size;
     prune_cache();
 
-    void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
+    // TODO: What about dimensionalities > 8
+    void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + sizeof(halide_buffer_t) * (tuple_count - 1));
     if (entry_storage == NULL) {
         current_cache_size -= added_size;
 

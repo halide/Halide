@@ -47,13 +47,14 @@ void halide_device_release(void *user_context, const halide_device_interface *de
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
-int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
+int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_host\n";
     // Skip if there is no device buffer.
-    if (buf->dev == 0)
+    if (buf->device == 0) {
         return 0;
+    }
     Target target(get_host_target());
-    int (*fn)(void *user_context, struct buffer_t *buf);
+    int (*fn)(void *user_context, struct halide_buffer_t *buf);
     if (lookup_runtime_routine("halide_copy_to_host", target, fn)) {
         return (*fn)(user_context, buf);
     }
@@ -66,11 +67,11 @@ int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
  * field, the device associated with the dev handle will be
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
-int halide_copy_to_device(void *user_context, struct buffer_t *buf,
+int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                           const halide_device_interface *device_interface) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_device\n";
     Target target(get_host_target());
-    int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
+    int (*fn)(void *user_context, struct halide_buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_copy_to_device", target, fn)) {
       return (*fn)(user_context, buf, device_interface);
     }
@@ -79,38 +80,38 @@ int halide_copy_to_device(void *user_context, struct buffer_t *buf,
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-int halide_device_sync(void *user_context, struct buffer_t *buf) {
+int halide_device_sync(void *user_context, struct halide_buffer_t *buf) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_sync\n";
     Target target(get_host_target());
-    int (*fn)(void *user_context, struct buffer_t *buf);
+    int (*fn)(void *user_context, struct halide_buffer_t *buf);
     if (lookup_runtime_routine("halide_device_sync", target, fn)) {
       return (*fn)(user_context, buf);
     }
     return -1;
 }
 
-/** Allocate device memory to back a buffer_t. */
-int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
+/** Allocate device memory to back a halide_buffer_t. */
+int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const halide_device_interface *device_interface) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_malloc\n";
     Target target(get_host_target());
-    int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
+    int (*fn)(void *user_context, struct halide_buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_device_malloc", target, fn)) {
       return (*fn)(user_context, buf, device_interface);
     }
     return -1;
 }
 
-int halide_device_free(void *user_context, struct buffer_t *buf) {
+int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
     user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_free\n";
     // Skip if there is no device buffer.
-    if (buf->dev == 0)
+    if (buf->device == 0)
         return 0;
     Target target(get_host_target());
-    int (*fn)(void *user_context, struct buffer_t *buf);
+    int (*fn)(void *user_context, struct halide_buffer_t *buf);
     if (lookup_runtime_routine("halide_device_free", target, fn)) {
         return (*fn)(user_context, buf);
     }
-    if (buf->dev != 0) {
+    if (buf->device != 0) {
         return -1;
     } else {
         return 0;

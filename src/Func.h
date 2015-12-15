@@ -439,7 +439,7 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
+    EXPORT void infer_input_bounds(const std::vector<int> &sizes);
     EXPORT void infer_input_bounds(Realization dst);
     EXPORT void infer_input_bounds(Buffer dst);
     // @}

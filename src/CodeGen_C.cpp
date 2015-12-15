@@ -33,6 +33,7 @@ const string buffer_t_definition =
     "#define BUFFER_T_DEFINED\n"
     "#include <stdbool.h>\n"
     "#include <stdint.h>\n"
+    // TODO: change this to halide_buffer_t
     "typedef struct buffer_t {\n"
     "    uint64_t dev;\n"
     "    uint8_t* host;\n"
@@ -157,18 +158,18 @@ const string globals =
     "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
     "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
     "                           int32_t min3, int32_t extent3, int32_t stride3) {\n"
-    " b->min[0] = min0;\n"
-    " b->min[1] = min1;\n"
-    " b->min[2] = min2;\n"
-    " b->min[3] = min3;\n"
-    " b->extent[0] = extent0;\n"
-    " b->extent[1] = extent1;\n"
-    " b->extent[2] = extent2;\n"
-    " b->extent[3] = extent3;\n"
-    " b->stride[0] = stride0;\n"
-    " b->stride[1] = stride1;\n"
-    " b->stride[2] = stride2;\n"
-    " b->stride[3] = stride3;\n"
+    " b->dim[0].min = min0;\n"
+    " b->dim[1].min = min1;\n"
+    " b->dim[2].min = min2;\n"
+    " b->dim[3].min = min3;\n"
+    " b->dim[0].extent = extent0;\n"
+    " b->dim[1].extent = extent1;\n"
+    " b->dim[2].extent = extent2;\n"
+    " b->dim[3].extent = extent3;\n"
+    " b->dim[0].stride = stride0;\n"
+    " b->dim[1].stride = stride1;\n"
+    " b->dim[2].stride = stride2;\n"
+    " b->dim[3].stride = stride3;\n"
     " return true;\n"
     "}\n";
 }
@@ -404,7 +405,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // Unpack the buffer_t's
         for (size_t i = 0; i < args.size(); i++) {
             if (args[i].is_buffer()) {
-                push_buffer(args[i].type, args[i].name);
+                push_buffer(args[i].type, args[i].dimensions, args[i].name);
             }
         }
         // Emit the body
@@ -442,17 +443,17 @@ void CodeGen_C::compile(const Buffer &buffer) {
     }
 
     string name = print_name(buffer.name());
-    buffer_t b = *(buffer.raw_buffer());
+    halide_buffer_t b = *(buffer.raw_buffer());
 
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
-    for (int d = 0; b.extent[d]; d++) {
-        num_elems += b.stride[d] * (b.extent[d] - 1);
+    for (int d = 0; b.dim[d].extent; d++) {
+        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
     }
 
     // Emit the data
     stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
-    for (size_t i = 0; i < num_elems * b.elem_size; i++) {
+    for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
         if (i > 0) stream << ", ";
         stream << (int)(b.host[i]);
     }
@@ -460,14 +461,14 @@ void CodeGen_C::compile(const Buffer &buffer) {
 
     // Emit the buffer_t
     user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
-    user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
+    user_assert(!b.device_dirty()) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
     stream << "static buffer_t " << name << "_buffer = {"
            << "0, " // dev
            << "&" << name << "_data[0], " // host
-           << "{" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "}, "
-           << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
-           << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
-           << b.elem_size << ", "
+           << "{" << b.dim[0].extent << ", " << b.dim[1].extent << ", " << b.dim[2].extent << ", " << b.dim[3].extent << "}, "
+           << "{" << b.dim[0].stride << ", " << b.dim[1].stride << ", " << b.dim[2].stride << ", " << b.dim[3].stride << "}, "
+           << "{" << b.dim[0].min << ", " << b.dim[1].min << ", " << b.dim[2].min << ", " << b.dim[3].min << "}, "
+           << b.type.bytes() << ", "
            << "0, " // host_dirty
            << "0};\n"; //dev_dirty
 
@@ -475,7 +476,7 @@ void CodeGen_C::compile(const Buffer &buffer) {
     stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
 }
 
-void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
+void CodeGen_C::push_buffer(Type t, int dims, const std::string &buffer_name) {
     string name = print_name(buffer_name);
     string buf_name = name + "_buffer";
     string type = print_type(t);
@@ -503,34 +504,34 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
     do_indent();
     stream << "(void)" << name << "_host_and_dev_are_null;\n";
 
-    for (int j = 0; j < 4; j++) {
+    for (int j = 0; j < dims; j++) {
         do_indent();
         stream << "const int32_t "
                << name
                << "_min_" << j << " = "
                << buf_name
-               << "->min[" << j << "];\n";
+               << "->dim[" << j << "].min;\n";
         // emit a void cast to suppress "unused variable" warnings
         do_indent();
         stream << "(void)" << name << "_min_" << j << ";\n";
     }
-    for (int j = 0; j < 4; j++) {
+    for (int j = 0; j < dims; j++) {
         do_indent();
         stream << "const int32_t "
                << name
                << "_extent_" << j << " = "
                << buf_name
-               << "->extent[" << j << "];\n";
+               << "->dim[" << j << "].extent;\n";
         do_indent();
         stream << "(void)" << name << "_extent_" << j << ";\n";
     }
-    for (int j = 0; j < 4; j++) {
+    for (int j = 0; j < dims; j++) {
         do_indent();
         stream << "const int32_t "
                << name
                << "_stride_" << j << " = "
                << buf_name
-               << "->stride[" << j << "];\n";
+               << "->dim[" << j << "].stride;\n";
         do_indent();
         stream << "(void)" << name << "_stride_" << j << ";\n";
     }
@@ -829,7 +830,7 @@ void CodeGen_C::visit(const Call *op) {
             int dims = ((int)(op->args.size())-2)/3;
             (void)dims; // In case internal_assert is ifdef'd to do nothing
             internal_assert((int)(op->args.size()) == dims*3 + 2);
-            internal_assert(dims <= 4);
+            internal_assert(dims <= 8);
             vector<string> args(op->args.size());
             const Variable *v = op->args[0].as<Variable>();
             internal_assert(v);
@@ -1433,30 +1434,24 @@ void CodeGen_C::test() {
         " (void)_buf;\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
         " (void)_buf_host_and_dev_are_null;\n"
-        " const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
+        " const int32_t _buf_min_0 = _buf_buffer->dim[0].min;\n"
         " (void)_buf_min_0;\n"
-        " const int32_t _buf_min_1 = _buf_buffer->min[1];\n"
+        " const int32_t _buf_min_1 = _buf_buffer->dim[1].min;\n"
         " (void)_buf_min_1;\n"
-        " const int32_t _buf_min_2 = _buf_buffer->min[2];\n"
+        " const int32_t _buf_min_2 = _buf_buffer->dim[2].min;\n"
         " (void)_buf_min_2;\n"
-        " const int32_t _buf_min_3 = _buf_buffer->min[3];\n"
-        " (void)_buf_min_3;\n"
-        " const int32_t _buf_extent_0 = _buf_buffer->extent[0];\n"
+        " const int32_t _buf_extent_0 = _buf_buffer->dim[0].extent;\n"
         " (void)_buf_extent_0;\n"
-        " const int32_t _buf_extent_1 = _buf_buffer->extent[1];\n"
+        " const int32_t _buf_extent_1 = _buf_buffer->dim[1].extent;\n"
         " (void)_buf_extent_1;\n"
-        " const int32_t _buf_extent_2 = _buf_buffer->extent[2];\n"
+        " const int32_t _buf_extent_2 = _buf_buffer->dim[2].extent;\n"
         " (void)_buf_extent_2;\n"
-        " const int32_t _buf_extent_3 = _buf_buffer->extent[3];\n"
-        " (void)_buf_extent_3;\n"
-        " const int32_t _buf_stride_0 = _buf_buffer->stride[0];\n"
+        " const int32_t _buf_stride_0 = _buf_buffer->dim[0].stride;\n"
         " (void)_buf_stride_0;\n"
-        " const int32_t _buf_stride_1 = _buf_buffer->stride[1];\n"
+        " const int32_t _buf_stride_1 = _buf_buffer->dim[1].stride;\n"
         " (void)_buf_stride_1;\n"
-        " const int32_t _buf_stride_2 = _buf_buffer->stride[2];\n"
+        " const int32_t _buf_stride_2 = _buf_buffer->dim[2].stride;\n"
         " (void)_buf_stride_2;\n"
-        " const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
-        " (void)_buf_stride_3;\n"
         " const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
         " (void)_buf_elem_size;\n"
         " {\n"

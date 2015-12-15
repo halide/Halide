@@ -250,11 +250,12 @@ WEAK int halide_matlab_init(void *user_context) {
     return halide_error_code_success;
 }
 
-// Convert a matlab mxArray to a Halide buffer_t, with a specific number of dimensions.
-WEAK int halide_matlab_array_to_buffer_t(void *user_context,
-                                         const mxArray *arr, const halide_filter_argument_t *arg,
-                                         buffer_t *buf) {
-    memset(buf, 0, sizeof(buffer_t));
+// Convert a matlab mxArray to a Halide halide_buffer_t, with a specific number of dimensions.
+WEAK int halide_matlab_array_to_halide_buffer_t(void *user_context,
+                                                const mxArray *arr,
+                                                const halide_filter_argument_t *arg,
+                                                halide_buffer_t *buf) {
+    memset(buf, 0, sizeof(halide_buffer_t));
 
     if (mxIsComplex(arr)) {
         error(user_context) << "Complex argument not supported for parameter " << arg->name << ".\n";
@@ -263,6 +264,8 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
 
     int dim_count = get_number_of_dimensions(arr);
     int expected_dims = arg->dimensions;
+
+
 
     // Validate that the data type of a buffer matches exactly.
     mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
@@ -289,23 +292,24 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     }
 
     buf->host = (uint8_t *)mxGetData(arr);
-    buf->elem_size = mxGetElementSize(arr);
+    buf->type = halide_type_t(halide_type_code_t(arg->type_code), arg->type_bits);
+    buf->dimensions = arg->dimensions;
 
     for (int i = 0; i < dim_count && i < expected_dims; i++) {
-        buf->extent[i] = static_cast<int32_t>(get_dimension(arr, i));
+        buf->dim[i].extent = static_cast<int32_t>(get_dimension(arr, i));
     }
 
     // Add back the dimensions with extent 1.
     for (int i = 2; i < expected_dims; i++) {
-        if (buf->extent[i] == 0) {
-            buf->extent[i] = 1;
+        if (buf->dim[i].extent == 0) {
+            buf->dim[i].extent = 1;
         }
     }
 
     // Compute dense strides.
-    buf->stride[0] = 1;
+    buf->dim[0].stride = 1;
     for (int i = 1; i < expected_dims; i++) {
-        buf->stride[i] = buf->extent[i - 1] * buf->stride[i - 1];
+        buf->dim[i].stride = buf->dim[i-1].extent * buf->dim[i-1].stride;
     }
 
     return halide_error_code_success;
@@ -413,8 +417,8 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
 
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
-            buffer_t *buf = (buffer_t *)__builtin_alloca(sizeof(buffer_t));
-            result = halide_matlab_array_to_buffer_t(user_context, arg, arg_metadata, buf);
+            halide_buffer_t *buf = (halide_buffer_t *)__builtin_alloca(sizeof(halide_buffer_t));
+            result = halide_matlab_array_to_halide_buffer_t(user_context, arg, arg_metadata, buf);
             if (result != 0) {
                 halide_matlab_note_pipeline_description(user_context, metadata);
                 return result;
@@ -440,7 +444,7 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
         const halide_filter_argument_t *arg_metadata = &metadata->arguments[i];
 
         if (arg_metadata->kind == halide_argument_kind_output_buffer) {
-            buffer_t *buf = (buffer_t *)args[i];
+            halide_buffer_t *buf = (halide_buffer_t *)args[i];
             halide_copy_to_host(user_context, buf);
         }
     }

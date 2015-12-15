@@ -20,7 +20,7 @@ protected:
     /** The underlying memory object */
     Buffer buffer;
 
-    /** The address of the zero coordinate. The buffer_t stores the
+    /** The address of the zero coordinate. The halide_buffer_t stores the
      * address of the min coordinate, but it's easier to index off the
      * zero coordinate. */
     void *origin;
@@ -51,7 +51,7 @@ public:
     ImageBase() : origin(NULL), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
 
     /** Allocate an image with the given dimensions. */
-    EXPORT ImageBase(Type t, int x, int y = 0, int z = 0, int w = 0, const std::string &name = "");
+    EXPORT ImageBase(Type t, const std::vector<int> &size, const std::string &name = "");
 
     /** Wrap a buffer in an Image object, so that we can directly
      * access its pixels in a type-safe way. */
@@ -60,9 +60,9 @@ public:
     /** Wrap a single-element realization in an Image object. */
     EXPORT ImageBase(Type t, const Realization &r);
 
-    /** Wrap a buffer_t in an Image object, so that we can access its
+    /** Wrap a halide_buffer_t in an Image object, so that we can access its
      * pixels. */
-    EXPORT ImageBase(Type t, const buffer_t *b, const std::string &name = "");
+    EXPORT ImageBase(Type t, const halide_buffer_t *b, const std::string &name = "");
 
     /** Get the name of this image. */
     EXPORT const std::string &name();
@@ -85,23 +85,11 @@ public:
     /** Get the dimensionality of the data. Typically two for grayscale images, and three for color images. */
     EXPORT int dimensions() const;
 
-    /** Get the size of a dimension */
-    EXPORT int extent(int dim) const;
+    /** Get information about a single dimension of this image. */
+    EXPORT Buffer::Dimension dim(int i) const;
 
-    /** Get the min coordinate of a dimension. The top left of the
-     * image represents this point in a function that was realized
-     * into this image. */
-    EXPORT int min(int dim) const;
-
-    /** Set the min coordinates of a dimension. */
-    EXPORT void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0);
-
-    /** Get the number of elements in the buffer between two adjacent
-     * elements in the given dimension. For example, the stride in
-     * dimension 0 is usually 1, and the stride in dimension 1 is
-     * usually the extent of dimension 0. This is not necessarily true
-     * though. */
-    EXPORT int stride(int dim) const;
+    /** Set the coordinates of the top left of the image. */
+    EXPORT void set_min(const std::vector<int> &m);
 
     /** Get the extent of dimension 0, which by convention we use as
      * the width of the image. Unlike extent(0), returns one if the
@@ -151,10 +139,10 @@ public:
     EXPORT Expr operator()(std::vector<Var>) const;
     // @}
 
-    /** Get a pointer to the raw buffer_t that this image holds */
-    EXPORT buffer_t *raw_buffer() const;
+    /** Get a pointer to the raw halide_buffer_t that this image holds */
+    EXPORT halide_buffer_t *raw_buffer() const;
 
-    /** Get the address of a particular pixel. */
+    /** Get the address of a particular pixel in up to four dimensions. */
     void *address_of(int x, int y = 0, int z = 0, int w = 0) const {
         uint8_t *ptr = (uint8_t *)origin;
         size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
@@ -179,17 +167,17 @@ public:
 
     /** Allocate an image with the given dimensions. */
     // @{
-    NO_INLINE Image(int x, int y = 0, int z = 0, int w = 0, const std::string &name = "") :
-        ImageBase(type_of<T>(), x, y, z, w, name) {}
+    NO_INLINE Image(int x, int y, int z, int w, const std::string &name = "") :
+        ImageBase(type_of<T>(), {x, y, z, w}, name) {}
 
-    NO_INLINE Image(int x, int y, int z, const std::string &name) :
-        ImageBase(type_of<T>(), x, y, z, 0, name) {}
+    NO_INLINE Image(int x, int y, int z, const std::string &name = "") :
+        ImageBase(type_of<T>(), {x, y, z}, name) {}
 
-    NO_INLINE Image(int x, int y, const std::string &name) :
-        ImageBase(type_of<T>(), x, y, 0, 0, name) {}
+    NO_INLINE Image(int x, int y, const std::string &name = "") :
+        ImageBase(type_of<T>(), {x, y}, name) {}
 
-    NO_INLINE Image(int x, const std::string &name) :
-        ImageBase(type_of<T>(), x, 0, 0, 0, name) {}
+    NO_INLINE Image(int x, const std::string &name = "") :
+        ImageBase(type_of<T>(), {x}, name) {}
     // @}
 
     /** Wrap a buffer in an Image object, so that we can directly
@@ -199,9 +187,9 @@ public:
     /** Wrap a single-element realization in an Image object. */
     NO_INLINE Image(const Realization &r) : ImageBase(type_of<T>(), r) {}
 
-    /** Wrap a buffer_t in an Image object, so that we can access its
+    /** Wrap a halide_buffer_t in an Image object, so that we can access its
      * pixels. */
-    NO_INLINE Image(const buffer_t *b, const std::string &name = "") :
+    NO_INLINE Image(const halide_buffer_t *b, const std::string &name = "") :
         ImageBase(type_of<T>(), b, name) {}
 
     /** Get a pointer to the element at the min location. */

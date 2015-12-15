@@ -1518,33 +1518,26 @@ Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
-    user_assert(defined()) << "Can't realize undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
-    }
-    Realization r(outputs);
-    realize(r, target);
-    return r;
+    return realize({x_size, y_size, z_size, w_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
-    return realize(x_size, y_size, z_size, 0, target);
+    return realize({x_size, y_size, z_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, const Target &target) {
-    return realize(x_size, y_size, 0, 0, target);
+    return realize({x_size, y_size}, target);
 }
 
 Realization Func::realize(int x_size, const Target &target) {
-    return realize(x_size, 0, 0, 0, target);
+    return realize({x_size}, target);
 }
 
-void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+void Func::infer_input_bounds(const vector<int> &sizes) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
+        outputs[i] = Buffer(func.output_types()[i], sizes, (uint8_t *)1);
     }
     Realization r(outputs);
     infer_input_bounds(r);

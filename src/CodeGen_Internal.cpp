@@ -46,7 +46,7 @@ void Closure::visit(const Load *op) {
             ref.dimensions = op->image.dimensions();
             ref.size = 1;
             for (int i = 0; i < op->image.dimensions(); i++) {
-                ref.size += (op->image.extent(i) - 1)*op->image.stride(i);
+                ref.size += (op->image.dim(i).extent() - 1)*op->image.dim(i).stride();
             }
             ref.size *= op->image.type().bytes();
         }

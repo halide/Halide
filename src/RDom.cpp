@@ -103,8 +103,8 @@ RDom::RDom(Buffer b) {
     for (int i = 0; i < b.dimensions(); i++) {
         ReductionVariable var = {
             b.name() + "." + var_names[i],
-            b.min(i),
-            b.extent(i)
+            b.dim(i).min(),
+            b.dim(i).extent()
         };
         vars.push_back(var);
     }
@@ -119,8 +119,8 @@ RDom::RDom(ImageParam p) {
     for (int i = 0; i < p.dimensions(); i++) {
         ReductionVariable var = {
             p.name() + "." + var_names[i],
-            p.min(i),
-            p.extent(i)
+            p.dim(i).min(),
+            p.dim(i).extent()
         };
         vars.push_back(var);
     }
