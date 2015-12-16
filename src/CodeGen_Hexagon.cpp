@@ -1316,12 +1316,6 @@ CodeGen_Hexagon::handleLargeVectors(const Max *op) {
 llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
   debug(4) << "HexCG: " << op->type << ", handleLargeVectors (Mul)\n";
-
-  // FIXME: DJP: MUL avoid slice/shuffles when: (see sobel)
-  //   Unsupported type for vector multiply (uint16x128 * uint16x128 = uint16x128)
-  // when sliced results in shuffles and:
-  //   Unsupported type for vector multiply (uint16x64 * uint16x64 = uint16x64)
-  #define _EXCLu16x128  true
   #define _OP(a,b)  a * b
   #include "CodeGen_Hexagon_LV.h"
 }
