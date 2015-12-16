@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
     // We also report the seed to enable reproducing failures.
     int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(NULL);
     srand(fuzz_seed);
-    std::cout << "Simplify fuzz test seed: " << fuzz_seed << '\n';
+    std::cout << "Simplify fuzz test seed: " << fuzz_seed << std::endl;
 
     int max_fuzz_vector_width = 4;
 
