@@ -19,15 +19,14 @@ ARG12="1920 1080"
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=clang++
-LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
-INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
+LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 
 
 integrate.o integrate.h: integrate.cpp
 	${X86_CLANG} integrate.cpp -g  -o integrate.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./integrate.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./integrate.generate.out
 
 
 integrate_run.o: integrate.o integrate.h integrate_run.cpp
@@ -43,15 +42,13 @@ clean:
 
 assembly: integrate.cpp
 	${X86_CLANG} integrate.cpp -g -o integrate.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./integrate.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ;  ./integrate.generate.out
 
 .PHONY: bitcode
 
 bitcode: integrate.cpp
 	${X86_CLANG} integrate.cpp -g  -o integrate.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./integrate.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./integrate.generate.out
 
 .PHONY: all
 
@@ -96,8 +93,7 @@ run: integrate.out
 
 stmt: integrate.cpp
 	${X86_CLANG} integrate.cpp -g  -o integrate.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./integrate.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./integrate.generate.out
 
 .PHONY: synthetic
 

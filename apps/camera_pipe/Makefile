@@ -9,8 +9,7 @@ endif
 all: process
 
 camera_pipe: ../../ camera_pipe.cpp
-	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe -ldl -lpthread -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) camera_pipe.cpp -o camera_pipe -ldl -lpthread -lz $(LDFLAGS)
 
 curved.o: camera_pipe
 	${GDB} ./camera_pipe 8 ${SCHEDULE} # 8-bit output,

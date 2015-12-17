@@ -17,17 +17,15 @@ ARG12="1920 1080"
 GDB=
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=/pkg/qct/software/llvm/build_tools/llvm34_140306/bin/clang++
-LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib  -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
-#LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
-INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
+X86_CLANG=clang++
+LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 
 
 nv12torgb888.o nv12torgb888.h: nv12torgb888.cpp
 	${X86_CLANG} nv12torgb888.cpp -g  -o nv12torgb888.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	${GDB} ./nv12torgb888.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ${GDB} ./nv12torgb888.generate.out
 
 
 nv12torgb888_run.o: nv12torgb888.o nv12torgb888.h nv12torgb888_run.cpp
@@ -43,15 +41,13 @@ clean:
 
 assembly: nv12torgb888.cpp
 	${X86_CLANG} nv12torgb888.cpp -g -o nv12torgb888.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./nv12torgb888.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./nv12torgb888.generate.out
 
 .PHONY: bitcode
 
 bitcode: nv12torgb888.cpp
 	${X86_CLANG} nv12torgb888.cpp -g  -o nv12torgb888.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./nv12torgb888.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./nv12torgb888.generate.out
 
 .PHONY: all
 
@@ -96,8 +92,7 @@ run: nv12torgb888.out
 
 stmt: nv12torgb888.cpp
 	${X86_CLANG} nv12torgb888.cpp -g  -o nv12torgb888.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./nv12torgb888.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./nv12torgb888.generate.out
 
 .PHONY: synthetic
 

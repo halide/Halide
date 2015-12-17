@@ -1,21 +1,36 @@
 CURR_DIR = $(shell pwd)
 HALIDE_TOP = ${CURR_DIR}/../../../..
-CC=/pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
+# Vector Length
+ifeq (,$(LOG2VLEN))
+  LOG2VLEN:=7
+endif
+
+ifeq (7,$(LOG2VLEN))
+  MHVX:=-mhvx-double
+else
+  MHVX:=-mhvx
+endif
 
 TIMING=--timing
-CXXFLAGS="--std=c++11"
+CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=clang++
-LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl   -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
+TEST_NAME= $(shell basename ${CURR_DIR})
+B128_MODE=
+GDB=
+CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
+CXXFLAGS += ${EXTRA_FLAGS}
+HALIDE_FUNC_CFLAGS = -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 
 gaussian3x3.o gaussian3x3.h: gaussian3x3.cpp
-	${X86_CLANG} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DRUN -O0 ${INCLUDES} ${LDFLAGS}
+	${X86_CLANG} gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DRUN -O0 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 
 gaussian3x3_run.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
-	${HEX_TOOLS}/bin/hexagon-clang++ -c gaussian3x3_run.cpp -mhvx -mv60 -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
+	${HEXAGON_CLANG} -c gaussian3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 gaussian3x3.out: gaussian3x3_run.o gaussian3x3.o gaussian3x3.h
 	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian3x3.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian3x3_run.o gaussian3x3.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
@@ -23,27 +38,39 @@ gaussian3x3.out: gaussian3x3_run.o gaussian3x3.o gaussian3x3.h
 all: gaussian3x3.out
 
 clean:
-	rm -rf *.o gaussian3x3.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result
+	rm -rf *.o gaussian5x5.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result run.std* pa_dump.core.0 stats_dump.v60.iss.0
 
 .PHONY: assembly
 
 assembly: gaussian3x3.cpp
-	${X86_CLANG} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DASSEMBLY -O0 ${INCLUDES} ${LDFLAGS}
+	${X86_CLANG}  gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DASSEMBLY -O0 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: bitcode
 
 bitcode: gaussian3x3.cpp
-	${X86_CLANG} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DBITCODE -O0 ${INCLUDES} ${LDFLAGS}
+	${X86_CLANG}  gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DBITCODE -O0 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
-.PHONY: all
+.PHONY: all run bmark-report
 
-all: gaussian3x3.out run
-
+all: gaussian3x3.out run bmark-report
+bmark-report:
+	if [ -e ${CURR_DIR}/run.stdout ]; then \
+		grep -q PASS ${CURR_DIR}/result; \
+		if [ $$? -eq 0 ];  then \
+			grep "cycles/pixel" ${CURR_DIR}/run.stdout | awk '{print $$6"("$$4"):",$$7 " cycles/pixel"}'; \
+		else \
+			echo "${TEST_NAME}: FAIL";\
+			exit 1; \
+		fi \
+	else \
+		echo "run.stdout not found; please run make run first"; \
+		exit 1; \
+	fi
 
 run: gaussian3x3.out
-	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.out ${TIMING} -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin; \
+	${HEX_TOOLS}/bin/hexagon-sim gaussian3x3.out ${TIMING} -- 1920 1080 ${HALIDE_TOP}/test/hexagon/apps/testvectors/football1920x1080.bin out.bin 1>${CURR_DIR}/run.stdout 2>${CURR_DIR}/run.stderr; \
 	RUN_STATUS=$$?; \
 	FAIL=0; \
 	if [ $$RUN_STATUS -ne 0 ]; then \
@@ -55,7 +82,7 @@ run: gaussian3x3.out
 	if [ $$FAIL -eq 0 ]; then \
           echo PASS > ${CURR_DIR}/result; \
 	  echo PASS; \
-        else \
+	else \
           echo FAIL > ${CURR_DIR}/result; \
 	  echo FAIL;\
 	  exit 1; \
@@ -68,6 +95,7 @@ run: gaussian3x3.out
 .PHONY: stmt
 
 stmt: gaussian3x3.cpp
+	${X86_CLANG} gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}
 	${X86_CLANG} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 

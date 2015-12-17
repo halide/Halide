@@ -15,15 +15,13 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     #else
     llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
     #endif
-
     #if LLVM_VERSION >= 37
-    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
+      llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
     #elif LLVM_VERSION >= 35
     llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get();
     #else
     llvm::Module *mod = llvm::ParseBitcodeFile(bitcode_buffer, *context);
     #endif
-
     #if LLVM_VERSION < 36
     delete bitcode_buffer;
     #endif
@@ -88,6 +86,7 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
+DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -380,6 +379,9 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     // llvm doesn't complain while combining them.
     for (size_t i = 0; i < modules.size(); i++) {
         #if LLVM_VERSION >= 37
+        //modules[i]->setDataLayout(*data_layout);
+        modules[i]->setDataLayout(data_layout);
+        #elif LLVM_VERSION >= 35
         modules[i]->setDataLayout(data_layout);
         #else
         modules[i]->setDataLayout(&data_layout);
@@ -391,14 +393,19 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     for (size_t i = 1; i < modules.size(); i++) {
         string err_msg;
         #if LLVM_VERSION >= 38
-        bool failed = llvm::Linker::linkModules(*modules[0], *modules[i],
-                                                [](const llvm::DiagnosticInfo &) {});
+        bool failed = llvm::Linker::linkModules(*modules[0], std::unique_ptr<llvm::Module>(modules[i]));
         #elif LLVM_VERSION >= 36
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
         #else
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
         #endif
+
+        // No matter which version about ran, we passed ownership of
+        // the second module to LLVM. modules[i] is now a dangling
+        // pointer. null it out so we don't accidentally use it.
+        modules[i] = nullptr;
+
         if (failed) {
             internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }
@@ -767,6 +774,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
         }
+    } else {
+        modules.push_back(get_initmod_nogpu(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {

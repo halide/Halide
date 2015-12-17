@@ -79,7 +79,10 @@ int main(int argc, char **argv) {
   // uses. For the 8-bit image we use in this test it's one.
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
-  SIM_ACQUIRE_HVX
+  SIM_ACQUIRE_HVX;
+#if LOG2VLEN == 7
+    SIM_SET_HVX_DOUBLE_MODE;
+#endif
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif
@@ -242,7 +245,10 @@ int main(int argc, char **argv) {
   // uses. For the 8-bit image we use in this test it's one.
   input1_buf.elem_size = 1; output_buf.elem_size = 1;
 
-  while (!SIM_ACQUIRE_HVX);
+  SIM_ACQUIRE_HVX;
+#if LOG2VLEN == 7
+    SIM_SET_HVX_DOUBLE_MODE;
+#endif
 #if DEBUG
   printf ("Acquired vector context\n");
 #endif
@@ -286,8 +292,10 @@ int main(int argc, char **argv) {
   free(input);
   free(output);
 
-#if defined(__hexagon__)
-    printf("AppReported (HVX64b-mode): Image %dx%d - median3x3: %0.4f cycles/pixel\n", (int)width, (int)height, (float)total_cycles/width/height);
+#if LOG2VLEN == 7
+    printf("AppReported (HVX128B-mode): Image %dx%d - gaussian3x3: %0.4f cycles/pixel\n", (int)width, (int)height, (float)total_cycles/width/height);
+#else
+    printf("AppReported (HVX64B-mode): Image %dx%d - gaussian3x3: %0.4f cycles/pixel\n", (int)width, (int)height, (float)total_cycles/width/height);
 #endif
     printf("Success!\n");
     return 0;
