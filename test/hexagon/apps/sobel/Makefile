@@ -15,15 +15,14 @@ TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} # -DTRACING -DSYNTHETIC
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=clang++
-LDFLAGS=-L/pkg/qct/software/llvm/build_tools/libc++_140306/lib -L/pkg/qct/software/llvm/build_tools/libedit_tw/lib -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -lc++ -Wl,--end-group
-INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1
+LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 
 
 sobel.o sobel.h: sobel.cpp
 	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./sobel.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./sobel.generate.out
 
 
 sobel_run.o: sobel.o sobel.h sobel_run.cpp
@@ -39,15 +38,13 @@ clean:
 
 assembly: sobel.cpp
 	${X86_CLANG} sobel.cpp -g -o sobel.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./sobel.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}  ; ./sobel.generate.out
 
 .PHONY: bitcode
 
 bitcode: sobel.cpp
 	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./sobel.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ;  ./sobel.generate.out
 
 .PHONY: all
 
@@ -92,8 +89,7 @@ run: sobel.out
 
 stmt: sobel.cpp
 	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
-	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}
-	./sobel.generate.out
+	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./sobel.generate.out
 
 .PHONY: synthetic
 

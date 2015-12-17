@@ -1,5 +1,4 @@
 HALIDE_TOP = $(shell pwd)/../../
-CC = /pkg/qct/software/gnu64/gcc/4.8.2/bin/g++
 CXXFLAGS = "--std=c++11"
 CLANG = hexagon-clang++
 
