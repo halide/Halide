@@ -247,6 +247,16 @@ struct Target {
         const bool is_avx2 = has_feature(Halide::Target::AVX2);
         const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
         const bool is_integer = t.is_int() || t.is_uint();
+        const int data_size = t.bits() / 8;
+
+        // HVX is either 64 or 128 byte vector size.
+        if (has_feature(Halide::Target::HVX_128)) {
+            user_warning << "128 Mode: natural vector size is " << 128/data_size << "\n";
+            return 128 / data_size;
+        } else if (has_feature(Halide::Target::HVX_64)) {
+            user_warning << "64 Mode: natural vector size is " << 64/data_size << "\n";
+            return 64 / data_size;
+        }
 
         // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
         // However, AVX has a very limited complement of integer instructions;
@@ -254,7 +264,6 @@ struct Target {
         // better performance. (AVX2 does have good integer operations for 256-bit
         // registers.)
         const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
-        const int data_size = t.bits() / 8;
         return vector_byte_size / data_size;
     }
 

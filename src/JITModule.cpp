@@ -274,7 +274,11 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     #if LLVM_VERSION >= 37
         TargetMachine *tm = engine_builder.selectTarget();
         #if LLVM_VERSION == 37
+        #ifdef NEWER
+            DataLayout target_data_layout(tm->createDataLayout());
+        #else
             DataLayout target_data_layout(*(tm->getDataLayout()));
+        #endif
         #else
             DataLayout target_data_layout(tm->createDataLayout());
         #endif

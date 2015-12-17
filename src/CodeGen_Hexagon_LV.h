@@ -4,11 +4,11 @@
 #endif
 
 //
-// Body of handleLargeVectors
+// Body of handleLargeVectors for 2 argument ops
 // #define _OP(a, b) accordingly and then include
 //
 // llvm::Value *
-// CodeGen_Hexagon::handleLargeVectors(const Add *op) {
+// CodeGen_Hexagon::handleLargeVectors2arg(const Add *op) {
   std::vector<Expr> Patterns;
   std::vector<Expr> matches;
   bool B128 = target.has_feature(Halide::Target::HVX_128);
@@ -47,25 +47,30 @@
       // 1. Slice the two operands into halves to get four operands
       std::vector<Expr> VectorRegisterPairsA;
       std::vector<Expr> VectorRegisterPairsB;
-      slice_into_halves(matches[0], VectorRegisterPairsA);
-      slice_into_halves(matches[1], VectorRegisterPairsB);
+      if (isDblVector(op->type, native_vector_bits())) {
+        getHighAndLowVectors(matches[0], VectorRegisterPairsA);
+        getHighAndLowVectors(matches[1], VectorRegisterPairsB);
+      } else {
+        slice_into_halves(matches[0], VectorRegisterPairsA);
+        slice_into_halves(matches[1], VectorRegisterPairsB);
+      }
 
       // 2. Operate on the halves
-      Expr A_low  = VectorRegisterPairsA[0];
-      Expr A_high = VectorRegisterPairsA[1];
-      Expr B_low  = VectorRegisterPairsB[0];
-      Expr B_high = VectorRegisterPairsB[1];
-      Value *EvenLanes = codegen(_OP(A_low, B_low));
-      Value *OddLanes = codegen(_OP(A_high, B_high));
+      Expr A_high = VectorRegisterPairsA[0];
+      Expr A_low  = VectorRegisterPairsA[1];
+      Expr B_high = VectorRegisterPairsB[0];
+      Expr B_low  = VectorRegisterPairsB[1];
+      Value *LowRes = codegen(_OP(A_low, B_low));
+      Value *HighRes = codegen(_OP(A_high, B_high));
 
       // 3. Combine the results
       Value *Result = NULL;
       if (isDblVector(op->type, native_vector_bits())) {
-        Result = concatVectors(OddLanes, EvenLanes);
+        Result = concatVectors(HighRes, LowRes);
       } else {
         std::vector<Value *>Ops;
-        Ops.push_back(EvenLanes);
-        Ops.push_back(OddLanes);
+        Ops.push_back(LowRes);
+        Ops.push_back(HighRes);
         Result = concat_vectors(Ops);
       }
       return convertValueType(Result, llvm_type_of(op->type));

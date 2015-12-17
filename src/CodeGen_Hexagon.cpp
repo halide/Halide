@@ -80,7 +80,7 @@ using namespace llvm;
             bool Invert = false) : pattern(p), ID(id), type(t),
                                    InvertOperands(Invert) {}
   };
-  std::vector<Pattern> casts, varith, averages, combiners, vbitwise, multiplies;
+  std::vector<Pattern> casts, typecasts, varith, averages, combiners, vbitwise, multiplies;
 
 namespace {
 Expr sat_h_ub(Expr A) {
@@ -168,6 +168,26 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   casts.push_back(Pattern(cast(Int(32, CPICK(64,32)),
                                WPICK(wild_i16x64,wild_i16x32)),
                           IPICK(Intrinsic::hexagon_V6_vsh)));
+
+  // same size typecasts
+  typecasts.push_back(Pattern(cast(Int(32, CPICK(32,16)),
+                               WPICK(wild_u32x32,wild_u32x16)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(Int(16, CPICK(64,32)),
+                               WPICK(wild_u16x64,wild_u16x32)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(Int(8, CPICK(128,64)),
+                               WPICK(wild_u8x128,wild_u8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(UInt(32, CPICK(32,16)),
+                               WPICK(wild_i32x32,wild_i32x16)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(UInt(16, CPICK(64,32)),
+                               WPICK(wild_i16x64,wild_i16x32)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
+  typecasts.push_back(Pattern(cast(UInt(8, CPICK(128,64)),
+                               WPICK(wild_i8x128,wild_i8x64)),
+                          IPICK(Intrinsic::hexagon_V6_vassign)));
 
   // "shift_left (x, 8)" is converted to x*256 by Simplify.cpp
   combiners.push_back(
@@ -266,10 +286,12 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
                            WPICK(wild_i32x32,wild_i32x16),
                            IPICK(Intrinsic::hexagon_V6_vaddw)));
-  // Note: no 32-bit saturating unsigned add in V60, use vaddw
-  varith.push_back(Pattern(WPICK(wild_u32x32,wild_u32x16) +
+  {
+    // Note: no 32-bit saturating unsigned add in V60, use vaddw
+    varith.push_back(Pattern(WPICK(wild_u32x32,wild_u32x16) +
                            WPICK(wild_u32x32,wild_u32x16),
                            IPICK(Intrinsic::hexagon_V6_vaddw)));
+  }
 
   // Double Vectors
   // Byte Double Vectors
@@ -290,10 +312,12 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) +
                            WPICK(wild_i32x64,wild_i32x32),
                            IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
-  // Note: no 32-bit saturating unsigned add in V60, use vaddw
-  varith.push_back(Pattern(WPICK(wild_u32x64,wild_u32x32) +
+  {
+    // Note: no 32-bit saturating unsigned add in V60, use vaddw
+    varith.push_back(Pattern(WPICK(wild_u32x64,wild_u32x32) +
                            WPICK(wild_u32x64,wild_u32x32),
                            IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
+  }
 
 
   // "Sub"
@@ -423,9 +447,48 @@ CodeGen_Hexagon::convertValueType(llvm::Value *V, llvm::Type *T) {
     return V;
 }
 void
+CodeGen_Hexagon::getHighAndLowVectors(Expr DoubleVec,
+                                      std::vector<Expr> &Res) {
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
+  int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
+  if (B128) VecSize *= 2;
+  Expr Hi, Lo;
+
+  Type t = DoubleVec.type();
+  Type NewT = Type(t.code(), t.bits(), t.lanes()/2);
+  int NumElements = NewT.lanes();
+
+  debug(4) << "HexCG: getHighAndLowVectors(Expr) "
+           << "DoubleVec.type: " << t
+           << " NewT: " << NewT << "\n";
+
+  internal_assert(t.is_vector());
+  internal_assert((t.bytes() * t.lanes()) == 2*VecSize);
+  internal_assert(NewT.is_vector());
+  internal_assert((NewT.bytes() * NumElements) == VecSize);
+
+  const Broadcast *B = DoubleVec.as<Broadcast>();
+  if (B) {
+    Hi = Broadcast::make(B->value, NumElements);
+    Lo = Broadcast::make(B->value, NumElements);
+  } else {
+    std::vector<Expr> Args;
+    Args.push_back(DoubleVec);
+    Hi = Call::make(NewT, Call::get_high_register, Args,
+                        Call::Intrinsic);
+    Lo = Call::make(NewT, Call::get_low_register, Args,
+                        Call::Intrinsic);
+  }
+  Res.push_back(Hi);
+  Res.push_back(Lo);
+}
+void
 CodeGen_Hexagon::getHighAndLowVectors(llvm::Value *DoubleVec,
                                       std::vector<llvm::Value *> &Res) {
   bool B128 = target.has_feature(Halide::Target::HVX_128);
+
+  debug(4) << "HexCG: getHighAndLowVectors(Value)\n";
+
   std::vector<Value *> Ops;
   Ops.push_back(DoubleVec);
   Value *Hi =
@@ -440,6 +503,9 @@ CodeGen_Hexagon::getHighAndLowVectors(llvm::Value *DoubleVec,
 llvm::Value *
 CodeGen_Hexagon::concatVectors(Value *High, Value *Low) {
   bool B128 = target.has_feature(Halide::Target::HVX_128);
+
+  debug(4) << "HexCG: concatVectors(Value, Value)\n";
+
   std::vector<Value *>Ops;
   Ops.push_back(High);
   Ops.push_back(Low);
@@ -456,6 +522,11 @@ CodeGen_Hexagon::slice_into_halves(Expr a, std::vector<Expr> &Res) {
   Type t = a.type();
   Type NewT = Type(t.code(), t.bits(), t.lanes()/2);
   int NumElements = NewT.lanes();
+
+  debug(4) << "HexCG: slice_into_halves(Expr) "
+           << "a.type: " << t
+           << " NewT: " << NewT << "\n";
+
   const Broadcast *B = a.as<Broadcast>();
   if (B) {
     A_low = Broadcast::make(B->value, NewT.lanes());
@@ -473,8 +544,10 @@ CodeGen_Hexagon::slice_into_halves(Expr a, std::vector<Expr> &Res) {
     A_high = Call::make(NewT, Call::shuffle_vector, ShuffleArgsAHigh,
                         Call::Intrinsic);
   }
-  Res.push_back(A_low);
+
+  // use high/low ordering to match getHighAndLowVectors
   Res.push_back(A_high);
+  Res.push_back(A_low);
   return;
 }
 
@@ -496,6 +569,9 @@ static bool EmittedOnce = false;
 int CodeGen_Hexagon::native_vector_bits() const {
   bool DoTrace = ! EmittedOnce;
   EmittedOnce = true;
+  if (DoTrace)
+    debug(1) << (target.has_feature(Halide::Target::HVX_V62)
+             ? "V62\n" : "V60\n");
   if (target.has_feature(Halide::Target::HVX_128)) {
     if (DoTrace) debug(1) << "128 Byte mode\n";
     return 128*8;
@@ -1232,12 +1308,6 @@ CodeGen_Hexagon::handleLargeVectors(const Max *op) {
 llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Mul *op) {
   debug(4) << "HexCG: " << op->type << ", handleLargeVectors (Mul)\n";
-
-  // FIXME: DJP: MUL avoid slice/shuffles when: (see sobel)
-  //   Unsupported type for vector multiply (uint16x128 * uint16x128 = uint16x128)
-  // when sliced results in shuffles and:
-  //   Unsupported type for vector multiply (uint16x64 * uint16x64 = uint16x64)
-  #define _EXCLu16x128  true
   #define _OP(a,b)  a * b
   #include "CodeGen_Hexagon_LV.h"
 }
@@ -1247,6 +1317,13 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Div *op) {
   debug(4) << "HexCG: " << op->type << ", handleLargeVectors (Div)\n";
   #define _OP(a,b)  a / b
+  #include "CodeGen_Hexagon_LV.h"
+}
+
+llvm::Value *
+CodeGen_Hexagon::handleLargeVectors_absd(const Call *op) {
+  debug(4) << "HexCG: " << op->type << ", handleLargeVectors_absd (Call)\n";
+  #define _OP(a,b)  absd(a, b)
   #include "CodeGen_Hexagon_LV.h"
 }
 
@@ -1497,7 +1574,6 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
       // into u16x64/i16x64
       Patterns.clear();
       matches.clear();
-
       Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
                                             UINT_16_IMAX)),
                                    IPICK(Intrinsic::hexagon_V6_vsatwh)));
@@ -1632,7 +1708,6 @@ void CodeGen_Hexagon::visit(const Cast *op) {
           Ops.push_back(Rt);
           Value *Call = builder->CreateCall(F, Ops);
 
-
           if (DestLLVMType != Call->getType())
             value = builder->CreateBitCast(Call, DestLLVMType);
           else
@@ -1668,8 +1743,8 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         }
       }
       // ******** End Part 1: Up casts (widening) ***************
-    } else {
-      // ******** Part 2: Down casts (Narrowing)* ***************
+  } else if (isNarrowingVectorCast(op)) {
+      // ******** Part 2: Down casts (Narrowing) ****************
       // Two step downcasts.
       // std::vector<Expr> Patterns;
       //  Patterns.push_back(u8_(min(wild_u32x64, 255)));
@@ -1891,8 +1966,33 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         }
       }
     }
+      // ******** End Part 2: Down casts (Narrowing) ************
+  } else if (isSameSizeVectorCast(op)) {
+      // ******** Part 3: Same size casts (typecast) ************
+      matches.clear();
+      for (size_t I = 0; I < typecasts.size(); ++I) {
+        const Pattern &P = typecasts[I];
+        if (expr_match(P.pattern, op, matches)) {
+          Intrinsic::ID ID = P.ID;
+          llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+          llvm::FunctionType *FType = F->getFunctionType();
+          Value *Op0 = codegen(matches[0]);
+          const Cast *C = P.pattern.as<Cast>();
+          internal_assert (C);
+          internal_assert(FType->getNumParams() == 1);
+          Halide::Type DestType = C->type;
+          llvm::Type *DestLLVMType = llvm_type_of(DestType);
+          llvm::Type *T0 = FType->getParamType(0);
+          if (T0 != Op0->getType()) {
+            Op0 = builder->CreateBitCast(Op0, T0);
+          }
+          Value *Call = builder->CreateCall(F, Op0);
+          value = builder->CreateBitCast(Call, DestLLVMType);
+          return;
+        }
+      }
+      // ******** End Part 3: Same size casts (typecast) ********
   }
-  // ******** End Part 2: Down casts (Narrowing)* ***************
 
   ostringstream msgbuf;
   msgbuf << "<- " << op->value.type();
@@ -1952,78 +2052,52 @@ void CodeGen_Hexagon::visit(const Call *op) {
     if (op->name == Call::bitwise_not) {
       if (op->type.is_vector() &&
           ((op->type.bytes() * op->type.lanes()) == VecSize)) {
+        std::vector<Value *> Ops;
+        Ops.push_back(codegen(op->args[0]));
         llvm::Function *F =
           Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_vnot));
-        llvm::FunctionType *FType = F->getFunctionType();
-        llvm::Type *T0 = FType->getParamType(0);
-        Value *Op0 = codegen(op->args[0]);
-        if (T0 != Op0->getType()) {
-          Op0 = builder->CreateBitCast(Op0, T0);
-        }
-        Halide::Type DestType = op->type;
-        llvm::Type *DestLLVMType = llvm_type_of(DestType);
-        Value *Call = builder->CreateCall(F, Op0);
-        if (DestLLVMType != Call->getType())
-          value = builder->CreateBitCast(Call, DestLLVMType);
-        else
-          value = Call;
+        Value *Call = CallLLVMIntrinsic(F, Ops);
+        value = convertValueType(Call, llvm_type_of(op->type));
         return;
       }
     } else if (op->name == Call::absd) {
-      if (op->type.is_vector() &&
-          ((op->type.bytes() * op->type.lanes()) == 2 * VecSize)) {
-        // vector sized absdiff should have been covered by the look up table
-        // "combiners".
-        std::vector<Pattern> doubleAbsDiff;
-
-        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_u8x256, wild_u8x128),
-                                             WPICK(wild_u8x256, wild_u8x128)),
-                                        IPICK(Intrinsic::
-                                              hexagon_V6_vabsdiffub)));
-        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_u16x128, wild_u16x64),
-                                             WPICK(wild_u16x128, wild_u16x64)),
-                                        IPICK(Intrinsic::
-                                              hexagon_V6_vabsdiffuh)));
-        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_i16x128, wild_i16x64),
-                                             WPICK(wild_i16x128, wild_i16x64)),
-                                        IPICK(Intrinsic::
-                                              hexagon_V6_vabsdiffh)));
-        doubleAbsDiff.push_back(Pattern(absd(WPICK(wild_i32x64 ,wild_i32x32),
-                                             WPICK(wild_i32x64 ,wild_i32x32)),
-                                        IPICK(Intrinsic::
-                                              hexagon_V6_vabsdiffw)));
-
-        matches.clear();
-        for (size_t I = 0; I < doubleAbsDiff.size(); ++I) {
-          const Pattern &P = doubleAbsDiff[I];
-          if (expr_match(P.pattern, op, matches)) {
-            internal_assert(matches.size() == 2);
-            Value *DoubleVector0 = codegen(matches[0]);
-            Value *DoubleVector1 = codegen(matches[1]);
-            std::vector<Value *> Ops0;
-            std::vector<Value *> Ops1;
-            getHighAndLowVectors(DoubleVector0, Ops0);
-            getHighAndLowVectors(DoubleVector1, Ops1);
-            internal_assert(Ops0.size() == 2);
-            internal_assert(Ops1.size() == 2);
-            std::swap(Ops0[0], Ops1[1]);
-            // Now Ops0 has both the low vectors and
-            // Ops1 has the high vectors.
-            Intrinsic::ID ID = P.ID;
-            Value *LowRes =
-              CallLLVMIntrinsic(Intrinsic::getDeclaration(module, ID), Ops0);
-            Value *HighRes =
-              CallLLVMIntrinsic(Intrinsic::getDeclaration(module, ID), Ops1);
-            Value *Result = concatVectors(HighRes, LowRes);
-            value = convertValueType(Result, llvm_type_of(op->type));
-            return;
-          }
-        }
+      if (isLargerThanVector(op->type, native_vector_bits())) {
+        value = handleLargeVectors_absd(op);
+        if (value)
+          return;
       }
+      // vector sized absdiff should have been covered by the look up table
+      // "combiners".
+    } else if (op->name == Call::get_high_register) {
+      internal_assert(op->type.is_vector());
+      internal_assert((op->type.bytes() * op->type.lanes()) == VecSize);
+      std::vector<Value *> Ops;
+      Ops.push_back(codegen(op->args[0]));
+      llvm::Function *F =
+        Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_hi));
+      Value *Call = CallLLVMIntrinsic(F, Ops);
+      value = convertValueType(Call, llvm_type_of(op->type));
+      return;
+    } else if (op->name == Call::get_low_register) {
+      internal_assert(op->type.is_vector());
+      internal_assert((op->type.bytes() * op->type.lanes()) == VecSize);
+      std::vector<Value *> Ops;
+      Ops.push_back(codegen(op->args[0]));
+      llvm::Function *F =
+        Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_lo));
+      Value *Call = CallLLVMIntrinsic(F, Ops);
+      value = convertValueType(Call, llvm_type_of(op->type));
+      return;
     }
-    // Suppress warning on the calls where it is OK to use CodeGen_Posix
-    if ((op->name != Call::interleave_vectors) &&
-        (op->name != Call::shuffle_vector)) {
+
+    int chk_call = show_chk;
+    // Only check these calls at higher levels
+    if ((chk_call < 2) &&
+        ((op->name == Call::interleave_vectors) ||
+         (op->name == Call::shuffle_vector))) {
+      chk_call = 0;
+    }
+    if (chk_call > 0) {
       checkVectorOp(op, "in visit(Call *)\n");
     }
     CodeGen_Posix::visit(op);
@@ -2341,6 +2415,8 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
     int width_32 = CPICK(32,16);
     int width_16 = CPICK(64,32);
     int width_8  = CPICK(128,64);
+
+    debug(4) << "HexCG: Entering vector broadcast\n";
 
     // Look for supported broadcasts.
     Expr match_i32 = Broadcast::make(wild_i32, 0);

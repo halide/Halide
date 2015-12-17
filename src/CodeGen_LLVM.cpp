@@ -774,7 +774,8 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
     // Finally, dump it in the symbol table
     Constant *zero[] = {ConstantInt::get(i32, 0)};
-#if LLVM_VERSION >= 37
+//#if LLVM_VERSION >= 37
+#if LLVM_VERSION >= 38
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, zero);
 #else
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, zero);
@@ -803,7 +804,8 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
 
     Constant *zero[] = {ConstantInt::get(i32, 0)};
     return ConstantExpr::getBitCast(
-#if LLVM_VERSION >= 37
+//#if LLVM_VERSION >= 37
+#if LLVM_VERSION >= 38
         ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
 #else
         ConstantExpr::getInBoundsGetElementPtr(storage, zero),
@@ -843,7 +845,8 @@ llvm::Constant *CodeGen_LLVM::embed_metadata(const std::string &metadata_name,
     Constant *metadata_fields[] = {
         /* version */ zero,
         /* num_arguments */ ConstantInt::get(i32, num_args),
-#if LLVM_VERSION >= 37
+//#if LLVM_VERSION >= 37
+#if LLVM_VERSION >= 38
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
 #else
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, zeros),
@@ -902,6 +905,12 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
+#undef LLVM_VERSION
+#define LLVM_VERSION 37
+
+    if (debug::debug_level >= 3) {
+        module->dump();
+    }
 
     if (debug::debug_level >= 3) {
         module->dump();
