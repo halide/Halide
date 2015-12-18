@@ -14,9 +14,6 @@ extern "C" {
                              int min, int size, uint8_t *closure) {
     return -1;
   }
-  WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
-    return -1;
-  }
 
   namespace Halide { namespace Runtime { namespace Internal {
         WEAK void *default_malloc(void *user_context, size_t x) {
