@@ -29,7 +29,7 @@ struct ParameterContents {
         // null expression. (param.set_stride(0, Expr());)
         stride_constraint[0] = 1;
         int i;
-        for (i =0 ; i < dimensions; i++)
+        for (i = 0; i < 4; i++)
           stride_multiple[i] = -1;
     }
 };
@@ -300,4 +300,3 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
 
 }
 }
-

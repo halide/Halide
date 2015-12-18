@@ -1716,7 +1716,10 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 
           Halide::Type DestType = op->type;
           llvm::Type *DestLLVMType = llvm_type_of(DestType);
-          Value *Call = builder->CreateCall(F, Lt, Rt);
+          std::vector<Value *> Ops;
+          Ops.push_back(Lt);
+          Ops.push_back(Rt);
+          Value *Call = builder->CreateCall(F, Ops);
 
           if (DestLLVMType != Call->getType())
             value = builder->CreateBitCast(Call, DestLLVMType);
@@ -2037,10 +2040,17 @@ void CodeGen_Hexagon::visit(const Call *op) {
         Op1 = builder->CreateBitCast(Op1, T1);
       }
       Value *Call;
-      if (InvertOperands)
-        Call = builder->CreateCall(F, Op1, Op0);
-      else
-        Call = builder->CreateCall(F, Op0, Op1);
+      if (InvertOperands) {
+        std::vector<Value *> Ops;
+        Ops.push_back(Op1);
+        Ops.push_back(Op0);
+        Call = builder->CreateCall(F, Ops);
+      } else {
+        std::vector<Value *> Ops;
+        Ops.push_back(Op0);
+        Ops.push_back(Op1);
+        Call = builder->CreateCall(F, Ops);
+      }
       value = builder->CreateBitCast(Call, DestLLVMType);
       return;
     }
@@ -2121,8 +2131,8 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
   std::vector<Pattern>Patterns;
   std::vector<Expr> matches;
   std::vector<Value *> Ops;
-  Expr Vec, BC, bc_value;;
-  Intrinsic::ID IntrinsID;
+  Expr Vec, BC, bc_value;
+  Intrinsic::ID IntrinsID = Intrinsic::not_intrinsic;
   //   Deal with these first.
   //   Vdd.h=vmpy(Vu.ub,Rt.b)
   //   Vdd.w=vmpy(Vu.h,Rt.h)
