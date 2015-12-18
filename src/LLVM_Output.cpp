@@ -215,11 +215,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     #if LLVM_VERSION == 37
-    #ifdef NEWER
-        llvm::DataLayout target_data_layout(target_machine->createDataLayout());
-    #else
         llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
-    #endif
     #else
         llvm::DataLayout target_data_layout(target_machine->createDataLayout());
     #endif
@@ -232,6 +228,7 @@ void emit_file(llvm::Module *module, const std::string &filename, llvm::TargetMa
                            << module->getDataLayout().getStringRepresentation() << "\n";
         module->setDataLayout(target_data_layout);
     }
+
     std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
 
     // Build up all of the passes that we want to do to the module.
