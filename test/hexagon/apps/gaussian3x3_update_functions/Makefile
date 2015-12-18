@@ -15,7 +15,7 @@ TIMING=--timing
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=clang++
-LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_TYPE?=realimage
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
@@ -26,10 +26,10 @@ gaussian3x3.o gaussian3x3.h: gaussian3x3.cpp
 
 
 gaussian3x3_run.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
-	${HEX_TOOLS}/bin/hexagon-clang++ -c gaussian3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
+	${HEXAGON_CLANG} -c gaussian3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 
 gaussian3x3.out: gaussian3x3_run.o gaussian3x3.o gaussian3x3.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian3x3.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian3x3_run.o gaussian3x3.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG}  -mv60 -o gaussian3x3.out gaussian3x3_run.o gaussian3x3.o -lhexagon
 
 all: gaussian3x3.out
 
@@ -105,7 +105,7 @@ gaussian3x3_run.halide_synthetic.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.
 
 
 gaussian3x3.halide_synthetic.out: gaussian3x3_run.halide_synthetic.o gaussian3x3.o gaussian3x3.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian3x3.halide_synthetic.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian3x3_run.halide_synthetic.o gaussian3x3.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o gaussian3x3.halide_synthetic.out gaussian3x3_run.halide_synthetic.o gaussian3x3.o -lhexagon
 
 
 halide_synthetic: gaussian3x3.halide_synthetic.out
