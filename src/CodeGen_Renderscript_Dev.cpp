@@ -63,7 +63,15 @@ CodeGen_Renderscript_Dev::CodeGen_Renderscript_Dev(Target host) : CodeGen_LLVM(h
     context = new llvm::LLVMContext();
 }
 
-CodeGen_Renderscript_Dev::~CodeGen_Renderscript_Dev() { delete context; }
+CodeGen_Renderscript_Dev::~CodeGen_Renderscript_Dev() {
+    // This is required as destroying the context before the module
+    // results in a crash. Really, reponsbility for destruction
+    // should be entirely in the parent class.
+    // TODO: Figure out how to better manage the context -- e.g. allow using
+    // same one as the host.
+    module.reset();
+    delete context;
+}
 
 void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
                                 const std::vector<GPU_Argument> &args) {
@@ -160,7 +168,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
-                                      kernel_name, module);
+                                      kernel_name, module.get());
 
     vector<string> arg_sym_names;
 
@@ -255,7 +263,6 @@ void CodeGen_Renderscript_Dev::init_module() {
     debug(2) << "CodeGen_Renderscript_Dev::init_module\n";
     init_context();
 #ifdef WITH_RENDERSCRIPT
-    delete module;
     module = get_initial_module_for_renderscript_device(target, context);
 
     // Add Renderscript standard set of metadata.
@@ -562,7 +569,7 @@ vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
 
     std::string str;
     llvm::raw_string_ostream OS(str);
-    llvm_3_2::WriteBitcodeToFile(module, OS);
+    llvm_3_2::WriteBitcodeToFile(module.get(), OS);
 
     OS.flush();
 
