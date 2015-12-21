@@ -177,7 +177,7 @@ void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::T
     #endif
 
     #if LLVM_VERSION < 35
-    llvm::DataLayout *layout = new llvm::DataLayout(module);
+    llvm::DataLayout *layout = new llvm::DataLayout(module.get());
     Internal::debug(2) << "Data layout: " << layout->getStringRepresentation();
     pass_manager.add(layout);
     #endif
