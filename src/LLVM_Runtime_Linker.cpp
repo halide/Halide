@@ -376,14 +376,11 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
                                                 std::move(modules[i]));
         #else
             #if LLVM_VERSION >= 36
-            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].get());
+            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].release());
             #else
-            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].get(),
-                                                llvm::Linker::DestroySource, &err_msg);
+            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].release(),
+                                                    llvm::Linker::DestroySource, &err_msg);
             #endif
-
-            // LLVM consumed the module so reset the unique_ptr.
-            modules[i].reset();
         #endif
 
         if (failed) {
