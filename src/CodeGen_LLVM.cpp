@@ -412,7 +412,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
 
-
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
     for (size_t i = 0; i < input.buffers.size(); i++) {
@@ -827,7 +826,7 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     #if LLVM_VERSION < 37
-    FunctionPassManager function_pass_manager(module);
+    FunctionPassManager function_pass_manager(module.get());
     PassManager module_pass_manager;
     #else
     legacy::FunctionPassManager function_pass_manager(module.get());
