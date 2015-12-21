@@ -286,12 +286,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
                            WPICK(wild_i32x32,wild_i32x16),
                            IPICK(Intrinsic::hexagon_V6_vaddw)));
-  if (t.has_feature(Halide::Target::HVX_V62)) {
-    varith.push_back(Pattern(WPICK(wild_u32x32,wild_u32x16) +
-                           WPICK(wild_u32x32,wild_u32x16),
-                           IPICK(Intrinsic::hexagon_V6_vadduwsat)));
-  } else {
-    // Note: no 32-bit saturating unsigned add in V60, use vaddw
+// Hexagon v62 feature.
+#include <v62feat1.inc>
+  {
     varith.push_back(Pattern(WPICK(wild_u32x32,wild_u32x16) +
                            WPICK(wild_u32x32,wild_u32x16),
                            IPICK(Intrinsic::hexagon_V6_vaddw)));
@@ -316,12 +313,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) +
                            WPICK(wild_i32x64,wild_i32x32),
                            IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
-  if (t.has_feature(Halide::Target::HVX_V62)) {
-    varith.push_back(Pattern(WPICK(wild_u32x64,wild_u32x32) +
-                           WPICK(wild_u32x64,wild_u32x32),
-                           IPICK(Intrinsic::hexagon_V6_vadduwsat_dv)));
-  } else {
-    // Note: no 32-bit saturating unsigned add in V60, use vaddw
+// Hexagon v62 feature
+#include <v62feat2.inc>
+  {
     varith.push_back(Pattern(WPICK(wild_u32x64,wild_u32x32) +
                            WPICK(wild_u32x64,wild_u32x32),
                            IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
@@ -1582,12 +1576,8 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
       // into u16x64/i16x64
       Patterns.clear();
       matches.clear();
-      if (target.has_feature(Halide::Target::HVX_V62))
-        Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
-                                            UINT_16_IMAX)),
-                                   IPICK(Intrinsic::hexagon_V6_vsatuwuh)));
-      else
-        Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
+#include <v62feat3.inc>
+      Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
                                             UINT_16_IMAX)),
                                    IPICK(Intrinsic::hexagon_V6_vsatwh)));
 
@@ -2465,16 +2455,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
       if (is_zero(op->value)) {
         ID = IPICK(Intrinsic::hexagon_V6_vd0);
         zero_bcast = true;
-      } else if (target.has_feature(Halide::Target::HVX_V62)) {
-        if (match8) {
-          ID = IPICK(Intrinsic::hexagon_V6_lvsplatb);
-          zext_wordsize = true;
-        } else if (match16) {
-          ID = IPICK(Intrinsic::hexagon_V6_lvsplath);
-          zext_wordsize = true;
-        } else if (match32) {
-          ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
-        }
+#include <v62feat4.inc>
       } else {
         ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
         if (match8 || match16) {
