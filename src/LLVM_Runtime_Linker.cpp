@@ -376,9 +376,9 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
                                                 std::move(modules[i]));
         #else
             #if LLVM_VERSION >= 36
-            bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
+            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].get());
             #else
-            bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
+            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].get(),
                                                 llvm::Linker::DestroySource, &err_msg);
             #endif
 
@@ -406,7 +406,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
                        ""};
 
     // Enumerate the global variables.
-    //    for (llvm::Module::global_iterator iter = module->global_begin(); iter != module->global_end(); iter++) {
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
         llvm::GlobalValue::LinkageTypes t = gv.getLinkage();
@@ -820,8 +819,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     modules[0]->setDataLayout(&dl);
     #endif
 
-
-
     return std::move(modules[0]);
 }
 #endif
@@ -840,7 +837,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_renderscript_device(Target 
     m->setDataLayout(&dl);
     #endif
 
-    return std::move(m);
+    return m;
 }
 #endif
 
