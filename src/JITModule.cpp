@@ -150,22 +150,6 @@ char *start, *end;
 #endif
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
-#if 0
-JITModule::Symbol compile_and_get_function(ExecutionEngine *ee, llvm::Module *mod, const string &name) {
-    internal_assert(mod && ee);
-
-    debug(2) << "Retrieving " << name << " from module\n";
-    llvm::Function *fn = mod->getFunction(name);
-    if (!fn) {
-        internal_error << "Could not find function " << name << " in module\n";
-    }
-
-    debug(2) << "JIT Compiling " << name << "\n";
-    void *f = ee->getPointerToFunction(fn);
-    if (!f) {
-        internal_error << "Compiling " << name << " returned NULL\n";
-    }
-#else
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
@@ -173,7 +157,6 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
     if (!f) {
         internal_error << "Compiling " << name << " returned NULL\n";
     }
-#endif
 
     JITModule::Symbol symbol(f, fn->getFunctionType());
 
