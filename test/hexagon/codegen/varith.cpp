@@ -25,12 +25,10 @@ int main(int argc, char **argv) {
   testAdd<int32_t>(target);
   // Commenting these two tests out until bug 20163 is fixed.
 
-// commenting these two out until vcombine issue fixed
-////CHECK_RL: vadd(v{{[0-9]+}}:{{[0-9]+}}.b,v{{[0-9]+}}:{{[0-9]+}}.b)
-//testAddDouble<int8_t>(target);
-////CHECK_RL: vadd(v{{[0-9]+}}:{{[0-9]+}}.ub,v{{[0-9]+}}:{{[0-9]+}}.ub):sat
-//testAddDouble<uint8_t>(target);
-
+  //CHECK: vadd(v{{[0-9]+}}:{{[0-9]+}}.b,v{{[0-9]+}}:{{[0-9]+}}.b)
+  testAddDouble<int8_t>(target);
+  //CHECK: vadd(v{{[0-9]+}}:{{[0-9]+}}.ub,v{{[0-9]+}}:{{[0-9]+}}.ub):sat
+  testAddDouble<uint8_t>(target);
   // Commenting these two tests out until bug 20163 is fixed.
   // //CHECK_PDB: vadd(v{{[0-9]+}}:{{[0-9]+}}.h,v{{[0-9]+}}:{{[0-9]+}}.h)
   // testAddDouble<int16_t>(target);
@@ -54,10 +52,10 @@ int main(int argc, char **argv) {
   //CHECK: vsub(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
   testSub<int32_t>(target);
 
-////CHECK_RL: vsub(v{{[0-9]+}}:{{[0-9]+}}.b,v{{[0-9]+}}:{{[0-9]+}}.b)
-//testSubDouble<int8_t>(target);
-////CHECK_RL: vsub(v{{[0-9]+}}:{{[0-9]+}}.ub,v{{[0-9]+}}:{{[0-9]+}}.ub):sat
-//testSubDouble<uint8_t>(target);
+  //CHECK: vsub(v{{[0-9]+}}:{{[0-9]+}}.b,v{{[0-9]+}}:{{[0-9]+}}.b)
+  testSubDouble<int8_t>(target);
+  //CHECK: vsub(v{{[0-9]+}}:{{[0-9]+}}.ub,v{{[0-9]+}}:{{[0-9]+}}.ub):sat
+  testSubDouble<uint8_t>(target);
   // Commenting these two tests out until bug 20163 is fixed.
   // //CHECK_PDB: vsub(v{{[0-9]+}}:{{[0-9]+}}.h,v{{[0-9]+}}:{{[0-9]+}}.h)
   // testSubDouble<int16_t>(target);
