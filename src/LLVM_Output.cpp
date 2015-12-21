@@ -247,7 +247,7 @@ void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMa
 #endif
 }
 
-std::unique_ptr<llvm::Module>compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
+std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
     return codegen_llvm(module, context);
 }
 
