@@ -364,14 +364,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (TD) {
         PM.add(new DataLayout(*TD));
     } else {
-        PM.add(new DataLayout(module));
+        PM.add(new DataLayout(module.get()));
     }
     #else
     if (TD) {
         module->setDataLayout(TD);
     }
     #if LLVM_VERSION == 35
-    PM.add(new DataLayoutPass(module));
+    PM.add(new DataLayoutPass(module.get()));
     #else // llvm >= 3.6
     PM.add(new DataLayoutPass);
     #endif
