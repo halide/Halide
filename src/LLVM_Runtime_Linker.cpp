@@ -399,6 +399,11 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
                                                 llvm::Linker::DestroySource, &err_msg);
         #endif
 
+        // No matter which version about ran, we passed ownership of
+        // the second module to LLVM. modules[i] is now a dangling
+        // pointer. null it out so we don't accidentally use it.
+        modules[i] = nullptr;
+
         if (failed) {
             internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }
