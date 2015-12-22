@@ -194,7 +194,7 @@ void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::T
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
 
-    pass_manager.run(*module);
+    pass_manager.run(module);
 
     delete out;
     delete raw_out;
