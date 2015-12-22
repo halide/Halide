@@ -12,20 +12,30 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Param<int> extent;
-    Var x, y, z;
-    RDom r(0, extent, 0, 4096, 0, 256);
+    Var x, y, z, w;
+    RDom r(0, extent, 0, extent, 0, extent, 0, extent/2 + 1);
     Func big;
-    big(x, y, z) = cast<uint8_t>(42);
+    big(x, y, z, w) = cast<uint8_t>(42);
     big.compute_root();
 
     Func grand_total;
-    grand_total() = cast<uint8_t>(sum(big(r.x, r.y, r.z)));
+    grand_total() = cast<uint8_t>(sum(big(r.x, r.y, r.z, r.w)));
     grand_total.set_error_handler(&halide_error);
 
-    extent.set(4096);
+    Target t = get_jit_target_from_environment();
+    grand_total.compile_jit(t);
+
+    if (t.bits == 32) {
+        // On 32-bit targets try an internal allocation of size just larger than 2^31
+        extent.set(1 << 8);
+    } else {
+        // On 64-bit targets try an internal allocation of size just larger than 2^63
+        extent.set(1 << 16);
+    }
 
     Image<uint8_t> result = grand_total.realize();
 
     assert(error_occurred);
     printf("Success!\n");
+
 }

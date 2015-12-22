@@ -34,6 +34,14 @@ int main(int argc, char **argv) {
     Buffer output_buf(UInt(8), &buf);
     identity_uint8.realize(output_buf);
 
-    assert(error_occurred);
+    Target t = get_jit_target_from_environment();
+    if (t.bits == 64) {
+        assert(!error_occurred);
+        Image<uint8_t> output = output_buf;
+        assert(output(0, 0, 0) == 42);
+        assert(output(output.extent(0) - 1, output.extent(1) - 1, output.extent(2) - 1) == 42);
+    } else {
+        assert(error_occurred);
+    }
     printf("Success!\n");
 }
