@@ -9,13 +9,22 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-void check_buffer_size(uint64_t bytes, const std::string &name) {
-    Target t = get_target_from_environment();
-    if (t.bits == 64) {
-        user_assert(bytes < (1UL << 63)) << "Total size of buffer " << name << " exceeds 2^63 - 1\n";
-    } else {
-        user_assert(bytes < (1UL << 31)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
-    }
+uint64_t multiply_buffer_size_check_overflow(uint64_t size, uint64_t factor, const std::string &name) {
+    // Ignore the dimensions for which the extent is zero.
+    if (!factor) return size;
+
+    // Multiply and check for 64-bit overflow
+    uint64_t result = size * factor;
+    bool overflow = (result / factor) != size;
+
+    // Check against the limits Halide internally assumes in its compiled code.
+    overflow |= (sizeof(void *) == 4) && (result >= (1UL << 31));
+    overflow |= (sizeof(void *) == 8) && (result >= (1UL << 63));
+
+    // Assert there was no overflow.
+    user_assert(!overflow)
+        << "Total size of buffer " << name << " exceeds 2^" << ((sizeof(void *) * 8) - 1) << " - 1\n";
+    return result;
 }
 }
 
@@ -45,28 +54,15 @@ struct BufferContents {
         user_assert(t.lanes() == 1) << "Can't create of a buffer of a vector type";
         buf.elem_size = t.bytes();
         uint64_t size = 1;
-        if (x_size) {
-            size *= x_size;
-            check_buffer_size(size, name);
-        }
-        if (y_size) {
-            size *= y_size;
-            check_buffer_size(size, name);
-        }
-        if (z_size) {
-            size *= z_size;
-            check_buffer_size(size, name);
-        }
-        if (w_size) {
-            size *= w_size;
-            check_buffer_size(size, name);
-        }
-        size *= buf.elem_size;
-        check_buffer_size(size, name);
+        size = multiply_buffer_size_check_overflow(size, x_size, name);
+        size = multiply_buffer_size_check_overflow(size, y_size, name);
+        size = multiply_buffer_size_check_overflow(size, z_size, name);
+        size = multiply_buffer_size_check_overflow(size, w_size, name);
+        size = multiply_buffer_size_check_overflow(size, buf.elem_size, name);
 
         if (!data) {
-            size = size + 32;
-            check_buffer_size(size, name);
+            // There's no way for this to overflow without the buffer already being > 2^63-1
+            size += 32;
             allocation = (uint8_t *)calloc(1, (size_t)size);
             user_assert(allocation) << "Out of memory allocating buffer " << name << " of size " << size << "\n";
             buf.host = allocation;
