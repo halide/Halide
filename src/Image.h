@@ -157,7 +157,8 @@ public:
     /** Get the address of a particular pixel. */
     void *address_of(int x, int y = 0, int z = 0, int w = 0) const {
         uint8_t *ptr = (uint8_t *)origin;
-        size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
+        size_t offset = (ssize_t)x*stride_0 + (ssize_t)y*stride_1 +
+            (ssize_t)z*stride_2 + (ssize_t)w*stride_3;
         return (void *)(ptr + offset * elem_size);
     }
 };

@@ -33,7 +33,7 @@ using std::vector;
 
 namespace {
 
-// Things that we can constant fold: Immediates and broadcasts of
+// Things that we can constant fold: Immediates, broadcasts of
 // immediates.
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
@@ -266,6 +266,7 @@ private:
         Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
+        const Ramp *ramp_value = value.as<Ramp>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
@@ -317,6 +318,14 @@ private:
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
             expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->lanes));
+        } else if (ramp_value &&
+                   no_overflow(op->type) &&
+                   no_overflow(ramp_value->base.type()) &&
+                   no_overflow(ramp_value->stride.type())) {
+            // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
+            expr = mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
+                                     Cast::make(op->type.element_of(), ramp_value->stride),
+                                     ramp_value->lanes));
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -678,6 +687,9 @@ private:
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Cast *cast_a = a.as<Cast>();
+        const Cast *cast_b = b.as<Cast>();
+
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -729,7 +741,19 @@ private:
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
-                                 broadcast_a->lanes);
+                                   broadcast_a->lanes);
+        } else if (cast_a && cast_b &&
+                   cast_a->value.type() == cast_b->value.type() &&
+                   cast_a->type.is_int() &&
+                   cast_b->type.is_int() &&
+                   cast_a->value.type().is_int() &&
+                   cast_b->value.type().is_int() &&
+                   no_overflow(cast_a->type) &&
+                   no_overflow(cast_b->type) &&
+                   no_overflow(cast_a->value.type()) &&
+                   no_overflow(cast_b->value.type())) {
+            // cast(t, a) - cast(t, b) -> cast(t, a - b)
+            expr = mutate(Cast::make(cast_a->type, cast_a->value - cast_b->value));
         } else if (select_a && select_b &&
                    equal(select_a->condition, select_b->condition)) {
             // select(c, a, b) - select(c, d, e) -> select(c, a+d, b+e)
@@ -3469,6 +3493,20 @@ void simplify_test() {
 
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
+
+    check(cast(Int(64, 3), ramp(x, 2, 3)),
+          ramp(cast(Int(64), x), cast(Int(64), 2), 3));
+    check(cast(Int(32, 3), ramp(cast(Int(64), x), make_const(Int(64), 2), 3)),
+          ramp(cast(Int(32), x), make_const(Int(32), 2), 3));
+
+    check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
+    // We do not perform the same simplification on floats, as it may
+    // not always result in a performance gain.
+    check(cast(Float(32), x + 1) - cast(Float(32), x),
+          cast(Float(32), x + 1) - cast(Float(32), x));
+    // Also unsafe on types with defined overflow.
+    check(cast(UInt(8), x + 1) - cast(UInt(8), x),
+          cast(UInt(8), x + 1) - cast(UInt(8), x));
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
