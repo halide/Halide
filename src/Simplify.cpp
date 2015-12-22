@@ -267,6 +267,7 @@ private:
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
+        const Add *add = value.as<Add>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
@@ -326,6 +327,14 @@ private:
             expr = mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
                                      Cast::make(op->type.element_of(), ramp_value->stride),
                                      ramp_value->lanes));
+        } else if (add &&
+                   op->type.is_int() &&
+                   no_overflow(op->value.type()) &&
+                   no_overflow(op->type) &&
+                   is_const(add->b)) {
+            // In the interest of moving constants outwards so they
+            // can cancel, pull the addition outside of the cast.
+            expr = mutate(Cast::make(op->type, add->a) + add->b);
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -687,8 +696,6 @@ private:
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
-        const Cast *cast_a = a.as<Cast>();
-        const Cast *cast_b = b.as<Cast>();
 
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
@@ -742,18 +749,6 @@ private:
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
                                    broadcast_a->lanes);
-        } else if (cast_a && cast_b &&
-                   cast_a->value.type() == cast_b->value.type() &&
-                   cast_a->type.is_int() &&
-                   cast_b->type.is_int() &&
-                   cast_a->value.type().is_int() &&
-                   cast_b->value.type().is_int() &&
-                   no_overflow(cast_a->type) &&
-                   no_overflow(cast_b->type) &&
-                   no_overflow(cast_a->value.type()) &&
-                   no_overflow(cast_b->value.type())) {
-            // cast(t, a) - cast(t, b) -> cast(t, a - b)
-            expr = mutate(Cast::make(cast_a->type, cast_a->value - cast_b->value));
         } else if (select_a && select_b &&
                    equal(select_a->condition, select_b->condition)) {
             // select(c, a, b) - select(c, d, e) -> select(c, a+d, b+e)
@@ -3499,12 +3494,9 @@ void simplify_test() {
     check(cast(Int(32, 3), ramp(cast(Int(64), x), make_const(Int(64), 2), 3)),
           ramp(cast(Int(32), x), make_const(Int(32), 2), 3));
 
+    // Check cancellations can occur through casts
     check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
-    // We do not perform the same simplification on floats, as it may
-    // not always result in a performance gain.
-    check(cast(Float(32), x + 1) - cast(Float(32), x),
-          cast(Float(32), x + 1) - cast(Float(32), x));
-    // Also unsafe on types with defined overflow.
+    // But only when overflow is undefined for the type
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
 

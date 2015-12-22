@@ -3,6 +3,10 @@
 
 using namespace Halide;
 int main(int argc, char **argv) {
-    Buffer result(UInt(8), 4096, 4096, 256);
+    if (sizeof(void *) == 8) {
+        Buffer result(UInt(8), 1 << 24, 1 << 24, 1 << 24);
+    } else {
+        Buffer result(UInt(8), 1 << 12, 1 << 12, 1 << 8);
+    }
     printf("Success!\n");
 }

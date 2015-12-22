@@ -53,21 +53,29 @@ int main(int argc, char **argv) {
     check(result, correct);
     in.extent[0] = 64;
 
-    // Input buffer larger than 2GB
-    in.extent[0] = 10000000;
-    in.extent[1] = 10000000;
-    result = error_codes(&in, 64, &out);
-    correct = halide_error_code_buffer_extents_too_large;
-    check(result, correct);
-    in.extent[0] = 64;
-    in.extent[1] = 64;
+    if (sizeof(void *) == 4) {
+        // Input buffer larger than 2GB
+        in.extent[0] = 10000000;
+        in.extent[1] = 10000000;
+        result = error_codes(&in, 64, &out);
+        correct = halide_error_code_buffer_extents_too_large;
+        check(result, correct);
+        in.extent[0] = 64;
+        in.extent[1] = 64;
 
-    // Input buffer requires addressing math that would overflow 32 bits.
-    in.stride[1] = 0x7fffffff;
-    result = error_codes(&in, 64, &out);
-    correct = halide_error_code_buffer_allocation_too_large;
-    check(result, correct);
-    in.stride[1] = 64;
+        // Input buffer requires addressing math that would overflow 32 bits.
+        in.stride[1] = 0x7fffffff;
+        result = error_codes(&in, 64, &out);
+        correct = halide_error_code_buffer_allocation_too_large;
+        check(result, correct);
+        in.stride[1] = 64;
+
+        // strides and extents are 32-bit signed integers. It's
+        // therefore impossible to make a buffer_t that can address
+        // more than 2^31 * 2^31 * dimensions elements, which is less
+        // than 2^63, so there's no way a Halide pipeline can return
+        // the above two error codes in 64-bit code.
+    }
 
     // stride[0] is constrained to be 1
     in.stride[0] = 2;
