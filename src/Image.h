@@ -91,6 +91,12 @@ public:
     /** Set the coordinates of the top left of the image. */
     EXPORT void set_min(const std::vector<int> &m);
 
+    template<typename ...Args>
+    void set_min(int first, Args... rest) {
+        std::vector<int> min = {first, rest...};
+        set_min(min);
+    }
+
     /** Get the extent of dimension 0, which by convention we use as
      * the width of the image. Unlike extent(0), returns one if the
      * buffer is zero-dimensional. */

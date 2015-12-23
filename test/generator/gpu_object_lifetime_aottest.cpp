@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
         gpu_object_lifetime(output);
 
         output.copy_to_host();
-        output.dev_free();
+        output.device_free();
 
         for (int x = 0; x < output.width(); x++) {
             if (output(x) != x) {

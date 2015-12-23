@@ -3,7 +3,7 @@
 
 extern "C" {
 
-struct halide_device_interface {
+struct halide_device_interface_t {
     // These next two methods are used to reference count the runtime code
     // these function pointers point to. They should always be initialized
     // to halide_use_jit_module and halide_release_jit_module and Halide's JIT

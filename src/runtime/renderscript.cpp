@@ -21,7 +21,7 @@ namespace Runtime {
 namespace Internal {
 namespace Renderscript {
 
-extern WEAK halide_device_interface renderscript_device_interface;
+extern WEAK halide_device_interface_t renderscript_device_interface;
 
 WEAK const char *get_error_name(RSError err);
 WEAK int create_renderscript_context(void *user_context, RsDevice *dev, RsContext *ctx);
@@ -1163,7 +1163,7 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
     return 0;
 }
 
-WEAK const struct halide_device_interface *halide_renderscript_device_interface() {
+WEAK const struct halide_device_interface_t *halide_renderscript_device_interface() {
     return &renderscript_device_interface;
 }
 
@@ -1195,7 +1195,7 @@ WEAK const char *get_error_name(RSError error) {
     }
 }
 
-WEAK halide_device_interface renderscript_device_interface = {
+WEAK halide_device_interface_t renderscript_device_interface = {
     halide_use_jit_module,  halide_release_jit_module,
     halide_renderscript_device_malloc,
     halide_renderscript_device_free,  halide_renderscript_device_sync,

@@ -27,8 +27,8 @@ int main(int argc, char **argv) {
     // Check the buffer was allocated and is of the expected size.
     Buffer b = tmp.get();
     assert(b.defined());
-    assert(b.extent(0) == 1028);
-    assert(b.extent(1) == 1026);
+    assert(b.dim(0).extent() == 1028);
+    assert(b.dim(1).extent() == 1026);
 
     // Now fill the intermediate using the first pipeline, and then
     // run the second pipeline.

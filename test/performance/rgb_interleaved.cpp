@@ -5,6 +5,64 @@
 
 using namespace Halide;
 
+void set_values(Image<uint8_t> im, uint8_t r, uint8_t g, uint8_t b) {
+    for (int y = 0; y < im.height(); y++) {
+        for (int x = 0; x < im.width(); x++) {
+            im(x, y, 0) = r;
+            im(x, y, 1) = g;
+            im(x, y, 2) = b;
+        }
+    }
+}
+
+void check_values(Image<uint8_t> im, uint8_t r, uint8_t g, uint8_t b) {
+    for (int y = 0; y < im.height(); y++) {
+        for (int x = 0; x < im.width(); x++) {
+            if (!(im(x, y, 0) == r &&
+                  im(x, y, 1) == g &&
+                  im(x, y, 2) == b)) {
+                printf("im(%d, %d) = {%d, %d, %d} instead of {%d, %d, %d}\n",
+                       x, y, im(x, y, 0), im(x, y, 1), im(x, y, 2), r, g, b);
+                exit(-1);
+            }
+        }
+    }
+}
+
+Image<uint8_t> make_planar(int size, uint8_t r, uint8_t g, uint8_t b) {
+    Image<uint8_t> im(size, size, 3);
+    set_values(im, r, g, b);
+    return im;
+}
+
+Image<uint8_t> make_interleaved(int size, uint8_t r, uint8_t g, uint8_t b) {
+    // The image type is naturally planar, but we can sneakily make an interleaved one like so...
+    Image<uint8_t> im(3, size, size);
+
+    // Swap the dimension descriptors in the raw buffer...
+    std::swap(im.raw_buffer()->dim[0], im.raw_buffer()->dim[1]);
+    std::swap(im.raw_buffer()->dim[1], im.raw_buffer()->dim[2]);
+
+    // But the image type doesn't except those strides to change, and
+    // actually caches them for fast access. We'll need to turn it
+    // to a buffer and back to an image to get it to grab them again.
+    im = Image<uint8_t>(Buffer(im));
+
+    set_values(im, r, g, b);
+    return im;
+}
+
+Image<uint8_t> make_semi_planar(int size, uint8_t r, uint8_t g, uint8_t b) {
+    Image<uint8_t> im(size, 3, size);
+
+    std::swap(im.raw_buffer()->dim[1], im.raw_buffer()->dim[2]);
+
+    im = Image<uint8_t>(Buffer(im));
+
+    set_values(im, r, g, b);
+    return im;
+}
+
 void test_deinterleave() {
     ImageParam src(UInt(8), 3);
     Func dst;
@@ -12,114 +70,48 @@ void test_deinterleave() {
 
     dst(x, y, c) = src(x, y, c);
 
-    src.set_stride(0, 3);
-    src.set_stride(2, 1);
-    src.set_extent(2, 3);
+    // src is interleaved
+    src
+        .dim(0).set_stride(3)
+        .dim(2).set_stride(1).set_extent(3);
 
-    // This is the default format for Halide, but made explicit for illustration.
-    dst.output_buffer().set_stride(0, 1);
-    dst.output_buffer().set_extent(2, 3);
+    // dst is planar
+    dst.output_buffer()
+        .dim(0).set_stride(1)
+        .dim(2).set_extent(3);
 
     dst.reorder(c, x, y).unroll(c);
     dst.vectorize(x, 16);
 
-    // Run test many times to avoid timing jitter
-    const int iterations = 20;
-
     // Allocate two 16 megapixel, 3 channel, 8-bit images -- input and output
-    const int32_t buffer_side_length = (1 << 12);
-    const int32_t buffer_size = buffer_side_length * buffer_side_length;
+    const int32_t size = (1 << 12);
+    const int32_t buffer_size = size*size*3;
 
-    uint8_t *src_storage(new uint8_t[buffer_size * 3]);
-    uint8_t *dst_storage(new uint8_t[buffer_size * 3]);
-
-    buffer_t src_buffer;
-    buffer_t dst_buffer;
-
-    // Setup src to be RGB interleaved, with no extra padding between channels or rows.
-    memset(&src_buffer, 0, sizeof(src_buffer));
-    src_buffer.host = src_storage;
-    src_buffer.extent[0] = buffer_side_length;
-    src_buffer.stride[0] = 3;
-    src_buffer.extent[1] = buffer_side_length;
-    src_buffer.stride[1] = src_buffer.stride[0] * src_buffer.extent[0];
-    src_buffer.extent[2] = 3;
-    src_buffer.stride[2] = 1;
-    src_buffer.elem_size = 1;
+    // Setup src to be RGB interleaved, with no extra padding between
+    // channels or rows.
+    Image<uint8_t> src_image = make_interleaved(size, 0, 128, 255);
 
     // Setup dst to be planar, with no extra padding between channels or rows.
-    memset(&dst_buffer, 0, sizeof(dst_buffer));
-    dst_buffer.host = dst_storage;
-    dst_buffer.extent[0] = buffer_side_length;
-    dst_buffer.stride[0] = 1;
-    dst_buffer.extent[1] = buffer_side_length;
-    dst_buffer.stride[1] = dst_buffer.stride[0] * dst_buffer.extent[0];
-    dst_buffer.extent[2] = 3;
-    dst_buffer.stride[2] = dst_buffer.stride[1] * dst_buffer.extent[1];
-    dst_buffer.elem_size = 1;
-
-    Image<uint8_t> src_image(&src_buffer, "src_image");
-    Image<uint8_t> dst_image(&dst_buffer, "dst_image");
-
-    for (int32_t x = 0; x < buffer_side_length; x++) {
-        for (int32_t y = 0; y < buffer_side_length; y++) {
-          src_image(x, y, 0) = 0;
-          src_image(x, y, 1) = 128;
-          src_image(x, y, 2) = 255;
-        }
-    }
-    memset(dst_storage, 0, buffer_size);
+    Image<uint8_t> dst_image = make_planar(size, 0, 0, 0);
 
     src.set(src_image);
 
-    dst.compile_jit();
-
-    // Warm up caches, etc.
-    dst.realize(dst_image);
-
-    double t1 = benchmark(1, iterations, [&]() {
+    double t1 = benchmark(1, 20, [&]() {
         dst.realize(dst_image);
     });
 
     printf("Interleaved to planar bandwidth %.3e byte/s.\n", buffer_size / t1);
-
-    for (int32_t x = 0; x < buffer_side_length; x++) {
-        for (int32_t y = 0; y < buffer_side_length; y++) {
-            assert(dst_image(x, y, 0) == 0);
-            assert(dst_image(x, y, 1) == 128);
-            assert(dst_image(x, y, 2) == 255);
-        }
-    }
+    check_values(dst_image, 0, 128, 255);
 
     // Setup a semi-planar output case.
-    memset(&dst_buffer, 0, sizeof(dst_buffer));
-    dst_buffer.host = dst_storage;
-    dst_buffer.extent[0] = buffer_side_length;
-    dst_buffer.stride[0] = 1;
-    dst_buffer.extent[1] = buffer_side_length;
-    dst_buffer.stride[1] = dst_buffer.stride[0] * dst_buffer.extent[0] * 3;
-    dst_buffer.extent[2] = 3;
-    dst_buffer.stride[2] = dst_buffer.extent[0];
-    dst_buffer.elem_size = 1;
+    dst_image = make_semi_planar(size, 0, 0, 0);
 
-    memset(dst_storage, 0, buffer_size);
-
-    double t2 = benchmark(1, iterations, [&]() {
+    double t2 = benchmark(3, 3, [&]() {
         dst.realize(dst_image);
     });
-
-    for (int32_t x = 0; x < buffer_side_length; x++) {
-        for (int32_t y = 0; y < buffer_side_length; y++) {
-            assert(dst_image(x, y, 0) == 0);
-            assert(dst_image(x, y, 1) == 128);
-            assert(dst_image(x, y, 2) == 255);
-        }
-    }
+    check_values(dst_image, 0, 128, 255);
 
     printf("Interleaved to semi-planar bandwidth %.3e byte/s.\n", buffer_size / t2);
-
-    delete[] src_storage;
-    delete[] dst_storage;
 }
 
 void test_interleave(bool fast) {
@@ -129,97 +121,44 @@ void test_interleave(bool fast) {
 
     dst(x, y, c) = src(x, y, c);
 
-    // This is the default format for Halide, but made explicit for illustration.
-    src.set_stride(0, 1);
-    src.set_extent(2, 3);
+    // src is planar
+    src
+        .dim(0).set_stride(1)
+        .dim(2).set_extent(3);
 
-    dst.output_buffer().set_min(2, 0);
-    dst.output_buffer().set_stride(0, 3);
-    dst.output_buffer().set_stride(2, 1);
-    dst.output_buffer().set_extent(2, 3);
+    // dst is interleaved
+    dst.output_buffer()
+        .dim(0).set_stride(3)
+        .dim(2).set_stride(1).set_bounds(0, 3);
 
-    if( fast ) {
+    if (fast) {
         dst.reorder(c, x, y).bound(c, 0, 3).unroll(c);
         dst.vectorize(x, 16);
     } else {
         dst.reorder(c, x, y).vectorize(x, 16);
     }
 
-    // Run test many times to avoid timing jitter
-    const int iterations = 20;
-
     // Allocate two 16 megapixel, 3 channel, 8-bit images -- input and output
-    const int32_t buffer_side_length = (1 << 12);
-    const int32_t buffer_size = buffer_side_length * buffer_side_length;
+    const int32_t size = (1 << 12);
+    const int32_t buffer_size = size*size*3;
 
-    uint8_t *src_storage(new uint8_t[buffer_size * 3]);
-    uint8_t *dst_storage(new uint8_t[buffer_size * 3]);
+    // Setup src to be planar, with no extra padding between channels or rows.
+    Image<uint8_t> src_image = make_planar(size, 0, 128, 255);
 
-    buffer_t src_buffer;
-    buffer_t dst_buffer;
-
-    // Setup src to be RGB interleaved, with no extra padding between channels or rows.
-    memset(&src_buffer, 0, sizeof(src_buffer));
-    src_buffer.host = src_storage;
-    src_buffer.extent[0] = buffer_side_length;
-    src_buffer.stride[0] = 1;
-    src_buffer.extent[1] = buffer_side_length;
-    src_buffer.stride[1] = src_buffer.stride[0] * src_buffer.extent[0];
-    src_buffer.extent[2] = 3;
-    src_buffer.stride[2] = src_buffer.stride[1] * src_buffer.extent[1];
-    src_buffer.elem_size = 1;
-
-    // Setup dst to be planar, with no extra padding between channels or rows.
-    memset(&dst_buffer, 0, sizeof(dst_buffer));
-    dst_buffer.host = dst_storage;
-    dst_buffer.extent[0] = buffer_side_length;
-    dst_buffer.stride[0] = 3;
-    dst_buffer.extent[1] = buffer_side_length;
-    dst_buffer.stride[1] = dst_buffer.stride[0] * dst_buffer.extent[0];
-    dst_buffer.extent[2] = 3;
-    dst_buffer.stride[2] = 1;
-    dst_buffer.elem_size = 1;
-
-    Image<uint8_t> src_image(&src_buffer, "src_image");
-    Image<uint8_t> dst_image(&dst_buffer, "dst_image");
-
-    for (int32_t x = 0; x < buffer_side_length; x++) {
-        for (int32_t y = 0; y < buffer_side_length; y++) {
-          src_image(x, y, 0) = 0;
-          src_image(x, y, 1) = 128;
-          src_image(x, y, 2) = 255;
-        }
-    }
-    memset(dst_storage, 0, buffer_size);
+    // Setup dst to be RGB interleaved, with no extra padding between
+    // channels or rows. Do it by making a 3 x size x size planar
+    // buffer and swapping two of the dimension descriptors.
+    Image<uint8_t> dst_image = make_interleaved(size, 0, 0, 0);
 
     src.set(src_image);
 
-    if( fast ) {
-        dst.compile_to_lowered_stmt("rgb_interleave_fast.stmt", dst.infer_arguments());
-    } else {
-        dst.compile_to_lowered_stmt("rgb_interleave_slow.stmt", dst.infer_arguments());
-    }
-    dst.compile_jit();
-
-    // Warm up caches, etc.
-    dst.realize(dst_image);
-
-    double t = benchmark(1, iterations, [&]() {
+    double t = benchmark(3, 3, [&]() {
         dst.realize(dst_image);
     });
 
     printf("Planar to interleaved bandwidth %.3e byte/s.\n", buffer_size / t);
 
-    for (int32_t x = 0; x < buffer_side_length; x++) {
-        for (int32_t y = 0; y < buffer_side_length; y++) {
-            assert(dst_image(x, y, 0) == 0);
-            assert(dst_image(x, y, 1) == 128);
-            assert(dst_image(x, y, 2) == 255);
-        }
-    }
-
-    delete[] src_storage;
-    delete[] dst_storage;
+    check_values(dst_image, 0, 128, 255);
 }
 
 int main(int argc, char **argv) {

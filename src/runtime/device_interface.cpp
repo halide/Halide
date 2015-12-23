@@ -26,7 +26,7 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
 
     if (buf->device_dirty()) {
         debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty is true\n";
-        const halide_device_interface *interface = buf->device_interface;
+        const halide_device_interface_t *interface = buf->device_interface;
         if (buf->host_dirty()) {
             debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
             result = halide_error_code_copy_to_host_failed;
@@ -54,7 +54,7 @@ extern "C" {
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-WEAK void halide_device_release(void *user_context, const halide_device_interface *device_interface) {
+WEAK void halide_device_release(void *user_context, const halide_device_interface_t *device_interface) {
     device_interface->device_release(user_context);
 }
 
@@ -72,7 +72,7 @@ WEAK int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
  * called directly; Halide handles copying to the device automatically. */
 WEAK int halide_copy_to_device(void *user_context,
                                struct halide_buffer_t *buf,
-                               const halide_device_interface *device_interface) {
+                               const halide_device_interface_t *device_interface) {
     int result = 0;
 
     ScopedMutexLock lock(&device_copy_mutex);
@@ -143,7 +143,7 @@ WEAK int halide_copy_to_device(void *user_context,
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 WEAK int halide_device_sync(void *user_context, struct halide_buffer_t *buf) {
-    const halide_device_interface *device_interface = NULL;
+    const halide_device_interface_t *device_interface = NULL;
     if (buf) {
         device_interface = buf->device_interface;
     }
@@ -160,8 +160,8 @@ WEAK int halide_device_sync(void *user_context, struct halide_buffer_t *buf) {
 }
 
 /** Allocate device memory to back a halide_buffer_t. */
-WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const halide_device_interface *device_interface) {
-    const halide_device_interface *current_interface = buf->device_interface;
+WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const halide_device_interface_t *device_interface) {
+    const halide_device_interface_t *current_interface = buf->device_interface;
     debug(user_context) << "halide_device_malloc: " << buf
                         << " interface " << device_interface
                         << " host: " << buf->host
@@ -195,7 +195,7 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
                         << " buf dev " << buf->device
                         << " interface " << buf->device_interface << "\n";
     if (buf != NULL) {
-        const halide_device_interface *device_interface = buf->device_interface;
+        const halide_device_interface_t *device_interface = buf->device_interface;
         if (device_interface != NULL) {
             // Ensure interface is not freed prematurely.
             // TODO: Exception safety...

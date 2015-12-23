@@ -209,12 +209,12 @@ extern int halide_shutdown_trace();
 /** All Halide GPU or device backend implementations much provide an interface
  * to be used with halide_device_malloc, etc.
  */
-struct halide_device_interface;
+struct halide_device_interface_t;
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_device_release(void *user_context, const halide_device_interface *device_interface);
+extern void halide_device_release(void *user_context, const halide_device_interface_t *device_interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
@@ -227,14 +227,14 @@ extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
 extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                 const halide_device_interface *device_interface);
+                                 const halide_device_interface_t *device_interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
 
 /** Allocate device memory to back a halide_buffer_t. */
-extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const halide_device_interface *device_interface);
+extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const halide_device_interface_t *device_interface);
 
 extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
 
@@ -333,7 +333,7 @@ enum halide_error_code_t {
 
     /** The elem_size field of a halide_buffer_t does not match the size in
      * bytes of the type of that ImageParam. Probable type mismatch. */
-    halide_error_code_bad_elem_size = -3,
+    halide_error_code_bad_type = -3,
 
     /** A pipeline would access memory outside of the halide_buffer_t passed
      * in. */
@@ -436,8 +436,10 @@ extern int halide_error_extern_stage_failed(void *user_context, const char *exte
 // @{
 extern int halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
                                                       int min_bound, int max_bound, int min_required, int max_required);
-extern int halide_error_bad_elem_size(void *user_context, const char *func_name,
-                                      const char *type_name, int elem_size_given, int correct_elem_size);
+extern int halide_error_bad_type(void *user_context, const char *func_name,
+                                 uint8_t code_given, uint8_t correct_code,
+                                 uint8_t bits_given, uint8_t correct_bits,
+                                 uint16_t lanes_given, uint16_t correct_lanes);
 extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
                                              int dimension, int min_touched, int max_touched,
                                              int min_valid, int max_valid);
@@ -541,9 +543,7 @@ struct halide_type_t {
 #endif
 };
 
-#ifndef HALIDE_BUFFER_T_DEFINED
-#define HALIDE_BUFFER_T_DEFINED
-
+#if 0
 /**
  * The old raw representation of a buffer, included for legacy support.
  */
@@ -595,11 +595,28 @@ typedef struct buffer_t {
     // there is no ambiguity.
     HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
-
+#endif
 
 typedef struct halide_dimension_t {
     int32_t min, extent, stride;
     uint32_t flags;
+
+#ifdef __cplusplus
+    halide_dimension_t() : min(0), extent(0), stride(0), flags(0) {}
+    halide_dimension_t(int32_t m, int32_t e, int32_t s, uint32_t f = 0) :
+        min(m), extent(e), stride(s), flags(f) {}
+
+    bool operator==(const halide_dimension_t &other) const {
+        return (min == other.min) &&
+            (extent == other.extent) &&
+            (stride == other.stride) &&
+            (flags == other.flags);
+    }
+
+    bool operator!=(const halide_dimension_t &other) const {
+        return !(*this == other);
+    }
+#endif
 } halide_dimension_t;
 
 /**
@@ -612,20 +629,26 @@ typedef struct halide_buffer_t {
     uint64_t device;
 
     /** The interface used to interpret the above handle. */
-    const halide_device_interface *device_interface;
+    const halide_device_interface_t *device_interface;
 
     /** A pointer to the start of the data in main memory. In terms of
      * the Halide coordinate system, this is the address of the min
      * coordinates (defined below). */
     uint8_t* host;
 
+    /** flags with various meanings. 64-bits is probably overkill, but
+     * it aligns the rest of the buffer nicely. */
+    enum buffer_flags {flag_host_dirty = 0, flag_device_dirty = 1};
+    uint64_t flags;
+
     /** The type of each buffer element. */
     halide_type_t type;
 
-    enum buffer_flags {flag_host_dirty = 0, flag_device_dirty = 1};
-    uint32_t flags;
+    /** The dimensionality of the buffer. */
     int32_t dimensions;
-    halide_dimension_t dim[8];
+
+    /** The shape of the buffer. */
+    halide_dimension_t *dim;
 
 #ifdef __cplusplus
     // Convenience methods for accessing the flags
@@ -654,6 +677,27 @@ typedef struct halide_buffer_t {
 #endif
 } halide_buffer_t;
 
+#ifdef __cplusplus
+} // extern "C"
+
+/** A wrapper for halide_buffer_t that knows the dimensionality at
+ * compile-time and also allocates enough space for the dimensions. */
+
+template<int D>
+struct halide_nd_buffer_t : public halide_buffer_t {
+    halide_dimension_t dim_storage[D];
+    halide_nd_buffer_t() {
+        memset(this, 0, sizeof(*this));
+        dimensions = D;
+        dim = dim_storage;
+    }
+};
+
+extern "C" {
+
+#endif
+
+/*
 inline void halide_upgrade_buffer_t(const buffer_t *buf, halide_type_t type, int dimensions, halide_buffer_t *new_buf) {
     new_buf->device = 0; // Don't try to unwrap old-style device wrappers
     new_buf->host = buf->host;
@@ -675,8 +719,7 @@ inline void halide_upgrade_buffer_t(const buffer_t *buf, halide_type_t type, int
     new_buf->set_host_dirty(buf->host_dirty);
     new_buf->set_device_dirty(buf->dev_dirty);
 }
-
-#endif
+*/
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;

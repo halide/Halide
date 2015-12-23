@@ -36,7 +36,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_enumerate_registered_filters,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
-    (void *)&halide_error_bad_elem_size,
+    (void *)&halide_error_bad_type,
     (void *)&halide_error_bounds_inference_call_failed,
     (void *)&halide_error_buffer_allocation_too_large,
     (void *)&halide_error_buffer_argument_is_null,

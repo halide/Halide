@@ -332,9 +332,12 @@ public:
                     Function input(args[j].func);
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
+                        vector<Expr> args = {null_handle, make_zero(input.output_types()[k])};
+                        for (int i = 0; i < input.dimensions()*3; i++) {
+                            args.push_back(0);
+                        }
                         Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                              {null_handle, make_zero(input.output_types()[k])},
-                                              Call::Intrinsic);
+                                              args, Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(Handle(), name));
                     }
@@ -342,12 +345,13 @@ public:
                     Parameter p = args[j].image_param;
                     Buffer b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
+                    int dims = args[j].is_image_param() ? p.dimensions() : b.dimensions();
 
                     Expr in_buf = Variable::make(Handle(), name + ".buffer");
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
-                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
+                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, {in_buf, dims}, Call::Intrinsic);
                     lets.push_back(make_pair(query_name, query_buf));
                     Expr buf = Variable::make(Handle(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);

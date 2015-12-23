@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         MultiDevicePipeline pipe2(const_input);
 
         ImageParam gpu_buffer(Float(32), 3);
-        gpu_buffer.set_bounds(2, 0, 3);
+        gpu_buffer.dim(2).set_bounds(0, 3);
         Func buf_input;
         buf_input(x, y, c) = gpu_buffer(x, y, c);
         MultiDevicePipeline pipe3(buf_input);

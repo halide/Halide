@@ -13,7 +13,7 @@ void check_constant_exterior(const Image<T> &input, T exterior, Func f,
                              int vector_width,
                              Target t = get_jit_target_from_environment()) {
     Image<T> result(test_extent_x, test_extent_y);
-    result.set_min(test_min_x, test_min_y);
+    result.set_min({test_min_x, test_min_y});
     f = lambda(x, y, f(x, y));
     if (vector_width != 1) {
         f.vectorize(x, vector_width);
@@ -40,7 +40,7 @@ void check_repeat_edge(const Image<T> &input, Func f,
                        int vector_width,
                        Target t = get_jit_target_from_environment()) {
     Image<T> result(test_extent_x, test_extent_y);
-    result.set_min(test_min_x, test_min_y);
+    result.set_min({test_min_x, test_min_y});
     f = lambda(x, y, f(x, y));
     if (vector_width != 1) {
         f.vectorize(x, vector_width);
@@ -65,7 +65,7 @@ void check_repeat_image(const Image<T> &input, Func f,
                         int vector_width,
                         Target t = get_jit_target_from_environment()) {
     Image<T> result(test_extent_x, test_extent_y);
-    result.set_min(test_min_x, test_min_y);
+    result.set_min({test_min_x, test_min_y});
     f = lambda(x, y, f(x, y));
     if (vector_width != 1) {
         f.vectorize(x, vector_width);
@@ -94,7 +94,7 @@ void check_mirror_image(const Image<T> &input, Func f,
                         int vector_width,
                         Target t = get_jit_target_from_environment()) {
     Image<T> result(test_extent_x, test_extent_y);
-    result.set_min(test_min_x, test_min_y);
+    result.set_min({test_min_x, test_min_y});
     f = lambda(x, y, f(x, y));
     if (vector_width != 1) {
         f.vectorize(x, vector_width);
@@ -127,7 +127,7 @@ void check_mirror_interior(const Image<T> &input, Func f,
                            int vector_width,
                            Target t = get_jit_target_from_environment()) {
     Image<T> result(test_extent_x, test_extent_y);
-    result.set_min(test_min_x, test_min_y);
+    result.set_min({test_min_x, test_min_y});
     f = lambda(x, y, f(x, y));
     if (vector_width != 1) {
         f.vectorize(x, vector_width);

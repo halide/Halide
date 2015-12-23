@@ -249,20 +249,26 @@ public:
         /** Set the min and extent in one call. */
         EXPORT Dimension set_bounds(Expr min, Expr extent);
 
+        /** Get a different dimension of the same buffer */
+        // @{
+        EXPORT Dimension dim(int i);
+        EXPORT const Dimension dim(int i) const;
+        // @}
+
     private:
         friend class OutputImageParam;
 
         /** Construct a Dimension representing dimension d of some
          * Internal::Parameter p. Only OutputImageParam may construct
          * these. */
-        Dimension(const Internal::Parameter &p, int d) : param(p), dim(d) {}
+        Dimension(const Internal::Parameter &p, int d) : param(p), d(d) {}
 
         /** Only OutputImageParam may copy these, too. This prevents
          * users removing constness by making a non-const copy. */
         Dimension(const Dimension &) = default;
 
         Internal::Parameter param;
-        int dim;
+        int d;
     };
 
     /** Construct a NULL image parameter handle. */

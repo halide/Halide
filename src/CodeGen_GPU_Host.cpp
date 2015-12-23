@@ -295,7 +295,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
         Value *kernel_src_ptr =
-            CodeGen_CPU::create_constant_binary_blob(kernel_src,
+            CodeGen_CPU::create_constant_binary_blob(&kernel_src[0], kernel_src.size(),
                                                      "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
         if (f.args[0].name == "__user_context") {
@@ -481,7 +481,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             if (closure_args[i].is_buffer) {
                 // If it's a buffer, dereference the dev handle
-                val = buffer_dev(sym_get(name + ".buffer"));
+                val = buffer_device(sym_get(name + ".buffer"));
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
                 // expression mesh. Pass a non-NULL value in the argument array

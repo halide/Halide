@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     f(x) = Tuple(x, sin(x));
 
     // Don't do this. Instead constrain the size of output buffer 0.
-    f.output_buffers()[1].set_min(0, 4);
+    f.output_buffers()[1].dim(0).set_min(4);
 
     f.compile_jit();
 

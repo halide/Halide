@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     // also produces the correct result
     float arg0 = 1.234f;
     float arg1 = 3.456f;
-    buffer_t arg2 = *output;
+    halide_buffer_t arg2 = *output;
     void* args[3] = { &arg0, &arg1, &arg2 };
     result = argvcall_argv(args);
     if (result != 0) {

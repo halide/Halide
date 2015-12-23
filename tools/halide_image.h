@@ -1,4 +1,4 @@
-// This header defines a simple Image class which wraps a buffer_t. This is
+// This header defines a simple Image class which wraps a halide_buffer_t. This is
 // useful when interacting with a statically-compiled Halide pipeline emitted by
 // Func::compile_to_file, when you do not want to link your processing program
 // against Halide.h/libHalide.a.
@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <stdint.h>  // <cstdint> requires C++11
+#include <string.h>
 
 #include "HalideRuntime.h"
 
@@ -20,18 +21,19 @@ namespace Tools {
 template<typename T>
 class Image {
     struct Contents {
-        Contents(const buffer_t &b, uint8_t *a) : buf(b), ref_count(1), alloc(a) {}
-        buffer_t buf;
-        int ref_count;
-        uint8_t *alloc;
+        halide_buffer_t buf = {0};
+        // This class supports up to four dimensions
+        halide_dimension_t shape[4];
+        int ref_count = 1;
+        uint8_t *alloc = NULL;
 
-        void dev_free() {
+        void device_free() {
             halide_device_free(NULL, &buf);
         }
 
         ~Contents() {
-            if (buf.dev) {
-                dev_free();
+            if (buf.device) {
+                device_free();
             }
             delete[] alloc;
         }
@@ -40,23 +42,28 @@ class Image {
     Contents *contents;
 
     void initialize(int x, int y, int z, int w, bool interleaved) {
-        buffer_t buf = {0};
-        buf.extent[0] = x;
-        buf.extent[1] = y;
-        buf.extent[2] = z;
-        buf.extent[3] = w;
+        contents = new Contents;
+
+        memset(contents->shape, 0, sizeof(contents->shape));
+
+        contents->shape[0].extent = x;
+        contents->shape[1].extent = y;
+        contents->shape[2].extent = z;
+        contents->shape[3].extent = w;
         if (interleaved) {
-            buf.stride[0] = z;
-            buf.stride[1] = x*z;
-            buf.stride[2] = 1;
-            buf.stride[3] = x*y*z;
+            contents->shape[0].stride = z;
+            contents->shape[1].stride = x*z;
+            contents->shape[2].stride = 1;
+            contents->shape[3].stride = x*y*z;
         } else {
-            buf.stride[0] = 1;
-            buf.stride[1] = x;
-            buf.stride[2] = x*y;
-            buf.stride[3] = x*y*z;
+            contents->shape[0].stride = 1;
+            contents->shape[1].stride = x;
+            contents->shape[2].stride = x*y;
+            contents->shape[3].stride = x*y*z;
         }
-        buf.elem_size = sizeof(T);
+        contents->buf.type = halide_type_of<T>();
+        contents->buf.dimensions = w ? 4 : z ? 3 : y ? 2 : x ? 1 : 0;
+        contents->buf.dim = contents->shape;
 
         size_t size = 1;
         if (x) size *= x;
@@ -65,12 +72,9 @@ class Image {
         if (w) size *= w;
 
         uint8_t *ptr = new uint8_t[sizeof(T)*size + 40];
-        buf.host = ptr;
-        buf.host_dirty = false;
-        buf.dev_dirty = false;
-        buf.dev = 0;
-        while ((size_t)buf.host & 0x1f) buf.host++;
-        contents = new Contents(buf, ptr);
+        contents->alloc = ptr;
+        while ((size_t)ptr & 0x1f) ptr++;
+        contents->buf.host = ptr;
     }
 
 public:
@@ -122,27 +126,24 @@ public:
     void set_host_dirty(bool dirty = true) {
         // If you use data directly, you must also call this so that
         // gpu-side code knows that it needs to copy stuff over.
-        contents->buf.host_dirty = dirty;
+        contents->buf.set_host_dirty(dirty);
     }
 
     void copy_to_host() {
-        if (contents->buf.dev_dirty) {
+        if (contents->buf.device_dirty()) {
             halide_copy_to_host(NULL, &contents->buf);
-            contents->buf.dev_dirty = false;
         }
     }
 
-    void copy_to_device(const struct halide_device_interface *device_interface) {
-        if (contents->buf.host_dirty) {
-            // If host
+    void copy_to_device(const struct halide_device_interface_t *device_interface) {
+        if (contents->buf.host_dirty()) {
             halide_copy_to_device(NULL, &contents->buf, device_interface);
-            contents->buf.host_dirty = false;
         }
     }
 
-    void dev_free() {
-        assert(!contents->buf.dev_dirty);
-        contents->dev_free();
+    void device_free() {
+        assert(!contents->buf.device_dirty());
+        contents->device_free();
     }
 
     Image(T vals[]) {
@@ -154,14 +155,14 @@ public:
      * accessing pixels directly. */
     T &operator()(int x, int y = 0, int z = 0, int w = 0) {
         T *ptr = (T *)contents->buf.host;
-        x -= contents->buf.min[0];
-        y -= contents->buf.min[1];
-        z -= contents->buf.min[2];
-        w -= contents->buf.min[3];
-        size_t s0 = contents->buf.stride[0];
-        size_t s1 = contents->buf.stride[1];
-        size_t s2 = contents->buf.stride[2];
-        size_t s3 = contents->buf.stride[3];
+        x -= contents->shape[0].min;
+        y -= contents->shape[1].min;
+        z -= contents->shape[2].min;
+        w -= contents->shape[3].min;
+        size_t s0 = contents->shape[0].stride;
+        size_t s1 = contents->shape[1].stride;
+        size_t s2 = contents->shape[2].stride;
+        size_t s3 = contents->shape[3].stride;
         return ptr[s0 * x + s1 * y + s2 * z + s3 * w];
     }
 
@@ -169,59 +170,58 @@ public:
      * accessing pixels directly */
     const T &operator()(int x, int y = 0, int z = 0, int w = 0) const {
         const T *ptr = (const T *)contents->buf.host;
-        x -= contents->buf.min[0];
-        y -= contents->buf.min[1];
-        z -= contents->buf.min[2];
-        w -= contents->buf.min[3];
-        size_t s0 = contents->buf.stride[0];
-        size_t s1 = contents->buf.stride[1];
-        size_t s2 = contents->buf.stride[2];
-        size_t s3 = contents->buf.stride[3];
+        x -= contents->shape[0].min;
+        y -= contents->shape[1].min;
+        z -= contents->shape[2].min;
+        w -= contents->shape[3].min;
+        size_t s0 = contents->shape[0].stride;
+        size_t s1 = contents->shape[1].stride;
+        size_t s2 = contents->shape[2].stride;
+        size_t s3 = contents->shape[3].stride;
         return ptr[s0 * x + s1 * y + s2 * z + s3 * w];
     }
 
-    operator buffer_t *() const {
+    operator halide_buffer_t *() const {
+        return &(contents->buf);
+    }
+
+    halide_buffer_t *raw_buffer() {
+        return &(contents->buf);
+    }
+
+    const halide_buffer_t *raw_buffer() const {
         return &(contents->buf);
     }
 
     int width() const {
-        return dimensions() > 0 ? contents->buf.extent[0] : 1;
+        return (dimensions() > 0) ? dim(0).extent : 1;
     }
 
     int height() const {
-        return dimensions() > 1 ? contents->buf.extent[1] : 1;
+        return (dimensions() > 1) ? dim(1).extent : 1;
     }
 
     int channels() const {
-        return dimensions() > 2 ? contents->buf.extent[2] : 1;
+        return (dimensions() > 2) ? dim(2).extent : 1;
     }
 
     int dimensions() const {
-        for (int i = 0; i < 4; i++) {
-            if (contents->buf.extent[i] == 0) {
-                return i;
-            }
-        }
-        return 4;
+        return contents->buf.dimensions;
     }
 
-    int stride(int dim) const {
-        return contents->buf.stride[dim];
+    const halide_dimension_t &dim(int d) const {
+        return contents->shape[d];
     }
 
-    int min(int dim) const {
-        return contents->buf.min[dim];
-    }
-
-    int extent(int dim) const {
-        return contents->buf.extent[dim];
+    halide_dimension_t &dim(int d) {
+        return contents->shape[d];
     }
 
     void set_min(int x, int y = 0, int z = 0, int w = 0) {
-        contents->buf.min[0] = x;
-        contents->buf.min[1] = y;
-        contents->buf.min[2] = z;
-        contents->buf.min[3] = w;
+        contents->shape[0].min = x;
+        contents->shape[1].min = y;
+        contents->shape[2].min = z;
+        contents->shape[3].min = w;
     }
 };
 

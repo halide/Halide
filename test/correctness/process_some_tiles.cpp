@@ -49,9 +49,9 @@ int main(int argc, char **argv) {
 
     // Compute the output in tiles of the appropriate size to simplify
     // the mod and div above. Not important for the stage skipping behavior.
-    output.bound(x, 0, (image.extent(0)/tile_size)*tile_size)
-          .bound(y, 0, (image.extent(1)/tile_size)*tile_size)
-          .tile(x, y, xi, yi, tile_size, tile_size);
+    output.bound(x, 0, (image.width()/tile_size)*tile_size)
+        .bound(y, 0, (image.height()/tile_size)*tile_size)
+        .tile(x, y, xi, yi, tile_size, tile_size);
 
     // Vectorize within tiles. We would also parallelize across tiles,
     // but that introduces a race condition in the call_count.

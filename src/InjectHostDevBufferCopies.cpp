@@ -316,19 +316,18 @@ class InjectBufferCopies : public IRMutator {
             }
 
             Expr buffer = Variable::make(Handle(), i.first + ".buffer");
-            Expr t = make_one(UInt(8));
 
             if (host_wrote) {
                 debug(4) << "Setting host dirty for " << i.first << "\n";
                 // If we just invalidated the dev pointer, we need to set the host dirty bit.
-                Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, {buffer, t}, Call::Intrinsic);
+                Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, {buffer}, Call::Intrinsic);
                 s = Block::make(s, Evaluate::make(set_host_dirty));
             }
 
             if (device_wrote) {
                 // If we just invalidated the host pointer, we need to set the dev dirty bit.
-                Expr set_dev_dirty = Call::make(Int(32), Call::set_dev_dirty, {buffer, t}, Call::Intrinsic);
-                s = Block::make(s, Evaluate::make(set_dev_dirty));
+                Expr set_device_dirty = Call::make(Int(32), Call::set_device_dirty, {buffer}, Call::Intrinsic);
+                s = Block::make(s, Evaluate::make(set_device_dirty));
             }
 
             // Clear the pending action bits.

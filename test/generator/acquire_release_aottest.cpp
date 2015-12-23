@@ -223,8 +223,8 @@ int main(int argc, char **argv) {
     }
 
     // We need to free our GPU buffers before destroying the context.
-    input.dev_free();
-    output.dev_free();
+    input.device_free();
+    output.device_free();
 
     // Free the context we created.
     destroy_context();

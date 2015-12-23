@@ -186,8 +186,23 @@ class RDom {
     EXPORT void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
 
     template <typename... Args>
-    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args... args) {
+    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges,
+                                          Expr min, Expr extent, Args... args) {
         ranges.push_back(std::make_pair(min, extent));
+        initialize_from_ranges(ranges, args...);
+    }
+
+    template <typename... Args>
+    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges,
+                                          const Buffer::Dimension &d, Args... args) {
+        ranges.push_back(std::make_pair(d.min(), d.extent()));
+        initialize_from_ranges(ranges, args...);
+    }
+
+    template <typename... Args>
+    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges,
+                                          const OutputImageParam::Dimension &d, Args... args) {
+        ranges.push_back(std::make_pair(d.min(), d.extent()));
         initialize_from_ranges(ranges, args...);
     }
 
@@ -208,6 +223,18 @@ public:
         // that work with variadic template unpacking in visual studio 2013
         std::vector<std::pair<Expr, Expr>> ranges;
         initialize_from_ranges(ranges, min, extent, args...);
+    }
+
+    template <typename... Args>
+    NO_INLINE RDom(const Buffer::Dimension &d, Args... args) {
+        std::vector<std::pair<Expr, Expr>> ranges;
+        initialize_from_ranges(ranges, d.min(), d.extent(), args...);
+    }
+
+    template <typename... Args>
+    NO_INLINE RDom(const OutputImageParam::Dimension &d, Args... args) {
+        std::vector<std::pair<Expr, Expr>> ranges;
+        initialize_from_ranges(ranges, d.min(), d.extent(), args...);
     }
     // @}
 

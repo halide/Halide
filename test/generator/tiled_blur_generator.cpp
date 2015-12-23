@@ -5,7 +5,7 @@ namespace {
 class TiledBlur : public Halide::Generator<TiledBlur> {
 public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
-    ImageParam input{ Int(32), 3, "input" };
+    ImageParam input{ Float(32), 3, "input" };
 
     Func build() {
         // This is the outermost pipeline, so input width and height
@@ -46,8 +46,11 @@ public:
             brighter1.reorder_storage(c, x, y);
             tiled_blur.reorder_storage(tiled_blur.args()[2], tiled_blur.args()[0],
                                        tiled_blur.args()[1]);
-            input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
-            brighter2.output_buffer().set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
+            input.dim(0).set_stride(3);
+            input.dim(2).set_stride(1).set_bounds(0, 3);
+            brighter2.output_buffer().dim(0).set_stride(3);
+            brighter2.output_buffer().dim(2).set_stride(1).set_bounds(0, 3);
+
         }
 
         return brighter2;

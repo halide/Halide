@@ -26,8 +26,12 @@ Image<double> test(bool with_vectorize) {
 
     Image<double> result(4, 4);
 
-    input.set_bounds(0, 0, 4).set_bounds(1, 0, 4);
-    output.output_buffer().set_bounds(0, 0, 4).set_bounds(1, 0, 4);
+    input
+        .dim(0).set_bounds(0, 4)
+        .dim(1).set_bounds(0, 4);
+    output.output_buffer()
+        .dim(0).set_bounds(0, 4)
+        .dim(1).set_bounds(0, 4);
 
     output.realize(result);
 

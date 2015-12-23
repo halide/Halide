@@ -255,7 +255,6 @@ WEAK int halide_matlab_array_to_halide_buffer_t(void *user_context,
                                                 const mxArray *arr,
                                                 const halide_filter_argument_t *arg,
                                                 halide_buffer_t *buf) {
-    memset(buf, 0, sizeof(halide_buffer_t));
 
     if (mxIsComplex(arr)) {
         error(user_context) << "Complex argument not supported for parameter " << arg->name << ".\n";
@@ -264,8 +263,6 @@ WEAK int halide_matlab_array_to_halide_buffer_t(void *user_context,
 
     int dim_count = get_number_of_dimensions(arr);
     int expected_dims = arg->dimensions;
-
-
 
     // Validate that the data type of a buffer matches exactly.
     mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
@@ -418,6 +415,9 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
             halide_buffer_t *buf = (halide_buffer_t *)__builtin_alloca(sizeof(halide_buffer_t));
+            memset(buf, 0, sizeof(halide_buffer_t));
+            buf->dim = (halide_dimension_t *)__builtin_alloca(sizeof(halide_dimension_t) * arg_metadata->dimensions);
+            memset(buf->dim, 0, sizeof(halide_dimension_t) * arg_metadata->dimensions);
             result = halide_matlab_array_to_halide_buffer_t(user_context, arg, arg_metadata, buf);
             if (result != 0) {
                 halide_matlab_note_pipeline_description(user_context, metadata);

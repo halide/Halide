@@ -5,7 +5,7 @@ namespace {
 class TiledBlurBlur : public Halide::Generator<TiledBlurBlur> {
 public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
-    ImageParam input{ Int(32), 3, "input" };
+    ImageParam input{ Float(32), 3, "input" };
     Param<int> width{ "width" };
     Param<int> height{ "height" };
 
@@ -28,8 +28,10 @@ public:
             4.0f;
 
         if (is_interleaved) {
-            input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
-            blur.output_buffer().set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
+            input.dim(0).set_stride(3);
+            input.dim(2).set_stride(1).set_bounds(0, 3);
+            blur.output_buffer().dim(0).set_stride(3);
+            blur.output_buffer().dim(2).set_stride(1).set_bounds(0, 3);
         }
         return blur;
     }

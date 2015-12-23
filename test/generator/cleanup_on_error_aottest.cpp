@@ -40,13 +40,12 @@ extern "C" void halide_error(void *user_context, const char *msg) {
     errors++;
 }
 
-extern "C" int halide_device_free(void *user_context, struct buffer_t *buf) {
+extern "C" int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
     device_frees++;
-    const halide_device_interface *interface = halide_get_device_interface(buf->dev);
-    return interface->device_free(user_context, buf);
+    return buf->device_interface->device_free(user_context, buf);
 }
 
-extern "C" int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
+extern "C" int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const halide_device_interface_t *interface) {
     device_mallocs++;
     return interface->device_malloc(user_context, buf);
 }

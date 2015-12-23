@@ -64,9 +64,7 @@ int main(int argc, char **argv) {
     // verify that calling via the _argv entry point
     // also produces the correct result
     const void* arg0 = context_pointer;
-    buffer_t arg1 = *input;
-    buffer_t arg2 = *output;
-    void* args[3] = { &arg0, &arg1, &arg2 };
+    void* args[3] = { &arg0, input.raw_buffer(), output.raw_buffer() };
     called_error = false;
     called_trace = false;
     called_malloc = false;

@@ -4,22 +4,15 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    buffer_t buf = {0};
+    halide_buffer_t buf = {0};
+    halide_dimension_t shape[] = {{100, 10, 1},
+                                  {300, 10, 10},
+                                  {500, 10, 100},
+                                  {400, 10, 1000}};
     buf.host = (uint8_t *)malloc(10000 * sizeof(int));
-    buf.min[0] = 100;
-    buf.min[1] = 300;
-    buf.min[2] = 500;
-    buf.min[3] = 400;
-    buf.extent[0] = 10;
-    buf.extent[1] = 10;
-    buf.extent[2] = 10;
-    buf.extent[3] = 10;
-    buf.stride[0] = 1;
-    buf.stride[1] = 10;
-    buf.stride[2] = 100;
-    buf.stride[3] = 1000;
-    buf.elem_size = 4;
-
+    buf.dim = shape;
+    buf.dimensions = 4;
+    buf.type = Int(32);
     Image<int> im(&buf);
 
     ((int *)buf.host)[0] = 17;

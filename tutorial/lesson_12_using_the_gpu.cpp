@@ -205,7 +205,7 @@ public:
 
         // Halide::Buffer, however, represents a buffer that may
         // exist on either CPU or GPU or both.
-        Buffer output(UInt(8), input.width(), input.height(), input.channels());
+        Buffer output(UInt(8), {input.width(), input.height(), input.channels()});
 
         // Run the filter once to initialize any GPU runtime state.
         curved.realize(output);

@@ -54,52 +54,46 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
 
 // Version for a one argument function.
 #define fun_1(type_ret, type, name, c_name)                                   \
-    void test_##type##_##name(buffer_t *in_buf) {                             \
+    void test_##type##_##name(Image<type> in) {                               \
         Target target = get_jit_target_from_environment();                    \
         if (!target.supports_type(type_of<type>())) {                         \
             return;                                                           \
         }                                                                     \
         Func test_##name("test_" #name);                                      \
         Var x("x");                                                           \
-        ImageParam input(type_of<type>(), 1);                                 \
-        test_##name(x) = name(input(x));                                      \
-        Buffer in_buffer(type_of<type>(), in_buf);                            \
-        input.set(in_buffer);                                                 \
+        test_##name(x) = name(in(x));                                         \
         if (target.has_gpu_feature()) {                                       \
             test_##name.gpu_tile(x, 8);                                       \
         }                                                                     \
-        Image<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
-        for (int i = 0; i < in_buf->extent[0]; i++) {                         \
-          type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]);  \
-	  if (!relatively_equal(c_result, result(i)))			\
-	    printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)reinterpret_cast<type *>(in_buf->host)[i], (double)c_result, (double)result(i)); \
-          assert(relatively_equal(c_result, result(i)) &&                     \
-                 "Failure on function " #name);                               \
+        Image<type_ret> result = test_##name.realize(in.width(), target);     \
+        for (int i = 0; i < in.width(); i++) {                                \
+            type_ret c_result = c_name(in(i));                                \
+	    if (!relatively_equal(c_result, result(i)))		              \
+	        printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", \
+                       (double)in(i), (double)c_result, (double)result(i));   \
+            assert(relatively_equal(c_result, result(i)) &&                   \
+                   "Failure on function " #name);                             \
         }                                                                     \
     }
 
 // Version for a one argument function
 #define fun_2(type_ret, type, name, c_name)                                         \
-    void test_##type##_##name(buffer_t *in_buf) {                                   \
+    void test_##type##_##name(Image<type> in) {                                     \
         Target target = get_jit_target_from_environment();                          \
         if (!target.supports_type(type_of<type>())) {                               \
             return;                                                                 \
         }                                                                           \
         Func test_##name("test_" #name);                                            \
         Var x("x");                                                                 \
-        ImageParam input(type_of<type>(), 2);                                       \
-        test_##name(x) = name(input(0, x), input(1, x));                            \
-        Buffer in_buffer(type_of<type>(), in_buf);                                  \
-        input.set(in_buffer);                                                       \
+        test_##name(x) = name(in(0, x), in(1, x));                                  \
         if (target.has_gpu_feature()) {                                             \
           test_##name.gpu_tile(x, 8);                                               \
         }                                                                           \
-        Image<type_ret> result = test_##name.realize(in_buf->extent[1], target);    \
-        for (int i = 0; i < in_buf->extent[1]; i++) {                               \
-          type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i * 2],     \
-                                     reinterpret_cast<type *>(in_buf->host)[i * 2 + 1]);\
-          assert(relatively_equal(c_result, result(i)) &&                           \
-                 "Failure on function " #name);                                     \
+        Image<type_ret> result = test_##name.realize(in.height(), target);          \
+        for (int i = 0; i < in.height(); i++) {                                     \
+            type_ret c_result = c_name(in(0, i), in(1, i));                         \
+            assert(relatively_equal(c_result, result(i)) &&                         \
+                   "Failure on function " #name);                                   \
         }                                                                           \
     }
 
@@ -180,8 +174,6 @@ struct TestArgs {
             data(1, i) = (T)((double)start_y + i * ((double)end_y - start_y) / steps);
           }
       }
-
-    operator buffer_t *() { return data.raw_buffer(); }
 };
 
 // Note this test is more oriented toward making sure the paths
@@ -194,14 +186,14 @@ struct TestArgs {
     {                                                             \
     printf("Testing " #name "(" #type ")\n");                     \
     TestArgs<type> args(steps, start, end);                       \
-    test_##type##_##name(args);                                   \
+    test_##type##_##name(args.data);                              \
     }
 
 #define call_2(type, name, steps, start1, end1, start2, end2)     \
     {                                                             \
     printf("Testing " #name "(" #type ")\n");                     \
     TestArgs<type> args(steps, start1, end1, start2, end2);       \
-    test_##type##_##name(args);                                   \
+    test_##type##_##name(args.data);                              \
     }
 
 #define call_1_float_types(name, steps, start, end)               \

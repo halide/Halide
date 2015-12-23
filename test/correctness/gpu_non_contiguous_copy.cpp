@@ -15,21 +15,16 @@ int main(int argc, char **argv) {
     const int x_off = 4, y_off = 8, z_off = 2, w_off = 4;
     const int x_size = 16, y_size = 16, z_size = 3, w_size = 3;
 
-    buffer_t cropped = *full.raw_buffer();
-    cropped.host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
-    cropped.min[0] = 0;
-    cropped.min[1] = 0;
-    cropped.min[2] = 0;
-    cropped.min[3] = 0;
-    cropped.extent[0] = x_size;
-    cropped.extent[1] = y_size;
-    cropped.extent[2] = z_size;
-    cropped.extent[3] = w_size;
-    cropped.stride[0] *= 2;
-    cropped.stride[1] *= 2;
-    cropped.stride[2] *= 2;
-    cropped.stride[3] *= 2;
-    Buffer out(Int(32), &cropped);
+    Buffer cropped(full.raw_buffer());
+    cropped.raw_buffer()->host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
+    cropped.raw_buffer()->dim[0].extent = x_size;
+    cropped.raw_buffer()->dim[1].extent = y_size;
+    cropped.raw_buffer()->dim[2].extent = z_size;
+    cropped.raw_buffer()->dim[3].extent = w_size;
+    cropped.raw_buffer()->dim[0].stride *= 2;
+    cropped.raw_buffer()->dim[1].stride *= 2;
+    cropped.raw_buffer()->dim[2].stride *= 2;
+    cropped.raw_buffer()->dim[3].stride *= 2;
 
     // Make a bitmask representing the region inside the crop.
     Image<bool> in_subregion(80, 60, 10, 10);
@@ -47,22 +42,22 @@ int main(int argc, char **argv) {
 
     Func f;
     f(x, y, z, w) = 3*x + 2*y + z + 4*w;
-    f.gpu_tile(x, y, 16, 16);
-    f.output_buffer().set_stride(0, Expr());
-    f.realize(out);
+    f.reorder(z, w, x, y).gpu_tile(x, y, 16, 16);
+    f.output_buffer().dim(0).set_stride(Expr());
+    f.realize(cropped);
 
     // Put some data in the full host buffer, avoiding the region
     // being evaluated above.
-    Expr change_out_of_subregion = select(test, undef<int>(), 4*x + 3*y + 2*z + w);
+    Expr change_out_of_subregion = select(test, undef<int>(), 4*x + 3*y + 2*z + w + 1000);
     lambda(x, y, z, w, change_out_of_subregion).realize(full);
 
     // Copy back the output subset from the GPU.
-    out.copy_to_host();
+    cropped.copy_to_host();
 
-    for (int w = 0; w < full.extent(3); ++w) {
-        for (int z = 0; z < full.extent(2); ++z) {
-            for (int y = 0; y < full.extent(1); ++y) {
-                for (int x = 0; x < full.extent(0); ++x) {
+    for (int w = 0; w < full.dim(3).extent(); ++w) {
+        for (int z = 0; z < full.dim(2).extent(); ++z) {
+            for (int y = 0; y < full.dim(1).extent(); ++y) {
+                for (int x = 0; x < full.dim(0).extent(); ++x) {
                     int correct;
                     if (in_subregion(x, y, z, w)) {
                         int x_ = (x - x_off)/2;
@@ -71,7 +66,7 @@ int main(int argc, char **argv) {
                         int w_ = (w - w_off)/2;
                         correct = 3*x_ + 2*y_ + z_ + 4*w_;
                     } else {
-                        correct = 4*x + 3*y + 2*z + w;
+                        correct = 4*x + 3*y + 2*z + w + 1000;
                     }
                     if (full(x, y, z, w) != correct) {
                         printf("Error! Incorrect value %i != %i at %i, %i, %i, %i\n", full(x, y, z, w), correct, x, y, z, w);

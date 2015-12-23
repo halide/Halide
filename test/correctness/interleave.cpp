@@ -131,15 +131,12 @@ int main(int argc, char **argv) {
 
         interleaved
             .output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 3)
-            .set_stride(1, 1)
-            .set_extent(1, 3);
+            .dim(0).set_stride(3)
+            .dim(1).set_bounds(0, 3).set_stride(1);
 
         Buffer buff3;
-        buff3 = Buffer(Float(32), 16, 3, 0, 0, (uint8_t *)0);
-        buff3.raw_buffer()->stride[0] = 3;
-        buff3.raw_buffer()->stride[1] = 1;
+        buff3 = Buffer(Float(32), {3, 16}, (uint8_t *)0);
+        std::swap(buff3.raw_buffer()->dim[0], buff3.raw_buffer()->dim[1]);
 
         Realization r3({buff3});
         interleaved.realize(r3);
@@ -181,17 +178,14 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output4.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 4)
-            .set_stride(1, 1)
-            .set_extent(1, 4);
+            .dim(0).set_stride(4)
+            .dim(1).set_bounds(0, 4).set_stride(1);
 
         check_interleave_count(output4, 1);
 
         Buffer buff4;
-        buff4 = Buffer(Float(32), 16, 4, 0, 0, (uint8_t *)0);
-        buff4.raw_buffer()->stride[0] = 4;
-        buff4.raw_buffer()->stride[1] = 1;
+        buff4 = Buffer(Float(32), {4, 16}, (uint8_t *)0);
+        std::swap(buff4.raw_buffer()->dim[0], buff4.raw_buffer()->dim[1]);
 
         Realization r4({buff4});
         output4.realize(r4);
@@ -223,18 +217,15 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output5.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 5)
-            .set_stride(1, 1)
-            .set_extent(1, 5);
+            .dim(0).set_stride(5)
+            .dim(1).set_stride(1).set_bounds(0, 5);
 
 
         check_interleave_count(output5, 1);
 
         Buffer buff5;
-        buff5 = Buffer(Float(32), 16, 5, 0, 0, (uint8_t *)0);
-        buff5.raw_buffer()->stride[0] = 5;
-        buff5.raw_buffer()->stride[1] = 1;
+        buff5 = Buffer(Float(32), {5, 16}, (uint8_t *)0);
+        std::swap(buff5.raw_buffer()->dim[0], buff5.raw_buffer()->dim[1]);
 
         Realization r5({buff5});
         output5.realize(r5);
@@ -364,14 +355,12 @@ int main(int argc, char **argv) {
             .vectorize(y);
 
         trans1.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0).set_bounds(0, 8).set_stride(1)
+            .dim(1).set_bounds(0, 8).set_stride(8);
 
         trans2.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0).set_bounds(0, 8).set_stride(1)
+            .dim(1).set_bounds(0, 8).set_stride(8);
 
         Image<uint16_t> result6(8,8);
         Image<uint16_t> result7(8,8);

@@ -412,8 +412,9 @@ public:
                                const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
                                const Target &target = Target());
-    EXPORT Realization realize(int x_size = 0,
+    EXPORT Realization realize(int x_size,
                                const Target &target = Target());
+    EXPORT Realization realize(const Target &target = Target());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -442,6 +443,12 @@ public:
     EXPORT void infer_input_bounds(const std::vector<int> &sizes);
     EXPORT void infer_input_bounds(Realization dst);
     EXPORT void infer_input_bounds(Buffer dst);
+
+    template<typename ...Args>
+    EXPORT void infer_input_bounds(int first, Args ...rest) {
+        std::vector<int> sizes = {first, rest...};
+        infer_input_bounds(sizes);
+    }
     // @}
 
     /** Statically compile this function to llvm bitcode, with the

@@ -1080,25 +1080,37 @@ void Pipeline::realize(Realization dst, const Target &t) {
     jit_context.finalize(exit_status);
 }
 
-namespace {
-// TODO: copy-pasted from Buffer.cpp. Put this somewhere better.
-size_t size_of_buffer_t(int dimensions) {
-    int extra_dims = std::max(0, dimensions - 8);
-    return sizeof(halide_buffer_t) + extra_dims * sizeof(halide_dimension_t);
-}
-}
-
 void Pipeline::infer_input_bounds(Realization dst) {
 
     Target target = get_jit_target_from_environment();
 
     vector<const void *> args = prepare_jit_call_arguments(dst, target);
 
+    struct BoundsQueryBuffer {
+        halide_buffer_t buf = {0};
+        vector<halide_dimension_t> dims;
+        BoundsQueryBuffer(int d) : dims(d, {0, 0, 0, 0}) {
+            buf.dimensions = d;
+            buf.dim = &dims[0];
+        }
+
+        BoundsQueryBuffer() {}
+
+        bool operator!=(const BoundsQueryBuffer &other) const {
+            if (memcmp(&buf, &other.buf, sizeof(halide_buffer_t))) {
+                return true;
+            }
+            for (int i = 0; i < buf.dimensions; i++) {
+                if (dims[i] != other.dims[i]) return true;
+            }
+            return false;
+        }
+    };
+
     struct TrackedBuffer {
-        // The query buffer.
-        vector<uint8_t> query;
-        // A backup copy of it to test if it changed.
-        vector<uint8_t> orig;
+        // The query buffer, and a backup to check for changes.
+        BoundsQueryBuffer query, orig;
+
     };
     vector<TrackedBuffer> tracked_buffers(args.size());
 
@@ -1108,12 +1120,10 @@ void Pipeline::infer_input_bounds(Realization dst) {
             query_indices.push_back(i);
             InferredArgument ia = contents.ptr->inferred_args[i];
             internal_assert(ia.param.defined() && ia.param.is_buffer());
-            vector<int> sizes(ia.param.dimensions(), 0);
             // Make some empty buffer_t's (TODO: with the right type and dimension)?
-            size_t bytes = size_of_buffer_t((int)sizes.size());
-            tracked_buffers[i].query.resize(bytes);
-            tracked_buffers[i].orig.resize(bytes);
-            args[i] = &(tracked_buffers[i].query[0]);
+            tracked_buffers[i].query = BoundsQueryBuffer(ia.param.dimensions());
+            tracked_buffers[i].orig = BoundsQueryBuffer(ia.param.dimensions());
+            args[i] = &(tracked_buffers[i].query.buf);
         }
     }
 
@@ -1140,9 +1150,9 @@ void Pipeline::infer_input_bounds(Realization dst) {
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
 
-        // Check if there were any changed
+        // Check if there were any changes
         for (TrackedBuffer &tb : tracked_buffers) {
-            if (memcmp(&tb.query[0], &tb.orig[0], tb.query.size())) {
+            if (tb.query != tb.orig) {
                 changed = true;
             }
         }
@@ -1164,24 +1174,11 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (size_t i : query_indices) {
         InferredArgument ia = contents.ptr->inferred_args[i];
         internal_assert(!ia.param.get_buffer().defined());
-        halide_buffer_t *buf = (halide_buffer_t *)(&(tracked_buffers[i].query[0]));
-
-        // TODO: re-enable this debug
-        /*
-        Internal::debug(1) << "Inferred bounds for " << ia.param.name() << ": ("
-                           << buf.min[0] << ","
-                           << buf.min[1] << ","
-                           << buf.min[2] << ","
-                           << buf.min[3] << ")..("
-                           << buf.min[0] + buf.extent[0] << ","
-                           << buf.min[1] + buf.extent[1] << ","
-                           << buf.min[2] + buf.extent[2] << ","
-                           << buf.min[3] + buf.extent[3] << ")\n";
-        */
+        halide_buffer_t *buf = &(tracked_buffers[i].query.buf);
 
         // Figure out how much memory to allocate for this buffer
         size_t min_idx = 0, max_idx = 0;
-        for (int d = 0; d < 8; d++) {
+        for (int d = 0; d < buf->dimensions; d++) {
             if (buf->dim[d].stride > 0) {
                 min_idx += buf->dim[d].min * buf->dim[d].stride;
                 max_idx += (buf->dim[d].min + buf->dim[d].extent - 1) * buf->dim[d].stride;
@@ -1193,14 +1190,14 @@ void Pipeline::infer_input_bounds(Realization dst) {
         size_t total_size = (max_idx - min_idx);
         while (total_size & 0x1f) total_size++;
 
-        vector<int> sizes(ia.param.dimensions(), 1);
+        vector<int> sizes(buf->dimensions, 1);
         sizes[0] = total_size;
 
         // Allocate enough memory with the right type and dimensionality.
         Buffer buffer(ia.param.type(), sizes);
 
         // Rewrite the buffer dimension fields to match the ones returned
-        for (int d = 0; d < ia.param.dimensions(); d++) {
+        for (int d = 0; d < buf->dimensions; d++) {
             buffer.raw_buffer()->dim[d] = buf->dim[d];
         }
 

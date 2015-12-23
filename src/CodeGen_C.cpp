@@ -20,32 +20,10 @@ using std::vector;
 using std::ostringstream;
 using std::map;
 
+// The contents of HalideRuntime.h -- declarations for the stuff in the initmods.
+extern "C" unsigned char halide_internal_initmod_declarations[];
+
 namespace {
-const string buffer_t_definition =
-    "#ifndef HALIDE_ATTRIBUTE_ALIGN\n"
-    "  #ifdef _MSC_VER\n"
-    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))\n"
-    "  #else\n"
-    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))\n"
-    "  #endif\n"
-    "#endif\n"
-    "#ifndef BUFFER_T_DEFINED\n"
-    "#define BUFFER_T_DEFINED\n"
-    "#include <stdbool.h>\n"
-    "#include <stdint.h>\n"
-    // TODO: change this to halide_buffer_t
-    "typedef struct buffer_t {\n"
-    "    uint64_t dev;\n"
-    "    uint8_t* host;\n"
-    "    int32_t extent[4];\n"
-    "    int32_t stride[4];\n"
-    "    int32_t min[4];\n"
-    "    int32_t elem_size;\n"
-    "    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;\n"
-    "    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;\n"
-    "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];\n"
-    "} buffer_t;\n"
-    "#endif\n";
 
 const string headers =
     "#include <iostream>\n"
@@ -58,19 +36,11 @@ const string headers =
 
 const string globals =
     "extern \"C\" {\n"
-    "void *halide_malloc(void *ctx, size_t);\n"
-    "void halide_free(void *ctx, void *ptr);\n"
-    "void *halide_print(void *ctx, const void *str);\n"
-    "void *halide_error(void *ctx, const void *str);\n"
-    "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
-    "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
     "void halide_profiler_pipeline_end(void *, void *);\n"
     "}\n"
     "\n"
 
-    // TODO: this next chunk is copy-pasted from posix_math.cpp. A
-    // better solution for the C runtime would be nice.
     "#ifdef _WIN32\n"
     "float roundf(float);\n"
     "double round(double);\n"
@@ -118,32 +88,6 @@ const string globals =
     "inline double ceil_f64(double x) {return ceil(x);}\n"
     "inline double round_f64(double x) {return round(x);}\n"
     "\n"
-    "inline float nan_f32() {return NAN;}\n"
-    "inline float neg_inf_f32() {return -INFINITY;}\n"
-    "inline float inf_f32() {return INFINITY;}\n"
-    "inline bool is_nan_f32(float x) {return x != x;}\n"
-    "inline bool is_nan_f64(double x) {return x != x;}\n"
-    "inline float float_from_bits(uint32_t bits) {\n"
-    " union {\n"
-    "  uint32_t as_uint;\n"
-    "  float as_float;\n"
-    " } u;\n"
-    " u.as_uint = bits;\n"
-    " return u.as_float;\n"
-    "}\n"
-    "inline int64_t make_int64(int32_t hi, int32_t lo) {\n"
-    "    return (((int64_t)hi) << 32) | (uint32_t)lo;\n"
-    "}\n"
-    "inline double make_float64(int32_t i0, int32_t i1) {\n"
-    "    union {\n"
-    "        int32_t as_int32[2];\n"
-    "        double as_double;\n"
-    "    } u;\n"
-    "    u.as_int32[0] = i0;\n"
-    "    u.as_int32[1] = i1;\n"
-    "    return u.as_double;\n"
-    "}\n"
-    "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
 
@@ -151,27 +95,7 @@ const string globals =
     // it. Compilers understand memcpy and will convert it to a no-op
     // when used in this way. See http://blog.regehr.org/archives/959
     // for a detailed comparison of type-punning methods.
-    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
-    "\n"
-    "static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
-    "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
-    "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
-    "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
-    "                           int32_t min3, int32_t extent3, int32_t stride3) {\n"
-    " b->dim[0].min = min0;\n"
-    " b->dim[1].min = min1;\n"
-    " b->dim[2].min = min2;\n"
-    " b->dim[3].min = min3;\n"
-    " b->dim[0].extent = extent0;\n"
-    " b->dim[1].extent = extent1;\n"
-    " b->dim[2].extent = extent2;\n"
-    " b->dim[3].extent = extent3;\n"
-    " b->dim[0].stride = stride0;\n"
-    " b->dim[1].stride = stride1;\n"
-    " b->dim[2].stride = stride2;\n"
-    " b->dim[3].stride = stride3;\n"
-    " return true;\n"
-    "}\n";
+    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n";
 }
 
 CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), is_header(is_header) {
@@ -182,19 +106,11 @@ CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRP
     }
 
     if (!is_header) {
-        stream << headers;
+        stream
+            << headers
+            << globals;
     }
-
-    // Throw in a definition of a buffer_t
-    stream << buffer_t_definition;
-
-    // halide_filter_metadata_t just gets a forward declaration
-    // (include HalideRuntime.h for the full goodness)
-    stream << "struct halide_filter_metadata_t;\n";
-
-    if (!is_header) {
-        stream << globals;
-    }
+    stream << halide_internal_initmod_declarations << '\n';
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
@@ -291,7 +207,8 @@ class ExternCallPrototypes : public IRGraphVisitor {
         IRGraphVisitor::visit(op);
 
         if (op->call_type == Call::Extern) {
-            if (!emitted.count(op->name)) {
+            if (!starts_with(op->name, "halide_") &&
+                !emitted.count(op->name)) {
                 stream << type_to_c_type(op->type) << " " << op->name << "(";
                 if (function_takes_user_context(op->name)) {
                     stream << "void *";
@@ -383,7 +300,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     stream << "int " << f.name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            stream << "buffer_t *"
+            stream << "halide_buffer_t *"
                    << print_name(args[i].name)
                    << "_buffer";
         } else {
@@ -460,6 +377,7 @@ void CodeGen_C::compile(const Buffer &buffer) {
     stream << "};\n";
 
     // Emit the buffer_t
+    // TODO: emit halide_buffer_t
     user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
     user_assert(!b.device_dirty()) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
     stream << "static buffer_t " << name << "_buffer = {"
@@ -473,7 +391,7 @@ void CodeGen_C::compile(const Buffer &buffer) {
            << "0};\n"; //dev_dirty
 
     // Make a global pointer to it
-    stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
+    stream << "static halide_buffer_t *" << name << " = &" << name << "_buffer;\n";
 }
 
 void CodeGen_C::push_buffer(Type t, int dims, const std::string &buffer_name) {
@@ -903,10 +821,11 @@ void CodeGen_C::visit(const Call *op) {
 
             rhs << result_id;
         } else if (op->name == Call::copy_buffer_t) {
+            // TODO upgrade to halide_buffer_t
             internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);
             string buf_id = unique_name('B');
-            stream << "buffer_t " << buf_id << " = *((buffer_t *)(" << arg << "))\n";
+            stream << "buffer_t " << buf_id << " = *((halide_buffer_t *)(" << arg << "))\n";
             rhs << "(&" << buf_id << ")";
         } else if (op->name == Call::create_buffer_t) {
             internal_assert(op->args.size() >= 2);
@@ -916,6 +835,7 @@ void CodeGen_C::visit(const Call *op) {
             for (size_t i = 2; i < op->args.size(); i++) {
                 args.push_back(print_expr(op->args[i]));
             }
+            // TODO upgrade to halide_buffer_t
             string buf_id = unique_name('B');
             do_indent();
             stream << "buffer_t " << buf_id << " = {0};\n";
@@ -926,41 +846,39 @@ void CodeGen_C::visit(const Call *op) {
             int dims = ((int)op->args.size() - 2)/3;
             for (int i = 0; i < dims; i++) {
                 do_indent();
-                stream << buf_id << ".min[" << i << "] = " << args[i*3+2] << ";\n";
+                stream << buf_id << ".dim[" << i << "].min = " << args[i*3+2] << ";\n";
                 do_indent();
-                stream << buf_id << ".extent[" << i << "] = " << args[i*3+3] << ";\n";
+                stream << buf_id << ".dim[" << i << "].extent = " << args[i*3+3] << ";\n";
                 do_indent();
-                stream << buf_id << ".stride[" << i << "] = " << args[i*3+4] << ";\n";
+                stream << buf_id << ".dim[" << i << "].stride = " << args[i*3+4] << ";\n";
             }
             rhs << "(&" + buf_id + ")";
         } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "(((buffer_t *)(" << a0 << "))->min[" << a1 << "] + " <<
-                "((buffer_t *)(" << a0 << "))->extent[" << a1 << "] - 1)";
+            rhs << "(((halide_buffer_t *)(" << a0 << "))->min[" << a1 << "] + " <<
+                "((halide_buffer_t *)(" << a0 << "))->extent[" << a1 << "] - 1)";
         } else if (op->name == Call::extract_buffer_min) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+            rhs << "((halide_buffer_t *)(" << a0 << "))->min[" << a1 << "]";
         } else if (op->name == Call::extract_buffer_host) {
             internal_assert(op->args.size() == 1);
             string a0 = print_expr(op->args[0]);
-            rhs << "((buffer_t *)(" << a0 << "))->host";
+            rhs << "((halide_buffer_t *)(" << a0 << "))->host";
         } else if (op->name == Call::set_host_dirty) {
-            internal_assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 1);
             string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
             do_indent();
-            stream << "((buffer_t *)(" << a0 << "))->host_dirty = " << a1 << ";\n";
+            stream << a0 << "->set_host_dirty(true);\n";
             rhs << "0";
-        } else if (op->name == Call::set_dev_dirty) {
-            internal_assert(op->args.size() == 2);
+        } else if (op->name == Call::set_device_dirty) {
+            internal_assert(op->args.size() == 1);
             string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
             do_indent();
-            stream << "((buffer_t *)(" << a0 << "))->dev_dirty = " << a1 << ";\n";
+            stream << a0 << "->set_device_dirty(true);\n";
             rhs << "0";
         } else if (op->name == Call::abs) {
             internal_assert(op->args.size() == 1);
@@ -1419,9 +1337,8 @@ void CodeGen_C::test() {
     string src = source.str();
     string correct_source =
         headers +
-        buffer_t_definition +
-        "struct halide_filter_metadata_t;\n" +
         globals +
+        string((const char *)halide_internal_initmod_declarations) + '\n' +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
         "#endif\n"
@@ -1429,7 +1346,7 @@ void CodeGen_C::test() {
         "extern \"C\" {\n"
         "#endif\n"
         "\n\n"
-        "int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(halide_buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"

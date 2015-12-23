@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         // asking the Halide routine to read out of bounds. We saw how
         // to do this in the previous lesson:
         Image<uint8_t> result(input.width()-2, input.height()-2, 3);
-        result.set_min(1, 1);
+        result.set_min({1, 1, 0});
         output.realize(result);
 
         // Save the result. It should look like a slightly blurry

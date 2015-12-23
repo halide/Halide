@@ -59,13 +59,13 @@ const OutputImageParam::Dimension OutputImageParam::dim(int i) const {
 
 Expr OutputImageParam::Dimension::min() const {
     std::ostringstream s;
-    s << param.name() << ".min." << dim;
+    s << param.name() << ".min." << d;
     return Internal::Variable::make(Int(32), s.str(), param);
 }
 
 Expr OutputImageParam::Dimension::extent() const {
     std::ostringstream s;
-    s << param.name() << ".extent." << dim;
+    s << param.name() << ".extent." << d;
     return Internal::Variable::make(Int(32), s.str(), param);
 }
 
@@ -75,27 +75,35 @@ Expr OutputImageParam::Dimension::max() const {
 
 Expr OutputImageParam::Dimension::stride() const {
     std::ostringstream s;
-    s << param.name() << ".stride." << dim;
+    s << param.name() << ".stride." << d;
     return Internal::Variable::make(Int(32), s.str(), param);
 }
 
 OutputImageParam::Dimension OutputImageParam::Dimension::set_extent(Expr extent) {
-    param.set_extent_constraint(dim, extent);
+    param.set_extent_constraint(d, extent);
     return *this;
 }
 
 OutputImageParam::Dimension OutputImageParam::Dimension::set_min(Expr min) {
-    param.set_min_constraint(dim, min);
+    param.set_min_constraint(d, min);
     return *this;
 }
 
 OutputImageParam::Dimension OutputImageParam::Dimension::set_stride(Expr stride) {
-    param.set_stride_constraint(dim, stride);
+    param.set_stride_constraint(d, stride);
     return *this;
 }
 
 OutputImageParam::Dimension OutputImageParam::Dimension::set_bounds(Expr min, Expr extent) {
     return set_min(min).set_extent(extent);
+}
+
+OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) {
+    return OutputImageParam::Dimension(param, i);
+}
+
+const OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) const {
+    return OutputImageParam::Dimension(param, i);
 }
 
 int OutputImageParam::dimensions() const {

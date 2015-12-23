@@ -42,26 +42,21 @@ int main(int argc, char **argv) {
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
 
-    buffer_t in = { 0 };
-    buffer_t out = { 0 };
+    halide_buffer_t in = { 0 };
+    halide_buffer_t out = { 0 };
+    halide_dimension_t shape[] = {{0, W, 3},
+                                  {0, H, W*3},
+                                  {0, 3, 1}};
 
     in.host = (uint8_t *)input.data();
-    in.extent[0] = W;
-    in.extent[1] = H;
-    in.extent[2] = 3;
-    in.stride[0] = 3;
-    in.stride[1] = W * 3;
-    in.stride[2] = 1;
-    in.elem_size = 4;
+    in.dim = shape;
+    in.dimensions = 3;
+    in.type = halide_type_of<float>();
 
     out.host = (uint8_t *)output.data();
-    out.extent[0] = W;
-    out.extent[1] = H;
-    out.extent[2] = 3;
-    out.stride[0] = 3;
-    out.stride[1] = W * 3;
-    out.stride[2] = 1;
-    out.elem_size = 4;
+    out.dim = shape;
+    out.dimensions = 3;
+    out.type = halide_type_of<float>();
 
     tiled_blur_interleaved(&in, &out);
 

@@ -12,20 +12,20 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
     f(x, y, c) = src(x, y, c);
 
     for (int i = 0; i < 3; i++) {
-        f.output_buffer()
-            .set_stride(i, dst.stride(i))
-            .set_extent(i, dst.extent(i))
-            .set_min(i, dst.min(i));
+        f.output_buffer().dim(i)
+            .set_min(dst.dim(i).min())
+            .set_extent(dst.dim(i).extent())
+            .set_stride(dst.dim(i).stride());
     }
 
-    if (dst.stride(0) == 1 && src.stride(0) == 1) {
+    if (dst.dim(0).stride() == 1 && src.dim(0).stride() == 1) {
         // packed -> packed
         f.vectorize(x, 16);
-    } else if (dst.stride(0) == 3 && src.stride(0) == 3) {
+    } else if (dst.dim(0).stride() == 3 && src.dim(0).stride() == 3) {
         // packed -> packed
         Var fused("fused");
         f.reorder(c, x, y).fuse(c, x, fused).vectorize(fused, 16);
-    } else if (dst.stride(0) == 3) {
+    } else if (dst.dim(0).stride() == 3) {
         // planar -> packed
         f.reorder(c, x, y).unroll(c).vectorize(x, 16);
     } else {
@@ -39,28 +39,26 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
 }
 
 Image<uint8_t> make_packed(uint8_t *host, int W, int H) {
-    buffer_t buf = {0};
+    halide_buffer_t buf = {0};
+    halide_dimension_t shape[] = {{0, W, 3},
+                                  {0, H, 3*W},
+                                  {0, 3, 1}};
     buf.host = host;
-    buf.extent[0] = W;
-    buf.stride[0] = 3;
-    buf.extent[1] = H;
-    buf.stride[1] = buf.stride[0] * buf.extent[0];
-    buf.extent[2] = 3;
-    buf.stride[2] = 1;
-    buf.elem_size = 1;
+    buf.dim = shape;
+    buf.dimensions = 3;
+    buf.type = UInt(8);
     return Image<uint8_t>(&buf);
 }
 
 Image<uint8_t> make_planar(uint8_t *host, int W, int H) {
-    buffer_t buf = {0};
+    halide_buffer_t buf = {0};
+    halide_dimension_t shape[] = {{0, W, 1},
+                                  {0, H, W},
+                                  {0, 3, W*H}};
     buf.host = host;
-    buf.extent[0] = W;
-    buf.stride[0] = 1;
-    buf.extent[1] = H;
-    buf.stride[1] = buf.stride[0] * buf.extent[0];
-    buf.extent[2] = 3;
-    buf.stride[2] = buf.stride[1] * buf.extent[1];
-    buf.elem_size = 1;
+    buf.dim = shape;
+    buf.dimensions = 3;
+    buf.type = UInt(8);
     return Image<uint8_t>(&buf);
 }
 

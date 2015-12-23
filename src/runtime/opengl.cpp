@@ -79,7 +79,7 @@ using namespace Halide::Runtime::Internal;
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-extern WEAK halide_device_interface opengl_device_interface;
+extern WEAK halide_device_interface_t opengl_device_interface;
 
 WEAK const char *gl_error_name(int32_t err) {
   const char *result;
@@ -1929,7 +1929,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     return 0;
 }
 
-WEAK const halide_device_interface *halide_opengl_device_interface() {
+WEAK const halide_device_interface_t *halide_opengl_device_interface() {
     return &opengl_device_interface;
 }
 
@@ -2039,7 +2039,7 @@ WEAK void halide_opengl_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-WEAK halide_device_interface opengl_device_interface = {
+WEAK halide_device_interface_t opengl_device_interface = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_opengl_device_malloc,

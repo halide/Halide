@@ -1530,7 +1530,12 @@ Realization Func::realize(int x_size, int y_size, const Target &target) {
 }
 
 Realization Func::realize(int x_size, const Target &target) {
-    return realize({x_size}, target);
+    std::vector<int> sizes {x_size};
+    return realize(sizes, target);
+}
+
+Realization Func::realize(const Target &target) {
+    return realize(std::vector<int>(), target);
 }
 
 void Func::infer_input_bounds(const vector<int> &sizes) {

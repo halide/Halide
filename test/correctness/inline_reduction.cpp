@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
 
     // Verify that all inline reductions compile with implicit argument syntax.
     Image<float> input_3d = lambda(x, y, z, x * 100.0f + y * 10.0f + ((z + 5 % 10))).realize(10, 10, 10);
-    RDom all_z(input_3d.min(2), input_3d.extent(2));
+    RDom all_z(input_3d.dim(2));
 
     Func sum_implicit;
     sum_implicit(_) = sum(input_3d(_, all_z));

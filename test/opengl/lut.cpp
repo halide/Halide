@@ -14,8 +14,8 @@ int test_lut1d() {
     Var c("c");
 
     Image<uint8_t> input(8, 8, 3, "input");
-    for (int y=0; y<input.height(); y++) {
-        for (int x=0; x<input.width(); x++) {
+    for (int y = 0; y < input.height(); y++) {
+        for (int x = 0; x < input.width(); x++) {
             float v = (1.0f/16.0f) + (float)x/8.0f;
             input(x, y, 0) = (uint8_t)(v * 255.0f);
             input(x, y, 1) = (uint8_t)((1.0f - v)*255.0f);
@@ -43,46 +43,9 @@ int test_lut1d() {
     f0.realize(out0);
     out0.copy_to_host();
 
-#if 0
-    printf("Input:\n");
-    for (int c = 0; c != input.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y = 0; y != input.extent(1); ++y) {
-            for (int x = 0; x != input.extent(0); ++x) {
-                printf("%d ", (int)input(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-    printf("\n");
-
-    printf("LUT:\n");
-    for (int c = 0; c != lut1d.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y=0; y != lut1d.extent(1); ++y) {
-            for (int x = 0; x != lut1d.extent(0); ++x) {
-                printf("%1.1f ", lut1d(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-    printf("\n");
-
-    printf("Output:\n");
-    for (int c = 0; c != out0.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y = 0; y != out0.extent(1); ++y) {
-            for (int x = 0; x != out0.extent(0); ++x) {
-                printf("%1.1f ", out0(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-#endif
-
-    for (int c = 0; c != out0.extent(2); ++c) {
-        for (int y = 0; y != out0.extent(1); ++y) {
-            for (int x = 0; x != out0.extent(0); ++x) {
+    for (int c = 0; c != out0.channels(); ++c) {
+        for (int y = 0; y != out0.height(); ++y) {
+            for (int x = 0; x != out0.width(); ++x) {
                 float expected = std::numeric_limits<float>::infinity();
                 switch (c) {
                     case 0:

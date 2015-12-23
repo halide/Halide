@@ -62,7 +62,7 @@ WEAK device_copy make_host_to_device_copy(const halide_buffer_t *buf) {
         c.stride_bytes[i] = 0;
     }
 
-    if (buf->dimensions <= MAX_COPY_DIMS) {
+    if (buf->dimensions > MAX_COPY_DIMS) {
         // This condition should also be checked for outside this fn.
         device_copy zero = {0};
         return zero;
@@ -97,6 +97,7 @@ WEAK device_copy make_host_to_device_copy(const halide_buffer_t *buf) {
         }
         // If the stride is 0, only copy it once.
         c.extent[insert] = stride_bytes != 0 ? buf->dim[i].extent : 1;
+        debug(NULL) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.stride_bytes[insert] = stride_bytes;
     };
 
