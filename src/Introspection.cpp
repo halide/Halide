@@ -845,6 +845,21 @@ public:
                    source_files[source_lines[i].file].c_str(),
                    source_lines[i].line);
         }
+
+        // Dump the global variables
+        for (size_t i = 0; i < global_variables.size(); i++) {
+            const GlobalVariable &v = global_variables[i];
+            TypeInfo *c = v.type;
+            const char *type_name = "(unknown)";
+            if (c) {
+                type_name = c->name.c_str();
+            }
+            printf("  Global variable %s at %llx of type %s\n",
+                   v.name.c_str(),
+                   (long long unsigned)v.addr,
+                   type_name);
+        }
+
     }
 
 private:
@@ -1776,7 +1791,7 @@ private:
 
         // Unpack class members of global variables
         for (size_t i = 0; i < global_variables.size(); i++) {
-            const GlobalVariable &v = global_variables[i];
+            GlobalVariable v = global_variables[i];
             if (v.type && v.addr &&
                 (v.type->type == TypeInfo::Struct ||
                  v.type->type == TypeInfo::Class ||
@@ -2255,6 +2270,8 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
 
         debug(4) << "Test passed\n";
     }
+
+    //debug_sections->dump();
 
     #endif
 }
