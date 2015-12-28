@@ -3,7 +3,7 @@
 
 #include "HalideRuntime.h"
 
-// A struct that extends buffer_t with an extra field. Note that this would interfere with buffers of dimensionality > 8
+// A struct that extends halide_buffer_t with an extra field.
 struct fancy_buffer_t : public halide_buffer_t {
     int extra_field;
 
