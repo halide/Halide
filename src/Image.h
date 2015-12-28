@@ -154,6 +154,20 @@ public:
         size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
         return (void *)(ptr + offset * elem_size);
     }
+
+    /** Get the address of a pixel in more than four dimensions. */
+    template<typename ...Args>
+    void *address_of(int x, int y, int z, int w, Args... args) const {
+        uint8_t *ptr = (uint8_t *)origin;
+        size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
+
+        // We can't rely on the cached strides for the extra dimensions.
+        const int extra[] = {args...};
+        for (int i = 0; i < sizeof...(Args); i++) {
+            offset += extra[i] * buffer.dim(i+4).stride();
+        }
+        return (void *)(ptr + offset * elem_size);
+    }
 };
 
 /** A reference-counted handle on a dense multidimensional array
@@ -206,52 +220,16 @@ public:
 
     using ImageBase::operator();
 
-    /** Assuming this image is one-dimensional, get the value of the
-     * element at position x */
-    const T &operator()(int x) const {
-        return *((T *)(address_of(x)));
+    /** Get the value of the element at the given position. */
+    template<typename ...Args>
+    const T &operator()(int first, Args... rest) const {
+        return *((T *)(address_of(first, rest...)));
     }
 
-    /** Assuming this image is two-dimensional, get the value of the
-     * element at position (x, y) */
-    const T &operator()(int x, int y) const {
-        return *((T *)(address_of(x, y)));
-    }
-
-    /** Assuming this image is three-dimensional, get the value of the
-     * element at position (x, y, z) */
-    const T &operator()(int x, int y, int z) const {
-        return *((T *)(address_of(x, y, z)));
-    }
-
-    /** Assuming this image is four-dimensional, get the value of the
-     * element at position (x, y, z, w) */
-    const T &operator()(int x, int y, int z, int w) const {
-        return *((T *)(address_of(x, y, z, w)));
-    }
-
-    /** Assuming this image is one-dimensional, get a reference to the
-     * element at position x */
-    T &operator()(int x) {
-        return *((T *)(address_of(x)));
-    }
-
-    /** Assuming this image is two-dimensional, get a reference to the
-     * element at position (x, y) */
-    T &operator()(int x, int y) {
-        return *((T *)(address_of(x, y)));
-    }
-
-    /** Assuming this image is three-dimensional, get a reference to the
-     * element at position (x, y, z) */
-    T &operator()(int x, int y, int z) {
-        return *((T *)(address_of(x, y, z)));
-    }
-
-    /** Assuming this image is four-dimensional, get a reference to the
-     * element at position (x, y, z, w) */
-    T &operator()(int x, int y, int z, int w) {
-        return *((T *)(address_of(x, y, z, w)));
+    /** Get a reference to the element at the given position. */
+    template<typename ...Args>
+    T &operator()(int first, Args... rest) {
+        return *((T *)(address_of(first, rest...)));
     }
 
     /** Get a handle on the Buffer that this image holds */
