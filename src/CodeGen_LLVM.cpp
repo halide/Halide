@@ -704,7 +704,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
 
-    // Embed the buffer_t and make it point to the data array.
+    // Embed the halide_buffer_t and make it point to the data array.
     GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
@@ -2259,7 +2259,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             Value *buffer = codegen(op->args[0]);
 
-            // Rewrite the buffer_t using the args
+            // Rewrite the halide_buffer_t using the args
             // Arg 1 is only used for its type
             Type t = op->args[1].type();
             builder->CreateStore(ConstantInt::get(i8, t.code()), buffer_type_code_ptr(buffer));

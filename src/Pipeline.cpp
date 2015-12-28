@@ -1120,7 +1120,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
             query_indices.push_back(i);
             InferredArgument ia = contents.ptr->inferred_args[i];
             internal_assert(ia.param.defined() && ia.param.is_buffer());
-            // Make some empty buffer_t's (TODO: with the right type and dimension)?
+            // Make some empty halide_buffer_t's
             tracked_buffers[i].query = BoundsQueryBuffer(ia.param.dimensions());
             tracked_buffers[i].orig = BoundsQueryBuffer(ia.param.dimensions());
             args[i] = &(tracked_buffers[i].query.buf);

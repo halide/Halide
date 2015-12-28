@@ -39,8 +39,7 @@ struct GPU_Argument {
 
     /** If this is a scalar parameter, then this is its type.
      *
-     * If this is a buffer parameter, this is used to determine elem_size
-     * of the buffer_t.
+     * If this is a buffer parameter, then this is the type of the elements.
      *
      * Note that type.lanes() should always be 1 here. */
     Type type;
@@ -55,8 +54,10 @@ struct GPU_Argument {
     /** For buffers, these two variables can be used to specify whether the
      * buffer is read or written. By default, we assume that the argument
      * buffer is read-write and set both flags. */
+    // @{
     bool read;
     bool write;
+    // @}
 
     GPU_Argument() :
         is_buffer(false),

@@ -76,9 +76,9 @@ class FindBuffersToTrack : public IRVisitor {
     }
 
     void visit(const LetStmt *op) {
-        // The let that defines the buffer_t is not interesting, and
-        // nothing before that let could be interesting either
-        // (because the buffer doesn't exist yet).
+        // The let that defines the halide_buffer_t is not
+        // interesting, and nothing before that let could be
+        // interesting either (because the buffer doesn't exist yet).
         const Call *c = op->value.as<Call>();
         if (ends_with(op->name, ".buffer") &&
             c && c->name == Call::create_buffer_t) {

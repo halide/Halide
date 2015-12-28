@@ -154,7 +154,7 @@ private:
             // Promote the type to be a multiple of 8 bits
             Type t = realize->types[idx].with_bits(realize->types[idx].bytes() * 8);
 
-            // Create a buffer_t object for this allocation.
+            // Create a halide_buffer_t object for this allocation.
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());

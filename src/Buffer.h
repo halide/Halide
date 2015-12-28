@@ -2,12 +2,12 @@
 #define HALIDE_BUFFER_H
 
 /** \file
- * Defines Buffer - A c++ wrapper around a buffer_t.
+ * Defines Buffer - A c++ wrapper around a halide_buffer_t.
  */
 
 #include <stdint.h>
 
-#include "runtime/HalideRuntime.h" // For buffer_t
+#include "runtime/HalideRuntime.h" // For halide_buffer_t
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Argument.h"
@@ -32,6 +32,8 @@ private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
 
 public:
+    /** Information about the shape of a Buffer in some
+     * dimension. Wraps halide_dimension_t. */
     class Dimension {
         halide_dimension_t d;
     public:
@@ -69,9 +71,15 @@ public:
 
     Buffer() : contents(NULL) {}
 
+    /** Make a new buffer of the given type with the given size. If
+     * data is null the Buffer allocates and owns the memory. If data
+     * is non-null then the Buffer points to it, but does not own it
+     * and won't delete it. */
     EXPORT Buffer(Type t, const std::vector<int32_t> &sizes,
                   uint8_t* data = NULL, const std::string &name = "");
 
+    /** Wrap an existing halide_buffer_t. Makes a copy of the metadata
+     * but not the data itself. */
     EXPORT Buffer(const halide_buffer_t *buf, const std::string &name = "");
 
     /** Get a pointer to the host-side memory. */

@@ -394,11 +394,11 @@ Stmt build_produce(Function f) {
             }
         }
 
-        // Grab the buffer_ts representing the output. If the store
-        // level matches the compute level, then we can use the ones
-        // already injected by allocation bounds inference. If it's
-        // the output to the pipeline then it will similarly be in the
-        // symbol table.
+        // Grab the halide_buffer_t's representing the output. If the
+        // store level matches the compute level, then we can use the
+        // ones already injected by allocation bounds inference. If
+        // it's the output to the pipeline then it will similarly be
+        // in the symbol table.
         if (f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();

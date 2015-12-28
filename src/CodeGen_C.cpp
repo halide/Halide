@@ -319,7 +319,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
         indent += 1;
 
-        // Unpack the buffer_t's
+        // Unpack the halide_buffer_t's
         for (size_t i = 0; i < args.size(); i++) {
             if (args[i].is_buffer()) {
                 push_buffer(args[i].type, args[i].dimensions, args[i].name);
@@ -335,7 +335,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         indent -= 1;
         stream << "}\n";
 
-        // Done with the buffer_t's, pop the associated symbols.
+        // Done with the halide_buffer_t's, pop the associated symbols.
         for (size_t i = 0; i < args.size(); i++) {
             if (args[i].is_buffer()) {
                 pop_buffer(args[i].name);
