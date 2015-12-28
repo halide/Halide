@@ -738,7 +738,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 }
 
 namespace {
-int do_multidimensional_copy(void *user_context, const ClContext &ctx,
+WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
                              const device_copy &c,
                              uint64_t off, int d, bool d_to_h) {
     if (d > MAX_COPY_DIMS) {

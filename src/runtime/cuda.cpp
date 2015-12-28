@@ -555,7 +555,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
-int do_multidimensional_copy(void *user_context, const device_copy &c, uint64_t dst, uint64_t src, int d, bool d_to_h) {
+WEAK int do_multidimensional_copy(void *user_context, const device_copy &c, uint64_t dst, uint64_t src, int d, bool d_to_h) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
