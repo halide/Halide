@@ -12,22 +12,20 @@ extern "C" int an_extern_func(int x, int y) {
     return x + y;
 }
 
-extern "C" int an_extern_stage(buffer_t *in, buffer_t *out) {
+extern "C" int an_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->host == NULL) {
         // We expect a 2D input.
-        in->extent[0] = 10;
-        in->extent[1] = 10;
-        in->min[0] = 0;
-        in->min[1] = 0;
+        in->dim[0] = {0, 10, 1};
+        in->dim[1] = {0, 10, 10};
     } else {
         assert(out->host);
         int result = 0;
         int16_t *origin = (int16_t *)in->host;
-        origin -= in->min[0] * in->stride[0];
-        origin -= in->min[1] * in->stride[1];
+        origin -= in->dim[0].min * in->dim[0].stride;
+        origin -= in->dim[1].min * in->dim[1].stride;
         for (int y = 0; y < 10; y++) {
             for (int x = 0; x < 10; x++) {
-                result += origin[x * in->stride[0] + y * in->stride[1]];
+                result += origin[x * in->dim[0].stride + y * in->dim[1].stride];
             }
         }
         int16_t *dst = (int16_t *)(out->host);
@@ -45,8 +43,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    Image<uint16_t> out_native(423, 633);
-    Image<uint16_t> out_c(423, 633);
+    Image<int16_t> out_native(423, 633);
+    Image<int16_t> out_c(423, 633);
 
     pipeline_native(in, out_native);
 

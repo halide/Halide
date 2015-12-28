@@ -362,6 +362,9 @@ void CodeGen_C::compile(const Buffer &buffer) {
     string name = print_name(buffer.name());
     halide_buffer_t b = *(buffer.raw_buffer());
 
+    user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
+    user_assert(!b.device_dirty()) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
+
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
     for (int d = 0; b.dim[d].extent; d++) {
@@ -376,19 +379,29 @@ void CodeGen_C::compile(const Buffer &buffer) {
     }
     stream << "};\n";
 
-    // Emit the buffer_t
-    // TODO: emit halide_buffer_t
-    user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
-    user_assert(!b.device_dirty()) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
-    stream << "static buffer_t " << name << "_buffer = {"
-           << "0, " // dev
+    // Emit the shape
+    stream << "static halide_dimension_t " << name << "_buffer_shape[] = {";
+    for (int i = 0; i < buffer.dimensions(); i++) {
+        stream << "{" << buffer.dim(i).min()
+               << ", " << buffer.dim(i).extent()
+               << ", " << buffer.dim(i).stride() << "}";
+        if (i < buffer.dimensions() - 1) {
+            stream << ", ";
+        }
+    }
+    stream << "};\n";
+
+    Type t = buffer.type();
+
+    // Emit the buffer struct
+    stream << "static halide_buffer_t " << name << "_buffer = {"
+           << "0, "             // device
+           << "NULL, "          // device_interface
            << "&" << name << "_data[0], " // host
-           << "{" << b.dim[0].extent << ", " << b.dim[1].extent << ", " << b.dim[2].extent << ", " << b.dim[3].extent << "}, "
-           << "{" << b.dim[0].stride << ", " << b.dim[1].stride << ", " << b.dim[2].stride << ", " << b.dim[3].stride << "}, "
-           << "{" << b.dim[0].min << ", " << b.dim[1].min << ", " << b.dim[2].min << ", " << b.dim[3].min << "}, "
-           << b.type.bytes() << ", "
-           << "0, " // host_dirty
-           << "0};\n"; //dev_dirty
+           << "0, "             // flags
+           << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
+           << buffer.dimensions() << ", "
+           << name << "_buffer_shape};\n";
 
     // Make a global pointer to it
     stream << "static halide_buffer_t *" << name << " = &" << name << "_buffer;\n";
@@ -416,52 +429,36 @@ void CodeGen_C::push_buffer(Type t, int dims, const std::string &buffer_name) {
     do_indent();
     stream << "const bool "
            << name
-           << "_host_and_dev_are_null = ("
+           << "_host_and_device_are_null = ("
            << buf_name << "->host == NULL) && ("
-           << buf_name << "->dev == 0);\n";
+           << buf_name << "->device == 0);\n";
     do_indent();
-    stream << "(void)" << name << "_host_and_dev_are_null;\n";
+    stream << "(void)" << name << "_host_and_device_are_null;\n";
 
-    for (int j = 0; j < dims; j++) {
+    string dim_fields[] = {"min", "extent", "stride"};
+    for (string f : dim_fields) {
+        for (int j = 0; j < dims; j++) {
+            do_indent();
+            stream << "const int32_t "
+                   << name
+                   << "_" << f << "_" << j << " = "
+                   << buf_name
+                   << "->dim[" << j << "]." << f << ";\n";
+            do_indent();
+            stream << "(void)" << name << "_" << f << "_" << j << ";\n";
+        }
+    }
+    string type_fields[] = {"code", "bits", "lanes"};
+    for (string f : type_fields) {
         do_indent();
         stream << "const int32_t "
                << name
-               << "_min_" << j << " = "
+               << "_type_" << f << " = (int32_t)("
                << buf_name
-               << "->dim[" << j << "].min;\n";
-        // emit a void cast to suppress "unused variable" warnings
+               << "->type." << f << ");\n";
         do_indent();
-        stream << "(void)" << name << "_min_" << j << ";\n";
-    }
-    for (int j = 0; j < dims; j++) {
-        do_indent();
-        stream << "const int32_t "
-               << name
-               << "_extent_" << j << " = "
-               << buf_name
-               << "->dim[" << j << "].extent;\n";
-        do_indent();
-        stream << "(void)" << name << "_extent_" << j << ";\n";
-    }
-    for (int j = 0; j < dims; j++) {
-        do_indent();
-        stream << "const int32_t "
-               << name
-               << "_stride_" << j << " = "
-               << buf_name
-               << "->dim[" << j << "].stride;\n";
-        do_indent();
-        stream << "(void)" << name << "_stride_" << j << ";\n";
-    }
-    do_indent();
-    stream << "const int32_t "
-           << name
-           << "_elem_size = "
-           << buf_name
-           << "->elem_size;\n";
-    do_indent();
-    stream << "(void)" << name << "_elem_size;\n";
-}
+        stream << "(void)" << name << "_type_" << f << ";\n";
+    }}
 
 void CodeGen_C::pop_buffer(const std::string &buffer_name) {
     allocations.pop(buffer_name);
@@ -708,7 +705,7 @@ void CodeGen_C::visit(const Call *op) {
 
             rhs << "halide_debug_to_file(";
             rhs << (have_user_context ? "__user_context_" : "NULL");
-            rhs << ", \"" + filename + "\", " + func;
+            rhs << ", \"" + filename + "\", (uint8_t *)(" + func + ")";
             for (size_t i = 0; i < args.size(); i++) {
                 rhs << ", " << args[i];
             }
@@ -746,26 +743,31 @@ void CodeGen_C::visit(const Call *op) {
             rhs << a0 << " >> " << a1;
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
-            (void)dims; // In case internal_assert is ifdef'd to do nothing
             internal_assert((int)(op->args.size()) == dims*3 + 2);
-            internal_assert(dims <= 8);
-            vector<string> args(op->args.size());
+
             const Variable *v = op->args[0].as<Variable>();
             internal_assert(v);
-            args[0] = print_name(v->name);
-            for (size_t i = 1; i < op->args.size(); i++) {
-                args[i] = print_expr(op->args[i]);
+            string buf = "((halide_buffer_t *)" + print_name(v->name) + ")";
+            Type t = op->args[1].type();
+            vector<string> shape(dims * 3);
+            for (size_t i = 0; i < shape.size(); i++) {
+                shape[i] = print_expr(op->args[i+2]);
             }
-            rhs << "halide_rewrite_buffer(";
-            for (size_t i = 0; i < 14; i++) {
-                if (i > 0) rhs << ", ";
-                if (i < args.size()) {
-                    rhs << args[i];
-                } else {
-                    rhs << '0';
-                }
+
+            // We want to assign a bunch of fields, but we need to act
+            // as an expression that evaluates to true. Fortunately
+            // assignment in C is an expression, so we can just emit
+            // comma-separated assignments.
+            rhs << "("
+                << buf << "->type.code = (halide_type_code_t)(" << (int)t.code() << "), "
+                << buf << "->type.bits = " << t.bits() << ", "
+                << buf << "->type.lanes = " << t.lanes() << ", ";
+            for (int i = 0; i < dims; i++) {
+                rhs << buf << "->dim[" << i << "].min = " << shape[i*3] << ", "
+                    << buf << "->dim[" << i << "].extent = " << shape[i*3+1] << ", "
+                    << buf << "->dim[" << i << "].stride = " << shape[i*3+2] << ", ";
             }
-            rhs << ")";
+            rhs << "true)";
         } else if (op->name == Call::lerp) {
             internal_assert(op->args.size() == 3);
             Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -821,49 +823,84 @@ void CodeGen_C::visit(const Call *op) {
 
             rhs << result_id;
         } else if (op->name == Call::copy_buffer_t) {
-            // TODO upgrade to halide_buffer_t
-            internal_assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 2);
+            const int64_t *dims = as_const_int(op->args[1]);
+            internal_assert(dims);
+
             string arg = print_expr(op->args[0]);
+            arg = "(halide_buffer_t *)(" + arg + ")";
+
             string buf_id = unique_name('B');
-            stream << "buffer_t " << buf_id << " = *((halide_buffer_t *)(" << arg << "))\n";
+
+            // Copy the buffer struct
+            do_indent();
+            stream << "halide_buffer_t " << buf_id << " = *" << arg << ";\n";
+
+            // Copy the shape
+            do_indent();
+            stream << "halide_dimension_t " << buf_id << "_shape[] = {";
+            for (int64_t i = 0; i < *dims; i++) {
+                stream << arg << "->dim[" << i << "]";
+                if (i < *dims - 1) {
+                    stream << ", ";
+                }
+            }
+            stream << "};\n";
+
+            // Use the copy of the shape
+            do_indent();
+            stream << buf_id << "->dim = " << buf_id << "_shape;\n";
+
             rhs << "(&" << buf_id << ")";
         } else if (op->name == Call::create_buffer_t) {
             internal_assert(op->args.size() >= 2);
-            vector<string> args;
-            args.push_back(print_expr(op->args[0]));
-            args.push_back(print_expr(op->args[1].type().bytes()));
+
+            int dims = (op->args.size() - 2) / 3;
+
+            string host = "(uint8_t *)(" + print_expr(op->args[0]) + ")";
+            Type t = op->args[1].type();
+            vector<string> shape;
             for (size_t i = 2; i < op->args.size(); i++) {
-                args.push_back(print_expr(op->args[i]));
+                shape.push_back(print_expr(op->args[i]));
             }
-            // TODO upgrade to halide_buffer_t
+
             string buf_id = unique_name('B');
+
+            // Emit the shape
             do_indent();
-            stream << "buffer_t " << buf_id << " = {0};\n";
-            do_indent();
-            stream << buf_id << ".host = (uint8_t *)(" << args[0] << ");\n";
-            do_indent();
-            stream << buf_id << ".elem_size = " << args[1] << ";\n";
-            int dims = ((int)op->args.size() - 2)/3;
+            stream << "halide_dimension_t " << buf_id << "_shape[] = {";
             for (int i = 0; i < dims; i++) {
-                do_indent();
-                stream << buf_id << ".dim[" << i << "].min = " << args[i*3+2] << ";\n";
-                do_indent();
-                stream << buf_id << ".dim[" << i << "].extent = " << args[i*3+3] << ";\n";
-                do_indent();
-                stream << buf_id << ".dim[" << i << "].stride = " << args[i*3+4] << ";\n";
+                stream << "{" << shape[i*3 + 0]
+                       << ", " << shape[i*3 + 1]
+                       << ", " << shape[i*3 + 2] << "}";
+                if (i < dims - 1) {
+                    stream << ", ";
+                }
             }
+            stream << "};\n";
+
+            // Emit the buffer struct
+            do_indent();
+            stream << "halide_buffer_t " << buf_id << " = {"
+                   << "0, "    // device
+                   << "NULL, " // device_interface
+                   << host << ", "
+                   << "0, "    // flags
+                   << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
+                   << dims << ", "
+                   << buf_id << "_shape};\n";
             rhs << "(&" + buf_id + ")";
         } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "(((halide_buffer_t *)(" << a0 << "))->min[" << a1 << "] + " <<
-                "((halide_buffer_t *)(" << a0 << "))->extent[" << a1 << "] - 1)";
+            rhs << "(((halide_buffer_t *)(" << a0 << "))->dim[" << a1 << "].min + " <<
+                "((halide_buffer_t *)(" << a0 << "))->dim[" << a1 << "].extent - 1)";
         } else if (op->name == Call::extract_buffer_min) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((halide_buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+            rhs << "((halide_buffer_t *)(" << a0 << "))->dim[" << a1 << "].min";
         } else if (op->name == Call::extract_buffer_host) {
             internal_assert(op->args.size() == 1);
             string a0 = print_expr(op->args[0]);
@@ -1349,8 +1386,8 @@ void CodeGen_C::test() {
         "int test1(halide_buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
-        " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
-        " (void)_buf_host_and_dev_are_null;\n"
+        " const bool _buf_host_and_device_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->device == 0);\n"
+        " (void)_buf_host_and_device_are_null;\n"
         " const int32_t _buf_min_0 = _buf_buffer->dim[0].min;\n"
         " (void)_buf_min_0;\n"
         " const int32_t _buf_min_1 = _buf_buffer->dim[1].min;\n"
@@ -1369,8 +1406,12 @@ void CodeGen_C::test() {
         " (void)_buf_stride_1;\n"
         " const int32_t _buf_stride_2 = _buf_buffer->dim[2].stride;\n"
         " (void)_buf_stride_2;\n"
-        " const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
-        " (void)_buf_elem_size;\n"
+        " const int32_t _buf_type_code = (int32_t)(_buf_buffer->type.code);\n"
+        " (void)_buf_type_code;\n"
+        " const int32_t _buf_type_bits = (int32_t)(_buf_buffer->type.bits);\n"
+        " (void)_buf_type_bits;\n"
+        " const int32_t _buf_type_lanes = (int32_t)(_buf_buffer->type.lanes);\n"
+        " (void)_buf_type_lanes;\n"
         " {\n"
         "  int64_t _0 = 43;\n"
         "  int64_t _1 = _0 * _beta;\n"
