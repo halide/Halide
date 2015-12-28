@@ -82,10 +82,7 @@ public:
     template <typename... Args>
     NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args... args) {
-        std::vector<VarOrRVar> collected_args;
-        collected_args.push_back(x);
-        collected_args.push_back(y);
-        Internal::collect_args(collected_args, args...);
+        std::vector<VarOrRVar> collected_args = {x, y, VarOrRVar(args)...};
         return reorder(collected_args);
     }
 
@@ -795,9 +792,8 @@ public:
     template <typename... Args>
     NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRefVar>::type
     operator()(Args... args) const {
-        std::vector<Var> collected_args;
-        Internal::collect_args(collected_args, args...);
-        return this->operator()(collected_args);
+        std::vector<Var> vars = {Var(args)...};
+        return (*this)(vars);
     }
     // @}
 
@@ -813,10 +809,8 @@ public:
     template <typename... Args>
     NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRefExpr>::type
     operator()(Expr x, Args... args) const {
-        std::vector<Expr> collected_args;
-        collected_args.push_back(x);
-        Internal::collect_args(collected_args, args...);
-        return (*this)(collected_args);
+        std::vector<Expr> exprs = {x, Expr(args)...};
+        return (*this)(exprs);
     }
     // @}
 
@@ -905,10 +899,7 @@ public:
     template <typename... Args>
     NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args... args) {
-        std::vector<VarOrRVar> collected_args;
-        collected_args.push_back(x);
-        collected_args.push_back(y);
-        Internal::collect_args(collected_args, args...);
+        std::vector<VarOrRVar> collected_args = {x, y, VarOrRVar(args)...};
         return reorder(collected_args);
     }
 
@@ -1228,10 +1219,7 @@ public:
     template <typename... Args>
     NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
     reorder_storage(Var x, Var y, Args... args) {
-        std::vector<Var> collected_args;
-        collected_args.push_back(x);
-        collected_args.push_back(y);
-        Internal::collect_args(collected_args, args...);
+        std::vector<Var> collected_args {x, y, Var(args)...};
         return reorder_storage(collected_args);
     }
     // @}
@@ -1523,24 +1511,6 @@ public:
     EXPORT OutputImageParam output_buffer() const;
     EXPORT std::vector<OutputImageParam> output_buffers() const;
     // @}
-
-    /** Casting a function to an expression is equivalent to calling
-     * the function with zero arguments. Implicit variables will be
-     * injected according to the function's dimensionality
-     * (see \ref Var::implicit).
-     *
-     * This lets you write things like:
-     *
-     \code
-     Func f, g;
-     Var x;
-     g(x) = ...
-     f(_) = g * 2;
-     \endcode
-    */
-    operator Expr() const {
-        return (*this)(_);
-    }
 
     /** Use a Func as an argument to an external stage. */
     operator ExternFuncArgument() const {

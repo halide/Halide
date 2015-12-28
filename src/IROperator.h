@@ -1814,9 +1814,9 @@ inline Expr undef() {
 EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
 
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, Args... args) {
-    std::vector<Expr> collected_args;
-    Internal::collect_args(collected_args, args...);
+inline NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, Expr>::type
+memoize_tag(Expr result, Args... args) {
+    std::vector<Expr> collected_args = {Expr(args)...};
     return memoize_tag(result, collected_args);
 }
 // @}

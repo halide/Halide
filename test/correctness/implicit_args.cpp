@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     // im2 is a 2d image
 
     Func f;
-    f(x, _) = im1 + im2(x, _) + im2;
+    f(x, _) = im1(_) + im2(x, _) + im2(_);
     // Equivalent to
     // f(x, i, j, k) = im1(i, j, k) + im2(x, i) + im2(i, j);
     // f(x, i, j, k) = i*j*k + x+i + i+j;
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     assert(f.dimensions() == 4);
 
     Func g;
-    g(_) = f(2, 2, _) + im2(Expr(1), _);
+    g(_) = f(2, 2, _) + im2(1, _);
     f.compute_root();
     // Equivalent to
     // g(i, j) = f(2, 2, i, j) + im2(1, i);

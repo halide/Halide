@@ -19,21 +19,20 @@ void ImageBase::prepare_for_direct_pixel_access() {
         // (low-dimensional) pixel access.
         origin = buffer.host_ptr();
         ssize_t offset = 0;
+        for (int i = 0; i < buffer.dimensions(); i++) {
+            offset += buffer.dim(i).min() * buffer.dim(i).stride();
+        }
         if (buffer.dimensions() > 0) {
             stride_0 = buffer.dim(0).stride();
-            offset += buffer.dim(0).min() * stride_0;
         }
         if (buffer.dimensions() > 1) {
             stride_1 = buffer.dim(1).stride();
-            offset += buffer.dim(1).min() * stride_1;
         }
         if (buffer.dimensions() > 2) {
             stride_2 = buffer.dim(2).stride();
-            offset += buffer.dim(2).min() * stride_2;
         }
         if (buffer.dimensions() > 3) {
             stride_3 = buffer.dim(3).stride();
-            offset += buffer.dim(3).min() * stride_3;
         }
         elem_size = buffer.type().bytes();
         offset *= elem_size;
@@ -186,59 +185,6 @@ int ImageBase::bottom() const {
     return dim(1).max();
 }
 
-Expr ImageBase::operator()() const {
-    user_error << "Can't construct a zero-argument reference to Image \"" << buffer.name()
-               << "\" with " << dims << " dimensions.\n";
-    std::vector<Expr> args;
-    return Internal::Call::make(buffer, args);
-}
-
-Expr ImageBase::operator()(Expr x) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    placeholder_seen |= add_implicit_args_if_placeholder(args, x, 1, placeholder_seen);
-
-    Internal::check_call_arg_types(buffer.name(), &args, dims);
-
-    return Internal::Call::make(buffer, args);
-}
-
-Expr ImageBase::operator()(Expr x, Expr y) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    placeholder_seen |= add_implicit_args_if_placeholder(args, x, 2, placeholder_seen);
-    placeholder_seen |= add_implicit_args_if_placeholder(args, y, 2, placeholder_seen);
-
-    Internal::check_call_arg_types(buffer.name(), &args, dims);
-
-    return Internal::Call::make(buffer, args);
-}
-
-Expr ImageBase::operator()(Expr x, Expr y, Expr z) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    placeholder_seen |= add_implicit_args_if_placeholder(args, x, 3, placeholder_seen);
-    placeholder_seen |= add_implicit_args_if_placeholder(args, y, 3, placeholder_seen);
-    placeholder_seen |= add_implicit_args_if_placeholder(args, z, 3, placeholder_seen);
-
-    Internal::check_call_arg_types(buffer.name(), &args, dims);
-
-    return Internal::Call::make(buffer, args);
-}
-
-Expr ImageBase::operator()(Expr x, Expr y, Expr z, Expr w) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    placeholder_seen |= add_implicit_args_if_placeholder(args, x, 4, placeholder_seen);
-    placeholder_seen |= add_implicit_args_if_placeholder(args, y, 4, placeholder_seen);
-    placeholder_seen |= add_implicit_args_if_placeholder(args, z, 4, placeholder_seen);
-    placeholder_seen |= add_implicit_args_if_placeholder(args, w, 4, placeholder_seen);
-
-    Internal::check_call_arg_types(buffer.name(), &args, dims);
-
-    return Internal::Call::make(buffer, args);
-}
-
 Expr ImageBase::operator()(std::vector<Expr> args_passed) const {
     std::vector<Expr> args;
     bool placeholder_seen = false;
@@ -252,17 +198,12 @@ Expr ImageBase::operator()(std::vector<Expr> args_passed) const {
     return Internal::Call::make(buffer, args);
 }
 
-Expr ImageBase::operator()(std::vector<Var> args_passed) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    for (size_t i = 0; i < args_passed.size(); i++) {
-        placeholder_seen |=
-            add_implicit_args_if_placeholder(args, args_passed[i],
-                                             args_passed.size(), placeholder_seen);
+Expr ImageBase::operator()(std::vector<Var> vars) const {
+    std::vector<Expr> exprs;
+    for (Var v : vars) {
+        exprs.push_back(v);
     }
-
-    Internal::check_call_arg_types(buffer.name(), &args, dims);
-    return Internal::Call::make(buffer, args);
+    return (*this)(exprs);
 }
 
 halide_buffer_t *ImageBase::raw_buffer() const {

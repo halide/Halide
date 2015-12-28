@@ -181,56 +181,6 @@ Buffer ImageParam::get() const {
     return param.get_buffer();
 }
 
-Expr ImageParam::operator()() const {
-    user_assert(dimensions() == 0)
-        << "Zero-argument access to Buffer " << name()
-        << ", which has " << dimensions() << "dimensions.\n";
-    std::vector<Expr> args;
-    return Internal::Call::make(param, args);
-}
-
-Expr ImageParam::operator()(Expr x) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    add_implicit_args_if_placeholder(args, x, 1, &placeholder_seen);
-
-    Internal::check_call_arg_types(name(), &args, dimensions());
-    return Internal::Call::make(param, args);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    add_implicit_args_if_placeholder(args, x, 2, &placeholder_seen);
-    add_implicit_args_if_placeholder(args, y, 2, &placeholder_seen);
-
-    Internal::check_call_arg_types(name(), &args, dimensions());
-    return Internal::Call::make(param, args);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y, Expr z) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    add_implicit_args_if_placeholder(args, x, 3, &placeholder_seen);
-    add_implicit_args_if_placeholder(args, y, 3, &placeholder_seen);
-    add_implicit_args_if_placeholder(args, z, 3, &placeholder_seen);
-
-    Internal::check_call_arg_types(name(), &args, dimensions());
-    return Internal::Call::make(param, args);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y, Expr z, Expr w) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    add_implicit_args_if_placeholder(args, x, 4, &placeholder_seen);
-    add_implicit_args_if_placeholder(args, y, 4, &placeholder_seen);
-    add_implicit_args_if_placeholder(args, z, 4, &placeholder_seen);
-    add_implicit_args_if_placeholder(args, w, 4, &placeholder_seen);
-
-    Internal::check_call_arg_types(name(), &args, dimensions());
-    return Internal::Call::make(param, args);
-}
-
 Expr ImageParam::operator()(std::vector<Expr> args_passed) const {
     std::vector<Expr> args;
     bool placeholder_seen = false;
@@ -243,16 +193,12 @@ Expr ImageParam::operator()(std::vector<Expr> args_passed) const {
     return Internal::Call::make(param, args);
 }
 
-Expr ImageParam::operator()(std::vector<Var> args_passed) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    for (size_t i = 0; i < args_passed.size(); i++) {
-        add_implicit_args_if_placeholder(args, args_passed[i],
-                                         args_passed.size(), &placeholder_seen);
+Expr ImageParam::operator()(std::vector<Var> vars) const {
+    std::vector<Expr> exprs;
+    for (Var v : vars) {
+        exprs.push_back(v);
     }
-
-    Internal::check_call_arg_types(name(), &args, dimensions());
-    return Internal::Call::make(param, args);
+    return (*this)(exprs);
 }
 
 }

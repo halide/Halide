@@ -366,31 +366,16 @@ public:
      * (see \ref Var::implicit)
      */
     // @{
-    EXPORT Expr operator()() const;
-    EXPORT Expr operator()(Expr x) const;
-    EXPORT Expr operator()(Expr x, Expr y) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
     EXPORT Expr operator()(std::vector<Expr>) const;
     EXPORT Expr operator()(std::vector<Var>) const;
-    // @}
 
-    /** Treating the image parameter as an Expr is equivalent to call
-     * it with no arguments. For example, you can say:
-     *
-     \code
-     ImageParam im(UInt(8), 2);
-     Func f;
-     f = im*2;
-     \endcode
-     *
-     * This will define f as a two-dimensional function with value at
-     * position (x, y) equal to twice the value of the image parameter
-     * at the same location.
-     */
-    operator Expr() const {
-        return (*this)(_);
-    }
+    template <typename ...Args>
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, Expr>::type
+    operator()(Args... args) {
+        std::vector<Expr> exprs = {Expr(args)...};
+        return (*this)(exprs);
+    };
+    // @}
 };
 
 }

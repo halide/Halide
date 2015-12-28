@@ -81,23 +81,6 @@ EXPORT std::string base_name(const std::string &name, char delim = '.');
 /** Split the source string using 'delim' as the divider. */
 EXPORT std::vector<std::string> split_string(const std::string &source, const std::string &delim);
 
-template <typename T>
-inline NO_INLINE void collect_args(std::vector<T> &collected_args) {
-}
-
-template <typename T, typename T2>
-inline NO_INLINE void collect_args(std::vector<T> &collected_args,
-                                   T2 arg) {
-    collected_args.push_back(arg);
-}
-
-template <typename T, typename T2, typename ...Args>
-inline NO_INLINE void collect_args(std::vector<T> &collected_args,
-                                   T2 arg, Args... args) {
-    collected_args.push_back(arg);
-    collect_args(collected_args, args...);
-}
-
 template <typename T1, typename T2, typename T3, typename T4 >
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                      T3 a1, T4 a2) {

@@ -132,17 +132,20 @@ public:
      * one-dimensional images. */
     EXPORT int bottom() const;
 
-    /** Construct an expression which loads from this image. The
-     * location is extended with enough implicit variables to match
-     * the dimensionality of the image (see \ref Var::implicit) */
+    /** Construct an expression which loads from this image. If the
+     * Var _ is used, the location is extended with enough implicit
+     * variables to match the dimensionality of the image (see \ref
+     * Var::implicit) */
     // @{
-    EXPORT Expr operator()() const;
-    EXPORT Expr operator()(Expr x) const;
-    EXPORT Expr operator()(Expr x, Expr y) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
     EXPORT Expr operator()(std::vector<Expr>) const;
     EXPORT Expr operator()(std::vector<Var>) const;
+
+    template <typename ...Args>
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, Expr>::type
+    operator()(Args... args) const {
+        std::vector<Expr> exprs = {Expr(args)...};
+        return (*this)(exprs);
+    };
     // @}
 
     /** Get a pointer to the raw halide_buffer_t that this image holds */
@@ -157,7 +160,8 @@ public:
 
     /** Get the address of a pixel in more than four dimensions. */
     template<typename ...Args>
-    void *address_of(int x, int y, int z, int w, Args... args) const {
+    typename std::enable_if<Internal::all_are_convertible<int, Args...>::value, void *>::type
+    address_of(int x, int y, int z, int w, Args... args) const {
         uint8_t *ptr = (uint8_t *)origin;
         size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
 
@@ -198,6 +202,9 @@ public:
 
     NO_INLINE Image(int x, const std::string &name = "") :
         ImageBase(type_of<T>(), {x}, name) {}
+
+    NO_INLINE Image(std::vector<int> size, const std::string &name = "") :
+        ImageBase(type_of<T>(), size, name) {}
     // @}
 
     /** Wrap a buffer in an Image object, so that we can directly
@@ -222,13 +229,15 @@ public:
 
     /** Get the value of the element at the given position. */
     template<typename ...Args>
-    const T &operator()(int first, Args... rest) const {
+    typename std::enable_if<Internal::all_are_convertible<int, Args...>::value, const T &>::type
+    operator()(int first, Args... rest) const {
         return *((T *)(address_of(first, rest...)));
     }
 
     /** Get a reference to the element at the given position. */
     template<typename ...Args>
-    T &operator()(int first, Args... rest) {
+    typename std::enable_if<Internal::all_are_convertible<int, Args...>::value, T &>::type
+    operator()(int first, Args... rest) {
         return *((T *)(address_of(first, rest...)));
     }
 
