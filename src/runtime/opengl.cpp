@@ -1098,12 +1098,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, halide_buffer_t *buf) 
     bool is_packed = (buf->dim[1].stride == buf->dim[0].extent * buf->dim[0].stride);
     if (is_interleaved && is_packed) {
         global_state.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host + buf->type.bytes() *
-            (buf->dim[0].min * buf->dim[0].stride +
-             buf->dim[1].min * buf->dim[1].stride +
-             buf->dim[2].min * buf->dim[2].stride +
-             buf->dim[3].min * buf->dim[3].stride);
-        global_state.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, host_ptr);
+        global_state.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, buf->host);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(1)")) {
             return 1;
         }
@@ -1227,15 +1222,10 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
     bool is_packed = (buf->dim[1].stride == buf->dim[0].extent * buf->dim[0].stride);
     if (is_interleaved && is_packed && texture_channels == buffer_channels) {
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host + buf->type.bytes() *
-            (buf->dim[0].min * buf->dim[0].stride +
-             buf->dim[1].min * buf->dim[1].stride +
-             buf->dim[2].min * buf->dim[2].stride +
-             buf->dim[3].min * buf->dim[3].stride);
 #ifdef DEBUG_RUNTIME
         int64_t t1 = halide_current_time_ns(user_context);
 #endif
-        global_state.ReadPixels(0, 0, buf->dim[0].extent, buf->dim[1].extent, format, type, host_ptr);
+        global_state.ReadPixels(0, 0, buf->dim[0].extent, buf->dim[1].extent, format, type, buf->host);
 #ifdef DEBUG_RUNTIME
         int64_t t2 = halide_current_time_ns(user_context);
 #endif
@@ -1243,7 +1233,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
             return 1;
         }
 #ifdef DEBUG_RUNTIME
-        debug(user_context)<<"ReadPixels(1) time: "<<(t2-t1)/1e3<<"usec\n";
+        debug(user_context) << "ReadPixels(1) time: "<<(t2-t1)/1e3<<"usec\n";
 #endif
     } else {
         debug(user_context)
