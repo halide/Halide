@@ -31,7 +31,12 @@ BOOST_PYTHON_FUNCTION_OVERLOADS( func_realize0_overloads, func_realize0, 2, 3)
 h::Realization func_realize1(h::Func &that, int x_size=0, int y_size=0, int z_size=0, int w_size=0,
                              const h::Target &target = h::Target())
 {
-    return that.realize(x_size, y_size, z_size, w_size, target);
+    std::vector<int> shape;
+    if (x_size) shape.push_back(x_size);
+    if (y_size) shape.push_back(y_size);
+    if (z_size) shape.push_back(z_size);
+    if (w_size) shape.push_back(w_size);
+    return that.realize(shape, target);
 }
 
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize1_overloads, func_realize1, 1, 6)
@@ -723,8 +728,6 @@ void defineFunc()
 
 
     defineFuncGpuMethods(func_class);
-
-    p::implicitly_convertible<Func, h::Expr>();
 
     defineStage();
     defineVarOrRVar();

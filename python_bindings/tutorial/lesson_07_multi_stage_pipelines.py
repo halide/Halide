@@ -58,7 +58,7 @@ def main():
         output[x, y, c] = cast(UInt(8), blur_y[x, y, c])
 
         # Each Func in this pipeline calls a previous one using
-        # familiar function call syntax (we've overloaded operator()
+        # familiar function call syntax (we've overloaded operator[]
         # on Func objects). A Func may call any other Func that has
         # been given a definition. This restriction prevents
         # pipelines with loops in them. Halide pipelines are always
@@ -87,7 +87,7 @@ def main():
         # asking the Halide routine to read out of bounds. We saw how
         # to do this in the previous lesson:
         result = Image(UInt(8), input.width() - 2, input.height() - 2, 3)
-        result.set_min(1, 1)
+        result.set_min(1, 1, 0)
         output.realize(result)
 
         # Save the result. It should look like a slightly blurry

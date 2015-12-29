@@ -26,8 +26,9 @@ protected:
     void *origin;
 
     /** The strides. These fields are also stored in the buffer, but
-     * they're cached here in the handle to make operator() fast. This
-     * is safe to do because the buffer is never modified.
+     * they're cached here in the handle to make operator() fast for
+     * low-dimensional images. This is safe to do because the buffer
+     * is never modified.
      */
     int stride_0, stride_1, stride_2, stride_3;
 
@@ -172,6 +173,16 @@ public:
         }
         return (void *)(ptr + offset * elem_size);
     }
+
+    /** Get the address of a pixel using a vector of integers. */
+    void *address_of(const std::vector<int> &vec) const {
+        uint8_t *ptr = (uint8_t *)origin;
+        size_t offset = 0;
+        for (size_t i = 0; i < vec.size(); i++) {
+            offset += vec[i] * buffer.dim(i).stride();
+        }
+        return (void *)(ptr + offset * elem_size);
+    }
 };
 
 /** A reference-counted handle on a dense multidimensional array
@@ -239,6 +250,16 @@ public:
     typename std::enable_if<Internal::all_are_convertible<int, Args...>::value, T &>::type
     operator()(int first, Args... rest) {
         return *((T *)(address_of(first, rest...)));
+    }
+
+    /** Get the value of the element at the given position. */
+    const T &operator()(std::vector<int> pos) const {
+        return *((T *)(address_of(pos)));
+    }
+
+    /** Get a reference to the element at the given position. */
+    T &operator()(std::vector<int> pos) {
+        return *((T *)(address_of(pos)));
     }
 
     /** Get a handle on the Buffer that this image holds */

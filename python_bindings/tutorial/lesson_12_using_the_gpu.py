@@ -229,20 +229,11 @@ class MyPipeline:
 
         # Halide::Buffer, however, represents a buffer that may
         # exist on either CPU or GPU or both.
-        output = Buffer(UInt(8), \
-                        self.input.width(),
-                        self.input.height(),
-                        self.input.channels())
-        output = Buffer(UInt(8), \
+        output = Buffer(UInt(8),
                         self.input.width(),
                         self.input.height(),
                         self.input.channels(),
-                        name="output")
-        output = Buffer(UInt(8), \
-                        x_size=self.input.width(),
-                        y_size=self.input.height(),
-                        z_size=self.input.channels(),
-                        name="output")
+                        name = "output")
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -321,7 +312,7 @@ def main():
     else:
         print("Not testing performance on GPU, "
               "because I can't find the opencl library")
-    
+
     return 0
 
 

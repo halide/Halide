@@ -1506,7 +1506,7 @@ size_t FuncRefExpr::size() const {
     return func.outputs();
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
+Realization Func::realize(std::vector<int> sizes, const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {

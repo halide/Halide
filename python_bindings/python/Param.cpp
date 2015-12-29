@@ -40,22 +40,12 @@ h::Expr imageparam_to_expr_operator1(h::ImageParam &that, h::Expr an_expr)
     return that(expr_args);
 }
 
-std::string imageparam_repr(h::ImageParam &param) // non-const due to a Halide bug in master (to be fixed)
+std::string imageparam_repr(const h::ImageParam &param)
 {
     std::string repr;
     const h::Type &t = param.type();
-    if (param.defined())
-    {
-        boost::format f("<halide.ImageParam named '%s' (not yet defined) >");
-        repr = boost::str(f % param.name());
-    }
-    else
-    {
-        boost::format f("<halide.ImageParam named '%s' of type '%s(%i)' and dimensions %i %i %i %i>");
-        repr = boost::str(f % param.name()
-                          % type_code_to_string(t) % t.bits()
-                          % param.extent(0) % param.extent(1) % param.extent(2) % param.extent(3));
-    }
+    boost::format f("<halide.ImageParam named '%s' of type '%t(%i)'>");
+    repr = boost::str(f % param.name() % type_code_to_string(t) % t.bits());
     return repr;
 }
 
@@ -124,7 +114,7 @@ void defineImageParam()
             ;
 
     p::implicitly_convertible<ImageParam, h::Argument>();
-    p::implicitly_convertible<ImageParam, h::Expr>();
+    // p::implicitly_convertible<ImageParam, h::Expr>();
 
     // "Using a param as the argument to an external stage treats it as an Expr"
     //p::implicitly_convertible<ImageParam, h::ExternFuncArgument>();
@@ -361,7 +351,7 @@ void defineParam_impl(const std::string suffix, const h::Type type)
             //            operator Argument() const
 
             .def("__repr__", &param_repr<T>, p::arg("self"))
-            ;
+        ;
 
     p::implicitly_convertible<Param<T>, h::Argument>();
     //p::implicitly_convertible<Param<T>, h::ExternFuncArgument>();
