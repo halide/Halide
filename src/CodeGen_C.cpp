@@ -886,7 +886,7 @@ void CodeGen_C::visit(const Call *op) {
                    << "NULL, " // device_interface
                    << host << ", "
                    << "0, "    // flags
-                   << "halide_type_t(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
+                   << "halide_type_t(" << (int)t.code() << ", " << t.bits() << ", " << t.lanes() << "), "
                    << dims << ", "
                    << buf_id << "_shape};\n";
             rhs << "(&" + buf_id + ")";
