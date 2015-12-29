@@ -870,9 +870,9 @@ void CodeGen_C::visit(const Call *op) {
             do_indent();
             stream << "halide_dimension_t " << buf_id << "_shape[] = {";
             for (int i = 0; i < dims; i++) {
-                stream << "{" << shape[i*3 + 0]
+                stream << "halide_dimension_t(" << shape[i*3 + 0]
                        << ", " << shape[i*3 + 1]
-                       << ", " << shape[i*3 + 2] << "}";
+                       << ", " << shape[i*3 + 2] << ")";
                 if (i < dims - 1) {
                     stream << ", ";
                 }
@@ -886,7 +886,7 @@ void CodeGen_C::visit(const Call *op) {
                    << "NULL, " // device_interface
                    << host << ", "
                    << "0, "    // flags
-                   << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
+                   << "halide_type_t(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
                    << dims << ", "
                    << buf_id << "_shape};\n";
             rhs << "(&" + buf_id + ")";

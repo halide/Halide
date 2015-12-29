@@ -21,14 +21,19 @@ namespace Tools {
 template<typename T>
 class Image {
     struct Contents {
-        halide_buffer_t buf = {0};
+        halide_buffer_t buf;
         // This class supports up to four dimensions
         halide_dimension_t shape[4];
-        int ref_count = 1;
+        int ref_count;
         uint8_t *alloc = NULL;
 
         void device_free() {
             halide_device_free(NULL, &buf);
+        }
+
+        Contents() : ref_count(1) {
+            memset(&buf, 0, sizeof(buf));
+            memset(&shape, 0, sizeof(shape));
         }
 
         ~Contents() {
@@ -43,8 +48,6 @@ class Image {
 
     void initialize(int x, int y, int z, int w, bool interleaved) {
         contents = new Contents;
-
-        memset(contents->shape, 0, sizeof(contents->shape));
 
         contents->shape[0].extent = x;
         contents->shape[1].extent = y;

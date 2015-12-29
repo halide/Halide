@@ -15,8 +15,8 @@ extern "C" int an_extern_func(int x, int y) {
 extern "C" int an_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->host == NULL) {
         // We expect a 2D input.
-        in->dim[0] = {0, 10, 1};
-        in->dim[1] = {0, 10, 10};
+        in->dim[0] = halide_dimension_t(0, 10, 1);
+        in->dim[1] = halide_dimension_t(0, 10, 10);
     } else {
         assert(out->host);
         int result = 0;
