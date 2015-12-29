@@ -195,6 +195,11 @@ foreach (i ${RUNTIME_BC} )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 
+add_custom_command(OUTPUT "${INITMOD_PREFIX}declarations.cpp"
+  DEPENDS "${NATIVE_RUNTIME_DIR}HalideRuntime.h"
+  COMMAND bitcode2cpp "declarations" < "${NATIVE_RUNTIME_DIR}HalideRuntime.h" > "${INITMOD_PREFIX}declarations.cpp"
+  COMMENT "HalideRuntime.h -> ${INITMOD_PREFIX}declarations.cpp")
+list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}declarations.cpp")
 
 set(HEADER_FILES
   AddImageChecks.h
