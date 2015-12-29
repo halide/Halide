@@ -50,11 +50,11 @@ public:
 
     bool isNull() const;
 
-    const buffer_t &luma() const;
+    const halide_nd_buffer_t<2> &luma() const;
 
-    const buffer_t &chromaU() const;
+    const halide_nd_buffer_t<2> &chromaU() const;
 
-    const buffer_t &chromaV() const;
+    const halide_nd_buffer_t<2> &chromaV() const;
 
     ChromaStorage chromaStorage() const;
 
@@ -63,7 +63,7 @@ public:
     //   memory.
     // - Twice the width.
     // Otherwise, returns a buffer_t pointing to nullptr.
-    const buffer_t &interleavedChromaView() const;
+    const halide_nd_buffer_t<2> &interleavedChromaView() const;
 
     // If chroma channels are planar and tightly packed (one directly follows
     // the other, with the same size and strides), then returns a buffer_t
@@ -72,21 +72,21 @@ public:
     //   memory.
     // - Twice the height.
     // Otherwise, returns a buffer_t pointing to nullptr.
-    const buffer_t &packedPlanarChromaView() const;
+    const halide_nd_buffer_t<2> &packedPlanarChromaView() const;
 
     // Rotate the buffer 180 degrees. Cheap. Just messes with the strides.
     void rotate180();
 
 private:
 
-    buffer_t luma_;
-    buffer_t chromaU_;
-    buffer_t chromaV_;
+    halide_nd_buffer_t<2> luma_;
+    halide_nd_buffer_t<2> chromaU_;
+    halide_nd_buffer_t<2> chromaV_;
 
     ChromaStorage chromaStorage_;
 
-    buffer_t interleavedChromaView_;
-    buffer_t packedPlanarChromaView_;
+    halide_nd_buffer_t<2> interleavedChromaView_;
+    halide_nd_buffer_t<2> packedPlanarChromaView_;
 };
 
 #endif // YUV_BUFFER_T_H

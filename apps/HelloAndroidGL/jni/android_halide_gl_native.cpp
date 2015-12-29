@@ -18,18 +18,12 @@ extern "C"
 JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
     JNIEnv *env, jobject obj, jint dst, jint width, jint height) {
 
-    buffer_t dstBuf = {0};
-    dstBuf.extent[0] = width;
-    dstBuf.extent[1] = height;
-    dstBuf.extent[2] = 4;
-    dstBuf.stride[0] = 4;
-    dstBuf.stride[1] = 4 * width;
-    dstBuf.stride[2] = 1;
-    dstBuf.min[0] = 0;
-    dstBuf.min[1] = 0;
-    dstBuf.min[2] = 0;
-    dstBuf.elem_size = 1;
-    dstBuf.host = NULL;
+    halide_nd_buffer_t<3> dstBuf;
+    dstBuf.dim[0] = halide_dimension_t(0, width, 4);
+    dstBuf.dim[1] = halide_dimension_t(0, height, 4*width);
+    dstBuf.dim[2] = halide_dimension_t(0, 4, 1);
+    dstBuf.type = halide_type_of<uint8_t>();
+
     // If dst == 0, let Halide render directly to the current render target.
     if (dst == 0) {
         int result = halide_opengl_wrap_render_target(user_context, &dstBuf);

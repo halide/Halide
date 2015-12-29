@@ -19,7 +19,6 @@ extern "C" void halide_set_error_handler(int (*handler)(void *user_context, cons
 extern "C" int halide_host_cpu_count();
 extern "C" int halide_start_clock(void *user_context);
 extern "C" int64_t halide_current_time_ns();
-extern "C" int halide_copy_to_host(void *, buffer_t *);
 
 int handler(void */* user_context */, const char *msg) {
     LOGE("%s", msg);
@@ -45,7 +44,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, surf);
 
-    
+
     static bool first_call = true;
     static unsigned counter = 0;
     static unsigned times[16];
@@ -73,39 +72,27 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
 #endif
 
     // Make these static so that we can reuse device allocations across frames.
-    static buffer_t srcBuf = {0};
-    static buffer_t dstBuf = {0};
+    static halide_nd_buffer_t<2> srcBuf;
+    static halide_nd_buffer_t<2> dstBuf;
 
     if (dst) {
         srcBuf.host = (uint8_t *)src;
-        srcBuf.host_dirty = true;
-        srcBuf.extent[0] = w;
-        srcBuf.extent[1] = h;
-        srcBuf.extent[2] = 0;
-        srcBuf.extent[3] = 0;
-        srcBuf.stride[0] = 1;
-        srcBuf.stride[1] = w;
-        srcBuf.min[0] = 0;
-        srcBuf.min[1] = 0;
-        srcBuf.elem_size = 1;
+        srcBuf.dim[0] = {0, w, 1};
+        srcBuf.dim[1] = {0, h, w};
+        srcBuf.type = halide_type_of<uint8_t>();
+        srcBuf.set_host_dirty(true);
 
         if (orientation >= 180) {
             // Camera sensor is probably upside down (e.g. Nexus 5x)
             srcBuf.host += w*h-1;
-            srcBuf.stride[0] = -1;
-            srcBuf.stride[1] = -w;
+            srcBuf.dim[0].stride = -1;
+            srcBuf.dim[1].stride = -w;
         }
-        
+
         dstBuf.host = dst;
-        dstBuf.extent[0] = w;
-        dstBuf.extent[1] = h;
-        dstBuf.extent[2] = 0;
-        dstBuf.extent[3] = 0;
-        dstBuf.stride[0] = 1;
-        dstBuf.stride[1] = w;
-        dstBuf.min[0] = 0;
-        dstBuf.min[1] = 0;
-        dstBuf.elem_size = 1;
+        dstBuf.dim[0] = {0, w, 1};
+        dstBuf.dim[1] = {0, h, w};
+        dstBuf.type = halide_type_of<uint8_t>();
 
         // Just set chroma to gray.
         memset(dst + w*h, 128, (w*h)/2);
@@ -113,7 +100,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         int64_t t1 = halide_current_time_ns();
         halide_generated(&srcBuf, &dstBuf);
 
-        if (dstBuf.dev) {
+        if (dstBuf.device) {
             halide_copy_to_host(NULL, &dstBuf);
         }
 
