@@ -70,15 +70,18 @@ void completion_callback(void *data, int32_t flags) {
 extern "C" void *halide_malloc(void *, size_t);
 extern "C" void halide_free(void *, void *);
 
-buffer_t ImageToBuffer(const ImageData &im) {
-    buffer_t buf;
-    memset(&buf, 0, sizeof(buffer_t));
+halide_nd_buffer_t<2> ImageToBuffer(const ImageData &im) {
+    halide_nd_buffer_t<2> buf;
     buf.host = (uint8_t *)im.data();
-    buf.extent[0] = im.size().width();
-    buf.stride[0] = 1;
-    buf.extent[1] = im.size().height();
-    buf.stride[1] = im.stride()/4;
-    buf.elem_size = 4;
+    //buf.dim[0] = halide_dimension_t(0, im.size().width(), 1);
+    //buf.dim[1] = halide_dimension_t(0, im.size().height(), im.stride()/4);
+    buf.dim[0].min = 0;
+    buf.dim[0].extent = im.size().width();
+    buf.dim[0].stride = 1;
+    buf.dim[1].min = 0;
+    buf.dim[1].extent = im.size().height();
+    buf.dim[1].stride = im.stride()/4;
+    buf.type = halide_type_of<int32_t>();
     return buf;
 }
 
@@ -109,7 +112,9 @@ public:
 
     int mouse_x, mouse_y;
 
-    buffer_t state_1, state_2, render_target;
+    // The state is up-to 3 dimensional. Bounds query mode should set the dimensionality for us.
+    halide_nd_buffer_t<2> render_target;
+    halide_nd_buffer_t<3> state_1, state_2;
 
     /// The constructor creates the plugin-side instance.
     /// @param[in] instance the handle to the browser-side plugin instance.
@@ -123,10 +128,6 @@ public:
         BindGraphics(graphics);
         RequestInputEvents(PP_INPUTEVENT_CLASS_MOUSE);
         inst = this;
-
-        memset(&state_1, 0, sizeof(buffer_t));
-        memset(&state_2, 0, sizeof(buffer_t));
-        render_target = ImageToBuffer(framebuffer);
     }
 
     virtual ~HalideDemosInstance() {
@@ -145,40 +146,42 @@ public:
         return false;
     }
 
-    void print_buffer(buffer_t *b) {
-        printf("buffer = {%p, %d %d %d %d, %d %d %d %d, %d %d %d %d}\n",
-               b->host,
-               b->min[0], b->min[1], b->min[2], b->min[3],
-               b->extent[0], b->extent[1], b->extent[2], b->extent[3],
-               b->stride[0], b->stride[1], b->stride[2], b->stride[3]);
+    void print_buffer(const halide_buffer_t *b) {
+        std::ostringstream oss;
+        oss << "Buffer host = " << ((size_t)b->host) << "<br>";
+        for (int i = 0; i < b->dimensions; i++) {
+            oss << " Dimension " << i << ": "
+                << b->dim[i].min << ", "
+                << b->dim[i].extent << ", "
+                << b->dim[i].stride << "<br>";
+        }
+        PostMessage(oss.str());
+
     }
 
-
-    void alloc_buffer(buffer_t *b) {
-        size_t sz = b->elem_size;
-        for (int i = 0; i < 4; i++) {
-            if (b->extent[i]) {
-                sz *= b->extent[i];
+    void alloc_buffer(halide_buffer_t *b) {
+        size_t sz = b->type.bytes();
+        for (int i = 0; i < b->dimensions; i++) {
+            if (b->dim[i].extent) {
+                sz *= b->dim[i].extent;
             }
         }
         b->host = (uint8_t *)halide_malloc(NULL, sz);
-
-        std::ostringstream oss;
-        oss << "Buffer size = " << sz << " pointer = " << ((size_t)b->host) << "\n";
-        PostMessage(oss.str());
     }
 
-    void free_buffer(buffer_t *b) {
+    void free_buffer(halide_buffer_t *b) {
         if (b->host) {
             halide_free(NULL, b->host);
+            b->host = NULL;
         }
-        memset(b, 0, sizeof(buffer_t));
     }
 
     virtual void HandleMessage(const Var& var_message) {
 
         if (busy) return;
         busy = true;
+
+        render_target = ImageToBuffer(framebuffer);
 
         static int thread_pool_size = 8;
         static int halide_last_t = 0;
@@ -205,6 +208,30 @@ public:
         if (first_run) {
             first_run = false;
             halide_set_num_threads(thread_pool_size);
+        }
+
+        if (0) {
+            // Print the layout of buffer_t and exit
+            std::ostringstream oss;
+            oss << "sizeof(halide_buffer_t) = "    << sizeof(halide_buffer_t) << "<br>";
+            oss << "sizeof(halide_dimension_t) = " << sizeof(halide_dimension_t) << "<br>";
+            oss << "sizeof(halide_type_t) = "      << sizeof(halide_type_t) << "<br>";
+            halide_buffer_t b;
+            oss << "offset of device = "           << (size_t(&b.device) - size_t(&b)) << "<br>";
+            oss << "offset of device_interface = " << (size_t(&b.device_interface) - size_t(&b)) << "<br>";
+            oss << "offset of host = "             << (size_t(&b.host) - size_t(&b)) << "<br>";
+            oss << "offset of flags = "            << (size_t(&b.flags) - size_t(&b)) << "<br>";
+            oss << "offset of type = "             << (size_t(&b.type) - size_t(&b)) << "<br>";
+            oss << "offset of dimensions = "       << (size_t(&b.dimensions) - size_t(&b)) << "<br>";
+            oss << "offset of dim = "              << (size_t(&b.dim) - size_t(&b)) << "<br>";
+            PostMessage(oss.str());
+            return;
+        }
+
+        if (0) {
+            // Print the render target buffer and exit
+            print_buffer(&render_target);
+            return;
         }
 
         // Initialize the input

@@ -650,6 +650,8 @@ typedef struct halide_buffer_t {
     /** The shape of the buffer. */
     halide_dimension_t *dim;
 
+    // TODO: pnacl uses 32-bit pointers but rounds this struct up to 40 bytes
+
 #ifdef __cplusplus
     // Convenience methods for accessing the flags
     bool get_flag(buffer_flags flag) const {
