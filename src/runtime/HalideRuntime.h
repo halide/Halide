@@ -543,60 +543,6 @@ struct halide_type_t {
 #endif
 };
 
-#if 0
-/**
- * The old raw representation of a buffer, included for legacy support.
- */
-typedef struct buffer_t {
-    /** A device-handle for e.g. GPU memory used to back this buffer. */
-    uint64_t dev;
-
-    /** A pointer to the start of the data in main memory. In terms of
-     * the Halide coordinate system, this is the address of the min
-     * coordinates (defined below). */
-    uint8_t* host;
-
-    /** The size of the buffer in each dimension. */
-    int32_t extent[4];
-
-    /** Gives the spacing in memory between adjacent elements in the
-    * given dimension.  The correct memory address for a load from
-    * this buffer at position x, y, z, w is:
-    * host + elem_size * ((x - min[0]) * stride[0] +
-    *                     (y - min[1]) * stride[1] +
-    *                     (z - min[2]) * stride[2] +
-    *                     (w - min[3]) * stride[3])
-    * By manipulating the strides and extents you can lazily crop,
-    * transpose, and even flip buffers without modifying the data.
-    */
-    int32_t stride[4];
-
-    /** Buffers often represent evaluation of a Func over some
-    * domain. The min field encodes the top left corner of the
-    * domain. */
-    int32_t min[4];
-
-    /** How many bytes does each buffer element take. This may be
-    * replaced with a more general type code in the future. */
-    int32_t elem_size;
-
-    /** This should be true if there is an existing device allocation
-    * mirroring this buffer, and the data has been modified on the
-    * host side. */
-    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;
-
-    /** This should be true if there is an existing device allocation
-    mirroring this buffer, and the data has been modified on the
-    device side. */
-    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;
-
-    // Some compilers will add extra padding at the end to ensure
-    // the size is a multiple of 8; we'll do that explicitly so that
-    // there is no ambiguity.
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
-} buffer_t;
-#endif
-
 typedef struct halide_dimension_t {
     int32_t min, extent, stride;
     uint32_t flags;
@@ -683,8 +629,8 @@ typedef struct halide_buffer_t {
 } // extern "C"
 
 /** A wrapper for halide_buffer_t that knows the dimensionality at
- * compile-time and also allocates enough space for the dimensions. */
-
+ * compile-time and allocates enough space for the dimensions. Can
+ * represent buffers of up-to D dimensions. */
 template<int D>
 struct halide_nd_buffer_t : public halide_buffer_t {
     halide_dimension_t dim_storage[D];
@@ -693,35 +639,44 @@ struct halide_nd_buffer_t : public halide_buffer_t {
         dimensions = D;
         dim = dim_storage;
     }
+
+    // We need custom copy and assignment operators to set the dim
+    // pointer correctly.
+    halide_nd_buffer_t(const halide_nd_buffer_t<D> &other) {
+        memcpy(this, &other, sizeof(*this));
+        dim = dim_storage;
+    }
+
+    // We need custom copy and assignment operators to set the dim
+    // pointer correctly.
+    halide_nd_buffer_t &operator=(const halide_nd_buffer_t<D> &other) {
+        memcpy(this, &other, sizeof(*this));
+        dim = dim_storage;
+    }
+
+    // Construct a halide_nd_buffer_t from a halide_buffer_t. Checks
+    // there are enough dimensions at runtime and call
+    explicit halide_nd_buffer_t(const halide_buffer_t &other) : halide_buffer_t(other) {
+        if (other.dimensions > D) {
+            halide_error(NULL, "Can't construct a halide_nd_buffer_t from a halide_buffer_t of greater dimensionality\n");
+        }
+
+        device = other.device;
+        device_interface = other.device_interface;
+        host = other.host;
+        flags = other.flags;
+        type = other.type;
+        dimensions = other.dimensions;
+
+        for (int i = 0; i < other.dimensions && i < D; i++) {
+            dim[i] = other.dim[i];
+        }
+    }
 };
 
 extern "C" {
 
 #endif
-
-/*
-inline void halide_upgrade_buffer_t(const buffer_t *buf, halide_type_t type, int dimensions, halide_buffer_t *new_buf) {
-    new_buf->device = 0; // Don't try to unwrap old-style device wrappers
-    new_buf->host = buf->host;
-    new_buf->type = type;
-    new_buf->dimensions = dimensions;
-    for (int i = 0; i < 4; i++) {
-        new_buf->dim[i].min = buf->min[i];
-        new_buf->dim[i].extent = buf->extent[i];
-        new_buf->dim[i].stride = buf->stride[i];
-        new_buf->dim[i].flags = 0;
-    }
-    for (int i = 4; i < 8; i++) {
-        new_buf->dim[i].min = 0;
-        new_buf->dim[i].extent = 0;
-        new_buf->dim[i].stride = 0;
-        new_buf->dim[i].flags = 0;
-    }
-    new_buf->flags = 0;
-    new_buf->set_host_dirty(buf->host_dirty);
-    new_buf->set_device_dirty(buf->dev_dirty);
-}
-*/
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;
