@@ -761,7 +761,8 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "("
                 << buf << "->type.code = (halide_type_code_t)(" << (int)t.code() << "), "
                 << buf << "->type.bits = " << t.bits() << ", "
-                << buf << "->type.lanes = " << t.lanes() << ", ";
+                << buf << "->type.lanes = " << t.lanes() << ", "
+                << buf << "->dimensions = " << dims << ", ";
             for (int i = 0; i < dims; i++) {
                 rhs << buf << "->dim[" << i << "].min = " << shape[i*3] << ", "
                     << buf << "->dim[" << i << "].extent = " << shape[i*3+1] << ", "

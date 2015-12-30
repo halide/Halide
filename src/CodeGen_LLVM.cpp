@@ -2266,6 +2266,8 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(ConstantInt::get(i8, t.bits()), buffer_type_bits_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i16, t.lanes()), buffer_type_lanes_ptr(buffer));
 
+            builder->CreateStore(ConstantInt::get(i32, dims), buffer_dimensions_ptr(buffer));
+
             for (int i = 0; i < dims; i++) {
                 builder->CreateStore(codegen(op->args[i*3+2]), buffer_min_ptr(buffer, i));
                 builder->CreateStore(codegen(op->args[i*3+3]), buffer_extent_ptr(buffer, i));
