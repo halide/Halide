@@ -636,8 +636,7 @@ typedef struct halide_buffer_t {
      * coordinates (defined below). */
     uint8_t* host;
 
-    /** flags with various meanings. 64-bits is probably overkill, but
-     * it aligns the rest of the buffer nicely. */
+    /** flags with various meanings. */
     enum buffer_flags {flag_host_dirty = 0, flag_device_dirty = 1};
     uint64_t flags;
 
@@ -650,7 +649,8 @@ typedef struct halide_buffer_t {
     /** The shape of the buffer. */
     halide_dimension_t *dim;
 
-    // TODO: pnacl uses 32-bit pointers but rounds this struct up to 40 bytes
+    /** Pads the buffer up to a multiple of 8 bytes */
+    void *padding;
 
 #ifdef __cplusplus
     // Convenience methods for accessing the flags
