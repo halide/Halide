@@ -55,6 +55,7 @@ public:
     CodeGen_GLSLBase(std::ostream &s);
 
     std::string print_name(const std::string &name);
+    std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
 protected:
     using CodeGen_C::visit;
@@ -78,13 +79,10 @@ public:
                     std::string name,
                     const std::vector<GPU_Argument> &args);
 
-    std::string print_name(const std::string &);
-
     EXPORT static void test();
 
 protected:
     using CodeGen_C::visit;
-    std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
     void visit(const FloatImm *);
 
