@@ -15,7 +15,7 @@
     HalideDemosModule = null;  // Global application object.
     statusText = 'NO-STATUS';
     threads = '8';
-    demo = '0';
+    demo = '1';
 
     // Indicate load success.
     function moduleDidLoad() {
@@ -86,10 +86,10 @@
 Demo
 </td><td>
 <select id="demo" onchange="setDemo(this.value)">
-<option value="0">Game of life</option>
 <option value="1">Julia set</option>
 <option value="2">Reaction diffusion</option>
 <option value="3">Reaction diffusion 2</option>
+<option value="0">Game of life</option>
 </select>
 </td></tr>
 

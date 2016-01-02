@@ -41,6 +41,7 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
 }
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
+void IRMutator::visit(const UIntImm *op)   {expr = op;}
 void IRMutator::visit(const FloatImm *op) {expr = op;}
 void IRMutator::visit(const StringImm *op) {expr = op;}
 void IRMutator::visit(const Variable *op) {expr = op;}
@@ -105,14 +106,14 @@ void IRMutator::visit(const Ramp *op) {
         stride.same_as(op->stride)) {
         expr = op;
     } else {
-        expr = Ramp::make(base, stride, op->width);
+        expr = Ramp::make(base, stride, op->lanes);
     }
 }
 
 void IRMutator::visit(const Broadcast *op) {
     Expr value = mutate(op->value);
     if (value.same_as(op->value)) expr = op;
-    else expr = Broadcast::make(value, op->width);
+    else expr = Broadcast::make(value, op->lanes);
 }
 
 void IRMutator::visit(const Call *op) {
@@ -159,26 +160,16 @@ void IRMutator::visit(const LetStmt *op) {
 
 void IRMutator::visit(const AssertStmt *op) {
     Expr condition = mutate(op->condition);
+    Expr message = mutate(op->message);
 
-    vector<Expr > new_args(op->args.size());
-    bool changed = false;
-
-    // Mutate the args
-    for (size_t i = 0; i < op->args.size(); i++) {
-        Expr old_arg = op->args[i];
-        Expr new_arg = mutate(old_arg);
-        if (!new_arg.same_as(old_arg)) changed = true;
-        new_args[i] = new_arg;
-    }
-
-    if (condition.same_as(op->condition) && !changed) {
+    if (condition.same_as(op->condition) && message.same_as(op->message)) {
         stmt = op;
     } else {
-        stmt = AssertStmt::make(condition, op->message, new_args);
+        stmt = AssertStmt::make(condition, message);
     }
 }
 
-void IRMutator::visit(const Pipeline *op) {
+void IRMutator::visit(const ProducerConsumer *op) {
     Stmt produce = mutate(op->produce);
     Stmt update = mutate(op->update);
     Stmt consume = mutate(op->consume);
@@ -187,7 +178,7 @@ void IRMutator::visit(const Pipeline *op) {
         consume.same_as(op->consume)) {
         stmt = op;
     } else {
-        stmt = Pipeline::make(op->name, produce, update, consume);
+        stmt = ProducerConsumer::make(op->name, produce, update, consume);
     }
 }
 
@@ -200,7 +191,7 @@ void IRMutator::visit(const For *op) {
         body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = For::make(op->name, min, extent, op->for_type, body);
+        stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
     }
 }
 
@@ -209,7 +200,9 @@ void IRMutator::visit(const Store *op) {
     Expr index = mutate(op->index);
     if (value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
-    } else stmt = Store::make(op->name, value, index);
+    } else {
+        stmt = Store::make(op->name, value, index);
+    }
 }
 
 void IRMutator::visit(const Provide *op) {
@@ -248,12 +241,17 @@ void IRMutator::visit(const Allocate *op) {
     }
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
+    Expr new_expr;
+    if (op->new_expr.defined()) {
+        new_expr = mutate(op->new_expr);
+    }
     if (all_extents_unmodified &&
         body.same_as(op->body) &&
-        condition.same_as(op->condition)) {
+        condition.same_as(op->condition) &&
+        new_expr.same_as(op->new_expr)) {
         stmt = op;
     } else {
-        stmt = Allocate::make(op->name, op->type, new_extents, condition, body);
+        stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
     }
 }
 

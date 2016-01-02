@@ -1,7 +1,7 @@
-#include <Halide.h>
-#include <stdio.h>
+#include "Halide.h"
+#include <cstdio>
 #include <algorithm>
-#include "clock.h"
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -12,7 +12,7 @@ Image<uint16_t> output;
 #define MAX 1020
 
 double test(Func f, bool test_correctness = true) {
-    f.compile_to_assembly(f.name() + ".s", Internal::vec<Argument>(input), f.name());
+    f.compile_to_assembly(f.name() + ".s", {input}, f.name());
     f.compile_jit();
     f.realize(output);
 
@@ -31,11 +31,7 @@ double test(Func f, bool test_correctness = true) {
         }
     }
 
-    double t1 = current_time();
-    for (int i = 0; i < 10; i++) {
-        f.realize(output);
-    }
-    return current_time() - t1;
+    return benchmark(1, 10, [&]() { f.realize(output); });
 }
 
 int main(int argc, char **argv) {
@@ -75,6 +71,7 @@ int main(int argc, char **argv) {
         f(x, y) = g(x, y) * 3 + g(x+1, y);
 
         f.vectorize(x, 8);
+        f.compile_to_lowered_stmt("debug_clamped_vector_load.stmt", f.infer_arguments());
 
         t_clamped = test(f);
     }

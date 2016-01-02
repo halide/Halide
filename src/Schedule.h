@@ -5,9 +5,7 @@
  * Defines the internal representation of the schedule for a function
  */
 
-#include "IR.h"
-#include <string>
-#include <vector>
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -86,7 +84,8 @@ struct Split {
 
 struct Dim {
     std::string var;
-    For::ForType for_type;
+    ForType for_type;
+    DeviceAPI device_api;
     bool pure;
 };
 
@@ -199,6 +198,9 @@ public:
     bool &allow_race_conditions();
     // @}
 
+    /** Pass an IRVisitor through to all Exprs referenced in the
+     * Schedule. */
+    void accept(IRVisitor *) const;
 };
 
 }

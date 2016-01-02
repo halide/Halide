@@ -1,7 +1,7 @@
-#include <Halide.h>
-#include <stdio.h>
+#include "Halide.h"
+#include <cstdio>
 #include <algorithm>
-#include "clock.h"
+#include "benchmark.h"
 
 using namespace Halide;
 
@@ -76,15 +76,15 @@ Func merge_sort(Func input, int total_size) {
         Expr b2 = min(a2, a3);
         Expr b3 = max(a2, a3);
 
-        a0 = min(b0, b3);
-        a1 = min(b1, b2);
-        a2 = max(b1, b2);
-        a3 = max(b0, b3);
+        a0 = min(b0, b2);
+        a1 = max(b0, b2);
+        a2 = min(b1, b3);
+        a3 = max(b1, b3);
 
-        b0 = min(a0, a1);
-        b1 = max(a0, a1);
-        b2 = min(a2, a3);
-        b3 = max(a2, a3);
+        b0 = a0;
+        b1 = min(a1, a2);
+        b2 = max(a1, a2);
+        b3 = a3;
 
         result(x, y) = select(x == 0, b0,
                               select(x == 1, b1,
@@ -156,11 +156,9 @@ int main(int argc, char **argv) {
     printf("Running...\n");
     Image<int> bitonic_sorted(N);
     f.realize(bitonic_sorted);
-    double t1 = current_time();
-    for (int i = 0; i < 10; i++) {
+    double t_bitonic = benchmark(1, 10, [&]() {
         f.realize(bitonic_sorted);
-    }
-    double t2 = current_time();
+    });
 
     printf("Merge sort...\n");
     f = merge_sort(input, N);
@@ -169,26 +167,24 @@ int main(int argc, char **argv) {
     printf("Running...\n");
     Image<int> merge_sorted(N);
     f.realize(merge_sorted);
-    double t3 = current_time();
-    for (int i = 0; i < 10; i++) {
+    double t_merge = benchmark(1, 10, [&]() {
         f.realize(merge_sorted);
-    }
-    double t4 = current_time();
+    });
 
     Image<int> correct(N);
     for (int i = 0; i < N; i++) {
         correct(i) = data(i);
     }
     printf("std::sort...\n");
-    double t5 = current_time();
-    std::sort(&correct(0), &correct(N));
-    double t6 = current_time();
+    double t_std = benchmark(1, 1, [&]() {
+        std::sort(&correct(0), &correct(N));
+    });
 
     printf("Times:\n"
-           "bitonic sort: %f \n"
-           "merge sort: %f \n"
-           "std::sort %f\n",
-           (t2-t1)/10, (t4-t3)/10, t6-t5);
+           "bitonic sort: %fms \n"
+           "merge sort: %fms \n"
+           "std::sort %fms\n",
+           t_bitonic * 1e3, t_merge * 1e3, t_std * 1e3);
 
     if (N <= 100) {
         for (int i = 0; i < N; i++) {

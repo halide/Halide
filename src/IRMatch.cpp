@@ -1,5 +1,7 @@
 #include <iostream>
+#include <map>
 
+#include "IRVisitor.h"
 #include "IRMatch.h"
 #include "IREquality.h"
 #include "IROperator.h"
@@ -8,6 +10,8 @@ namespace Halide {
 namespace Internal {
 
 using std::vector;
+using std::map;
+using std::string;
 
 void expr_match_test() {
     vector<Expr> matches;
@@ -27,10 +31,11 @@ void expr_match_test() {
                     equal(matches[0], y*2));
 
     internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
-                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), matches) &&
+                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(x + 4.5f)), matches) &&
+                    matches.size() == 3 &&
                     equal(matches[0], 81.0f * fy) &&
                     equal(matches[1], x/2) &&
-                    equal(matches[2], 4.5f));
+                    equal(matches[2], x + 4.5f));
 
     internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
                     matches.empty());
@@ -47,31 +52,57 @@ void expr_match_test() {
 class IRMatch : public IRVisitor {
 public:
     bool result;
-    vector<Expr> &matches;
+    vector<Expr> *matches;
+    map<string, Expr> *var_matches;
     Expr expr;
 
-    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(m), expr(e) {
+    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(NULL), expr(e) {
+    }
+    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(NULL), var_matches(&m), expr(e) {
     }
 
     using IRVisitor::visit;
 
+    bool types_match(Type pattern_type, Type expr_type) {
+        bool bits_matches  = (pattern_type.bits()  == 0) || (pattern_type.bits()  == expr_type.bits());
+        bool lanes_matches = (pattern_type.lanes() == 0) || (pattern_type.lanes() == expr_type.lanes());
+        bool code_matches  = (pattern_type.code()  == expr_type.code());
+        return bits_matches && lanes_matches && code_matches;
+    }
+
     void visit(const IntImm *op) {
         const IntImm *e = expr.as<IntImm>();
-        if (!e || e->value != op->value) {
+        if (!e ||
+            e->value != op->value ||
+            !types_match(op->type, e->type)) {
+            result = false;
+        }
+    }
+
+    void visit(const UIntImm *op) {
+        const UIntImm *e = expr.as<UIntImm>();
+        if (!e ||
+            e->value != op->value ||
+            !types_match(op->type, e->type)) {
             result = false;
         }
     }
 
     void visit(const FloatImm *op) {
         const FloatImm *e = expr.as<FloatImm>();
-        if (!e || e->value != op->value) {
+        // Note we use uint64_t equality instead of double equality to
+        // catch NaNs. We're checking for the same bits.
+        if (!e ||
+            reinterpret_bits<uint64_t>(e->value) !=
+            reinterpret_bits<uint64_t>(op->value) ||
+            !types_match(op->type, e->type)) {
             result = false;
         }
     }
 
     void visit(const Cast *op) {
         const Cast *e = expr.as<Cast>();
-        if (result && e && e->type == op->type) {
+        if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
             op->value.accept(this);
         } else {
@@ -80,13 +111,26 @@ public:
     }
 
     void visit(const Variable *op) {
-        if (op->type != expr.type()) {
+        if (!result) {
+            return;
+        }
+
+        if (!types_match(op->type, expr.type())) {
             result = false;
-        } else if (op->name == "*") {
-            matches.push_back(expr);
-        } else if (result) {
-            const Variable *e = expr.as<Variable>();
-            result = e && (e->name == op->name);
+        } else if (matches) {
+            if (op->name == "*") {
+                matches->push_back(expr);
+            } else {
+                const Variable *e = expr.as<Variable>();
+                result = e && (e->name == op->name);
+            }
+        } else if (var_matches) {
+            Expr &match = (*var_matches)[op->name];
+            if (match.defined()) {
+                result = equal(match, expr);
+            } else {
+                match = expr;
+            }
         }
     }
 
@@ -145,7 +189,7 @@ public:
 
     void visit(const Load *op) {
         const Load *e = expr.as<Load>();
-        if (result && e && e->type == op->type && e->name == op->name) {
+        if (result && e && types_match(op->type, e->type) && e->name == op->name) {
             expr = e->index;
             op->index.accept(this);
         } else {
@@ -155,7 +199,7 @@ public:
 
     void visit(const Ramp *op) {
         const Ramp *e = expr.as<Ramp>();
-        if (result && e && e->width == op->width) {
+        if (result && e && e->lanes == op->lanes) {
             expr = e->base;
             op->base.accept(this);
             expr = e->stride;
@@ -167,7 +211,7 @@ public:
 
     void visit(const Broadcast *op) {
         const Broadcast *e = expr.as<Broadcast>();
-        if (result && e && e->width == op->width) {
+        if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
             op->value.accept(this);
         } else {
@@ -178,7 +222,7 @@ public:
     void visit(const Call *op) {
         const Call *e = expr.as<Call>();
         if (result && e &&
-            e->type == op->type &&
+            types_match(op->type, e->type) &&
             e->name == op->name &&
             e->value_index == op->value_index &&
             e->call_type == op->call_type &&
@@ -207,8 +251,25 @@ public:
 
 bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
     matches.clear();
-    if (!pattern.defined() && !pattern.defined()) return true;
-    if (!pattern.defined() || !pattern.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) return true;
+    if (!pattern.defined() || !expr.defined()) return false;
+
+    IRMatch eq(expr, matches);
+    pattern.accept(&eq);
+    if (eq.result) {
+        return true;
+    } else {
+        matches.clear();
+        return false;
+    }
+}
+
+bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
+    // Explicitly don't clear matches. This allows usages to pre-match
+    // some variables.
+
+    if (!pattern.defined() && !expr.defined()) return true;
+    if (!pattern.defined() || !expr.defined()) return false;
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);

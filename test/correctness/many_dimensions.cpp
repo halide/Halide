@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     std::vector<Var> vars(20);
     Func f;
     Expr e = 0;
-    for (int i = 0; i < vars.size(); i++) {
+    for (size_t i = 0; i < vars.size(); i++) {
         vars[i] = Var();
         e += vars[i];
     }
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     // define two corners of a hypercube to be evaluated at each pixel
     // of the output.
     std::vector<Expr> site1(vars.size()), site2(vars.size());
-    for (int i = 0; i < vars.size(); i++) {
+    for (size_t i = 0; i < vars.size(); i++) {
         site1[i] = rand() & 0x1;
         if (rand() & 1) site1[i] += x;
         if (rand() & 1) site1[i] += y;

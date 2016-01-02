@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -24,9 +24,7 @@ int main(int argc, char **argv) {
     Func tone_curve;
     tone_curve(x) = i16(pow(f32(x)/256.0f, 1.8f) * 256.0f);
 
-    Func clamped;
-    clamped(x, y) = input(clamp(x, 0, input.width()-1),
-                          clamp(y, 0, input.height()-1));
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     Func curved;
     curved(x, y) = tone_curve(clamped(x, y));
@@ -44,10 +42,19 @@ int main(int argc, char **argv) {
     curved.store_at(result, y).compute_at(result, yi);
 
     /*
-      curved.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, GPU_OpenCL);
-      result.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, GPU_OpenCL);
+      curved.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, Device_OpenCL);
+      result.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, Device_OpenCL);
     */
 
+    // We want to handle inputs that may be rotated 180 due to camera module placement.
+
+    // Unset the default stride constraint
+    input.set_stride(0, Expr());
+
+    // Make specialized versions for input stride +/-1 to get dense vector loads
+    curved.specialize(input.stride(0) == 1);
+    curved.specialize(input.stride(0) == -1);
+        
     std::vector<Argument> args;
     args.push_back(input);
     result.compile_to_file("halide_generated", args);

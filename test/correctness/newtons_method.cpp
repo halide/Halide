@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 #ifdef _MSC_VER
@@ -11,8 +11,8 @@ template<typename T>
 int find_pi() {
     // Skip test if data type is not supported by the target.
     Target target = get_jit_target_from_environment();
-    if ((target.features & Target::OpenCL) != 0 &&
-        (target.features & Target::CLDoubles) == 0 &&
+    if (target.has_feature(Target::OpenCL) &&
+        !target.has_feature(Target::CLDoubles) &&
         type_of<T>() == type_of<double>()) {
         return 0;
     }
@@ -73,10 +73,11 @@ int main(int argc, char **argv) {
     if (result != 0)
         return result;
 
-    // Test in float.
-    result = find_pi<double>();
-    if (result != 0)
-        return result;
+    if (get_jit_target_from_environment().supports_type(type_of<double>())) {
+        result = find_pi<double>();
+        if (result != 0)
+            return result;
+    }
 
     printf("Success!\n");
     return 0;

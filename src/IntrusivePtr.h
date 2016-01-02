@@ -7,10 +7,10 @@
  * pointers.
  */
 
+#include <stdlib.h>
+
 #include "Util.h"
 
-#include <stdlib.h>
-#include <iostream>
 namespace Halide {
 namespace Internal {
 

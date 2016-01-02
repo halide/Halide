@@ -2,6 +2,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IR.h"
+#include "Simplify.h"
 
 // This file is largely a port of parts of src/analysis.ml
 namespace Halide {
@@ -19,6 +20,7 @@ public:
     }
 
     void visit(const IntImm *);
+    void visit(const UIntImm *);
     void visit(const FloatImm *);
     void visit(const StringImm *);
     void visit(const Cast *);
@@ -47,7 +49,7 @@ public:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const Pipeline *);
+    void visit(const ProducerConsumer *);
     void visit(const For *);
     void visit(const Store *);
     void visit(const Provide *);
@@ -133,6 +135,10 @@ void ComputeModulusRemainder::visit(const IntImm *op) {
     modulus = 0;
 }
 
+void ComputeModulusRemainder::visit(const UIntImm *op) {
+    internal_error << "modulus_remainder of uint\n";
+}
+
 void ComputeModulusRemainder::visit(const FloatImm *) {
     internal_error << "modulus_remainder of float\n";
 }
@@ -173,9 +179,7 @@ int lcm(int a, int b) {
 
 int mod(int a, int m) {
     if (m == 0) return a;
-    a = a % m;
-    if (a < 0) a += m;
-    return a;
+    return mod_imp(a, m);
 }
 
 void ComputeModulusRemainder::visit(const Add *op) {
@@ -370,7 +374,7 @@ void ComputeModulusRemainder::visit(const AssertStmt *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
-void ComputeModulusRemainder::visit(const Pipeline *) {
+void ComputeModulusRemainder::visit(const ProducerConsumer *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
@@ -409,7 +413,6 @@ void ComputeModulusRemainder::visit(const IfThenElse *) {
 void ComputeModulusRemainder::visit(const Evaluate *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
-
 
 }
 }

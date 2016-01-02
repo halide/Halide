@@ -1,22 +1,27 @@
-// Halide tutorial lesson 7
-
-// This lesson demonstrates how express multi-stage pipelines.
+// Halide tutorial lesson 7: Multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
 // LD_LIBRARY_PATH=../bin ./lesson_07
 
 // On os x:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
 
-#include <Halide.h>
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_07_multi_stage_pipelines
+// in a shell with the current directory at the top of the halide
+// source tree.
+
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
 
 // Support code for loading pngs.
-#include "image_io.h"
+#include "halide_image_io.h"
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.
@@ -26,7 +31,7 @@ int main(int argc, char **argv) {
     // first horizontally, and then vertically.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<uint8_t>("images/rgb.png");
+        Image<uint8_t> input = load_image("images/rgb.png");
 
         // Upgrade it to 16-bit, so we can do math without it overflowing.
         Func input_16("input_16");
@@ -34,11 +39,15 @@ int main(int argc, char **argv) {
 
         // Blur it horizontally:
         Func blur_x("blur_x");
-        blur_x(x, y, c) = (input_16(x-1, y, c) + 2*input_16(x, y, c) + input_16(x+1, y, c))/4;
+        blur_x(x, y, c) = (input_16(x-1, y, c) +
+                           2 * input_16(x, y, c) +
+                           input_16(x+1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
-        blur_y(x, y, c) = (blur_x(x, y-1, c) + 2*blur_x(x, y, c) + blur_x(x, y+1, c))/4;
+        blur_y(x, y, c) = (blur_x(x, y-1, c) +
+                           2 * blur_x(x, y, c) +
+                           blur_x(x, y+1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");
@@ -80,7 +89,7 @@ int main(int argc, char **argv) {
         // Save the result. It should look like a slightly blurry
         // parrot, and it should be two pixels narrower and two pixels
         // shorter than the input image.
-        save(result, "blurry_parrot_1.png");
+        save_image(result, "blurry_parrot_1.png");
 
         // This is usually the fastest way to deal with boundaries:
         // don't write code that reads out of bounds :) The more
@@ -90,13 +99,13 @@ int main(int argc, char **argv) {
     // The same pipeline, with a boundary condition on the input.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<uint8_t>("images/rgb.png");
+        Image<uint8_t> input = load_image("images/rgb.png");
 
         // This time, we'll wrap the input in a Func that prevents
         // reading out of bounds:
         Func clamped("clamped");
 
-        // Define an expression that clamps x to lie within the the
+        // Define an expression that clamps x to lie within the
         // range [0, input.width()-1].
         Expr clamped_x = clamp(x, 0, input.width()-1);
         // Similarly clamp y.
@@ -107,6 +116,16 @@ int main(int argc, char **argv) {
         // style boundary condition, and is the simplest boundary
         // condition to express in Halide.
         clamped(x, y, c) = input(clamped_x, clamped_y, c);
+
+        // Defining 'clamped' in that way can be done more concisely
+        // using a helper function from the BoundaryConditions
+        // namespace like so:
+        //
+        // clamped = BoundaryConditions::repeat_edge(input);
+        //
+        // These are important to use for other boundary conditions,
+        // because they are expressed in the way that Halide can best
+        // understand and optimize.
 
         // Upgrade it to 16-bit, so we can do math without it
         // overflowing. This time we'll refer to our new Func
@@ -119,11 +138,15 @@ int main(int argc, char **argv) {
 
         // Blur it horizontally:
         Func blur_x("blur_x");
-        blur_x(x, y, c) = (input_16(x-1, y, c) + 2*input_16(x, y, c) + input_16(x+1, y, c))/4;
+        blur_x(x, y, c) = (input_16(x-1, y, c) +
+                           2 * input_16(x, y, c) +
+                           input_16(x+1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
-        blur_y(x, y, c) = (blur_x(x, y-1, c) + 2*blur_x(x, y, c) + blur_x(x, y+1, c))/4;
+        blur_y(x, y, c) = (blur_x(x, y-1, c) +
+                           2 * blur_x(x, y, c) +
+                           blur_x(x, y+1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");
@@ -136,7 +159,7 @@ int main(int argc, char **argv) {
         // Save the result. It should look like a slightly blurry
         // parrot, but this time it will be the same size as the
         // input.
-        save(result, "blurry_parrot_2.png");
+        save_image(result, "blurry_parrot_2.png");
     }
 
     printf("Success!\n");

@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 
 // This tests out-of-bounds reads from an input image
 

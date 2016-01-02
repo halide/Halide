@@ -1,9 +1,9 @@
 include ../support/Makefile.inc
 
 pipeline: pipeline.cpp
-	$(CXX) -Wall pipeline.cpp -I ../../include $(LDFLAGS) ../../$(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -g
+	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline -lpthread -ldl -lz -g
 
-pipeline_c.c: pipeline
+pipeline_c.cpp: pipeline
 	./pipeline
 
 pipeline_c.h: pipeline
@@ -15,11 +15,11 @@ pipeline_native.h: pipeline
 pipeline_native.o: pipeline
 	./pipeline
 
-run: run.cpp pipeline_native.h pipeline_c.c
-	$(CXX) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+run: run.cpp pipeline_native.h pipeline_c.cpp
+	$(CXX) $(CXXFLAGS) -Wall run.cpp pipeline_c.cpp pipeline_native.o -lpthread -ldl -o run
 
 test: run
 	./run
 
 clean:
-	rm -f run pipeline_native.{h,o} pipeline_c.{c,h} pipeline
+	rm -f run pipeline_native.{h,o} pipeline_c.{cpp,h} pipeline

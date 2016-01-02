@@ -102,16 +102,29 @@ define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinli
        ret double %y
 }
 
-declare float @roundf(float) nounwind readnone
-declare double @round(double) nounwind readnone
+declare float @nearbyintf(float) nounwind readnone
+declare double @nearbyint(double) nounwind readnone
 
 define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @roundf(float %x) nounwind readnone
+       %y = tail call float @nearbyintf(float %x) nounwind readnone
        ret float %y
 }
 
 define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @round(double %x) nounwind readnone
+       %y = tail call double @nearbyint(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @truncf(float) nounwind readnone
+declare double @trunc(double) nounwind readnone
+
+define weak_odr float @trunc_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @truncf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @trunc_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @trunc(double %x) nounwind readnone
        ret double %y
 }
 
@@ -269,4 +282,30 @@ define weak_odr float @atanh_f32(float %x) nounwind uwtable readnone alwaysinlin
 define weak_odr double @atanh_f64(double %x) nounwind uwtable readnone alwaysinline {
        %y = tail call double @atanh(double %x) nounwind readnone
        ret double %y
+}
+
+
+define weak_odr float @inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0x7FF0000000000000
+}
+
+define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0xFFF0000000000000
+}
+
+define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0x7FF8000000000000
+}
+
+
+define weak_odr double @inf_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0x7FF0000000000000
+}
+
+define weak_odr double @neg_inf_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0xFFF0000000000000
+}
+
+define weak_odr double @nan_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0x7FF8000000000000
 }

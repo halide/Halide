@@ -47,6 +47,20 @@ define weak_odr double @sqrt_f64(double %x) nounwind uwtable readnone alwaysinli
        ret double %y
 }
 
+declare float @__nv_frcp_rn(float) nounwind readnone
+
+define weak_odr float @fast_inverse_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_frcp_rn(float %x) nounwind readnone
+       ret float %y
+}
+
+declare float @llvm.nvvm.rsqrt.approx.ftz.f(float) nounwind readnone
+
+define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @llvm.nvvm.rsqrt.approx.ftz.f(float %x) nounwind readnone
+       ret float %y
+}
+
 declare float @__nv_sinf(float) nounwind readnone
 declare double @__nv_sin(double) nounwind readnone
 
@@ -138,18 +152,29 @@ define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinli
        ret double %y
 }
 
-; declare float @__nv_nearbyintf(float) nounwind readnone
-; declare double @__nv_nearbyint(double) nounwind readnone
-declare float @__nv_roundf(float) nounwind readnone
-declare double @__nv_round(double) nounwind readnone
+declare float @__nv_nearbyintf(float) nounwind readnone
+declare double @__nv_nearbyint(double) nounwind readnone
 
 define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @__nv_roundf(float %x) nounwind readnone
+       %y = tail call float @__nv_nearbyintf(float %x) nounwind readnone
        ret float %y
 }
 
 define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @__nv_round(double %x) nounwind readnone
+       %y = tail call double @__nv_nearbyint(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_truncf(float) nounwind readnone
+declare double @__nv_trunc(double) nounwind readnone
+
+define weak_odr float @trunc_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_truncf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @trunc_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_trunc(double %x) nounwind readnone
        ret double %y
 }
 

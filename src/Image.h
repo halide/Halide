@@ -5,9 +5,8 @@
  * Defines Halide's Image data type
  */
 
-#include "Buffer.h"
-#include "Tuple.h"
 #include "Var.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -21,14 +20,22 @@ protected:
     /** The underlying memory object */
     Buffer buffer;
 
-    /** These fields are also stored in the buffer, but they're cached
-     * here in the handle to make operator() fast. This is safe to do
-     * because the buffer is never modified
-     */
-    // @{
+    /** The address of the zero coordinate. The buffer_t stores the
+     * address of the min coordinate, but it's easier to index off the
+     * zero coordinate. */
     void *origin;
-    int stride_0, stride_1, stride_2, stride_3, dims;
-    // @}
+
+    /** The strides. These fields are also stored in the buffer, but
+     * they're cached here in the handle to make operator() fast. This
+     * is safe to do because the buffer is never modified.
+     */
+    int stride_0, stride_1, stride_2, stride_3;
+
+    /** The dimensionality. */
+    int dims;
+
+    /** The size of each element. */
+    int elem_size;
 
     /** Prepare the buffer to be used as an image. Makes sure that the
      * cached strides are correct, and that the image data is on the
@@ -146,6 +153,13 @@ public:
 
     /** Get a pointer to the raw buffer_t that this image holds */
     EXPORT buffer_t *raw_buffer() const;
+
+    /** Get the address of a particular pixel. */
+    void *address_of(int x, int y = 0, int z = 0, int w = 0) const {
+        uint8_t *ptr = (uint8_t *)origin;
+        size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
+        return (void *)(ptr + offset * elem_size);
+    }
 };
 
 /** A reference-counted handle on a dense multidimensional array
@@ -158,6 +172,8 @@ public:
 template<typename T>
 class Image : public ImageBase {
 public:
+    typedef T ElemType;
+
     /** Construct an undefined image handle */
     Image() : ImageBase() {}
 
@@ -199,49 +215,49 @@ public:
     /** Assuming this image is one-dimensional, get the value of the
      * element at position x */
     const T &operator()(int x) const {
-        return ((T *)origin)[x*stride_0];
+        return *((T *)(address_of(x)));
     }
 
     /** Assuming this image is two-dimensional, get the value of the
      * element at position (x, y) */
     const T &operator()(int x, int y) const {
-        return ((T *)origin)[x*stride_0 + y*stride_1];
+        return *((T *)(address_of(x, y)));
     }
 
     /** Assuming this image is three-dimensional, get the value of the
      * element at position (x, y, z) */
     const T &operator()(int x, int y, int z) const {
-        return ((T *)origin)[x*stride_0 + y*stride_1 + z*stride_2];
+        return *((T *)(address_of(x, y, z)));
     }
 
     /** Assuming this image is four-dimensional, get the value of the
      * element at position (x, y, z, w) */
     const T &operator()(int x, int y, int z, int w) const {
-        return ((T *)origin)[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
+        return *((T *)(address_of(x, y, z, w)));
     }
 
     /** Assuming this image is one-dimensional, get a reference to the
      * element at position x */
     T &operator()(int x) {
-        return ((T *)origin)[x*stride_0];
+        return *((T *)(address_of(x)));
     }
 
     /** Assuming this image is two-dimensional, get a reference to the
      * element at position (x, y) */
     T &operator()(int x, int y) {
-        return ((T *)origin)[x*stride_0 + y*stride_1];
+        return *((T *)(address_of(x, y)));
     }
 
     /** Assuming this image is three-dimensional, get a reference to the
      * element at position (x, y, z) */
     T &operator()(int x, int y, int z) {
-        return ((T *)origin)[x*stride_0 + y*stride_1 + z*stride_2];
+        return *((T *)(address_of(x, y, z)));
     }
 
     /** Assuming this image is four-dimensional, get a reference to the
      * element at position (x, y, z, w) */
     T &operator()(int x, int y, int z, int w) {
-        return ((T *)origin)[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
+        return *((T *)(address_of(x, y, z, w)));
     }
 
     /** Get a handle on the Buffer that this image holds */

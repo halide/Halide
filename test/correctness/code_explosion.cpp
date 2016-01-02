@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     std::vector<Func> funcs;
     funcs.push_back(lambda(x, x));
     funcs.push_back(lambda(x, x));
-    for (size_t i = 2; i < size; i++) {
+    for (int i = 2; i < size; i++) {
         funcs.push_back(lambda(x, funcs[i-1](x) + funcs[i-2](x)));
     }
     Func g;

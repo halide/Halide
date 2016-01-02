@@ -1,10 +1,11 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
+    Target target = get_jit_target_from_environment();
+    if (!target.has_gpu_feature() && !target.has_feature(Target::OpenGLCompute)) {
         printf("No gpu target enabled. Skipping test.\n");
         return 0;
     }

@@ -19,6 +19,80 @@ using std::vector;
 using std::string;
 using std::set;
 
+struct FunctionContents {
+    mutable RefCount ref_count;
+    std::string name;
+    std::vector<std::string> args;
+    std::vector<Expr> values;
+    std::vector<Type> output_types;
+    Schedule schedule;
+
+    std::vector<UpdateDefinition> updates;
+
+    std::string debug_file;
+
+    std::vector<Parameter> output_buffers;
+
+    std::vector<ExternFuncArgument> extern_arguments;
+    std::string extern_function_name;
+
+    bool trace_loads, trace_stores, trace_realizations;
+
+    bool frozen;
+
+    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
+
+    void accept(IRVisitor *visitor) const {
+        for (Expr i : values) {
+            i.accept(visitor);
+        }
+
+        schedule.accept(visitor);
+
+        for (UpdateDefinition update : updates) {
+            for (Expr i : update.values) {
+                i.accept(visitor);
+            }
+            for (Expr i : update.args) {
+                i.accept(visitor);
+            }
+
+            if (update.domain.defined()) {
+                for (ReductionVariable rv : update.domain.domain()) {
+                    rv.min.accept(visitor);
+                    rv.extent.accept(visitor);
+                }
+            }
+
+            update.schedule.accept(visitor);
+        }
+
+        if (!extern_function_name.empty()) {
+            for (ExternFuncArgument i : extern_arguments) {
+                if (i.is_func()) {
+                    i.func.ptr->accept(visitor);
+                } else if (i.is_expr()) {
+                    i.expr.accept(visitor);
+                }
+            }
+        }
+
+        for (Parameter i : output_buffers) {
+            for (size_t j = 0; j < args.size() && j < 4; j++) {
+                if (i.min_constraint(j).defined()) {
+                    i.min_constraint(j).accept(visitor);
+                }
+                if (i.stride_constraint(j).defined()) {
+                    i.stride_constraint(j).accept(visitor);
+                }
+                if (i.extent_constraint(j).defined()) {
+                    i.extent_constraint(j).accept(visitor);
+                }
+            }
+        }
+    }
+};
+
 template<>
 EXPORT RefCount &ref_count<FunctionContents>(const FunctionContents *f) {
     return f->ref_count;
@@ -137,6 +211,19 @@ namespace {
 static int rand_counter = 0;
 }
 
+Function::Function() : contents(new FunctionContents) {
+}
+
+Function::Function(const std::string &n) : contents(new FunctionContents) {
+    for (size_t i = 0; i < n.size(); i++) {
+        user_assert(n[i] != '.')
+            << "Func name \"" << n << "\" is invalid. "
+            << "Func names may not contain the character '.', "
+            << "as it is used internally by Halide as a separator\n";
+    }
+    contents.ptr->name = n;
+}
+
 void Function::define(const vector<string> &args, vector<Expr> values) {
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new pure definition, "
@@ -212,61 +299,64 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], For::Serial, true};
+        Dim d = {args[i], ForType::Serial, DeviceAPI::Parent, true};
         contents.ptr->schedule.dims().push_back(d);
         contents.ptr->schedule.storage_dims().push_back(args[i]);
     }
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), For::Serial, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
         contents.ptr->schedule.dims().push_back(d);
     }
 
     for (size_t i = 0; i < values.size(); i++) {
         string buffer_name = name();
         if (values.size() > 1) {
-            buffer_name += '.' + int_to_string((int)i);
+            buffer_name += '.' + std::to_string((int)i);
         }
-        contents.ptr->output_buffers.push_back(Parameter(values[i].type(), true, buffer_name));
+        Parameter output(values[i].type(), true, args.size(), buffer_name);
+        contents.ptr->output_buffers.push_back(output);
     }
 }
 
-void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) {
+void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
+    int update_idx = static_cast<int>(contents.ptr->updates.size());
+
     user_assert(!name().empty())
         << "Func has an empty name.\n";
     user_assert(has_pure_definition())
-        << "In update definition of Func \"" << name() << "\":\n"
-        << "Can't add a update definition without a pure definition first.\n";
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
+        << "Can't add an update definition without a pure definition first.\n";
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new update definition, "
         << "because it has already been realized or used in the definition of another Func.\n";
 
     for (size_t i = 0; i < values.size(); i++) {
         user_assert(values[i].defined())
-            << "In update definition of Func \"" << name() << "\":\n"
-            << "Undefined expression in right-hand-side of reduction.\n";
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
+            << "Undefined expression in right-hand-side of update.\n";
 
     }
 
     // Check the dimensionality matches
     user_assert((int)_args.size() == dimensions())
-        << "In update definition of Func \"" << name() << "\":\n"
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Dimensionality of update definition must match dimensionality of pure definition.\n";
 
     user_assert(values.size() == contents.ptr->values.size())
-        << "In update definition of Func \"" << name() << "\":\n"
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Number of tuple elements for update definition must "
         << "match number of tuple elements for pure definition.\n";
 
     for (size_t i = 0; i < values.size(); i++) {
-        // Check that pure value and the reduction value have the same
+        // Check that pure value and the update value have the same
         // type.  Without this check, allocations may be the wrong size
         // relative to what update code expects.
         Type pure_type = contents.ptr->values[i].type();
         if (pure_type != values[i].type()) {
             std::ostringstream err;
-            err << "In update definition of Func \"" << name() << "\":\n";
+            err << "In update definition " << update_idx << " of Func \"" << name() << "\":\n";
             if (values.size()) {
                 err << "Tuple element " << i << " of update definition has type ";
             } else {
@@ -291,9 +381,9 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
         user_assert(args[i].defined())
-            << "In update definition of Func \"" << name() << "\":\n"
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Argument " << i
-            << " in left-hand-side of reduction definition is undefined.\n";
+            << " in left-hand-side of update definition is undefined.\n";
         if (const Variable *var = args[i].as<Variable>()) {
             if (!var->param.defined() &&
                 !var->reduction_domain.defined() &&
@@ -350,13 +440,13 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
         values[i] = lower_random(values[i], free_vars, tag);
     }
 
-    ReductionDefinition r;
+    UpdateDefinition r;
     r.args = args;
     r.values = values;
     r.domain = check.reduction_domain;
     r.schedule.set_reduction_domain(r.domain);
 
-    // The reduction value and args probably refer back to the
+    // The update value and args probably refer back to the
     // function itself, introducing circular references and hence
     // memory leaks. We need to count the number of unique call nodes
     // that point back to this function in order to break the cycles.
@@ -386,7 +476,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
 
             bool pure = can_parallelize_rvar(v, name(), r);
 
-            Dim d = {v, For::Serial, pure};
+            Dim d = {v, ForType::Serial, DeviceAPI::Parent, pure};
             r.schedule.dims().push_back(d);
         }
     }
@@ -394,14 +484,14 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], For::Serial, true};
+            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::Parent, true};
             r.schedule.dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), For::Serial, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
         r.schedule.dims().push_back(d);
     }
 
@@ -412,14 +502,14 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
         counter.count == 0 &&
         pure) {
         user_warning
-            << "In update definition of Func \"" << name() << "\":\n"
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Update definition completely hides earlier definitions, "
             << " because all the arguments are pure, it contains no self-references, "
             << " and no reduction domain. This may be an accidental re-definition of "
             << " an already-defined function.\n";
     }
 
-    contents.ptr->reductions.push_back(r);
+    contents.ptr->updates.push_back(r);
 
 }
 
@@ -428,8 +518,7 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality) {
 
-    string source_loc = get_source_location();
-    user_assert(!has_pure_definition() && !has_reduction_definition())
+    user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func with a pure definition cannot have an extern definition.\n";
 
@@ -444,9 +533,10 @@ void Function::define_extern(const std::string &function_name,
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
         if (types.size() > 1) {
-            buffer_name += '.' + int_to_string((int)i);
+            buffer_name += '.' + std::to_string((int)i);
         }
-        contents.ptr->output_buffers.push_back(Parameter(types[i], true, buffer_name));
+        Parameter output(types[i], true, dimensionality, buffer_name);
+        contents.ptr->output_buffers.push_back(output);
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
@@ -456,7 +546,97 @@ void Function::define_extern(const std::string &function_name,
         contents.ptr->args[i] = arg;
         contents.ptr->schedule.storage_dims().push_back(arg);
     }
+}
 
+void Function::accept(IRVisitor *visitor) const {
+    contents.ptr->accept(visitor);
+}
+
+const std::string &Function::name() const {
+    return contents.ptr->name;
+}
+
+const std::vector<std::string> &Function::args() const {
+    return contents.ptr->args;
+}
+
+const std::vector<Type> &Function::output_types() const {
+    return contents.ptr->output_types;
+}
+
+const std::vector<Expr> &Function::values() const {
+    return contents.ptr->values;
+}
+
+Schedule &Function::schedule() {
+    return contents.ptr->schedule;
+}
+
+const Schedule &Function::schedule() const {
+    return contents.ptr->schedule;
+}
+
+const std::vector<Parameter> &Function::output_buffers() const {
+    return contents.ptr->output_buffers;
+}
+
+Schedule &Function::update_schedule(int idx) {
+    return contents.ptr->updates[idx].schedule;
+}
+
+const std::vector<UpdateDefinition> &Function::updates() const {
+    return contents.ptr->updates;
+}
+
+bool Function::has_update_definition() const {
+    return !contents.ptr->updates.empty();
+}
+
+bool Function::has_extern_definition() const {
+    return !contents.ptr->extern_function_name.empty();
+}
+
+const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
+    return contents.ptr->extern_arguments;
+}
+
+const std::string &Function::extern_function_name() const {
+    return contents.ptr->extern_function_name;
+}
+
+const std::string &Function::debug_file() const {
+    return contents.ptr->debug_file;
+}
+
+std::string &Function::debug_file() {
+    return contents.ptr->debug_file;
+}
+
+void Function::trace_loads() {
+    contents.ptr->trace_loads = true;
+}
+void Function::trace_stores() {
+    contents.ptr->trace_stores = true;
+}
+void Function::trace_realizations() {
+    contents.ptr->trace_realizations = true;
+}
+bool Function::is_tracing_loads() const {
+    return contents.ptr->trace_loads;
+}
+bool Function::is_tracing_stores() const {
+    return contents.ptr->trace_stores;
+}
+bool Function::is_tracing_realizations() const {
+    return contents.ptr->trace_realizations;
+}
+
+void Function::freeze() {
+    contents.ptr->frozen = true;
+}
+
+bool Function::frozen() const {
+    return contents.ptr->frozen;
 }
 
 }

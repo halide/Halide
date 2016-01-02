@@ -2,27 +2,15 @@
 
 using namespace Halide;
 
-#include <image_io.h>
-
 #include <iostream>
 #include <limits>
 
-#include <sys/time.h>
+#include "benchmark.h"
+#include "halide_image_io.h"
+
+using namespace Halide::Tools;
 
 using std::vector;
-
-double now() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    static bool first_call = true;
-    static time_t first_sec = 0;
-    if (first_call) {
-        first_call = false;
-        first_sec = tv.tv_sec;
-    }
-    assert(tv.tv_sec >= first_sec);
-    return (tv.tv_sec - first_sec) + (tv.tv_usec / 1000000.0);
-}
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -31,6 +19,9 @@ int main(int argc, char **argv) {
     }
 
     ImageParam input(Float(32), 3);
+
+    // Input must have four color channels - rgba
+    input.set_bounds(2, 0, 4);
 
     const int levels = 10;
 
@@ -41,8 +32,7 @@ int main(int argc, char **argv) {
     Func upsampledx[levels];
     Var x("x"), y("y"), c("c");
 
-    Func clamped;
-    clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     // This triggers a bug in llvm 3.3 (3.2 and trunk are fine), so we
     // rewrite it in a way that doesn't trigger the bug. The rewritten
@@ -120,16 +110,29 @@ int main(int argc, char **argv) {
     {
         Var xi, yi;
         std::cout << "Flat schedule with parallelization + vectorization." << std::endl;
-        clamped.compute_root().parallel(y).bound(c, 0, 4).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
         for (int l = 1; l < levels-1; ++l) {
-            if (l > 0) downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
-            interpolated[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
-            interpolated[l].unroll(x, 2).unroll(y, 2);
+            downsampled[l]
+                .compute_root()
+                .parallel(y, 8)
+                .vectorize(x, 4);
+            interpolated[l]
+                .compute_root()
+                .parallel(y, 8)
+                .unroll(x, 2)
+                .unroll(y, 2)
+                .vectorize(x, 8);
         }
-        final.reorder(c, x, y).bound(c, 0, 3).parallel(y);
-        final.tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi);
-        final.bound(x, 0, input.width());
-        final.bound(y, 0, input.height());
+        final
+            .reorder(c, x, y)
+            .bound(c, 0, 3)
+            .unroll(c)
+            .tile(x, y, xi, yi, 2, 2)
+            .unroll(xi)
+            .unroll(yi)
+            .parallel(y, 8)
+            .vectorize(x, 8)
+            .bound(x, 0, input.width())
+            .bound(y, 0, input.height());
         break;
     }
     case 3:
@@ -157,7 +160,7 @@ int main(int argc, char **argv) {
         Var yo, yi, xo, xi;
         final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4);
         final.tile(x, y, xo, yo, xi, yi, input.width()/8, input.height()/8);
-        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, GPU_Default).unroll(c);
+        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, DeviceAPI::Default_GPU).unroll(c);
 
         // Start from level 1 to save memory - level zero will be computed on demand
         for (int l = 1; l < levels; ++l) {
@@ -169,8 +172,8 @@ int main(int argc, char **argv) {
                 // Outer loop on CPU for the larger ones.
                 downsampled[l].tile(x, y, xo, yo, x, y, 256, 256);
             }
-            downsampled[l].gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default);
-            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default);
+            downsampled[l].gpu_tile(x, y, c, tile_size, tile_size, 4, DeviceAPI::Default_GPU);
+            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, DeviceAPI::Default_GPU);
         }
         break;
     }
@@ -181,31 +184,19 @@ int main(int argc, char **argv) {
     // JIT compile the pipeline eagerly, so we don't interfere with timing
     final.compile_jit(target);
 
-    Image<float> in_png = load<float>(argv[1]);
+    Image<float> in_png = load_image(argv[1]);
     Image<float> out(in_png.width(), in_png.height(), 3);
     assert(in_png.channels() == 4);
     input.set(in_png);
 
     std::cout << "Running... " << std::endl;
-    double min = std::numeric_limits<double>::infinity();
-    const int iters = 20;
-
-    for (int x = 0; x < iters; ++x) {
-        double before = now();
-        final.realize(out);
-        double after = now();
-        double amt = after - before;
-
-        std::cout << "   " << amt * 1000 << std::endl;
-        if (amt < min) min = amt;
-
-    }
-    std::cout << " took " << min * 1000 << " msec." << std::endl;
+    double best = benchmark(20, 1, [&]() { final.realize(out); });
+    std::cout << " took " << best * 1e3 << " msec." << std::endl;
 
     vector<Argument> args;
     args.push_back(input);
     final.compile_to_assembly("test.s", args, target);
 
-    save(out, argv[2]);
+    save_image(out, argv[2]);
 
 }

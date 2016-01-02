@@ -1,6 +1,5 @@
 #include "UniquifyVariableNames.h"
 #include "IRMutator.h"
-#include "Scope.h"
 #include <sstream>
 
 namespace Halide {
@@ -87,7 +86,7 @@ class UniquifyVariableNames : public IRMutator {
             extent.same_as(op->extent)) {
             stmt = op;
         } else {
-            stmt = For::make(new_name, min, extent, op->for_type, body);
+            stmt = For::make(new_name, min, extent, op->for_type, op->device_api, body);
         }
     }
 

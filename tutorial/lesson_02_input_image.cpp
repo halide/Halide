@@ -1,22 +1,28 @@
-// Halide tutorial lesson 2.
+// Halide tutorial lesson 2: Processing images
 
-// This lesson demonstrates how to pass in input images.
+// This lesson demonstrates how to pass in input images and manipulate
+// them.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_02
+// g++ lesson_02*.cpp -g -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_02 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_02
 
 // On os x:
-// g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02
+// g++ lesson_02*.cpp -g -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_02
 
-// The only Halide header file you need is Halide.h. It includes all of Halide.
-#include <Halide.h>
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_02_input_image
+// in a shell with the current directory at the top of the halide
+// source tree.
 
-// Include some support code for loading pngs. It assumes there's an
-// Image type, so we'll pull the one from Halide namespace;
-using Halide::Image;
-#include "image_io.h"
+// The only Halide header file you need is Halide.h. It includes all of Halide.
+#include "Halide.h"
+
+// Include some support code for loading pngs.
+#include "halide_image_io.h"
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
 
@@ -24,7 +30,9 @@ int main(int argc, char **argv) {
     // brightens an image.
 
     // First we'll load the input image we wish to brighten.
-    Halide::Image<uint8_t> input = load<uint8_t>("images/rgb.png");
+    Halide::Image<uint8_t> input = load_image("images/rgb.png");
+
+    // See figures/lesson_02_input.jpg for a smaller version.
 
     // Next we define our Func object that represents our one pipeline
     // stage.
@@ -72,7 +80,7 @@ int main(int argc, char **argv) {
     // - I left the Halide:: off clamp. It's unnecessary due to Koenig
     //   lookup.
 
-    // Remember. All we've done so far is build a representation of a
+    // Remember, all we've done so far is build a representation of a
     // Halide program in memory. We haven't actually processed any
     // pixels yet. We haven't even compiled that Halide program yet.
 
@@ -82,10 +90,13 @@ int main(int argc, char **argv) {
     // smaller size. If we request a larger size Halide will throw an
     // error at runtime telling us we're trying to read out of bounds
     // on the input image.
-    Halide::Image<uint8_t> output = brighter.realize(input.width(), input.height(), input.channels());
+    Halide::Image<uint8_t> output =
+        brighter.realize(input.width(), input.height(), input.channels());
 
     // Save the output for inspection. It should look like a bright parrot.
-    save(output, "brighter.png");
+    save_image(output, "brighter.png");
+
+    // See figures/lesson_02_output.jpg for a small version of the output.
 
     printf("Success!\n");
     return 0;

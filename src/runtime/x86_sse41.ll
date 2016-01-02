@@ -1,10 +1,51 @@
-declare <8 x i16> @llvm.x86.sse41.packusdw(<4 x i32>, <4 x i32>)
+declare <8 x i16> @llvm.x86.sse41.packusdw(<4 x i32>, <4 x i32>) nounwind readnone
 
 define weak_odr <8 x i16>  @packusdwx8(<8 x i32> %arg) nounwind alwaysinline {
   %1 = shufflevector <8 x i32> %arg, <8 x i32> undef, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
   %2 = shufflevector <8 x i32> %arg, <8 x i32> undef, <4 x i32> < i32 4, i32 5, i32 6, i32 7>
   %3 = tail call <8 x i16> @llvm.x86.sse41.packusdw(<4 x i32> %1, <4 x i32> %2)
   ret <8 x i16> %3
+}
+
+define weak_odr <16 x i8> @pblendvb_i8x16(<16 x i1> %c, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = select <16 x i1> %c, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %1
+}
+
+define weak_odr <16 x i8> @pblendvb_eq_i8x16(<16 x i8> %a, <16 x i8> %b, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = icmp eq <16 x i8> %a, %b
+  %2 = select <16 x i1> %1, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %2
+}
+
+define weak_odr <16 x i8> @pblendvb_ne_i8x16(<16 x i8> %a, <16 x i8> %b, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = icmp ne <16 x i8> %a, %b
+  %2 = select <16 x i1> %1, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %2
+}
+
+define weak_odr <16 x i8> @pblendvb_ult_i8x16(<16 x i8> %a, <16 x i8> %b, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = icmp ult <16 x i8> %a, %b
+  %2 = select <16 x i1> %1, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %2
+}
+
+define weak_odr <16 x i8> @pblendvb_slt_i8x16(<16 x i8> %a, <16 x i8> %b, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = icmp slt <16 x i8> %a, %b
+  %2 = select <16 x i1> %1, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %2
+}
+
+define weak_odr <16 x i8> @pblendvb_ule_i8x16(<16 x i8> %a, <16 x i8> %b, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = icmp ule <16 x i8> %a, %b
+  %2 = select <16 x i1> %1, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %2
+}
+
+define weak_odr <16 x i8> @pblendvb_sle_i8x16(<16 x i8> %a, <16 x i8> %b, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = icmp sle <16 x i8> %a, %b
+  %2 = select <16 x i1> %1, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %2
 }
 
 define weak_odr <4 x float> @floor_f32x4(<4 x float> %x) nounwind uwtable readnone optsize inlinehint alwaysinline {
@@ -41,6 +82,16 @@ define weak_odr <2 x double> @round_f64x2(<2 x double> %x) nounwind uwtable read
   ret <2 x double> %1
 }
 
+define weak_odr <4 x float> @trunc_f32x4(<4 x float> %x) nounwind uwtable readnone optsize inlinehint alwaysinline {
+  %1 = tail call <4 x float> @llvm.x86.sse41.round.ps(<4 x float> %x, i32 3)
+  ret <4 x float> %1
+}
+
+define weak_odr <2 x double> @trunc_f64x2(<2 x double> %x) nounwind uwtable readnone optsize inlinehint alwaysinline {
+  %1 = tail call <2 x double> @llvm.x86.sse41.round.pd(<2 x double> %x, i32 3)
+  ret <2 x double> %1
+}
+
 define weak_odr <16 x i8> @abs_i8x16(<16 x i8> %x) nounwind uwtable readnone alwaysinline {
   %1 = tail call <16 x i8> @llvm.x86.ssse3.pabs.b.128(<16 x i8> %x)
   ret <16 x i8> %1
@@ -61,4 +112,3 @@ define weak_odr <4 x i32> @abs_i32x4(<4 x i32> %x) nounwind uwtable readnone alw
 }
 
 declare <4 x i32> @llvm.x86.ssse3.pabs.d.128(<4 x i32>) nounwind readnone
-

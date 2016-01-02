@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 #include <iostream>
 
 using namespace Halide;
@@ -18,9 +18,9 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         // Resolve why OpenCL used 32,1 tiling
-        f.gpu_tile(x, y, 8, 8, GPU_Default);
-        g.gpu_tile(x, y, 8, 8, GPU_Default);
-        h.gpu_tile(x, y, 8, 8, GPU_Default);
+        f.gpu_tile(x, y, 8, 8);
+        g.gpu_tile(x, y, 8, 8);
+        h.gpu_tile(x, y, 8, 8);
     }
 
     printf("Realizing function...\n");

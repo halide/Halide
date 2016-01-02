@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -13,8 +13,9 @@ int main(int argc, char **argv) {
 
     Target t = get_jit_target_from_environment();
 
-    if (t.features & (Target::OpenCL | Target::CUDA)) {
-        f.cuda_tile(x, y, 16, 16);
+    if (t.has_feature(Target::OpenCL) ||
+        t.has_feature(Target::CUDA)) {
+        f.gpu_tile(x, y, 16, 16);
 
         // This allocates a buffer, does gpu compute into it, and then
         // frees it (calling dev_free) possibly before the compute is

@@ -36,6 +36,10 @@ public:
 
     void dump();
 
+    virtual std::string print_gpu_name(const std::string &name);
+
+    std::string api_unique_name() { return "opencl"; }
+
 protected:
 
     class CodeGen_OpenCL_C : public CodeGen_C {
@@ -55,9 +59,17 @@ protected:
         void visit(const For *);
         void visit(const Ramp *op);
         void visit(const Broadcast *op);
+        void visit(const Call *op);
         void visit(const Load *op);
         void visit(const Store *op);
         void visit(const Cast *op);
+        void visit(const Select *op);
+        void visit(const EQ *);
+        void visit(const NE *);
+        void visit(const LT *);
+        void visit(const LE *);
+        void visit(const GT *);
+        void visit(const GE *);
         void visit(const Allocate *op);
         void visit(const Free *op);
     };

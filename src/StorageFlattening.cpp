@@ -4,6 +4,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,20 +14,47 @@ using std::string;
 using std::vector;
 using std::map;
 
+namespace {
+// Visitor and helper function to test if a piece of IR uses an extern image.
+class UsesExternImage : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *c) {
+        if (c->call_type == Call::Image) {
+            result = true;
+        } else {
+            IRVisitor::visit(c);
+        }
+    }
+public:
+    UsesExternImage() : result(false) {}
+    bool result;
+};
+
+inline bool uses_extern_image(Stmt s) {
+    UsesExternImage uses;
+    s.accept(&uses);
+    return uses.result;
+}
+}
+
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e)
-        : env(e) {}
+    FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e)
+        : outputs(outputs), env(e) {}
     Scope<int> scope;
 private:
+    const vector<Function> &outputs;
     const map<string, Function> &env;
+    Scope<int> realizations;
 
-    Expr flatten_args(const string &name, const vector<Expr> &args) {
+    Expr flatten_args(const string &name, const vector<Expr> &args,
+                      bool internal) {
         Expr idx = 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
-            string dim = int_to_string(i);
+            string dim = std::to_string(i);
             string stride_name = name + ".stride." + dim;
             string min_name = name + ".min." + dim;
             string stride_name_constrained = stride_name + ".constrained";
@@ -41,7 +69,7 @@ private:
             mins[i] = Variable::make(Int(32), min_name);
         }
 
-        if (env.find(name) != env.end()) {
+        if (internal) {
             // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
@@ -68,6 +96,8 @@ private:
     using IRMutator::visit;
 
     void visit(const Realize *realize) {
+        realizations.push(realize->name, 1);
+
         Stmt body = mutate(realize->body);
 
         // Compute the size
@@ -77,6 +107,8 @@ private:
           extents[i] = mutate(extents[i]);
         }
         Expr condition = mutate(realize->condition);
+
+        realizations.pop(realize->name);
 
         vector<int> storage_permutation;
         {
@@ -100,14 +132,14 @@ private:
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
             string buffer_name = realize->name;
             if (realize->types.size() > 1) {
-                buffer_name = buffer_name + '.' + int_to_string(idx);
+                buffer_name = buffer_name + '.' + std::to_string(idx);
             }
 
             // Make the names for the mins, extents, and strides
             int dims = realize->bounds.size();
             vector<string> min_name(dims), extent_name(dims), stride_name(dims);
             for (int i = 0; i < dims; i++) {
-                string d = int_to_string(i);
+                string d = std::to_string(i);
                 min_name[i] = buffer_name + ".min." + d;
                 stride_name[i] = buffer_name + ".stride." + d;
                 extent_name[i] = buffer_name + ".extent." + d;
@@ -120,15 +152,14 @@ private:
             }
 
             // Promote the type to be a multiple of 8 bits
-            Type t = realize->types[idx];
-            t.bits = t.bytes() * 8;
+            Type t = realize->types[idx].with_bits(realize->types[idx].bytes() * 8);
 
             // Create a buffer_t object for this allocation.
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, vec(first_elem), Call::Intrinsic);
-            args[1] = realize->types[idx].bytes();
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            args[1] = make_zero(realize->types[idx]);
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];
                 args[3*i+3] = extent_var[i];
@@ -164,50 +195,121 @@ private:
         }
     }
 
-    void visit(const Provide *provide) {
+    struct ProvideValue {
+        Expr value;
+        string name;
+    };
 
-        vector<Expr> values(provide->values.size());
+    void flatten_provide_values(vector<ProvideValue> &values, const Provide *provide) {
+        values.resize(provide->values.size());
+
         for (size_t i = 0; i < values.size(); i++) {
-            values[i] = mutate(provide->values[i]);
+            Expr value = mutate(provide->values[i]);
 
             // Promote the type to be a multiple of 8 bits
-            Type t = values[i].type();
-            t.bits = t.bytes() * 8;
-            if (t.bits != values[i].type().bits) {
-                values[i] = Cast::make(t, values[i]);
+            Type t = value.type().with_bits(value.type().bytes() * 8);
+            if (t.bits() != value.type().bits()) {
+                value = Cast::make(t, value);
+            }
+
+            values[i].value = value;
+            if (values.size() > 1) {
+                values[i].name = provide->name + "." + std::to_string(i);
+            } else {
+                values[i].name = provide->name;
+            }
+        }
+    }
+
+    // Lower a set of provides
+    Stmt flatten_provide_atomic(const Provide *provide) {
+        vector<ProvideValue> values;
+        flatten_provide_values(values, provide);
+
+        bool is_output = false;
+        for (Function f : outputs) {
+            is_output |= f.name() == provide->name;
+            if (is_output) break;
+        }
+
+        Stmt result;
+        for (size_t i = 0; i < values.size(); i++) {
+            const ProvideValue &cv = values[i];
+
+            Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
+            Expr var = Variable::make(cv.value.type(), cv.name + ".value");
+            Stmt store = Store::make(cv.name, var, idx);
+
+            if (result.defined()) {
+                result = Block::make(result, store);
+            } else {
+                result = store;
             }
         }
 
-        if (values.size() == 1) {
-            Expr idx = mutate(flatten_args(provide->name, provide->args));
-            stmt = Store::make(provide->name, values[0], idx);
+        for (size_t i = values.size(); i > 0; i--) {
+            const ProvideValue &cv = values[i-1];
+
+            result = LetStmt::make(cv.name + ".value", cv.value, result);
+        }
+        return result;
+    }
+
+    Stmt flatten_provide(const Provide *provide) {
+        vector<ProvideValue> values;
+        flatten_provide_values(values, provide);
+
+        bool is_output = false;
+        for (Function f : outputs) {
+            is_output |= f.name() == provide->name;
+        }
+
+        Stmt result;
+        for (size_t i = 0; i < values.size(); i++) {
+            const ProvideValue &cv = values[i];
+
+            Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
+            Stmt store = Store::make(cv.name, cv.value, idx);
+
+            if (result.defined()) {
+                result = Block::make(result, store);
+            } else {
+                result = store;
+            }
+        }
+        return result;
+    }
+
+    void visit(const Provide *provide) {
+        Stmt result;
+
+        // Handle the provide atomically if necessary. This logic is
+        // currently very conservative, it will lower many provides
+        // atomically that do not require it.
+        if (provide->values.size() == 1) {
+            // If there is only one value, we don't need to worry
+            // about atomicity.
+            result = flatten_provide(provide);
+        } else if (!realizations.contains(provide->name) &&
+                   uses_extern_image(provide)) {
+            // If the provide is not a realization and it uses an
+            // input image, it might be aliased. Flatten it atomically
+            // because we can't prove the boxes don't overlap.
+            result = flatten_provide_atomic(provide);
         } else {
+            Box provided = box_provided(Stmt(provide), provide->name);
+            Box required = box_required(Stmt(provide), provide->name);
 
-            vector<string> names(provide->values.size());
-            Stmt result;
-
-            // Store the values by name
-            for (size_t i = 0; i < provide->values.size(); i++) {
-                string name = provide->name + "." + int_to_string(i);
-                Expr idx = mutate(flatten_args(name, provide->args));
-                names[i] = name + ".value";
-                Expr var = Variable::make(values[i].type(), names[i]);
-                Stmt store = Store::make(name, var, idx);
-
-                if (result.defined()) {
-                    result = Block::make(result, store);
-                } else {
-                    result = store;
-                }
+            if (boxes_overlap(provided, required)) {
+                // The boxes provided and required might overlap, so
+                // the provide must be done atomically.
+                result = flatten_provide_atomic(provide);
+            } else {
+                // The boxes don't overlap.
+                result = flatten_provide(provide);
             }
-
-            // Add the let statements that define the values
-            for (size_t i = provide->values.size(); i > 0; i--) {
-                result = LetStmt::make(names[i-1], values[i-1], result);
-            }
-
-            stmt = result;
         }
+        stmt = result;
     }
 
     void visit(const Call *call) {
@@ -228,17 +330,23 @@ private:
             string name = call->name;
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
-                name = name + '.' + int_to_string(call->value_index);
+                name = name + '.' + std::to_string(call->value_index);
             }
 
-            // Promote the type to be a multiple of 8 bits
-            Type t = call->type;
-            t.bits = t.bytes() * 8;
+            bool is_output = false;
+            for (Function f : outputs) {
+                is_output |= f.name() == call->name;
+            }
 
-            Expr idx = mutate(flatten_args(name, call->args));
+            bool is_input = env.find(call->name) == env.end();
+
+            // Promote the type to be a multiple of 8 bits
+            Type t = call->type.with_bits(call->type.bytes() * 8);
+
+            Expr idx = mutate(flatten_args(name, call->args, !(is_output || is_input)));
             expr = Load::make(t, name, idx, call->image, call->param);
 
-            if (call->type.bits != t.bits) {
+            if (call->type.bits() != t.bits()) {
                 expr = Cast::make(call->type, expr);
             }
         }
@@ -260,8 +368,10 @@ private:
 };
 
 
-Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
-    return FlattenDimensions(env).mutate(s);
+Stmt storage_flattening(Stmt s,
+                        const vector<Function> &outputs,
+                        const map<string, Function> &env) {
+    return FlattenDimensions(outputs, env).mutate(s);
 }
 
 }

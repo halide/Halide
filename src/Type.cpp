@@ -1,120 +1,180 @@
 #include <sstream>
-
+#include <cfloat>
 #include "IR.h"
 
 namespace Halide {
 
 using std::ostringstream;
 
-/** Return an integer which is the maximum value of this type. */
-int Type::imax() const {
-    if (is_uint()) {
-        if (bits == 32) {
-            return 0xffffffff;
-        } else if (bits < 32) {
-            return (int) ((1 << bits) - 1);
-        } else {
-            internal_error
-                << "Can't call Type::imax() on " << (*this)
-                << " because value is too large to represent as a signed 32-bit integer\n";
-            return 0;
-        }
-    } else if (is_int()) {
-        if (bits == 32) {
-            return 0x7fffffff;
-        } else if (bits < 32) {
-            return (int) ((1 << (bits-1)) - 1);
-        } else {
-            internal_error
-                << "Can't call Type::imax() on " << (*this)
-                << " because value is too large to represent as a signed 32-bit integer\n";
-            return 0;
-        }
-    } else {
-        internal_error
-            << "Can't call Type::imax() on " << (*this)
-            << " because value is too large to represent as a signed 32-bit integer\n";
-        return 0;
-    }
+namespace {
+uint64_t max_uint(int bits) {
+    uint64_t max_val = 0xffffffffffffffffULL;
+    return max_val >> (64 - bits);
+}
+
+int64_t max_int(int bits) {
+    int64_t  max_val = 0x7fffffffffffffffLL;
+    return max_val >> (64 - bits);
+}
+
+int64_t min_int(int bits) {
+    return -max_int(bits) - 1;
+}
+
 }
 
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
-    if (width > 1) {
-        return Internal::Broadcast::make(element_of().max(), width);
-    }
-    if (is_int() && bits == 32) {
-        return imax(); // No explicit cast of scalar i32.
-    } else if ((is_int() || is_uint()) && bits <= 32) {
-        return Internal::Cast::make(*this, imax());
-    } else {
-        // Use a run-time call to a math intrinsic (see posix_math.cpp)
-        ostringstream ss;
-        ss << "maxval_";
-        if (is_int()) ss << "s";
-        else if (is_uint()) ss << "u";
-        else ss << "f";
-        ss << bits;
-        return Internal::Call::make(*this, ss.str(), std::vector<Expr>(), Internal::Call::Extern);
-    }
-}
-
-/** Return an integer which is the minimum value of this type */
-int Type::imin() const {
-    if (is_uint()) {
-        return 0;
+    if (is_vector()) {
+        return Internal::Broadcast::make(element_of().max(), lanes());
     } else if (is_int()) {
-        if (bits == 32) {
-            return 0x80000000;
-        } else if (bits < 32) {
-            return -(1 << (bits-1));
+        return Internal::IntImm::make(*this, max_int(bits()));
+    } else if (is_uint()) {
+        return Internal::UIntImm::make(*this, max_uint(bits()));
+    } else {
+        internal_assert(is_float());
+        if (bits() == 16) {
+            return Internal::FloatImm::make(*this, 65504.0);
+        } else if (bits() == 32) {
+            return Internal::FloatImm::make(*this, FLT_MAX);
+        } else if (bits() == 64) {
+            return Internal::FloatImm::make(*this, DBL_MAX);
         } else {
             internal_error
-                << "Can't call Type::imin() on " << (*this)
-                << " because value is too large to represent as a signed 32-bit integer\n";
+                << "Unknown float type: " << (*this) << "\n";
             return 0;
         }
-    } else {
-        internal_error
-            << "Can't call Type::imin() on " << (*this)
-            << " because value is too large to represent as a signed 32-bit integer\n";
-        return 0;
     }
 }
 
 /** Return an expression which is the minimum value of this type */
-Expr Type::min() const {
-    if (width > 1) {
-        return Internal::Broadcast::make(element_of().min(), width);
-    }
-    if (is_int() && bits == 32) {
-        return imin(); // No explicit cast of scalar i32.
-    } else if ((is_int() || is_uint()) && bits <= 32) {
-        return Internal::Cast::make(*this, imin());
+Halide::Expr Type::min() const {
+    if (is_vector()) {
+        return Internal::Broadcast::make(element_of().min(), lanes());
+    } else if (is_int()) {
+        return Internal::IntImm::make(*this, min_int(bits()));
+    } else if (is_uint()) {
+        return Internal::UIntImm::make(*this, 0);
     } else {
-        // Use a run-time call to a math intrinsic (see posix_math.cpp)
-        ostringstream ss;
-        ss << "minval_";
-        if (is_int()) ss << "s";
-        else if (is_uint()) ss << "u";
-        else ss << "f";
-        ss << bits;
-        return Internal::Call::make(*this, ss.str(), std::vector<Expr>(), Internal::Call::Extern);
+        internal_assert(is_float());
+        if (bits() == 16) {
+            return Internal::FloatImm::make(*this, -65504.0);
+        } else if (bits() == 32) {
+            return Internal::FloatImm::make(*this, -FLT_MAX);
+        } else if (bits() == 64) {
+            return Internal::FloatImm::make(*this, -DBL_MAX);
+        } else {
+            internal_error
+                << "Unknown float type: " << (*this) << "\n";
+            return 0;
+        }
     }
+}
 
+bool Type::is_max(int64_t x) const {
+    return x > 0 && is_max((uint64_t)x);
+}
+
+bool Type::is_max(uint64_t x) const {
+    if (is_int()) {
+        return x == (uint64_t)max_int(bits());
+    } else if (is_uint()) {
+        return x == max_uint(bits());
+    } else {
+        return false;
+    }
+}
+
+bool Type::is_min(int64_t x) const {
+    if (is_int()) {
+        return x == min_int(bits());
+    } else if (is_uint()) {
+        return x == 0;
+    } else {
+        return false;
+    }
+}
+
+bool Type::is_min(uint64_t x) const {
+    return false;
 }
 
 bool Type::can_represent(Type other) const {
-    if (width != other.width) return false;
+    if (lanes() != other.lanes()) return false;
     if (is_int()) {
-        return ((other.is_int() && other.bits <= bits) ||
-                (other.is_uint() && other.bits < bits));
+        return ((other.is_int() && other.bits() <= bits()) ||
+                (other.is_uint() && other.bits() < bits()));
     } else if (is_uint()) {
-        return other.is_uint() && other.bits <= bits;
+        return other.is_uint() && other.bits() <= bits();
     } else if (is_float()) {
-        return ((other.is_float() && other.bits <= bits) ||
-                (bits == 64 && other.bits <= 32) ||
-                (bits == 32 && other.bits <= 16));
+        return ((other.is_float() && other.bits() <= bits()) ||
+                (bits() == 64 && other.bits() <= 32) ||
+                (bits() == 32 && other.bits() <= 16));
+    } else {
+        return false;
+    }
+}
+
+bool Type::can_represent(int64_t x) const {
+    if (is_int()) {
+        return x >= min_int(bits()) && x <= max_int(bits());
+    } else if (is_uint()) {
+        return x >= 0 && (uint64_t)x <= max_uint(bits());
+    } else if (is_float()) {
+        switch (bits()) {
+        case 16:
+            return (int64_t)(float)(float16_t)(float)x == x;
+        case 32:
+            return (int64_t)(float)x == x;
+        case 64:
+            return (int64_t)(double)x == x;
+        default:
+            return false;
+        }
+    } else {
+        return false;
+    }
+}
+
+bool Type::can_represent(uint64_t x) const {
+    if (is_int()) {
+        return x <= (uint64_t)(max_int(bits()));
+    } else if (is_uint()) {
+        return x <= max_uint(bits());
+    } else if (is_float()) {
+        switch (bits()) {
+        case 16:
+            return (uint64_t)(float)(float16_t)(float)x == x;
+        case 32:
+            return (uint64_t)(float)x == x;
+        case 64:
+            return (uint64_t)(double)x == x;
+        default:
+            return false;
+        }
+    } else {
+        return false;
+    }
+}
+
+bool Type::can_represent(double x) const {
+    if (is_int()) {
+        int64_t i = x;
+        return (x >= min_int(bits())) && (x <= max_int(bits())) && (x == (double)i);
+    } else if (is_uint()) {
+        uint64_t u = x;
+        return (x >= 0) && (x <= max_uint(bits())) && (x == (double)u);
+    } else if (is_float()) {
+        switch (bits()) {
+        case 16:
+            return (double)(float16_t)x == x;
+        case 32:
+            return (double)(float)x == x;
+        case 64:
+            return true;
+        default:
+            return false;
+        }
     } else {
         return false;
     }

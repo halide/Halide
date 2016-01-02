@@ -1,17 +1,23 @@
-// Halide tutorial lesson 1.
+// Halide tutorial lesson 1: Getting started with Funcs, Vars, and Exprs
 
 // This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_01
+// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_01 -std=c++11
 // LD_LIBRARY_PATH=../bin ./lesson_01
 
 // On os x:
-// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -o lesson_01
+// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -o lesson_01 -std=c++11
 // DYLD_LIBRARY_PATH=../bin ./lesson_01
 
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_01_basics
+// in a shell with the current directory at the top of the halide
+// source tree.
+
 // The only Halide header file you need is Halide.h. It includes all of Halide.
-#include <Halide.h>
+#include "Halide.h"
 
 // We'll also include stdio for printf.
 #include <stdio.h>
@@ -29,6 +35,11 @@ int main(int argc, char **argv) {
     // Var objects are names to use as variables in the definition of
     // a Func. They have no meaning by themselves.
     Halide::Var x, y;
+
+    // We typically use Vars named 'x' and 'y' to correspond to the x
+    // and y axes of an image, and we write them in that order. If
+    // you're used to thinking of images as having rows and columns,
+    // then x is the column index, and y is the row index.
 
     // Funcs are defined at any integer coordinate of its variables as
     // an Expr in terms of those variables and other functions.

@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
