@@ -1,4 +1,4 @@
-#include "CodeGen_OpenGL_Dev.h"
+#include "../../src/CodeGen_OpenGL_Dev.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

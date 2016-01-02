@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -63,12 +63,8 @@ int main(int argc, char **argv) {
         // Side-lobes is used.
         Func f1, f2, f3, f4;
         f1(x) = cast<uint8_t>(x);
-        f2.define_extern("call_counter",
-                         Internal::vec<ExternFuncArgument>(f1, Expr(1), Expr(0)),
-                         UInt(8), 1);
-        f3.define_extern("call_counter",
-                         Internal::vec<ExternFuncArgument>(f1, Expr(2), Expr(1)),
-                         UInt(8), 1);
+        f2.define_extern("call_counter", {f1, 1, 0}, UInt(8), 1);
+        f3.define_extern("call_counter", {f1, 2, 1}, UInt(8), 1);
         f4(x) = select(toggle1, f2(x), f3(x));
 
         f1.compute_root();
@@ -83,7 +79,7 @@ int main(int argc, char **argv) {
         for (int32_t i = 0; i < 10; i++) {
             assert(result1(i) == i + 1);
         }
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 0);
 
         reset_counts();
@@ -92,7 +88,7 @@ int main(int argc, char **argv) {
         for (int32_t i = 0; i < 10; i++) {
             assert(result2(i) == i + 2);
         }
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(0, 1);
     }
 
@@ -105,16 +101,16 @@ int main(int argc, char **argv) {
         identity(x) = x;
 
         f1.define_extern("call_counter",
-                         Internal::vec<ExternFuncArgument>(identity, Expr(1), Expr(0)),
+                         {identity, 1, 0},
                          UInt(8), 1);
         Func f1_plus_one;
         f1_plus_one(x) = f1(x) + 1;
 
         f2.define_extern("call_counter",
-                         Internal::vec<ExternFuncArgument>(f1_plus_one, Expr(1), Expr(1)),
+                         {f1_plus_one, 1, 1},
                          UInt(8), 1);
         f3.define_extern("call_counter",
-                         Internal::vec<ExternFuncArgument>(f1_plus_one, Expr(1), Expr(2)),
+                         {f1_plus_one, 1, 2},
                          UInt(8), 1);
         f4(x) = select(toggle1, f2(x), 0) + select(toggle2, f3(x), 0);
 
@@ -130,28 +126,28 @@ int main(int argc, char **argv) {
         toggle1.set(true);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 1);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 0, 1);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(0, 0, 0);
 
     }
@@ -167,10 +163,10 @@ int main(int argc, char **argv) {
 
         Func extern1, extern2, f1, f2;
         extern1.define_extern("call_counter",
-                              Internal::vec<ExternFuncArgument>(identity, Expr(0), Expr(0)),
+                              {identity, 0, 0},
                               UInt(8), 1);
         extern2.define_extern("call_counter",
-                              Internal::vec<ExternFuncArgument>(identity, Expr(1), Expr(1)),
+                              {identity, 1, 1},
                               UInt(8), 1);
 
         f1(x) = Tuple(extern1(x), extern2(x+1));
@@ -187,13 +183,13 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 1);
 
         reset_counts();
         toggle1.set(false);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 1);
     }
 
@@ -205,10 +201,10 @@ int main(int argc, char **argv) {
 
         Func extern1, extern2, f1, f2;
         extern1.define_extern("call_counter",
-                              Internal::vec<ExternFuncArgument>(identity, Expr(0), Expr(0)),
+                              {identity, 0, 0},
                               UInt(8), 1);
         extern2.define_extern("call_counter",
-                              Internal::vec<ExternFuncArgument>(identity, Expr(1), Expr(1)),
+                              {identity, 1, 1},
                               UInt(8), 1);
 
         f1(x) = Tuple(extern1(x), extern2(x+1));
@@ -226,13 +222,13 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(1, 1);
 
         reset_counts();
         toggle1.set(false);
         f2.realize(10);
-        check_queries(1, 1);
+        check_queries(2, 2);
         check_counts(0, 0);
     }
 
@@ -243,13 +239,13 @@ int main(int argc, char **argv) {
 
         Func extern1, extern2, extern3, f1, f2, f3, f4;
         extern1.define_extern("call_counter",
-                              Internal::vec<ExternFuncArgument>(identity, Expr(0), Expr(0)),
+                              {identity, 0, 0},
                               UInt(8), 1);
         extern2.define_extern("call_counter",
-                              Internal::vec<ExternFuncArgument>(identity, Expr(1), Expr(1)),
+                              {identity, 1, 1},
                               UInt(8), 1);
         extern3.define_extern("call_counter",
-                              Internal::vec<ExternFuncArgument>(identity, Expr(1), Expr(2)),
+                              {identity, 1, 2},
                               UInt(8), 1);
 
         f1(x) = extern1(x);
@@ -274,28 +270,28 @@ int main(int argc, char **argv) {
         toggle1.set(true);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 1);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 0, 1);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(1, 1, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
         f4.realize(10);
-        check_queries(1, 1, 1);
+        check_queries(2, 2, 2);
         check_counts(0, 0, 0);
     }
 

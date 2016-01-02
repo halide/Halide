@@ -1,11 +1,11 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
 
 int my_trace(void *user_context, const halide_trace_event *e) {
     // The schedule implies that f will be stored from 0 to 8
-    if (e->event == 2) {
+    if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] < 8) {
             printf("Bounds on realization of f were supposed to be >= [0, 8]\n"
                    "Instead they are: %d %d\n", e->coordinates[0], e->coordinates[1]);

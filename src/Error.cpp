@@ -2,6 +2,16 @@
 
 namespace Halide {
 
+namespace {
+
+CompileTimeErrorReporter* custom_error_reporter = NULL;
+
+}  // namespace
+
+void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter) {
+    custom_error_reporter = error_reporter;
+}
+
 bool exceptions_enabled() {
     #ifdef WITH_EXCEPTIONS
     return true;
@@ -33,6 +43,20 @@ InternalError _internal_error("");
 }
 
 void ErrorReport::explode() {
+    if (custom_error_reporter != NULL) {
+        if (warning) {
+            custom_error_reporter->warning(msg->str().c_str());
+            delete msg;
+            return;
+        } else {
+            custom_error_reporter->error(msg->str().c_str());
+            delete msg;
+            // error() should not have returned to us, but just in case
+            // it does, make sure we don't continue.
+            abort();
+        }
+    }
+
     // TODO: Add an option to error out on warnings too
     if (warning) {
         std::cerr << msg->str();

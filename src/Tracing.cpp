@@ -18,12 +18,11 @@ using std::string;
 class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
-    Function output;
     int global_level;
-    InjectTracing(const map<string, Function> &e,
-                  Function o) : env(e),
-                                output(o),
-                                global_level(tracing_level()) {}
+
+    InjectTracing(const map<string, Function> &e)
+        : env(e),
+          global_level(tracing_level()) {}
 
 private:
     using IRMutator::visit;
@@ -64,7 +63,7 @@ private:
                 } else {
                     Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
                 }
-                expr = Call::make(Handle(), Call::address_of, vec(inner), Call::Intrinsic);
+                expr = Call::make(Handle(), Call::address_of, {inner}, Call::Intrinsic);
                 return;
             }
         }
@@ -75,20 +74,25 @@ private:
         op = expr.as<Call>();
         internal_assert(op);
 
-        if (op->call_type != Call::Halide) {
-            return;
+        bool trace_it = false;
+        Expr trace_parent;
+        if (op->call_type == Call::Halide) {
+            Function f = op->func;
+            bool inlined = f.schedule().compute_level().is_inline();
+            if (f.has_update_definition()) inlined = false;
+            trace_it = f.is_tracing_loads() || (global_level > 2 && !inlined);
+            trace_parent = Variable::make(Int(32), op->name + ".trace_id");
+        } else if (op->call_type == Call::Image) {
+            trace_it = global_level > 2;
+            trace_parent = Variable::make(Int(32), "pipeline.trace_id");
         }
 
-        Function f = op->func;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
-
-        if (f.is_tracing_loads() || (global_level > 2 && !inlined)) {
-
+        if (trace_it) {
             // Wrap the load in a call to trace_load
             vector<Expr> args;
-            args.push_back(f.name());
+            args.push_back(op->name);
             args.push_back(halide_trace_load);
-            args.push_back(Variable::make(Int(32), op->name + ".trace_id"));
+            args.push_back(trace_parent);
             args.push_back(op->value_index);
             args.push_back(op);
             args.insert(args.end(), op->args.begin(), op->args.end());
@@ -106,7 +110,8 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
+        bool inlined = f.schedule().compute_level().is_inline();
+        if (f.has_update_definition()) inlined = false;
 
         if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
             // Wrap each expr in a tracing call
@@ -143,7 +148,7 @@ private:
             vector<Expr> args;
             args.push_back(op->name);
             args.push_back(halide_trace_begin_realization); // event type for begin realization
-            args.push_back(0); // realization id
+            args.push_back(Variable::make(Int(32), "pipeline.trace_id")); // pipeline id
             args.push_back(0); // value index
             args.push_back(0); // value
 
@@ -172,9 +177,9 @@ private:
 
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         IRMutator::visit(op);
-        op = stmt.as<Pipeline>();
+        op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
@@ -214,7 +219,7 @@ private:
             call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
             new_consume = Block::make(new_consume, Evaluate::make(call));
 
-            stmt = Pipeline::make(op->name, op->produce, new_update, new_consume);
+            stmt = ProducerConsumer::make(op->name, op->produce, new_update, new_consume);
 
             args[1] = halide_trace_produce;
             call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
@@ -224,36 +229,64 @@ private:
     }
 };
 
-Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
+class RemoveRealizeOverOutput : public IRMutator {
+    using IRMutator::visit;
+    const vector<Function> &outputs;
+
+    void visit(const Realize *op) {
+        for (Function f : outputs) {
+            if (op->name == f.name()) {
+                stmt = mutate(op->body);
+                return;
+            }
+        }
+        IRMutator::visit(op);
+    }
+
+public:
+    RemoveRealizeOverOutput(const vector<Function> &o) : outputs(o) {}
+};
+
+Stmt inject_tracing(Stmt s, const string &pipeline_name,
+                    const map<string, Function> &env, const vector<Function> &outputs) {
     Stmt original = s;
-    InjectTracing tracing(env, output);
+    InjectTracing tracing(env);
 
     // Add a dummy realize block for the output buffers
-    Region output_region;
-    Parameter output_buf = output.output_buffers()[0];
-    internal_assert(output_buf.is_buffer());
-    for (int i = 0; i < output.dimensions(); i++) {
-        string d = int_to_string(i);
-        Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
-        Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
-        output_region.push_back(Range(min, extent));
+    for (Function output : outputs) {
+        Region output_region;
+        Parameter output_buf = output.output_buffers()[0];
+        internal_assert(output_buf.is_buffer());
+        for (int i = 0; i < output.dimensions(); i++) {
+            string d = std::to_string(i);
+            Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
+            Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
+            output_region.push_back(Range(min, extent));
+        }
+        s = Realize::make(output.name(), output.output_types(), output_region, const_true(), s);
     }
-    s = Realize::make(output.name(), output.output_types(), output_region, const_true(), s);
 
     // Inject tracing calls
     s = tracing.mutate(s);
 
-    // Strip off the dummy realize block
-    const Realize *r = s.as<Realize>();
-    internal_assert(r);
-    s = r->body;
+    // Strip off the dummy realize blocks
+    s = RemoveRealizeOverOutput(outputs).mutate(s);
 
-    // Unless tracing was a no-op, add a call to shut down the trace
-    // (which flushes the output stream)
     if (!s.same_as(original)) {
-        Expr flush = Call::make(Int(32), "halide_shutdown_trace", vector<Expr>(), Call::Extern);
-        s = Block::make(s, AssertStmt::make(flush == 0, "Failed to flush trace", vector<Expr>()));
+        // Add pipeline start and end events
+        vector<Expr> args = {pipeline_name,
+                             halide_trace_begin_pipeline,
+                             0, 0, 0};
+        Expr pipeline_start = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+
+        args[1] = halide_trace_end_pipeline;
+        args[2] = Variable::make(Int(32), "pipeline.trace_id");
+        Expr pipeline_end = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+
+        s = Block::make(s, Evaluate::make(pipeline_end));
+        s = LetStmt::make("pipeline.trace_id", pipeline_start, s);
     }
+
     return s;
 }
 

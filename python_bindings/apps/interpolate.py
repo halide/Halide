@@ -1,18 +1,29 @@
+#!/usr/bin/python3
+"""
+Fast image interpolation using a pyramid.
+"""
 
-"Fast image interpolation using a pyramid."
+from __future__ import print_function
+from __future__ import division
 
 import time, sys
 from halide import *
 
+from datetime import datetime
+from scipy.misc import imread, imsave
+import numpy as np
+import os.path
+
 int_t = Int(32)
 float_t = Float(32)
 
-def main():
+def get_interpolate(input, levels):
+    """
+    Build function, schedules it, and invokes jit compiler
+    :return: halide.Func
+    """
 
     # THE ALGORITHM
-
-    input = ImageParam(float_t, 3, 'input')
-    levels = 10
 
     downsampled = [Func('downsampled%d'%i) for i in range(levels)]
     downx = [Func('downx%d'%l) for l in range(levels)]
@@ -143,17 +154,56 @@ def main():
     # JIT compile the pipeline eagerly, so we don't interfere with timing
     final.compile_jit(target)
 
-    def evaluate(in_png):
-        T0 = time.time()
-        out = final.realize(in_png.width(), in_png.height(), 3)
-        print 'Interpolated in %.5f secs' % (time.time()-T0)
-        return out
+    return final
 
-    I = filter_image(input, final, builtin_image('rgba.png'), eval_func=evaluate)()
-    if len(sys.argv) >= 2:
-        I.save(sys.argv[1])
-    else:
-        I.show()
+def get_input_data():
+
+    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgba.png")
+    assert os.path.exists(image_path), "Could not find %s" % image_path
+    rgba_data = imread(image_path)
+    #print("rgba_data", type(rgba_data), rgba_data.shape, rgba_data.dtype)
+
+    input_data = np.copy(rgba_data, order="F").astype(np.float32) / 255.0
+    # input data is in range [0, 1]
+    #print("input_data", type(input_data), input_data.shape, input_data.dtype)
+
+    return input_data
+
+
+def main():
+
+    input = ImageParam(float_t, 3, "input")
+    levels = 10
+
+    interpolate = get_interpolate(input, levels)
+
+    # preparing input and output memory buffers (numpy ndarrays)
+    input_data = get_input_data()
+    assert input_data.shape[2] == 4
+    input_image = Image(input_data, "input_image")
+    input.set(input_image)
+
+    input_width, input_height = input_data.shape[:2]
+
+    t0 = datetime.now()
+    output_realization = interpolate.realize(input_width, input_height, 3)
+    t1 = datetime.now()
+    print('Interpolated in %.5f secs' % (t1-t0).total_seconds())
+
+    output_data = image_to_ndarray(Image(Float(32), output_realization))
+    #print("output_data", type(output_data), output_data.shape, output_data.dtype)
+
+        # save results
+    input_path = "interpolate_input.png"
+    output_path = "interpolate_result.png"
+    imsave(input_path, input_data)
+    imsave(output_path, output_data)
+    print("\nblur realized on output image.",
+          "Result saved at", output_path,
+          "( input data copy at", input_path, ")")
+
+    print("\nEnd of game. Have a nice day!")
+
 
 if __name__ == '__main__':
     main()

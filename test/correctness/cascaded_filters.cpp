@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     stages.push_back(first);
     for (size_t i = 0; i < 100; i++) {
-        stages.push_back(blur(stages.back(), "S" + Internal::int_to_string(i+1)));
+        stages.push_back(blur(stages.back(), "S" + std::to_string(i+1)));
     }
 
     for (size_t i = 0; i < stages.size()-1; i++) {

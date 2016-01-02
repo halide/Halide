@@ -4,6 +4,7 @@
 
 #include "Debug.h"
 #include "LLVM_Headers.h"
+#include "Error.h"
 
 #include <string>
 #include <iostream>
@@ -19,7 +20,10 @@ using std::map;
 
 namespace Halide {
 namespace Internal {
+namespace Introspection {
 
+// All of this only works with DWARF debug info on linux and OS X. For
+// other platforms, WITH_INTROSPECTION should be off.
 #ifdef __APPLE__
 extern "C" void _NSGetExecutablePath(char *, int32_t *);
 void get_program_name(char *name, int32_t size) {
@@ -74,6 +78,21 @@ class DebugSections {
         }
     };
     vector<GlobalVariable> global_variables;
+
+    struct HeapObject {
+        uint64_t addr;
+        TypeInfo *type;
+        struct Member {
+            uint64_t addr;
+            std::string name;
+            TypeInfo *type;
+            bool operator<(const Member &other) const {
+                return addr < other.addr;
+            }
+        };
+        vector<Member> members;
+    };
+    map<uint64_t, HeapObject> heap_objects;
 
     struct LocalVariable {
         std::string name;
@@ -158,15 +177,7 @@ public:
 
         debug(2) << "Loading " << binary << "\n";
 
-        llvm::object::ObjectFile *obj = load_object_file(binary);
-        if (obj) {
-            working = true;
-            parse_object_file(obj);
-            delete obj;
-        } else {
-            debug(1) << "Could not load object file: " << binary << "\n";
-            working = false;
-        }
+        load_and_parse_object_file(binary);
     }
 
     int count_trailing_zeros(int64_t x) {
@@ -265,11 +276,10 @@ public:
         return false;
     }
 
-    // Get the debug name of a global var from a pointer to it
-    std::string get_global_variable_name(const void *global_pointer, const std::string &type_name = "") {
+    int find_global_variable(const void *global_pointer) {
         if (global_variables.empty()) {
             debug(4) << "Considering possible global at " << global_pointer << " but global_variables is empty\n";
-            return "";
+            return -1;
         }
         debug(4) << "Considering possible global at " << global_pointer << "\n";
 
@@ -288,7 +298,7 @@ public:
         }
 
         if (lo >= global_variables.size()) {
-            return "";
+            return -1;
         }
 
         // There may be multiple matching addresses. Walk backwards to find the first one.
@@ -297,8 +307,37 @@ public:
             idx--;
         }
 
+        // Check the address is indeed inside the object found
+        uint64_t end_ptr = global_variables[idx].addr;
+        TypeInfo *t = global_variables[idx].type;
+        uint64_t size = t->size;
+        while (t->type == TypeInfo::Array) {
+            t = t->members[0].type;
+            size *= t->size;
+        }
+        end_ptr += size;
+        if (address < global_variables[idx].addr ||
+            address >= end_ptr) {
+            return -1;
+        }
+
+        return (int)idx;
+    }
+
+    // Get the debug name of a global var from a pointer to it
+    std::string get_global_variable_name(const void *global_pointer, const std::string &type_name = "") {
+        // Find the index of the first global variable with this address
+        int idx = find_global_variable(global_pointer);
+
+        if (idx < 0) {
+            // No matching global variable found.
+            return "";
+        }
+
+        uint64_t address = (uint64_t)global_pointer;
+
         // Now test all of them
-        for (; idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
+        for (; (size_t)idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
 
             GlobalVariable &v = global_variables[idx];
             TypeInfo *elem_type = NULL;
@@ -334,6 +373,189 @@ public:
         }
 
         // No match
+        return "";
+    }
+
+    void register_heap_object(const void *obj, size_t size, const void *helper) {
+        // helper should be a pointer to a global
+        int idx = find_global_variable(helper);
+        if (idx == -1) {
+            debug(4) << "Could not find helper object: " << helper << "\n";
+            return;
+        }
+        const GlobalVariable &ptr = global_variables[idx];
+        debug(4) << "helper object is " << ptr.name << " at " << std::hex << ptr.addr << std::dec;
+        if (ptr.type) {
+            debug(4) << " with type " << ptr.type->name << "\n";
+        } else {
+            debug(4) << " with unknown type!\n";
+            return;
+        }
+
+        internal_assert(ptr.type->type == TypeInfo::Pointer)
+            << "The type of the helper object was supposed to be a pointer\n";
+        internal_assert(ptr.type->members.size() == 1);
+        TypeInfo *object_type = ptr.type->members[0].type;
+        internal_assert(object_type);
+
+        debug(4) << "The object has type: " << object_type->name << "\n";
+
+        internal_assert(size == object_type->size);
+
+        HeapObject heap_object;
+        heap_object.type = object_type;
+        heap_object.addr = (uint64_t)obj;
+
+        // Recursively enumerate the members.
+        for (size_t i = 0; i < object_type->members.size(); i++) {
+            const LocalVariable &member_spec = object_type->members[i];
+            HeapObject::Member member;
+            member.name = member_spec.name;
+            member.type = member_spec.type;
+            member.addr = heap_object.addr + member_spec.stack_offset;
+            if (member.type) {
+                heap_object.members.push_back(member);
+                debug(4) << member.name << " - " << (int)(member.type->type) << "\n";
+            }
+        }
+
+        // Note that this loop pushes elements onto the vector it's
+        // iterating over as it goes - that's what makes the
+        // enumeration recursive.
+        for (size_t i = 0; i < heap_object.members.size(); i++) {
+            HeapObject::Member parent = heap_object.members[i];
+
+            // Stop at references or pointers. We could register them
+            // recursively (and basically write a garbage collector
+            // object tracker), but that's beyond the scope of what
+            // we're trying to do here. Besides, predicting the
+            // addresses of their children-of-children might follow a
+            // dangling pointer.
+            if (parent.type->type == TypeInfo::Pointer ||
+                parent.type->type == TypeInfo::Reference) continue;
+
+            for (size_t j = 0; j < parent.type->members.size(); j++) {
+                const LocalVariable &member_spec = parent.type->members[j];
+                TypeInfo *member_type = member_spec.type;
+
+                HeapObject::Member child;
+                child.type = member_type;
+
+                if (parent.type->type == TypeInfo::Typedef ||
+                    parent.type->type == TypeInfo::Const) {
+                    // We're just following a type modifier. It's still the same member.
+                    child.name = parent.name;
+                } else if (parent.type->type == TypeInfo::Array) {
+                    child.name = ""; // the '[index]' gets added in the query routine.
+                } else {
+                    child.name = member_spec.name;
+                }
+
+                child.addr = parent.addr + member_spec.stack_offset;
+
+                if (child.type) {
+                    debug(4) << child.name << " - " << (int)(child.type->type) << "\n";
+                    heap_object.members.push_back(child);
+                }
+            }
+        }
+
+        // Sort by member address, but use stable stort so that parents stay before children.
+        std::stable_sort(heap_object.members.begin(), heap_object.members.end());
+
+        debug(4) << "Children of heap object of type " << object_type->name << " at " << obj << ":\n";
+        for (size_t i = 0; i < heap_object.members.size(); i++) {
+            const HeapObject::Member &mem = heap_object.members[i];
+            debug(4) << std::hex << mem.addr << std::dec << ": " << mem.type->name << " " << mem.name << "\n";
+        }
+
+        heap_objects[heap_object.addr] = heap_object;
+    }
+
+    void deregister_heap_object(const void *obj, size_t size) {
+        heap_objects.erase((uint64_t)obj);
+    }
+
+    // Get the debug name of a member of a heap variable from a pointer to it
+    std::string get_heap_member_name(const void *ptr, const std::string &type_name = "") {
+        debug(4) << "Getting heap member name of " << ptr << "\n";
+
+        if (heap_objects.empty()) {
+            debug(4) << "No registered heap objects\n";
+            return "";
+        }
+
+        uint64_t addr = (uint64_t)ptr;
+        std::map<uint64_t, HeapObject>::iterator it = heap_objects.upper_bound(addr);
+
+        if (it == heap_objects.begin()) {
+            debug(4) << "No heap objects less than this address\n";
+            return "";
+        }
+
+        // 'it' is the first element strictly greater than addr, so go
+        // back one to get less-than-or-equal-to.
+        it--;
+
+        const HeapObject &obj = it->second;
+        uint64_t object_start = it->first;
+        uint64_t object_end = object_start + obj.type->size;
+        if (addr < object_start || addr >= object_end) {
+            debug(4) << "Not contained in any heap object\n";
+            return "";
+        }
+
+
+        std::ostringstream name;
+
+        // Look in the members for the appropriate offset.
+        for (size_t i = 0; i < obj.members.size(); i++) {
+            TypeInfo *t = obj.members[i].type;
+
+            if (!t) continue;
+
+            debug(4) << "Comparing to member " << obj.members[i].name
+                     << " at address " << std::hex << obj.members[i].addr << std::dec
+                     << " with type " << t->name
+                     << " and type type " << (int)t->type << "\n";
+
+
+            if (obj.members[i].addr == addr &&
+                type_name_match(t->name, type_name)) {
+                name << obj.members[i].name;
+                return name.str();
+            }
+
+            // For arrays, we only unpacked the first element.
+            if (t->type == TypeInfo::Array) {
+                TypeInfo *elem_type = t->members[0].type;
+                uint64_t array_start_addr = obj.members[i].addr;
+                uint64_t array_end_addr = array_start_addr + t->size * elem_type->size;
+                debug(4) << "Array runs from " << std::hex << array_start_addr << " to " << array_end_addr << "\n";
+                if (elem_type && addr >= array_start_addr && addr < array_end_addr) {
+                    // Adjust the query address backwards to lie
+                    // within the first array element and remember the
+                    // array index to correct the name later.
+                    uint64_t containing_elem = (addr - array_start_addr) / elem_type->size;
+                    addr -= containing_elem * elem_type->size;
+                    debug(4) << "Query belongs to this array. Adjusting query address backwards to "
+                             << std::hex << addr << std::dec << "\n";
+                    name << obj.members[i].name << '[' << containing_elem << ']';
+                }
+            } else if (t->type == TypeInfo::Struct ||
+                       t->type == TypeInfo::Class ||
+                       t->type == TypeInfo::Primitive) {
+                // If I'm not this member, but am contained within it, incorporate its name.
+                uint64_t struct_start_addr = obj.members[i].addr;
+                uint64_t struct_end_addr = struct_start_addr + t->size;
+                debug(4) << "Struct runs from " << std::hex << struct_start_addr << " to " << struct_end_addr << "\n";
+                if (addr >= struct_start_addr && addr < struct_end_addr) {
+                    name << obj.members[i].name << '.';
+                }
+            }
+        }
+
+        debug(4) << "Didn't seem to be any of the members of this heap object\n";
         return "";
     }
 
@@ -425,6 +647,8 @@ public:
             debug(4) << "Bailing out because containing function used an unknown mechanism for specifying stack offsets\n";
             return "";
         }
+
+        debug(4) << "Searching for var at offset " << offset << "\n";
 
         for (size_t j = 0; j < func->variables.size(); j++) {
             const LocalVariable &var = func->variables[j];
@@ -625,21 +849,50 @@ public:
 
 private:
 
-    llvm::object::ObjectFile *load_object_file(const std::string &binary) {
-        // Open the object file in question
-        #if LLVM_VERSION > 34
-        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile> > maybe_obj =
+    void load_and_parse_object_file(const std::string &binary) {
+        llvm::object::ObjectFile *obj = NULL;
+
+        // Open the object file in question. The API to do this keeps changing.
+        #if LLVM_VERSION >= 36
+
+        llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
 
         if (!maybe_obj) {
             debug(1) << "Failed to load binary:" << binary << "\n";
-            return NULL;
+            return;
         }
 
-        return maybe_obj.get().release();
+        obj = maybe_obj.get().getBinary();
+
+        #elif LLVM_VERSION >= 35
+
+        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
+
+        if (!maybe_obj) {
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
+        }
+
+        obj = maybe_obj.get().get();
+
         #else
-        return llvm::object::ObjectFile::createObjectFile(binary);
+        obj = llvm::object::ObjectFile::createObjectFile(binary);
         #endif
+
+        if (obj) {
+            working = true;
+            parse_object_file(obj);
+
+            #if LLVM_VERSION < 35
+            // It's not memory-managed in older LLVMs.
+            delete obj;
+            #endif
+        } else {
+            debug(1) << "Could not load object file: " << binary << "\n";
+            working = false;
+        }
     }
 
     void parse_object_file(llvm::object::ObjectFile *obj) {
@@ -764,8 +1017,7 @@ private:
 
             uint64_t start_of_unit = off;
 
-            uint16_t version = e.getU16(&off);
-            (void)version;
+            uint16_t dwarf_version = e.getU16(&off);
 
             uint64_t debug_abbrev_offset = 0;
             if (dwarf_64) {
@@ -777,10 +1029,10 @@ private:
 
             uint8_t address_size = e.getU8(&off);
 
-            vector<pair<FunctionInfo, int> > func_stack;
-            vector<pair<TypeInfo, int> > type_stack;
-            vector<pair<std::string, int> > namespace_stack;
-            vector<pair<vector<LiveRange>, int> > live_range_stack;
+            vector<pair<FunctionInfo, int>> func_stack;
+            vector<pair<TypeInfo, int>> type_stack;
+            vector<pair<std::string, int>> namespace_stack;
+            vector<pair<vector<LiveRange>, int>> live_range_stack;
 
             int stack_depth = 0;
 
@@ -811,6 +1063,7 @@ private:
             const unsigned attr_high_pc = 0x12;
             const unsigned attr_upper_bound = 0x2f;
             const unsigned attr_abstract_origin = 0x31;
+            const unsigned attr_count = 0x37;
             const unsigned attr_data_member_location = 0x38;
             const unsigned attr_frame_base = 0x40;
             const unsigned attr_specification = 0x47;
@@ -992,7 +1245,8 @@ private:
                     }
                     case 16: // ref_addr (offset from beginning of debug_info. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
-                        if (dwarf_64) {
+                        if ((dwarf_version <= 2 && address_size == 8) ||
+                            (dwarf_version > 2 && dwarf_64)) {
                             val = e.getU64(&off);
                         } else {
                             val = e.getU32(&off);
@@ -1135,6 +1389,8 @@ private:
                             m.stack_offset = 0;
                             type_info.members.push_back(m);
                             type_info.type = TypeInfo::Pointer;
+                            // Assume the size is the address size
+                            type_info.size = address_size;
                         } else if (attr == attr_byte_size) {
                             // Should really be 4 or 8
                             type_info.size = val;
@@ -1169,6 +1425,10 @@ private:
                             type_info.members.push_back(m);
                             type_info.type = TypeInfo::Array;
                         } else if (attr == attr_byte_size) {
+                            // According to the dwarf spec, this
+                            // should be the number of bytes the array
+                            // occupies, but compilers seem to emit
+                            // the number of array entries instead.
                             type_info.size = val;
                         }
                     } else if (fmt.tag == tag_variable) {
@@ -1234,6 +1494,10 @@ private:
                             type_stack.size() &&
                             type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val+1;
+                        } else if (attr == attr_count &&
+                                   type_stack.size() &&
+                                   type_stack.back().first.type == TypeInfo::Array) {
+                            type_stack.back().first.size = val;
                         }
                     } else if (fmt.tag == tag_inlined_subroutine ||
                                fmt.tag == tag_lexical_block) {
@@ -1480,18 +1744,34 @@ private:
                     new_vars.insert(new_vars.begin() + j + 1,
                                     v.type->members.begin(),
                                     v.type->members.end());
-                    // Correct the stack offsets and names
-                    for (size_t k = 0; k < members; k++) {
-                        new_vars[j+k+1].stack_offset += new_vars[j].stack_offset;
-                        if (new_vars[j+k+1].name.size() &&
-                            new_vars[j].name.size()) {
-                            new_vars[j+k+1].name = new_vars[j].name + "." + new_vars[j+k+1].name;
+
+                    // Typedefs retain the same name and stack offset
+                    if (new_vars[j].type->type == TypeInfo::Typedef) {
+                        new_vars[j+1].name = new_vars[j].name;
+                        new_vars[j+1].stack_offset = new_vars[j].stack_offset;
+                    } else {
+                        // Correct the stack offsets and names
+                        for (size_t k = 0; k < members; k++) {
+                            new_vars[j+k+1].stack_offset += new_vars[j].stack_offset;
+                            if (new_vars[j+k+1].name.size() &&
+                                new_vars[j].name.size()) {
+                                new_vars[j+k+1].name = new_vars[j].name + "." + new_vars[j+k+1].name;
+                            }
                         }
                     }
-
                 }
             }
             functions[i].variables.swap(new_vars);
+
+            if (functions[i].variables.size()) {
+                debug(4) << "Function " << functions[i].name << ":\n";
+                for (size_t j = 0; j < functions[i].variables.size(); j++) {
+                    if (functions[i].variables[j].type) {
+                        debug(4) << " " << functions[i].variables[j].type->name << " " << functions[i].variables[j].name << "\n";
+                    }
+                }
+            }
+
         }
 
         // Unpack class members of global variables
@@ -1622,6 +1902,9 @@ private:
                 }
             }
 
+            // The first source file index for this compilation unit.
+            int source_files_base = source_files.size();
+
             while (off < end_header_off) {
                 const char *name = e.getCStr(&off);
                 if (name && name[0]) {
@@ -1682,41 +1965,41 @@ private:
                     // Extended opcodes
                     uint32_t ext_offset = off;
                     uint64_t len = e.getULEB128(&off);
-                uint32_t arg_size = len - (off - ext_offset);
-                uint8_t sub_opcode = e.getU8(&off);
-                switch (sub_opcode) {
-                case 1: // end_sequence
-                {
-                    state.end_sequence = true;
-                    state.append_row(source_lines);
-                    state = initial_state;
-                    break;
-                }
-                case 2: // set_address
-                {
-                    state.address = e.getAddress(&off);
-                    break;
-                }
-                case 3: // define_file
-                {
-                    const char *name = e.getCStr(&off);
-                    uint64_t dir_index = e.getULEB128(&off);
-                    uint64_t mod_time = e.getULEB128(&off);
-                    uint64_t length = e.getULEB128(&off);
-                    (void)mod_time;
-                    (void)length;
-                    assert(dir_index < include_dirs.size());
-                    source_files.push_back(include_dirs[dir_index] + "/" + name);
-                    break;
-                }
-                case 4: // set_discriminator
-                {
-                    state.discriminator = e.getULEB128(&off);
-                    break;
-                }
-                default: // Some unknown thing. Skip it.
-                    off += arg_size;
-                }
+                    uint32_t arg_size = len - (off - ext_offset);
+                    uint8_t sub_opcode = e.getU8(&off);
+                    switch (sub_opcode) {
+                    case 1: // end_sequence
+                    {
+                        state.end_sequence = true;
+                        state.append_row(source_lines);
+                        state = initial_state;
+                        break;
+                    }
+                    case 2: // set_address
+                    {
+                        state.address = e.getAddress(&off);
+                        break;
+                    }
+                    case 3: // define_file
+                    {
+                        const char *name = e.getCStr(&off);
+                        uint64_t dir_index = e.getULEB128(&off);
+                        uint64_t mod_time = e.getULEB128(&off);
+                        uint64_t length = e.getULEB128(&off);
+                        (void)mod_time;
+                        (void)length;
+                        assert(dir_index < include_dirs.size());
+                        source_files.push_back(include_dirs[dir_index] + "/" + name);
+                        break;
+                    }
+                    case 4: // set_discriminator
+                    {
+                        state.discriminator = e.getULEB128(&off);
+                        break;
+                    }
+                    default: // Some unknown thing. Skip it.
+                        off += arg_size;
+                    }
                 } else if (opcode < opcode_base) {
                     // A standard opcode
                     switch (opcode) {
@@ -1743,7 +2026,7 @@ private:
                     }
                     case 4: // set_file
                     {
-                        state.file = e.getULEB128(&off) - 1;
+                        state.file = e.getULEB128(&off) - 1 + source_files_base;
                         break;
                     }
                     case 5: // set_column
@@ -1897,9 +2180,14 @@ std::string get_variable_name(const void *var, const std::string &expected_type)
     if (!debug_sections->working) return "";
     std::string name = debug_sections->get_stack_variable_name(var, expected_type);
     if (name.empty()) {
+        // Maybe it's a member of a heap object.
+        name = debug_sections->get_heap_member_name(var, expected_type);
+    }
+    if (name.empty()) {
         // Maybe it's a global
         name = debug_sections->get_global_variable_name(var, expected_type);
     }
+
     return name;
 }
 
@@ -1907,6 +2195,19 @@ std::string get_source_location() {
     if (!debug_sections) return "";
     if (!debug_sections->working) return "";
     return debug_sections->get_source_location();
+}
+
+void register_heap_object(const void *obj, size_t size, const void *helper) {
+    if (!debug_sections) return;
+    if (!debug_sections->working) return;
+    if (!helper) return;
+    debug_sections->register_heap_object(obj, size, helper);
+}
+
+void deregister_heap_object(const void *obj, size_t size) {
+    if (!debug_sections) return;
+    if (!debug_sections->working) return;
+    debug_sections->deregister_heap_object(obj, size);
 }
 
 bool saves_frame_pointer(void *fn) {
@@ -1960,11 +2261,14 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
 
 }
 }
+}
 
 #else // WITH_INTROSPECTION
 
 namespace Halide {
 namespace Internal {
+namespace Introspection {
+
 std::string get_variable_name(const void *var, const std::string &expected_type) {
     return "";
 }
@@ -1973,9 +2277,16 @@ std::string get_source_location() {
     return "";
 }
 
+void register_heap_object(const void *obj, size_t size, const void *helper) {
+}
+
+void deregister_heap_object(const void *obj, size_t size) {
+}
+
 void test_compilation_unit(bool (*test)(), void (*calib)()) {
 }
 
+}
 }
 }
 

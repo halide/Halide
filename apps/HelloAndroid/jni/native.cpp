@@ -7,7 +7,8 @@
 #include <stdlib.h>
 
 #include "halide_generated.h"
-#include <HalideRuntime.h>
+#include "HalideRuntime.h"
+#include "HalideRuntimeOpenCL.h"
 
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
@@ -16,11 +17,9 @@
 
 extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
 extern "C" int halide_host_cpu_count();
+extern "C" int halide_start_clock(void *user_context);
 extern "C" int64_t halide_current_time_ns();
 extern "C" int halide_copy_to_host(void *, buffer_t *);
-extern "C" int halide_copy_to_dev(void *, buffer_t *);
-extern "C" int halide_dev_malloc(void *, buffer_t *);
-extern "C" int halide_dev_free(void *, buffer_t *);
 
 int handler(void */* user_context */, const char *msg) {
     LOGE("%s", msg);
@@ -28,10 +27,11 @@ int handler(void */* user_context */, const char *msg) {
 
 extern "C" {
 JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
-    JNIEnv *env, jobject obj, jbyteArray jSrc, jint j_w, jint j_h, jobject surf) {
+    JNIEnv *env, jobject obj, jbyteArray jSrc, jint j_w, jint j_h, jint j_orientation, jobject surf) {
 
-    const int w = j_w, h = j_h;
+    const int w = j_w, h = j_h, orientation = j_orientation;
 
+    halide_start_clock(NULL);
     halide_set_error_handler(handler);
 
     unsigned char *src = (unsigned char *)env->GetByteArrayElements(jSrc, NULL);
@@ -40,9 +40,12 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         return;
     }
 
-    ANativeWindow *win = ANativeWindow_fromSurface(env, surf);
-    ANativeWindow_acquire(win);
+    LOGD("[output window size] j_w = %d, j_h = %d", j_w, j_h);
+    LOGD("[src array length] jSrc.length = %d", env->GetArrayLength(jSrc));
 
+    ANativeWindow *win = ANativeWindow_fromSurface(env, surf);
+
+    
     static bool first_call = true;
     static unsigned counter = 0;
     static unsigned times[16];
@@ -65,7 +68,9 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
     uint8_t *dst = (uint8_t *)buf.bits;
 
     // If we're using opencl, use the gpu backend for it.
-    halide_set_ocl_device_type("gpu");
+#if COMPILING_FOR_OPENCL
+    halide_opencl_set_device_type("gpu");
+#endif
 
     // Make these static so that we can reuse device allocations across frames.
     static buffer_t srcBuf = {0};
@@ -84,6 +89,13 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         srcBuf.min[1] = 0;
         srcBuf.elem_size = 1;
 
+        if (orientation >= 180) {
+            // Camera sensor is probably upside down (e.g. Nexus 5x)
+            srcBuf.host += w*h-1;
+            srcBuf.stride[0] = -1;
+            srcBuf.stride[1] = -w;
+        }
+        
         dstBuf.host = dst;
         dstBuf.extent[0] = w;
         dstBuf.extent[1] = h;
@@ -95,8 +107,8 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         dstBuf.min[1] = 0;
         dstBuf.elem_size = 1;
 
-        // Just copy over chrominance untouched
-        memcpy(dst + w*h, src + w*h, (w*h)/2);
+        // Just set chroma to gray.
+        memset(dst + w*h, 128, (w*h)/2);
 
         int64_t t1 = halide_current_time_ns();
         halide_generated(&srcBuf, &dstBuf);

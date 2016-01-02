@@ -7,8 +7,8 @@
  * Halide is a programming language designed to make it easier to
  * write high-performance image processing code on modern
  * machines. Its front end is embedded in C++. Compiler
- * targets include x86/SSE, ARM v7/NEON, CUDA, Native Client, and
- * OpenCL.
+ * targets include x86/SSE, ARM v7/NEON, CUDA, Native Client,
+ * OpenCL, and Metal.
  *
  * You build a Halide program by writing C++ code using objects of
  * type \ref Halide::Var, \ref Halide::Expr, and \ref Halide::Func,
@@ -29,7 +29,7 @@
  *
  * For defining, scheduling, and evaluating basic pipelines:
  *
- * Halide::Func, Halide::Var
+ * Halide::Func, Halide::Stage, Halide::Var
  *
  * Our image data type:
  *
@@ -63,4 +63,11 @@
  * \example tutorial/lesson_07_multi_stage_pipelines.cpp
  * \example tutorial/lesson_08_scheduling_2.cpp
  * \example tutorial/lesson_09_update_definitions.cpp
+ * \example tutorial/lesson_10_aot_compilation_generate.cpp
+ * \example tutorial/lesson_10_aot_compilation_run.cpp
+ * \example tutorial/lesson_11_cross_compilation.cpp
+ * \example tutorial/lesson_12_using_the_gpu.cpp
+ * \example tutorial/lesson_13_tuples.cpp
+ * \example tutorial/lesson_14_types.cpp
+ * \example tutorial/lesson_15_generators.cpp
  */

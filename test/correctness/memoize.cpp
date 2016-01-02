@@ -1,8 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Halide.h>
-#include <HalideRuntime.h>
+#include "Halide.h"
+#include "HalideRuntime.h"
 
 using namespace Halide;
 
@@ -65,9 +65,9 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t
             in->extent[i] = out->extent[i];
             in->stride[i] = out->stride[i];
         }
-      in->elem_size = out->elem_size;
+        in->elem_size = out->elem_size;
     } else if (out->host) {
-        assert(stage < sizeof(call_count_staged)/sizeof(call_count_staged[0]));
+        assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
         for (int32_t i = 0; i < out->extent[0]; i++) {
             for (int32_t j = 0; j < out->extent[1]; j++) {
@@ -79,18 +79,35 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t
     return 0;
 }
 
+void simple_free(void *user_context, void *ptr) {
+    free(ptr);
+}
+
+void *flakey_malloc(void */* user_context */, size_t x) {
+    if ((rand() % 4) == 0) {
+        return NULL;
+    } else {
+        return malloc(x);
+    }
+}
+
+bool error_occured = false;
+void record_error(void *user_context, const char *msg) {
+    error_occured = true;
+}
+
 int main(int argc, char **argv) {
 
     {
         call_count = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
-        Func f;
-        f() = count_calls(0, 0);
-        f.compute_root().memoize();
+        Func f, f_memoized;
+        f_memoized() = count_calls(0, 0);
+        f_memoized.compute_root().memoize();
+        f() = f_memoized();
+        f_memoized.compute_root().memoize();
 
         Image<uint8_t> result1 = f.realize();
         Image<uint8_t> result2 = f.realize();
@@ -105,18 +122,16 @@ int main(int argc, char **argv) {
         call_count = 0;
         Param<int32_t> coord;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f, g;
-	Var x, y;
+        Var x, y;
         f() = count_calls(coord, coord);
         f.compute_root().memoize();
 
-	g(x, y) = f();
+        g(x, y) = f();
 
-	coord.set(0);
+        coord.set(0);
         Image<uint8_t> out1 = g.realize(256, 256);
         Image<uint8_t> out2 = g.realize(256, 256);
 
@@ -128,7 +143,7 @@ int main(int argc, char **argv) {
         }
         assert(call_count == 1);
 
-	coord.set(1);
+        coord.set(1);
         Image<uint8_t> out3 = g.realize(256, 256);
         Image<uint8_t> out4 = g.realize(256, 256);
 
@@ -144,9 +159,7 @@ int main(int argc, char **argv) {
     {
         call_count = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls",
-                                  std::vector<ExternFuncArgument>(),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -169,14 +182,10 @@ int main(int argc, char **argv) {
 
     {
         Func count_calls_23;
-        count_calls_23.define_extern("count_calls_with_arg",
-                                     Internal::vec(ExternFuncArgument(cast<uint8_t>(23))),
-                                     UInt(8), 2);
+        count_calls_23.define_extern("count_calls_with_arg", {cast<uint8_t>(23)}, UInt(8), 2);
 
         Func count_calls_42;
-        count_calls_42.define_extern("count_calls_with_arg",
-                                     Internal::vec(ExternFuncArgument(cast<uint8_t>(42))),
-                                     UInt(8), 2);
+        count_calls_42.define_extern("count_calls_with_arg", {cast<uint8_t>(42)}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -202,14 +211,10 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls_val1;
-        count_calls_val1.define_extern("count_calls_with_arg",
-                                       Internal::vec(ExternFuncArgument(Expr(val1))),
-                                       UInt(8), 2);
+        count_calls_val1.define_extern("count_calls_with_arg", {val1}, UInt(8), 2);
 
         Func count_calls_val2;
-        count_calls_val2.define_extern("count_calls_with_arg",
-                                       Internal::vec(ExternFuncArgument(Expr(val2))),
-                                       UInt(8), 2);
+        count_calls_val2.define_extern("count_calls_with_arg", {val2}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -254,9 +259,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -282,9 +285,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(memoize_tag(cast<uint8_t>(val)))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {memoize_tag(cast<uint8_t>(val))}, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -312,9 +313,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
         Func f, g, h;
         Var x;
 
@@ -345,9 +344,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -390,9 +387,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -401,7 +396,7 @@ int main(int argc, char **argv) {
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
@@ -415,7 +410,68 @@ int main(int argc, char **argv) {
             }
         }
         // TODO work out an assertion on call count here.
-        printf("Call count is %d.\n", call_count_with_arg);
+        fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
+    }
+
+    {
+        // Test flushing entire cache with a single element larger than the cache
+        Param<float> val;
+
+        call_count_with_arg = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+
+        Func f;
+        Var x, y, xi, yi;
+        f(x, y) = count_calls(x, y) + cast<uint8_t>(x);
+        count_calls.compute_root().memoize();
+
+        Func g;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
+
+        for (int v = 0; v < 1000; v++) {
+            int r = rand() % 256;
+            val.set((float)r);
+            Image<uint8_t> out1 = g.realize(128, 128);
+
+            for (int32_t i = 0; i < 100; i++) {
+                for (int32_t j = 0; j < 100; j++) {
+                    assert(out1(i, j) == (uint8_t)(3 * r + i + (i - 1) + (i + 1)));
+                }
+            }
+        }
+
+        // TODO work out an assertion on call count here.
+        fprintf(stderr, "Call count before oversize realize is %d.\n", call_count_with_arg);
+        call_count_with_arg = 0;
+
+        Image<uint8_t> big = g.realize(1024, 1024);
+        Image<uint8_t> big2 = g.realize(1024, 1024);
+
+        // TODO work out an assertion on call count here.
+        fprintf(stderr, "Call count after oversize realize is %d.\n", call_count_with_arg);
+
+        call_count_with_arg = 0;
+        for (int v = 0; v < 1000; v++) {
+            int r = rand() % 256;
+            val.set((float)r);
+            Image<uint8_t> out1 = g.realize(128, 128);
+
+            for (int32_t i = 0; i < 100; i++) {
+                for (int32_t j = 0; j < 100; j++) {
+                    assert(out1(i, j) == (uint8_t)(3 * r + i + (i - 1) + (i + 1)));
+                }
+            }
+        }
+
+        fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {
@@ -423,9 +479,7 @@ int main(int argc, char **argv) {
         Param<float> val;
 
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg_parallel",
-                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
-                                  UInt(8), 3);
+        count_calls.define_extern("count_calls_with_arg_parallel", {cast<uint8_t>(val)}, UInt(8), 3);
 
         Func f;
         Var x, y;
@@ -440,7 +494,7 @@ int main(int argc, char **argv) {
         g.parallel(y, 16);
 
         val.set(23.0f);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
         Image<uint8_t> out = g.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
@@ -451,8 +505,11 @@ int main(int argc, char **argv) {
 
         // TODO work out an assertion on call counts here.
         for (int i = 0; i < 8; i++) {
-          printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
+          fprintf(stderr, "Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {
@@ -480,13 +537,11 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 3; i++) {
           stage[i].compute_root();
         }
-#if DYNAMIC_SKIP_STAGE_BUG_FIXED // This makes the test fail to compile
         stage[3].compute_root().memoize();
-#else
-        stage[3].compute_root();
-#endif
+        Func output;
+        output(_) = stage[3](_);
         val.set(23.0f);
-        Image<uint8_t> result = stage[3].realize(128, 128);
+        Image<uint8_t> result = output.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
@@ -495,10 +550,10 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < 4; i++) {
-          printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+          fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
-        result = stage[3].realize(128, 128);
+        result = output.realize(128, 128);
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
               assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
@@ -506,11 +561,77 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < 4; i++) {
-            printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+            fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
     }
 
-    printf("Success!\n");
+    {
+        // Test out of memory handling.
+        Param<float> val;
+
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+
+        Func f;
+        Var x, y, xi, yi;
+        f(x, y) = Tuple(count_calls(x, y) + cast<uint8_t>(x), x);
+        count_calls.compute_root().memoize();
+        f.compute_root().memoize();
+
+        Func g;
+        g(x, y) = Tuple(f(x, y)[0] + f(x - 1, y)[0] + f(x + 1, y)[0], f(x, y)[1]);
+
+        Pipeline pipe(g);
+        pipe.set_error_handler(record_error);
+        pipe.set_custom_allocator(flakey_malloc, simple_free);
+
+        int total_errors = 0;
+        int completed = 0;
+        for (int trial = 0; trial < 100; trial++) {
+            call_count_with_arg = 0;
+            error_occured = false;
+
+            val.set(23.0f + trial);
+            Realization out = pipe.realize(16, 16);
+            if (error_occured) {
+                total_errors++;
+            } else {
+                Image<uint8_t> out0 = out[0];
+                Image<int32_t> out1 = out[1];
+
+                for (int32_t i = 0; i < 16; i++) {
+                    for (int32_t j = 0; j < 16; j++) {
+                      assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                        assert(out1(i, j) == i);
+                    }
+                }
+
+                error_occured = false;
+                out = pipe.realize(16, 16);
+                if (error_occured) {
+                    total_errors++;
+                } else {
+                    out0 = out[0];
+                    out1 = out[1];
+
+                    for (int32_t i = 0; i < 16; i++) {
+                        for (int32_t j = 0; j < 16; j++) {
+                          assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                            assert(out1(i, j) == i);
+                        }
+                    }
+                    assert(call_count_with_arg == 1);
+                    completed++;
+                }
+            }
+        }
+
+        fprintf(stderr, "In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
+
+
+    }
+
+    fprintf(stderr, "Success!\n");
     return 0;
 }

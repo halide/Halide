@@ -1,10 +1,10 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <iostream>
 
 using namespace Halide;
 
 void check_pure(Func f) {
-    if (f.is_reduction()) {
+    if (f.has_update_definition()) {
         std::cout << "f's reduction definition was supposed to fail!\n";
         exit(-1);
     }

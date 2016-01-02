@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
     f(x, y, z) = x*y+z*k+1;
 
-    f.gpu_tile(x, y, 16, 16, GPU_Default);
+    f.gpu_tile(x, y, 16, 16);
     f.parallel(z);
 
     Image<int> im = f.realize(64, 64, 64);

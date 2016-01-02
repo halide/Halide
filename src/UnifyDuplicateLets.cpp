@@ -12,7 +12,7 @@ using std::string;
 class UnifyDuplicateLets : public IRMutator {
     using IRMutator::visit;
 
-    map<Expr, string, ExprDeepCompare> scope;
+    map<Expr, string, IRDeepCompare> scope;
     map<string, string> rewrites;
 
 public:
@@ -21,7 +21,7 @@ public:
     Expr mutate(Expr e) {
 
         if (e.defined()) {
-            map<Expr, string, ExprDeepCompare>::iterator iter = scope.find(e);
+            map<Expr, string, IRDeepCompare>::iterator iter = scope.find(e);
             if (iter != scope.end()) {
                 expr = Variable::make(e.type(), iter->second);
             } else {
@@ -59,7 +59,7 @@ protected:
         bool should_pop = false;
 
         if (!contains_calls) {
-            map<Expr, string, ExprDeepCompare>::iterator iter = scope.find(value);
+            map<Expr, string, IRDeepCompare>::iterator iter = scope.find(value);
             if (iter == scope.end()) {
                 scope[value] = op->name;
                 should_pop = true;

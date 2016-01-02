@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 
@@ -50,11 +50,11 @@ int main(int argc, char **argv) {
     ok = ok && test_type<int32_t>();
     ok = ok && test_type<float>();
     ok = ok && test_type<double>();
-    
+
     if (ok) {
         printf("Success!\n");
         return 0;
     } else {
-        return -1; 
+        return -1;
     }
 }

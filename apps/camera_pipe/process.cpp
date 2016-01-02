@@ -1,29 +1,28 @@
-#include <arpa/inet.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/time.h>
-#include <unistd.h>
-
-extern "C" {
-  #include "curved.h"
-}
-#include <static_image.h>
-#include <image_io.h>
-
 #include "fcam/Demosaic.h"
 #include "fcam/Demosaic_ARM.h"
 
+#include "benchmark.h"
+#include "curved.h"
+#include "halide_image.h"
+#include "halide_image_io.h"
+
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cassert>
+
+using namespace Halide::Tools;
+
 int main(int argc, char **argv) {
-    if (argc < 6) {
-        printf("Usage: ./process raw.png color_temp gamma contrast output.png\n"
-               "e.g. ./process raw.png 3200 2 50 output.png");
+    if (argc < 7) {
+        printf("Usage: ./process raw.png color_temp gamma contrast timing_iterations output.png\n"
+               "e.g. ./process raw.png 3200 2 50 5 output.png");
         return 0;
     }
 
-    Image<uint16_t> input = load<uint16_t>(argv[1]);
-    Image<uint8_t> output(2560-32, 1920, 3); // image size is hard-coded for the N900 raw pipeline
+    Image<uint16_t> input = load_image(argv[1]);
+    fprintf(stderr, "%d %d\n", input.width(), input.height());
+    Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
@@ -45,44 +44,28 @@ int main(int argc, char **argv) {
     float color_temp = atof(argv[2]);
     float gamma = atof(argv[3]);
     float contrast = atof(argv[4]);
+    int timing_iterations = atoi(argv[5]);
 
-    timeval t1, t2;
-    unsigned int bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
-        gettimeofday(&t1, NULL);
+    double best;
+
+    best = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast,
                input, matrix_3200, matrix_7000, output);
-        gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        if (t < bestT) bestT = t;
-        if (i % 5 == 0) sleep(1);
-    }
-    printf("Halide:\t%u\n", bestT);
-    save(output, argv[5]);
+    });
+    fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
+    save_image(output, argv[6]);
 
-    bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
-        gettimeofday(&t1, NULL);
+    best = benchmark(timing_iterations, 1, [&]() {
         FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
-        gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        if (t < bestT) bestT = t;
-        if (i % 5 == 0) sleep(1);
-    }
-    printf("C++:\t%u\n", bestT);
-    save(output, "fcam_c.png");
+    });
+    fprintf(stderr, "C++:\t%gus\n", best * 1e6);
+    save_image(output, "fcam_c.png");
 
-    bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
-        gettimeofday(&t1, NULL);
+    best = benchmark(timing_iterations, 1, [&]() {;
         FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
-        gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        if (t < bestT) bestT = t;
-        if (i % 5 == 0) sleep(1);
-    }
-    printf("ASM:\t%u\n", bestT);
-    save(output, "fcam_arm.png");
+    });
+    fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
+    save_image(output, "fcam_arm.png");
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms

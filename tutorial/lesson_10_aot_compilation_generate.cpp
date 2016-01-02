@@ -1,4 +1,4 @@
-// Halide tutorial lesson 10.
+// Halide tutorial lesson 10: AOT compilation part 1
 
 // This lesson demonstrates how to use Halide as an more traditional
 // ahead-of-time (AOT) compiler.
@@ -10,13 +10,13 @@
 // is a multi-step process.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_10*generate.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_10_generate
+// g++ lesson_10*generate.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_10_generate
 // LD_LIBRARY_PATH=../bin ./lesson_10_generate
 // g++ lesson_10*run.cpp lesson_10_halide.o -lpthread -o lesson_10_run
 // ./lesson_10_run
 
 // On os x:
-// g++ lesson_10*generate.cpp -g -I ../include -L ../bin -lHalide -o lesson_10_generate
+// g++ lesson_10*generate.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -o lesson_10_generate
 // DYLD_LIBRARY_PATH=../bin ./lesson_10_generate
 // g++ lesson_10*run.cpp lesson_10_halide.o -o lesson_10_run
 // ./lesson_10_run
@@ -25,7 +25,13 @@
 // - Doesn't do any jit compilation at runtime, so it's fast.
 // - Doesn't depend on libHalide at all, so it's a small, easy-to-deploy binary.
 
-#include <Halide.h>
+// If you have the entire Halide source tree, you can also build it by
+// running:
+//    make tutorial_lesson_10_aot_compilation_run
+// in a shell with the current directory at the top of the halide
+// source tree.
+
+#include "Halide.h"
 #include <stdio.h>
 using namespace Halide;
 
@@ -38,13 +44,15 @@ int main(int argc, char **argv) {
     // The pipeline will depend on one scalar parameter.
     Param<uint8_t> offset;
 
-    // And take one grayscale 8-bit input buffer. The first parameter
-    // gives the type of a pixel, and the second specifies the number
-    // of dimensions (not the number of channels!). For a grayscale
-    // image this is 2; for a color image it's three.
+    // And take one grayscale 8-bit input buffer. The first
+    // constructor argument gives the type of a pixel, and the second
+    // specifies the number of dimensions (not the number of
+    // channels!). For a grayscale image this is two; for a color
+    // image it's three. Currently, four dimensions is the maximum for
+    // inputs and outputs.
     ImageParam input(type_of<uint8_t>(), 2);
 
-    // If we were jit-compiling, this would just be an int and an
+    // If we were jit-compiling, these would just be an int and an
     // Image, but because we want to compile the pipeline once and
     // have it work for any value of the parameter, we need to make a
     // Param object, which can be used like an Expr, and an ImageParam
@@ -63,9 +71,7 @@ int main(int argc, char **argv) {
     // For AOT-compiled code, we need to explicitly declare the
     // arguments to the routine. This routine takes two. Arguments are
     // usually Params or ImageParams.
-    std::vector<Argument> args(2);
-    args[0] = input;
-    args[1] = offset;
+    std::vector<Argument> args = {input, offset};
     brighter.compile_to_file("lesson_10_halide", args);
 
     // If you're using C++11, you can just say:

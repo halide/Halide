@@ -1,25 +1,13 @@
 #ifndef HALIDE_MINI_CUDA_H
 #define HALIDE_MINI_CUDA_H
 
+namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
+
 #if defined(WINDOWS) && defined(BITS_32)
 #define CUDAAPI __stdcall
 #else
 #define CUDAAPI
 #endif
-
-// API version > 3020
-#define cuCtxCreate                         cuCtxCreate_v2
-#define cuMemAlloc                          cuMemAlloc_v2
-#define cuMemFree                           cuMemFree_v2
-#define cuMemcpyHtoD                        cuMemcpyHtoD_v2
-#define cuMemcpyDtoH                        cuMemcpyDtoH_v2
-#define cuMemcpy3D                          cuMemcpy3D_v2
-// API version >= 4000
-#define cuCtxDestroy                        cuCtxDestroy_v2
-#define cuCtxPopCurrent                     cuCtxPopCurrent_v2
-#define cuCtxPushCurrent                    cuCtxPushCurrent_v2
-#define cuStreamDestroy                     cuStreamDestroy_v2
-#define cuEventDestroy                      cuEventDestroy_v2
 
 #ifdef BITS_64
 typedef unsigned long long CUdeviceptr;
@@ -213,50 +201,6 @@ typedef struct CUDA_MEMCPY3D_st {
 
 #define CU_POINTER_ATTRIBUTE_CONTEXT 1
 
-extern "C" {
-
-CUresult CUDAAPI cuInit(unsigned int Flags);
-CUresult CUDAAPI cuDeviceGetCount(int *count);
-CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal);
-CUresult CUDAAPI cuDeviceGetAttribute(int *, CUdevice_attribute attrib, CUdevice dev);
-CUresult CUDAAPI cuDeviceGetName(char *, int len, CUdevice dev);
-CUresult CUDAAPI cuDeviceTotalMem(size_t *, CUdevice dev);
-CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev);
-CUresult CUDAAPI cuCtxDestroy(CUcontext pctx);
-CUresult CUDAAPI cuCtxGetApiVersion(CUcontext ctx, unsigned int *version);
-CUresult CUDAAPI cuModuleLoadData(CUmodule *module, const void *image);
-CUresult CUDAAPI cuModuleUnload(CUmodule module);
-CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name);
-CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
-CUresult CUDAAPI cuMemFree(CUdeviceptr dptr);
-CUresult CUDAAPI cuMemcpyHtoD(CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount);
-CUresult CUDAAPI cuMemcpyDtoH(void *dstHost, CUdeviceptr srcDevice, size_t ByteCount);
-CUresult CUDAAPI cuMemcpy3D(const CUDA_MEMCPY3D *pCopy);
-CUresult CUDAAPI cuLaunchKernel(CUfunction f,
-                                unsigned int gridDimX,
-                                unsigned int gridDimY,
-                                unsigned int gridDimZ,
-                                unsigned int blockDimX,
-                                unsigned int blockDimY,
-                                unsigned int blockDimZ,
-                                unsigned int sharedMemBytes,
-                                CUstream hStream,
-                                void **kernelParams,
-                                void **extra);
-CUresult CUDAAPI cuCtxSynchronize();
-
-CUresult CUDAAPI cuCtxPushCurrent(CUcontext ctx);
-CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
-
-CUresult CUDAAPI cuEventRecord(CUevent hEvent, CUstream hStream);
-CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags);
-CUresult CUDAAPI cuEventDestroy(CUevent phEvent);
-CUresult CUDAAPI cuEventSynchronize(CUevent hEvent);
-CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUevent hEnd);
-CUresult CUDAAPI cuPointerGetAttribute(void *result, int query, CUdeviceptr ptr);
-CUresult CUDAAPI cuGetErrorName(CUresult error, const char **str);
-CUresult CUDAAPI cuGetErrorString(CUresult error, const char **str);
-
-}
+}}}}
 
 #endif

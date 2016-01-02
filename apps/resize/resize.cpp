@@ -2,25 +2,11 @@
 
 using namespace Halide;
 
-#include <image_io.h>
-
 #include <iostream>
 #include <limits>
 
-#include <sys/time.h>
-
-double now() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    static bool first_call = true;
-    static time_t first_sec = 0;
-    if (first_call) {
-        first_call = false;
-        first_sec = tv.tv_sec;
-    }
-    assert(tv.tv_sec >= first_sec);
-    return (tv.tv_sec - first_sec) + (tv.tv_usec / 1000000.0);
-}
+#include <halide_image_io.h>
+#include <benchmark.h>
 
 enum InterpolationType {
     BOX, LINEAR, CUBIC, LANCZOS
@@ -128,8 +114,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y"), c("c"), k("k");
 
-    Func clamped("clamped");
-    clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    Func clamped = BoundaryConditions::repeat_edge(input);
 
     // For downscaling, widen the interpolation kernel to perform lowpass
     // filtering.
@@ -192,7 +177,7 @@ int main(int argc, char **argv) {
     final.compile_jit(target);
 
     printf("Loading '%s'\n", infile.c_str());
-    Image<float> in_png = load<float>(infile);
+    Image<float> in_png = Tools::load_image(infile);
     int out_width = in_png.width() * scaleFactor;
     int out_height = in_png.height() * scaleFactor;
     Image<float> out(out_width, out_height, 3);
@@ -203,20 +188,8 @@ int main(int argc, char **argv) {
            out_width, out_height,
            kernelInfo[interpolationType].name);
 
-    double min = std::numeric_limits<double>::infinity();
-    const unsigned int iters = 20;
+    double min = benchmark(10, 1, [&]() { final.realize(out); });
+    std::cout << " took min=" << min * 1000 << " msec." << std::endl;
 
-    for (unsigned int x = 0; x < iters; ++x) {
-        double before = now();
-        final.realize(out);
-        double after = now();
-        double amt = after - before;
-
-        std::cout << "   " << amt * 1000 << std::endl;
-        if (amt < min) min = amt;
-
-    }
-    std::cout << " took " << min * 1000 << " msec." << std::endl;
-
-    save(out, outfile);
+    Tools::save_image(out, outfile);
 }

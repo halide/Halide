@@ -3,7 +3,7 @@
 
 #include "IRPrinter.h"
 #include "IROperator.h"
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -13,7 +13,7 @@ using std::string;
 using std::ostringstream;
 
 ostream &operator<<(ostream &out, const Type &type) {
-    switch (type.code) {
+    switch (type.code()) {
     case Type::Int:
         out << "int";
         break;
@@ -27,8 +27,8 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "handle";
         break;
     }
-    out << type.bits;
-    if (type.width > 1) out << 'x' << type.width;
+    out << type.bits();
+    if (type.lanes() > 1) out << 'x' << type.lanes();
     return out;
 }
 
@@ -40,6 +40,53 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
         p.print(ir);
     }
     return stream;
+}
+
+ostream &operator <<(ostream &stream, const Buffer &buffer) {
+    return stream << "buffer " << buffer.name() << " = {...}\n";
+}
+
+ostream &operator<<(ostream &stream, const Module &m) {
+    stream << "Target = " << m.target().to_string() << "\n";
+    for (size_t i = 0; i < m.buffers.size(); i++) {
+        stream << m.buffers[i] << "\n";
+    }
+    for (size_t i = 0; i < m.functions.size(); i++) {
+        stream << m.functions[i] << "\n";
+    }
+    return stream;
+}
+
+ostream &operator<<(ostream &out, const DeviceAPI &api) {
+    switch (api) {
+    case DeviceAPI::Host:
+        break;
+    case DeviceAPI::Parent:
+        out << "<Parent>";
+        break;
+    case DeviceAPI::Default_GPU:
+        out << "<Default_GPU>";
+        break;
+    case DeviceAPI::CUDA:
+        out << "<CUDA>";
+        break;
+    case DeviceAPI::OpenCL:
+        out << "<OpenCL>";
+        break;
+    case DeviceAPI::OpenGLCompute:
+        out << "<OpenGLCompute>";
+        break;
+    case DeviceAPI::GLSL:
+        out << "<GLSL>";
+        break;
+    case DeviceAPI::Renderscript:
+        out << "<Renderscript>";
+        break;
+    case DeviceAPI::Metal:
+        out << "<Metal>";
+        break;
+    }
+    return out;
 }
 
 namespace Internal {
@@ -54,23 +101,24 @@ void IRPrinter::test() {
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
-    Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, store);
+    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x);
-    Stmt for_loop2 = For::make("x", 0, y, For::Vectorized , store2);
-    Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
-    Stmt assertion = AssertStmt::make(y > 3, "y is greater than %d", vec<Expr>(3));
+    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
+    Stmt pipeline = ProducerConsumer::make("buf", for_loop, Stmt(), for_loop2);
+    Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
+                                                         {string("y"), y, 3}, Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), const_true(), let_stmt);
+    Stmt allocate = Allocate::make("buf", f32, {1023}, const_true(), let_stmt);
 
     ostringstream source;
     source << allocate;
     std::string correct_source = \
         "allocate buf[float32 * 1023]\n"
         "let y = 17\n"
-        "assert((y > 3), \"y is greater than %d\", 3)\n"
+        "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
         "produce buf {\n"
         "  parallel (x, -2, (y + 2)) {\n"
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
@@ -88,18 +136,18 @@ void IRPrinter::test() {
     std::cout << "IRPrinter test passed\n";
 }
 
-ostream &operator<<(ostream &out, const For::ForType &type) {
+ostream &operator<<(ostream &out, const ForType &type) {
     switch (type) {
-    case For::Serial:
+    case ForType::Serial:
         out << "for";
         break;
-    case For::Parallel:
+    case ForType::Parallel:
         out << "parallel";
         break;
-    case For::Unrolled:
+    case ForType::Unrolled:
         out << "unrolled";
         break;
-    case For::Vectorized:
+    case ForType::Vectorized:
         out << "vectorized";
         break;
     }
@@ -114,6 +162,34 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
         p.print(ir);
     }
     return stream;
+}
+
+
+ostream &operator <<(ostream &stream, const LoweredFunc &function) {
+    stream << function.linkage << " func " << function.name << " (";
+    for (size_t i = 0; i < function.args.size(); i++) {
+        stream << function.args[i].name;
+        if (i + 1 < function.args.size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") {\n";
+    stream << function.body;
+    stream << "}\n\n";
+    return stream;
+}
+
+
+std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
+    switch (type) {
+    case LoweredFunc::External:
+        out << "external";
+        break;
+    case LoweredFunc::Internal:
+        out << "internal";
+        break;
+    }
+    return out;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {
@@ -134,11 +210,31 @@ void IRPrinter::do_indent() {
 }
 
 void IRPrinter::visit(const IntImm *op) {
-    stream << op->value;
+    if (op->type == Int(32)) {
+        stream << op->value;
+    } else {
+        stream << "(" << op->type << ")" << op->value;
+    }
+}
+
+void IRPrinter::visit(const UIntImm *op) {
+    stream << "(" << op->type << ")" << op->value;
 }
 
 void IRPrinter::visit(const FloatImm *op) {
-    stream << op->value << 'f';
+  switch (op->type.bits()) {
+    case 64:
+        stream << op->value;
+        break;
+    case 32:
+        stream << op->value << 'f';
+        break;
+    case 16:
+        stream << op->value << 'h';
+        break;
+    default:
+        internal_error << "Bad bit-width for float: " << op->type << "\n";
+    }
 }
 
 void IRPrinter::visit(const StringImm *op) {
@@ -332,11 +428,11 @@ void IRPrinter::visit(const Ramp *op) {
     print(op->base);
     stream << ", ";
     print(op->stride);
-    stream << ", " << op->width << ")";
+    stream << ", " << op->lanes << ")";
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << "x" << op->width << "(";
+    stream << "x" << op->lanes << "(";
     print(op->value);
     stream << ")";
 }
@@ -344,7 +440,11 @@ void IRPrinter::visit(const Broadcast *op) {
 void IRPrinter::visit(const Call *op) {
     // Special-case some intrinsics for readability
     if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::extract_buffer_min) {
+        if (op->name == Call::extract_buffer_host) {
+            print(op->args[0]);
+            stream << ".host";
+            return;
+        } else if (op->name == Call::extract_buffer_min) {
             print(op->args[0]);
             stream << ".min[" << op->args[1] << "]";
             return;
@@ -386,15 +486,12 @@ void IRPrinter::visit(const AssertStmt *op) {
     do_indent();
     stream << "assert(";
     print(op->condition);
-    stream << ", " << '"' << op->message << '"';
-    for (size_t i = 0; i < op->args.size(); i++) {
-        stream << ", ";
-        print(op->args[i]);
-    }
+    stream << ", ";
+    print(op->message);
     stream << ")\n";
 }
 
-void IRPrinter::visit(const Pipeline *op) {
+void IRPrinter::visit(const ProducerConsumer *op) {
 
     do_indent();
     stream << "produce " << op->name << " {\n";
@@ -420,7 +517,7 @@ void IRPrinter::visit(const Pipeline *op) {
 void IRPrinter::visit(const For *op) {
 
     do_indent();
-    stream << op->for_type << " (" << op->name << ", ";
+    stream << op->for_type << op->device_api << " (" << op->name << ", ";
     print(op->min);
     stream << ", ";
     print(op->extent);
@@ -479,13 +576,20 @@ void IRPrinter::visit(const Allocate *op) {
         stream << " if ";
         print(op->condition);
     }
+    if (op->new_expr.defined()) {
+        stream << "\n custom_new { " << op->new_expr << " }";
+    }
+    if (!op->free_function.empty()) {
+        stream << "\n custom_delete { " << op->free_function << "(<args>); }";
+    }
     stream << "\n";
     print(op->body);
 }
 
 void IRPrinter::visit(const Free *op) {
     do_indent();
-    stream << "free " << op->name << '\n';
+    stream << "free " << op->name;
+    stream << '\n';
 }
 
 void IRPrinter::visit(const Realize *op) {

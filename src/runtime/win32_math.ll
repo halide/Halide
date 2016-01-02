@@ -72,6 +72,7 @@ define weak_odr float @log_f32(float %x) nounwind uwtable readnone alwaysinline 
        ret float %y
 }
 
+declare float @llvm.fabs.f32(float) nounwind readnone
 declare double @llvm.fabs.f64(double) nounwind readnone
 
 define weak_odr double @abs_f64(double %x) nounwind uwtable readnone noinline {
@@ -114,17 +115,30 @@ define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline
        ret float %y
 }
 
-define weak_odr double @round_f64(double %x) nounwind uwtable readnone noinline {
-       %z = fadd double %x, 0.5
-       %y = tail call double @floor_f64(double %z) nounwind readnone
+declare float @llvm.nearbyint.f32(float) nounwind readnone
+declare double @llvm.nearbyint.f64(double) nounwind readnone
+
+define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @llvm.nearbyint.f32(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @llvm.nearbyint.f64(double %x) nounwind readnone
        ret double %y
 }
 
-define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %xd = fpext float %x to double
-       %yd = tail call double @round_f64(double %xd) nounwind readnone
-       %y = fptrunc double %yd to float
+declare float @llvm.trunc.f32(float) nounwind readnone
+declare double @llvm.trunc.f64(double) nounwind readnone
+
+define weak_odr float @trunc_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @llvm.trunc.f32(float %x) nounwind readnone
        ret float %y
+}
+
+define weak_odr double @trunc_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @llvm.trunc.f64(double %x) nounwind readnone
+       ret double %y
 }
 
 declare double @llvm.pow.f64(double, double) nounwind readnone
@@ -297,3 +311,28 @@ define weak_odr float @atanh_f32(float %x) nounwind uwtable readnone alwaysinlin
        ret float %y
 }
 
+
+define weak_odr float @inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0x7FF0000000000000
+}
+
+define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0xFFF0000000000000
+}
+
+define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0x7FF8000000000000
+}
+
+
+define weak_odr double @inf_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0x7FF0000000000000
+}
+
+define weak_odr double @neg_inf_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0xFFF0000000000000
+}
+
+define weak_odr double @nan_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0x7FF8000000000000
+}

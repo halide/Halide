@@ -1,5 +1,5 @@
 // This file should be auto-generated in the future
-#include <Halide.h>
+#include "Halide.h"
 
 namespace my_library {
 

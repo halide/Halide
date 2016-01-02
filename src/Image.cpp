@@ -20,13 +20,14 @@ void ImageBase::prepare_for_direct_pixel_access() {
         stride_1 = buffer.stride(1);
         stride_2 = buffer.stride(2);
         stride_3 = buffer.stride(3);
+        elem_size = buffer.type().bytes();
         // The host pointer points to the mins vec, but we want to
         // point to the origin of the coordinate system.
         size_t offset = (buffer.min(0) * stride_0 +
                          buffer.min(1) * stride_1 +
                          buffer.min(2) * stride_2 +
                          buffer.min(3) * stride_3);
-        offset *= buffer.type().bytes();
+        offset *= elem_size;
         origin = (void *)((uint8_t *)origin - offset);
         dims = buffer.dimensions();
     } else {

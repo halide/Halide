@@ -1,17 +1,22 @@
+#!/usr/bin/python3
+"""
+Bilateral histogram.
+"""
 
-"Bilateral histogram."
+from __future__ import print_function
+from __future__ import division
 
-import sys
 from halide import *
+
+import numpy as np
+from scipy.misc import imread, imsave
+import os.path
 
 int_t = Int(32)
 float_t = Float(32)
 
-def main():
 
-    input = ImageParam(float_t, 3, 'input')
-    r_sigma = Param(float_t, 'r_sigma', 0.1) # Value needed if not generating an executable
-    s_sigma = 8 # This is passed during code generation in the C++ version
+def get_bilateral_grid(input, r_sigma, s_sigma):
 
     x = Var('x')
     y = Var('y')
@@ -21,13 +26,14 @@ def main():
     # Add a boundary condition
     clamped = Func('clamped')
     clamped[x, y] = input[clamp(x, 0, input.width()-1),
-                          clamp(y, 0, input.height()-1),0]
+                          clamp(y, 0, input.height()-1)]
 
     # Construct the bilateral grid
     r = RDom(0, s_sigma, 0, s_sigma, 'r')
-    val = clamped[x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2]
+    val = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
     val = clamp(val, 0.0, 1.0)
-    zi = cast(int_t, val * (1.0/r_sigma) + 0.5)
+    #zi = cast(int_t, val * (1.0/r_sigma) + 0.5)
+    zi = cast(int_t, (val / r_sigma) + 0.5)
     histogram = Func('histogram')
     histogram[x, y, z, c] = 0.0
     histogram[x, y, zi, c] += select(c == 0, val, 1.0)
@@ -40,7 +46,7 @@ def main():
 
     # Take trilinear samples to compute the output
     val = clamp(clamped[x, y], 0.0, 1.0)
-    zv = val * (1.0/r_sigma)
+    zv = val / r_sigma
     zi = cast(int_t, zv)
     zf = zv - zi
     xf = cast(float_t, x % s_sigma) / s_sigma
@@ -55,15 +61,16 @@ def main():
 
     # Normalize
     bilateral_grid = Func('bilateral_grid')
-    bilateral_grid[x, y, c] = interpolated[x, y, 0]/interpolated[x, y, 1]
+    bilateral_grid[x, y] = interpolated[x, y, 0]/interpolated[x, y, 1]
 
     target = get_target_from_environment()
     if target.has_gpu_feature():
+    #if True:
         # GPU schedule
         # Currently running this directly from the Python code is very slow.
         # Probably because of the dispatch time because generated code
         # is same speed as C++ generated code.
-        print ("Compiling for GPU")
+        print ("Compiling for GPU.")
         histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
         histogram = histogram.update() # Because returns ScheduleHandle
         histogram.reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c)
@@ -73,7 +80,7 @@ def main():
         bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma)
     else:
         # CPU schedule
-        print ("Compiling for CPU")
+        print ("Compiling for CPU.")
         histogram.compute_root().parallel(z)
         histogram = histogram.update() # Because returns ScheduleHandle
         histogram.reorder(c, r.x, r.y, x, y).unroll(c)
@@ -82,18 +89,91 @@ def main():
         blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 4).unroll(c)
         bilateral_grid.compute_root().parallel(y).vectorize(x, 4)
 
-    generate = False # Set to False to run the jit immediately and get  instant gratification.
+    return bilateral_grid
+
+
+def generate_compiled_file(bilateral_grid):
+
+    target = get_target_from_environment()
+    # Need to copy the filter executable from the C++ apps/bilateral_grid folder to run this.
+    # (after making it of course)
+    arguments = ArgumentsVector()
+    arguments.append(Argument('r_sigma', InputScalar, Float(32), 0))
+    arguments.append(Argument('input', InputBuffer, UInt(16), 2))
+    bilateral_grid.compile_to_file("bilateral_grid",
+                                   arguments,
+                                   target)
+    print("Generated compiled file for bilateral_grid function.")
+    return
+
+
+def get_input_data():
+
+    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
+    assert os.path.exists(image_path), \
+        "Could not find %s" % image_path
+    rgb_data = imread(image_path)
+    #print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
+
+    grey_data = np.mean(rgb_data, axis=2, dtype=np.float32)
+    input_data = np.copy(grey_data, order="F") / 255.0
+    # input is in [0, 1] range
+    #print("input_data", type(input_data), input_data.shape, input_data.dtype)
+
+    return input_data
+
+
+def filter_test_image(bilateral_grid, input):
+
+    bilateral_grid.compile_jit()
+
+    # preparing input and output memory buffers (numpy ndarrays)
+    input_data = get_input_data()
+    input_image = Image(input_data, "input_image")
+    input.set(input_image)
+
+    output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
+    output_image = Image(output_data, "output_image")
+
+    if False:
+        print("input_image", input_image)
+        print("output_image", output_image)
+
+    # do the actual computation
+    bilateral_grid.realize(output_image)
+
+    # save results
+    input_path = "bilateral_grid_input.png"
+    output_path = "bilateral_grid.png"
+    imsave(input_path, input_data)
+    imsave(output_path, output_data)
+    print("\nbilateral_grid realized on output_image.")
+    print("Result saved at '", output_path,
+          "' ( input data copy at '", input_path, "' ).", sep="")
+
+    return
+
+
+def main():
+
+    input = ImageParam(float_t, 2, 'input')
+    r_sigma = Param(float_t, 'r_sigma', 0.1) # Value needed if not generating an executable
+    s_sigma = 8 # This is passed during code generation in the C++ version
+
+    #print("r_sigma", r_sigma)
+
+    bilateral_grid = get_bilateral_grid(input, r_sigma, s_sigma)
+
+    # Set `generate` to False to run the jit immediately and get  instant gratification.
+    #generate = True
+    generate = False
     if generate:
-        # Need to copy the filter executable from the C++ apps/bilateral_grid folder to run this.
-        # (after making it of course)
-        bilateral_grid.compile_to_file("bilateral_grid", Argument('r_sigma', False, Float(32)), Argument('input', True, UInt(16)), target);
+        generate_compiled_file(bilateral_grid)
     else:
-        eval_func = filter_image(input, bilateral_grid, builtin_image('rgb.png'), disp_time=True)
-        I = eval_func()
-        if len(sys.argv) >= 2:
-            I.save(sys.argv[1])
-        else:
-            I.show()
+        filter_test_image(bilateral_grid, input)
+
+    print("\nEnd of game. Have a nice day!")
+    return
 
 if __name__ == '__main__':
     main()

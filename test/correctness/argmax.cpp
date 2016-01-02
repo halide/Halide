@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 #include <stdio.h>
 
 using namespace Halide;
@@ -67,6 +67,42 @@ int main(int argc, char **argv) {
         printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
                best_x, best_y, best_val, 50, 40, 4100);
         return -1;
+    }
+
+
+    // Try an in place argmax, using an elements at various places in
+    // the sequence as the initial guess.  This tests some edge cases
+    // for the atomicity of provides.
+    int starts[] = {
+        -1,
+        0,
+        1,
+        5,
+        99,
+        100,
+        101,
+    };
+    for (size_t i = 0; i < sizeof(starts)/sizeof(starts[0]); i++) {
+        int init = starts[i];
+        Func h;
+        r = RDom(0, 100);
+        h(x) = Tuple(x * (100 - x), x);
+        h(init) = tuple_select(h(init)[0] >= h(r)[0], Tuple(h(init)), Tuple(h(r)));
+
+        Func arg_max_h;
+        arg_max_h() = h(init);
+
+        evaluate_may_gpu(arg_max_h(), &best_val, &best_x);
+
+        if (best_val != 2500) {
+            printf("Arg max of h is %d, but should have been 2500\n", best_val);
+            return -1;
+        }
+
+        if (best_x != 50) {
+            printf("Arg max of h is %d, but should have been 50\n", best_x);
+            return -1;
+        }
     }
 
     printf("Success!\n");

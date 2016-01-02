@@ -13,7 +13,7 @@ namespace Halide {
 namespace Internal {
 
 std::string cplusplus_mangled_name(const Call *op, const Target &target) {
-    clang::CompilerInstance compiler_instance(false);
+    clang::CompilerInstance compiler_instance;
 
 #if 0
     Diags = compiler_instance.createDiagnostics(new DiagnosticOptions(),

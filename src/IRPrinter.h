@@ -1,12 +1,6 @@
 #ifndef HALIDE_IR_PRINTER_H
 #define HALIDE_IR_PRINTER_H
 
-#include <ostream>
-
-#include "IR.h"
-
-namespace Halide {
-
 /** \file
  * This header file defines operators that let you dump a Halide
  * expression, statement, or type directly into an output stream
@@ -20,6 +14,13 @@ namespace Halide {
  * These operators are implemented using \ref Halide::Internal::IRPrinter
  */
 
+#include <ostream>
+
+#include "Module.h"
+#include "IRVisitor.h"
+
+namespace Halide {
+
 /** Emit an expression on an output stream (such as std::cout) in a
  * human-readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
@@ -28,15 +29,22 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
  * human-readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
 
+/** Emit a halide Module on an output stream (such as std::cout) in a
+ * human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
+
+/** Emit a halide device api type in a human readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
+
 namespace Internal {
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Stmt &);
+EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */
-std::ostream &operator<<(std::ostream &stream, const For::ForType &);
+EXPORT std::ostream &operator<<(std::ostream &stream, const ForType &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -54,7 +62,7 @@ public:
     /** emit a statement on the output stream */
     void print(Stmt);
 
-    static void test();
+    EXPORT static void test();
 
 protected:
     /** The stream we're outputting on */
@@ -68,6 +76,7 @@ protected:
     void do_indent();
 
     void visit(const IntImm *);
+    void visit(const UIntImm *);
     void visit(const FloatImm *);
     void visit(const StringImm *);
     void visit(const Cast *);
@@ -96,7 +105,7 @@ protected:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const Pipeline *);
+    void visit(const ProducerConsumer *);
     void visit(const For *);
     void visit(const Store *);
     void visit(const Provide *);
@@ -106,7 +115,6 @@ protected:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-
 };
 }
 }

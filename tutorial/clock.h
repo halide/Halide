@@ -2,14 +2,16 @@
 // milliseconds.
 
 #ifdef _WIN32
-extern "C" bool QueryPerformanceCounter(uint64_t *);
-extern "C" bool QueryPerformanceFrequency(uint64_t *);
+#include <Windows.h>
 double current_time() {
-    uint64_t t, freq;
+    LARGE_INTEGER freq, t;
     QueryPerformanceCounter(&t);
     QueryPerformanceFrequency(&freq);
-    return (t * 1000.0) / freq;
+    return (t.QuadPart * 1000.0) / freq.QuadPart;
 }
+// Gross, these come from Windows.h
+#undef max
+#undef min
 #else
 #include <sys/time.h>
 double current_time() {

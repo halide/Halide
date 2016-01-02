@@ -1,6 +1,9 @@
 #include "StmtToHtml.h"
+#include "IRVisitor.h"
 #include "IROperator.h"
+#include "Scope.h"
 
+#include <iterator>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -29,104 +32,103 @@ class StmtToHtml : public IRVisitor {
 private:
     std::ofstream stream;
 
-    int unique_id() { return id_count++; }
+    int unique_id() { return ++id_count; }
 
-    string open_span(string cls, string id) {
-        return "<span class=\""+cls+"\" id=\""+id+"\">";
-    }
-
-    string open_span(string cls, int id = -1) {
+    // All spans and divs will have an id of the form "x-y", where x
+    // is shared among all spans/divs in the same context, and y is unique.
+    std::vector<int> context_stack;
+    string open_tag(const string &tag, const string &cls, int id = -1) {
+        std::stringstream s;
+        s << "<" << tag << " class='" << cls << "' id='";
         if (id == -1) {
-            id = unique_id();
+            s << context_stack.back() << "-";
+            s << unique_id();
+        } else {
+            s << id;
         }
-        return open_span(cls, to_string(id));
+        s << "'>";
+        context_stack.push_back(unique_id());
+        return s.str();
+    }
+    string tag(const string &tag, const string &cls, const string &body, int id = -1) {
+        std::stringstream s;
+        s << open_tag(tag, cls, id);
+        s << body;
+        s << close_tag(tag);
+        return s.str();
+    }
+    string close_tag(const string &tag) {
+        context_stack.pop_back();
+        return "</" + tag + ">";
     }
 
+    string open_span(const string &cls, int id = -1) {
+        return open_tag("span", cls, id);
+    }
     string close_span() {
-        return "</span>";
+        return close_tag("span");
+    }
+    string span(const string &cls, const string &body, int id = -1) {
+        return tag("span", cls, body, id);
+    }
+    string matched(const string &cls, const string &body, int id = -1) {
+        return span(cls + " Matched", body, id);
+    }
+    string matched(const string &body) {
+        return span("Matched", body);
     }
 
-    string open_div(string cls, int id = -1) {
-        if (id == -1) {
-            id = unique_id();
-        }
-        return "<div class=\""+cls+"\" id=\""+ to_string(id) +"\">";
+    string open_div(const string &cls, int id = -1) {
+        return open_tag("div", cls, id) + "\n";
     }
-
     string close_div() {
-        return "</div>\n";
+        return close_tag("div") + "\n";
     }
 
-    string open_line() {
-        return "<p class=WrapLine>";
-    }
-    string close_line() {
-        return "</p>";
+    string open_line() { return "<p class=WrapLine>"; }
+    string close_line() { return "</p>"; }
+
+    string keyword(const string &x) { return span("Keyword", x); }
+    string type(const string &x) { return span("Type", x); }
+    string symbol(const string &x) { return span("Symbol", x); }
+
+    Scope<int> scope;
+    string var(const string &x) {
+        int id;
+        if (scope.contains(x)) {
+            id = scope.get(x);
+        } else {
+            id = unique_id();
+            scope.push(x, id);
+        }
+
+        std::stringstream s;
+        s << "<b class='Variable Matched' id='" << id << "-" << unique_id() << "'>";
+        s << x;
+        s << "</b>";
+        return s.str();
     }
 
-    string keyword(string k) {
-        return open_span("Keyword") + k + close_span();
-    }
-    string type(string t) {
-        return open_span("Type") + t + close_span();
-    }
-    string symbol(string s) {
-        return open_span("Symbol") + s + close_span();
-    }
-    string var(string v) {
-        return open_span("Variable") + v + close_span();
-    }
-
-    string open_matched(const string &cls, const string &body, int id) {
-        return open_span(cls + " Matched", to_string(id) + "-open") + body + close_span();
-    }
-    string close_matched(const string &cls, const string &body, int id) {
-        return open_span(cls + " Matched", to_string(id) + "-close") + body + close_span();
-    }
-    string matched(const string &cls, const string &body, int id) {
-        return open_span(cls + " Matched", to_string(id) + "-" + to_string(unique_id())) + body + close_span();
-    }
-
-    string open_matched(const string &body, int id) { return open_matched("", body, id); }
-    string close_matched(const string &body, int id) { return close_matched("", body, id); }
-    string matched(const string &body, int id) { return matched("", body, id); }
-
-    std::vector<int> match_ids;
-
-    string open_matched(const string &cls, const string &c) {
-        int id = unique_id();
-        match_ids.push_back(id);
-        return open_matched(cls, c, id);
-    }
-
-    string close_matched(const string &cls, const string &c) {
-        int id = match_ids.back();
-        match_ids.pop_back();
-        return close_matched(cls, c, id);
-    }
-
-    string open_matched(const string &body) { return open_matched("", body); }
-    string close_matched(const string &body) { return close_matched("", body); }
-
-    void print_list(const string &l, const std::vector<Expr> &args, const string &r) {
-        int id = unique_id();
-        stream << open_matched(l, id);
+    void print_list(const std::vector<Expr> &args) {
         for (size_t i = 0; i < args.size(); i++) {
             if (i > 0) {
-                stream << matched(",", id) << " ";
+                stream << matched(",") << " ";
             }
             print(args[i]);
         }
-        stream << close_matched(r, id);
+    }
+    void print_list(const string &l, const std::vector<Expr> &args, const string &r) {
+        stream << matched(l);
+        print_list(args);
+        stream << matched(r);
     }
 
-    string open_expand_button(int &id) {
-        id = unique_id();
+    string open_expand_button(int id) {
         std::stringstream button;
-        button << "<a class=ExpandButton onclick=\"return toggle(" << id << ");\" href=_blank>"
-               << "<div style=\"position:relative; width:0; height:0;\">"
-               << "<div class=ShowHide style=\"display:none;\" id=" << id << "-show" << "><i class=\"fa fa-plus-square-o\"></i></div>"
-               << "<div class=ShowHide id=" << id << "-hide" << "><i class=\"fa fa-minus-square-o\"></i></div>"
+        button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
+               << "<div style='position:relative; width:0; height:0;'>"
+               << "<div class=ShowHide style='display:none;' id=" << id << "-show" << "><i class='fa fa-plus-square-o'></i></div>"
+               << "<div class=ShowHide id=" << id << "-hide" << "><i class='fa fa-minus-square-o'></i></div>"
                << "</div>";
         return button.str();
     }
@@ -135,21 +137,24 @@ private:
         return "</a>";
     }
 
-    void print(Expr ir) {
-        ir.accept(this);
-    }
-
-    void print(Stmt ir) {
-        ir.accept(this);
-    }
-
-public:
     void visit(const IntImm *op){
-        stream <<  open_span("IntImm Imm") << op->value << close_span();
+        stream << open_span("IntImm Imm");
+        stream << Expr(op);
+        stream << close_span();
     }
+
+    void visit(const UIntImm *op){
+        stream << open_span("UIntImm Imm");
+        stream << Expr(op);
+        stream << close_span();
+    }
+
     void visit(const FloatImm *op){
-        stream <<  open_span("FloatImm Imm") << op->value << 'f' << close_span();
+        stream << open_span("FloatImm Imm");
+        stream << Expr(op);
+        stream << close_span();
     }
+
     void visit(const StringImm *op){
         stream << open_span("StringImm");
         stream << '"';
@@ -191,21 +196,26 @@ public:
 
     void visit(const Cast *op){
         stream << open_span("Cast");
+
+        stream << open_span("Matched");
         stream << open_span("Type") << op->type << close_span();
-        stream << open_matched("(");
+        stream << "(";
+        stream << close_span();
         print(op->value);
-        stream << close_matched(")");
+        stream << matched(")");
+
         stream << close_span();
     }
 
     void visit_binary_op(Expr a, Expr b, const char *op) {
         stream << open_span("BinaryOp");
-        int id = unique_id();
-        stream << open_matched("(", id);
+
+        stream << matched("(");
         print(a);
-        stream << " " << matched("Operator", op, id) << " ";
+        stream << " " << matched("Operator", op) << " ";
         print(b);
-        stream << close_matched(")", id);
+        stream << matched(")");
+
         stream << close_span();
     }
 
@@ -225,12 +235,12 @@ public:
 
     void visit(const Min *op) {
         stream << open_span("Min");
-        print_list(symbol("min") + "(", vec(op->a, op->b), ")");
+        print_list(symbol("min") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
     void visit(const Max *op) {
         stream << open_span("Max");
-        print_list(symbol("max") + "(", vec(op->a, op->b), ")");
+        print_list(symbol("max") + "(", {op->a, op->b}, ")");
         stream << close_span();
     }
     void visit(const Not *op) {
@@ -241,44 +251,57 @@ public:
     }
     void visit(const Select *op) {
         stream << open_span("Select");
-        print_list(symbol("select") + "(", vec(op->condition, op->true_value, op->false_value), ")");
+        print_list(symbol("select") + "(", {op->condition, op->true_value, op->false_value}, ")");
         stream << close_span();
     }
     void visit(const Load *op) {
         stream << open_span("Load");
-        stream << var(op->name);
-        stream << open_matched("[");
+        stream << open_span("Matched");
+        stream << var(op->name) << "[";
+        stream << close_span();
         print(op->index);
-        stream << close_matched("]");
+        stream << matched("]");
         stream << close_span();
     }
     void visit(const Ramp *op) {
         stream << open_span("Ramp");
-        print_list(symbol("ramp") + "(", vec(op->base, op->stride, Expr(op->width)), ")");
+        print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->lanes)}, ")");
         stream << close_span();
     }
     void visit(const Broadcast *op) {
         stream << open_span("Broadcast");
-        stream << open_matched(symbol("x" + to_string(op->width)) + "(");
+        stream << open_span("Matched");
+        stream << symbol("x") << op->lanes << "(";
+        stream << close_span();
         print(op->value);
-        stream << close_matched(")");
+        stream << matched(")");
         stream << close_span();
     }
     void visit(const Call *op) {
         stream << open_span("Call");
         if (op->call_type == Call::Intrinsic) {
-            if (op->name == Call::extract_buffer_min) {
+            if (op->name == Call::extract_buffer_host) {
+                stream << open_span("Matched");
                 print(op->args[0]);
-                stream << ".min" << open_matched("[");
+                stream << ".host";
+                stream << close_span();
+                return;
+            } else if (op->name == Call::extract_buffer_min) {
+                stream << open_span("Matched");
+                print(op->args[0]);
+                stream << ".min[";
+                stream << close_span();
                 print(op->args[1]);
-                stream << close_matched("]");
+                stream << matched("]");
                 stream << close_span();
                 return;
             } else if (op->name == Call::extract_buffer_max) {
+                stream << open_span("Matched");
                 print(op->args[0]);
-                stream << ".max" << open_matched("[");
+                stream << ".max[";
+                stream << close_span();
                 print(op->args[1]);
-                stream << close_matched("]");
+                stream << matched("]");
                 stream << close_span();
                 return;
             }
@@ -288,90 +311,116 @@ public:
     }
 
     void visit(const Let *op) {
+        scope.push(op->name, unique_id());
         stream << open_span("Let");
-        int id = unique_id();
-        stream << open_matched("(" + keyword("let"), id) << " ";
-        print(op->name);
-        stream << " " << matched("Operator Assign", "=", id) << " ";
+        stream << open_span("Matched");
+        stream << "(" << keyword("let") << " ";
+        stream << var(op->name);
+        stream << close_span();
+        stream << " " << matched("Operator Assign", "=") << " ";
         print(op->value);
-        stream << " " << matched("Keyword", "in", id) << " ";
+        stream << " " << matched("Keyword", "in") << " ";
         print(op->body);
-        stream << close_matched(")", id) << close_span();
+        stream << matched(")");
+        stream << close_span();
+        scope.pop(op->name);
     }
     void visit(const LetStmt *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
-        stream << open_matched("Keyword", "let") << " ";
+        stream << open_span("Matched");
+        stream << keyword("let") << " ";
         stream << var(op->name);
-        stream << " " << close_matched("Operator Assign", "=") << " ";
+        stream << close_span();
+        stream << " " << matched("Operator Assign", "=") << " ";
         print(op->value);
         stream << close_line();
-        op->body.accept(this);
+        print(op->body);
         stream << close_div();
+        scope.pop(op->name);
     }
     void visit(const AssertStmt *op) {
         stream << open_div("AssertStmt WrapLine");
         std::vector<Expr> args;
         args.push_back(op->condition);
         args.push_back(op->message);
-        std::copy(op->args.begin(), op->args.end(), std::back_inserter(args));
         print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("Produce");
-        int produce_id = 0;
-        stream << open_expand_button(produce_id)
-               << keyword("produce") << " " << var(op->name)
-               << close_expand_button();
-        stream << " " << open_matched("{");
+        int produce_id = unique_id();
+        stream << open_span("Matched");
+        stream << open_expand_button(produce_id);
+        stream << keyword("produce") << " ";
+        stream << var(op->name);
+        stream << close_expand_button() << " {";
+        stream << close_span();;
         stream << open_div("ProduceBody Indent", produce_id);
         print(op->produce);
         stream << close_div();
-        stream << close_matched("}");
+        stream << matched("}");
         stream << close_div();
         if (op->update.defined()) {
             stream << open_div("Update");
-            int update_id = 0;
-            stream << open_expand_button(update_id)
-                   << keyword("update") << " " << var(op->name)
-                   << close_expand_button();
-            stream << " " << open_matched("{");
+            int update_id = unique_id();
+            stream << open_span("Matched");
+            stream << open_expand_button(update_id);
+            stream << keyword("update") << " ";
+            stream << var(op->name);
+            stream << close_expand_button();
+            stream << " {";
+            stream << close_span();
             stream << open_div("UpdateBody Indent", update_id);
             print(op->update);
             stream << close_div();
-            stream << close_matched("}");
+            stream << matched("}");
             stream << close_div();
         }
         print(op->consume);
-
+        scope.pop(op->name);
     }
     void visit(const For *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("For");
 
-        int id = 0;
+        int id = unique_id();
         stream << open_expand_button(id);
-        if (op->for_type == 0) {
+        stream << open_span("Matched");
+        if (op->for_type == ForType::Serial) {
             stream << keyword("for");
-        } else {
+        } else if (op->for_type == ForType::Parallel) {
             stream << keyword("parallel");
+        } else if (op->for_type == ForType::Vectorized) {
+            stream << keyword("vectorized");
+        } else if (op->for_type == ForType::Unrolled) {
+            stream << keyword("unrolled");
+        } else {
+            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
-        stream << " ";
-        print_list("(", vec(Variable::make(Int(32), op->name), op->min, op->extent), ")");
+        stream << " (";
+        stream << close_span();
+        print_list({Variable::make(Int(32), op->name), op->min, op->extent});
+        stream << matched(")");
         stream << close_expand_button();
-        stream << " " << open_matched("{");
+        stream << " " << matched("{");
         stream << open_div("ForBody Indent", id);
         print(op->body);
         stream << close_div();
-        stream << close_matched("}");
+        stream << matched("}");
+
         stream << close_div();
+        scope.pop(op->name);
     }
     void visit(const Store *op) {
         stream << open_div("Store WrapLine");
-        stream << var(op->name);
-        stream << open_matched("[");
+        stream << open_span("Matched");
+        stream << var(op->name) << "[";
+        stream << close_span();
         print(op->index);
-        stream << close_matched("]")
-               << " " << open_span("Operator Assign") << "=" << close_span() << " ";
+        stream << matched("]");
+        stream << " " << span("Operator Assign Matched", "=") << " ";
         stream << open_span("StoreValue");
         print(op->value);
         stream << close_span();
@@ -379,9 +428,12 @@ public:
     }
     void visit(const Provide *op) {
         stream << open_div("Provide WrapLine");
-        stream << var(op->name);
-        print_list("(", op->args, ")");
-        stream << " = ";
+        stream << open_span("Matched");
+        stream << var(op->name) << "(";
+        stream << close_span();
+        print_list(op->args);
+        stream << matched(")") << " ";
+        stream << matched("=") << " ";
         if (op->values.size() > 1) {
             print_list("{", op->values, "}");
         } else {
@@ -390,24 +442,44 @@ public:
         stream << close_div();
     }
     void visit(const Allocate *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("Allocate");
+        stream << open_span("Matched");
         stream << keyword("allocate") << " ";
-        stream << var(op->name);
-        stream << open_matched("[");
-        stream << open_span("Type") << op->type << close_span();
+        stream << var(op->name) << "[";
+        stream << close_span();
+
+        stream << open_span("Type");
+        stream << op->type;
+        stream << close_span();
+
         for (size_t i = 0; i < op->extents.size(); i++) {
             stream  << " * ";
             print(op->extents[i]);
         }
-        stream << close_matched("]");
+        stream << matched("]");
         if (!is_one(op->condition)) {
-            stream << " if ";
+            stream << " " << keyword("if") << " ";
             print(op->condition);
         }
+        if (op->new_expr.defined()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_new") << "{";
+            print(op->new_expr);
+            stream << matched("}");
+        }
+        if (!op->free_function.empty()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_delete") << "{ " << op->free_function << "(); ";
+            stream << matched("}");
+        }
+
         stream << open_div("AllocateBody");
         print(op->body);
         stream << close_div();
+
         stream << close_div();
+        scope.pop(op->name);
     }
     void visit(const Free *op) {
         stream << open_div("Free WrapLine");
@@ -416,58 +488,88 @@ public:
         stream << close_div();
     }
     void visit(const Realize *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("Realize");
-        int id;
+        int id = unique_id();
         stream << open_expand_button(id);
-        stream << keyword("realize") << " " << var(op->name) << open_matched("(");
+        stream << keyword("realize") << " ";
+        stream << var(op->name);
+        stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            print_list("[", vec(op->bounds[i].min, op->bounds[i].extent), "]");
+            print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
             if (i < op->bounds.size() - 1) stream << ", ";
         }
-        stream << close_matched(")");
+        stream << matched(")");
         if (!is_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
         stream << close_expand_button();
 
-        stream << " " << open_matched("{");
+        stream << " " << matched("{");
         stream << open_div("RealizeBody Indent", id);
         print(op->body);
         stream << close_div();
-        stream << close_matched("}");
+        stream << matched("}");
         stream << close_div();
+        scope.pop(op->name);
+    }
+
+    // To avoid generating ridiculously deep DOMs, we flatten blocks here.
+    void visit_block_stmt(Stmt stmt) {
+        if (const Block *b = stmt.as<Block>()) {
+            visit_block_stmt(b->first);
+            visit_block_stmt(b->rest);
+        } else if (stmt.defined()) {
+            print(stmt);
+        }
     }
     void visit(const Block *op) {
         stream << open_div("Block");
-        print(op->first);
-        if (op->rest.defined()) print(op->rest);
+        visit_block_stmt(op->first);
+        visit_block_stmt(op->rest);
         stream << close_div();
     }
     void visit(const IfThenElse *op) {
         stream << open_div("IfThenElse");
-        stream << keyword("if") << " " << open_matched("(");
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << open_span("Matched");
+        stream << keyword("if") << " (";
+        stream << close_span();
         while (1) {
             print(op->condition);
-            stream << close_matched(")")
-                   << " " << open_matched("{"); // close if (or else if) span
-            stream << open_div("ThenBody Indent");
+            stream << matched(")");
+            stream << close_expand_button() << " ";
+            stream << matched("{"); // close if (or else if) span
+
+            stream << open_div("ThenBody Indent", id);
             print(op->then_case);
             stream << close_div(); // close thenbody div
 
             if (!op->else_case.defined()) {
-                stream << close_matched("}");
+                stream << matched("}");
                 break;
             }
 
+            id = unique_id();
+
             if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
-                stream << close_matched("}") << " " << keyword("else if") << " " << open_matched("(");
+                stream << matched("}") << " ";
+                stream << open_expand_button(id);
+                stream << open_span("Matched");
+                stream << keyword("else if") << " (";
+                stream << close_span();
                 op = nested_if;
             } else {
-                stream << close_matched("}") << " " << keyword("else") << " " << open_matched("{");
-                stream << open_div("ElseBody Indent");
+                stream << open_span("Matched") << "} ";
+                stream << open_expand_button(id);
+                stream << keyword("else");
+                stream << close_expand_button() << "{";
+                stream << close_span();
+                stream << open_div("ElseBody Indent", id);
                 print(op->else_case);
-                stream << close_div();
+                stream << close_div() << matched("}");
                 break;
             }
         }
@@ -480,37 +582,76 @@ public:
         stream << close_div();
     }
 
-    StmtToHtml(string filename){
-        id_count = 0;
+public:
+    void print(Expr ir) {
+        ir.accept(this);
+    }
+
+    void print(Stmt ir) {
+        ir.accept(this);
+    }
+
+    void print(const LoweredFunc &op) {
+        scope.push(op.name, unique_id());
+        stream << open_div("Function");
+
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << open_span("Matched");
+        stream << keyword("func");
+        stream << " " << op.name << "(";
+        stream << close_span();
+        for (size_t i = 0; i < op.args.size(); i++) {
+            if (i > 0) {
+                stream << matched(",") << " ";
+            }
+            stream << var(op.args[i].name);
+        }
+        stream << matched(")");
+        stream << close_expand_button();
+        stream << " " << matched("{");
+        stream << open_div("FunctionBody Indent", id);
+        print(op.body);
+        stream << close_div();
+        stream << matched("}");
+
+        stream << close_div();
+        scope.pop(op.name);
+    }
+
+    void print(const Buffer &op) {
+        stream << open_div("Buffer");
+        stream << keyword("buffer ") << var(op.name());
+        stream << close_div();
+    }
+
+    StmtToHtml(string filename) : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
-        stream << "<style type=\"text/css\">" << css << "</style>\n";
-        stream << "<script language=\"javascript\" type=\"text/javascript\">" + js + "</script>\n";
-        stream <<"<link rel=\"stylesheet\" type=\"text/css\" href=\"my.css\">\n";
-        stream << "<script language=\"javascript\" type=\"text/javascript\" src=\"my.js\"></script>\n";
-        stream << "<link href=\"http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css\" rel=\"stylesheet\">\n";
-        stream << "<script src=\"http://code.jquery.com/jquery-1.10.2.js\"></script>\n";
+        stream << "<style type='text/css'>" << css << "</style>\n";
+        stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
+        stream <<"<link rel='stylesheet' type='text/css' href='my.css'>\n";
+        stream << "<script language='javascript' type='text/javascript' src='my.js'></script>\n";
+        stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
+        stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
     }
 
-    void generate(Stmt s){
-        print(s);
+    ~StmtToHtml() {
         stream << "<script>\n"
-               << "$( \".Matched\" ).each( function() {\n"
-               << "    this.onmouseover = function() { $(\"[id^=\" + this.id.split('-')[0] + \"-]\").addClass(\"Highlight\"); }\n"
-               << "    this.onmouseout = function() { $(\"[id^=\" + this.id.split('-')[0] + \"-]\").removeClass(\"Highlight\"); }\n"
+               << "$( '.Matched' ).each( function() {\n"
+               << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight'); }\n"
+               << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight'); }\n"
                << "} );\n"
                << "</script>\n";
         stream << "</body>";
-        stream.close();
     }
-
-    ~StmtToHtml(){}
 };
 
 const std::string StmtToHtml::css = "\n \
-body { font-family: Consolas, \"Liberation Mono\", Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; } \n \
+body { font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; margin-left:15px; } \n \
 a, a:hover, a:visited, a:active { color: inherit; text-decoration: none; } \n \
+b { font-weight: normal; }\n \
 p.WrapLine { margin: 0px; margin-left: 30px; text-indent:-30px; } \n \
 div.WrapLine { margin-left: 30px; text-indent:-30px; } \n \
 div.Indent { padding-left: 15px; }\n \
@@ -523,32 +664,11 @@ span.Type { color: #445588; font-weight: bold; }\n \
 span.StringImm { color: #d14; }\n \
 span.IntImm { color: #099; }\n \
 span.FloatImm { color: #099; }\n \
+b.Highlight { font-weight: bold; background-color: #DDD; }\n \
 span.Highlight { font-weight: bold; background-color: #FF0; }\n \
 ";
 
 const std::string StmtToHtml::js = "\n \
-window.onload = function () { \n \
-// adding jquery \n \
-var script = document.createElement('script'); \n \
-script.src = 'http://code.jquery.com/jquery-2.1.1.js'; \n \
-script.type = 'text/javascript'; \n \
-document.getElementsByTagName('head')[0].appendChild(script); \n \
-fold = function(selector) { \n \
-    selector.each(function() { \n \
-        $(this).attr('title', $(this).text().replace(/\"/g, \"'\")); \n \
-        $(this).text(\"...\"); \n \
-    }); \n \
-}; \n \
-unfold = function(select) { \n \
-    selector.each(function() { \n \
-        $(this).text($(this).attr('title')); \n \
-        // $(this).attr('title', $(this).text().replace('\"',\"'\")); \n \
-        // $(this).text(\"...\"); \n \
-    }); \n \
-}; \n \
-foldClass = function(className) { fold($('.'+className)); }; \n \
-unfoldClass = function(className) { unfold($('.'+className)); }; \n \
-};\n \
 function toggle(id) { \n \
     e = document.getElementById(id); \n \
     show = document.getElementById(id + '-show'); \n \
@@ -568,7 +688,17 @@ function toggle(id) { \n \
 
 void print_to_html(string filename, Stmt s) {
     StmtToHtml sth(filename);
-    sth.generate(s);
+    sth.print(s);
+}
+
+void print_to_html(string filename, const Module &m) {
+    StmtToHtml sth(filename);
+    for (size_t i = 0; i < m.buffers.size(); i++) {
+        sth.print(m.buffers[i]);
+    }
+    for (size_t i = 0; i < m.functions.size(); i++) {
+        sth.print(m.functions[i]);
+    }
 }
 
 }

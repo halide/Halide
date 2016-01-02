@@ -134,7 +134,7 @@ private:
             stride.same_as(op->stride)) {
             expr = op;
         } else {
-            expr = Ramp::make(base, stride, op->width);
+            expr = Ramp::make(base, stride, op->lanes);
         }
     }
 
@@ -142,7 +142,7 @@ private:
         Expr value = mutate(op->value);
         if (!expr.defined()) return;
         if (value.same_as(op->value)) expr = op;
-        else expr = Broadcast::make(value, op->width);
+        else expr = Broadcast::make(value, op->lanes);
     }
 
     void visit(const Call *op) {
@@ -220,32 +220,23 @@ private:
             return;
         }
 
-        vector<Expr > new_args(op->args.size());
-        bool changed = false;
-
-        // Mutate the args
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg);
-            if (!new_arg.defined()) {
-                stmt = Stmt();
-                return;
-            }
-            if (!new_arg.same_as(old_arg)) changed = true;
-            new_args[i] = new_arg;
+        Expr message = mutate(op->message);
+        if (!expr.defined()) {
+            stmt = Stmt();
+            return;
         }
 
-        if (condition.same_as(op->condition) && !changed) {
+        if (condition.same_as(op->condition) && message.same_as(op->message)) {
             stmt = op;
         } else {
-            stmt = AssertStmt::make(condition, op->message, new_args);
+            stmt = AssertStmt::make(condition, message);
         }
     }
 
-    void visit(const Pipeline *op) {
+    void visit(const ProducerConsumer *op) {
         Stmt produce = mutate(op->produce);
         if (!produce.defined()) {
-            produce = AssertStmt::make(const_true(), "Produce step elided due to use of Halide::undef", vector<Expr>());
+            produce = Evaluate::make(Expr("Produce step elided due to use of Halide::undef"));
         }
         Stmt update = mutate(op->update);
         Stmt consume = mutate(op->consume);
@@ -255,7 +246,7 @@ private:
             consume.same_as(op->consume)) {
             stmt = op;
         } else {
-            stmt = Pipeline::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
 
@@ -277,7 +268,7 @@ private:
             body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, min, extent, op->for_type, body);
+            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
         }
     }
 
@@ -285,13 +276,13 @@ private:
         predicate = Expr();
 
         Expr value = mutate(op->value);
-        if (!expr.defined()) {
+        if (!value.defined()) {
             stmt = Stmt();
             return;
         }
 
         Expr index = mutate(op->index);
-        if (!expr.defined()) {
+        if (!index.defined()) {
             stmt = Stmt();
             return;
         }
@@ -309,6 +300,8 @@ private:
     }
 
     void visit(const Provide *op) {
+        predicate = Expr();
+
         vector<Expr> new_args(op->args.size());
         vector<Expr> new_values(op->values.size());
         bool changed = false;
@@ -336,7 +329,10 @@ private:
             new_values[i] = new_value;
         }
 
-        if (!changed) {
+        if (predicate.defined()) {
+            stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args));
+            predicate = Expr();
+        } else if (!changed) {
             stmt = op;
         } else {
             stmt = Provide::make(op->name, new_values, new_args);
@@ -360,12 +356,18 @@ private:
         Expr condition = mutate(op->condition);
         if (!condition.defined()) return;
 
+        Expr new_expr;
+        if (op->new_expr.defined()) {
+            new_expr = mutate(op->new_expr);
+        }
+
         if (all_extents_unmodified &&
             body.same_as(op->body) &&
-            condition.same_as(op->condition)) {
+            condition.same_as(op->condition) &&
+            new_expr.same_as(op->new_expr)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, condition, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
         }
     }
 
@@ -470,7 +472,9 @@ private:
 Stmt remove_undef(Stmt s) {
     RemoveUndef r;
     s = r.mutate(s);
-    internal_assert(!r.predicate.defined()) << "Undefined expression leaked outside of a Store node\n";
+    internal_assert(!r.predicate.defined())
+        << "Undefined expression leaked outside of a Store node: "
+        << r.predicate << "\n";
     return s;
 }
 
