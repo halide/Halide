@@ -376,14 +376,19 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     for (size_t i = 1; i < modules.size(); i++) {
         string err_msg;
         #if LLVM_VERSION >= 38
-        bool failed = llvm::Linker::linkModules(*modules[0], *modules[i],
-                                                [](const llvm::DiagnosticInfo &) {});
+        bool failed = llvm::Linker::linkModules(*modules[0], std::unique_ptr<llvm::Module>(modules[i]));
         #elif LLVM_VERSION >= 36
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
         #else
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
         #endif
+
+        // No matter which version about ran, we passed ownership of
+        // the second module to LLVM. modules[i] is now a dangling
+        // pointer. null it out so we don't accidentally use it.
+        modules[i] = nullptr;
+
         if (failed) {
             internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }
