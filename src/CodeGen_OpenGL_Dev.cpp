@@ -192,7 +192,7 @@ void CodeGen_GLSLBase::visit(const Call *op) {
     print_assignment(op->type, rhs.str());
 }
 
-string CodeGen_GLSL::print_type(Type type, AppendSpaceIfNeeded space_option) {
+string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option) {
     ostringstream oss;
     type = map_type(type);
     if (type.is_scalar()) {
