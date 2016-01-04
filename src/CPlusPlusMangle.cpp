@@ -5,6 +5,7 @@
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Mangle.h>
 #include <clang/Basic/Builtins.h>
+#include <clang/Basic/TargetInfo.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include "IR.h"
 #include "Type.h"
@@ -124,20 +125,42 @@ clang::QualType halide_type_to_clang_type(clang::ASTContext &context, Type type)
 std::string cplusplus_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
                                    Type return_type, const std::vector<ExternFuncArgument> &args,
                                    const Target &target) {
+#define COMPILER_INSTANCE 1
+#if COMPILER_INSTANCE
     clang::CompilerInstance compiler_instance;
 
-    auto diags = compiler_instance.createDiagnostics(new clang::DiagnosticOptions());
+    compiler_instance.createDiagnostics();
+    std::shared_ptr<clang::TargetOptions> target_options(new clang::TargetOptions);
+    target_options->Triple = "x86_64-unknown-unknown-unknown"; // Have to provide something so compilation is independent of host platform
+    compiler_instance.setTarget(clang::TargetInfo::CreateTargetInfo(compiler_instance.getDiagnostics(), target_options));
+    compiler_instance.createFileManager();
+    compiler_instance.createSourceManager(compiler_instance.getFileManager());
+    compiler_instance.getLangOpts().CPlusPlus = true;
+    compiler_instance.getLangOpts().CPlusPlus11 = true;
+    compiler_instance.createPreprocessor(clang::TU_Complete);
+    compiler_instance.createASTContext();
 
+    clang::DiagnosticsEngine &diags(compiler_instance.getDiagnostics());
+    clang::ASTContext &context(compiler_instance.getASTContext());
+#else
+    clang::DiagnosticOptions diagnostic_options;
+    clang::IntrusiveRefCntPtr<clang::DiagnosticIDs> diagIDs(new clang::DiagnosticIDs);
+    clang::DiagnosticsEngine diags(diagIDs, &diagnostic_options);
+    clang::FileSystemOptions filesystem_options;
+    clang::FileManager file_manager(filesystem_options);
+    clang::SourceManager source_manager(diags, file_manager);
     clang::LangOptions lang_opts;
     clang::IdentifierTable id_table(lang_opts);
     clang::SelectorTable selector_table;
     clang::Builtin::Context builtins_context;
-    clang::ASTContext context(lang_opts, compiler_instance.getSourceManager(), id_table, selector_table, builtins_context);
+
+    clang::ASTContext context(lang_opts, source_manager, id_table, selector_table, builtins_context);
+#endif
     std::unique_ptr<clang::MangleContext> mangle_context;
     if (target.os == Target::Windows) {
-        mangle_context.reset(clang::MicrosoftMangleContext::create(context, *diags));
+        mangle_context.reset(clang::MicrosoftMangleContext::create(context, diags));
     } else {
-        mangle_context.reset(clang::ItaniumMangleContext::create(context, *diags));
+        mangle_context.reset(clang::ItaniumMangleContext::create(context, diags));
     }
 
     clang::DeclContext *decl_context = namespaced_decl_scope(context, namespaces);
@@ -157,16 +180,39 @@ std::string cplusplus_mangled_name(const std::string &name, const std::vector<st
     clang::QualType function_type = context.getFunctionType(halide_type_to_clang_type(context, return_type), clang_args,
                                                             clang::FunctionProtoType::ExtProtoInfo());
 
-    // Make NameInfo
     clang::FunctionDecl *decl = clang::FunctionDecl::Create(context, decl_context,
                                                             clang::SourceLocation(), clang::SourceLocation(),
-                                                            &context.Idents.get(name), function_type, NULL, clang::SC_Extern);
+                                                            &context.Idents.get(name), function_type, NULL, clang::SC_None);
+    std::vector<clang::ParmVarDecl *> param_var_decls;
+    for (auto &qual_type : clang_args) {
+        param_var_decls.push_back(clang::ParmVarDecl::Create(context, decl, 
+                                                             clang::SourceLocation(), clang::SourceLocation(),
+                                                             NULL, qual_type, NULL, clang::SC_None, NULL));
+    }
+    decl->setParams(param_var_decls);
+ 
+    const clang::FunctionType *ft = decl->getType()->getAs<clang::FunctionType>();
+    const clang::FunctionProtoType *proto = clang::cast<clang::FunctionProtoType>(ft);
+    internal_assert(proto != NULL) << "proto is null\n";
 
     std::string result;
     llvm::raw_string_ostream out_str(result);
     mangle_context->mangleName(decl, out_str);
 
     return out_str.str();
+}
+
+void cplusplus_mangle_test() {
+    std::string simple_name =
+        cplusplus_mangled_name("test_function", { }, Int(32), { }, Target(Target::Linux, Target::X86, 64));
+    internal_assert(simple_name == "_Z13test_functionv") << "Expected mangling  for simple canse to produce _Z13test_functionv but got " << simple_name << "\n";
+    std::string with_namespaces =
+        cplusplus_mangled_name("test_function", { "foo", "bar" }, Int(32), { }, Target(Target::Linux, Target::X86, 64));
+    internal_assert(with_namespaces == "_ZN3foo3bar13test_functionEv") << "Expected mangling namespace case to produce _ZN3foo3bar13test_functionEv but got " << simple_name << "\n";
+    std::string with_args =
+      cplusplus_mangled_name("test_function", { "foo", "bar" }, Int(32), { ExternFuncArgument(42) }, Target(Target::Linux, Target::X86, 64));
+    internal_assert(with_args == "_ZN3foo3bar13test_functionEi") << "Expected mangling args case to produce _ZN3foo3bar13test_functionEi but got " << simple_name << "\n";
+    // TODO: test struct types, Microsoft mangling.
 }
 
 }
