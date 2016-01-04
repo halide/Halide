@@ -37,16 +37,16 @@
 struct halide_cplusplus_type_name {
     /// An enum to indicate whether a C++ type is non-composite, a struct, class, or union
     enum CPPTypeType {
-      Simple, ///< "int"
-      Struct, ///< "struct Foo"
-      Class,  ///< "class Foo"
-      Union,  ///< "union Foo" TODO: Do we need unions
-      Enum,   ///< "enum Foo" TODO: Do we need enums
+        Simple, ///< "int"
+        Struct, ///< "struct Foo"
+        Class,  ///< "class Foo"
+        Union,  ///< "union Foo" TODO: Do we need unions
+        Enum,   ///< "enum Foo" TODO: Do we need enums
     } cpp_type_type;
 
     enum CPPTypeQualifiers {
-      Const = 1,    ///< flag for "const"
-      Volatile = 2, ///< flag for "volatile"
+        Const = 1,    ///< flag for "const"
+        Volatile = 2, ///< flag for "volatile"
     };
     int32_t cpp_type_qualifiers; /// Bitset indicating which qualifiers are present on type
 

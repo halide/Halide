@@ -26,7 +26,7 @@ struct ParameterContents {
     Expr min_value, max_value;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
         : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r),
-	  name(n), buffer(Buffer()), data(0), default_val(0) {
+          name(n), buffer(Buffer()), data(0), default_val(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
