@@ -2,6 +2,7 @@
 #include "IRPrinter.h"
 #include "CodeGen_X86.h"
 #include "CodeGen_C.h"
+#include "CPlusPlusMangle.cpp"
 #include "Func.h"
 #include "Simplify.h"
 #include "Bounds.h"
@@ -29,6 +30,7 @@ int main(int argc, const char **argv) {
     simplify_test();
     solve_test();
     target_test();
+    cplusplus_mangle_test();
 
     return 0;
 }
