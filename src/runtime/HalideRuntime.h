@@ -655,7 +655,8 @@ struct halide_nd_buffer_t : public halide_buffer_t {
     }
 
     // Construct a halide_nd_buffer_t from a halide_buffer_t. Checks
-    // there are enough dimensions at runtime and call
+    // there are enough dimensions at runtime and calls halide_error
+    // if there aren't.
     explicit halide_nd_buffer_t(const halide_buffer_t &other) : halide_buffer_t(other) {
         if (other.dimensions > D) {
             halide_error(NULL, "Can't construct a halide_nd_buffer_t from a halide_buffer_t of greater dimensionality\n");
