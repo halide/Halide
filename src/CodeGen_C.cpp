@@ -117,34 +117,6 @@ const string globals =
     "inline double ceil_f64(double x) {return ceil(x);}\n"
     "inline double round_f64(double x) {return round(x);}\n"
     "\n"
-    "inline float maxval_f32() {return FLT_MAX;}\n"
-    "inline float minval_f32() {return -FLT_MAX;}\n"
-    "inline double maxval_f64() {return DBL_MAX;}\n"
-    "inline double minval_f64() {return -DBL_MAX;}\n"
-    "inline uint8_t maxval_u8() {return 0xff;}\n"
-    "inline uint8_t minval_u8() {return 0;}\n"
-    "inline uint16_t maxval_u16() {return 0xffff;}\n"
-    "inline uint16_t minval_u16() {return 0;}\n"
-    "inline uint32_t maxval_u32() {return 0xffffffff;}\n"
-    "inline uint32_t minval_u32() {return 0;}\n"
-    "inline uint64_t maxval_u64() {return 0xffffffffffffffff;}\n"
-    "inline uint64_t minval_u64() {return 0;}\n"
-    "inline int8_t maxval_s8() {return 0x7f;}\n"
-    "inline int8_t minval_s8() {return 0x80;}\n"
-    "inline int16_t maxval_s16() {return 0x7fff;}\n"
-    "inline int16_t minval_s16() {return 0x8000;}\n"
-    "inline int32_t maxval_s32() {return 0x7fffffff;}\n"
-    "inline int32_t minval_s32() {return 0x80000000;}\n"
-    "inline int64_t maxval_s64() {return 0x7fffffffffffffff;}\n"
-    "inline int64_t minval_s64() {return 0x8000000000000000;}\n"
-    "\n"
-    "inline int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}\n"
-    "inline int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}\n"
-    "inline int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}\n"
-    "inline int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}\n"
-    "inline float abs_f32(float a) {return fabsf(a);}\n"
-    "inline double abs_f64(double a) {return fabs(a);}\n"
-    "\n"
     "inline float nan_f32() {return NAN;}\n"
     "inline float neg_inf_f32() {return -INFINITY;}\n"
     "inline float inf_f32() {return INFINITY;}\n"
@@ -173,8 +145,6 @@ const string globals =
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
-    "template<typename T> T smod(T a, T b) {T result = a % b; if (result < 0) result += b < 0 ? -b : b; return result;}\n"
-    "template<typename T> T sdiv(T a, T b) {T q = a / b; T r = a - q*b; int bs = b >> (8*sizeof(T) - 1); int rs = r >> (8*sizeof(T) - 1); return q - (rs & bs) + (rs & ~bs);}\n"
 
     // This may look wasteful, but it's the right way to do
     // it. Compilers understand memcpy and will convert it to a no-op
@@ -250,11 +220,11 @@ CodeGen_C::~CodeGen_C() {
 namespace {
 string type_to_c_type(Type type) {
     ostringstream oss;
-    user_assert(type.width == 1) << "Can't use vector types when compiling to C (yet)\n";
+    user_assert(type.lanes() == 1) << "Can't use vector types when compiling to C (yet)\n";
     if (type.is_float()) {
-        if (type.bits == 32) {
+        if (type.bits() == 32) {
             oss << "float";
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             oss << "double";
         } else {
             user_error << "Can't represent a float with this many bits in C: " << type << "\n";
@@ -263,13 +233,13 @@ string type_to_c_type(Type type) {
     } else if (type.is_handle()) {
         oss << "void *";
     } else {
-        switch (type.bits) {
+        switch (type.bits()) {
         case 1:
             oss << "bool";
             break;
         case 8: case 16: case 32: case 64:
             if (type.is_uint()) oss << 'u';
-            oss << "int" << type.bits << "_t";
+            oss << "int" << type.bits() << "_t";
             break;
         default:
             user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
@@ -656,7 +626,18 @@ void CodeGen_C::visit(const Div *op) {
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv", {op->a, op->b}, Call::Extern));
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        // q = a / b
+        string q = print_assignment(op->type, a + " / " + b);
+        // r = a - q * b
+        string r = print_assignment(op->type, a + " - " + q + " * " + b);
+        // bs = b >> (8*sizeof(T) - 1)
+        string bs = print_assignment(op->type, b + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
+        // rs = r >> (8*sizeof(T) - 1)
+        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
+        // id = q - (rs & bs) + (rs & bs)
+        print_assignment(op->type, q + " - (" + rs + " & " + bs + ") + (" + rs + " & ~" + bs + ")");
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -669,7 +650,16 @@ void CodeGen_C::visit(const Mod *op) {
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "smod", {op->a, op->b}, Call::Extern));
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        // r = a % b
+        string r = print_assignment(op->type, a + " % " + b);
+        // rs = r >> (8*sizeof(T) - 1)
+        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
+        // abs_b = abs(b)
+        string abs_b = print_expr(cast(op->type, abs(op->b)));
+        // id = r + (abs_b & rs)
+        print_assignment(op->type, r + " + (" + abs_b + " & " + rs + ")");
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
@@ -720,7 +710,15 @@ void CodeGen_C::visit(const Not *op) {
 }
 
 void CodeGen_C::visit(const IntImm *op) {
-    id = std::to_string(op->value);
+    if (op->type == Int(32)) {
+        id = std::to_string(op->value);
+    } else {
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+    }
+}
+
+void CodeGen_C::visit(const UIntImm *op) {
+    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -965,8 +963,8 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "0";
         } else if (op->name == Call::abs) {
             internal_assert(op->args.size() == 1);
-            string arg = print_expr(op->args[0]);
-            rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
+            Expr a0 = op->args[0];
+            rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
         } else if (op->name == Call::memoize_expr) {
             internal_assert(op->args.size() >= 1);
             string arg = print_expr(op->args[0]);
@@ -1016,7 +1014,7 @@ void CodeGen_C::visit(const Call *op) {
                     format_string += "%llu";
                     printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
                 } else if (t.is_float()) {
-                    if (t.bits == 32) {
+                    if (t.bits() == 32) {
                         format_string += "%f";
                     } else {
                         format_string += "%e";

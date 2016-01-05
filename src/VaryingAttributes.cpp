@@ -137,15 +137,10 @@ protected:
         expr = op;
     }
 
-    template<typename T>
-    void visit_imm(T *op) {
-        order = 0;
-        expr = T::make(op->value);
-    }
-
-    virtual void visit(const IntImm *op)    { visit_imm(op); }
-    virtual void visit(const FloatImm *op)  { visit_imm(op); }
-    virtual void visit(const StringImm *op) { visit_imm(op); }
+    virtual void visit(const IntImm *op)    { order = 0; expr = op; }
+    virtual void visit(const UIntImm *op)   { order = 0; expr = op; }
+    virtual void visit(const FloatImm *op)  { order = 0; expr = op; }
+    virtual void visit(const StringImm *op) { order = 0; expr = op; }
 
     virtual void visit(const Cast *op) {
 
@@ -154,7 +149,7 @@ protected:
 
         // We can only interpolate float values, disqualify the expression if
         // this is a cast to a different type
-        if (order && (op->type.code != Type::Float)) {
+        if (order && (!op->type.is_float())) {
             order = 2;
         }
 
@@ -307,7 +302,7 @@ protected:
             order = 2;
         }
 
-        expr = Broadcast::make(a, op->width);
+        expr = Broadcast::make(a, op->lanes);
     }
 
     virtual void visit(const Select *op) {
@@ -533,7 +528,7 @@ protected:
     }
 
     Type float_type(Expr e) {
-        return Float(e.type().bits, e.type().width);
+        return Float(e.type().bits(), e.type().lanes());
     }
 
     template<typename T>
@@ -1219,16 +1214,16 @@ public:
 
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops
-            stmt = LetStmt::make("glsl.num_coords_dim0", dont_simplify(IntImm::make(coords[0].size())),
-                   LetStmt::make("glsl.num_coords_dim1", dont_simplify(IntImm::make(coords[1].size())),
-                   LetStmt::make("glsl.num_padded_attributes", dont_simplify(IntImm::make(num_padded_attributes)),
-                                 Allocate::make(vs.vertex_buffer_name, Float(32), {vertex_buffer_size}, const_true(),
+            stmt = LetStmt::make("glsl.num_coords_dim0", dont_simplify((int)(coords[0].size())),
+                   LetStmt::make("glsl.num_coords_dim1", dont_simplify((int)(coords[1].size())),
+                   LetStmt::make("glsl.num_padded_attributes", dont_simplify(num_padded_attributes),
+                   Allocate::make(vs.vertex_buffer_name, Float(32), {vertex_buffer_size}, const_true(),
                    Block::make(vertex_setup,
                    Block::make(loop_stmt,
-                   Block::make(used_in_codegen(Int(32),"glsl.num_coords_dim0"),
-                   Block::make(used_in_codegen(Int(32),"glsl.num_coords_dim1"),
-                   Block::make(used_in_codegen(Int(32),"glsl.num_padded_attributes"),
-                               Free::make(vs.vertex_buffer_name))))))))));
+                   Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim0"),
+                   Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim1"),
+                   Block::make(used_in_codegen(Int(32), "glsl.num_padded_attributes"),
+                   Free::make(vs.vertex_buffer_name))))))))));
         } else {
             IRMutator::visit(op);
         }

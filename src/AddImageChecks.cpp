@@ -72,8 +72,15 @@ Stmt add_image_checks(Stmt s,
     s.accept(&finder);
     map<string, FindBuffers::Result> bufs = finder.buffers;
 
-    // Add the output buffer(s)
+    // Add the output buffer(s).
     for (Function f : outputs) {
+        // Check that their dimensionality
+        // doesn't exceed what buffer_t can handle.
+        user_assert(f.dimensions() <= 4)
+            << "Output Func " << f.name()
+            << " has " << f.dimensions()
+            << " dimensions. Output buffers may not currently have more than four dimensions.\n";
+
         for (size_t i = 0; i < f.values().size(); i++) {
             FindBuffers::Result output_buffer;
             output_buffer.type = f.values()[i].type();
@@ -328,7 +335,7 @@ Stmt add_image_checks(Stmt s,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
-        vector<Expr> args = {buffer_name_expr, Expr(type.bits/8)};
+        vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
             args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));

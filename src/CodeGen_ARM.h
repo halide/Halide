@@ -26,6 +26,7 @@ protected:
     void visit(const Add *);
     void visit(const Sub *);
     void visit(const Div *);
+    void visit(const Mod *);
     void visit(const Mul *);
     void visit(const Min *);
     void visit(const Max *);
@@ -38,7 +39,7 @@ protected:
     struct Pattern {
         std::string intrin32; ///< Name of the intrinsic for 32-bit arm
         std::string intrin64; ///< Name of the intrinsic for 64-bit arm
-        int intrin_width;     ///< The native vector width of the intrinsic
+        int intrin_lanes;     ///< The native vector width of the intrinsic
         Expr pattern;         ///< The pattern to match against
         enum PatternType {Simple = 0, ///< Just match the pattern
                           LeftShift,  ///< Match the pattern if the RHS is a const power of two
@@ -47,10 +48,10 @@ protected:
         };
         PatternType type;
         Pattern() {}
-        Pattern(const std::string &i32, const std::string &i64, int w, Expr p, PatternType t = Simple) :
+        Pattern(const std::string &i32, const std::string &i64, int l, Expr p, PatternType t = Simple) :
             intrin32("llvm.arm.neon." + i32),
             intrin64("llvm.aarch64.neon." + i64),
-            intrin_width(w), pattern(p), type(t) {}
+            intrin_lanes(l), pattern(p), type(t) {}
     };
     std::vector<Pattern> casts, left_shifts, averagings, negations;
 

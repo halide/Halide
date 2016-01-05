@@ -86,7 +86,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     }
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s, env, outputs);
+    s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     if (t.has_feature(Target::Profile)) {

@@ -64,7 +64,7 @@ private:
         // Check to see if we are reading from a one or two dimension function
         // and pad to three dimensions.
         while (padded_call_args.size() < 3) {
-            padded_call_args.push_back(IntImm::make(0));
+            padded_call_args.push_back(0);
         }
 
         // Create image_load("name", name.buffer, x, x_extent, y, y_extent, ...).
@@ -97,13 +97,13 @@ private:
                 args.push_back(mutate(padded_call_args[i]) - min);
                 args.push_back(Variable::make(Int(32), extent_name));
             } else {
-                args.push_back(IntImm::make(0));
-                args.push_back(IntImm::make(1));
+                args.push_back(0);
+                args.push_back(1);
             }
         }
 
         Type load_type = call->type;
-        // load_type.width = 4;
+        // load_type = load_type.with_lanes(4);
 
         Expr load_call = Call::make(load_type,
                           Call::image_load,

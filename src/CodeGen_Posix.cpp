@@ -30,7 +30,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // does not work with NaCl at the moment.
 
     Expr no_overflow = const_true(1);
-    Expr total_size = cast<int64_t>(type.width * type.bytes());
+    Expr total_size = Expr((int64_t)(type.lanes() * type.bytes()));
     Expr max_size = cast<int64_t>(0x7fffffff);
     for (size_t i = 0; i < extents.size(); i++) {
         total_size *= extents[i];
@@ -66,7 +66,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             stack_bytes = ((stack_bytes + 31)/32)*32;
         } else {
             stack_bytes = 0;
-            llvm_size = codegen(Expr(static_cast<int32_t>(constant_bytes)));
+            llvm_size = codegen(Expr(constant_bytes));
         }
     } else {
         llvm_size = codegen_allocation_size(name, type, extents);
@@ -133,8 +133,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
             debug(4) << "Creating call to halide_malloc for allocation " << name
                      << " of size " << type.bytes();
-            for (size_t i = 0; i < extents.size(); i++) {
-                debug(4) << " x " << extents[i];
+            for (Expr e : extents) {
+                debug(4) << " x " << e;
             }
             debug(4) << "\n";
             Value *args[2] = { get_user_context(), llvm_size };

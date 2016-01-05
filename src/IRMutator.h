@@ -42,6 +42,7 @@ protected:
     Stmt stmt;
 
     EXPORT virtual void visit(const IntImm *);
+    EXPORT virtual void visit(const UIntImm *);
     EXPORT virtual void visit(const FloatImm *);
     EXPORT virtual void visit(const StringImm *);
     EXPORT virtual void visit(const Cast *);

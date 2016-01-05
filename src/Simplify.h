@@ -51,7 +51,7 @@ inline T mod_imp(T a, T b) {
     Type t = type_of<T>();
     if (t.is_int()) {
         T r = a % b;
-        r = r + (r < 0 ? (T)std::abs((int)b) : 0);
+        r = r + (r < 0 ? (T)std::abs((int64_t)b) : 0);
         return r;
     } else {
         return a % b;
@@ -62,10 +62,10 @@ template<typename T>
 inline T div_imp(T a, T b) {
     Type t = type_of<T>();
     if (t.is_int()) {
-        int q = a / b;
-        int r = a - q * b;
-        int bs = b >> (t.bits - 1);
-        int rs = r >> (t.bits - 1);
+        int64_t q = a / b;
+        int64_t r = a - q * b;
+        int64_t bs = b >> (t.bits() - 1);
+        int64_t rs = r >> (t.bits() - 1);
         return q - (rs & bs) + (rs & ~bs);
     } else {
         return a / b;

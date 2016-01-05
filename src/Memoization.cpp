@@ -90,9 +90,9 @@ public:
         } else if (info.type.is_handle()) {
             internal_error << "Handle parameter " << parameter.name() <<
                 " encountered in computed_cached computation.\n" <<
-                "Computations which depend on buffer parameters " <<
+                "Computations which depend on handle parameters " <<
                 "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for buffer.\n";
+                "Use memoize_tag to provide cache key information for handle.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);
@@ -268,9 +268,9 @@ public:
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
-        static uint32_t memoize_instance = 0;
+        static int32_t memoize_instance = 0;
         writes.push_back(Store::make(key_name,
-                                     IntImm::make(memoize_instance++), // Use and increment counter
+                                     memoize_instance++, // Use and increment counter
                                      (index / Int(32).bytes())));
         alignment += 4;
         index += 4;
@@ -322,7 +322,7 @@ public:
         }
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
-        return Call::make(Bool(1), "halide_memoization_cache_lookup", args, Call::Extern);
+        return Call::make(Int(32), "halide_memoization_cache_lookup", args, Call::Extern);
     }
 
     // Returns a statement which will store the result of a computation under this key
@@ -417,7 +417,7 @@ private:
             Stmt cache_miss_marker = LetStmt::make(cache_miss_name,
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
                                                    mutated_pipeline);
-            Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), IntImm::make(-1)),
+            Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
                                                                    Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
                                                   cache_miss_marker);
             Stmt cache_lookup = LetStmt::make(cache_result_name,

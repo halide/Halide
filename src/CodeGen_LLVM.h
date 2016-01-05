@@ -33,6 +33,7 @@ class GlobalVariable;
 #include <map>
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "IRVisitor.h"
 #include "Module.h"
@@ -58,7 +59,7 @@ public:
     virtual ~CodeGen_LLVM();
 
     /** Takes a halide Module and compiles it to an llvm Module. */
-    virtual llvm::Module *compile(const Module &module);
+    virtual std::unique_ptr<llvm::Module> compile(const Module &module);
 
     /** The target we're generating code for */
     const Target &get_target() const { return target; }
@@ -84,10 +85,12 @@ protected:
     virtual bool use_soft_float_abi() const = 0;
     // @}
 
-    // What's the natural vector bit-width to use for loads, stores, etc.
-    // @{
+    /** Should indexing math be promoted to 64-bit on platforms with
+     * 64-bit pointers? */
+    virtual bool promote_indices() const {return true;}
+
+    /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
-    // @}
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
@@ -104,7 +107,7 @@ protected:
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
 
-    llvm::Module *module;
+    std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
@@ -242,7 +245,7 @@ protected:
     llvm::Constant *create_constant_binary_blob(const std::vector<char> &data, const std::string &name);
 
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
-    llvm::Value *create_broadcast(llvm::Value *, int width);
+    llvm::Value *create_broadcast(llvm::Value *, int lanes);
 
     /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
      * The *_ptr variants return a pointer to the struct element, while the basic variants
@@ -286,6 +289,7 @@ protected:
      * optimizations. The result of each is stored in \ref value */
     // @{
     virtual void visit(const IntImm *);
+    virtual void visit(const UIntImm *);
     virtual void visit(const FloatImm *);
     virtual void visit(const StringImm *);
     virtual void visit(const Cast *);
@@ -368,16 +372,16 @@ protected:
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
-     * given by 'intrin_vector_width', the intrinsic is called on each
+     * given by 'intrin_lanes', the intrinsic is called on each
      * piece, then the results (if any) are concatenated back together
      * into the original type 't'. For the version that takes an
      * llvm::Type *, the type may be void, so the vector width of the
      * arguments must be specified explicitly as
-     * 'called_vector_width'. */
+     * 'called_lanes'. */
     // @{
-    llvm::Value *call_intrin(Type t, int intrin_vector_width,
+    llvm::Value *call_intrin(Type t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, int intrin_vector_width,
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);
     // @}
 
@@ -404,7 +408,7 @@ protected:
      *
      * If there's no match, returns (NULL, 0).
      */
-    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
+    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
 private:
 
@@ -440,7 +444,8 @@ private:
 }
 
 /** Given a Halide module, generate an llvm::Module. */
-EXPORT llvm::Module *codegen_llvm(const Module &module, llvm::LLVMContext &context);
+EXPORT std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
+                                                  llvm::LLVMContext &context);
 
 }
 

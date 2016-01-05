@@ -6,11 +6,8 @@ using namespace Halide::Internal;
 
 template<typename T>
 bool constant_expr_equals(Expr expr, T expected) {
-    T actual;
-    if (scalar_from_constant_expr(expr, &actual)) {
-        return expected == actual;
-    }
-    return false;
+    return (expr.type() == type_of<T>() &&
+            is_one(simplify(expr == Expr(expected))));
 }
 
 int main(int argc, char **argv) {
@@ -27,7 +24,7 @@ int main(int argc, char **argv) {
         Param<float> frac("frac", 22.5f, 11.25f, 1e30f);
         // Named so that it will come last.
         const uint64_t kU64 = 0xf00dcafedeadbeef;
-        Param<uint64_t> z_unsigned("z_unsigned", 0xdeadbeef, 0x01, scalar_to_constant_expr(kU64));
+        Param<uint64_t> z_unsigned("z_unsigned", 0xdeadbeef, 0x01, Expr(kU64));
 
         Var x("x"), y("y"), c("c");
 
@@ -94,17 +91,17 @@ int main(int argc, char **argv) {
         EXPECT(0, args[5].dimensions);
         EXPECT(0, args[6].dimensions);
 
-        EXPECT(Type::Float, args[2].type.code);
-        EXPECT(Type::Int, args[3].type.code);
-        EXPECT(Type::UInt, args[4].type.code);
-        EXPECT(Type::Int, args[5].type.code);
-        EXPECT(Type::UInt, args[6].type.code);
+        EXPECT(Type::Float, args[2].type.code());
+        EXPECT(Type::Int, args[3].type.code());
+        EXPECT(Type::UInt, args[4].type.code());
+        EXPECT(Type::Int, args[5].type.code());
+        EXPECT(Type::UInt, args[6].type.code());
 
-        EXPECT(32, args[2].type.bits);
-        EXPECT(32, args[3].type.bits);
-        EXPECT(8, args[4].type.bits);
-        EXPECT(32, args[5].type.bits);
-        EXPECT(64, args[6].type.bits);
+        EXPECT(32, args[2].type.bits());
+        EXPECT(32, args[3].type.bits());
+        EXPECT(8, args[4].type.bits());
+        EXPECT(32, args[5].type.bits());
+        EXPECT(64, args[6].type.bits());
 
         Func f_a("f_a"), f_b("f_b");
         f_a(x, y, c) = input1(x, y, c) * frac;
@@ -127,11 +124,11 @@ int main(int argc, char **argv) {
         EXPECT(0, args[1].dimensions);
         EXPECT(0, args[2].dimensions);
 
-        EXPECT(Type::Float, args[1].type.code);
-        EXPECT(Type::UInt, args[2].type.code);
+        EXPECT(Type::Float, args[1].type.code());
+        EXPECT(Type::UInt, args[2].type.code());
 
-        EXPECT(32, args[1].type.bits);
-        EXPECT(8, args[2].type.bits);
+        EXPECT(32, args[1].type.bits());
+        EXPECT(8, args[2].type.bits());
     }
 
 

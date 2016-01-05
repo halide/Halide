@@ -311,3 +311,28 @@ define weak_odr float @atanh_f32(float %x) nounwind uwtable readnone alwaysinlin
        ret float %y
 }
 
+
+define weak_odr float @inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0x7FF0000000000000
+}
+
+define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0xFFF0000000000000
+}
+
+define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0x7FF8000000000000
+}
+
+
+define weak_odr double @inf_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0x7FF0000000000000
+}
+
+define weak_odr double @neg_inf_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0xFFF0000000000000
+}
+
+define weak_odr double @nan_f64() nounwind uwtable readnone alwaysinline {
+       ret double 0x7FF8000000000000
+}

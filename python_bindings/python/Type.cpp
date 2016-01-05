@@ -17,7 +17,7 @@ namespace h = Halide;
 std::string type_code_to_string(const h::Type &t)
 {
     std::string code_string = "unknown";
-    switch(t.code)
+    switch(t.code())
     {
     case h::Type::UInt:
         code_string = "UInt";
@@ -44,10 +44,10 @@ std::string type_code_to_string(const h::Type &t)
 
 std::string type_repr(const h::Type &t)
 {
-    auto message_format = boost::format("<halide.Type code '%s' with %i bits and width %i>");
+    auto message_format = boost::format("<halide.Type code '%s' with %i bits and %i lanes>");
 
 
-    return boost::str(message_format % type_code_to_string(t) % t.bits % t.width);
+    return boost::str(message_format % type_code_to_string(t) % t.bits() % t.lanes());
 }
 
 void defineType()
@@ -55,20 +55,21 @@ void defineType()
 
     using Halide::Type;
     namespace p = boost::python;
-    
+
+    bool (Type::*can_represent_other_type)(Type) const = &Type::can_represent;
 
     p::class_<Type>("Type",
                     "Default constructor initializes everything to predictable-but-unlikely values",
                     p::no_init)
-            .def(p::init<h::Type::TypeCode, int, int>(p::args("code", "bits", "width")))
+            .def(p::init<halide_type_code_t, int, int>(p::args("code", "bits", "lanes")))
             .def(p::init<h::Type>(p::args("that"), "Copy constructor"))
 
-            .def_readwrite("bits", &Type::bits,
-                           "The number of bits of precision of a single scalar value of this type.")
+            .def("bits", &Type::bits,
+                 "The number of bits of precision of a single scalar value of this type.")
             .def("bytes", &Type::bytes,
                  "The number of bytes required to store a single scalar value of this type. Ignores vector width.")
-            .def_readwrite("width", &Type::width,
-                           "How many elements (if a vector type). Should be 1 for scalar types.")
+            .def("lanes", &Type::lanes,
+                 "How many elements (if a vector type). Should be 1 for scalar types.")
             .def("is_bool", &Type::is_bool, p::arg("self"),
                  "Is this type boolean (represented as UInt(1))?")
             .def("is_vector", &Type::is_vector, p::arg("self"),
@@ -85,18 +86,16 @@ void defineType()
                  "Is this type an opaque handle type (void *)")
             .def(p::self == p::self)
             .def(p::self != p::self)
-            .def("vector_of", &Type::vector_of, p::args("self", "w"),
-                 "Produce a vector of this type, with 'width' elements")
+            .def("with_lanes", &Type::with_lanes, p::args("self", "w"),
+                 "Produce a copy of this type, with 'lanes' vector lanes")
+            .def("with_bits", &Type::with_bits, p::args("self", "w"),
+                 "Produce a copy of this type, with 'bits' bits")
             .def("element_of", &Type::element_of, p::arg("self"),
                  "Produce the type of a single element of this vector type")
-            .def("can_represent", &Type::can_represent, p::arg("other"),
+            .def("can_represent", can_represent_other_type, p::arg("other"),
                  "Can this type represent all values of another type?")
-            .def("imax", &Type::imax, p::arg("self"),
-                 "Return an integer which is the maximum value of this type.")
             .def("max", &Type::max, p::arg("self"),
                  "Return an expression which is the maximum value of this type")
-            .def("imin", &Type::imin, p::arg("self"),
-                 "Return an integer which is the minimum value of this type")
             .def("min", &Type::min, p::arg("self"),
                  "Return an expression which is the minimum value of this type")
             .def("__repr__", &type_repr, p::arg("self"),
@@ -128,5 +127,3 @@ void defineType()
 
     return;
 }
-
-

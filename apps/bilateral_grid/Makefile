@@ -12,7 +12,7 @@ bilateral_grid.o: bilateral_grid
 filter: bilateral_grid.o filter.cpp
 	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpthread -ldl -o filter  $(PNGFLAGS)
 
-bilateral_grid.mp4: bilateral_grid.cpp viz.sh $(HALIDE_PATH)/bin/HalideTraceViz
+bilateral_grid.mp4: bilateral_grid.cpp viz.sh
 	bash viz.sh
 
 out.png: filter
