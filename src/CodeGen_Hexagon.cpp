@@ -500,10 +500,10 @@ CodeGen_Hexagon::getHighAndLowVectors(llvm::Value *DoubleVec,
   std::vector<Value *> Ops;
   Ops.push_back(DoubleVec);
   Value *Hi =
-    CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
                       IPICK(Intrinsic::hexagon_V6_hi)), Ops);
   Value *Lo =
-    CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
                       IPICK(Intrinsic::hexagon_V6_lo)), Ops);
   Res.push_back(Hi);
   Res.push_back(Lo);
@@ -518,7 +518,7 @@ CodeGen_Hexagon::concatVectors(Value *High, Value *Low) {
   Ops.push_back(High);
   Ops.push_back(Low);
   Value *CombineCall =
-    CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
                       IPICK(Intrinsic::hexagon_V6_vcombine)), Ops);
   return CombineCall;
 }
@@ -697,7 +697,7 @@ llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
         Intrinsic::ID ID = P.ID;
         bool BitCastNeeded = false;
         llvm::Type *BitCastBackTo;
-        llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+        llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
         llvm::FunctionType *FType = F->getFunctionType();
         Value *Lt = codegen(matches[0]);
         Value *Rt = codegen(matches[1]);
@@ -1015,7 +1015,7 @@ bool CodeGen_Hexagon::possiblyGenerateVMPAAccumulate(const Add *op) {
       Ops.push_back(Scalar);
       Intrinsic::ID IntrinsID = P.ID;
       Value *Result = CallLLVMIntrinsic(Intrinsic::
-                                        getDeclaration(module, IntrinsID),
+                                        getDeclaration(module.get(), IntrinsID),
                                         Ops);
       value =  convertValueType(Result, llvm_type_of(op->type));
       return true;
@@ -1037,7 +1037,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
     Value *Lt = LLVMValues[0];
     Value *Rt = LLVMValues[1];
     llvm::Function *F =
-      Intrinsic::getDeclaration(module, Intrinsic::hexagon_V6_vmpabuuv);
+      Intrinsic::getDeclaration(module.get(), Intrinsic::hexagon_V6_vmpabuuv);
     llvm::FunctionType *FType = F->getFunctionType();
     llvm::Type *T0 = FType->getParamType(0);
     llvm::Type *T1 = FType->getParamType(1);
@@ -1065,7 +1065,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
     Value *Lt = LLVMValues[0];
     Value *Rt = LLVMValues[1];
     llvm::Function *F =
-      Intrinsic::getDeclaration(module, Intrinsic::hexagon_V6_vdmpyhvsat);
+      Intrinsic::getDeclaration(module.get(), Intrinsic::hexagon_V6_vdmpyhvsat);
     llvm::FunctionType *FType = F->getFunctionType();
     llvm::Type *T0 = FType->getParamType(0);
     llvm::Type *T1 = FType->getParamType(1);
@@ -1141,15 +1141,15 @@ CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
         getHighAndLowVectors(DoubleVecB, OpsB);
         Ops.push_back(OpsA[0]);
         Ops.push_back(OpsB[0]);
-        Value *HighRes = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
-                                                                     IntrinsID),
-                                           Ops);
+        Value *HighRes = CallLLVMIntrinsic(
+                           Intrinsic::getDeclaration(module.get(), IntrinsID),
+                                                     Ops);
         Ops.clear();
         Ops.push_back(OpsA[1]);
         Ops.push_back(OpsB[1]);
-        Value *LowRes = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
-                                                                    IntrinsID),
-                                           Ops);
+        Value *LowRes = CallLLVMIntrinsic(
+                          Intrinsic::getDeclaration(module.get(), IntrinsID),
+                                                    Ops);
         Ops.clear();
         Ops.push_back(LowRes);
         Ops.push_back(HighRes);
@@ -1209,8 +1209,8 @@ void CodeGen_Hexagon::visit(const Div *op) {
             Ops.push_back(Vector);
             Ops.push_back(ShiftBy);
             Value *Result =
-              CallLLVMIntrinsic(Intrinsic::getDeclaration(module, IntrinsID),
-                                Ops);
+              CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
+                                  IntrinsID), Ops);
             value = convertValueType(Result, llvm_type_of(op->type));
             return;
           }
@@ -1446,7 +1446,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
           Ops.push_back(LowVecReg);
           Value *EvenRegisterPair =
             CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module,
+                              getDeclaration(module.get(),
                                              IntrinsID), Ops);
           debug(4) << "HexCG::" << "Widening higher vector reg elements(odd)"
             " elements to 32 bit\n";
@@ -1454,7 +1454,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
           Ops.push_back(HiVecReg);
           Value *OddRegisterPair =
             CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module,
+                              getDeclaration(module.get(),
                                              IntrinsID), Ops);
           Ops.clear();
           Ops.push_back(EvenRegisterPair);
@@ -1541,7 +1541,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 
           // Ops[0] is the higher vectors and Ops[1] the lower.
           getHighAndLowVectors(FirstStep, Ops);
-          Value *V = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+          Value *V = CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
                                                                  IntrinsID),
                                        Ops);
           return convertValueType(V, llvm_type_of(op->type));
@@ -1569,7 +1569,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
           std::vector<Value *> Ops;
           Intrinsic::ID IntrinsID = P.ID;
           getHighAndLowVectors(FirstStep, Ops);
-          Value * V = CallLLVMIntrinsic(Intrinsic::getDeclaration(module,
+          Value * V = CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
                                                                   IntrinsID),
                                         Ops);
           return convertValueType(V, llvm_type_of(op->type));
@@ -1610,12 +1610,12 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
           // TODO: For v61 use hexagon_V6_vsathuwuh
           Value *EvenHalf =
             CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module, IntrinsID), Ops);
+                              getDeclaration(module.get(), IntrinsID), Ops);
           Ops.clear();
           getHighAndLowVectors(OddRegPair, Ops);
           Value *OddHalf =
             CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module, IntrinsID), Ops);
+                              getDeclaration(module.get(), IntrinsID), Ops);
 
           // EvenHalf & OddHalf are each one vector wide.
           Value *Result = concatVectors(OddHalf, EvenHalf);
@@ -1654,12 +1654,12 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 
           Value *EvenHalf =
             CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module, IntrinsID), Ops);
+                              getDeclaration(module.get(), IntrinsID), Ops);
           Ops.clear();
           getHighAndLowVectors(OddRegPair, Ops);
           Value *OddHalf =
             CallLLVMIntrinsic(Intrinsic::
-                              getDeclaration(module, IntrinsID), Ops);
+                              getDeclaration(module.get(), IntrinsID), Ops);
 
           // EvenHalf & OddHalf are each one vector wide.
           Value *Result = concatVectors(OddHalf, EvenHalf);
@@ -1698,7 +1698,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         if (expr_match(P.pattern, op, matches)) {
           internal_assert(matches.size() == 2);
           Intrinsic::ID ID = P.ID;
-          llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+          llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
           llvm::FunctionType *FType = F->getFunctionType();
           bool InvertOperands = P.InvertOperands;
           Value *Lt = codegen(matches[0]);
@@ -1738,7 +1738,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         const Pattern &P = casts[I];
         if (expr_match(P.pattern, op, matches)) {
           Intrinsic::ID ID = P.ID;
-          llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+          llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
           llvm::FunctionType *FType = F->getFunctionType();
           Value *Op0 = codegen(matches[0]);
           const Cast *C = P.pattern.as<Cast>();
@@ -1819,7 +1819,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
           getHighAndLowVectors(DoubleVector, Ops);
           Intrinsic::ID ID = P.ID;
           Value *ShuffleInst =
-            CallLLVMIntrinsic(Intrinsic::getDeclaration(module, ID), Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(), ID), Ops);
           value = convertValueType(ShuffleInst, llvm_type_of(op->type));
           return;
         }
@@ -1862,7 +1862,8 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         getHighAndLowVectors(DoubleVector, Ops);
         Ops.push_back(ShiftOperand);
         Value *SatAndPackInst =
-          CallLLVMIntrinsic(Intrinsic::getDeclaration(module, IntrinsID), Ops);
+          CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
+                                                      IntrinsID), Ops);
         value = convertValueType(SatAndPackInst, llvm_type_of(op->type));
         return;
       }
@@ -1903,8 +1904,8 @@ void CodeGen_Hexagon::visit(const Cast *op) {
             getHighAndLowVectors(DoubleVector, Ops);
             Ops.push_back(ShiftBy);
             Value *Result =
-              CallLLVMIntrinsic(Intrinsic::getDeclaration(module, IntrinsID),
-                                Ops);
+              CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),
+                                IntrinsID), Ops);
             value = convertValueType(Result, llvm_type_of(op->type));
             return;
           }
@@ -1937,7 +1938,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
             " shorts (signed and unsigned) to signed chars\n";
         } else {
           Value *SatAndPackInst =
-            CallLLVMIntrinsic(Intrinsic::getDeclaration(module,ID), Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(),ID), Ops);
           value = convertValueType(SatAndPackInst, llvm_type_of(op->type));
           return;
         }
@@ -1973,7 +1974,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
           getHighAndLowVectors(DoubleVector, Ops);
           Intrinsic::ID ID = P.ID;
           Value *ShuffleInst =
-            CallLLVMIntrinsic(Intrinsic::getDeclaration(module, ID), Ops);
+            CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(), ID), Ops);
           value = convertValueType(ShuffleInst, llvm_type_of(op->type));
           return;
         }
@@ -1987,7 +1988,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
         const Pattern &P = typecasts[I];
         if (expr_match(P.pattern, op, matches)) {
           Intrinsic::ID ID = P.ID;
-          llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+          llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
           llvm::FunctionType *FType = F->getFunctionType();
           Value *Op0 = codegen(matches[0]);
           const Cast *C = P.pattern.as<Cast>();
@@ -2022,7 +2023,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
     if (expr_match(P.pattern, op, matches)) {
       Intrinsic::ID ID = P.ID;
       bool InvertOperands = P.InvertOperands;
-      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
       llvm::FunctionType *FType = F->getFunctionType();
       size_t NumMatches = matches.size();
       internal_assert(NumMatches == 2);
@@ -2068,7 +2069,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
         std::vector<Value *> Ops;
         Ops.push_back(codegen(op->args[0]));
         llvm::Function *F =
-          Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_vnot));
+          Intrinsic::getDeclaration(module.get(),
+                                    IPICK(Intrinsic::hexagon_V6_vnot));
         Value *Call = CallLLVMIntrinsic(F, Ops);
         value = convertValueType(Call, llvm_type_of(op->type));
         return;
@@ -2087,7 +2089,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
       std::vector<Value *> Ops;
       Ops.push_back(codegen(op->args[0]));
       llvm::Function *F =
-        Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_hi));
+        Intrinsic::getDeclaration(module.get(),
+                                  IPICK(Intrinsic::hexagon_V6_hi));
       Value *Call = CallLLVMIntrinsic(F, Ops);
       value = convertValueType(Call, llvm_type_of(op->type));
       return;
@@ -2097,7 +2100,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
       std::vector<Value *> Ops;
       Ops.push_back(codegen(op->args[0]));
       llvm::Function *F =
-        Intrinsic::getDeclaration(module, IPICK(Intrinsic::hexagon_V6_lo));
+        Intrinsic::getDeclaration(module.get(),
+                                  IPICK(Intrinsic::hexagon_V6_lo));
       Value *Call = CallLLVMIntrinsic(F, Ops);
       value = convertValueType(Call, llvm_type_of(op->type));
       return;
@@ -2236,7 +2240,7 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
   Ops.push_back(Vector);
   Ops.push_back(Scalar);
   Value *Vmpy =
-    CallLLVMIntrinsic(Intrinsic::getDeclaration(module, IntrinsID), Ops);
+    CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(), IntrinsID), Ops);
   value = convertValueType(Vmpy, llvm_type_of(op->type));
   return true;
 }
@@ -2363,20 +2367,20 @@ void CodeGen_Hexagon::visit(const Mul *op) {
               Ops.push_back(Scalar);
               Value *Call1 =  //Odd elements
                 CallLLVMIntrinsic(Intrinsic::
-                                  getDeclaration(module, IntrinsID), Ops);
+                                  getDeclaration(module.get(), IntrinsID), Ops);
               Ops.clear();
               Ops.push_back(LoCall);
               Ops.push_back(Scalar);
               Value *Call2 =        // Even elements.
                 CallLLVMIntrinsic(Intrinsic::
-                                  getDeclaration(module, IntrinsID), Ops);
+                                  getDeclaration(module.get(), IntrinsID), Ops);
               Ops.clear();
               Ops.push_back(Call1);
               Ops.push_back(Call2);
               IntrinsID = IPICK(Intrinsic::hexagon_V6_vcombine);
               Value *CombineCall =
                 CallLLVMIntrinsic(Intrinsic::
-                                  getDeclaration(module, IntrinsID), Ops);
+                                  getDeclaration(module.get(), IntrinsID), Ops);
               Halide::Type DestType = op->type;
               llvm::Type *DestLLVMType = llvm_type_of(DestType);
               if (DestLLVMType != CombineCall->getType())
@@ -2553,7 +2557,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
 
     std::vector<Value *> ResVec;
     for (size_t numop = 0; numop < NumOps; ++numop) {
-      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
       std::vector<Value *> Ops;
       if (splatval) {
          Ops.push_back(splatval);
@@ -2648,7 +2652,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
             Ops.push_back(Scalar);
             Value *valign =
               CallLLVMIntrinsic(Intrinsic::
-                                getDeclaration(module, IntrinsID), Ops);
+                                getDeclaration(module.get(), IntrinsID), Ops);
             value = convertValueType(valign, llvm_type_of(op->type));
             return;
           } else {
@@ -2669,7 +2673,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
             Ops.push_back(Scalar);
             Value *valign =
               CallLLVMIntrinsic(Intrinsic::
-                                getDeclaration(module, IntrinsID), Ops);
+                                getDeclaration(module.get(), IntrinsID), Ops);
             value = convertValueType(valign, llvm_type_of(op->type));
             return;
           }
@@ -2778,14 +2782,14 @@ void CodeGen_Hexagon::visit(const Select *op) {
             Ops.push_back(OpsB[0]);
             Intrinsic::ID ID = IPICK(Intrinsic::hexagon_V6_vmux);
             Value *HighMux = CallLLVMIntrinsic(Intrinsic::
-                                               getDeclaration(module, ID),
+                                               getDeclaration(module.get(), ID),
                                                Ops);
             Ops.clear();
             Ops.push_back(LowCond);
             Ops.push_back(OpsA[1]);
             Ops.push_back(OpsB[1]);
             Value *LowMux = CallLLVMIntrinsic(Intrinsic::
-                                               getDeclaration(module, ID),
+                                               getDeclaration(module.get(), ID),
                                                Ops);
             Ops.clear();
             Ops.push_back(LowMux);
@@ -2834,7 +2838,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
             Ops.push_back(VecB);
             Intrinsic::ID ID = IPICK(Intrinsic::hexagon_V6_vmux);
             Value *Mux = CallLLVMIntrinsic(Intrinsic::
-                                               getDeclaration(module, ID),
+                                               getDeclaration(module.get(), ID),
                                                Ops);
             value = convertValueType(Mux, llvm_type_of(op->type));
             return;
@@ -2861,7 +2865,7 @@ llvm::Value *
 CodeGen_Hexagon::negate(llvm::Value *a) {
   bool B128 = target.has_feature(Halide::Target::HVX_128);
   Intrinsic::ID PredNot = IPICK(Intrinsic::hexagon_V6_pred_not);
-  llvm::Function *PredNotF = Intrinsic::getDeclaration(module, PredNot);
+  llvm::Function *PredNotF = Intrinsic::getDeclaration(module.get(), PredNot);
   std::vector<Value*> Ops;
   Ops.push_back(a);
   Value *Cmp = CallLLVMIntrinsic(PredNotF, Ops);
@@ -2886,7 +2890,7 @@ CodeGen_Hexagon::generate_vector_comparison(const BaseExprNode *op,
       // OpsA[0] == HighVector;
       // OpsA[1] = LowVector;
       // a <= b is !(a > b)
-      llvm::Function *CmpF = Intrinsic::getDeclaration(module, IntrinsID);
+      llvm::Function *CmpF = Intrinsic::getDeclaration(module.get(), IntrinsID);
       Value *LowCmp, *HighCmp;
       if (invert_ops) {
        LowCmp = compare(OpsB[0], OpsA[0], CmpF);
@@ -2913,7 +2917,7 @@ CodeGen_Hexagon::generate_vector_comparison(const BaseExprNode *op,
       Value *VecB = codegen(matches[1]);
       Intrinsic::ID IntrinsID = P.ID;
       // a <= b is !(a > b)
-      llvm::Function *CmpF = Intrinsic::getDeclaration(module, IntrinsID);
+      llvm::Function *CmpF = Intrinsic::getDeclaration(module.get(), IntrinsID);
       Value *Cmp;
       if (invert_ops)
         Cmp = compare(VecB, VecA, CmpF);
