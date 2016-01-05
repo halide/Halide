@@ -33,6 +33,7 @@ class GlobalVariable;
 #include <map>
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "IRVisitor.h"
 #include "Module.h"
@@ -58,7 +59,7 @@ public:
     virtual ~CodeGen_LLVM();
 
     /** Takes a halide Module and compiles it to an llvm Module. */
-    virtual llvm::Module *compile(const Module &module);
+    virtual std::unique_ptr<llvm::Module> compile(const Module &module);
 
     /** The target we're generating code for */
     const Target &get_target() const { return target; }
@@ -106,7 +107,7 @@ protected:
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
 
-    llvm::Module *module;
+    std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
@@ -457,7 +458,8 @@ private:
 }
 
 /** Given a Halide module, generate an llvm::Module. */
-EXPORT llvm::Module *codegen_llvm(const Module &module, llvm::LLVMContext &context);
+EXPORT std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
+                                                  llvm::LLVMContext &context);
 
 }
 
