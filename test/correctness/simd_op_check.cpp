@@ -554,6 +554,13 @@ void check_neon_all() {
     bool arm32 = (target.bits == 32);
 
     for (int w = 1; w <= 4; w++) {
+        // There are no vectorized div and mod calls. They should
+        // generate support library calls.
+        if (arm32) {
+            check("__aeabi_idiv(PLT)", 2*w, i32_1 / i32_2);
+            check("__modsi3(PLT)", 2*w, i32_1 % i32_2);
+        }
+
         // VABA     I       -       Absolute Difference and Accumulate
         check(arm32 ? "vaba.s8"  : "saba", 8*w, i8_1 + absd(i8_2, i8_3));
         check(arm32 ? "vaba.u8"  : "uaba", 8*w, u8_1 + absd(u8_2, u8_3));

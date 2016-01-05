@@ -19,6 +19,7 @@ class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
     int global_level;
+
     InjectTracing(const map<string, Function> &e)
         : env(e),
           global_level(tracing_level()) {}
@@ -83,7 +84,7 @@ private:
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
             trace_it = global_level > 2;
-            trace_parent = -1;
+            trace_parent = Variable::make(Int(32), "pipeline.trace_id");
         }
 
         if (trace_it) {
@@ -147,7 +148,7 @@ private:
             vector<Expr> args;
             args.push_back(op->name);
             args.push_back(halide_trace_begin_realization); // event type for begin realization
-            args.push_back(0); // realization id
+            args.push_back(Variable::make(Int(32), "pipeline.trace_id")); // pipeline id
             args.push_back(0); // value index
             args.push_back(0); // value
 
@@ -246,7 +247,8 @@ public:
     RemoveRealizeOverOutput(const vector<Function> &o) : outputs(o) {}
 };
 
-Stmt inject_tracing(Stmt s, const map<string, Function> &env, const vector<Function> &outputs) {
+Stmt inject_tracing(Stmt s, const string &pipeline_name,
+                    const map<string, Function> &env, const vector<Function> &outputs) {
     Stmt original = s;
     InjectTracing tracing(env);
 
@@ -270,12 +272,21 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, const vector<Funct
     // Strip off the dummy realize blocks
     s = RemoveRealizeOverOutput(outputs).mutate(s);
 
-    // Unless tracing was a no-op, add a call to shut down the trace
-    // (which flushes the output stream)
     if (!s.same_as(original)) {
-        Expr flush = Call::make(Int(32), "halide_shutdown_trace", vector<Expr>(), Call::Extern);
-        s = Block::make(s, Evaluate::make(flush));
+        // Add pipeline start and end events
+        vector<Expr> args = {pipeline_name,
+                             halide_trace_begin_pipeline,
+                             0, 0, 0};
+        Expr pipeline_start = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+
+        args[1] = halide_trace_end_pipeline;
+        args[2] = Variable::make(Int(32), "pipeline.trace_id");
+        Expr pipeline_end = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+
+        s = Block::make(s, Evaluate::make(pipeline_end));
+        s = LetStmt::make("pipeline.trace_id", pipeline_start, s);
     }
+
     return s;
 }
 

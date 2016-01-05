@@ -13,7 +13,7 @@ using std::string;
 using std::ostringstream;
 
 ostream &operator<<(ostream &out, const Type &type) {
-    switch (type.code) {
+    switch (type.code()) {
     case Type::Int:
         out << "int";
         break;
@@ -27,8 +27,8 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "handle";
         break;
     }
-    out << type.bits;
-    if (type.width > 1) out << 'x' << type.width;
+    out << type.bits();
+    if (type.lanes() > 1) out << 'x' << type.lanes();
     return out;
 }
 
@@ -210,11 +210,31 @@ void IRPrinter::do_indent() {
 }
 
 void IRPrinter::visit(const IntImm *op) {
-    stream << op->value;
+    if (op->type == Int(32)) {
+        stream << op->value;
+    } else {
+        stream << "(" << op->type << ")" << op->value;
+    }
+}
+
+void IRPrinter::visit(const UIntImm *op) {
+    stream << "(" << op->type << ")" << op->value;
 }
 
 void IRPrinter::visit(const FloatImm *op) {
-    stream << op->value << 'f';
+  switch (op->type.bits()) {
+    case 64:
+        stream << op->value;
+        break;
+    case 32:
+        stream << op->value << 'f';
+        break;
+    case 16:
+        stream << op->value << 'h';
+        break;
+    default:
+        internal_error << "Bad bit-width for float: " << op->type << "\n";
+    }
 }
 
 void IRPrinter::visit(const StringImm *op) {
@@ -408,11 +428,11 @@ void IRPrinter::visit(const Ramp *op) {
     print(op->base);
     stream << ", ";
     print(op->stride);
-    stream << ", " << op->width << ")";
+    stream << ", " << op->lanes << ")";
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << "x" << op->width << "(";
+    stream << "x" << op->lanes << "(";
     print(op->value);
     stream << ")";
 }

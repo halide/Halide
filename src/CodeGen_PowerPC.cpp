@@ -21,14 +21,14 @@ CodeGen_PowerPC::CodeGen_PowerPC(Target t) : CodeGen_Posix(t) {
 
 const char* CodeGen_PowerPC::altivec_int_type_name(const Type& t) {
     if (t.is_int()) {
-        switch (t.bits) {
+        switch (t.bits()) {
         case  8: return "sb";
         case 16: return "sh";
         case 32: return "sw";
         case 64: return "sd";
         }
     } else if (t.is_uint()) {
-        switch (t.bits) {
+        switch (t.bits()) {
         case  8: return "ub";
         case 16: return "uh";
         case 32: return "uw";
@@ -41,81 +41,42 @@ const char* CodeGen_PowerPC::altivec_int_type_name(const Type& t) {
 namespace {
 
 Expr _i64(Expr e) {
-    return cast(Int(64, e.type().width), e);
+    return cast(Int(64, e.type().lanes()), e);
 }
 
 Expr _u64(Expr e) {
-    return cast(UInt(64, e.type().width), e);
+    return cast(UInt(64, e.type().lanes()), e);
 }
 Expr _i32(Expr e) {
-    return cast(Int(32, e.type().width), e);
+    return cast(Int(32, e.type().lanes()), e);
 }
 
 Expr _u32(Expr e) {
-    return cast(UInt(32, e.type().width), e);
+    return cast(UInt(32, e.type().lanes()), e);
 }
 
 Expr _i16(Expr e) {
-    return cast(Int(16, e.type().width), e);
+    return cast(Int(16, e.type().lanes()), e);
 }
 
 Expr _u16(Expr e) {
-    return cast(UInt(16, e.type().width), e);
+    return cast(UInt(16, e.type().lanes()), e);
 }
 
 Expr _i8(Expr e) {
-    return cast(Int(8, e.type().width), e);
+    return cast(Int(8, e.type().lanes()), e);
 }
 
 Expr _u8(Expr e) {
-    return cast(UInt(8, e.type().width), e);
+    return cast(UInt(8, e.type().lanes()), e);
 }
 
 Expr _f32(Expr e) {
-    return cast(Float(32, e.type().width), e);
+    return cast(Float(32, e.type().lanes()), e);
 }
 
 Expr _f64(Expr e) {
-    return cast(Float(64, e.type().width), e);
-}
-
-// Attempt to cast an expression to a smaller type while provably not
-// losing information. If it can't be done, return an undefined Expr.
-
-Expr lossless_cast(Type t, Expr e) {
-    if (t == e.type()) {
-        return e;
-    } else if (t.can_represent(e.type())) {
-        return cast(t, e);
-    }
-
-    if (const Cast *c = e.as<Cast>()) {
-        if (t == c->value.type()) {
-            return c->value;
-        } else {
-            return lossless_cast(t, c->value);
-        }
-    }
-
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value);
-        if (v.defined()) {
-            return Broadcast::make(v, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = e.as<IntImm>()) {
-        int x = int_cast_constant(t, i->value);
-        if (x == i->value) {
-            return cast(t, e);
-        } else {
-            return Expr();
-        }
-    }
-
-    return Expr();
+    return cast(Float(64, e.type().lanes()), e);
 }
 
 }
@@ -193,7 +154,7 @@ void CodeGen_PowerPC::visit(const Cast *op) {
                 }
             }
             if (match) {
-                value = call_intrin(op->type, pattern.type.width, pattern.intrin, matches);
+                value = call_intrin(op->type, pattern.type.lanes(), pattern.intrin, matches);
                 return;
             }
         }
@@ -215,8 +176,8 @@ void CodeGen_PowerPC::visit(const Min *op) {
     const char* element_type_name = altivec_int_type_name(element_type);
 
     if (element_type_name != nullptr &&
-        (element_type.bits < 64 || arch_2_07)) {
-        value = call_intrin(op->type, (128 / element_type.bits),
+        (element_type.bits() < 64 || arch_2_07)) {
+        value = call_intrin(op->type, (128 / element_type.bits()),
                             std::string("llvm.ppc.altivec.vmin") + element_type_name,
                             {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {
@@ -241,8 +202,8 @@ void CodeGen_PowerPC::visit(const Max *op) {
     const char* element_type_name = altivec_int_type_name(element_type);
 
     if (element_type_name != nullptr &&
-        (element_type.bits < 64 || arch_2_07)) {
-        value = call_intrin(op->type, (128 / element_type.bits),
+        (element_type.bits() < 64 || arch_2_07)) {
+        value = call_intrin(op->type, (128 / element_type.bits()),
                             std::string("llvm.ppc.altivec.vmax") + element_type_name,
                             {op->a, op->b});
     } else if (op->type.element_of() == Float(32)) {

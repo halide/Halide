@@ -15,9 +15,10 @@ namespace {
 #define C1 1121052041
 #define C2 1040796640
 
-// Permute a 32-bit integer using a fixed psuedorandom permutation.
+// Permute a 32-bit unsigned integer using a fixed psuedorandom
+// permutation.
 Expr rng32(Expr x) {
-    internal_assert(x.type() == Int(32));
+    internal_assert(x.type() == UInt(32));
 
     // A polynomial P with coefficients C0 .. CN induces a permutation
     // modulo 2^d iff:
@@ -53,8 +54,8 @@ Expr rng32(Expr x) {
     // So I declare this good enough for image processing.
 
     // If it's just a const (which it often is), save the simplifier some work:
-    if (const int *i = as_const_int(x)) {
-        return (((C2 * (*i)) + C1) * (*i) + C0);
+    if (const uint64_t *i = as_const_uint(x)) {
+        return make_const(UInt(32), ((C2 * (*i)) + C1) * (*i) + C0);
     }
 
     return (((C2 * x) + C1) * x) + C0;
@@ -64,21 +65,21 @@ Expr rng32(Expr x) {
 
 Expr random_int(const vector<Expr> &e) {
     internal_assert(e.size());
-    internal_assert(e[0].type() == Int(32));
+    internal_assert(e[0].type() == Int(32) || e[0].type() == UInt(32));
     // Permute the first term
-    Expr result = rng32(e[0]);
+    Expr result = rng32(cast(UInt(32), e[0]));
     for (size_t i = 1; i < e.size(); i++) {
-        internal_assert(e[i].type() == Int(32));
+        internal_assert(e[i].type() == Int(32) || e[i].type() == UInt(32));
         // Add in the next term and permute again
         string name = unique_name('R');
         // If it's a const, save the simplifier some work
-        const int *ir = as_const_int(result);
-        const int *ie = as_const_int(e[i]);
+        const uint64_t *ir = as_const_uint(result);
+        const uint64_t *ie = as_const_uint(e[i]);
         if (ir && ie) {
-            result = rng32((*ir) + (*ie));
+            result = rng32(make_const(UInt(32), (*ir) + (*ie)));
         } else {
-            result = Let::make(name, result + e[i],
-                               rng32(Variable::make(Int(32), name)));
+            result = Let::make(name, result + cast<uint32_t>(e[i]),
+                               rng32(Variable::make(UInt(32), name)));
         }
     }
     return result;
@@ -103,9 +104,11 @@ class LowerRandom : public IRMutator {
             if (op->type == Float(32)) {
                 expr = random_float(args);
             } else if (op->type == Int(32)) {
-                expr = cast<int>(random_int(args));
+                expr = cast<int32_t>(random_int(args));
+            } else if (op->type == UInt(32)) {
+                expr = random_int(args);
             } else {
-                internal_error << "The intrinsic random() returns an Int(32) or a Float(32).\n";
+                internal_error << "The intrinsic random() returns an Int(32), UInt(32) or a Float(32).\n";
             }
         } else {
             IRMutator::visit(op);

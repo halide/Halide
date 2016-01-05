@@ -115,8 +115,7 @@ bool is_negative_one(unsigned char val) {
 
 template<typename T,typename BIG,int bits>
 BIG maximum() {
-    Type t = type_of<T>();
-    t.bits = bits;
+    Type t = type_of<T>().with_bits(bits);
 
     if (t.is_float()) {
         return (BIG) 1.0;
@@ -125,13 +124,13 @@ BIG maximum() {
         uint64_t max;
         max = 0;
         max = ~max;
-        if (t.bits < 64)
-            max = (((uint64_t) 1) << t.bits) - 1;
+        if (t.bits() < 64)
+            max = (((uint64_t) 1) << t.bits()) - 1;
         return (BIG) max;
     }
     if (t.is_int()) {
         uint64_t umax;
-        umax = (((uint64_t) 1) << (t.bits - 1)) - 1;
+        umax = (((uint64_t) 1) << (t.bits() - 1)) - 1;
         return (BIG) umax;
     }
     assert(0);
@@ -140,8 +139,7 @@ BIG maximum() {
 
 template<typename T,typename BIG,int bits>
 BIG minimum() {
-    Type t = type_of<T>();
-    t.bits = bits;
+    Type t = type_of<T>().with_bits(bits);
 
     if (t.is_float()) {
         return (BIG) 0.0;
@@ -152,7 +150,7 @@ BIG minimum() {
     if (t.is_int()) {
         uint64_t umax;
         BIG min;
-        umax = (((uint64_t) 1) << (t.bits - 1)) - 1;
+        umax = (((uint64_t) 1) << (t.bits() - 1)) - 1;
         min = umax;
         min = -min - 1;
         return min;
@@ -175,7 +173,7 @@ Image<T> init(Type t, int unique, int width, int height) {
 
     Image<T> result(width, height);
 
-    assert(t.bits == bits);
+    assert(t.bits() == bits);
 
     if (t.is_int()) {
         // Signed integer type with specified number of bits.
@@ -266,14 +264,13 @@ Image<T> init(Type t, int unique, int width, int height) {
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
-bool div_mod() {
+bool div_mod(int vector_width) {
+    std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
+
     int i, j;
-    Type t = type_of<T>();
+    Type t = type_of<T>().with_bits(bits);
     BIG minval = minimum<T,BIG,bits>();
     bool success = true;
-
-    std::cout << "Test division of " << t << '\n';
-    t.bits = bits; // Override the bits
 
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
@@ -298,6 +295,9 @@ bool div_mod() {
     Var x, y;
     f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
     Target target = get_jit_target_from_environment();
+    if (vector_width > 1) {
+        f.vectorize(x, vector_width);
+    }
     if (target.has_gpu_feature()) {
         f.compute_root().gpu_tile(x, y, 16, 16);
     }
@@ -314,24 +314,38 @@ bool div_mod() {
             T ri = r(i, j);
 
             if (qi*bi + ri != ai && (ecount++) < 10) {
-                std::cout << "(a/b)*b + a%b != a; a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
+                std::cout << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
+                          << ", " << (int64_t)bi
+                          << "; q, r = " << (int64_t)qi
+                          << ", " << (int64_t)ri << "\n";
                 success = false;
-            } else if (!(0 <= ri && ((int64_t)bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
-                std::cout << "ri is not in the range [0, |b|); a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
+            } else if (!(0 <= ri &&
+                         (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
+                       (ecount++) < 10) {
+                std::cout << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
+                          << ", " << (int64_t)bi
+                          << "; q, r = " << (int64_t)qi
+                          << ", " << (int64_t)ri << "\n";
                 success = false;
             }
 
             if (i < SWIDTH && j < SHEIGHT) {
-                Expr ae = cast<T>((int)ai);
-                Expr be = cast<T>((int)bi);
+                Expr ae = Expr(ai);
+                Expr be = Expr(bi);
                 Expr qe = simplify(ae/be);
                 Expr re = simplify(ae%be);
 
-                if (!Internal::equal(qe, cast<T>((int)qi)) && (ecount++) < 10) {
-                    std::cout << "Compiled a/b != simplified a/b: " << (int)ai << "/" << (int)bi << " = " << (int)qi << " != " << qe << "\n";
+                if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
+                    std::cout << "Compiled a/b != simplified a/b: " << (int64_t)ai
+                              << "/" << (int64_t)bi
+                              << " = " << (int64_t)qi
+                              << " != " << qe << "\n";
                     success = false;
-                } else if (!Internal::equal(re, cast<T>((int)ri)) && (ecount++) < 10) {
-                    std::cout << "Compiled a%b != simplified a%b: " << (int)ai << "/" << (int)bi << " = " << (int)ri << " != " << re << "\n";
+                } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
+                    std::cout << "Compiled a%b != simplified a%b: " << (int64_t)ai
+                              << "/" << (int64_t)bi
+                              << " = " << (int64_t)ri
+                              << " != " << re << "\n";
                     success = false;
                 }
             }
@@ -346,12 +360,11 @@ bool div_mod() {
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
 bool f_mod() {
-    int i, j;
-    Type t = type_of<T>();
-    bool success = true;
+    std::cout << "Test mod of " << type_of<T>() << '\n';
 
-    std::cout << "Test mod of " << t << '\n';
-    t.bits = bits; // Override the bits
+    int i, j;
+    Type t = type_of<T>().with_bits(bits);
+    bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
@@ -403,12 +416,14 @@ int main(int argc, char **argv) {
     bool success = true;
     success &= f_mod<float,double,32>();
 
-    success &= div_mod<uint8_t,uint64_t,8>();
-    success &= div_mod<uint16_t,uint64_t,16>();
-    success &= div_mod<uint32_t,uint64_t,32>();
-    success &= div_mod<int8_t,int64_t,8>();
-    success &= div_mod<int16_t,int64_t,16>();
-    success &= div_mod<int32_t,int64_t,32>();
+    for (int vector_width = 1; vector_width <= 4; vector_width *= 2) {
+        success &= div_mod<uint8_t,uint64_t,8>(vector_width);
+        success &= div_mod<uint16_t,uint64_t,16>(vector_width);
+        success &= div_mod<uint32_t,uint64_t,32>(vector_width);
+        success &= div_mod<int8_t,int64_t,8>(vector_width);
+        success &= div_mod<int16_t,int64_t,16>(vector_width);
+        success &= div_mod<int32_t,int64_t,32>(vector_width);
+    }
 
     if (! success) {
         printf ("Failure!\n");

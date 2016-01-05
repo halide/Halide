@@ -31,10 +31,11 @@ void expr_match_test() {
                     equal(matches[0], y*2));
 
     internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
-                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), matches) &&
+                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(x + 4.5f)), matches) &&
+                    matches.size() == 3 &&
                     equal(matches[0], 81.0f * fy) &&
                     equal(matches[1], x/2) &&
-                    equal(matches[2], 4.5f));
+                    equal(matches[2], x + 4.5f));
 
     internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
                     matches.empty());
@@ -63,22 +64,38 @@ public:
     using IRVisitor::visit;
 
     bool types_match(Type pattern_type, Type expr_type) {
-        bool bits_matches  = (pattern_type.bits  == -1) || (pattern_type.bits  == expr_type.bits);
-        bool width_matches = (pattern_type.width == -1) || (pattern_type.width == expr_type.width);
-        bool code_matches  = (pattern_type.code  == expr_type.code);
-        return bits_matches && width_matches && code_matches;
+        bool bits_matches  = (pattern_type.bits()  == 0) || (pattern_type.bits()  == expr_type.bits());
+        bool lanes_matches = (pattern_type.lanes() == 0) || (pattern_type.lanes() == expr_type.lanes());
+        bool code_matches  = (pattern_type.code()  == expr_type.code());
+        return bits_matches && lanes_matches && code_matches;
     }
 
     void visit(const IntImm *op) {
         const IntImm *e = expr.as<IntImm>();
-        if (!e || e->value != op->value) {
+        if (!e ||
+            e->value != op->value ||
+            !types_match(op->type, e->type)) {
+            result = false;
+        }
+    }
+
+    void visit(const UIntImm *op) {
+        const UIntImm *e = expr.as<UIntImm>();
+        if (!e ||
+            e->value != op->value ||
+            !types_match(op->type, e->type)) {
             result = false;
         }
     }
 
     void visit(const FloatImm *op) {
         const FloatImm *e = expr.as<FloatImm>();
-        if (!e || e->value != op->value) {
+        // Note we use uint64_t equality instead of double equality to
+        // catch NaNs. We're checking for the same bits.
+        if (!e ||
+            reinterpret_bits<uint64_t>(e->value) !=
+            reinterpret_bits<uint64_t>(op->value) ||
+            !types_match(op->type, e->type)) {
             result = false;
         }
     }
@@ -182,7 +199,7 @@ public:
 
     void visit(const Ramp *op) {
         const Ramp *e = expr.as<Ramp>();
-        if (result && e && e->width == op->width) {
+        if (result && e && e->lanes == op->lanes) {
             expr = e->base;
             op->base.accept(this);
             expr = e->stride;

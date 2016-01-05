@@ -49,6 +49,7 @@ private:
     CmpResult compare_scalar(T a, T b);
 
     void visit(const IntImm *);
+    void visit(const UIntImm *);
     void visit(const FloatImm *);
     void visit(const StringImm *);
     void visit(const Cast *);
@@ -195,9 +196,9 @@ IRComparer::CmpResult IRComparer::compare_stmt(const Stmt &a, const Stmt &b) {
 IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     if (result != Equal) return result;
 
-    compare_scalar(a.code, b.code);
-    compare_scalar(a.bits, b.bits);
-    compare_scalar(a.width, b.width);
+    compare_scalar(a.code(), b.code());
+    compare_scalar(a.bits(), b.bits());
+    compare_scalar(a.lanes(), b.lanes());
 
     return result;
 }
@@ -229,6 +230,11 @@ IRComparer::CmpResult IRComparer::compare_expr_vector(const vector<Expr> &a, con
 
 void IRComparer::visit(const IntImm *op) {
     const IntImm *e = expr.as<IntImm>();
+    compare_scalar(e->value, op->value);
+}
+
+void IRComparer::visit(const UIntImm *op) {
+    const UIntImm *e = expr.as<UIntImm>();
     compare_scalar(e->value, op->value);
 }
 

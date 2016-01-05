@@ -379,7 +379,10 @@ public:
     void register_heap_object(const void *obj, size_t size, const void *helper) {
         // helper should be a pointer to a global
         int idx = find_global_variable(helper);
-        if (idx == -1) return;
+        if (idx == -1) {
+            debug(4) << "Could not find helper object: " << helper << "\n";
+            return;
+        }
         const GlobalVariable &ptr = global_variables[idx];
         debug(4) << "helper object is " << ptr.name << " at " << std::hex << ptr.addr << std::dec;
         if (ptr.type) {
@@ -842,6 +845,21 @@ public:
                    source_files[source_lines[i].file].c_str(),
                    source_lines[i].line);
         }
+
+        // Dump the global variables
+        for (size_t i = 0; i < global_variables.size(); i++) {
+            const GlobalVariable &v = global_variables[i];
+            TypeInfo *c = v.type;
+            const char *type_name = "(unknown)";
+            if (c) {
+                type_name = c->name.c_str();
+            }
+            printf("  Global variable %s at %llx of type %s\n",
+                   v.name.c_str(),
+                   (long long unsigned)v.addr,
+                   type_name);
+        }
+
     }
 
 private:
@@ -1014,8 +1032,7 @@ private:
 
             uint64_t start_of_unit = off;
 
-            uint16_t version = e.getU16(&off);
-            (void)version;
+            uint16_t dwarf_version = e.getU16(&off);
 
             uint64_t debug_abbrev_offset = 0;
             if (dwarf_64) {
@@ -1061,6 +1078,7 @@ private:
             const unsigned attr_high_pc = 0x12;
             const unsigned attr_upper_bound = 0x2f;
             const unsigned attr_abstract_origin = 0x31;
+            const unsigned attr_count = 0x37;
             const unsigned attr_data_member_location = 0x38;
             const unsigned attr_frame_base = 0x40;
             const unsigned attr_specification = 0x47;
@@ -1242,7 +1260,8 @@ private:
                     }
                     case 16: // ref_addr (offset from beginning of debug_info. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
-                        if (dwarf_64) {
+                        if ((dwarf_version <= 2 && address_size == 8) ||
+                            (dwarf_version > 2 && dwarf_64)) {
                             val = e.getU64(&off);
                         } else {
                             val = e.getU32(&off);
@@ -1385,6 +1404,8 @@ private:
                             m.stack_offset = 0;
                             type_info.members.push_back(m);
                             type_info.type = TypeInfo::Pointer;
+                            // Assume the size is the address size
+                            type_info.size = address_size;
                         } else if (attr == attr_byte_size) {
                             // Should really be 4 or 8
                             type_info.size = val;
@@ -1488,6 +1509,10 @@ private:
                             type_stack.size() &&
                             type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val+1;
+                        } else if (attr == attr_count &&
+                                   type_stack.size() &&
+                                   type_stack.back().first.type == TypeInfo::Array) {
+                            type_stack.back().first.size = val;
                         }
                     } else if (fmt.tag == tag_inlined_subroutine ||
                                fmt.tag == tag_lexical_block) {
@@ -1766,7 +1791,7 @@ private:
 
         // Unpack class members of global variables
         for (size_t i = 0; i < global_variables.size(); i++) {
-            const GlobalVariable &v = global_variables[i];
+            GlobalVariable v = global_variables[i];
             if (v.type && v.addr &&
                 (v.type->type == TypeInfo::Struct ||
                  v.type->type == TypeInfo::Class ||
@@ -2245,6 +2270,8 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
 
         debug(4) << "Test passed\n";
     }
+
+    //debug_sections->dump();
 
     #endif
 }

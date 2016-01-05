@@ -19,6 +19,11 @@ public:
             .parallel(y, 4)
             .vectorize(x, natural_vector_size(UInt(8)));
 
+        // Cope with rotated inputs
+        uvInterleaved.set_stride(0, Expr());
+        result.specialize(uvInterleaved.stride(0) == 1);
+        result.specialize(uvInterleaved.stride(0) == -1);
+
         return result;
     }
 };

@@ -237,7 +237,7 @@ std::string image_repr(const h::Image<T> &image)
     boost::format f("<halide.Image%s%i; element_size %i bytes; "
                     "extent (%i %i %i %i); min (%i %i %i %i); stride (%i %i %i %i)>");
 
-    repr = boost::str(f % suffix % t.bits % b.raw_buffer()->elem_size
+    repr = boost::str(f % suffix % t.bits() % b.raw_buffer()->elem_size
                       % b.extent(0) % b.extent(1) % b.extent(2) % b.extent(3)
                       % b.min(0) % b.min(1) % b.min(2) % b.min(3)
                       % b.stride(0) % b.stride(1) % b.stride(2) % b.stride(3));
@@ -265,7 +265,7 @@ template<typename T>
 void defineImage_impl(const std::string suffix, const h::Type type)
 {
     using h::Image;
-    
+
 
     auto image_class =
             p::class_< Image<T>, p::bases<h::ImageBase> >(
@@ -564,9 +564,9 @@ p::object raw_buffer_to_image(bn::ndarray &array, buffer_t &raw_buffer, const st
 buffer_t ndarray_to_buffer_t(bn::ndarray &array)
 {
     size_t num_elements = 0;
-    for(size_t i = 0; i < array.get_nd(); i += 1)
+    for (size_t i = 0; i < (size_t)array.get_nd(); i += 1)
     {
-        if(i == 0)
+        if (i == 0)
         {
             num_elements = array.shape(i);
         }
@@ -576,12 +576,12 @@ buffer_t ndarray_to_buffer_t(bn::ndarray &array)
         }
     }
 
-    if(num_elements == 0)
+    if (num_elements == 0)
     {
         throw std::invalid_argument("numpy_to_image recieved an empty array");
     }
 
-    if(array.get_nd() > 4)
+    if (array.get_nd() > 4)
     {
         throw std::invalid_argument("numpy_to_image received array with more than 4 dimensions. "
                                     "Halide only supports 4 or less dimensions");
@@ -595,9 +595,9 @@ buffer_t ndarray_to_buffer_t(bn::ndarray &array)
     raw_buffer.host_dirty = false;
     raw_buffer.dev_dirty = false;
 
-    for(int c=0; c < 4; c += 1)
+    for (int c=0; c < 4; c += 1)
     {
-        if(c < array.get_nd())
+        if (c < array.get_nd())
         {
             raw_buffer.extent[c] = array.shape(c);
             // numpy counts stride in bytes, while Halide counts in number of elements
@@ -634,9 +634,9 @@ struct hash<h::Type>
     result_type operator()(argument_type const& t) const
     {
         size_t seed = 0;
-        boost::hash_combine(seed, static_cast<int>(t.code));
-        boost::hash_combine(seed, t.bits);
-        boost::hash_combine(seed, t.width);
+        boost::hash_combine(seed, static_cast<int>(t.code()));
+        boost::hash_combine(seed, t.bits());
+        boost::hash_combine(seed, t.lanes());
         return seed;
     }
 };
@@ -902,5 +902,3 @@ void defineImage()
 
     return;
 }
-
-
