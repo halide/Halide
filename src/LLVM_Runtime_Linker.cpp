@@ -256,7 +256,11 @@ llvm::Triple get_triple_for_target(Target target) {
             triple.setVendor(llvm::Triple::PC);
             triple.setOS(llvm::Triple::Win32);
             #if LLVM_VERSION >= 36
-            triple.setEnvironment(llvm::Triple::MSVC);
+            if (target.has_feature(Target::MinGW)) {
+                triple.setEnvironment(llvm::Triple::GNU);
+            } else {
+                triple.setEnvironment(llvm::Triple::MSVC);
+            }
             #endif
             if (target.has_feature(Target::JIT)) {
                 // Use ELF for jitting
