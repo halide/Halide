@@ -11,8 +11,10 @@
 #include "LLVM_Output.h"
 
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #define NOMINMAX
+#endif
+#ifdef _WIN32
 #include <windows.h>
 static bool have_symbol(const char *s) {
     return GetProcAddress(GetModuleHandle(NULL), s) != NULL;

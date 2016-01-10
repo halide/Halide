@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 // No msvc warnings from llvm headers please
-#ifdef _WIN32
+#ifdef _MSC_VER
 #pragma warning(push, 0)
 #endif
 
@@ -81,7 +81,7 @@
 #endif
 
 // No msvc warnings from llvm headers please
-#ifdef _WIN32
+#ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 
