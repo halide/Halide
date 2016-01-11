@@ -391,8 +391,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
         #if LLVM_VERSION >= 38
         bool failed = llvm::Linker::linkModules(*modules[0],
                                                 std::move(modules[i]));
-        #elif LLVM_VERSION >= 36
-        bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
         #else
             #if LLVM_VERSION >= 36
             bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].release());
