@@ -654,7 +654,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
           }
           modules.push_back(get_initmod_tracing(c, bits_64, debug));
           modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-          modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+          if (t.arch != Target::Hexagon) {
+            modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+          }
           modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
           if (t.arch != Target::Hexagon) {
             modules.push_back(get_initmod_posix_print(c, bits_64, debug));
