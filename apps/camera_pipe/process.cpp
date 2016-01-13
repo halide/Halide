@@ -101,13 +101,13 @@ int main(int argc, char **argv) {
 #endif
 #endif
 
-    Image<uint8_t> output_c(output.width(), output.height(), output.channels());
+#ifndef NOFCAM
 #ifdef PCYCLES
     RESET_PMU();
     start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output_c, color_temp, contrast, true, 25, 1023, gamma);
+        FCam::demosaic(input, outref, color_temp, contrast, true, 25, 1023, gamma);
     });
 #ifdef PCYCLES
     total_cycles = READ_PCYCLES() - start_time;
@@ -123,6 +123,7 @@ int main(int argc, char **argv) {
     save_image(outref, "fcam_c" IMGEXT);
 #endif
     fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
+#endif
 
 #if not defined(__hexagon__)
     Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
