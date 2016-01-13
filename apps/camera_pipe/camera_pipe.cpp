@@ -247,6 +247,50 @@ Func demosaic(Func deinterleaved) {
         output.compute_at(processed, tx)
             .unroll(y, 2)
             .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 6) {
+        // no tiling, vectorized by 32
+        g_r.compute_at(processed, tx).vectorize(x, 32);
+        g_b.compute_at(processed, tx).vectorize(x, 32);
+        r_gr.compute_at(processed, tx).vectorize(x, 32);
+        b_gr.compute_at(processed, tx).vectorize(x, 32);
+        r_gb.compute_at(processed, tx).vectorize(x, 32);
+        b_gb.compute_at(processed, tx).vectorize(x, 32);
+        r_b.compute_at(processed, tx).vectorize(x, 32);
+        b_r.compute_at(processed, tx).vectorize(x, 32);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .vectorize(x, 32)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 7) {
+        // no tiling, vectorized by 64
+        g_r.compute_at(processed, tx).vectorize(x, 64);
+        g_b.compute_at(processed, tx).vectorize(x, 64);
+        r_gr.compute_at(processed, tx).vectorize(x, 64);
+        b_gr.compute_at(processed, tx).vectorize(x, 64);
+        r_gb.compute_at(processed, tx).vectorize(x, 64);
+        b_gb.compute_at(processed, tx).vectorize(x, 64);
+        r_b.compute_at(processed, tx).vectorize(x, 64);
+        b_r.compute_at(processed, tx).vectorize(x, 64);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .vectorize(x, 64)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 8) {
+        // no tiling, scalar
+        g_r.compute_at(processed, tx);
+        g_b.compute_at(processed, tx);
+        r_gr.compute_at(processed, tx);
+        b_gr.compute_at(processed, tx);
+        r_gb.compute_at(processed, tx);
+        b_gb.compute_at(processed, tx);
+        r_b.compute_at(processed, tx);
+        b_r.compute_at(processed, tx);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
     } else {
         // Basic naive schedule
         g_r.compute_root();
@@ -388,6 +432,24 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
+    } else if (schedule == 6) {
+        // no tiling, vectorized by 32
+        denoised.compute_at(processed, tx).vectorize(x, 32);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
+        processed.reorder(c, tx, ty);
+    } else if (schedule == 7) {
+        // no tiling, vectorized by 64
+        denoised.compute_at(processed, tx).vectorize(x, 64);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        processed.reorder(c, tx, ty);
+    } else if (schedule == 8) {
+        // no tiling, scalar
+        denoised.compute_at(processed, tx);
+        deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
+        processed.reorder(c, tx, ty);
     } else {
         denoised.compute_root();
         deinterleaved.compute_root();
