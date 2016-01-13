@@ -99,6 +99,7 @@ int main(int argc, char **argv) {
 #endif
 #endif
 
+#ifndef NOFCAM
 #ifdef PCYCLES
     RESET_PMU();
     start_time = READ_PCYCLES();
@@ -117,6 +118,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "outref: fcam_c" IMGEXT "\n");
     save_image(outref, "fcam_c" IMGEXT);
     fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
+#endif
 
 #if not defined(__hexagon__)
     Image<uint8_t> outarm(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
