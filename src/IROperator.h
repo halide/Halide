@@ -97,7 +97,7 @@ EXPORT void check_representable(Type t, int64_t val);
  * is that C++ does not have a real bool type - it is in fact
  * close enough to char that C++ does not know how to distinguish them.
  * make_bool is the explicit coercion. */
-EXPORT Expr make_bool(bool val, int width = 1);
+EXPORT Expr make_bool(bool val, int lanes = 1);
 
 /** Construct the representation of zero in the given type */
 EXPORT Expr make_zero(Type t);
@@ -109,12 +109,12 @@ EXPORT Expr make_one(Type t);
 EXPORT Expr make_two(Type t);
 
 /** Construct the constant boolean true. May also be a vector of
- * trues, if a width argument is given. */
-EXPORT Expr const_true(int width = 1);
+ * trues, if a lanes argument is given. */
+EXPORT Expr const_true(int lanes = 1);
 
 /** Construct the constant boolean false. May also be a vector of
- * falses, if a width argument is given. */
-EXPORT Expr const_false(int width = 1);
+ * falses, if a lanes argument is given. */
+EXPORT Expr const_false(int lanes = 1);
 
 /** Attempt to cast an expression to a smaller type while provably not
  * losing information. If it can't be done, return an undefined
@@ -156,7 +156,7 @@ EXPORT Expr halide_erf(Expr a);
 
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
-EXPORT Expr raise_to_integer_power(Expr a, int b);
+EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
 
 
 }
@@ -195,10 +195,10 @@ inline Expr cast(Type t, Expr a) {
 
     if (t.is_vector()) {
         if (a.type().is_scalar()) {
-            return Internal::Broadcast::make(cast(t.element_of(), a), t.width);
+            return Internal::Broadcast::make(cast(t.element_of(), a), t.lanes());
         } else if (const Internal::Broadcast *b = a.as<Internal::Broadcast>()) {
-            internal_assert(b->width == t.width);
-            return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
+            internal_assert(b->lanes == t.lanes());
+            return Internal::Broadcast::make(cast(t.element_of(), b->value), t.lanes());
         }
     }
     return Internal::Cast::make(t, a);
@@ -573,11 +573,46 @@ inline Expr operator&&(Expr a, Expr b) {
     return Internal::And::make(a, b);
 }
 
+/** Logical and of an Expr and a bool. Either returns the Expr or an
+ * Expr representing false, depending on the bool. */
+// @{
+inline Expr operator&&(Expr a, bool b) {
+    internal_assert(a.defined()) << "operator&& of undefined Expr\n";
+    internal_assert(a.type().is_bool()) << "operator&& of Expr of type " << a.type() << "\n";
+    if (b) {
+        return a;
+    } else {
+        return Internal::make_zero(a.type());
+    }
+}
+inline Expr operator&&(bool a, Expr b) {
+    return b && a;
+}
+// @}
+
 /** Returns the logical or of the two arguments */
 inline Expr operator||(Expr a, Expr b) {
     Internal::match_types(a, b);
     return Internal::Or::make(a, b);
 }
+
+/** Logical or of an Expr and a bool. Either returns the Expr or an
+ * Expr representing true, depending on the bool. */
+// @{
+inline Expr operator||(Expr a, bool b) {
+    internal_assert(a.defined()) << "operator|| of undefined Expr\n";
+    internal_assert(a.type().is_bool()) << "operator|| of Expr of type " << a.type() << "\n";
+    if (b) {
+        return Internal::make_one(a.type());
+    } else {
+        return a;
+    }
+}
+inline Expr operator||(bool a, Expr b) {
+    return b || a;
+}
+// @}
+
 
 /** Returns the logical not the argument */
 inline Expr operator!(Expr a) {
@@ -701,14 +736,12 @@ inline Expr abs(Expr a) {
     user_assert(a.defined())
         << "abs of undefined Expr\n";
     Type t = a.type();
-    if (t.is_int()) {
-        t.code = Type::UInt;
-    } else if (t.is_uint()) {
+    if (t.is_uint()) {
         user_warning << "Warning: abs of an unsigned type is a no-op\n";
         return a;
     }
-    return Internal::Call::make(t, Internal::Call::abs,
-                                {a}, Internal::Call::Intrinsic);
+    return Internal::Call::make(t.with_code(t.is_int() ? Type::UInt : t.code()),
+                                Internal::Call::abs, {a}, Internal::Call::Intrinsic);
 }
 
 /** Return the absolute difference between two values. Vectorizes
@@ -726,13 +759,9 @@ inline Expr absd(Expr a, Expr b) {
         return abs(a - b);
     }
 
-    if (t.is_int()) {
-        // The argument may be signed, but the return type is unsigned.
-        t.code = Type::UInt;
-    }
-
-    return Internal::Call::make(t, Internal::Call::absd,
-                                {a, b},
+    // The argument may be signed, but the return type is unsigned.
+    return Internal::Call::make(t.with_code(t.is_int() ? Type::UInt : t.code()),
+                                Internal::Call::absd, {a, b},
                                 Internal::Call::Intrinsic);
 }
 
@@ -1270,7 +1299,7 @@ inline Expr floor(Expr x) {
         return Internal::Call::make(Float(16), "floor_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width);
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "floor_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1288,7 +1317,7 @@ inline Expr ceil(Expr x) {
         return Internal::Call::make(Float(16), "ceil_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width);
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "ceil_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1307,7 +1336,7 @@ inline Expr round(Expr x) {
         return Internal::Call::make(Float(16), "round_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width);
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "round_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1324,7 +1353,7 @@ inline Expr trunc(Expr x) {
         return Internal::Call::make(Float(16), "trunc_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type t = Float(32, x.type().width);
+        Type t = Float(32, x.type().lanes());
         return Internal::Call::make(t, "trunc_f32", {cast(t, x)}, Internal::Call::Extern);
     }
 }
@@ -1334,7 +1363,7 @@ inline Expr trunc(Expr x) {
 inline Expr is_nan(Expr x) {
     user_assert(x.defined()) << "is_nan of undefined Expr\n";
     user_assert(x.type().is_float()) << "is_nan only works for float";
-    Type t = Bool(x.type().width);
+    Type t = Bool(x.type().lanes());
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(t, "is_nan_f64", {x}, Internal::Call::Extern);
     }
@@ -1342,7 +1371,7 @@ inline Expr is_nan(Expr x) {
         return Internal::Call::make(t, "is_nan_f16", {x}, Internal::Call::Extern);
     }
     else {
-        Type ft = Float(32, x.type().width);
+        Type ft = Float(32, x.type().lanes());
         return Internal::Call::make(t, "is_nan_f32", {cast(ft, x)}, Internal::Call::Extern);
     }
 }
@@ -1358,8 +1387,8 @@ inline Expr fract(Expr x) {
 /** Reinterpret the bits of one value as another type. */
 inline Expr reinterpret(Type t, Expr e) {
     user_assert(e.defined()) << "reinterpret of undefined Expr\n";
-    int from_bits = e.type().bits * e.type().width;
-    int to_bits = t.bits * t.width;
+    int from_bits = e.type().bits() * e.type().lanes();
+    int to_bits = t.bits() * t.lanes();
     user_assert(from_bits == to_bits)
         << "Reinterpret cast from type " << e.type()
         << " which has " << from_bits
@@ -1379,10 +1408,8 @@ inline Expr reinterpret(Expr e) {
 inline Expr operator&(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
     // First widen or narrow, then bitcast.
-    if (y.type().bits != x.type().bits) {
-        Type t = y.type();
-        t.bits = x.type().bits;
-        y = cast(t, y);
+    if (y.type().bits() != x.type().bits()) {
+        y = cast(y.type().with_bits(x.type().bits()), y);
     }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
@@ -1396,10 +1423,8 @@ inline Expr operator&(Expr x, Expr y) {
 inline Expr operator|(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
     // First widen or narrow, then bitcast.
-    if (y.type().bits != x.type().bits) {
-        Type t = y.type();
-        t.bits = x.type().bits;
-        y = cast(t, y);
+    if (y.type().bits() != x.type().bits()) {
+        y = cast(y.type().with_bits(x.type().bits()), y);
     }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
@@ -1413,10 +1438,8 @@ inline Expr operator|(Expr x, Expr y) {
 inline Expr operator^(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
     // First widen or narrow, then bitcast.
-    if (y.type().bits != x.type().bits) {
-        Type t = y.type();
-        t.bits = x.type().bits;
-        y = cast(t, y);
+    if (y.type().bits() != x.type().bits()) {
+        y = cast(y.type().with_bits(x.type().bits()), y);
     }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
@@ -1571,7 +1594,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     user_assert((weight.type().is_uint() || weight.type().is_float()))
         << "A lerp weight must be an unsigned integer or a float, but "
         << "lerp weight " << weight << " has type " << weight.type() << ".\n";
-    user_assert((zero_val.type().is_float() || zero_val.type().width <= 32))
+    user_assert((zero_val.type().is_float() || zero_val.type().lanes() <= 32))
         << "Lerping between 64-bit integers is not supported\n";
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.

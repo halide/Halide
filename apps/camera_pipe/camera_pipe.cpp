@@ -10,8 +10,7 @@ Func processed("processed");
 
 // Average two positive values rounding up
 Expr avg(Expr a, Expr b) {
-    Type wider = a.type();
-    wider.bits *= 2;
+    Type wider = a.type().with_bits(a.type().bits() * 2);
     return cast(a.type(), (cast(wider, a) + b + 1)/2);
 }
 

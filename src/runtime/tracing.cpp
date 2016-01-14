@@ -51,7 +51,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         buffer[13] = clamped_dimensions;
 
         // Use up to 33 bytes for the function name
-        int i = 14;
+        size_t i = 14;
         for (; i < header_bytes-1; i++) {
             buffer[i] = e->func[i-14];
             if (buffer[i] == 0) break;

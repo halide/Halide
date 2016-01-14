@@ -47,10 +47,10 @@ llvm::Function *define_matlab_wrapper(llvm::Module *module, const std::string &p
 
     // Extract the argument values from the mexFunction.
     llvm::Function::arg_iterator mex_args = mex->arg_begin();
-    Value *nlhs = mex_args++;
-    Value *plhs = mex_args++;
-    Value *nrhs = mex_args++;
-    Value *prhs = mex_args++;
+    Value *nlhs = iterator_to_pointer(mex_args++);
+    Value *plhs = iterator_to_pointer(mex_args++);
+    Value *nrhs = iterator_to_pointer(mex_args++);
+    Value *prhs = iterator_to_pointer(mex_args++);
 
     Value *call_pipeline_args[] = {
         user_context,

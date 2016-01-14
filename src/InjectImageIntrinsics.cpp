@@ -13,11 +13,12 @@ using std::vector;
 
 class InjectImageIntrinsics : public IRMutator {
 public:
-    InjectImageIntrinsics() : inside_kernel_loop(false) {}
+    InjectImageIntrinsics(Target t) : inside_kernel_loop(false), target(t) {}
     Scope<int> scope;
     bool inside_kernel_loop;
 
 private:
+    Target target;
     using IRMutator::visit;
 
     void visit(const Provide *provide) {
@@ -28,19 +29,25 @@ private:
 
         internal_assert(provide->values.size() == 1)
             << "Image currently only supports single-valued stores.\n";
-        user_assert(provide->args.size() == 3)
-            << "Image stores require three coordinates.\n";
+        if (target.has_feature(Target::OpenCL)) {
+            user_assert(provide->args.size() == 2 || provide->args.size() == 3)
+                << "OpenCL image stores require two or three coordinates.\n";
+        } else {
+            user_assert(provide->args.size() == 3)
+                << "Image stores require three coordinates.\n";
+        }
 
         // Create image_store("name", name.buffer, x, y, c, value)
         // intrinsic.
         Expr value_arg = mutate(provide->values[0]);
         vector<Expr> args = {
             provide->name,
-            Variable::make(Handle(), provide->name + ".buffer"),
-            provide->args[0],
-            provide->args[1],
-            provide->args[2],
-            value_arg};
+            Variable::make(Handle(), provide->name + ".buffer")
+        };
+        for (const Expr &arg : provide->args) {
+            args.push_back(arg);
+        }
+        args.push_back(value_arg);
 
         stmt = Evaluate::make(Call::make(value_arg.type(),
                                          Call::image_store,
@@ -61,10 +68,12 @@ private:
         }
 
         vector<Expr> padded_call_args = call->args;
-        // Check to see if we are reading from a one or two dimension function
-        // and pad to three dimensions.
-        while (padded_call_args.size() < 3) {
-            padded_call_args.push_back(0);
+        if (!target.has_feature(Target::OpenCL)) {
+            // Check to see if we are reading from a one or two dimension function
+            // and pad to three dimensions.
+            while (padded_call_args.size() < 3) {
+                padded_call_args.push_back(0);
+            }
         }
 
         // Create image_load("name", name.buffer, x, x_extent, y, y_extent, ...).
@@ -103,7 +112,7 @@ private:
         }
 
         Type load_type = call->type;
-        // load_type.width = 4;
+        // load_type = load_type.with_lanes(4);
 
         Expr load_call = Call::make(load_type,
                           Call::image_load,
@@ -138,7 +147,8 @@ private:
             (loop->device_api == DeviceAPI::GLSL ||
              loop->device_api == DeviceAPI::Renderscript ||
              loop->device_api == DeviceAPI::MetalTextures ||
-             loop->device_api == DeviceAPI::OpenCLTextures)) {
+             loop->device_api == DeviceAPI::OpenCLTextures ||
+             loop->device_api == DeviceAPI::Default_GPU)) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);
@@ -146,12 +156,12 @@ private:
     }
 };
 
-Stmt inject_image_intrinsics(Stmt s) {
+Stmt inject_image_intrinsics(Stmt s, Target t) {
     debug(4)
         << "InjectImageIntrinsics: inject_image_intrinsics stmt: "
         << s << "\n";
     s = zero_gpu_loop_mins(s);
-    InjectImageIntrinsics gl;
+    InjectImageIntrinsics gl(t);
     return gl.mutate(s);
 }
 }

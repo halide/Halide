@@ -44,12 +44,13 @@ protected:
 
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
-        CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_OpenCL_C(std::ostream &s, Target t) : CodeGen_C(s), target(t) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<GPU_Argument> &args);
 
     protected:
+        Target target;
         using CodeGen_C::visit;
         std::string print_type(Type type);
         std::string print_reinterpret(Type type, Expr e);

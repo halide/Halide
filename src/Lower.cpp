@@ -152,9 +152,9 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
+    if (t.features_any_of({Target::OpenGL, Target::Renderscript, Target::Textures})) {
         debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s);
+        s = inject_image_intrinsics(s, t);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
 

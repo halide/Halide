@@ -36,7 +36,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
         "/System/Library/Frameworks/OpenCL.framework/OpenCL",
 #endif
     };
-    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+    for (size_t i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
         lib_opencl = halide_load_library(lib_names[i]);
         if (lib_opencl) {
             debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
@@ -66,6 +66,7 @@ WEAK void load_libopencl(void *user_context) {
 }
 
 extern WEAK halide_device_interface opencl_device_interface;
+extern WEAK halide_device_interface opencl_textures_device_interface;
 
 WEAK const char *get_opencl_error_name(cl_int err);
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q);
@@ -343,7 +344,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         device = deviceCount - 1;
     }
 
-    if (device < 0 || device >= deviceCount) {
+    if (device < 0 || device >= (int)deviceCount) {
         error(user_context) << "CL: Failed to get device: " << device;
         return CL_DEVICE_NOT_FOUND;
     }
@@ -745,9 +746,9 @@ WEAK int halide_opencl_textures_device_malloc(void *user_context, buffer_t* buf)
      debug(user_context)
          << "CL: halide_opencl_textures_device_malloc (user_context: " << user_context
          << ", buf: " << buf << ")\n";
-                 
+
      ClContext ctx(user_context);
-                 
+
      size_t size = buf_size(user_context, buf);
      if (buf->dev) {
          halide_assert(user_context, validate_device_pointer(user_context, buf, size));
@@ -817,7 +818,7 @@ WEAK int halide_opencl_textures_device_malloc(void *user_context, buffer_t* buf)
     } else {
         debug(user_context) << (void *)dev_ptr << "\n";
     }
-    buf->dev = halide_new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
+    buf->dev = halide_new_device_wrapper((uint64_t)dev_ptr, &opencl_textures_device_interface);
     if (buf->dev == 0) {
         error(user_context) << "CL: out of memory allocating device wrapper.\n";
         clReleaseMemObject(dev_ptr);
@@ -863,8 +864,10 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
 
     device_copy c = make_host_to_device_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
             // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
             // can deal with the 2 innermost strides with OpenCL.
@@ -892,8 +895,8 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
                 return err;
             }
 #else
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
@@ -931,6 +934,79 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
     return 0;
 }
 
+WEAK int halide_opencl_textures_copy_to_device(void *user_context, buffer_t* buf) {
+    debug(user_context) << "halide_opencl_textures_copy_to_device: calling device_malloc\n";
+    int err = halide_opencl_textures_device_malloc(user_context, buf);
+    if (err) {
+        return err;
+    }
+
+    debug(user_context)
+        << "CL: halide_opencl_textures_copy_to_device (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    // Acquire the context so we can use the command queue. This also avoids multiple
+    // redundant calls to clEnqueueWriteBuffer when multiple threads are trying to copy
+    // the same buffer.
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
+
+    device_copy c = make_host_to_device_copy(buf);
+
+    for (unsigned w = 0; w < c.extent[3]; w++) {
+        uint64_t off = w * c.stride_bytes[3];
+        size_t offset[3] = { off, 0, 0 };
+        size_t region[3] = { buf->extent[0],
+                             buf->extent[1] > 0 ? buf->extent[1] : 1,
+                             buf->extent[2] > 0 ? buf->extent[2] : 1 };
+
+        debug(user_context)
+            << "    clEnqueueWriteImage (("<< w << "), "
+            << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
+            << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes "
+            << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
+
+        cl_int err = clEnqueueWriteImage(ctx.cmd_queue, // command_queue
+                                         (cl_mem)c.dst, // image
+                                         CL_FALSE,      // blocking_write
+                                         offset,        // origin
+                                         region,        // region
+                                         0,             // input_row_pitch
+                                         0,             // input_slice_pitch
+                                         (void *)c.src, // ptr
+                                         0,             // num_events_in_wait_list
+                                         NULL,          // event_wait_list
+                                         NULL);         // event
+
+        if (err != CL_SUCCESS) {
+            error(user_context) << "CL: clEnqueueWriteImage failed: "
+                                << get_opencl_error_name(err);
+            return err;
+        }
+    }
+
+    // The writes above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't write
+    // to the buffer while the above writes are still running.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
 WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
     debug(user_context)
         << "CL: halide_copy_to_host (user_context: " << user_context
@@ -953,8 +1029,10 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
             // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
             // can deal with the 2 innermost strides with OpenCL.
@@ -982,8 +1060,8 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
                 return err;
             }
 #else
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
@@ -1006,6 +1084,73 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
                 }
             }
 #endif
+        }
+    }
+    // The writes above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't read
+    // bad data.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
+WEAK int halide_opencl_textures_copy_to_host(void *user_context, buffer_t* buf) {
+    debug(user_context)
+        << "CL: halide_opencl_textures_copy_to_host (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    // Acquire the context so we can use the command queue. This also avoids multiple
+    // redundant calls to clEnqueueReadImage when multiple threads are trying to copy
+    // the same buffer.
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
+
+    device_copy c = make_device_to_host_copy(buf);
+
+    for (unsigned w = 0; w < c.extent[3]; w++) {
+        uint64_t off = w * c.stride_bytes[3];
+
+        size_t offset[3] = { off, 0, 0 };
+        size_t region[3] = { buf->extent[0],
+                             buf->extent[1] > 0 ? buf->extent[1] : 1,
+                             buf->extent[2] > 0 ? buf->extent[2] : 1 };
+
+        debug(user_context)
+            << "    clEnqueueReadImage ((" << w << "), "
+            << "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
+            << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << " bytes "
+            << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
+
+        cl_int err = clEnqueueReadImage(ctx.cmd_queue, // command_queue
+                                        (cl_mem)c.src, // image
+                                        CL_FALSE,      // blocking_read
+                                        offset,        // origin
+                                        region,        // region
+                                        0,             // row_pitch
+                                        0,             // slice_pitch
+                                        (void *)c.dst, // ptr
+                                        0,             // num_events_in_wait_list
+                                        NULL,          // event_wait_list
+                                        NULL);         // event
+
+        if (err != CL_SUCCESS) {
+            error(user_context) << "CL: clEnqueueReadImage failed: "
+                                << get_opencl_error_name(err);
+            return err;
         }
     }
     // The writes above are all non-blocking, so empty the command
@@ -1192,6 +1337,10 @@ WEAK const struct halide_device_interface *halide_opencl_device_interface() {
     return &opencl_device_interface;
 }
 
+WEAK const struct halide_device_interface *halide_opencl_textures_device_interface() {
+    return &opencl_textures_device_interface;
+}
+
 namespace {
 __attribute__((destructor))
 WEAK void halide_opencl_cleanup() {
@@ -1273,8 +1422,8 @@ WEAK halide_device_interface opencl_textures_device_interface = {
     halide_opencl_textures_device_free,
     halide_opencl_device_sync,
     halide_opencl_device_release,
-    halide_opencl_copy_to_host,
-    halide_opencl_copy_to_device,
+    halide_opencl_textures_copy_to_host,
+    halide_opencl_textures_copy_to_device,
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL

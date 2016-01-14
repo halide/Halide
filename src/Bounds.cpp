@@ -113,12 +113,13 @@ private:
     }
 
     void bounds_of_type(Type t) {
-        if (t.is_uint() && t.bits <= 16) {
-            max = cast(t, (1 << t.bits) - 1);
+        t = t.element_of();
+        if (t.is_uint() && t.bits() <= 16) {
+            max = cast(t, (1 << t.bits()) - 1);
             min = cast(t, 0);
-        } else if (t.is_int() && t.bits <= 16) {
-            max = cast(t, (1 << (t.bits-1)) - 1);
-            min = cast(t, -(1 << (t.bits-1)));
+        } else if (t.is_int() && t.bits() <= 16) {
+            max = cast(t, (1 << (t.bits()-1)) - 1);
+            min = cast(t, -(1 << (t.bits()-1)));
         } else {
             max = Expr();
             min = Expr();
@@ -152,8 +153,8 @@ private:
             return;
         }
 
-        Type to = op->type;
-        Type from = op->value.type();
+        Type to = op->type.element_of();
+        Type from = op->value.type().element_of();
 
         if (min_a.defined() && min_a.same_as(max_a)) {
             min = max = Cast::make(to, min_a);
@@ -165,7 +166,7 @@ private:
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (to.is_int() && to.bits >= 32) {
+        } else if (to.is_int() && to.bits() >= 32) {
             // If we cast to an int32 or greater, assume that it won't
             // overflow. Signed 32-bit integer overflow is undefined.
             could_overflow = false;
@@ -216,8 +217,10 @@ private:
             Interval bounds = scope.get(op->name);
             min = bounds.min;
             max = bounds.max;
+        } else if (op->type.is_vector()) {
+            // Uh oh, we need to take the min/max lane of some unknown vector. Treat as unbounded.
+            min = max = Expr();
         } else {
-            debug(3) << op->name << " not in scope, so leaving it as-is\n";
             min = op;
             max = op;
         }
@@ -244,7 +247,7 @@ private:
         }
 
         // Check for overflow for (u)int8 and (u)int16
-        if (!op->type.is_float() && op->type.bits < 32) {
+        if (!op->type.is_float() && op->type.bits() < 32) {
             if (max.defined()) {
                 Expr test = (cast<int>(max_a) + cast<int>(max_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
@@ -285,7 +288,7 @@ private:
         }
 
         // Check for overflow for (u)int8 and (u)int16
-        if (!op->type.is_float() && op->type.bits < 32) {
+        if (!op->type.is_float() && op->type.bits() < 32) {
             if (max.defined()) {
                 Expr test = (cast<int>(max_a) - cast<int>(min_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
@@ -352,7 +355,7 @@ private:
                 // Sign of a is unknown
                 Expr a = min_a * min_b;
                 Expr b = min_a * max_b;
-                Expr cmp = min_a >= make_zero(min_a.type());
+                Expr cmp = min_a >= make_zero(min_a.type().element_of());
                 min = select(cmp, a, b);
                 max = select(cmp, b, a);
             }
@@ -370,7 +373,7 @@ private:
                 // Sign of b is unknown
                 Expr a = min_b * min_a;
                 Expr b = min_b * max_a;
-                Expr cmp = min_b >= make_zero(min_b.type());
+                Expr cmp = min_b >= make_zero(min_b.type().element_of());
                 min = select(cmp, a, b);
                 max = select(cmp, b, a);
             }
@@ -385,7 +388,7 @@ private:
             max = Max::make(Max::make(a, b), Max::make(c, d));
         }
 
-        if (op->type.bits < 32 && !op->type.is_float()) {
+        if (op->type.bits() < 32 && !op->type.is_float()) {
             // Try to prove it can't overflow
             Expr test1 = (cast<int>(min_a) * cast<int>(min_b) - cast<int>(min_a * min_b));
             Expr test2 = (cast<int>(min_a) * cast<int>(max_b) - cast<int>(min_a * max_b));
@@ -437,7 +440,7 @@ private:
                 // Sign of b is unknown
                 Expr a = min_a / min_b;
                 Expr b = max_a / max_b;
-                Expr cmp = min_b > make_zero(min_b.type());
+                Expr cmp = min_b > make_zero(min_b.type().element_of());
                 min = select(cmp, a, b);
                 max = select(cmp, b, a);
             }
@@ -483,27 +486,29 @@ private:
             return;
         }
 
+        Type t = op->type.element_of();
+
         if (min_a.defined() && min_a.same_as(max_a) && min_b.same_as(max_b)) {
             min = max = Mod::make(min_a, min_b);
         } else {
             // Only consider B (so A can be undefined)
             if (max_b.type().is_uint() || (max_b.type().is_int() && is_positive_const(min_b))) {
                 // If the RHS is a positive integer, the result is in [0, max_b-1]
-                min = make_zero(op->type);
-                max = max_b - make_one(op->type);
+                min = make_zero(t);
+                max = max_b - make_one(t);
             } else if (max_b.type().is_int()) {
                 // mod takes the sign of the second arg
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [-7,0]
                 // x % [-8, 10] -> [-7,9]
-                min = Min::make(min_b + make_one(op->type), make_zero(op->type));
-                max = Max::make(max_b - make_one(op->type), make_zero(op->type));
+                min = Min::make(min_b + make_one(t), make_zero(t));
+                max = Max::make(max_b - make_one(t), make_zero(t));
             } else {
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                min = Min::make(min_b, make_zero(op->type));
-                max = Max::make(max_b, make_zero(op->type));
+                min = Min::make(min_b, make_zero(t));
+                max = Max::make(max_b, make_zero(t));
             }
         }
     }
@@ -656,7 +661,7 @@ private:
         op->index.accept(this);
         if (min.defined() && min.same_as(max)) {
             // If the index is const we can return the load of that index
-            min = max = Load::make(op->type, op->name, min, op->image, op->param);
+            min = max = Load::make(op->type.element_of(), op->name, min, op->image, op->param);
         } else {
             // Otherwise use the bounds of the type
             bounds_of_type(op->type);
@@ -664,11 +669,18 @@ private:
     }
 
     void visit(const Ramp *op) {
-        internal_error << "Bounds of vector";
+        // Treat the ramp lane as a free variable
+        string var_name = unique_name('t');
+        Expr var = Variable::make(op->base.type(), var_name);
+        Expr lane = op->base + var * op->stride;
+        scope.push(var_name, Interval(make_const(var.type(), 0),
+                                      make_const(var.type(), op->lanes-1)));
+        lane.accept(this);
+        scope.pop(var_name);
     }
 
-    void visit(const Broadcast *) {
-        internal_error << "Bounds of vector";
+    void visit(const Broadcast *op) {
+        op->value.accept(this);
     }
 
     void visit(const Call *op) {
@@ -688,27 +700,29 @@ private:
             }
         }
 
-        if (op->type == Handle()) {
+        Type t = op->type.element_of();
+
+        if (t == Handle()) {
             min = max = Expr();
             return;
         }
 
         if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
-            min = max = Call::make(op->type, op->name, new_args, op->call_type,
+            min = max = Call::make(t, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
         } else if (op->call_type == Call::Intrinsic && op->name == Call::abs) {
             Expr min_a = min, max_a = max;
-            min = make_zero(op->type);
+            min = make_zero(t);
             if (min_a.defined() && max_a.defined()) {
                 if (equal(min_a, max_a)) {
-                    min = max = Call::make(op->type, Call::abs, {max_a}, Call::Intrinsic);
+                    min = max = Call::make(t, Call::abs, {max_a}, Call::Intrinsic);
                 } else {
-                    min = make_zero(op->type);
-                    if (op->args[0].type().is_int() && op->args[0].type().bits == 32) {
-                        max = Max::make(Cast::make(op->type, -min_a), Cast::make(op->type, max_a));
+                    min = make_zero(t);
+                    if (op->args[0].type().is_int() && op->args[0].type().bits() == 32) {
+                        max = Max::make(Cast::make(t, -min_a), Cast::make(t, max_a));
                     } else {
-                        min_a = Call::make(op->type, Call::abs, {min_a}, Call::Intrinsic);
-                        max_a = Call::make(op->type, Call::abs, {max_a}, Call::Intrinsic);
+                        min_a = Call::make(t, Call::abs, {min_a}, Call::Intrinsic);
+                        max_a = Call::make(t, Call::abs, {max_a}, Call::Intrinsic);
                         max = Max::make(min_a, max_a);
                     }
                 }
@@ -734,7 +748,7 @@ private:
                 simplified.accept(this);
             } else {
                 // Just use the bounds of the type
-                bounds_of_type(op->type);
+                bounds_of_type(t);
             }
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
@@ -745,9 +759,9 @@ private:
             // For monotonic, pure, single-argument functions, we can
             // make two calls for the min and the max.
             Expr min_a = min, max_a = max;
-            min = Call::make(op->type, op->name, {min_a}, op->call_type,
+            min = Call::make(t, op->name, {min_a}, op->call_type,
                              op->func, op->value_index, op->image, op->param);
-            max = Call::make(op->type, op->name, {max_a}, op->call_type,
+            max = Call::make(t, op->name, {max_a}, op->call_type,
                              op->func, op->value_index, op->image, op->param);
 
         } else if (op->call_type == Call::Intrinsic &&
@@ -776,7 +790,7 @@ private:
             bounds_of_func(op->func, op->value_index);
         } else {
             // Just use the bounds of the type
-            bounds_of_type(op->type);
+            bounds_of_type(t);
         }
     }
 
@@ -796,7 +810,7 @@ private:
                 min_var = min_val;
                 min_val = Expr();
             } else {
-                min_var = Variable::make(op->value.type(), min_name);
+                min_var = Variable::make(op->value.type().element_of(), min_name);
             }
         }
 
@@ -805,7 +819,7 @@ private:
                 max_var = max_val;
                 max_val = Expr();
             } else {
-                max_var = Variable::make(op->value.type(), max_name);
+                max_var = Variable::make(op->value.type().element_of(), max_name);
             }
         }
 
@@ -874,6 +888,16 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const 
     Bounds b(&scope, fb);
     expr.accept(&b);
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
+    if (b.min.defined()) {
+        internal_assert(b.min.type().is_scalar())
+            << "Min of " << expr
+            << " should have been a scalar: " << b.min << "\n";
+    }
+    if (b.max.defined()) {
+        internal_assert(b.max.type().is_scalar())
+            << "Max of " << expr
+            << " should have been a scalar: " << b.max << "\n";
+    }
     return Interval(b.min, b.max);
 }
 
@@ -1488,6 +1512,11 @@ void bounds_test() {
     check(scope, cast<float>(x), 0.0f, 10.0f);
 
     check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
+
+    // Check some vectors
+    check(scope, Ramp::make(x*2, 5, 5), 0, 40);
+    check(scope, Broadcast::make(x*2, 5), 0, 20);
+    check(scope, Broadcast::make(3, 4), 3, 3);
 
     // Check some operations that may overflow
     check(scope, (cast<uint8_t>(x)+250), make_const(UInt(8), 0), make_const(UInt(8), 255));
