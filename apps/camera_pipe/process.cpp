@@ -89,7 +89,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
 #endif
     fprintf(stderr, "output: %s\n", argv[6]);
+#ifndef NOSAVE
     save_image(output, argv[6]);
+#endif
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
 #if defined(__hexagon__)
@@ -116,7 +118,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
 #endif
     fprintf(stderr, "outref: fcam_c" IMGEXT "\n");
+#ifndef NOSAVE
     save_image(outref, "fcam_c" IMGEXT);
+#endif
     fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
 #endif
 
@@ -127,7 +131,9 @@ int main(int argc, char **argv) {
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
     fprintf(stderr, "outarm: fcam_arm" IMGEXT "\n");
+#ifndef NOSAVE
     save_image(outarm, "fcam_arm" IMGEXT);
+#endif
     fprintf(stderr, "        %d %d\n", outarm.width(), outarm.height());
 #endif
 
