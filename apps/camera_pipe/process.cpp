@@ -89,7 +89,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
 #endif
     fprintf(stderr, "output: %s\n", argv[6]);
+#ifndef NOSAVE
     save_image(output, argv[6]);
+#endif
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
 #if defined(__hexagon__)
@@ -117,18 +119,22 @@ int main(int argc, char **argv) {
 #endif
 
     fprintf(stderr, "outref: fcam_c" IMGEXT "\n");
+#ifndef NOSAVE
     save_image(outref, "fcam_c" IMGEXT);
+#endif
     fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
 
 #if not defined(__hexagon__)
     Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
     best = benchmark(timing_iterations, 1, [&]() {;
-        FCam::demosaic_ARM(input, outarm, color_temp, contrast, true, 25, gamma);
+        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, 25, gamma);
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    fprintf(stderr, "outarm: fcam_arm" IMGEXT "\n");
+    fprintf(stderr, "output_asm: fcam_arm" IMGEXT "\n");
+#ifndef NOSAVE
     save_image(output_asm, "fcam_arm" IMGEXT);
-    fprintf(stderr, "        %d %d\n", outarm.width(), outarm.height());
+#endif
+    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
 #endif
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
