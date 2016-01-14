@@ -165,14 +165,15 @@ void GPU_Host_Closure::visit(const Call *op) {
         string bufname = string_imm->value;
         BufferRef &ref = buffers[bufname];
         ref.type = op->type;
-        // TODO: do we need to set ref.dimensions?
 
         if (op->name == Call::glsl_texture_load ||
             op->name == Call::image_load) {
             ref.read = true;
+            ref.dimensions = (op->args.size() - 2) / 2;
         } else if (op->name == Call::glsl_texture_store ||
                    op->name == Call::image_store) {
             ref.write = true;
+            ref.dimensions = op->args.size() - 3;
         }
 
         // The Func's name and the associated .buffer are mentioned in the

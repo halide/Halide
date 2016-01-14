@@ -385,7 +385,10 @@ class InjectBufferCopies : public IRMutator {
             }
         } else if (op->name == Call::image_load && op->call_type == Call::Intrinsic) {
             // counts as a device read
-            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
+            internal_assert(device_api == DeviceAPI::GLSL ||
+                            device_api == DeviceAPI::Renderscript ||
+                            device_api == DeviceAPI::OpenCLTextures ||
+                            device_api == DeviceAPI::MetalTextures);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
@@ -395,7 +398,10 @@ class InjectBufferCopies : public IRMutator {
             IRMutator::visit(op);
         } else if (op->name == Call::image_store && op->call_type == Call::Intrinsic) {
             // counts as a device store
-            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
+            internal_assert(device_api == DeviceAPI::GLSL ||
+                            device_api == DeviceAPI::Renderscript ||
+                            device_api == DeviceAPI::OpenCLTextures ||
+                            device_api == DeviceAPI::MetalTextures);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
