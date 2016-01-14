@@ -37,7 +37,7 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
         "/Library/Frameworks/CUDA.framework/CUDA",
 #endif
     };
-    for (int i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
+    for (size_t i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
         lib_cuda = halide_load_library(lib_names[i]);
         if (lib_cuda) {
             debug(user_context) << "    Loaded CUDA runtime library: " << lib_names[i] << "\n";
@@ -88,11 +88,11 @@ extern "C" {
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
-// - halide_acquire_cl_context should always store a valid context/command
+// - halide_cuda_acquire_context should always store a valid context/command
 //   queue in ctx/q, or return an error code.
-// - A call to halide_acquire_cl_context is followed by a matching call to
-//   halide_release_cl_context. halide_acquire_cl_context should block while a
-//   previous call (if any) has not yet been released via halide_release_cl_context.
+// - A call to halide_cuda_acquire_context is followed by a matching call to
+//   halide_cuda_release_context. halide_cuda_acquire_context should block while a
+//   previous call (if any) has not yet been released via halide_cuda_release_context.
 WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
     // TODO: Should we use a more "assertive" assert? these asserts do
     // not block execution on failure.
@@ -299,6 +299,14 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         cuCtxGetApiVersion(*ctx, &version);
         debug(user_context) << *ctx << "(" << version << ")\n";
     }
+    // Creation automatically pushes the context, but we'll pop to allow the caller
+    // to decide when to push.
+    err = cuCtxPopCurrent(&context);
+    if (err != CUDA_SUCCESS) {
+      error(user_context) << "CUDA: cuCtxPopCurrent failed: "
+                          << get_error_name(err);
+      return err;
+    }
 
     return CUDA_SUCCESS;
 }
@@ -443,7 +451,10 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // It's possible that this is being called from the destructor of
         // a static variable, in which case the driver may already be
         // shutting down.
-        err = cuCtxSynchronize();
+        err = cuCtxPushCurrent(ctx);
+        if (err != CUDA_SUCCESS) {
+            err = cuCtxSynchronize();
+        }
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
         // Unload the modules attached to this context. Note that the list
@@ -461,6 +472,9 @@ WEAK int halide_cuda_device_release(void *user_context) {
             }
             state = state->next;
         }
+
+        CUcontext old_ctx;
+        cuCtxPopCurrent(&old_ctx);
 
         // Only destroy the context if we own it
         if (ctx == context) {
@@ -559,10 +573,12 @@ WEAK int halide_cuda_copy_to_device(void *user_context, buffer_t* buf) {
 
     device_copy c = make_host_to_device_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
@@ -612,10 +628,12 @@ WEAK int halide_cuda_copy_to_host(void *user_context, buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +

@@ -103,7 +103,7 @@ private:
         }
 
         Type load_type = call->type;
-        // load_type.width = 4;
+        // load_type = load_type.with_lanes(4);
 
         Expr load_call = Call::make(load_type,
                           Call::image_load,
