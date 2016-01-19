@@ -15,7 +15,11 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
+void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma
+#ifdef FCAMLUT
+        , unsigned char *lut
+#endif
+        ) {
 
 #ifdef __arm__ // only build on arm
     const int BLOCK_WIDTH  = 40;
@@ -152,9 +156,11 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 #define R_R_NOISY  G_R
 #define G_GB_NOISY B_GB
 
+#ifndef FCAMLUT
     // Prepare the lookup table
     unsigned char lut[whiteLevel+1];
     makeLUT(contrast, blackLevel, whiteLevel, gamma, lut);
+#endif
 
     // For each block in the input
 #if 0
