@@ -23,7 +23,14 @@ void demosaic(Halide::Tools::Image<uint16_t> input,
               float contrast = 50.0f,
               bool denoise = true, int blackLevel = 25,
               int whiteLevel = 1023,
-              float gamma = 2.2f);
+              float gamma = 2.2f
+#ifdef FCAMLUT
+              , unsigned char *lut = NULL
+#endif
+              );
+
+// Make a linear luminance -> pixel value lookup table
+void makeLUT(float contrast, int blackLevel, int whiteLevel, float gamma, unsigned char *lut);
 }
 
 #endif
