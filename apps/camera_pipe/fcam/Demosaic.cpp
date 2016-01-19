@@ -82,7 +82,11 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
+void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma
+#ifdef FCAMLUT
+        , unsigned char *lut
+#endif
+        ) {
 #if 0
     if (!src.image().valid()) {
         error(Event::DemosaicError, "Cannot demosaic an invalid image");
@@ -157,9 +161,11 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     }
 #endif
 
+#ifndef FCAMLUT
     // Prepare the lookup table
     unsigned char lut[4096];
     makeLUT(contrast, blackLevel, gamma, lut);
+#endif
 
     // Grab the color matrix
     float colorMatrix[12];
