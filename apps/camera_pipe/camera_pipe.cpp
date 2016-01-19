@@ -465,6 +465,7 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
     } else if (schedule == 3) {
         // optimized for Hexagon
         // Compute in chunks over 32x32 tiles, scalar
@@ -472,6 +473,7 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
     } else if (schedule == 4) {
         // optimized for Hexagon
         // Compute in chunks over 64x64 tiles, vectorized by 64
@@ -479,6 +481,7 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
     } else if (schedule == 5) {
         // optimized for Hexagon
         // Compute in chunks over 64x64 tiles, scalar
@@ -486,24 +489,28 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
     } else if (schedule == 6) {
         // no tiling, vectorized by 32
         denoised.compute_at(processed, tx).vectorize(x, 32);
         deinterleaved.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
         processed.reorder(c, tx, ty);
+        processed.parallel(ty);
     } else if (schedule == 7) {
         // no tiling, vectorized by 64
         denoised.compute_at(processed, tx).vectorize(x, 64);
         deinterleaved.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
         processed.reorder(c, tx, ty);
+        processed.parallel(ty);
     } else if (schedule == 8) {
         // no tiling, scalar
         denoised.compute_at(processed, tx);
         deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         processed.reorder(c, tx, ty);
+        processed.parallel(ty);
     } else {
         denoised.compute_root();
         deinterleaved.compute_root();
