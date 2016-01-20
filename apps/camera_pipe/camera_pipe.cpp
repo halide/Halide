@@ -413,7 +413,9 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
 Func apply_curve(Func input, Type result_type, ImageParam lut) {
     Func curved;
     // Use pre-computed LUT
-    curved(x, y, c) = lut(input(x, y, c));
+    // curved(x, y, c) = lut(input(x, y, c));
+    // Use clamp to make sure input stays within the LUT
+    curved(x, y, c) = lut(clamp(input(x, y, c), 0, MAXRAW+1));
 
     return curved;
 }
