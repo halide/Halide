@@ -102,6 +102,14 @@ Expr bitwiseXor(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_xor, {A, B},
                               Internal::Call::Intrinsic);
 }
+Expr vavg_round(Expr A, Expr B) {
+  Type wider = A.type().with_bits(A.type().bits() * 2);
+  return cast(A.type(), (cast(wider, A) + cast(wider, B) + 1)/2);
+}
+Expr vavg(Expr A, Expr B) {
+  Type wider = A.type().with_bits(A.type().bits() * 2);
+  return cast(A.type(), (cast(wider, A) + cast(wider, B))/2);
+}
 #ifdef THESE_ARE_UNUSED
 Expr bitwiseNot(Expr A) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_not, {A},
@@ -1663,6 +1671,52 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 // End of handleLargeVectors
 /////////////////////////////////////////////////////////////////////////////
 
+bool CodeGen_Hexagon::possiblyCodeGenVavg(const Cast *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
+  std::vector<Pattern> avgs;
+  vector<Expr> matches;
+  avgs.push_back(Pattern(vavg(WPICK(wild_u8x128, wild_u8x64),
+                              WPICK(wild_u8x128, wild_u8x64)),
+                         IPICK(Intrinsic::hexagon_V6_vavgub)));
+  avgs.push_back(Pattern(vavg_round(WPICK(wild_u8x128, wild_u8x64),
+                                    WPICK(wild_u8x128, wild_u8x64)),
+                         IPICK(Intrinsic::hexagon_V6_vavgubrnd)));
+  avgs.push_back(Pattern(vavg(WPICK(wild_u16x64, wild_u16x32),
+                              WPICK(wild_u16x64, wild_u16x32)),
+                         IPICK(Intrinsic::hexagon_V6_vavguh)));
+  avgs.push_back(Pattern(vavg_round(WPICK(wild_u16x64, wild_u16x32),
+                                    WPICK(wild_u16x64, wild_u16x32)),
+                         IPICK(Intrinsic::hexagon_V6_vavguhrnd)));
+  avgs.push_back(Pattern(vavg(WPICK(wild_i16x64, wild_i16x32),
+                              WPICK(wild_i16x64, wild_i16x32)),
+                         IPICK(Intrinsic::hexagon_V6_vavgh)));
+  avgs.push_back(Pattern(vavg_round(WPICK(wild_i16x64, wild_i16x32),
+                                    WPICK(wild_i16x64, wild_i16x32)),
+                         IPICK(Intrinsic::hexagon_V6_vavghrnd)));
+  avgs.push_back(Pattern(vavg(WPICK(wild_i32x32, wild_i32x16),
+                              WPICK(wild_i32x32, wild_i32x16)),
+                         IPICK(Intrinsic::hexagon_V6_vavgw)));
+  avgs.push_back(Pattern(vavg_round(WPICK(wild_i32x32, wild_i32x16),
+                                    WPICK(wild_i32x32, wild_i32x16)),
+                         IPICK(Intrinsic::hexagon_V6_vavgwrnd)));
+  matches.clear();
+  for (size_t I = 0; I < avgs.size(); ++I) {
+    const Pattern &P = avgs[I];
+    if (expr_match(P.pattern, op, matches)) {
+      std::vector<Value *> Ops;
+      Value *Vec0 = codegen(matches[0]);
+      Value *Vec1 = codegen(matches[1]);
+      Ops.push_back(Vec0);
+      Ops.push_back(Vec1);
+      Intrinsic::ID ID = P.ID;
+      Value *VavgInst =
+        CallLLVMIntrinsic(Intrinsic::getDeclaration(module.get(), ID), Ops);
+      value = convertValueType(VavgInst, llvm_type_of(op->type));
+      return true;
+    }
+  }
+  return false;
+}
 void CodeGen_Hexagon::visit(const Cast *op) {
   vector<Expr> matches;
   debug(1) << "HexCG: " << op->type << " <- " << op->value.type() << ", " << "visit(Cast)\n";
@@ -1757,6 +1811,9 @@ void CodeGen_Hexagon::visit(const Cast *op) {
           return;
       }
     bool B128 = target.has_feature(Halide::Target::HVX_128);
+    if (possiblyCodeGenVavg(op)) {
+      return;
+    }
     // Looking for shuffles
     {
       std::vector<Pattern> Shuffles;

@@ -93,6 +93,7 @@ protected:
     bool possiblyCodeGenWideningMultiply(const Mul *);
     bool possiblyGenerateVMPAAccumulate(const Add *);
     bool possiblyCodeGenNarrowerType(const Select *);
+    bool possiblyCodeGenVavg(const Cast *);
     llvm::Value *possiblyCodeGenWideningMultiplySatRndSat(const Div *);
 };
 
