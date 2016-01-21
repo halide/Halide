@@ -49,7 +49,7 @@ struct debug {
     debug(int v) : verbosity(v) {
         if (!initialized) {
             // Read the debug level from the environment
-            #ifdef _WIN32
+            #ifdef _MSC_VER
             char lvl[32];
             size_t read = 0;
             getenv_s(&read, lvl, "HL_DEBUG_CODEGEN");

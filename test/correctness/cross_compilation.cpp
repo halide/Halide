@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
         #ifndef _MSC_VER
         std::string object_name = "test_object_" + t + ".o";
-        if (target.os == Target::Windows) object_name += "bj";
+        if ((target.os == Target::Windows) && (!target.has_feature(Target::MinGW))) object_name += "bj";
         assert(access(object_name.c_str(), F_OK) == 0 && "Output file not created.");
         #endif
     }

@@ -75,7 +75,7 @@ function(halide_add_generator_dependency)
 
   # Add a custom target to invoke the GENERATOR_TARGET and output the Halide
   # generated library
-  if (WIN32)
+  if (MSVC)
     add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
                               "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.obj"
       DEPENDS "${args_GENERATOR_TARGET}"

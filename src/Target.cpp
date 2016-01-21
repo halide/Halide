@@ -51,7 +51,7 @@ Target get_host_target() {
     #ifdef __linux__
     os = Target::Linux;
     #endif
-    #ifdef _MSC_VER
+    #ifdef _WIN32
     os = Target::Windows;
     #endif
     #ifdef __APPLE__
@@ -106,6 +106,11 @@ Target get_host_target() {
             initial_features.push_back(Target::AVX2);
         }
     }
+#ifdef _WIN32
+#ifndef _MSC_VER
+    initial_features.push_back(Target::MinGW);
+#endif
+#endif
 
     return Target(os, arch, bits, initial_features);
 #endif
@@ -114,7 +119,7 @@ Target get_host_target() {
 
 namespace {
 string get_env(const char *name) {
-#ifdef _WIN32
+#ifdef _MSC_VER
     char buf[128];
     size_t read = 0;
     getenv_s(&read, buf, name);
@@ -198,6 +203,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
+    {"mingw", Target::MinGW},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -250,6 +256,9 @@ Target parse_target_string(const std::string &target) {
     t.os = host.os;
     t.arch = host.arch;
     t.bits = host.bits;
+
+    if ((t.os == Target::Windows) && (host.has_feature(Target::MinGW))) t.set_feature(Target::MinGW);
+
 
     if (!t.merge_string(target)) {
         const char *separator = "";
@@ -331,6 +340,7 @@ bool Target::merge_string(const std::string &target) {
             if (os_specified) {
                 return false;
             }
+            set_feature(Target::MinGW, false);
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
             set_feature(feature);
