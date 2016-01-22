@@ -14,7 +14,6 @@ endif
 TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS= -L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -24,7 +23,7 @@ CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 CXXFLAGS += ${EXTRA_FLAGS}
 HALIDE_FUNC_CFLAGS = -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 fast9.o fast9.h: fast9.cpp
-	${X86_CLANG}  fast9.cpp -g -o fast9.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  fast9.cpp -g -o fast9.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./fast9.generate.out  ${B128_MODE}
 
 
@@ -42,13 +41,13 @@ clean:
 .PHONY: assembly
 
 assembly: fast9.cpp
-	${X86_CLANG}  fast9.cpp -g  -o fast9.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  fast9.cpp -g  -o fast9.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./fast9.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: fast9.cpp
-	${X86_CLANG}  fast9.cpp -g  -lHalide -lpthread -ldl -o fast9.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  fast9.cpp -g  -lHalide -lpthread -ldl -o fast9.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./fast9.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
@@ -94,7 +93,7 @@ run: fast9.out
 .PHONY: stmt
 
 stmt: fast9.cpp
-	${X86_CLANG}  fast9.cpp -g  -lHalide -lpthread -ldl -o fast9.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  fast9.cpp -g  -lHalide -lpthread -ldl -o fast9.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./fast9.generate.out
 
 .PHONY: synthetic

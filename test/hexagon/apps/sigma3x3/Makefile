@@ -16,7 +16,6 @@ ARG12=1920 1080
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -25,7 +24,7 @@ VERSION_FLAG=-DRDOM
 GDB=
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 sigma3x3.o sigma3x3.h: sigma3x3.cpp
-	${X86_CLANG}  sigma3x3.cpp -g -o sigma3x3.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} ${VERSION_FLAG} ; \
+	${CXX}  sigma3x3.cpp -g -o sigma3x3.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} ${VERSION_FLAG} ; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./sigma3x3.generate.out  ${B128_MODE}
 
 
@@ -43,13 +42,13 @@ clean:
 .PHONY: assembly
 
 assembly: sigma3x3.cpp
-	${X86_CLANG}  sigma3x3.cpp -g  -o sigma3x3.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
+	${CXX}  sigma3x3.cpp -g  -o sigma3x3.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./sigma3x3.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: sigma3x3.cpp
-	${X86_CLANG}  sigma3x3.cpp -g  -lHalide -lpthread -ldl -o sigma3x3.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
+	${CXX}  sigma3x3.cpp -g  -lHalide -lpthread -ldl -o sigma3x3.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./sigma3x3.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
@@ -95,7 +94,7 @@ run: sigma3x3.out
 .PHONY: stmt
 
 stmt: sigma3x3.cpp
-	${X86_CLANG}  sigma3x3.cpp -g  -lHalide -lpthread -ldl -o sigma3x3.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
+	${CXX}  sigma3x3.cpp -g  -lHalide -lpthread -ldl -o sigma3x3.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./sigma3x3.generate.out
 
 .PHONY: synthetic
