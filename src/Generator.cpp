@@ -33,6 +33,7 @@ namespace Internal {
 
 const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
     static const std::map<std::string, Halide::Type> halide_type_enum_map{
+        {"bool", Halide::Bool()},
         {"int8", Halide::Int(8)},
         {"int16", Halide::Int(16)},
         {"int32", Halide::Int(32)},
