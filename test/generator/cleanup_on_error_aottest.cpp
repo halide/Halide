@@ -16,9 +16,8 @@ const int size = 64;
 
 int successful_mallocs = 0, failed_mallocs = 0, frees = 0, errors = 0, device_mallocs = 0, device_frees = 0;
 
-extern "C" void *my_halide_malloc(void *user_context, size_t x) {
-  printf("Called the custom halide_malloc\n"); fflush(stdout);
-  // Only the first malloc succeeds
+ void *my_halide_malloc(void *user_context, size_t x) {
+    // Only the first malloc succeeds
     if (successful_mallocs) {
         failed_mallocs++;
         return NULL;
@@ -32,16 +31,17 @@ extern "C" void *my_halide_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-extern "C" void my_halide_free(void *user_context, void *ptr) {
+void my_halide_free(void *user_context, void *ptr) {
     frees++;
     free(((void**)ptr)[-1]);
 }
 
-extern "C" void my_halide_error(void *user_context, const char *msg) {
-  printf("Called the custom halide_error\n"); fflush(stdout);
-  errors++;
+void my_halide_error(void *user_context, const char *msg) {
+    errors++;
 }
 
+// These two can't be overridden on windows, so we'll just check that
+// the number of calls to free matches the number of calls to malloc.
 extern "C" int halide_device_free(void *user_context, struct buffer_t *buf) {
     device_frees++;
     const halide_device_interface *interface = halide_get_device_interface(buf->dev);
