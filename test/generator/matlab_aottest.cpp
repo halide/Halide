@@ -163,7 +163,10 @@ int main(int argc, char **argv) {
         for (int j = 0; j < 5; j++) {
             float in = input(i, j);
             float expected = in * scale(0, 0) * (negate(0, 0) ? -1.0f : 1.0f);
-            assert(output(i, j) == expected);
+            if (output(i, j) == expected) {
+                printf("output(%d, %d) = %f instead of %f\n",
+                       i, j, output(i, j), expected);
+            }
         }
     }
 
