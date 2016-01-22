@@ -715,7 +715,6 @@ typedef int (*enumerate_func_t)(void* enumerate_context,
  */
 extern int halide_enumerate_registered_filters(void *user_context, void* enumerate_context, enumerate_func_t func);
 
-
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread
  * alongside the pipeline. */

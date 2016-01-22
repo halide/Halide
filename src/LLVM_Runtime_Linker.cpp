@@ -413,11 +413,19 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // used in the Halide-generated code must remain weak. This is
     // handled automatically by assuming any symbol starting with
     // "halide_" that is weak will be retained. There are a few
-    // compiler generated symbols for which this convention is not
-    // followed and these are in this array.
+    // symbols for which this convention is not followed and these are
+    // in this array.
     vector<string> retain = {"__stack_chk_guard",
 			     "__stack_chk_fail"};
 
+    if (t.has_feature(Target::MinGW)) {      
+	retain.insert(retain.end(),
+                             {"sincos", "sincosf",
+			      "asinh", "asinhf",
+			      "acosh", "acoshf",
+			      "atanh", "atanhf"});
+    }
+    
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
@@ -451,20 +459,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
                 f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
-
-	if (t.has_feature(Target::MinGW) &&
-	    !t.has_feature(Target::NoRuntime) &&
-	    !Internal::starts_with(f.getName(), "sincos")) {
-	    // Weak linkage doesn't exist on windows, but for MinGW
-	    // there's a workaround. This prevents symbols in
-	    // multiple copies of the runtime from fighting, but it
-	    // doesn't give a way for users to override symbols,
-	    // unfortunately.
-	    // 
-	    // sincos is a special case that's already in its own
-	    // section. See src/runtime/mingw_math.cpp
-	    //f.setSection(".gnu.linkonce.halide_runtime");
-	}	     
     }
 
     // Now remove the force-usage global that prevented clang from
@@ -628,6 +622,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
+		if (t.has_feature(Target::MinGW)) {
+                    modules.push_back(get_initmod_mingw_math(c, bits_64, debug));
+                }
             } else if (t.os == Target::IOS) {
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
@@ -653,9 +650,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 		} else {
 		    modules.push_back(get_initmod_posix_math_ll(c));		    
 		}
-		if (t.has_feature(Target::MinGW)) {
-                    modules.push_back(get_initmod_mingw_math(c, bits_64, debug));
-                }
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
             } else {

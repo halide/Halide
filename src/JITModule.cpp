@@ -665,7 +665,8 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         // Enumerate the functions.
         for (auto &f : *module) {
-            if (f.hasWeakLinkage() && starts_with(f.getName(), "halide_")) {
+            // LLVM_Runtime_Linker has marked everything that should be exported as weak
+            if (f.hasWeakLinkage()) {
                 halide_exports_unique.insert(f.getName());
             }
         }
