@@ -37,6 +37,7 @@ set(RUNTIME_CPP
   linux_opengl_context
   matlab
   metadata
+  mingw_math
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count

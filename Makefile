@@ -491,6 +491,7 @@ RUNTIME_CPP_COMPONENTS = \
   metal \
   metal_objc_arm \
   metal_objc_x86 \
+  mingw_math \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
@@ -568,16 +569,15 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	# Archive together all the halide and llvm object files
 	@-mkdir -p $(LIB_DIR)
 	@rm -f $(LIB_DIR)/libHalide.a
-	# ar breaks (with Bad File Number) on MinGW with all objects at the same time.
-	ar q $(LIB_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES) 
-	ar q $(LIB_DIR)/libHalide.a $(BUILD_DIR)/llvm_objects/*.o*
+	# ar breaks on MinGW with all objects at the same time.
+	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
 	ranlib $(LIB_DIR)/libHalide.a
 else
-$(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
+$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p $(BIN_DIR)
-	@rm -f $(BIN_DIR)/libHalide.a
-	ar q $(BIN_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES)
-	ranlib $(BIN_DIR)/libHalide.a
+	@rm -f $(LIB_DIR)/libHalide.a
+	ar q $(LIB_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES)
+	ranlib $(LIB_DIR)/libHalide.a
 endif
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(LIB_DIR)/libHalide.a
@@ -669,6 +669,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 
 .PHONY: clean
 clean:
+	rm -rf $(LIB_DIR)/*
 	rm -rf $(BIN_DIR)/*
 	rm -rf $(BUILD_DIR)/*
 	rm -rf $(TMP_DIR)/*
@@ -690,7 +691,11 @@ TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 ifeq ($(UNAME), Darwin)
 LD_PATH_SETUP = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:$(CURDIR)/$(BIN_DIR)
 else
+ifneq (,$(findstring MINGW,$(UNAME)))
+LD_PATH_SETUP = PATH="${PATH}:$(CURDIR)/$(BIN_DIR)"
+else
 LD_PATH_SETUP = LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(CURDIR)/$(BIN_DIR)
+endif
 endif
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=correctness_%)
@@ -1017,7 +1022,7 @@ time_compilation_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.gen
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(FILTERS_DIR)/tiled_blur_interleaved.o
 
 .PHONY: test_apps
-test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
+test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	mkdir -p apps
 	# Make a local copy of the apps if we're building out-of-tree,
 	# because the app Makefiles are written to build in-tree
@@ -1059,7 +1064,7 @@ test_apps: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	cd apps/HelloMatlab; HALIDE_PATH=$(CURDIR) ./run_blur.sh
 
 .PHONY: test_python
-test_python: $(BIN_DIR)/libHalide.a
+test_python: $(LIB_DIR)/libHalide.a
 	mkdir -p python_bindings
 	make -C python_bindings -f $(ROOT_DIR)/python_bindings/Makefile test
 
