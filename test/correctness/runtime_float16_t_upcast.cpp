@@ -55,8 +55,8 @@ int main() {
     float expectedF[] = {
         0.0f,
         -0.0f,
-        INFINITY,
-        -INFINITY,
+        std::numeric_limits<float>::infinity(),
+	-std::numeric_limits<float>::infinity(),
         std::numeric_limits<float>::quiet_NaN(),
         65504.0f,
         -65504.0f,
@@ -74,8 +74,8 @@ int main() {
     double expectedD[] = {
         0.0,
         -0.0,
-        (double) INFINITY,
-        (double) -INFINITY,
+        std::numeric_limits<double>::infinity(),
+	-std::numeric_limits<double>::infinity(),
         std::numeric_limits<double>::quiet_NaN(),
         65504.0,
         -65504.0,
