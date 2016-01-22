@@ -14,7 +14,6 @@ endif
 TIMING=--timing
 CXXFLAGS="--std=c++11"
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl   -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -22,7 +21,7 @@ B128_MODE=
 GDB=
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 dilate3x3.o dilate3x3.h: dilate3x3.cpp
-	${X86_CLANG}  dilate3x3.cpp -g -o dilate3x3.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
+	${CXX}  dilate3x3.cpp -g -o dilate3x3.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./dilate3x3.generate.out  ${B128_MODE}
 
 
@@ -40,13 +39,13 @@ clean:
 .PHONY: assembly
 
 assembly: dilate3x3.cpp
-	${X86_CLANG}  dilate3x3.cpp -g  -o dilate3x3.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS}  -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
+	${CXX}  dilate3x3.cpp -g  -o dilate3x3.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS}  -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./dilate3x3.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: dilate3x3.cpp
-	${X86_CLANG}  dilate3x3.cpp -g  -lHalide -lpthread -ldl -o dilate3x3.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS}  -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
+	${CXX}  dilate3x3.cpp -g  -lHalide -lpthread -ldl -o dilate3x3.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS}  -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./dilate3x3.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
@@ -92,7 +91,7 @@ run: dilate3x3.out
 .PHONY: stmt
 
 stmt: dilate3x3.cpp
-	${X86_CLANG}  dilate3x3.cpp -g  -lHalide -lpthread -ldl -o dilate3x3.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS}  -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
+	${CXX}  dilate3x3.cpp -g  -lHalide -lpthread -ldl -o dilate3x3.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS}  -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./dilate3x3.generate.out
 
 .PHONY: synthetic

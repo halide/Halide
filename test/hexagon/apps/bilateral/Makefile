@@ -19,14 +19,13 @@ GDB=
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl -Wl,--end-group
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 CXXFLAGS += ${EXTRA_FLAGS}
 
 bilateral.o bilateral.h: bilateral.cpp
-	${X86_CLANG} bilateral.cpp -g  -o bilateral.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} bilateral.cpp -g  -o bilateral.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./bilateral.generate.out
 
 
@@ -42,13 +41,13 @@ clean:
 .PHONY: assembly
 
 assembly: bilateral.cpp
-	${X86_CLANG} bilateral.cpp -g -o bilateral.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} bilateral.cpp -g -o bilateral.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./bilateral.generate.out
 
 .PHONY: bitcode
 
 bitcode: bilateral.cpp
-	${X86_CLANG} bilateral.cpp -g  -o bilateral.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} bilateral.cpp -g  -o bilateral.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./bilateral.generate.out
 
 .PHONY: all
@@ -93,7 +92,7 @@ run: bilateral.out
 .PHONY: stmt
 
 stmt: bilateral.cpp
-	${X86_CLANG} bilateral.cpp -g  -o bilateral.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} bilateral.cpp -g  -o bilateral.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./bilateral.generate.out
 
 .PHONY: synthetic
