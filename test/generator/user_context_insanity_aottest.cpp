@@ -12,7 +12,7 @@ const int num_launcher_tasks = 1000;
 
 static bool got_context[num_launcher_tasks];
 
-extern "C" int32_t my_halide_trace(void *context, const halide_trace_event *e) {
+int32_t my_halide_trace(void *context, const halide_trace_event *e) {
     bool *bool_ptr = (bool *)context;
     *bool_ptr = true;
     return 0;

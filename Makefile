@@ -14,8 +14,6 @@ ifeq ($(OS), Windows_NT)
     LIBDL =
     SHARED_EXT=dll
     FPIC=
-    # Clang breaks weak linking on Windows. Work around by allowing multiple definitions
-    LD_ALLOW_MULIPLE_DEFS=-Wl,--allow-multiple-definition
 else
     # let's assume "normal" UNIX such as linux
     LIBDL=-ldl
@@ -801,42 +799,53 @@ $(FILTERS_DIR)/%.generator: $(ROOT_DIR)/test/generator/%_generator.cpp $(GENGEN_
 	@mkdir -p $(FILTERS_DIR)
 	$(CXX) -std=c++11 -g $(CXX_WARNING_FLAGS) -fno-rtti -I$(INCLUDE_DIR) $(filter %_generator.cpp,$^) $(ROOT_DIR)/tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread $(LIBDL) -o $@
 
-# By default, %.o/.h are produced by executing %.generator
+# An empty generator used for making stand-alone runtimes
+$(FILTERS_DIR)/empty.generator: $(GENGEN_DEPS)
+	@mkdir -p $(FILTERS_DIR)
+	$(CXX) -std=c++11 -g $(CXX_WARNING_FLAGS) -fno-rtti -I$(INCLUDE_DIR) $(ROOT_DIR)/tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread $(LIBDL) -o $@
+
+# By default, %.o/.h are produced by executing %.generator. Runtimes are not included in these.
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
+
+# Generate a standalone runtime
+$(FILTERS_DIR)/runtime_%.o: $(FILTERS_DIR)/empty.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -r $(notdir $@) -o $(CURDIR)/$(FILTERS_DIR) target=$*
 
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g tiled_blur -f tiled_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET) is_interleaved=true
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g tiled_blur -f tiled_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
 
 $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur_blur.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET) is_interleaved=true
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
 
 # metadata_tester is built with and without user-context
 $(FILTERS_DIR)/metadata_tester.o $(FILTERS_DIR)/metadata_tester.h: $(FILTERS_DIR)/metadata_tester.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-register_metadata
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-register_metadata-no_runtime
 
 $(FILTERS_DIR)/metadata_tester_ucon.o $(FILTERS_DIR)/metadata_tester_ucon.h: $(FILTERS_DIR)/metadata_tester.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata-no_runtime
 
 $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.o
 
 # user_context needs to be generated with user_context as the first argument to its calls
 $(FILTERS_DIR)/user_context.o $(FILTERS_DIR)/user_context.h: $(FILTERS_DIR)/user_context.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
 # ditto for user_context_insanity
 $(FILTERS_DIR)/user_context_insanity.o $(FILTERS_DIR)/user_context_insanity.h: $(FILTERS_DIR)/user_context_insanity.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
@@ -855,19 +864,13 @@ $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_
 # nested_externs_generators.cpp is a counterexample, and thus requires
 # some special casing to get right.  First, make a special rule to
 # build each of the Generators in nested_externs_generator.cpp (which
-# all have the form nested_externs_*). We'll build them without
-# including the Halide runtime in each, to also test that
-# functionality.
+# all have the form nested_externs_*).
 $(FILTERS_DIR)/nested_externs_%.o $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_DIR)/nested_externs.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g nested_externs_$* -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
 
-$(FILTERS_DIR)/nested_externs_runtime.o: $(FILTERS_DIR)/nested_externs.generator
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -r nested_externs_runtime.o -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)
-
 # Synthesize 'nested_externs.o' based on the four generator products we need:
-$(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o $(FILTERS_DIR)/nested_externs_runtime.o
+$(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o
 	$(LD) -r $(FILTERS_DIR)/nested_externs_*.o -o $(FILTERS_DIR)/nested_externs.o
 
 # Synthesize 'nested_externs.h' based on the four generator products we need:
@@ -875,11 +878,15 @@ $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 	cat $(FILTERS_DIR)/nested_externs_*.h > $(FILTERS_DIR)/nested_externs.h
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h (but not libHalide).
-$(BIN_DIR)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h $(INCLUDE_DIR)/HalideRuntime.h
-	$(CXX) $(LD_ALLOW_MULIPLE_DEFS) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+$(BIN_DIR)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h $(INCLUDE_DIR)/HalideRuntime.h $(FILTERS_DIR)/runtime_$(HL_TARGET).o
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+
+# The matlab tests needs "-matlab" in the runtime
+$(BIN_DIR)/generator_aot_matlab: $(ROOT_DIR)/test/generator/matlab_aottest.cpp $(FILTERS_DIR)/matlab.o $(FILTERS_DIR)/matlab.h $(INCLUDE_DIR)/HalideRuntime.h $(FILTERS_DIR)/runtime_$(HL_TARGET)-matlab.o
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
 
 # acquire_release is the only test that explicitly uses CUDA/OpenCL APIs, so link only those here.
-$(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.o $(FILTERS_DIR)/acquire_release.h $(INCLUDE_DIR)/HalideRuntime.h
+$(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.o $(FILTERS_DIR)/acquire_release.h $(INCLUDE_DIR)/HalideRuntime.h $(FILTERS_DIR)/runtime_$(HL_TARGET).o
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) $(OPENCL_LDFLAGS) $(CUDA_LDFLAGS) -o $@
 
 # By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
