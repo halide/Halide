@@ -1026,6 +1026,7 @@ bool CodeGen_Hexagon::possiblyGenerateVMPAAccumulate(const Add *op) {
   return false;
 }
 void CodeGen_Hexagon::visit(const Add *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   debug(4) << "HexagonCodegen: " << op->type << ", " << op->a
            << " + " << op->b << "\n";
   if (isLargerThanDblVector(op->type, native_vector_bits())) {
@@ -1039,7 +1040,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
     Value *Lt = LLVMValues[0];
     Value *Rt = LLVMValues[1];
     llvm::Function *F =
-      Intrinsic::getDeclaration(module.get(), Intrinsic::hexagon_V6_vmpabuuv);
+      Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vmpabuuv));
     llvm::FunctionType *FType = F->getFunctionType();
     llvm::Type *T0 = FType->getParamType(0);
     llvm::Type *T1 = FType->getParamType(1);
@@ -1067,7 +1068,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
     Value *Lt = LLVMValues[0];
     Value *Rt = LLVMValues[1];
     llvm::Function *F =
-      Intrinsic::getDeclaration(module.get(), Intrinsic::hexagon_V6_vdmpyhvsat);
+      Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vdmpyhvsat));
     llvm::FunctionType *FType = F->getFunctionType();
     llvm::Type *T0 = FType->getParamType(0);
     llvm::Type *T1 = FType->getParamType(1);
