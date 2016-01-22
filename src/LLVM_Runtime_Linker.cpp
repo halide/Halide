@@ -108,6 +108,7 @@ DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(to_string)
+DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
@@ -355,6 +356,16 @@ llvm::Triple get_triple_for_target(Target target) {
     return triple;
 }
 
+namespace {
+uint32_t simple_string_hash(const string &s) {
+    uint32_t result = 0;
+    for (char c : s) {
+	result = result * 101 + c;
+    }
+    return result;
+}
+}
+
 // Link all modules together and with the result in modules[0], all
 // other input modules are destroyed. Sets the datalayout and target
 // triple appropriately for the target.
@@ -404,17 +415,16 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // "halide_" that is weak will be retained. There are a few
     // compiler generated symbols for which this convention is not
     // followed and these are in this array.
-    string retain[] = {"__stack_chk_guard",
-                       "__stack_chk_fail",
-                       ""};
+    vector<string> retain = {"__stack_chk_guard",
+			     "__stack_chk_fail"};
 
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
-        llvm::GlobalValue::LinkageTypes t = gv.getLinkage();
-        if (t == llvm::GlobalValue::WeakAnyLinkage) {
+        llvm::GlobalValue::LinkageTypes linkage = gv.getLinkage();
+        if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
             gv.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-        } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+        } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
             gv.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
         }
     }
@@ -422,8 +432,8 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         bool can_strip = true;
-        for (size_t i = 0; !retain[i].empty(); i++) {
-            if (f.getName() == retain[i]) {
+        for (const string &r : retain) {
+            if (f.getName() == r) {
                 can_strip = false;
             }
         }
@@ -433,14 +443,28 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
             << " for function " << (std::string)f.getName() << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
 
+	llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
         if (can_strip) {
-            llvm::GlobalValue::LinkageTypes t = f.getLinkage();
-            if (t == llvm::GlobalValue::WeakAnyLinkage) {
+            if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
                 f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+            } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
                 f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
+
+	if (t.has_feature(Target::MinGW) &&
+	    !t.has_feature(Target::NoRuntime) &&
+	    !Internal::starts_with(f.getName(), "sincos")) {
+	    // Weak linkage doesn't exist on windows, but for MinGW
+	    // there's a workaround. This prevents symbols in
+	    // multiple copies of the runtime from fighting, but it
+	    // doesn't give a way for users to override symbols,
+	    // unfortunately.
+	    // 
+	    // sincos is a special case that's already in its own
+	    // section. See src/runtime/mingw_math.cpp
+	    //f.setSection(".gnu.linkonce.halide_runtime");
+	}	     
     }
 
     // Now remove the force-usage global that prevented clang from
@@ -623,8 +647,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_destructors(c, bits_64, debug));
 
             // Math intrinsics vary slightly across platforms
-            if (t.os == Target::Windows && t.bits == 32) {
-                modules.push_back(get_initmod_win32_math_ll(c));
+            if (t.os == Target::Windows) {
+		if (t.bits == 32) {
+		    modules.push_back(get_initmod_win32_math_ll(c));
+		} else {
+		    modules.push_back(get_initmod_posix_math_ll(c));		    
+		}
+		if (t.has_feature(Target::MinGW)) {
+                    modules.push_back(get_initmod_mingw_math(c, bits_64, debug));
+                }
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
             } else {
