@@ -1153,7 +1153,18 @@ void CodeGen_LLVM::visit(const Cast *op) {
     } else if (src.is_float() && dst.is_int()) {
         value = builder->CreateFPToSI(value, llvm_dst);
     } else if (src.is_float() && dst.is_uint()) {
-        value = builder->CreateFPToUI(value, llvm_dst);
+        // fptoui has undefined behavior on overflow. Seems reasonable
+        // to get an unspecified uint on overflow, but because uint1s
+        // are stored in uint8s for float->uint1 casts this undefined
+        // behavior manifests itself as uint1 values greater than 1,
+        // which could in turn break our bounds inference
+        // guarantees. So go via uint8 in this case.
+        if (dst.bits() < 8) {
+            value = builder->CreateFPToUI(value, llvm_type_of(dst.with_bits(8)));
+            value = builder->CreateIntCast(value, llvm_dst, false);
+        } else {
+            value = builder->CreateFPToUI(value, llvm_dst);
+        }
     } else if (src.is_int() && dst.is_float()) {
         value = builder->CreateSIToFP(value, llvm_dst);
     } else if (src.is_uint() && dst.is_float()) {
