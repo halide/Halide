@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <limits>
 
-// FIXME: We should use a proper framework for this. See issue #898
 void h_assert(bool condition, const char *msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
