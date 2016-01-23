@@ -48,30 +48,30 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 Target get_host_target() {
     Target::OS os = Target::OSUnknown;
-    #ifdef __linux__
+#ifdef __linux__
     os = Target::Linux;
-    #endif
-    #ifdef _WIN32
+#endif
+#ifdef _WIN32
     os = Target::Windows;
-    #endif
-    #ifdef __APPLE__
+#endif
+#ifdef __APPLE__
     os = Target::OSX;
-    #endif
-
+#endif
+    
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
-
-    #if __mips__ || __mips || __MIPS__
+    
+#if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
     return Target(os, arch, bits);
-    #else
-    #ifdef __arm__
+#else
+#ifdef __arm__
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
-    #else
-
+#else
+    
     Target::Arch arch = Target::X86;
-
+    
     int info[4];
     cpuid(info, 1, 0);
     bool have_sse41 = info[2] & (1 << 19);
@@ -111,7 +111,7 @@ Target get_host_target() {
     initial_features.push_back(Target::MinGW);
 #endif
 #endif
-
+    
     return Target(os, arch, bits, initial_features);
 #endif
 #endif
@@ -247,18 +247,17 @@ Target parse_target_string(const std::string &target) {
     Target host = get_host_target();
 
     if (target.empty()) {
-        // If nothing is specified, use the host target.
+        // If nothing is specified, use the full host target.
         return host;
     }
 
-    // Default to the host OS and architecture.
+    // Default to the host OS and architecture in case of partially
+    // specified targets (e.g. x86-64-cuda doesn't specify the OS, so
+    // use the host OS).
     Target t;
     t.os = host.os;
     t.arch = host.arch;
     t.bits = host.bits;
-
-    if ((t.os == Target::Windows) && (host.has_feature(Target::MinGW))) t.set_feature(Target::MinGW);
-
 
     if (!t.merge_string(target)) {
         const char *separator = "";
@@ -340,7 +339,6 @@ bool Target::merge_string(const std::string &target) {
             if (os_specified) {
                 return false;
             }
-            set_feature(Target::MinGW, false);
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
             set_feature(feature);

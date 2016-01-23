@@ -254,9 +254,9 @@ struct FuncInfo {
                 }
                 fprintf(stderr, "[%d, %d)", min_coord[i], max_coord[i]);
             }
-	    // TODO: Convert this file to using std::cerr so I don't
-	    // have to struggle with cross-platform printf format
-	    // specifiers. (stores and loads below really shouldn't be a double)
+            // TODO: Convert this file to using std::cerr so I don't
+            // have to struggle with cross-platform printf format
+            // specifiers. (stores and loads below really shouldn't be a double)
             fprintf(stderr,
                     "\n"
                     " range of values: [%f, %f]\n"
