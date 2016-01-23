@@ -7,7 +7,7 @@ public:
 	// runtime. More interesting code may go here in the future.
 	Var x;
 	Func f;
-	f(x) = cast(Float(16), x);
+	f(x) = x;
 	return f;
     }
 };
