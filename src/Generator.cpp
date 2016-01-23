@@ -312,7 +312,8 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
             // actually a pnacl bitcode file.
             if (Target(target).arch == Target::PNaCl) {
                 output_files.object_name = base_path + ".bc";
-            } else if ((Target(target).os == Target::Windows) && (! Target(target).has_feature(Target::MinGW))) {
+            } else if (Target(target).os == Target::Windows &&
+                       !Target(target).has_feature(Target::MinGW)) {
                 // If it's windows, then we're emitting a COFF file
                 output_files.object_name = base_path + ".obj";
             } else {

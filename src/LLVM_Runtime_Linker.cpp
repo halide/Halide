@@ -360,7 +360,7 @@ namespace {
 uint32_t simple_string_hash(const string &s) {
     uint32_t result = 0;
     for (char c : s) {
-	result = result * 101 + c;
+        result = result * 101 + c;
     }
     return result;
 }
@@ -416,14 +416,14 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // symbols for which this convention is not followed and these are
     // in this array.
     vector<string> retain = {"__stack_chk_guard",
-			     "__stack_chk_fail"};
+                             "__stack_chk_fail"};
 
     if (t.has_feature(Target::MinGW)) {      
-	retain.insert(retain.end(),
+        retain.insert(retain.end(),
                              {"sincos", "sincosf",
-			      "asinh", "asinhf",
-			      "acosh", "acoshf",
-			      "atanh", "atanhf"});
+                              "asinh", "asinhf",
+                              "acosh", "acoshf",
+                              "atanh", "atanhf"});
     }
     
     // Enumerate the global variables.
@@ -451,7 +451,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
             << " for function " << (std::string)f.getName() << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
 
-	llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
+        llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
         if (can_strip) {
             if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
                 f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
@@ -622,7 +622,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
-		if (t.has_feature(Target::MinGW)) {
+                if (t.has_feature(Target::MinGW)) {
                     modules.push_back(get_initmod_mingw_math(c, bits_64, debug));
                 }
             } else if (t.os == Target::IOS) {
@@ -645,11 +645,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows) {
-		if (t.bits == 32) {
-		    modules.push_back(get_initmod_win32_math_ll(c));
-		} else {
-		    modules.push_back(get_initmod_posix_math_ll(c));		    
-		}
+                if (t.bits == 32) {
+                    modules.push_back(get_initmod_win32_math_ll(c));
+                } else {
+                    modules.push_back(get_initmod_posix_math_ll(c));                
+                }
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
             } else {
