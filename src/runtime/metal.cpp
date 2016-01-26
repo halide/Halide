@@ -320,7 +320,7 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t* buf) {
         << "halide_metal_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf->size_in_bytes();
     if (buf->device) {
         // This buffer already has a device allocation
         return 0;
@@ -548,7 +548,7 @@ WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t* buffer
     }
 
     mtl_buffer *metal_buffer = (mtl_buffer *)buffer->device;
-    size_t total_size = buf_size(user_context, buffer);
+    size_t total_size = buffer->size_in_bytes();
     NSRange total_extent;
     total_extent.location = 0;
     total_extent.length = total_size;

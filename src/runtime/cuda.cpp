@@ -501,7 +501,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
         return ctx.error;
     }
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf->size_in_bytes();
     if (buf->device) {
         // This buffer already has a device allocation
         halide_assert(user_context, validate_device_pointer(user_context, buf, size));

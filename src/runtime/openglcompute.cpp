@@ -227,23 +227,6 @@ WEAK int halide_openglcompute_device_release(void *user_context) {
     return 0;
 }
 
-namespace {
-size_t buf_size(void *user_context, halide_buffer_t *buf) {
-    size_t size = buf->type.bytes();
-    for (int i = 0; i < buf->dimensions; i++) {
-        int stride = buf->dim[i].stride;
-        if (stride < 0) stride = -stride;
-        size_t total_dim_size =
-            buf->type.bytes() * buf->dim[i].extent * stride;
-        if (total_dim_size > size) {
-            size = total_dim_size;
-        }
-    }
-    halide_assert(user_context, size);
-    return size;
-};
-}
-
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
 WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t *buf) {
@@ -259,8 +242,6 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
         return 1;
     }
 
-    size_t size = buf_size(user_context, buf);
-
     if (buf->device) {
         // This buffer already has a device allocation
         debug(user_context) << "openglcompute_device_malloc: This buffer already has a "
@@ -273,8 +254,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     }
 
 
-    debug(user_context) << "    allocating "
-                        << " buffer of " << (int64_t)size << " bytes, "
+    debug(user_context) << "    allocating buffer, "
                         << "extents: " << buf->dim[0].extent << "x"
                         << buf->dim[1].extent << "x" << buf->dim[2].extent << "x"
                         << buf->dim[3].extent << " "
@@ -298,7 +278,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     if (global_state.CheckAndReportError(user_context, "oglc: GenBuffers")) { return 1; }
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
-    size_t sizeInBytes = buf_size(user_context, buf);
+    size_t sizeInBytes = buf->size_in_bytes();
     global_state.BufferData(GL_ARRAY_BUFFER, sizeInBytes, NULL, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
 
@@ -372,7 +352,7 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf->size_in_bytes();
     global_state.BufferData(GL_ARRAY_BUFFER, size, buf->host, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
 
@@ -398,7 +378,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
     }
 
     GLuint the_buffer = (GLuint)buf->device;
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf->size_in_bytes();
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_host ("
                         << "user_context: " << user_context
                         << ", buf: " << buf

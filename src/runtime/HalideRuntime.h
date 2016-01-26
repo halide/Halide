@@ -594,17 +594,22 @@ typedef struct halide_buffer_t {
     /** The dimensionality of the buffer. */
     int32_t dimensions;
 
-    /** The shape of the buffer. */
+    /** The shape of the buffer. Halide does not own this array - you
+     * must manage the memory for it yourself. If you know the
+     * dimensionality at compile time, you can use halide_nd_buffer_t
+     * below for a version that does own this array. */
     halide_dimension_t *dim;
 
     /** Pads the buffer up to a multiple of 8 bytes */
     void *padding;
 
 #ifdef __cplusplus
-    // Convenience methods for accessing the flags
+    /** Convenience methods for accessing the flags */
+    // @{
     bool get_flag(buffer_flags flag) const {
         return flags & flag;
     }
+
     void set_flag(buffer_flags flag, bool value) {
         if (value) {
             flags |= flag;
@@ -612,18 +617,72 @@ typedef struct halide_buffer_t {
             flags &= ~flag;
         }
     }
+
     bool host_dirty() const {
         return get_flag(flag_host_dirty);
     }
+
     bool device_dirty() const {
         return get_flag(flag_device_dirty);
     }
+
     void set_host_dirty(bool v) {
         set_flag(flag_host_dirty, v);
     }
+
     void set_device_dirty(bool v) {
         set_flag(flag_device_dirty, v);
     }
+    // @}
+
+    /** The total number of elements this buffer represents. Equal to
+     * the product of the extents */
+    size_t number_of_elements() const {
+        size_t s = 1;
+        for (int i = 0; i < dimensions; i++) {
+            s *= dim[i].extent;
+        }
+        return s;
+    }
+
+    /** A pointer to the element with the lowest address. If all
+     * strides are positive, equal to the host pointer. */
+    uint8_t *begin() const {
+        ptrdiff_t index = 0;
+        for (int i = 0; i < dimensions; i++) {
+            if (dim[i].stride < 0) {
+                index += dim[i].stride * (dim[i].extent - 1);
+            }
+        }
+        return host + index * type.bytes();
+    }
+
+    /** A pointer to one beyond the element with the highest address. */
+    uint8_t *end() const {
+        ptrdiff_t index = 0;
+        for (int i = 0; i < dimensions; i++) {
+            if (dim[i].stride > 0) {
+                index += dim[i].stride * (dim[i].extent - 1);
+            }
+        }
+        index += 1;
+        return host + index * type.bytes();
+    }
+
+    /** A pointer to the element at the given location. */
+    uint8_t *address_of(const int *pos) const {
+        ptrdiff_t index = 0;
+        for (int i = 0; i < dimensions; i++) {
+            index += dim[i].stride * (pos[i] - dim[i].min);
+        }
+        return host + index * type.bytes();
+    }
+
+    /** The total number of bytes spanned by the data in memory. */
+    size_t size_in_bytes() const {
+        return (size_t)(end() - begin());
+    }
+
 #endif
 } halide_buffer_t;
 
@@ -642,23 +701,23 @@ struct halide_nd_buffer_t : public halide_buffer_t {
         dim = dim_storage;
     }
 
-    // We need custom copy and assignment operators to set the dim
-    // pointer correctly.
+    /** Make a copy of another halide_nd_buffer_t. Also copies the
+     * shape array.  We need custom copy and assignment operators to
+     * set the dim pointer correctly. */
     halide_nd_buffer_t(const halide_nd_buffer_t<D> &other) {
         memcpy(this, &other, sizeof(*this));
         dim = dim_storage;
     }
 
-    // We need custom copy and assignment operators to set the dim
-    // pointer correctly.
+    /** Copy the fields and shape from another halide_nd_buffer_t. */
     halide_nd_buffer_t &operator=(const halide_nd_buffer_t<D> &other) {
         memcpy(this, &other, sizeof(*this));
         dim = dim_storage;
     }
 
-    // Construct a halide_nd_buffer_t from a halide_buffer_t. Checks
-    // there are enough dimensions at runtime and calls halide_error
-    // if there aren't.
+    /** Construct a halide_nd_buffer_t from a halide_buffer_t. Checks
+     * there are enough dimensions at runtime and calls halide_error
+     * if there aren't. */
     explicit halide_nd_buffer_t(const halide_buffer_t &other) : halide_buffer_t(other) {
         if (other.dimensions > D) {
             halide_error(NULL, "Can't construct a halide_nd_buffer_t from a halide_buffer_t of greater dimensionality\n");

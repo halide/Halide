@@ -785,21 +785,6 @@ WEAK int halide_renderscript_device_release(void *user_context) {
     return RS_SUCCESS;
 }
 
-WEAK size_t buf_size(void *user_context, halide_buffer_t *buf) {
-    size_t size = buf->type.bytes();
-    for (int i = 0; i < buf->dimensions; i++) {
-        int stride = buf->dim[i].stride;
-        if (stride < 0) stride = -stride;
-        size_t total_dim_size =
-            buf->type.bytes() * buf->dim[i].extent * stride;
-        if (total_dim_size > size) {
-            size = total_dim_size;
-        }
-    }
-    halide_assert(user_context, size);
-    return size;
-}
-
 namespace {
 WEAK bool is_interleaved_rgba_buffer_t(halide_buffer_t *buf) {
     return (buf->dimensions == 3 &&
@@ -816,8 +801,6 @@ WEAK int halide_renderscript_device_malloc(void *user_context, halide_buffer_t *
     if (ctx.error != RS_SUCCESS) {
         return ctx.error;
     }
-
-    size_t size = buf_size(user_context, buf);
 
     if (buf->device) {
         // This buffer already has a device allocation
@@ -839,7 +822,7 @@ WEAK int halide_renderscript_device_malloc(void *user_context, halide_buffer_t *
 
     debug(user_context) << "    allocating "
                         << (is_interleaved_rgba_buffer_t(buf)? "interleaved": "plain")
-                        << " buffer of " << (int64_t)size << " bytes, "
+                        << " buffer, "
                         << "extents: " << buf->dim[0].extent << "x"
                         << buf->dim[1].extent << "x" << buf->dim[2].extent << " "
                         << "strides: " << buf->dim[0].stride << "x"
