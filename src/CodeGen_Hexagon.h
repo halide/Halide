@@ -94,6 +94,7 @@ protected:
     bool possiblyGenerateVMPAAccumulate(const Add *);
     bool possiblyCodeGenNarrowerType(const Select *);
     bool possiblyCodeGenVavg(const Cast *);
+    bool possiblyCodeGenSaturatingArith(const Cast *);
     llvm::Value *possiblyCodeGenWideningMultiplySatRndSat(const Div *);
 };
 

@@ -1,3 +1,6 @@
+#ifndef __HALIDE_HEXAGON_SETUP_H
+#define __HALIDE_HEXAGON_SETUP_H
+
 using namespace Halide;
 #include <Halide.h>
 #include <assert.h>
@@ -73,3 +76,27 @@ Expr sat_8(Expr e) {
 Expr usat_8(Expr e) {
   return clamp(e, 0, 255);
 }
+
+Expr saturating_subtract(Expr a, Expr b) {
+  Type wider = Int(a.type().bits() * 2);
+  /* FIXME: There is a problem here that I do not already know how to address.
+    There is no way to saturate and pack shorts (signed or unsigned) into signed
+    bytes. Assuming 'a' and 'b' were, say, i8x64 types, we'd be doing exactly
+    this, i.e. saturating and packing the widened result of the subtract
+    (i16x64) into signed bytes. This isn't supported. Should we be warning here?
+    At the present moment, the compilers asserts with the following message.
+           Saturate and packing not supported when downcasting shorts
+           (signed and unsigned) to signed chars.
+            Aborted
+  */
+  return cast(a.type(), clamp(cast(wider, a) - cast(wider, b),
+                              a.type().min(), a.type().max()));
+}
+Expr saturating_add(Expr a, Expr b) {
+  Type wider = Int(a.type().bits() * 2);
+  /* FIXME: See comment in saturating_subtract above.  */
+  return cast(a.type(), clamp(cast(wider, a) + cast(wider, b),
+                              a.type().min(), a.type().max()));
+}
+
+#endif
