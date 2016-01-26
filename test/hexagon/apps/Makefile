@@ -18,11 +18,13 @@ NOT_READY4PRIMTIME = \
   sigma3x3 \
   bilateral \
   epsilon \
-  fast9
+  fast9 \
+  invsqrt
 
 # Tests currently known to fail (failures ignored)
 KNOWNFAIL = \
   integrate \
+  invsqrt \
   sigma3x3
 
 # Keep going on unknown failures (if set to non-zero)
