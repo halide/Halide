@@ -210,6 +210,7 @@ public:
             halide_set_num_threads(thread_pool_size);
         }
 
+        // Useful code for debugging struct layout disagreements between pnacl and Halide.
         if (0) {
             // Print the layout of buffer_t and exit
             std::ostringstream oss;
@@ -228,6 +229,7 @@ public:
             return;
         }
 
+        // Debugging code for inspecting the buffer.
         if (0) {
             // Print the render target buffer and exit
             print_buffer(&render_target);
