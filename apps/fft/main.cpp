@@ -157,8 +157,8 @@ int main(int argc, char **argv) {
     // iteration. This seems to match the behavior of FFTW's benchmark
     // code, and like the input, it is a reasonable assumption for a well
     // optimized real world system.
-    R_c2c[0].raw_buffer()->stride[2] = 0;
-    R_c2c[1].raw_buffer()->stride[2] = 0;
+    R_c2c[0].raw_buffer()->dim[2].stride = 0;
+    R_c2c[1].raw_buffer()->dim[2].stride = 0;
 
     double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); })*1e6/reps;
 #ifdef WITH_FFTW
@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
 #else
     double fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
+    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "c2c",
            halide_t,
            5*W*H*(log2(W) + log2(H))/halide_t,
@@ -184,8 +184,8 @@ int main(int argc, char **argv) {
     bench_r2c.compile_to_lowered_stmt("r2c.html", bench_r2c.infer_arguments(), HTML);
     Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
-    R_r2c[0].raw_buffer()->stride[2] = 0;
-    R_r2c[1].raw_buffer()->stride[2] = 0;
+    R_r2c[0].raw_buffer()->dim[2].stride = 0;
+    R_r2c[1].raw_buffer()->dim[2].stride = 0;
 
     halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); })*1e6/reps;
 #ifdef WITH_FFTW
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
 #else
     fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
+    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "r2c",
            halide_t,
            2.5*W*H*(log2(W) + log2(H))/halide_t,
@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
     bench_c2r.compile_to_lowered_stmt("c2r.html", bench_c2r.infer_arguments(), HTML);
     Realization R_c2r = bench_c2r.realize(W, H, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
-    R_c2r[0].raw_buffer()->stride[2] = 0;
+    R_c2r[0].raw_buffer()->dim[2].stride = 0;
 
     halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); })*1e6/reps;
 #ifdef WITH_FFTW
@@ -219,7 +219,7 @@ int main(int argc, char **argv) {
 #else
     fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
+    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "c2r",
            halide_t,
            2.5*W*H*(log2(W) + log2(H))/halide_t,
