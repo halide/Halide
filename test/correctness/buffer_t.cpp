@@ -26,6 +26,8 @@ int main(int argc, char **argv) {
                   (sizeof(void *) == 4 && sizeof(halide_buffer_t) == 40),
                   "size is wrong");
 
+    static_assert(sizeof(halide_dimension_t) == 16, "size of halide_dimension_t is wrong");
+
     // Ensure alignment is at least that of a pointer.
     static_assert(ALIGN_OF(halide_buffer_t) >= ALIGN_OF(uint8_t*), "align is wrong");
 
