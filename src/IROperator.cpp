@@ -397,8 +397,9 @@ void match_types(Expr &a, Expr &b) {
     } else if (!ta.is_float() && !tb.is_float()) {
         // int(a) * (u)int(b) -> int(max(a, b))
         int bits = std::max(ta.bits(), tb.bits());
-        a = cast(Int(bits), a);
-        b = cast(Int(bits), b);
+        int lanes = a.type().lanes();
+        a = cast(Int(bits, lanes), a);
+        b = cast(Int(bits, lanes), b);
     } else {
         internal_error << "Could not match types: " << ta << ", " << tb << "\n";
     }
