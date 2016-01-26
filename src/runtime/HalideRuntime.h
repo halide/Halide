@@ -545,6 +545,8 @@ struct halide_type_t {
 
 typedef struct halide_dimension_t {
     int32_t min, extent, stride;
+
+    // Per-dimension flags. None are defined yet (This is reserved for future use).
     uint32_t flags;
 
 #ifdef __cplusplus
@@ -583,7 +585,7 @@ typedef struct halide_buffer_t {
     uint8_t* host;
 
     /** flags with various meanings. */
-    enum buffer_flags {flag_host_dirty = 0, flag_device_dirty = 1};
+    enum buffer_flags {flag_host_dirty = 1, flag_device_dirty = 2};
     uint64_t flags;
 
     /** The type of each buffer element. */
@@ -601,13 +603,13 @@ typedef struct halide_buffer_t {
 #ifdef __cplusplus
     // Convenience methods for accessing the flags
     bool get_flag(buffer_flags flag) const {
-        return flags & (1 << flag);
+        return flags & flag;
     }
     void set_flag(buffer_flags flag, bool value) {
         if (value) {
-            flags |= (1 << flag);
+            flags |= flag;
         } else {
-            flags &= ~(1 << flag);
+            flags &= ~flag;
         }
     }
     bool host_dirty() const {
