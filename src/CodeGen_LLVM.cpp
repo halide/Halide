@@ -31,11 +31,9 @@
 
 namespace Halide {
 
-llvm::Module *codegen_llvm(const Module &module, llvm::LLVMContext &context) {
-    Internal::CodeGen_LLVM *cg = Internal::CodeGen_LLVM::new_for_target(module.target(), context);
-    llvm::Module *out = cg->compile(module);
-    delete cg;
-    return out;
+std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
+    std::unique_ptr<Internal::CodeGen_LLVM> cg(Internal::CodeGen_LLVM::new_for_target(module.target(), context));
+    return cg->compile(module);
 }
 
 namespace Internal {
@@ -128,7 +126,6 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
-    module(NULL),
     function(NULL), context(NULL),
     builder(NULL),
     value(NULL),
@@ -369,7 +366,6 @@ void CodeGen_LLVM::init_module() {
     init_context();
 
     // Start with a module containing the initial module for this target.
-    delete module;
     module = get_initial_module_for_target(target, context);
 }
 
@@ -384,7 +380,7 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 
-llvm::Module *CodeGen_LLVM::compile(const Module &input) {
+std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     init_module();
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -426,7 +422,6 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     device_interface_t_type = module->getTypeByName("struct.halide_device_interface_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_device_interface_t in initial module";
 
-
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
     for (size_t i = 0; i < input.buffers.size(); i++) {
@@ -436,7 +431,7 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
         compile_func(input.functions[i]);
     }
 
-    debug(2) << module << "\n";
+    debug(2) << module.get() << "\n";
 
     // Verify the module is ok
     verifyModule(*module);
@@ -446,9 +441,7 @@ llvm::Module *CodeGen_LLVM::compile(const Module &input) {
     CodeGen_LLVM::optimize_module();
 
     // Disown the module and return it.
-    llvm::Module *m = module;
-    module = NULL;
-    return m;
+    return std::move(module);
 }
 
 namespace {
@@ -509,7 +502,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module);
+    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -555,21 +548,21 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     }
 
     module->setModuleIdentifier("halide_module_" + name);
-    debug(2) << module << "\n";
+    debug(2) << module.get() << "\n";
 
     internal_assert(!verifyFunction(*function));
 
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
     if (f.linkage == LoweredFunc::External) {
-        llvm::Function *wrapper = add_argv_wrapper(module, function, name + "_argv");
+        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, name + "_argv");
         llvm::Constant *metadata = embed_metadata(name + "_metadata", name, args);
         if (target.has_feature(Target::RegisterMetadata)) {
             register_metadata(name, metadata, wrapper);
         }
 
         if (target.has_feature(Target::Matlab)) {
-            define_matlab_wrapper(module, name);
+            define_matlab_wrapper(module.get(), name);
         }
     }
 }
@@ -823,7 +816,7 @@ void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Constant *me
         ConstantStruct::get(register_t_type, list_node_fields));
 
     llvm::FunctionType *func_t = llvm::FunctionType::get(void_t, false);
-    llvm::Function *ctor = llvm::Function::Create(func_t, llvm::GlobalValue::PrivateLinkage, name + ".register_metadata", module);
+    llvm::Function *ctor = llvm::Function::Create(func_t, llvm::GlobalValue::PrivateLinkage, name + ".register_metadata", module.get());
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", ctor);
     builder->SetInsertPoint(block);
     llvm::Value *call_args[] = {list_node};
@@ -847,10 +840,10 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     #if LLVM_VERSION < 37
-    FunctionPassManager function_pass_manager(module);
+    FunctionPassManager function_pass_manager(module.get());
     PassManager module_pass_manager;
     #else
-    legacy::FunctionPassManager function_pass_manager(module);
+    legacy::FunctionPassManager function_pass_manager(module.get());
     legacy::PassManager module_pass_manager;
     #endif
 
@@ -1197,7 +1190,18 @@ void CodeGen_LLVM::visit(const Cast *op) {
     } else if (src.is_float() && dst.is_int()) {
         value = builder->CreateFPToSI(value, llvm_dst);
     } else if (src.is_float() && dst.is_uint()) {
-        value = builder->CreateFPToUI(value, llvm_dst);
+        // fptoui has undefined behavior on overflow. Seems reasonable
+        // to get an unspecified uint on overflow, but because uint1s
+        // are stored in uint8s for float->uint1 casts this undefined
+        // behavior manifests itself as uint1 values greater than 1,
+        // which could in turn break our bounds inference
+        // guarantees. So go via uint8 in this case.
+        if (dst.bits() < 8) {
+            value = builder->CreateFPToUI(value, llvm_type_of(dst.with_bits(8)));
+            value = builder->CreateIntCast(value, llvm_dst, false);
+        } else {
+            value = builder->CreateFPToUI(value, llvm_dst);
+        }
     } else if (src.is_int() && dst.is_float()) {
         value = builder->CreateSIToFP(value, llvm_dst);
     } else if (src.is_uint() && dst.is_float()) {
@@ -1520,7 +1524,7 @@ Expr promote_64(Expr e) {
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
-    llvm::DataLayout d(module);
+    llvm::DataLayout d(module.get());
     if (promote_indices() && d.getPointerSize() == 8) {
         index = promote_64(index);
     }
@@ -1548,7 +1552,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Va
     }
 
     // Promote index to 64-bit on targets that use 64-bit pointers.
-    llvm::DataLayout d(module);
+    llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
         index = builder->CreateIntCast(index, i64, true);
     }
@@ -2085,7 +2089,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 internal_assert(dst.is_uint() && dst.bits() == 64);
 
                 // Handle -> UInt64
-                llvm::DataLayout d(module);
+                llvm::DataLayout d(module.get());
                 if (d.getPointerSize() == 4) {
                     llvm::Type *intermediate = llvm_type_of(UInt(32, dst.lanes()));
                     value = builder->CreatePtrToInt(value, intermediate);
@@ -2100,7 +2104,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 internal_assert(src.is_uint() && src.bits() == 64);
 
                 // UInt64 -> Handle
-                llvm::DataLayout d(module);
+                llvm::DataLayout d(module.get());
                 if (d.getPointerSize() == 4) {
                     llvm::Type *intermediate = llvm_type_of(UInt(32, src.lanes()));
                     value = builder->CreateTrunc(value, intermediate);
@@ -2393,7 +2397,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             std::vector<llvm::Type*> arg_type(1);
             arg_type[0] = llvm_type_of(op->args[0].type());
-            llvm::Function *fn = Intrinsic::getDeclaration(module, Intrinsic::ctpop, arg_type);
+            llvm::Function *fn = Intrinsic::getDeclaration(module.get(), Intrinsic::ctpop, arg_type);
             CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
             value = call;
         } else if (op->name == Call::count_leading_zeros ||
@@ -2401,7 +2405,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             std::vector<llvm::Type*> arg_type(1);
             arg_type[0] = llvm_type_of(op->args[0].type());
-            llvm::Function *fn = Intrinsic::getDeclaration(module,
+            llvm::Function *fn = Intrinsic::getDeclaration(module.get(),
                 (op->name == Call::count_leading_zeros) ? Intrinsic::ctlz :
                                                           Intrinsic::cttz,
                 arg_type);
@@ -2577,7 +2581,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (!f) {
                 llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
                 FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
-                f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module);
+                f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module.get());
                 f->setCallingConv(CallingConv::C);
             }
             register_destructor(f, codegen(arg), Always);
@@ -2643,7 +2647,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
 
-            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module.get());
             fn->setCallingConv(CallingConv::C);
             debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         } else {
@@ -2941,7 +2945,7 @@ void CodeGen_LLVM::visit(const For *op) {
         FunctionType *func_t = FunctionType::get(i32, args_t, false);
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
-                                          "par for " + function->getName() + "_" + op->name, module);
+                                          "par for " + function->getName() + "_" + op->name, module.get());
         function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function
@@ -3236,7 +3240,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
     if (!fn) {
         llvm::Type *intrinsic_result_type = VectorType::get(result_type->getScalarType(), intrin_lanes);
         FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
-        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
+        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
         fn->setCallingConv(CallingConv::C);
     }
 

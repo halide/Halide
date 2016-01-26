@@ -2225,8 +2225,8 @@ private:
                        equal(add_b->b, a)) {
                 expr = mutate(make_zero(add_b->a.type()) < add_b->a);
             } else if (add_b &&
-                       is_const(a) &&
-                       is_const(add_b->b)) {
+                       is_simple_const(a) &&
+                       is_simple_const(add_b->b)) {
                 // a < x + b -> (a - b) < x
                 expr = mutate((a - add_b->b) < add_b->a);
             } else if (sub_b &&

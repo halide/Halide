@@ -888,7 +888,7 @@ tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.s
 	@-mkdir -p $(TMP_DIR)
 	cp $(BIN_DIR)/tutorial_lesson_15_generators $(TMP_DIR)/lesson_15_generate; \
 	cd $(TMP_DIR); \
-	$(LD_PATH_SETUP) bash $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh
+	$(LD_PATH_SETUP) source $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh
 	@-echo
 
 $(BIN_DIR)/tutorial_lesson_16_rgb_generate: $(ROOT_DIR)/tutorial/lesson_16_rgb_generate.cpp $(BIN_DIR)/libHalide.so $(INCLUDE_DIR)/Halide.h
@@ -1063,6 +1063,10 @@ ifneq (,$(findstring clang version 3.8,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 3.9,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1087,7 +1091,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39))
 LLVM_OK=yes
 endif
 

@@ -155,15 +155,15 @@ int main(int argc, char **argv) {
     double specialized_planar_time = tick("brighten_specialized on planar images");
 
     // The cost of the if statement should be negligible, but we'll
-    // allow a tolerance of 20% for this test to account for
+    // allow a tolerance of 50% for this test to account for
     // measurement noise.
-    assert(specialized_planar_time < 1.2 * planar_time);
+    assert(specialized_planar_time < 1.5 * planar_time);
 
     for (int i = 0; i < 100; i++) {
         brighten_specialized(&interleaved_input, 1, &interleaved_output);
     }
     double specialized_interleaved_time = tick("brighten_specialized on interleaved images");
-    assert(specialized_interleaved_time < 1.2 * interleaved_time);
+    assert(specialized_interleaved_time < 1.5 * interleaved_time);
 
     // Remember to free our allocated memory...
     destroy_image(&planar_input);
