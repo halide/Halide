@@ -755,6 +755,14 @@ struct halide_nd_buffer_t : public halide_buffer_t {
 extern "C" {
 #endif
 
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_DEPRECATED __declspec(deprecated)
+#else
+#define HALIDE_ATTRIBUTE_DEPRECATED __attribute__((deprecated))
+#endif
+#endif
+
 /** The old buffer_t, included for compatability with old code. Don't
  * use it. */
 typedef struct buffer_t {
