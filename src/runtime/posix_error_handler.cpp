@@ -197,4 +197,11 @@ WEAK int halide_error_debug_to_file_failed(void *user_context, const char *func,
     return halide_error_code_debug_to_file_failed;
 }
 
+WEAK int halide_error_cannot_query_bounds_for_input(void *user_context, const char *buffer) {
+    error(user_context)
+        << "Cannot perform a bounds query on " << buffer
+        << " because its bounds are part of the meaning of the algorithm.";
+    return halide_error_code_cannot_query_bounds_for_input;
+}
+
 }

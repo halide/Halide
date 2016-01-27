@@ -416,6 +416,13 @@ enum halide_error_code_t {
      * a GPU kernel. Turn on -debug in your target string to see more
      * details. */
     halide_error_code_device_run_failed = -23,
+
+    /** A bounds query was attempted on an input for which the bounds
+     * of the input are part of the meaning of the algorithm
+     * (e.g. there is a boundary condition). The bounds must be
+     * supplied by the user for the output to make sense, and cannot
+     * be inferred. */
+    halide_error_code_cannot_query_bounds_for_input = -24,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -467,6 +474,7 @@ extern int halide_error_out_of_memory(void *user_context);
 extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
+extern int halide_error_cannot_query_bounds_for_input(void *user_context, const char *buffer_name);
 // @}
 
 /** Types in the halide type system. They can be ints, unsigned ints,

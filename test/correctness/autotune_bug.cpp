@@ -14,8 +14,8 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), xi("xi"), yi("yi");
 
     Func input;
-    input(x,y) = in_img(clamp(x, 1, in_img.width()-1),
-                        clamp(y, 1, in_img.height())-1);
+    input(x,y) = in_img(clamp(x, 0, 15),
+                        clamp(y, 0, 15));
 
     // The algorithm
     blur_x(x, y) = (input(x, y) + input(x+1, y) + input(x+2, y))/3;

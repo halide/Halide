@@ -57,6 +57,41 @@ public:
     }
 };
 
+/* Find all externally referenced buffers that have their bounds used
+ * as part of the algorithm (e.g. due to a boundary condition). It's
+ * not OK to do bounds queries on these buffers. */
+class FindBuffersWithBoundsUsed : public IRVisitor {
+public:
+    void visit(const Function &f) {
+        // Bounds used in the schedule is OK - we need to check for
+        // bounds used in the algorithm itself, which means the args
+        // and values for all definitions.
+        for (Expr i : f.values()) {
+            i.accept(this);
+        }
+        for (UpdateDefinition update : f.updates()) {
+            for (Expr i : update.values) {
+                i.accept(this);
+            }
+            for (Expr i : update.args) {
+                i.accept(this);
+            }
+        }
+    }
+
+    std::set<string> result;
+
+protected:
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) {
+        if (op->param.defined() &&
+            op->param.is_buffer()) {
+            result.insert(op->param.name());
+        }
+    }
+};
+
 Stmt add_image_checks(Stmt s,
                       const vector<Function> &outputs,
                       const Target &t,
@@ -71,6 +106,13 @@ Stmt add_image_checks(Stmt s,
     FindBuffers finder;
     s.accept(&finder);
     map<string, FindBuffers::Result> bufs = finder.buffers;
+
+    // Check which ones have their bounds used as part of the
+    // algorithm.
+    FindBuffersWithBoundsUsed find_buffers_with_bounds_used;
+    for (pair<string, Function> p : env) {
+        find_buffers_with_bounds_used.visit(p.second);
+    }
 
     // Add the output buffer(s).
     for (Function f : outputs) {
@@ -109,6 +151,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_proposed;
     vector<Stmt> asserts_elem_size;
     vector<Stmt> buffer_rewrites;
+    vector<Stmt> bad_bounds_query_asserts;
 
     // Inject the code that conditionally returns if we're in inference mode
     Expr maybe_return_condition = const_false();
@@ -333,19 +376,26 @@ Stmt add_image_checks(Stmt s,
             }
         }
 
-        // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
-        vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
-        for (int i = 0; i < dimensions; i++) {
-            string dim = std::to_string(i);
-            args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
-            args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
-            args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
+        if (find_buffers_with_bounds_used.result.count(name)) {
+            // We can't do bounds inference on this buffer.
+            Expr error = Call::make(Int(32), "halide_error_cannot_query_bounds_for_input",
+                                    {name}, Call::Extern);
+            bad_bounds_query_asserts.push_back(AssertStmt::make(!inference_mode, error));
+        } else {
+            // Create code that mutates the input buffers if we're in bounds inference mode.
+            Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
+            vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
+            for (int i = 0; i < dimensions; i++) {
+                string dim = std::to_string(i);
+                args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
+                args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
+                args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
+            }
+            Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, Function(), 0, image, param);
+            Stmt rewrite = Evaluate::make(call);
+            rewrite = IfThenElse::make(inference_mode, rewrite);
+            buffer_rewrites.push_back(rewrite);
         }
-        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, Function(), 0, image, param);
-        Stmt rewrite = Evaluate::make(call);
-        rewrite = IfThenElse::make(inference_mode, rewrite);
-        buffer_rewrites.push_back(rewrite);
 
         // Build the constraints tests and proposed sizes.
         vector<pair<string, Expr>> constraints;
@@ -548,6 +598,12 @@ Stmt add_image_checks(Stmt s,
     // Inject the code that defines the required sizes produced by bounds inference.
     for (size_t i = lets_required.size(); i > 0; i--) {
         s = LetStmt::make(lets_required[i-1].first, lets_required[i-1].second, s);
+    }
+
+    // Inject the code that asserts we're not in bounds query mode for
+    // buffers where the algorithm itself depends on the bounds.
+    for (Stmt a : bad_bounds_query_asserts) {
+        s = Block::make(a, s);
     }
 
     return s;

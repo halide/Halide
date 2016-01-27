@@ -41,6 +41,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_error_buffer_allocation_too_large,
     (void *)&halide_error_buffer_argument_is_null,
     (void *)&halide_error_buffer_extents_too_large,
+    (void *)&halide_error_cannot_query_bounds_for_input,
     (void *)&halide_error_constraint_violated,
     (void *)&halide_error_constraints_make_required_region_smaller,
     (void *)&halide_error_debug_to_file_failed,
