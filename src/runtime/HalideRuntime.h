@@ -767,7 +767,7 @@ extern "C" {
 #endif
 #endif
 
-/** The old buffer_t, included for compatability with old code. Don't
+/** The old buffer_t, included for compatibility with old code. Don't
  * use it. */
 typedef struct buffer_t {
     uint64_t dev;
