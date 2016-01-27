@@ -475,6 +475,7 @@ RUNTIME_CPP_COMPONENTS = \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
+  old_buffer_t \
   opencl \
   opengl \
   openglcompute \

@@ -44,6 +44,7 @@ set(RUNTIME_CPP
   metal
   metal_objc_arm
   metal_objc_x86
+  old_buffer_t
   opengl
   openglcompute
   osx_clock

@@ -259,14 +259,14 @@ public:
 
 void CodeGen_C::compile(const Module &input) {
     for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile(input.buffers[i]);
+        compile(input.buffers[i], input.target());
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
-        compile(input.functions[i]);
+        compile(input.functions[i], input.target());
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f) {
+void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
     // Don't put non-external function declarations in headers.
     if (is_header && f.linkage != LoweredFunc::External) {
         return;
@@ -349,11 +349,78 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "int " << f.name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
         // And also the metadata.
-       stream << "extern const struct halide_filter_metadata_t " << f.name << "_metadata;\n";
+        stream << "extern const struct halide_filter_metadata_t " << f.name << "_metadata;\n";
+
+        // And a stub to accept and upgrade old buffer_t's
+        string ucon = have_user_context ? "__user_context" : "NULL";
+        stream
+            << "\n// A shim to support use of the old buffer_t struct. This will be deprecated at some point.\n"
+            << "#ifdef __cplusplus\n"
+            << "}; // extern \"C\" \n"
+            << "inline int " << f.name << "(";
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer()) {
+                stream << "buffer_t *"
+                       << print_name(args[i].name)
+                       << "_buffer";
+            } else {
+                stream << print_type(args[i].type)
+                       << " "
+                       << print_name(args[i].name);
+            }
+            if (i < args.size()-1) stream << ", ";
+        }
+        stream << ") HALIDE_FUNCTION_ATTRS {\n"
+               << "    int err = 0;\n";
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer()) {
+                string name = print_name(args[i].name);
+                stream << "    halide_nd_buffer_t<" << (int)args[i].dimensions
+                       << "> " << name << "_upgraded;\n"
+                       << "    " << name << "_upgraded.type = halide_type_of<"
+                       << print_type(args[i].type) << ">();\n"
+                       << "    err = halide_upgrade_buffer_t(" << ucon << ", "
+                       << "\"" << args[i].name << "\", "
+                       << name << "_buffer, "
+                       << "&" << name << "_upgraded);\n"
+                       << "    if (err) return err;\n";
+            }
+        }
+        stream << "    err = " << f.name << "(";
+        for (size_t i = 0; i < args.size(); i++) {
+            print_name(args[i].name);
+            if (args[i].is_buffer()) {
+                stream << "&" << print_name(args[i].name) << "_upgraded";
+            } else {
+                stream << print_name(args[i].name);
+            }
+            if (i < args.size()-1) stream << ", ";
+        }
+        stream << ");\n";
+        if (!target.has_feature(Target::NoBoundsQuery)) {
+            stream << "    if (err) return err;\n";
+            // Copy back any bounds inference results.
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].is_buffer()) {
+                    string name = print_name(args[i].name);
+                    stream << "    if (" << name << "_buffer->host == NULL) {\n"
+                           << "        err = halide_downgrade_buffer_t(" << ucon << ", "
+                           << "\"" << args[i].name << "\", "
+                           << "&" << name << "_upgraded, "
+                           << name << "_buffer);\n"
+                           << "        if (err) return err;\n"
+                           << "    }\n";
+                }
+            }
+        }
+        stream << "    return err;\n"
+               << "}\n"
+               << "extern \"C\" {\n"
+               << "#endif\n\n";
     }
 }
 
-void CodeGen_C::compile(const Buffer &buffer) {
+void CodeGen_C::compile(const Buffer &buffer, const Target &target) {
     // Don't define buffers in headers.
     if (is_header) {
         return;

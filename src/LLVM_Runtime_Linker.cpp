@@ -86,6 +86,7 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
+DECLARE_CPP_INITMOD(old_buffer_t)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -642,6 +643,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_profiler(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
+            modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {

@@ -171,9 +171,7 @@ Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
     return out;
 }
 
-extern "C" {
 #include "halide_blur.h"
-}
 
 Image<uint16_t> blur_halide(Image<uint16_t> in) {
     Image<uint16_t> out(in.width()-8, in.height()-2);
