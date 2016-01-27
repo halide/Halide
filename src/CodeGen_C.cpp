@@ -354,7 +354,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
         // And a stub to accept and upgrade old buffer_t's
         string ucon = have_user_context ? "__user_context" : "NULL";
         stream
-            << "\n// A shim to support use of the old buffer_t struct. This will be deprecated at some point.\n"
+            << "\n// A shim to support use of the old buffer_t struct. This is deprecated and will be removed at some point.\n"
             << "#ifdef __cplusplus\n"
             << "}; // extern \"C\" \n"
             << "inline int " << f.name << "(";
