@@ -1,5 +1,5 @@
 // Avoid deprecation warnings
-#define HALIDE_ATTRIBUTE_DEPRECATED
+#define HALIDE_ALLOW_DEPRECATED
 
 #include "HalideRuntime.h"
 #include <stdio.h>

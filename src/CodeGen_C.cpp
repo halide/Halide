@@ -357,7 +357,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
             << "\n// A shim to support use of the old buffer_t struct. This is deprecated and will be removed at some point.\n"
             << "#ifdef __cplusplus\n"
             << "}; // extern \"C\" \n"
-            << "HALIDE_ATTRIBUTE_DEPRECATED inline int " << f.name << "(";
+            << "HALIDE_ATTRIBUTE_DEPRECATED(\"buffer_t is deprecated. Use halide_buffer_t.\")\n"
+            << "inline int " << f.name << "(";
         for (size_t i = 0; i < args.size(); i++) {
             if (args[i].is_buffer()) {
                 stream << "buffer_t *"

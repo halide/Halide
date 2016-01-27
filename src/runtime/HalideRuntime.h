@@ -756,10 +756,14 @@ extern "C" {
 #endif
 
 #ifndef HALIDE_ATTRIBUTE_DEPRECATED
-#ifdef _MSC_VER
-#define HALIDE_ATTRIBUTE_DEPRECATED __declspec(deprecated)
+#ifdef HALIDE_ALLOW_DEPRECATED
+#define HALIDE_ATTRIBUTE_DEPRECATED(x)
 #else
-#define HALIDE_ATTRIBUTE_DEPRECATED __attribute__((deprecated))
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
+#else
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
+#endif
 #endif
 #endif
 
