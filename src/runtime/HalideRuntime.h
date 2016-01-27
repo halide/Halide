@@ -686,7 +686,7 @@ typedef struct halide_buffer_t {
     }
 
     /** A pointer to the element at the given location. */
-    uint8_t *address_of(const int *pos) const {
+    uint8_t *address_of(const int pos[]) const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             index += dim[i].stride * (pos[i] - dim[i].min);
