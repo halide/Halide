@@ -4,9 +4,13 @@
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
 #include <stddef.h>
 
-// No msvc warnings from llvm headers please
+// No warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(push, 0)
+#endif
+#ifdef __GNU_C__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
 #endif
 
 #include <llvm/ExecutionEngine/MCJIT.h>
@@ -80,9 +84,12 @@
 #include <llvm/Transforms/NaCl.h>
 #endif
 
-// No msvc warnings from llvm headers please
+// No warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(pop)
+#endif
+#ifdef __GNU_C__
+#pragma GCC diagnostic pop
 #endif
 
 // llvm may sometimes define NDEBUG, which is annoying, because we always want asserts
