@@ -5,6 +5,8 @@
 #endif
 
 using namespace Halide;
+using namespace Halide::Internal;
+IRPrinter irp(std::cerr);
 
 int schedule;
 
@@ -296,6 +298,38 @@ Func demosaic(Func deinterleaved) {
         output.compute_at(processed, tx)
             .unroll(y, 2)
             .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 9) {
+        // optimized for Hexagon 64 byte mode.
+        // Compute these in chunks over tiles, vectorized by 32
+        g_r.compute_at(processed, tx).vectorize(x, 32);
+        g_b.compute_at(processed, tx).vectorize(x, 32);
+        r_gr.compute_at(processed, tx).vectorize(x, 32);
+        b_gr.compute_at(processed, tx).vectorize(x, 32);
+        r_gb.compute_at(processed, tx).vectorize(x, 32);
+        b_gb.compute_at(processed, tx).vectorize(x, 32);
+        r_b.compute_at(processed, tx).vectorize(x, 32);
+        b_r.compute_at(processed, tx).vectorize(x, 32);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+          .unroll(x, 2)
+          .unroll(y, 2)
+          .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 10) {
+        // optimized for Hexagon
+        // Compute these in chunks over tiles, vectorized by 64
+      g_r.compute_at(processed, tx).vectorize(x, 64);
+      g_b.compute_at(processed, tx).vectorize(x, 64);
+      r_gr.compute_at(processed, tx).vectorize(x, 64);
+      b_gr.compute_at(processed, tx).vectorize(x, 64);
+      r_gb.compute_at(processed, tx).vectorize(x, 64);
+      b_gb.compute_at(processed, tx).vectorize(x, 64);
+      r_b.compute_at(processed, tx).vectorize(x, 64);
+      b_r.compute_at(processed, tx).vectorize(x, 64);
+      // These interleave in y, so unrolling them in y helps
+      output.compute_at(processed, tx)
+        .unroll (x, 2)
+        .unroll(y, 2)
+        .reorder(c, x, y).bound(c, 0, 3).unroll(c);
     } else {
         // Basic naive schedule
         g_r.compute_root();
@@ -512,6 +546,22 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).reorder(c, x, y).unroll(c);
         processed.reorder(c, tx, ty);
+        processed.parallel(ty);
+    } else if (schedule == 9) {
+        // optimized for Hexagon 64 byte mode.
+        // Compute in chunks over 32x32 tiles, vectorized by 32
+        denoised.compute_at(processed, tx).vectorize(x, 32);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
+    } else if (schedule == 10) {
+        // optimized for Hexagon 128 byte mode.
+        // Compute in chunks over 64x64 tiles, vectorized by 64
+        denoised.compute_at(processed, tx).vectorize(x, 64);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
     } else {
         denoised.compute_root();
