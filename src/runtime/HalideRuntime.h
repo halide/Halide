@@ -106,10 +106,12 @@ extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *clo
 extern void halide_set_num_threads(int n);
 
 /** Define halide_malloc and halide_free to replace the default memory
- * allocator.  See Func::set_custom_allocator. (Specifically note that
- * halide_malloc must return a 32-byte aligned pointer, and it must be
- * safe to read at least 8 bytes before the start and beyond the
- * end.)
+ * allocator.  See Func::set_custom_allocator. Specifically note that
+ * halide_malloc must return a pointer aligned to the maximum
+ * meaningful alignment for the platform for the purpose of vector
+ * loads and stores. The default implementation uses 32-byte
+ * alignment, which is safe for arm and x86. Additionally, it must be
+ * safe to read at least 8 bytes before the start and beyond the end.
  */
 //@{
 extern void *halide_malloc(void *user_context, size_t x);
