@@ -7,13 +7,19 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#if defined(__powerpc__) && defined(__linux__)
+// This uses elf.h and must be included after "LLVM_Headers.h", which
+// uses llvm/support/Elf.h.
+#include <sys/auxv.h>
+#endif
+
 namespace Halide {
 
 using std::string;
 using std::vector;
 
 namespace {
-#ifndef __arm__
+#if defined(__x86_64__) || defined(__i386__)
 
 #ifdef _MSC_VER
 static void cpuid(int info[4], int infoType, int extra) {
@@ -69,6 +75,24 @@ Target get_host_target() {
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
     #else
+    #if defined(__powerpc__) && defined(__linux__)
+    Target::Arch arch = Target::POWERPC;
+
+    unsigned long hwcap = getauxval(AT_HWCAP);
+    unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
+    bool have_vsx     = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
+    bool arch_2_07    = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+
+    user_assert(have_altivec)
+        << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
+
+    std::vector<Target::Feature> initial_features;
+    if (have_vsx)     initial_features.push_back(Target::VSX);
+    if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
+
+    return Target(os, arch, bits, initial_features);
+#else
 
     Target::Arch arch = Target::X86;
 
@@ -108,6 +132,7 @@ Target get_host_target() {
     }
 
     return Target(os, arch, bits, initial_features);
+#endif
 #endif
 #endif
 }
@@ -161,6 +186,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
     {"hexagon", Target::Hexagon},
+    {"powerpc", Target::POWERPC},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -185,6 +211,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"f16c", Target::F16C},
     {"armv7s", Target::ARMv7s},
     {"no_neon", Target::NoNEON},
+    {"vsx", Target::VSX},
+    {"power_arch_2_07", Target::POWER_ARCH_2_07},
     {"cuda", Target::CUDA},
     {"cuda_capability_30", Target::CUDACapability30},
     {"cuda_capability_32", Target::CUDACapability32},
