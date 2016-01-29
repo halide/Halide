@@ -51,7 +51,7 @@ extern "C" {
 extern void halide_print(void *user_context, const char *);
 extern void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
 // @}
-  
+
 /** Halide calls this function on runtime errors (for example bounds
  * checking failures). This function can be replaced in JITed code by
  * using Func::set_error_handler, or in AOT code by calling
@@ -63,7 +63,7 @@ extern void (*halide_set_custom_print(void (*print)(void *, const char *)))(void
 extern void halide_error(void *user_context, const char *);
 extern void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
 // @}
-  
+
 /** These are allocated statically inside the runtime, hence the fixed
  * size. They must be initialized with zero. The first time
  * halide_mutex_lock is called, the lock must be initialized in a
@@ -105,7 +105,7 @@ extern void halide_shutdown_thread_pool();
 /** Set a custom method for performing a parallel for loop. Returns
  * the old do_par_for handler. */
 extern int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task_t, int, int, uint8_t *)))(void *, halide_task_t, int, int, uint8_t *);
-  
+
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
 extern int (*halide_set_custom_do_task(int (*f)(void *, halide_task_t, int, uint8_t *)))(void *, halide_task_t, int, uint8_t *);
@@ -122,9 +122,14 @@ extern void halide_set_num_threads(int n);
  * replace in AOT code, use the halide_set_custom_malloc and
  * halide_set_custom_free, or (on platforms that support weak
  * linking), simply define these functions yourself. In JIT-compiled
- * code use Func::set_custom_allocator.  Note that halide_malloc must
- * return a 32-byte aligned pointer, and it must be safe to read at
- * least 8 bytes before the start and beyond the end.
+ * code use Func::set_custom_allocator.
+ *
+ * Note that halide_malloc must return a pointer aligned to the
+ * maximum meaningful alignment for the platform for the purpose of
+ * vector loads and stores. The default implementation uses 32-byte
+ * alignment, which is safe for arm and x86. Additionally, it must be
+ * safe to read at least 8 bytes before the start and beyond the
+ * end.
  */
 //@{
 extern void *halide_malloc(void *user_context, size_t x);
@@ -132,7 +137,7 @@ extern void halide_free(void *user_context, void *ptr);
 extern void *(*halide_set_custom_malloc(void *(*user_malloc)(void *, size_t)))(void *, size_t);
 extern void (*halide_set_custom_free(void (*user_free)(void *, void *)))(void *, void *);
 //@}
-  
+
 /** Called when debug_to_file is used inside %Halide code.  See
  * Func::debug_to_file for how this is called
  *
@@ -205,7 +210,7 @@ struct halide_trace_event {
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event *event);
 extern int32_t (*halide_set_custom_trace(int32_t (*halide_trace)(void *, const struct halide_trace_event *)))(void *, const struct halide_trace_event *);
 // @}
-  
+
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
  * information to stdout in a human-readable format. If never called,
