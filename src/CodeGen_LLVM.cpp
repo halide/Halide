@@ -1723,7 +1723,10 @@ void CodeGen_LLVM::visit(const Load *op) {
                     alignment *= 2;
                 }
             }
-
+            // FIXME: PDB: This should eventually be removed once we have implemented halide_malloc
+            // to return a naturally aligned vector address. i.e 128 byte alignment.
+            if (target.arch == Target::Hexagon)
+              alignment = 1;
             // For dense vector loads wider than the native vector
             // width, bust them up into native vectors
             int load_lanes = op->type.lanes();
@@ -3179,7 +3182,10 @@ void CodeGen_LLVM::visit(const Store *op) {
                     alignment *= 2;
                 }
             }
-
+            // FIXME: PDB: This should eventually be removed once we have implemented halide_malloc
+            // to return a naturally aligned vector address. i.e 128 byte alignment.
+            if (target.arch == Target::Hexagon)
+              alignment = 1;
             // For dense vector stores wider than the native vector
             // width, bust them up into native vectors.
             int store_lanes = value_type.lanes();
