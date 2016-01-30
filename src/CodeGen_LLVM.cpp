@@ -1711,13 +1711,19 @@ void CodeGen_LLVM::visit(const Load *op) {
             int alignment = op->type.bytes(); // The size of a single element
 
             int native_bits = native_vector_bits();
+            int native_bytes = native_bits / 8;
+            // We assume halide_malloc for the platform returns
+            // buffers aligned to at least the native vector
+            // width. (i.e. 16-byte alignment on arm, and 32-byte
+            // alignment on x86), so this is the maximum alignment we
+            // can infer based on the index alone.
 
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
             if (!possibly_misaligned) {
                 while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
-                       alignment < native_bits) {
+                       alignment < native_bytes) {
                     mod_rem.modulus /= 2;
                     mod_rem.remainder /= 2;
                     alignment *= 2;
@@ -3170,13 +3176,14 @@ void CodeGen_LLVM::visit(const Store *op) {
         if (ramp && is_one(ramp->stride)) {
 
             int native_bits = native_vector_bits();
+            int native_bytes = native_bits / 8;
 
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
             if (!possibly_misaligned) {
                 while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
-                       alignment < native_bits) {
+                       alignment < native_bytes) {
                     mod_rem.modulus /= 2;
                     mod_rem.remainder /= 2;
                     alignment *= 2;

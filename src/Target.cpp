@@ -19,14 +19,14 @@ using std::string;
 using std::vector;
 
 namespace {
-#if defined(__x86_64__) || defined(__i386__)
 
 #ifdef _MSC_VER
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
-
 #else
+
+#if defined(__x86_64__) || defined(__i386__)
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
@@ -413,7 +413,7 @@ std::string Target::to_string() const {
     return result;
 }
 
-namespace Internal{ 
+namespace Internal{
 
 EXPORT void target_test() {
     Target t;
