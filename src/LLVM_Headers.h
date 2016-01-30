@@ -10,7 +10,7 @@
 #endif
 #ifdef __GNU_C__
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wsign-compare"
 #endif
 
 #include <llvm/ExecutionEngine/MCJIT.h>
