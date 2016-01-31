@@ -140,8 +140,8 @@ int main(int argc, char **argv) {
     Image<float> re_in = lambda(x, y, 0.0f).realize(W, H);
     Image<float> im_in = lambda(x, y, 0.0f).realize(W, H);
 
-    printf("%12s %5s%11s%5s %5s%11s%5s\n", "", "", "Halide", "", "", "FFTW", "");
-    printf("%12s %10s %10s %10s %10s %10s\n", "DFT type", "Time (us)", "MFLOP/s", "Time (us)", "MFLOP/s", "Ratio");
+//    printf("%12s %5s%11s%5s %5s%11s%5s\n", "", "", "Halide", "", "", "FFTW", "");
+//    printf("%12s %10s %10s %10s %10s %10s\n", "DFT type", "Time (us)", "MFLOP/s", "Time (us)", "MFLOP/s", "Ratio");
 
     ComplexFunc c2c_in;
     // Read all reps from the same place in memory. This effectively
@@ -160,22 +160,16 @@ int main(int argc, char **argv) {
     R_c2c[0].raw_buffer()->stride[2] = 0;
     R_c2c[1].raw_buffer()->stride[2] = 0;
 
-    double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); })*1e6/reps;
+    double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); })/reps;
 #ifdef WITH_FFTW
     std::vector<std::pair<float, float>> fftw_c1(W * H);
     std::vector<std::pair<float, float>> fftw_c2(W * H);
     fftwf_plan c2c_plan = fftwf_plan_dft_2d(W, H, (fftwf_complex*)&fftw_c1[0], (fftwf_complex*)&fftw_c2[0], FFTW_FORWARD, FFTW_EXHAUSTIVE);
-    double fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2c_plan); })*1e6;
+    double fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2c_plan); });
 #else
     double fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
-           "c2c",
-           halide_t,
-           5*W*H*(log2(W) + log2(H))/halide_t,
-           fftw_t,
-           5*W*H*(log2(W) + log2(H))/fftw_t,
-           fftw_t / halide_t);
+    printf("fft c2c %dx%d\t%f\t%f\n", W, H, halide_t, fftw_t);
 
     Func r2c_in;
     // All reps read from the same input. See notes on c2c_in.
@@ -187,21 +181,15 @@ int main(int argc, char **argv) {
     R_r2c[0].raw_buffer()->stride[2] = 0;
     R_r2c[1].raw_buffer()->stride[2] = 0;
 
-    halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); })*1e6/reps;
+    halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); })/reps;
 #ifdef WITH_FFTW
     std::vector<float> fftw_r(W * H);
     fftwf_plan r2c_plan = fftwf_plan_dft_r2c_2d(W, H, &fftw_r[0], (fftwf_complex*)&fftw_c1[0], FFTW_EXHAUSTIVE);
-    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(r2c_plan); })*1e6;
+    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(r2c_plan); });
 #else
     fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
-           "r2c",
-           halide_t,
-           2.5*W*H*(log2(W) + log2(H))/halide_t,
-           fftw_t,
-           2.5*W*H*(log2(W) + log2(H))/fftw_t,
-           fftw_t / halide_t);
+    printf("fft r2c %dx%d\t%f\t%f\n", W, H, halide_t, fftw_t);
 
     ComplexFunc c2r_in;
     // All reps read from the same input. See notes on c2c_in.
@@ -212,20 +200,14 @@ int main(int argc, char **argv) {
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_c2r[0].raw_buffer()->stride[2] = 0;
 
-    halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); })*1e6/reps;
+    halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); })/reps;
 #ifdef WITH_FFTW
     fftwf_plan c2r_plan = fftwf_plan_dft_c2r_2d(W, H, (fftwf_complex*)&fftw_c1[0], &fftw_r[0], FFTW_EXHAUSTIVE);
-    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2r_plan); })*1e6;
+    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2r_plan); });
 #else
     fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
-           "c2r",
-           halide_t,
-           2.5*W*H*(log2(W) + log2(H))/halide_t,
-           fftw_t,
-           2.5*W*H*(log2(W) + log2(H))/fftw_t,
-           fftw_t / halide_t);
+    printf("fft c2r %dx%d\t%f\t%f\n", W, H, halide_t, fftw_t);
 
 #ifdef WITH_FFTW
     fftwf_destroy_plan(c2c_plan);

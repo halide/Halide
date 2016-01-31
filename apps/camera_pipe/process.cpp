@@ -21,7 +21,6 @@ int main(int argc, char **argv) {
     }
 
     Image<uint16_t> input = load_image(argv[1]);
-    fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
     // These color matrices are for the sensor in the Nokia N900 and are
@@ -46,26 +45,25 @@ int main(int argc, char **argv) {
     float contrast = atof(argv[4]);
     int timing_iterations = atoi(argv[5]);
 
-    double best;
-
-    best = benchmark(timing_iterations, 1, [&]() {
+    double best_halide = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast,
                input, matrix_3200, matrix_7000, output);
     });
-    fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
     save_image(output, argv[6]);
 
-    best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
-    });
-    fprintf(stderr, "C++:\t%gus\n", best * 1e6);
-    save_image(output, "fcam_c.png");
-
-    best = benchmark(timing_iterations, 1, [&]() {;
+    double best_ref;
+#ifdef __arm__
+    best_ref = benchmark(timing_iterations, 1, [&]() {;
         FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
     });
-    fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    save_image(output, "fcam_arm.png");
+#else
+    best_ref = benchmark(timing_iterations, 1, [&]() {
+        FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
+    });
+#endif
+    fprintf(stderr, "camera_pipe\t%f\t%f\n", best_halide, best_ref);
+
+    save_image(output, "fcam_ref.png");
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms
