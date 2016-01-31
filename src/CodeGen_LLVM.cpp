@@ -489,6 +489,14 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                 "Halide HVX internal compiler\n");
+    // We need to EnableQuIC for LLVM and Halide (Unrolling).
+    if (CodeGen_LLVM::llvm_Hexagon_enabled) {
+      char *s = strdup("HALIDE_LLVM_QUIC=-enable-quic");
+      ::putenv(s);
+      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
+                                  "Halide HVX quic option\n");
+    }
+    // HVX double mode.
     if (target.has_feature(Halide::Target::HVX_128)) {
       char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
       ::putenv(s);
