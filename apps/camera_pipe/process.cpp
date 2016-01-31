@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
     });
 #endif
-    fprintf(stderr, "camera_pipe\t%f\t%f\n", best_halide, best_ref);
+    fprintf(stderr, "camera_pipe\t%f\t%f\n", best_halide*1e3, best_ref*1e3);
 
     save_image(output, "fcam_ref.png");
 

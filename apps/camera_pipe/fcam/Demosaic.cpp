@@ -178,7 +178,7 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     for (int by = 0; by < rawHeight-8-BLOCK_HEIGHT+1; by += BLOCK_HEIGHT) {
         for (int bx = 0; bx < rawWidth-8-BLOCK_WIDTH+1; bx += BLOCK_WIDTH) {
 #else
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
         for (int bx = 0; bx < outWidth; bx += BLOCK_WIDTH) {
 #endif

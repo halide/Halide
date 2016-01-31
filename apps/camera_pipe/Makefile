@@ -15,13 +15,13 @@ curved.o: camera_pipe
 	./camera_pipe 8 0 # 8-bit output,
 
 fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
-	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
+	$(CXX) $(CXXFLAGS) -c -Wall -O3 -fopenmp $< -o $@
 
 fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
-	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
+	$(CXX) $(CXXFLAGS) -c -Wall -O3 -fopenmp $< -o $@
 
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O3 -fopenmp $^ -o $@ -lpthread -ldl $(PNGFLAGS)
 
 out.png: process
 	./process ../images/bayer_raw.png 3700 2.0 50 5 out.png

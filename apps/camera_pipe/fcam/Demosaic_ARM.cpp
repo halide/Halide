@@ -160,6 +160,7 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 #if 0
     for (int by = 0; by < rawHeight-8-BLOCK_HEIGHT+1; by += BLOCK_HEIGHT) {
 #else
+    #pragma omp parallel for
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
 #endif
         const short *__restrict__ blockPtr = (const short *)&input(0,by);

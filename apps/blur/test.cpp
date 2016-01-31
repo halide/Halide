@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
     double halide_time = t;
 
     // fast_time2 is always slower than fast_time, so skip printing it
-    printf("blur\t%f\t%f\n", halide_time, fast_time);
+    printf("blur\t%f\t%f\n", halide_time*1e3, fast_time*1e3);
 
     for (int y = 64; y < input.height() - 64; y++) {
         for (int x = 64; x < input.width() - 64; x++) {

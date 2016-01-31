@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
 #else
     double fftw_t = 0;
 #endif
-    printf("fft c2c %dx%d\t%f\t%f\n", W, H, halide_t, fftw_t);
+    printf("fft c2c %dx%d\t%f\t%f\n", W, H, halide_t*1e3, fftw_t*1e3);
 
     Func r2c_in;
     // All reps read from the same input. See notes on c2c_in.
@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
 #else
     fftw_t = 0;
 #endif
-    printf("fft r2c %dx%d\t%f\t%f\n", W, H, halide_t, fftw_t);
+    printf("fft r2c %dx%d\t%f\t%f\n", W, H, halide_t*1e3, fftw_t*1e3);
 
     ComplexFunc c2r_in;
     // All reps read from the same input. See notes on c2c_in.
@@ -207,7 +207,7 @@ int main(int argc, char **argv) {
 #else
     fftw_t = 0;
 #endif
-    printf("fft c2r %dx%d\t%f\t%f\n", W, H, halide_t, fftw_t);
+    printf("fft c2r %dx%d\t%f\t%f\n", W, H, halide_t*1e3, fftw_t*1e3);
 
 #ifdef WITH_FFTW
     fftwf_destroy_plan(c2c_plan);
