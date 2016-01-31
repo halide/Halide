@@ -9,8 +9,10 @@
 #pragma warning(push, 0)
 #endif
 #ifdef __GNU_C__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC system_header
+#endif
+#ifdef __clang__
+#pragma clang system_header
 #endif
 
 #include <llvm/ExecutionEngine/MCJIT.h>
@@ -87,9 +89,6 @@
 // No warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(pop)
-#endif
-#ifdef __GNU_C__
-#pragma GCC diagnostic pop
 #endif
 
 // llvm may sometimes define NDEBUG, which is annoying, because we always want asserts
