@@ -252,6 +252,9 @@ struct Target {
         return natural_vector_size(type_of<data_t>());
     }
 
+    /** Was libHalide compiled with support for this target? */
+    EXPORT bool supported() const;
+
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
