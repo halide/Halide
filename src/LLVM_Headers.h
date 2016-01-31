@@ -8,7 +8,7 @@
 #ifdef _WIN32
 #pragma warning(push, 0)
 #endif
-#ifdef __GNU_C__
+#ifdef __GNUC__
 #pragma GCC system_header
 #endif
 #ifdef __clang__
