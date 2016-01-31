@@ -23,7 +23,7 @@ string filter = "";
 
 Target target;
 
-int num_processes = 16;
+int num_processes = 1;
 int my_process_id = 0;
 
 void check(string op, int vector_width, Expr e) {
@@ -1292,6 +1292,61 @@ void check_neon_all() {
     // halide.
 }
 
+void check_hvx_all() {
+    ImageParam in_f32(Float(32), 1, "in_f32");
+    ImageParam in_f64(Float(64), 1, "in_f64");
+    ImageParam in_i8(Int(8), 1, "in_i8");
+    ImageParam in_u8(UInt(8), 1, "in_u8");
+    ImageParam in_i16(Int(16), 1, "in_i16");
+    ImageParam in_u16(UInt(16), 1, "in_u16");
+    ImageParam in_i32(Int(32), 1, "in_i32");
+    ImageParam in_u32(UInt(32), 1, "in_u32");
+    ImageParam in_i64(Int(64), 1, "in_i64");
+    ImageParam in_u64(UInt(64), 1, "in_u64");
+
+    Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
+    Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
+    Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
+    Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32);
+    Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16), i16_3 = in_i16(x+32);
+    Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16), u16_3 = in_u16(x+32);
+    Expr i32_1 = in_i32(x), i32_2 = in_i32(x+16), i32_3 = in_i32(x+32);
+    Expr u32_1 = in_u32(x), u32_2 = in_u32(x+16), u32_3 = in_u32(x+32);
+    Expr i64_1 = in_i64(x), i64_2 = in_i64(x+16), i64_3 = in_i64(x+32);
+    Expr u64_1 = in_u64(x), u64_2 = in_u64(x+16), u64_3 = in_u64(x+32);
+    Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+/*
+    const int min_i8 = -128, max_i8 = 127;
+    const int min_i16 = -32768, max_i16 = 32767;
+    const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
+    const int max_u8 = 255;
+    const int max_u16 = 65535;
+*/
+    Expr max_u32 = UInt(32).max();
+
+
+    int hvx_width = 0;
+    if (target.has_feature(Target::HVX_64)) {
+        hvx_width = 64;
+    } else if (target.has_feature(Target::HVX_128)) {
+        hvx_width = 128;
+    }
+
+    //check("vzxt\(v\d+\.ub\)", hvx_width, cast<uint16_t>(u8_1));
+    //check("vzxt\(v\d+\.uh\)", hvx_width, cast<uint32_t>(u16_1));
+    //check("vsxt\(v\d+\.b\)", hvx_width, cast<int16_t>(i8_1));
+    //check("vsxt\(v\d+\.h\)", hvx_width, cast<int32_t>(i16_1));
+    check("vzxt", hvx_width, cast<uint16_t>(u8_1));
+    check("vzxt", hvx_width, cast<uint32_t>(u16_1));
+    check("vsxt", hvx_width, cast<int16_t>(i8_1));
+    check("vsxt", hvx_width, cast<int32_t>(i16_1));
+
+    check("vshuffe", hvx_width, cast<uint8_t>(u16_1));
+    check("vshuffo", hvx_width, cast<uint8_t>(u16_1 >> 8));
+
+    check("vabsdiff", hvx_width, absd(u8_1, u8_2));
+}
+
 int main(int argc, char **argv) {
     if (argc > 1) {
         num_processes = 1;
@@ -1314,7 +1369,7 @@ int main(int argc, char **argv) {
     }
 
     target = get_target_from_environment();
-    target.set_features({Target::NoBoundsQuery, Target::NoRuntime});
+    target.set_features({Target::NoBoundsQuery, Target::NoAsserts, Target::NoRuntime});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
@@ -1328,8 +1383,10 @@ int main(int argc, char **argv) {
     use_sse42 = use_avx;
     if (target.arch == Target::X86) {
         check_sse_all();
-    } else {
+    } else if (target.arch == Target::ARM) {
         check_neon_all();
+    } else if (target.arch == Target::Hexagon) {
+        check_hvx_all();
     }
 
     // Compile a runtime for this target, for use in the static test.
