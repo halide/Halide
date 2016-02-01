@@ -1,0 +1,3 @@
+[submodule "apps/private"]
+	path = apps/private
+	url = git@github.com:jrk/halide-private-benchmarks.git
