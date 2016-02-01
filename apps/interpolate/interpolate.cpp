@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
     input.set(in_png);
 
     double best = benchmark(20, 1, [&]() { final.realize(out); });
-    std::cout << "interpolate\t" << best*1e3 << std::endl;
+    std::cout << "interpolate\t" << best*1e3 << "\t";
 
     vector<Argument> args;
     args.push_back(input);

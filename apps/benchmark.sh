@@ -33,6 +33,10 @@ cd ../
 cd interpolate
 make -s interpolate
 ./interpolate ../images/rgba.png out.png
+cd fastInterpOSX
+make -s fast_interp
+./fast_interp ../../images/rgba.png
+cd ../
 cd ../
 
 # Local laplacian
