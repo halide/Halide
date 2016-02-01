@@ -56,4 +56,4 @@ clean:
 
 # File rules
 truncated_kernel_bf.o: truncated_kernel_bf.cpp
-	$(CC) truncated_kernel_bf.cpp -c -o truncated_kernel_bf.o $(INCDIR) $(DEFINES)
+	$(CC) truncated_kernel_bf.cpp -c -O3 -o truncated_kernel_bf.o $(INCDIR) $(DEFINES)
