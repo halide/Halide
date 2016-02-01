@@ -349,10 +349,11 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
             cl_device_id dev = devices[i];
             cl_uint core_count = 0;
             err = clGetDeviceInfo(dev, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), &core_count, NULL);
-            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
             if (err != CL_SUCCESS) {
+                debug(user_context) << "      Failed to get info on device " << i << "\n";
                 continue;
             }
+            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
             if (core_count >= best_core_count) {
                 device = i;
                 best_core_count = core_count;
