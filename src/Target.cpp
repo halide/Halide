@@ -413,6 +413,45 @@ std::string Target::to_string() const {
     return result;
 }
 
+/** Was libHalide compiled with support for this target? */
+bool Target::supported() const {
+    bool bad = false;
+#if !(WITH_NATIVE_CLIENT)
+    bad |= (arch == Target::PNaCl || os == Target::NaCl);
+#endif
+#if !(WITH_ARM)
+    bad |= arch == Target::ARM && bits == 32;
+#endif
+#if !(WITH_AARCH64) || WITH_NATIVE_CLIENT // In pnacl llvm, the aarch64 backend is crashy.
+    bad |= arch == Target::ARM && bits == 64;
+#endif
+#if !(WITH_X86)
+    bad |= arch == Target::X86;
+#endif
+#if !(WITH_MIPS)
+    bad |= arch == Target::MIPS;
+#endif
+#if !(WITH_POWERPC)
+    bad |= arch == Target::POWERPC;
+#endif
+#if !(WITH_PTX)
+    bad |= has_feature(Target::CUDA);
+#endif
+#if !(WITH_OPENCL)
+    bad |= has_feature(Target::OpenCL);
+#endif
+#if !(WITH_METAL)
+    bad |= has_feature(Target::Metal);
+#endif
+#if !(WITH_RENDERSCRIPT)
+    bad |= has_feature(Target::Renderscript);
+#endif
+#if !(WITH_OPENGL)
+    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#endif
+    return !bad;
+}
+
 namespace Internal{
 
 EXPORT void target_test() {
