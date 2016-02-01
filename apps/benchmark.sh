@@ -21,7 +21,7 @@ make -s filter
 cd reference_cpu
 make -s truncated_kernel_bf
 ./truncated_kernel_bf ../../images/rgb.ppm out.pgm 10 0.1
-cd ../
+cd ../../
 
 # Harris
 cd harris
