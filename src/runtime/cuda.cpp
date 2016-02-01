@@ -193,8 +193,29 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     }
 
     int device = halide_get_gpu_device(user_context);
-    if (device == -1) {
-        device = deviceCount - 1;
+    if (device == -1 && deviceCount == 1) {
+        device = 0;
+    } else if (device == -1) {
+        debug(user_context) << "CUDA: Multiple CUDA devices detected. Selecting the one with the most cores.\n";
+        int best_core_count = 0;
+        for (int i = 0; i < deviceCount; i++) {
+            CUdevice dev;
+            CUresult status = cuDeviceGet(&dev, i);
+            if (status != CUDA_SUCCESS) {
+                debug(user_context) << "      Failed to get device " << i << "\n";
+                continue;
+            }
+            int core_count = 0;
+            status = cuDeviceGetAttribute(&core_count, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, dev);
+            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
+            if (status != CUDA_SUCCESS) {
+                continue;
+            }
+            if (core_count >= best_core_count) {
+                device = i;
+                best_core_count = core_count;
+            }
+        }
     }
 
     // Get device
