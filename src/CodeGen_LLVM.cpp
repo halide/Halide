@@ -491,7 +491,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
                                 "Halide HVX internal compiler\n");
     // We need to EnableQuIC for LLVM and Halide (Unrolling).
     if (CodeGen_LLVM::llvm_Hexagon_enabled) {
-      char *s = strdup("HALIDE_LLVM_QUIC=-enable-quic");
+      char *s = strdup("HALIDE_LLVM_QUIC=-enable-quic -hexagon-small-data-threshold=0");
       ::putenv(s);
       cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
                                   "Halide HVX quic option\n");
