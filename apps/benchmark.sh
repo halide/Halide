@@ -9,10 +9,10 @@ make -s test
 cd ../
 
 # Unsharp
-#cd unsharp
-#make -s unsharp
-#./unsharp
-#cd ../
+cd unsharp
+make -s unsharp
+./unsharp
+cd ../
 
 # Bilateral grid
 cd bilateral_grid
@@ -21,6 +21,10 @@ make -s filter
 cd ../
 
 # Harris
+cd harris
+make -s filter
+./filter ../images/rgb.png
+cd ../
 
 # interpolate
 cd interpolate

@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         opencv_t = benchmark(10, 1, [&] () {
             cv::Mat gray;
             cv::cvtColor(input_image, gray, CV_BGR2GRAY);
-            cv::cornerHarris(gray, output_image, 2, 3, 0.04);
+            cv::cornerHarris(gray, output_image, 3, 3, 0.04);
         });
 
         cv::Mat normalized;
