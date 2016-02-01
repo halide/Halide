@@ -337,10 +337,28 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     // If the user indicated a specific device index to use, use
     // that. Note that this is an index within the set of devices
-    // specified by the device type. -1 means the last device.
+    // specified by the device type. -1 means select a device
+    // automatically based on core count.
     int device = halide_get_gpu_device(user_context);
-    if (device == -1) {
-        device = deviceCount - 1;
+    if (device == -1 && deviceCount == 1) {
+        device = 0;
+    } else if (device == -1) {
+        debug(user_context) << "    Multiple CL devices detected. Selecting the one with the most cores.\n";
+        int best_core_count = 0;
+        for (int i = 0; i < deviceCount; i++) {
+            cl_device_id dev = devices[i];
+            cl_uint core_count = 0;
+            err = clGetDeviceInfo(dev, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), &core_count, NULL);
+            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
+            if (err != CL_SUCCESS) {
+                continue;
+            }
+            if (core_count >= best_core_count) {
+                device = i;
+                best_core_count = core_count;
+            }
+        }
+        debug(user_context) << "    Selected device " << device << "\n";
     }
 
     if (device < 0 || device >= (int)deviceCount) {
