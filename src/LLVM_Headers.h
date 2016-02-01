@@ -8,6 +8,12 @@
 #ifdef _MSC_VER
 #pragma warning(push, 0)
 #endif
+#ifdef __GNUC__
+#pragma GCC system_header
+#endif
+#ifdef __clang__
+#pragma clang system_header
+#endif
 
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
