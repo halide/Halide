@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     double min_t = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid(atof(argv[3]), input, output);
     });
-    printf("bilateral_grid\t%f\n", min_t*1e3);
+    printf("bilateral_grid\t%f\t", min_t*1e3);
 
     save_image(output, argv[2]);
 

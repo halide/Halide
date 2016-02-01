@@ -18,6 +18,9 @@ cd ../
 cd bilateral_grid
 make -s filter
 ./filter ../images/gray.png out.png 0.1 10
+cd reference_cpu
+make -s truncated_kernel_bf
+./truncated_kernel_bf ../../images/rgb.ppm out.pgm 10 0.1
 cd ../
 
 # Harris
