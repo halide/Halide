@@ -372,8 +372,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     else { if (!check(false, "Invalid bit depth in PGM\n")) return false; }
 
     // Graymap
-    int channels = 1;
-    *im = ImageType(width, height, channels);
+    *im = ImageType(width, height);
 
     // convert the data to ImageType::ElemType
     if (bit_depth == 8) {
@@ -444,8 +443,8 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_pgm(ImageType &im, const std::string &filename, int channel = 0) {
     im.copy_to_host();
 
-	unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
-	unsigned int num_channels = im.channels();
+    unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
+    unsigned int num_channels = im.channels();
 
     if (!check(channel >= 0, "Selected channel %d not available in image\n", channel)) return false;
     if (!check(channel < num_channels, "Selected channel %d not available in image\n", channel)) return false;
@@ -594,7 +593,7 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_ppm(ImageType &im, const std::string &filename) {
     im.copy_to_host();
 
-	unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
+    unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
 
     Internal::FileOpener f(filename.c_str(), "wb");
     if (!check(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str())) return false;
