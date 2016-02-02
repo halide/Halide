@@ -7,7 +7,7 @@
 namespace FCam {
 
 // Make a linear luminance -> pixel value lookup table
-extern void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut);
+extern void makeLUT(float contrast, int blackLevel, int whiteLevel, float gamma, unsigned char *lut);
 extern void makeColorMatrix(float colorMatrix[], float colorTemp);
 
 // Some functions used by demosaic
@@ -15,7 +15,7 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
+void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
 
 #ifdef __arm__ // only build on arm
     const int BLOCK_WIDTH  = 40;
@@ -153,8 +153,8 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 #define G_GB_NOISY B_GB
 
     // Prepare the lookup table
-    unsigned char lut[4096];
-    makeLUT(contrast, blackLevel, gamma, lut);
+    unsigned char lut[whiteLevel+1];
+    makeLUT(contrast, blackLevel, whiteLevel, gamma, lut);
 
     // For each block in the input
 #if 0
@@ -528,7 +528,7 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 
                 int i = 2*VEC_WIDTH*4;
 
-                const uint16x4_t bound = vdup_n_u16(1023);
+                const uint16x4_t bound = vdup_n_u16(whiteLevel);
 
                 for (int y = 2; y < VEC_HEIGHT-2; y++) {
 

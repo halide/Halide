@@ -15,11 +15,11 @@
 namespace FCam {
 
 // Make a linear luminance -> pixel value lookup table
-void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut) {
+void makeLUT(float contrast, int blackLevel, int whiteLevel, float gamma, unsigned char *lut) {
     unsigned short minRaw = 0 + blackLevel; //f.platform().minRawValue()+blackLevel;
-    unsigned short maxRaw = 1023; //f.platform().maxRawValue();
+    unsigned short maxRaw = whiteLevel; //f.platform().maxRawValue();
 
-    for (int i = 0; i <= minRaw; i++) {
+    for (int i = 0; i <= whiteLevel; i++) {
         lut[i] = 0;
     }
 
@@ -44,11 +44,6 @@ void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut) {
         if (y < 0) { y = 0; }
         if (y > 255) { y = 255; }
         lut[i] = (unsigned char)y;
-    }
-
-    // add a guard band
-    for (int i = maxRaw+1; i < 1024; i++) {
-        lut[i] = 255;
     }
 }
 
@@ -77,7 +72,7 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
+void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
     const int BLOCK_WIDTH = 40;
     const int BLOCK_HEIGHT = 24;
     const int G = 0, GR = 0, R = 1, B = 2, GB = 3;
@@ -94,14 +89,14 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     outHeight *= BLOCK_HEIGHT;
 
     // Prepare the lookup table
-    unsigned char lut[1024];
-    makeLUT(contrast, blackLevel, gamma, lut);
+    unsigned char lut[whiteLevel+1];
+    makeLUT(contrast, blackLevel, whiteLevel, gamma, lut);
 
     // Grab the color matrix
     float colorMatrix[12];
     makeColorMatrix(colorMatrix, colorTemp);
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
         for (int bx = 0; bx < outWidth; bx += BLOCK_WIDTH) {
             /*
@@ -325,9 +320,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > whiteLevel ? whiteLevel : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > whiteLevel ? whiteLevel : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > whiteLevel ? whiteLevel : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
                     out(bx+(x-2)*2, by+(y-2)*2, 0) = lut[ri];
@@ -351,9 +346,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > whiteLevel ? whiteLevel : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > whiteLevel ? whiteLevel : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > whiteLevel ? whiteLevel : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
                     out(bx+(x-2)*2+1, by+(y-2)*2, 0) = lut[ri];
@@ -377,9 +372,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > whiteLevel ? whiteLevel : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > whiteLevel ? whiteLevel : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > whiteLevel ? whiteLevel : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
                     out(bx+(x-2)*2, by+(y-2)*2+1, 0) = lut[ri];
@@ -403,9 +398,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                         colorMatrix[11];
 
                     // Clamp
-                    ri = r < 0 ? 0 : (r > 1023 ? 1023 : (unsigned short)(r+0.5f));
-                    gi = g < 0 ? 0 : (g > 1023 ? 1023 : (unsigned short)(g+0.5f));
-                    bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
+                    ri = r < 0 ? 0 : (r > whiteLevel ? whiteLevel : (unsigned short)(r+0.5f));
+                    gi = g < 0 ? 0 : (g > whiteLevel ? whiteLevel : (unsigned short)(g+0.5f));
+                    bi = b < 0 ? 0 : (b > whiteLevel ? whiteLevel : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
                     out(bx+(x-2)*2+1, by+(y-2)*2+1, 0) = lut[ri];
