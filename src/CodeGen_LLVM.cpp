@@ -419,11 +419,40 @@ void CodeGen_LLVM::init_context() {
 }
 
 
+void CodeGen_LLVM::init_env_flags() {
+  static bool OneTimeOnlyVasili = false;
+  if (OneTimeOnlyVasili) return;
+  OneTimeOnlyVasili = true;
+
+  if (CodeGen_LLVM::llvm_Hexagon_enabled) {
+      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
+                                  "Halide HVX internal compiler\n");
+      // We need to EnableQuIC for LLVM and Halide (Unrolling).
+      char *s = strdup("HALIDE_LLVM_QUIC=-enable-quic -hexagon-small-data-threshold=0");
+      ::putenv(s);
+      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
+                                  "Halide HVX quic option\n");
+
+      // HVX double mode.
+      if (target.has_feature(Halide::Target::HVX_128)) {
+        char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
+        ::putenv(s);
+        cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",
+                                    "Halide HVX internal options\n");
+        if (target.has_feature(Halide::Target::HVX_64))
+           internal_error << "Both HVX_64 and HVX_128 set at same time\n";
+      }
+  }
+}
+
 void CodeGen_LLVM::init_module() {
     init_context();
 
     // Start with a module containing the initial module for this target.
     module = get_initial_module_for_target(target, context);
+
+    // Add flags for llvm here.
+    init_env_flags();
 }
 
 CodeGen_LLVM::~CodeGen_LLVM() {
@@ -486,25 +515,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Verify the module is ok
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
-
-    cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
-                                "Halide HVX internal compiler\n");
-    // We need to EnableQuIC for LLVM and Halide (Unrolling).
-    if (CodeGen_LLVM::llvm_Hexagon_enabled) {
-      char *s = strdup("HALIDE_LLVM_QUIC=-enable-quic -hexagon-small-data-threshold=0");
-      ::putenv(s);
-      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
-                                  "Halide HVX quic option\n");
-    }
-    // HVX double mode.
-    if (target.has_feature(Halide::Target::HVX_128)) {
-      char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
-      ::putenv(s);
-      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",
-                                  "Halide HVX internal options\n");
-      if (target.has_feature(Halide::Target::HVX_64))
-         internal_error << "Both HVX_64 and HVX_128 set at same time\n";
-    }
 
 //  compile_for_device(stmt, name, args,images_to_embed);
 

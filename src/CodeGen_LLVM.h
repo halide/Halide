@@ -121,6 +121,10 @@ protected:
 
     /** Grab all the context specific internal state. */
     virtual void init_context();
+
+    /** Init env/flags */
+    virtual void init_env_flags();
+
     /** Initialize the CodeGen_LLVM internal state to compile a fresh
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
