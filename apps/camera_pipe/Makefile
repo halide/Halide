@@ -22,17 +22,17 @@ curved.o: camera_pipe
 	${GDB} ./camera_pipe 8 ${SCHEDULE} # 8-bit output,
 
 fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
-	$(TGT_CXX) $(TGT_CXXFLAGS) -c -Wall -fopenmp -O3 $< -o $@
+	$(TGT_CXX) $(TGT_CXXFLAGS) -c -Wall -O3 $< -o $@
 
 fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
-	$(TGT_CXX) $(TGT_CXXFLAGS) -c -Wall -fopenmp -O3 $< -o $@
+	$(TGT_CXX) $(TGT_CXXFLAGS) -c -Wall -O3 $< -o $@
 
 ifdef HEX_TOOLS
 process: process.cpp curved.o fcam/Demosaic.o
 	$(TGT_CXX) $(TGT_CXXFLAGS) -Wall -O3 $^ -o $@ -lhexagon
 else
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl $(PNGFLAGS)
 endif
 
 out.png: process

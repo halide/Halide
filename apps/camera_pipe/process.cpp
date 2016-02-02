@@ -61,6 +61,8 @@ int main(int argc, char **argv) {
     float color_temp = atof(argv[2]);
     float gamma = atof(argv[3]);
     float contrast = atof(argv[4]);
+    int blackLevel = 25;
+    int whiteLevel = 1023;
 
     int timing_iterations = atoi(argv[5]);
     double best;
@@ -81,13 +83,13 @@ int main(int argc, char **argv) {
 
     // Prepare the luminance lookup table
     // compute it once ahead of time outside of main timing loop
-    unsigned char _lut[4096];
+    unsigned char * _lut = new unsigned char[whiteLevel+1];
 
     best = benchmark(timing_iterations, 1, [&]() {
-    FCam::makeLUT(contrast, 25, gamma, _lut);
+    FCam::makeLUT(contrast, blackLevel, whiteLevel, gamma, _lut);
     });
-    Image<unsigned char> lut(4096);
-    for (int i = 0; i < 4096; i++) {
+    Image<unsigned char> lut(whiteLevel+1);
+    for (int i = 0; i < whiteLevel+1; i++) {
         lut(i) = _lut[i];
     }
 
@@ -114,7 +116,7 @@ int main(int argc, char **argv) {
     start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
-        curved(color_temp, gamma, contrast, 25,
+        curved(color_temp, gamma, contrast, blackLevel, whiteLevel,
                input, matrix_3200, matrix_7000,
 #ifdef FCAMLUT
                lut,
@@ -149,7 +151,7 @@ int main(int argc, char **argv) {
     start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, outref, color_temp, contrast, true, 25, gamma
+        FCam::demosaic(input, outref, color_temp, contrast, true, blackLevel, whiteLevel, gamma
 #ifdef FCAMLUT
                         , _lut
 #endif
@@ -170,20 +172,20 @@ int main(int argc, char **argv) {
     fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
 
 #if not defined(__hexagon__)
-    Image<uint8_t> outarm(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
-    best = benchmark(timing_iterations, 1, [&]() {;
-        FCam::demosaic_ARM(input, outarm, color_temp, contrast, true, 25, gamma
+    Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
+    best = benchmark(timing_iterations, 1, [&]() {
+        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, blackLevel, whiteLevel, gamma
 #ifdef FCAMLUT
                         , _lut
 #endif
                         );
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    fprintf(stderr, "outarm: fcam_arm" IMGEXT "\n");
+    fprintf(stderr, "output_asm: fcam_arm" IMGEXT "\n");
 #ifndef NOSAVE
-    save_image(outarm, "fcam_arm" IMGEXT);
+    save_image(output_asm, "fcam_arm" IMGEXT);
 #endif
-    fprintf(stderr, "        %d %d\n", outarm.width(), outarm.height());
+    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
 #endif
 
 #endif // NOFCAM
