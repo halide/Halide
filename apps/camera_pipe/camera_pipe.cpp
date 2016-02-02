@@ -390,10 +390,8 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
     return corrected;
 }
 
-#define MAXRAW  1023
-
 #ifndef FCAMLUT
-Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast, Param<int> blackLevel) {
+Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
     // copied from FCam
     Func curve("curve");
 
@@ -414,7 +412,7 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
     curved(x, y, c) = curve(input(x, y, c));
 #else // NEW_CURVE (from FCam makeLUT)
     Expr minRaw = 0 + blackLevel;
-    Expr maxRaw = MAXRAW;
+    Expr maxRaw = whiteLevel;
 
     Expr invRange = 1.0f/(maxRaw - minRaw);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
@@ -438,18 +436,25 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
 
     Func curved;
     // Use clamp to restrict size of LUT as allocated by compute_root
-    curved(x, y, c) = curve(clamp(input(x, y, c), 0, MAXRAW+1));
+    // - Clamp to variable whiteLevel
+    // curved(x, y, c) = curve(clamp(input(x, y, c), 0, whiteLevel));
+    // - Clamp to a constant upper value
+    curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
 #endif
 
     return curved;
 }
 #else
-Func apply_curve(Func input, Type result_type, ImageParam lut) {
+Func apply_curve(Func input, Type result_type, ImageParam lut, Param<int> whiteLevel) {
     Func curved;
     // Use pre-computed LUT
+    // Assume input stays within LUT bounds
     // curved(x, y, c) = lut(input(x, y, c));
     // Use clamp to make sure input stays within the LUT
-    curved(x, y, c) = lut(clamp(input(x, y, c), 0, MAXRAW+1));
+    // - Clamp to variable whiteLevel
+    // curved(x, y, c) = lut(clamp(input(x, y, c), 0, whiteLevel));
+    // - Clamp to a constant upper value
+    curved(x, y, c) = lut(clamp(input(x, y, c), 0, 1023));
 
     return curved;
 }
@@ -457,7 +462,7 @@ Func apply_curve(Func input, Type result_type, ImageParam lut) {
 
 Func process(Func raw, Type result_type,
              ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp,
-             Param<float> gamma, Param<float> contrast, Param<int> blackLevel
+             Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel
 #ifdef FCAMLUT
              , ImageParam lut
 #endif
@@ -471,9 +476,9 @@ Func process(Func raw, Type result_type,
     Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
 #ifdef FCAMLUT
     // use passed in luminance lut
-    Func curved = apply_curve(corrected, result_type, lut);
+    Func curved = apply_curve(corrected, result_type, lut, whiteLevel);
 #else
-    Func curved = apply_curve(corrected, result_type, gamma, contrast, blackLevel);
+    Func curved = apply_curve(corrected, result_type, gamma, contrast, blackLevel, whiteLevel);
 #endif
 
     processed(tx, ty, c) = curved(tx, ty, c);
@@ -589,6 +594,7 @@ int main(int argc, char **argv) {
     Param<float> gamma("gamma"); //, 1.8f);
     Param<float> contrast("contrast"); //, 10.0f);
     Param<int> blackLevel("blackLevel"); //, 25);
+    Param<int> whiteLevel("whiteLevel"); //, 1023);
 #ifdef FCAMLUT
     ImageParam lut(UInt(8), 1, "lut");
 #endif
@@ -610,7 +616,7 @@ int main(int argc, char **argv) {
 
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000,
-                             color_temp, gamma, contrast, blackLevel
+                             color_temp, gamma, contrast, blackLevel, whiteLevel
 #ifdef FCAMLUT
                              , lut
 #endif
@@ -626,7 +632,7 @@ int main(int argc, char **argv) {
     //string s = processed.serialize();
     //printf("%s\n", s.c_str());
 
-    std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel,
+    std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
                                   input, matrix_3200, matrix_7000
 #ifdef FCAMLUT
                                   , lut
