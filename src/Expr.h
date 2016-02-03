@@ -265,9 +265,20 @@ enum class DeviceAPI {
     GLSL,
     Renderscript,
     OpenGLCompute,
-    Metal,
-    End /// Sentinel
+    Metal
 };
+
+/** An array containing all the device apis. Useful for iterating
+ * through them. */
+const DeviceAPI all_device_apis[] = {DeviceAPI::Parent,
+                                     DeviceAPI::Host,
+                                     DeviceAPI::Default_GPU,
+                                     DeviceAPI::CUDA,
+                                     DeviceAPI::OpenCL,
+                                     DeviceAPI::GLSL,
+                                     DeviceAPI::Renderscript,
+                                     DeviceAPI::OpenGLCompute,
+                                     DeviceAPI::Metal};
 
 namespace Internal {
 

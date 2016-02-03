@@ -160,7 +160,7 @@ string print_loop_nest(const vector<Function> &outputs) {
     // For the purposes of printing the loop nest, we don't want to
     // worry about which features are and aren't enabled.
     Target target = get_host_target();
-    for (int api = (int)(DeviceAPI::Default_GPU)+1; api < (int)(DeviceAPI::End); api++) {
+    for (DeviceAPI api : all_device_apis) {
         target.set_feature(target_feature_for_device_api(DeviceAPI(api)));
     }
 
