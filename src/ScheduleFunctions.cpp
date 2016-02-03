@@ -997,7 +997,8 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
             if (!target.supports_device_api(d.device_api)) {
                 user_error << "Schedule for Func " << f.name()
                            << " requires " << d.device_api
-                           << " but no compatible target feature is enabled.\n";
+                           << " but no compatible target feature is enabled in target "
+                           << target.to_string() << "\n";
             }
         }
     }
