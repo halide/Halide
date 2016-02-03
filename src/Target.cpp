@@ -7,20 +7,26 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#if defined(__powerpc__) && defined(__linux__)
+// This uses elf.h and must be included after "LLVM_Headers.h", which
+// uses llvm/support/Elf.h.
+#include <sys/auxv.h>
+#endif
+
 namespace Halide {
 
 using std::string;
 using std::vector;
 
 namespace {
-#ifndef __arm__
 
 #ifdef _MSC_VER
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
-
 #else
+
+#if defined(__x86_64__) || defined(__i386__)
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
@@ -69,6 +75,24 @@ Target get_host_target() {
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
     #else
+    #if defined(__powerpc__) && defined(__linux__)
+    Target::Arch arch = Target::POWERPC;
+
+    unsigned long hwcap = getauxval(AT_HWCAP);
+    unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
+    bool have_vsx     = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
+    bool arch_2_07    = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+
+    user_assert(have_altivec)
+        << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
+
+    std::vector<Target::Feature> initial_features;
+    if (have_vsx)     initial_features.push_back(Target::VSX);
+    if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
+
+    return Target(os, arch, bits, initial_features);
+#else
 
     Target::Arch arch = Target::X86;
 
@@ -108,6 +132,7 @@ Target get_host_target() {
     }
 
     return Target(os, arch, bits, initial_features);
+#endif
 #endif
 #endif
 }
@@ -160,6 +185,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arm", Target::ARM},
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
+    {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
 };
 
@@ -185,6 +211,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"f16c", Target::F16C},
     {"armv7s", Target::ARMv7s},
     {"no_neon", Target::NoNEON},
+    {"vsx", Target::VSX},
+    {"power_arch_2_07", Target::POWER_ARCH_2_07},
     {"cuda", Target::CUDA},
     {"cuda_capability_30", Target::CUDACapability30},
     {"cuda_capability_32", Target::CUDACapability32},
@@ -383,6 +411,48 @@ std::string Target::to_string() const {
         }
     }
     return result;
+}
+
+/** Was libHalide compiled with support for this target? */
+bool Target::supported() const {
+    bool bad = false;
+#if !(WITH_NATIVE_CLIENT)
+    bad |= (arch == Target::PNaCl || os == Target::NaCl);
+#endif
+#if !(WITH_ARM)
+    bad |= arch == Target::ARM && bits == 32;
+#endif
+#if !(WITH_AARCH64) || WITH_NATIVE_CLIENT // In pnacl llvm, the aarch64 backend is crashy.
+    bad |= arch == Target::ARM && bits == 64;
+#endif
+#if !(WITH_X86)
+    bad |= arch == Target::X86;
+#endif
+#if !(WITH_MIPS)
+    bad |= arch == Target::MIPS;
+#endif
+#if !(WITH_POWERPC)
+    bad |= arch == Target::POWERPC;
+#endif
+#if !(WITH_HEXAGON)
+    bad |= arch == Target::Hexagon;
+#endif
+#if !(WITH_PTX)
+    bad |= has_feature(Target::CUDA);
+#endif
+#if !(WITH_OPENCL)
+    bad |= has_feature(Target::OpenCL);
+#endif
+#if !(WITH_METAL)
+    bad |= has_feature(Target::Metal);
+#endif
+#if !(WITH_RENDERSCRIPT)
+    bad |= has_feature(Target::Renderscript);
+#endif
+#if !(WITH_OPENGL)
+    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#endif
+    return !bad;
 }
 
 namespace Internal{

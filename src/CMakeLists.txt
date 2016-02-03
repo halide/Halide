@@ -218,6 +218,7 @@ set(HEADER_FILES
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_PNaCl.h
+  CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
@@ -360,6 +361,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PNaCl.cpp
+  CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
   CodeGen_Renderscript_Dev.cpp
