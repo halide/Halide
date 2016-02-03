@@ -265,7 +265,8 @@ enum class DeviceAPI {
     GLSL,
     Renderscript,
     OpenGLCompute,
-    Metal
+    Metal,
+    End /// Sentinel
 };
 
 namespace Internal {

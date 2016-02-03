@@ -85,6 +85,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::Metal:
         out << "<Metal>";
         break;
+    case DeviceAPI::End:
+        out << "<Device API Sentinel>";
+        break;
     }
     return out;
 }
