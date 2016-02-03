@@ -2730,7 +2730,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                         call->setDoesNotAccessMemory();
                     }
                     call->setDoesNotThrow();
-                    value = builder->CreateInsertElement(value, call, idx);
+                    if (!call->getType()->isVoidTy()) {
+                        value = builder->CreateInsertElement(value, call, idx);
+                    } // otherwise leave it as undef.
                 }
             }
         }
