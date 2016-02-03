@@ -4,9 +4,15 @@
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
 #include <stddef.h>
 
-// No msvc warnings from llvm headers please
+// No warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(push, 0)
+#endif
+#ifdef __GNUC__
+#pragma GCC system_header
+#endif
+#ifdef __clang__
+#pragma clang system_header
 #endif
 
 #include <llvm/ExecutionEngine/MCJIT.h>
@@ -80,7 +86,7 @@
 #include <llvm/Transforms/NaCl.h>
 #endif
 
-// No msvc warnings from llvm headers please
+// No warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(pop)
 #endif

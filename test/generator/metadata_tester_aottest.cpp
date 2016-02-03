@@ -237,7 +237,9 @@ const halide_scalar_value_t *make_scalar(void *v) {
 void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     // target will vary depending on where we are testing, but probably
     // will contain "x86" or "arm".
-    if (!strstr(md.target, "x86") && !strstr(md.target, "arm")) {
+    if (!strstr(md.target, "x86") &&
+        !strstr(md.target, "powerpc") &&
+        !strstr(md.target, "arm")) {
         fprintf(stderr, "Expected x86 or arm, Actual %s\n", md.target);
         exit(-1);
     }
