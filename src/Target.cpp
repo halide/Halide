@@ -448,7 +448,7 @@ bool Target::supported() const {
 
 bool Target::supports_device_api(DeviceAPI api) const {
     switch (api) {
-    case DeviceAPI::Parent:
+    case DeviceAPI::Parent:      return true;
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature();
     default:                     return has_feature(target_feature_for_device_api(api));
