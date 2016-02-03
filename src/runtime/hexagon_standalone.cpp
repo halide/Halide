@@ -23,13 +23,18 @@ extern "C" {
 
   namespace Halide { namespace Runtime { namespace Internal {
         WEAK void *default_malloc(void *user_context, size_t x) {
-          void *orig = malloc(x+40);
+          // Halide requires halide_malloc to allocate memory that can be
+          // read 8 bytes before the start and 8 bytes beyond the end.
+          // Additionally, we also need to align it to the natural vector
+          // width.
+          void *orig = malloc(x+(128+8));
           if (orig == NULL) {
             // Will result in a failed assertion and a call to halide_error
             return NULL;
           }
-          // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
-          void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
+          // Round up to next multiple of 128. Should add at least 8 bytes so we
+          // can fit the original pointer.
+          void *ptr = (void *)((((size_t)orig + 128) >> 7) << 7);
           ((void **)ptr)[-1] = orig;
           return ptr;
         }

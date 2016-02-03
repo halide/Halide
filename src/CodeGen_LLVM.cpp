@@ -1747,12 +1747,11 @@ void CodeGen_LLVM::visit(const Load *op) {
                     alignment *= 2;
                 }
             }
-            // FIXME: PDB: This should eventually be removed once we have implemented halide_malloc
-            // to return a naturally aligned vector address. i.e 128 byte alignment.
-            if (target.arch == Target::Hexagon)
-              alignment = 1;
             // For dense vector loads wider than the native vector
             // width, bust them up into native vectors
+            debug(4) << "Generating load w/ alignment: " << alignment << "\n";
+            debug(4) << "Type: " << op->type << "\n";
+            debug(4) << "Index: " << op->index << "\n";
             int load_lanes = op->type.lanes();
             int native_lanes = native_bits / op->type.bits();
             vector<Value *> slices;
@@ -3207,12 +3206,12 @@ void CodeGen_LLVM::visit(const Store *op) {
                     alignment *= 2;
                 }
             }
-            // FIXME: PDB: This should eventually be removed once we have implemented halide_malloc
-            // to return a naturally aligned vector address. i.e 128 byte alignment.
-            if (target.arch == Target::Hexagon)
-              alignment = 1;
             // For dense vector stores wider than the native vector
             // width, bust them up into native vectors.
+            debug(4) << "Generating store w/ alignment: " << alignment << "\n";
+            debug(4) << "Type: " << value_type << "\n";
+            debug(4) << "Index: " << op->index << "\n";
+
             int store_lanes = value_type.lanes();
             int native_lanes = native_bits / value_type.bits();
 
@@ -3318,7 +3317,10 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
         builder->SetInsertPoint(entry, entry->getFirstInsertionPt());
     }
     Value *size = ConstantInt::get(i32, n);
-    Value *ptr = builder->CreateAlloca(t, size, name);
+    AllocaInst *alloca = builder->CreateAlloca(t, size, name);
+    if (t->isVectorTy() || n > 1)
+      alloca->setAlignment(native_vector_bits()/8);
+    Value *ptr = alloca;
 
     if (zero_initialize) {
         internal_assert(n == 1) << "Zero initialization for stack arrays not implemented\n";
