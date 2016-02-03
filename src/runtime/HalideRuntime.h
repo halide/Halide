@@ -797,7 +797,13 @@ extern float halide_float16_bits_to_float(uint16_t);
  *  the double that represents the same value */
 extern double halide_float16_bits_to_double(uint16_t);
 
-// TODO: Conversion functions to half
+/** Convert a ``float`` to the bits representing a half precision floating point
+ * number using the round to nearest (ties to even) rounding mode */
+extern uint16_t halide_float_to_float16_bits(float);
+
+/** Convert a ``double`` to the bits representing a half precision floating point
+ * number using the round to nearest (ties to even) rounding mode */
+extern uint16_t halide_double_to_float16_bits(double);
 
 //@}
 
