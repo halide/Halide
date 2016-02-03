@@ -9,6 +9,7 @@
 #include "Target.h"
 #include "Inline.h"
 #include "CodeGen_GPU_Dev.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
@@ -612,12 +613,13 @@ bool function_is_used_in_stmt(Function f, Stmt s) {
 class InjectRealization : public IRMutator {
 public:
     const Function &func;
-    bool is_output, found_store_level, found_compute_level, inject_asserts;
+    bool is_output, found_store_level, found_compute_level;
+    const Target &target;
 
-    InjectRealization(const Function &f, bool o, bool asserts) :
+    InjectRealization(const Function &f, bool o, const Target &t) :
         func(f), is_output(o),
         found_store_level(false), found_compute_level(false),
-        inject_asserts(asserts) {}
+        target(t) {}
 
 private:
 
@@ -645,10 +647,10 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        if (inject_asserts) {
-            return inject_explicit_bounds(s, func);
-        } else {
+        if (target.has_feature(Target::NoAsserts)) {
             return s;
+        } else {
+            return inject_explicit_bounds(s, func);
         }
     }
 
@@ -942,7 +944,7 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
-void validate_schedule(Function f, Stmt s, bool is_output) {
+void validate_schedule(Function f, Stmt s, const Target &target, bool is_output) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -974,6 +976,28 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
                           << " schedule it. If this was intentional, call "
                           << f.name() << ".update(" << i << ") to suppress"
                           << " this warning.\n";
+            }
+        }
+    }
+
+    // If the func is scheduled on the gpu, check that the relevant
+    // api is enabled in the target.
+    vector<Schedule> schedules;
+    schedules.push_back(f.schedule());
+    for (const UpdateDefinition &u : f.updates()) {
+        schedules.push_back(u.schedule);
+    }
+    for (size_t i = 0; i < schedules.size(); i++) {
+        for (const Specialization &s : schedules[i].specializations()) {
+            schedules.push_back(s.schedule);
+        }
+    }
+    for (const Schedule &s : schedules) {
+        for (const Dim &d : s.dims()) {
+            if (!target.supports_device_api(d.device_api)) {
+                user_error << "Schedule for Func " << f.name()
+                           << " requires " << d.device_api
+                           << " but no compatible target feature is enabled.\n";
             }
         }
     }
@@ -1113,8 +1137,8 @@ public:
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
-                        bool &any_memoized,
-                        bool inject_asserts) {
+                        const Target &target,
+                        bool &any_memoized) {
 
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
@@ -1129,7 +1153,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
-        validate_schedule(f, s, is_output);
+        validate_schedule(f, s, target, is_output);
 
         if (f.has_pure_definition() &&
             !f.has_update_definition() &&
@@ -1138,7 +1162,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
-            InjectRealization injector(f, is_output, inject_asserts);
+            InjectRealization injector(f, is_output, target);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
