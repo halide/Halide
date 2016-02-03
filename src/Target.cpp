@@ -196,9 +196,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
-    {"hvx-64", Target::HVX_64},
-    {"hvx-128", Target::HVX_128},
-    {"hvx-v62", Target::HVX_V62},
+    {"hvx_64", Target::HVX_64},
+    {"hvx_128", Target::HVX_128},
+    {"hvx_v62", Target::HVX_V62},
     {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
@@ -385,7 +385,7 @@ std::string Target::to_string() const {
     return result;
 }
 
-namespace Internal{ 
+namespace Internal{
 
 EXPORT void target_test() {
     Target t;
