@@ -257,6 +257,7 @@ SOURCE_FILES = \
   Bounds.cpp \
   BoundsInference.cpp \
   Buffer.cpp \
+  Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
@@ -376,6 +377,7 @@ HEADER_FILES = \
   Bounds.h \
   BoundsInference.h \
   Buffer.h \
+  Closure.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
