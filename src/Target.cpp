@@ -71,7 +71,7 @@ Target get_host_target() {
     Target::Arch arch = Target::MIPS;
     return Target(os, arch, bits);
 #else
-#ifdef __arm__
+#if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
 #else
