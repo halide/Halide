@@ -54,28 +54,28 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 Target get_host_target() {
     Target::OS os = Target::OSUnknown;
-    #ifdef __linux__
+#ifdef __linux__
     os = Target::Linux;
-    #endif
-    #ifdef _MSC_VER
+#endif
+#ifdef _WIN32
     os = Target::Windows;
-    #endif
-    #ifdef __APPLE__
+#endif
+#ifdef __APPLE__
     os = Target::OSX;
-    #endif
+#endif
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
 
-    #if __mips__ || __mips || __MIPS__
+#if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
     return Target(os, arch, bits);
-    #else
-    #ifdef __arm__
+#else
+#if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
-    #else
-    #if defined(__powerpc__) && defined(__linux__)
+#else
+#if defined(__powerpc__) && defined(__linux__)
     Target::Arch arch = Target::POWERPC;
 
     unsigned long hwcap = getauxval(AT_HWCAP);
@@ -93,7 +93,6 @@ Target get_host_target() {
 
     return Target(os, arch, bits, initial_features);
 #else
-
     Target::Arch arch = Target::X86;
 
     int info[4];
@@ -130,6 +129,11 @@ Target get_host_target() {
             initial_features.push_back(Target::AVX2);
         }
     }
+#ifdef _WIN32
+#ifndef _MSC_VER
+    initial_features.push_back(Target::MinGW);
+#endif
+#endif
 
     return Target(os, arch, bits, initial_features);
 #endif
@@ -139,7 +143,7 @@ Target get_host_target() {
 
 namespace {
 string get_env(const char *name) {
-#ifdef _WIN32
+#ifdef _MSC_VER
     char buf[128];
     size_t read = 0;
     getenv_s(&read, buf, name);
@@ -226,6 +230,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
+    {"mingw", Target::MinGW},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -269,11 +274,13 @@ Target parse_target_string(const std::string &target) {
     Target host = get_host_target();
 
     if (target.empty()) {
-        // If nothing is specified, use the host target.
+        // If nothing is specified, use the full host target.
         return host;
     }
 
-    // Default to the host OS and architecture.
+    // Default to the host OS and architecture in case of partially
+    // specified targets (e.g. x86-64-cuda doesn't specify the OS, so
+    // use the host OS).
     Target t;
     t.os = host.os;
     t.arch = host.arch;
@@ -446,7 +453,7 @@ bool Target::supported() const {
     return !bad;
 }
 
-namespace Internal{
+namespace Internal {
 
 EXPORT void target_test() {
     Target t;

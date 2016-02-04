@@ -5,7 +5,7 @@ using namespace Halide;
 
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
