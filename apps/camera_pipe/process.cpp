@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 48)/32)*32, 3);
     // The ref output will have a width that is a multiple of 40, and a height
     // which is a multiple of 24.
-    Image<uint8_t> outref(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
+    Image<uint8_t> output_c(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
 
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
@@ -61,10 +61,10 @@ int main(int argc, char **argv) {
     float color_temp = atof(argv[2]);
     float gamma = atof(argv[3]);
     float contrast = atof(argv[4]);
+    int timing_iterations = atoi(argv[5]);
     int blackLevel = 25;
     int whiteLevel = 1023;
 
-    int timing_iterations = atoi(argv[5]);
     double best;
 #if defined(__hexagon__)
     long long start_time = 0;
@@ -76,23 +76,16 @@ int main(int argc, char **argv) {
 #endif
 
 #ifdef FCAMLUT
+    // Prepare the luminance lookup table
+    // compute it once ahead of time outside of main timing loop
+    unsigned char * _lut = new unsigned char[whiteLevel+1];
 #ifdef PCYCLES
     RESET_PMU();
     start_time = READ_PCYCLES();
 #endif
-
-    // Prepare the luminance lookup table
-    // compute it once ahead of time outside of main timing loop
-    unsigned char * _lut = new unsigned char[whiteLevel+1];
-
     best = benchmark(timing_iterations, 1, [&]() {
     FCam::makeLUT(contrast, blackLevel, whiteLevel, gamma, _lut);
     });
-    Image<unsigned char> lut(whiteLevel+1);
-    for (int i = 0; i < whiteLevel+1; i++) {
-        lut(i) = _lut[i];
-    }
-
 #ifdef PCYCLES
     total_cycles = READ_PCYCLES() - start_time;
     DUMP_PMU();
@@ -101,10 +94,13 @@ int main(int argc, char **argv) {
 #else
     fprintf(stderr, "makeLUT:\t%gus\n", best * 1e6);
 #endif
+    Image<unsigned char> lut(whiteLevel+1);
+    for (int i = 0; i < whiteLevel+1; i++) {
+        lut(i) = _lut[i];
+    }
 #ifdef DBGLUT
-    for (int i = 0; i < 4096; i++) {
-        if (i%16 == 0)
-            fprintf(stderr, "\n%4d: ", i);
+    for (int i = 0; i < whiteLevel+1; i++) {
+        if (i%16 == 0) fprintf(stderr, "\n%4d: ", i);
         fprintf(stderr, "%4d ", _lut[i]);
     }
     fprintf(stderr, "\n");
@@ -145,13 +141,12 @@ int main(int argc, char **argv) {
 #endif
 
 #ifndef NOFCAM
-
 #ifdef PCYCLES
     RESET_PMU();
     start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, outref, color_temp, contrast, true, blackLevel, whiteLevel, gamma
+        FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma
 #ifdef FCAMLUT
                         , _lut
 #endif
@@ -161,18 +156,18 @@ int main(int argc, char **argv) {
     total_cycles = READ_PCYCLES() - start_time;
     DUMP_PMU();
     fprintf(stderr, "C++:\t%0.4f cycles/pixel\n",
-            (float)total_cycles/outref.height()/outref.width()/timing_iterations);
+            (float)total_cycles/output_c.height()/output_c.width()/timing_iterations);
 #else
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
 #endif
-    fprintf(stderr, "outref: fcam_c" IMGEXT "\n");
+    fprintf(stderr, "output_c: fcam_c" IMGEXT "\n");
 #ifndef NOSAVE
-    save_image(outref, "fcam_c" IMGEXT);
+    save_image(output_c, "fcam_c" IMGEXT);
 #endif
-    fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
+    fprintf(stderr, "        %d %d\n", output_c.width(), output_c.height());
 
 #if not defined(__hexagon__)
-    Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
+    Image<uint8_t> output_asm(output_c.width(), output_c.height(), output_c.channels());
     best = benchmark(timing_iterations, 1, [&]() {
         FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, blackLevel, whiteLevel, gamma
 #ifdef FCAMLUT

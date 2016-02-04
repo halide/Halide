@@ -92,9 +92,6 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     outHeight /= BLOCK_HEIGHT;
     outHeight *= BLOCK_HEIGHT;
 
-    // int WIDTH = outWidth, HEIGHT = outHeight;
-    // fprintf(stderr, "FCam outWidth=%d, outHeight=%d\n", outWidth, outHeight);
-
 #ifndef FCAMLUT
     // Prepare the lookup table
     unsigned char lut[whiteLevel+1];
