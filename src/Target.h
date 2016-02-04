@@ -78,6 +78,8 @@ struct Target {
 
         Metal, ///< Enable the (Apple) Metal runtime.
 
+        MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
+
         FeatureEnd
     };
 

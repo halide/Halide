@@ -3,14 +3,14 @@ include ../support/Makefile.inc
 all: filter
 
 bilateral_grid: bilateral_grid.cpp
-	$(CXX) $(CXXFLAGS) bilateral_grid.cpp -g $(LIB_HALIDE) -o bilateral_grid -lpthread -ldl -lz $(LDFLAGS) \
+	$(CXX) $(CXXFLAGS) bilateral_grid.cpp -g $(LIB_HALIDE) -o bilateral_grid -lz $(LDFLAGS) \
 	$(LLVM_SHARED_LIBS)
 
 bilateral_grid.o: bilateral_grid
 	./bilateral_grid 8
 
 filter: bilateral_grid.o filter.cpp
-	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpthread -ldl -o filter  $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -o filter  $(PNGFLAGS) $(LDFLAGS)
 
 bilateral_grid.mp4: bilateral_grid.cpp viz.sh
 	bash viz.sh
