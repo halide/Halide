@@ -886,7 +886,7 @@ $(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_rel
 
 # By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
 $(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h .$(SHARED_EXT),$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.$(SHARED_EXT),$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
 
 # nested externs doesn't actually contain a generator named
 # "nested_externs", and has no internal tests in any case.
