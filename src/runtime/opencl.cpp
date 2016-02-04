@@ -344,8 +344,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         device = 0;
     } else if (device == -1) {
         debug(user_context) << "    Multiple CL devices detected. Selecting the one with the most cores.\n";
-        int best_core_count = 0;
-        for (int i = 0; i < deviceCount; i++) {
+        cl_uint best_core_count = 0;
+        for (cl_uint i = 0; i < deviceCount; i++) {
             cl_device_id dev = devices[i];
             cl_uint core_count = 0;
             err = clGetDeviceInfo(dev, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), &core_count, NULL);

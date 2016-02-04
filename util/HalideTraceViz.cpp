@@ -254,17 +254,20 @@ struct FuncInfo {
                 }
                 fprintf(stderr, "[%d, %d)", min_coord[i], max_coord[i]);
             }
+            // TODO: Convert this file to using std::cerr so I don't
+            // have to struggle with cross-platform printf format
+            // specifiers. (stores and loads below really shouldn't be a double)
             fprintf(stderr,
                     "\n"
                     " range of values: [%f, %f]\n"
                     " number of realizations: %d\n"
                     " number of productions: %d\n"
-                    " number of loads: %llu\n"
-                    " number of stores: %llu\n",
+                    " number of loads: %g\n"
+                    " number of stores: %g\n",
                     min_value, max_value,
                     num_realizations, num_productions,
-                    (long long unsigned)loads,
-                    (long long unsigned)stores);
+                    (double)loads,
+                    (double)stores);
         }
 
     } stats;
