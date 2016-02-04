@@ -11,8 +11,6 @@
 // we need our own portable once implementation. For now, threadpool
 // only works on platforms where PTHREAD_MUTEX_INITIALIZER is zero.
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
 extern "C" {
 
 extern long sysconf(int);
@@ -53,7 +51,7 @@ extern int atoi(const char *);
 
 extern int halide_host_cpu_count();
 
-WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
                         uint8_t *closure);
 
 } // extern "C"
@@ -114,7 +112,7 @@ struct halide_work_queue_t {
 };
 WEAK halide_work_queue_t halide_work_queue;
 
-WEAK int default_do_task(void *user_context, halide_task f, int idx,
+WEAK int default_do_task(void *user_context, halide_task_t f, int idx,
                         uint8_t *closure) {
     return f(user_context, idx, closure);
 }
@@ -192,7 +190,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
     return NULL;
 }
 
-WEAK int default_do_par_for(void *user_context, halide_task f,
+WEAK int default_do_par_for(void *user_context, halide_task_t f,
                             int min, int size, uint8_t *closure) {
     // Grab the lock. If it hasn't been initialized yet, then the
     // field will be zero-initialized because it's a static
@@ -281,8 +279,8 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
     return job.exit_status;
 }
 
-WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *) = default_do_task;
-WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *) = default_do_par_for;
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task_t, int, uint8_t *) = default_do_task;
+WEAK int (*halide_custom_do_par_for)(void *, halide_task_t, int, int, uint8_t *) = default_do_par_for;
 
 struct spawn_thread_task {
     void (*f)(void *);
@@ -380,22 +378,22 @@ WEAK void halide_set_num_threads(int n) {
     halide_num_threads = n;
 }
 
-WEAK int (*halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)))
-          (void *, halide_task, int, uint8_t *) {
-    int (*result)(void *, halide_task, int, uint8_t *) = halide_custom_do_task;
+WEAK int (*halide_set_custom_do_task(int (*f)(void *, halide_task_t, int, uint8_t *)))
+          (void *, halide_task_t, int, uint8_t *) {
+    int (*result)(void *, halide_task_t, int, uint8_t *) = halide_custom_do_task;
     halide_custom_do_task = f;
     return result;
 }
 
 
-WEAK int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)))
-          (void *, halide_task, int, int, uint8_t *) {
-    int (*result)(void *, halide_task, int, int, uint8_t *) = halide_custom_do_par_for;
+WEAK int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task_t, int, int, uint8_t *)))
+          (void *, halide_task_t, int, int, uint8_t *) {
+    int (*result)(void *, halide_task_t, int, int, uint8_t *) = halide_custom_do_par_for;
     halide_custom_do_par_for = f;
     return result;
 }
 
-WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
                         uint8_t *closure) {
     return (*halide_custom_do_task)(user_context, f, idx, closure);
 }
