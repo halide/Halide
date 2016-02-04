@@ -1163,8 +1163,8 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(INCL
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README.md $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image.h halide/tools/halide_image_io.h
-	rm halide
+	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/lib halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image.h halide/tools/halide_image_io.h
+	rm -rf halide
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz
