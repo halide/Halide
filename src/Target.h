@@ -78,7 +78,7 @@ struct Target {
         NoRuntime, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
         Metal, ///< Enable the (Apple) Metal runtime.
-
+        MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
         FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     };
 

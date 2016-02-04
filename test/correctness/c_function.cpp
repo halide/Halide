@@ -7,7 +7,7 @@ using namespace Halide;
 // This is not supported by the C backend.
 
 // On windows, you need to use declspec to do the same.
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
