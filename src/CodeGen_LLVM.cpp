@@ -2867,9 +2867,11 @@ void CodeGen_LLVM::visit(const Call *op) {
                         call->setDoesNotAccessMemory();
                     }
                     call->setDoesNotThrow();
-                    value = builder->CreateInsertElement(value, call, idx);
-                    debug(2) << "Generate InsertElement call\n";
-                    if (debug::debug_level >= 2) value -> dump();
+                    if (!call->getType()->isVoidTy()) {
+                        value = builder->CreateInsertElement(value, call, idx);
+                        debug(2) << "Generate InsertElement call\n";
+                        if (debug::debug_level >= 2) value -> dump();
+                    } // otherwise leave it as undef.
                 }
             }
         }
