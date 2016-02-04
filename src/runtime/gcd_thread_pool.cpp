@@ -2,8 +2,6 @@
 
 #include "HalideRuntime.h"
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
 extern "C" {
 
 typedef long dispatch_once_t;
@@ -29,7 +27,7 @@ extern long dispatch_semaphore_signal(dispatch_semaphore_t dsema);
 extern void dispatch_release(void *object);
 
     
-WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
                         uint8_t *closure);
 
 }
@@ -71,7 +69,7 @@ WEAK void halide_do_gcd_task(void *job, size_t idx) {
                                     j->closure);
 }
 
-WEAK int default_do_par_for(void *user_context, halide_task f,
+WEAK int default_do_par_for(void *user_context, halide_task_t f,
                             int min, int size, uint8_t *closure) {
     halide_gcd_job job;
     job.f = f;
@@ -84,8 +82,8 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
     return job.exit_status;
 }
 
-WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *) = default_do_task;
-WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *) = default_do_par_for;
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task_t, int, uint8_t *) = default_do_task;
+WEAK int (*halide_custom_do_par_for)(void *, halide_task_t, int, int, uint8_t *) = default_do_par_for;
 
 }}} // namespace Halide::Runtime::Internal
 
@@ -116,21 +114,21 @@ WEAK void halide_shutdown_thread_pool() {
 WEAK void halide_set_num_threads(int) {
 }
 
-WEAK int (*halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)))
-          (void *, halide_task, int, uint8_t *) {
-    int (*result)(void *, halide_task, int, uint8_t *) = halide_custom_do_task;
+WEAK int (*halide_set_custom_do_task(int (*f)(void *, halide_task_t, int, uint8_t *)))
+          (void *, halide_task_t, int, uint8_t *) {
+    int (*result)(void *, halide_task_t, int, uint8_t *) = halide_custom_do_task;
     halide_custom_do_task = f;
     return result;
 }
 
-WEAK int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)))
-          (void *, halide_task, int, int, uint8_t *) {
-    int (*result)(void *, halide_task, int, int, uint8_t *) = halide_custom_do_par_for;
+WEAK int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task_t, int, int, uint8_t *)))
+          (void *, halide_task_t, int, int, uint8_t *) {
+    int (*result)(void *, halide_task_t, int, int, uint8_t *) = halide_custom_do_par_for;
     halide_custom_do_par_for = f;
     return result;
 }
 
-WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
                         uint8_t *closure) {
     return (*halide_custom_do_task)(user_context, f, idx, closure);
 }

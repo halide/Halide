@@ -6,7 +6,7 @@
 using namespace Halide;
 
 // 32-bit windows defines powf as a macro, which won't work for us.
-#ifdef WIN32
+#ifdef _WIN32
 extern "C" __declspec(dllexport) float pow_ref(float x, float y) {
     return pow(x, y);
 }

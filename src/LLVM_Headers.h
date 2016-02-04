@@ -4,8 +4,8 @@
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
 #include <stddef.h>
 
-// No warnings from llvm headers please
-#ifdef _WIN32
+// No msvc warnings from llvm headers please
+#ifdef _MSC_VER
 #pragma warning(push, 0)
 #endif
 #ifdef __GNUC__
@@ -86,8 +86,8 @@
 #include <llvm/Transforms/NaCl.h>
 #endif
 
-// No warnings from llvm headers please
-#ifdef _WIN32
+// No msvc warnings from llvm headers please
+#ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 

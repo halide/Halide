@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _MSC_VER
+#ifndef M_PI
 #define M_PI 3.14159265358979310000
 #endif
 
