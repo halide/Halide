@@ -99,12 +99,13 @@ int main(int argc, char **argv) {
 #endif
 #endif
 
+    Image<uint8_t> output_c(output.width(), output.height(), output.channels());
 #ifdef PCYCLES
     RESET_PMU();
     start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, outref, color_temp, contrast, true, 25, gamma);
+        FCam::demosaic(input, output_c, color_temp, contrast, true, 25, 1023, gamma);
     });
 #ifdef PCYCLES
     total_cycles = READ_PCYCLES() - start_time;
@@ -114,18 +115,19 @@ int main(int argc, char **argv) {
 #else
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
 #endif
+
     fprintf(stderr, "outref: fcam_c" IMGEXT "\n");
     save_image(outref, "fcam_c" IMGEXT);
     fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
 
 #if not defined(__hexagon__)
-    Image<uint8_t> outarm(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
+    Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
     best = benchmark(timing_iterations, 1, [&]() {;
         FCam::demosaic_ARM(input, outarm, color_temp, contrast, true, 25, gamma);
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
     fprintf(stderr, "outarm: fcam_arm" IMGEXT "\n");
-    save_image(outarm, "fcam_arm" IMGEXT);
+    save_image(output_asm, "fcam_arm" IMGEXT);
     fprintf(stderr, "        %d %d\n", outarm.width(), outarm.height());
 #endif
 
