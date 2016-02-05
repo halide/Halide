@@ -11,8 +11,10 @@
 #include "LLVM_Output.h"
 
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #define NOMINMAX
+#endif
+#ifdef _WIN32
 #include <windows.h>
 static bool have_symbol(const char *s) {
     return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
@@ -663,7 +665,8 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         // Enumerate the functions.
         for (auto &f : *module) {
-            if (f.hasWeakLinkage() && starts_with(f.getName(), "halide_")) {
+            // LLVM_Runtime_Linker has marked everything that should be exported as weak
+            if (f.hasWeakLinkage()) {
                 halide_exports_unique.insert(f.getName());
             }
         }
