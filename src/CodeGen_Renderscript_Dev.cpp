@@ -98,13 +98,14 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types_1(args.size());
-    llvm::Type *argument_type = NULL;
+    llvm::Type *output_type = NULL;
     for (size_t i = 0; i < args.size(); i++) {
         string arg_name = args[i].name;
         debug(1) << "CodeGen_Renderscript_Dev arg[" << i << "].name=" << arg_name << "\n";
         if (args[i].is_buffer && args[i].write) {
             // Remember actual type of buffer argument - will use it for kernel output buffer type.
-            argument_type = llvm_type_of(args[i].type);
+            internal_assert(output_type == NULL) << "Already found an output buffer for kernel.\n";
+            output_type = llvm_type_of(args[i].type);
             debug(1) << "  this is our output buffer type\n";
         }
 
@@ -157,7 +158,8 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
     // Make our function with arguments for kernel defined per Renderscript
     // convention: (in_type in, i32 x, i32 y)
     vector<llvm::Type *> arg_types;
-    arg_types.push_back(argument_type);  // "in"
+    internal_assert(output_type != NULL) << "Did not find an output buffer for kernel.\n";
+    arg_types.push_back(output_type);  // "in"
     for (int i = 0; i < 4; i++) {
         debug(2) << "  adding argument type at " << i << ": "
                  << bounds_names.names[i] << "\n";
