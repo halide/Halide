@@ -11,7 +11,7 @@ add_executable(opengl_test opengl_test.cpp ${hb_header} ${hycc_header})
 target_link_libraries(opengl_test PRIVATE Halide ${OPENGL_LIBRARIES}
                     "${hb_obj}" "${hycc_obj}")
 if (NOT WIN32)
-target_link_libraries(opengl_test PRIVATE pthread dl)
+target_link_libraries(opengl_test PRIVATE pthread dl X11 GL)
 endif()
 target_include_directories(opengl_test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
