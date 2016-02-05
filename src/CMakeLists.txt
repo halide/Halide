@@ -37,6 +37,7 @@ set(RUNTIME_CPP
   linux_opengl_context
   matlab
   metadata
+  mingw_math
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
@@ -451,6 +452,14 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${INITIAL_MODULES}
 )
 
+   if (WIN32)
+     if (MSVC)
+	   # empty
+     else()
+       set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
+     endif()
+   endif()
+   
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support
 # See the output of ``llvm-config --components`` for a list of possible components
@@ -537,7 +546,7 @@ endif()
 
 # Get the LLVM libraries we need
 set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
-if(WIN32)
+if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
   execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
@@ -552,7 +561,7 @@ endif()
 # PRIVATE scope is the correct choice here.
 target_link_libraries(Halide PRIVATE ${LIBS})
 
-if (NOT WIN32)
+if (NOT MSVC)
   if (${LLVM_VERSION} GREATER 34)
     execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   else()

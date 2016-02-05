@@ -2888,9 +2888,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     }
                     call->setDoesNotThrow();
                     if (!call->getType()->isVoidTy()) {
-                        debug(2) << "Generate InsertElement call\n";
+                       debug(2) << "Generate InsertElement call\n";
                        if (debug::debug_level >= 2) value -> dump();
-                        value = builder->CreateInsertElement(value, call, idx);
+                         value = builder->CreateInsertElement(value, call, idx);
                     } // otherwise leave it as undef.
                 }
             }

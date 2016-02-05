@@ -1,5 +1,13 @@
 HALIDE_BIN_PATH ?= ../..
 HALIDE_SRC_PATH ?= ../..
+LDFLAGS ?= 
+
+ifeq ($(OS), Windows_NT)
+# Flags for mingw environment
+LDFLAGS += -lole32 -luuid -Wl,--stack,8388608
+else
+LDFLAGS += -ldl -lpthread -lz
+endif
 
 CXX ?= g++
 GXX ?= g++
@@ -29,7 +37,7 @@ endif
 
 LIB_HALIDE = $(HALIDE_BIN_PATH)/bin/libHalide.a
 
-GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/bin/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
+GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -69,3 +77,5 @@ endif
 ifneq (, $(findstring opengl,$(HL_TARGET)))
   OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
+
+

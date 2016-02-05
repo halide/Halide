@@ -1,3 +1,12 @@
+// waitpid, etc doesn't exist on windows.
+#ifdef _WIN32
+#include <stdio.h>
+int main(int argc, char **argv) {
+    printf("Skipping test on windows\n");
+    return 0;
+}
+#else
+
 #include <fstream>
 
 #include "Halide.h"
@@ -1473,3 +1482,5 @@ int main(int argc, char **argv) {
 
     return failed ? -1 : 0;
 }
+
+#endif
