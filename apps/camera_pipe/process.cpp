@@ -61,27 +61,68 @@ int main(int argc, char **argv) {
     float color_temp = atof(argv[2]);
     float gamma = atof(argv[3]);
     float contrast = atof(argv[4]);
+
     int timing_iterations = atoi(argv[5]);
-
     double best;
-
 #if defined(__hexagon__)
+    long long start_time = 0;
+    long long total_cycles = 0;
     SIM_ACQUIRE_HVX;
 #if LOG2VLEN == 7
     SIM_SET_HVX_DOUBLE_MODE;
 #endif
 #endif
 
+#ifdef FCAMLUT
 #ifdef PCYCLES
     RESET_PMU();
-    long long start_time = READ_PCYCLES();
+    start_time = READ_PCYCLES();
+#endif
+
+    // Prepare the luminance lookup table
+    // compute it once ahead of time outside of main timing loop
+    unsigned char _lut[4096];
+
+    best = benchmark(timing_iterations, 1, [&]() {
+    FCam::makeLUT(contrast, 25, gamma, _lut);
+    });
+    Image<unsigned char> lut(4096);
+    for (int i = 0; i < 4096; i++) {
+        lut(i) = _lut[i];
+    }
+
+#ifdef PCYCLES
+    total_cycles = READ_PCYCLES() - start_time;
+    DUMP_PMU();
+    fprintf(stderr, "makeLUT:\t%0.4f cycles/pixel\n",
+            (float)total_cycles/output.height()/output.width()/timing_iterations);
+#else
+    fprintf(stderr, "makeLUT:\t%gus\n", best * 1e6);
+#endif
+#ifdef DBGLUT
+    for (int i = 0; i < 4096; i++) {
+        if (i%16 == 0)
+            fprintf(stderr, "\n%4d: ", i);
+        fprintf(stderr, "%4d ", _lut[i]);
+    }
+    fprintf(stderr, "\n");
+#endif
+#endif // FCAMLUT
+
+#ifdef PCYCLES
+    RESET_PMU();
+    start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
-        curved(color_temp, gamma, contrast,
-               input, matrix_3200, matrix_7000, output);
+        curved(color_temp, gamma, contrast, 25,
+               input, matrix_3200, matrix_7000,
+#ifdef FCAMLUT
+               lut,
+#endif
+               output);
     });
 #ifdef PCYCLES
-    long long total_cycles = READ_PCYCLES() - start_time;
+    total_cycles = READ_PCYCLES() - start_time;
     DUMP_PMU();
     fprintf(stderr, "Halide:\t%0.4f cycles/pixel\n",
             (float)total_cycles/output.height()/output.width()/timing_iterations);
@@ -89,7 +130,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
 #endif
     fprintf(stderr, "output: %s\n", argv[6]);
+#ifndef NOSAVE
     save_image(output, argv[6]);
+#endif
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
 #if defined(__hexagon__)
@@ -99,13 +142,18 @@ int main(int argc, char **argv) {
 #endif
 #endif
 
-    Image<uint8_t> output_c(output.width(), output.height(), output.channels());
+#ifndef NOFCAM
+
 #ifdef PCYCLES
     RESET_PMU();
     start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output_c, color_temp, contrast, true, 25, 1023, gamma);
+        FCam::demosaic(input, outref, color_temp, contrast, true, 25, 1023, gamma
+#ifdef FCAMLUT
+                        , _lut
+#endif
+                        );
     });
 #ifdef PCYCLES
     total_cycles = READ_PCYCLES() - start_time;
@@ -117,19 +165,29 @@ int main(int argc, char **argv) {
 #endif
 
     fprintf(stderr, "outref: fcam_c" IMGEXT "\n");
+#ifndef NOSAVE
     save_image(outref, "fcam_c" IMGEXT);
+#endif
     fprintf(stderr, "        %d %d\n", outref.width(), outref.height());
 
 #if not defined(__hexagon__)
     Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
     best = benchmark(timing_iterations, 1, [&]() {;
-        FCam::demosaic_ARM(input, outarm, color_temp, contrast, true, 25, gamma);
+        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, 25, 1023 gamma
+#ifdef FCAMLUT
+                        , _lut
+#endif
+                        );
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    fprintf(stderr, "outarm: fcam_arm" IMGEXT "\n");
+    fprintf(stderr, "output_asm: fcam_arm" IMGEXT "\n");
+#ifndef NOSAVE
     save_image(output_asm, "fcam_arm" IMGEXT);
-    fprintf(stderr, "        %d %d\n", outarm.width(), outarm.height());
 #endif
+    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
+#endif
+
+#endif // NOFCAM
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms
