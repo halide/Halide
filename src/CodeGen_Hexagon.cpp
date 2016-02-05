@@ -110,6 +110,10 @@ Expr vavg(Expr A, Expr B) {
   Type wider = A.type().with_bits(A.type().bits() * 2);
   return cast(A.type(), (cast(wider, A) + cast(wider, B))/2);
 }
+Expr vnavg(Expr A, Expr B) {
+  Type wider = A.type().with_bits(A.type().bits() * 2);
+  return cast(A.type(), (cast(wider, A) - cast(wider, B))/2);
+}
 Expr sat_sub(Expr A, Expr B) {
   Type wider = Int(A.type().bits() * 2, A.type().lanes());
   Expr max_v = A.type().max();
@@ -1749,6 +1753,19 @@ bool CodeGen_Hexagon::possiblyCodeGenVavg(const Cast *op) {
   avgs.push_back(Pattern(vavg_round(WPICK(wild_i32x32, wild_i32x16),
                                     WPICK(wild_i32x32, wild_i32x16)),
                          IPICK(Intrinsic::hexagon_V6_vavgwrnd)));
+
+  avgs.push_back(Pattern(vnavg(WPICK(wild_u8x128, wild_u8x64),
+                              WPICK(wild_u8x128, wild_u8x64)),
+                         IPICK(Intrinsic::hexagon_V6_vnavgub)));
+  avgs.push_back(Pattern(vnavg(WPICK(wild_u16x64, wild_u16x32),
+                              WPICK(wild_u16x64, wild_u16x32)),
+                         IPICK(Intrinsic::hexagon_V6_vnavgh)));
+  avgs.push_back(Pattern(vnavg(WPICK(wild_i16x64, wild_i16x32),
+                              WPICK(wild_i16x64, wild_i16x32)),
+                         IPICK(Intrinsic::hexagon_V6_vnavgh)));
+  avgs.push_back(Pattern(vnavg(WPICK(wild_i32x32, wild_i32x16),
+                              WPICK(wild_i32x32, wild_i32x16)),
+                         IPICK(Intrinsic::hexagon_V6_vnavgw)));
   matches.clear();
   for (size_t I = 0; I < avgs.size(); ++I) {
     const Pattern &P = avgs[I];

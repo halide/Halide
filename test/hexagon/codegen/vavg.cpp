@@ -15,6 +15,11 @@ Expr avg(Expr a, Expr b) {
     return cast(a.type(), (cast(wider, a) + b + 1)/2);
 }
 
+Expr navg(Expr a, Expr b) {
+    Type wider = a.type().with_bits(a.type().bits() * 2);
+    return cast(a.type(), ((cast(wider, a) - cast(wider, b)))/2);
+}
+
 void testVAVG_u8(Target& target) {
   Halide::Var x("x"), y("y");
   std::vector<Argument> args(2);
@@ -39,6 +44,19 @@ void testVAVG_u16(Target& target) {
   args[1] = i2;
   COMPILE(vavg_u16, "vavg_u16");
 }
+// CHECK: vnavg(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
+void testVNAVG_u16(Target& target) {
+  Halide::Var x("x"), y("y");
+  std::vector<Argument> args(2);
+  Halide::Func vnavg_u16;
+  ImageParam i1 (type_of<uint16_t>(), 1);
+  ImageParam i2 (type_of<uint16_t>(), 1);
+  vnavg_u16(x) = navg(i1(x), i2(x));
+  vnavg_u16.vectorize(x, 32);
+  args[0]  = i1;
+  args[1] = i2;
+  COMPILE(vnavg_u16, "vnavg_u16");
+}
 
 int main(int argc, char **argv) {
   Target target;
@@ -46,6 +64,7 @@ int main(int argc, char **argv) {
   commonTestSetup(target);
   testVAVG_u8(target);
   testVAVG_u16(target);
+  testVNAVG_u16(target);
   printf ("Done\n");
   return 0;
 }
