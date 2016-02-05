@@ -74,7 +74,7 @@ CodeGen_Renderscript_Dev::~CodeGen_Renderscript_Dev() {
 }
 
 void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
-                                const std::vector<GPU_Argument> &args) {
+                                const std::vector<DeviceArgument> &args) {
     internal_assert(module != NULL);
 
     // Use [kernel_name] as the function name.

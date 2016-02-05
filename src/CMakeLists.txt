@@ -229,6 +229,7 @@ set(HEADER_FILES
   DebugToFile.h
   Deinterleave.h
   Derivative.h
+  DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
   Error.h
@@ -374,6 +375,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DebugToFile.cpp
   Deinterleave.cpp
   Derivative.cpp
+  DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
   Error.cpp
@@ -461,7 +463,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
        set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
      endif()
    endif()
-   
+
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support
 # See the output of ``llvm-config --components`` for a list of possible components
