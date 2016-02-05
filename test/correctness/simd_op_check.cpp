@@ -1342,8 +1342,13 @@ void check_hvx_all() {
 
     // TODO: Verify that the intermediate result of vavg does not overflow.
     check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
+    check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
     check("vavg(v*.uh,v*.uh)", hvx_width/2, u16((u32(u16_1) + u32(u16_2))/2));
+    check("vavg(v*.uh,v*.uh):rnd", hvx_width/2, u16((u32(u16_1) + u32(u16_2) + 1)/2));
     check("vavg(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) + i32(i16_2))/2));
+    check("vavg(v*.h,v*.h):rnd", hvx_width/2, i16((i32(i16_1) + i32(i16_2) + 1)/2));
+    check("vavg(v*.w,v*.w)", hvx_width/4, i32((i64(i32_1) + i64(i32_2))/2));
+    check("vavg(v*.w,v*.w):rnd", hvx_width/4, i32((i64(i32_1) + i64(i32_2) + 1)/2));
     check("vnavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) - u16(u8_2))/2));
     check("vnavg(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) - i32(i16_2))/2));
 
