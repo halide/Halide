@@ -15,30 +15,35 @@ static bool called_trace = false;
 static bool called_malloc = false;
 static bool called_free = false;
 
-extern "C" void halide_error(void *context, const char *msg) {
+void my_halide_error(void *context, const char *msg) {
     called_error = true;
     assert(context == context_pointer);
 }
 
-extern "C" int32_t halide_trace(void *context, const halide_trace_event *e) {
+int32_t my_halide_trace(void *context, const halide_trace_event *e) {
     called_trace = true;
     assert(context == context_pointer);
     return 0;
 }
 
-extern "C" void *halide_malloc(void *context, size_t sz) {
+void *my_halide_malloc(void *context, size_t sz) {
     assert(context == context_pointer);
     called_malloc = true;
     return malloc(sz);
 }
 
-extern "C" void halide_free(void *context, void *ptr) {
+void my_halide_free(void *context, void *ptr) {
     assert(context == context_pointer);
     called_free = true;
     free(ptr);
 }
 
 int main(int argc, char **argv) {
+    halide_set_error_handler(&my_halide_error);
+    halide_set_custom_malloc(&my_halide_malloc);
+    halide_set_custom_free(&my_halide_free);
+    halide_set_custom_trace(&my_halide_trace);
+    
     int result;
 
     Image<float> input(10, 10);

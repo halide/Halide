@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
         #ifndef _MSC_VER
         std::string object_name = "test_object_" + t;
-        if (target.os == Target::Windows) {
+        if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
             object_name += ".obj";
         } else {
             object_name += ".o";

@@ -9,7 +9,7 @@ endif
 all: process
 
 camera_pipe: ../../ camera_pipe.cpp
-	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe -ldl -lpthread -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe $(LDFLAGS)
 
 curved.o: camera_pipe
 	${GDB} ./camera_pipe 8 ${SCHEDULE} # 8-bit output,
@@ -25,7 +25,7 @@ process: process.cpp curved.o fcam/Demosaic.o
 	$(TGT_CXX) $(TGT_CXXFLAGS) -Wall -O3 $^ -o $@ -lhexagon
 else
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ -lpthread -ldl $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ $(PNGFLAGS)
 endif
 
 out.png: process

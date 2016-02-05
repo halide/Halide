@@ -42,11 +42,11 @@ int main(int argc, char **argv) {
 
         assert(messages.size() == 10);
         for (size_t i = 0; i < messages.size(); i++) {
-            long long square;
+            long square;
             float forty_two;
-            unsigned long long one_forty_five;
+            unsigned long one_forty_five;
 
-            int scan_count = sscanf(messages[i].c_str(), "%lld the answer is %f unsigned %llu",
+            int scan_count = sscanf(messages[i].c_str(), "%ld the answer is %f unsigned %lu",
                                     &square, &forty_two, &one_forty_five);
             assert(scan_count == 3);
             assert(square == static_cast<long long>(i * i));
@@ -74,11 +74,11 @@ int main(int argc, char **argv) {
         }
 
         assert(messages.size() == 1);
-        long long nine;
+        long nine;
         float forty_two;
-        long long p;
+        long p;
 
-        int scan_count = sscanf(messages[0].c_str(), "%lld g %f %%s %lld",
+        int scan_count = sscanf(messages[0].c_str(), "%ld g %f %%s %ld",
                                 &nine, &forty_two, &p);
         assert(scan_count == 3);
         assert(nine == 9);
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
     // Check that Halide's stringification of floats and doubles
     // matches %f and %e respectively.
 
-    #ifndef _MSC_VER
+    #ifndef _WIN32
     // msvc's library has different ideas about how %f and %e should come out.
     {
         Func f, g;
