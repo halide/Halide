@@ -205,6 +205,10 @@ int Buffer::min(int dim) const {
     return contents.ptr->buf.min[dim];
 }
 
+int Buffer::max(int dim) const {
+    return min(dim) + extent(dim) - 1;
+}
+
 void Buffer::set_min(int m0, int m1, int m2, int m3) {
     user_assert(defined()) << "Buffer is undefined\n";
     contents.ptr->buf.min[0] = m0;
