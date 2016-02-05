@@ -2,7 +2,7 @@
 #define HALIDE_DEVICE_ARGUMENT_H
 
 /** \file
- * Defines the code-generator interface for producing GPU device code
+ * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
 
 #include "IR.h"
