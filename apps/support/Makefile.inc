@@ -35,7 +35,7 @@ else
   CXXFLAGS+=$(EXTRA_CXXFLAGS)
 endif
 
-LIB_HALIDE = $(HALIDE_BIN_PATH)/bin/libHalide.a
+LIB_HALIDE = $(HALIDE_BIN_PATH)/lib/libHalide.a
 
 GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
 
