@@ -280,6 +280,7 @@ SOURCE_FILES = \
   DebugToFile.cpp \
   Deinterleave.cpp \
   Derivative.cpp \
+  DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
@@ -399,6 +400,7 @@ HEADER_FILES = \
   DebugToFile.h \
   Deinterleave.h \
   Derivative.h \
+  DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
   Error.h \
