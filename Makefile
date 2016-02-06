@@ -263,6 +263,7 @@ SOURCE_FILES = \
   Bounds.cpp \
   BoundsInference.cpp \
   Buffer.cpp \
+  Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
@@ -286,6 +287,7 @@ SOURCE_FILES = \
   DebugToFile.cpp \
   Deinterleave.cpp \
   Derivative.cpp \
+  DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
@@ -384,6 +386,7 @@ HEADER_FILES = \
   Bounds.h \
   BoundsInference.h \
   Buffer.h \
+  Closure.h \
   CodeGen_ARM.h \
   CodeGen_Hexagon.h \
   CodeGen_C.h \
@@ -406,6 +409,7 @@ HEADER_FILES = \
   DebugToFile.h \
   Deinterleave.h \
   Derivative.h \
+  DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
   Error.h \
@@ -1211,7 +1215,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README.md $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image.h halide/tools/halide_image_io.h
+	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/lib halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image.h halide/tools/halide_image_io.h
 	rm -rf halide
 
 .PHONY: distrib
