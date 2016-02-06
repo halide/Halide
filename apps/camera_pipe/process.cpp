@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     });
     save_image(output_asm, "fcam_arm.png");
 
-    fprintf(stderr, "camera pipe\t%f\t%f\t%f\n", best_halide*1e3, best_c*1e3, best_asm*1e3);
+    printf("camera pipe\t%f\t%f\t%f\n", best_halide*1e3, best_c*1e3, best_asm*1e3);
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms
