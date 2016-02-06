@@ -443,6 +443,11 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
             buffer_t *buf = (buffer_t *)args[i];
             halide_copy_to_host(user_context, buf);
         }
+        if (arg_metadata->kind == halide_argument_kind_input_buffer ||
+            arg_metadata->kind == halide_argument_kind_output_buffer) {
+            buffer_t *buf = (buffer_t *)args[i];
+            halide_device_free(user_context, buf);
+        }
     }
 
     return result;
