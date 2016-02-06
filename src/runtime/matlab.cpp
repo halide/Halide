@@ -289,6 +289,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     }
 
     buf->host = (uint8_t *)mxGetData(arr);
+    buf->host_dirty = true;
     buf->elem_size = mxGetElementSize(arr);
 
     for (int i = 0; i < dim_count && i < expected_dims; i++) {
