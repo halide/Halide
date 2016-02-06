@@ -459,6 +459,27 @@ bool Target::supported() const {
     return !bad;
 }
 
+bool Target::supports_device_api(DeviceAPI api) const {
+    switch (api) {
+    case DeviceAPI::Parent:      return true;
+    case DeviceAPI::Host:        return true;
+    case DeviceAPI::Default_GPU: return has_gpu_feature();
+    default:                     return has_feature(target_feature_for_device_api(api));
+    }
+}
+
+Target::Feature target_feature_for_device_api(DeviceAPI api) {
+    switch (api) {
+    case DeviceAPI::CUDA:          return Target::CUDA;
+    case DeviceAPI::OpenCL:        return Target::OpenCL;
+    case DeviceAPI::GLSL:          return Target::OpenGL;
+    case DeviceAPI::Renderscript:  return Target::Renderscript;
+    case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
+    case DeviceAPI::Metal:         return Target::Metal;
+    default:                       return Target::FeatureEnd;
+    }
+}
+
 namespace Internal {
 
 EXPORT void target_test() {

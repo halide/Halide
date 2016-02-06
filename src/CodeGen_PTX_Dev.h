@@ -28,7 +28,7 @@ public:
 
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     static void test();
 

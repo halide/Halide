@@ -263,6 +263,7 @@ SOURCE_FILES = \
   Bounds.cpp \
   BoundsInference.cpp \
   Buffer.cpp \
+  Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
@@ -286,6 +287,7 @@ SOURCE_FILES = \
   DebugToFile.cpp \
   Deinterleave.cpp \
   Derivative.cpp \
+  DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
   Error.cpp \
@@ -384,6 +386,7 @@ HEADER_FILES = \
   Bounds.h \
   BoundsInference.h \
   Buffer.h \
+  Closure.h \
   CodeGen_ARM.h \
   CodeGen_Hexagon.h \
   CodeGen_C.h \
@@ -406,6 +409,7 @@ HEADER_FILES = \
   DebugToFile.h \
   Deinterleave.h \
   Derivative.h \
+  DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
   Error.h \

@@ -23,7 +23,7 @@ public:
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     void init_module();
 
@@ -45,7 +45,7 @@ protected:
         void add_kernel(Stmt stmt,
                         Target target,
                         const std::string &name,
-                        const std::vector<GPU_Argument> &args);
+                        const std::vector<DeviceArgument> &args);
     protected:
 
         std::string print_type(Type type);
