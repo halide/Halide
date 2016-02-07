@@ -8,26 +8,20 @@ Var x, y, xi, yi;
 Image<uint16_t> in(6408, 4802);
 Image<uint16_t> out(in.width()-16, in.height()-8);
 
+uint16_t kw = 3,
+         kh = 3;
+
 void gen() {
     bx = Func("bx"); by = Func("by"); // reset
         
     // The algorithm
-    bx(x, y) = (in(x, y)
-              + in(x+1, y)
-              + in(x+2, y)
-              + in(x+3, y)
-              + in(x+4, y)
-              + in(x+5, y)
-              + in(x+6, y)
-    )/7;
-    by(x, y) = (bx(x, y)
-              + bx(x, y+1)
-              + bx(x, y+2)
-              + bx(x, y+3)
-              + bx(x, y+4)
-              + bx(x, y+5)
-              + bx(x, y+6)
-    )/7;
+    Expr _bx = cast<uint16_t>(0);
+    for (int i = 0; i < kw; i++) { _bx = _bx + in(x+i, y); }
+    bx(x, y) = _bx/kw;
+
+    Expr _by = cast<uint16_t>(0);
+    for (int i = 0; i < kh; i++) { _by = _by + bx(x, y+i); }
+    by(x, y) = _by/kh;
 }
 
 double bench() {
@@ -49,44 +43,41 @@ int main(int argc, char **argv) {
             in(x, y) = rand() & 0xfff;
         }
     }
+    
+    if (argc > 1) {
+        kw = atoi(argv[1]);
+        if (argc > 2) {
+            kh = atoi(argv[2]);
+        } else {
+            kh = kw;
+        }
+    }
 
-    fprintf(stderr, "Size: %d x %d = %d megapixels\n",
+    printf("Size: %d x %d = %d megapixels\n",
                         out.width(),
                         out.height(),
                         out.width()*out.height()/1000000);
+    printf("Kernel: %d x %d\n", kw, kh);
 
+TILED:
+    for (int stripsize : {1, 2, 3, 4, 5, 6, 7, 8, 10, 16, 30, 32, 64, 96})
     {
         gen();
-        bx.compute_root();
-        printf("Root\t%f\n", bench());
-    }
-
-    {
-        gen();
-        printf("Inline\t%f\n", bench());
-    }
-
-    {
-        gen();
-        bx.parallel(y, 8).vectorize(x, 8);
-        by.parallel(y, 8).vectorize(x, 8);
-        bx.compute_root();
-        printf("Root parallel\t%f\n", bench());
-    }
-
-    {
-        gen();
-        by.parallel(y, 8).vectorize(x, 8);
-        printf("Inline parallel\t%f\n", bench());
-    }
-
-    {
-        gen();
-        by.tile(x, y, xi, yi, 256, 32).parallel(y).vectorize(xi, 8);
+        by.tile(x, y, xi, yi, 256, stripsize).parallel(y).vectorize(xi, 8);
         bx.compute_at(by, x).vectorize(x, 8);
-        printf("Tiled\t%f\n", bench());
+        printf("Tiled %dx%d\t%f\n", 256, stripsize, bench());
     }
 
+LINEBUFFER:
+    {
+        gen();
+        by.vectorize(x, 8);
+        bx.store_root().compute_at(by, y).vectorize(x, 8);
+        printf("Line buffered\t%f\n", bench());
+    }
+
+
+DARKROOM:
     {
         gen();
         by.split(x, x, xi, out.width()/4).reorder(xi, y, x)
@@ -95,11 +86,73 @@ int main(int argc, char **argv) {
         printf("Line buffered Darkroom\t%f\n", bench());
     }
     
+LBSTRIPS:
+    for (int stripsize : {7, 8, 9, 10, 16, 32, 64, 96, 128, 256, 512, 1024})
     {
         gen();
-        by.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
+        by.split(y, y, yi, stripsize).parallel(y).vectorize(x, 8);
         bx.store_at(by, y).compute_at(by, yi).vectorize(x, 8);
-        printf("Line buffered chunks\t%f\n", bench());
+        printf("Line buffered in strips %d\t%f\n", stripsize, bench());
+    }
+
+ROOTVEC:
+    {
+        gen();
+        bx.compute_root().vectorize(x, 8);
+        by.vectorize(x, 8);
+        printf("Root vec\t%f\n", bench());
+    }
+
+INLINEVEC:
+    {
+        gen();
+        by.vectorize(x, 8);
+        printf("Inline vec\t%f\n", bench());
+    }
+
+ROOTPAR:
+    {
+        gen();
+        bx.parallel(y, 8);
+        by.parallel(y, 8);
+        bx.compute_root();
+        printf("Root par\t%f\n", bench());
+    }
+
+INLINEPAR:
+    {
+        gen();
+        by.parallel(y, 8);
+        printf("Inline par\t%f\n", bench());
+    }
+
+ROOTPARVEC:
+    {
+        gen();
+        bx.parallel(y, 8).vectorize(x, 8);
+        by.parallel(y, 8).vectorize(x, 8);
+        bx.compute_root();
+        printf("Root parvec\t%f\n", bench());
+    }
+
+INLINEPARVEC:
+    {
+        gen();
+        by.parallel(y, 8).vectorize(x, 8);
+        printf("Inline parvec\t%f\n", bench());
+    }
+
+ROOT:
+    {
+        gen();
+        bx.compute_root();
+        printf("Root\t%f\n", bench());
+    }
+
+INLINE:
+    {
+        gen();
+        printf("Inline\t%f\n", bench());
     }
     
     return 0;
