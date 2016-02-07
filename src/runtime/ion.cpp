@@ -13,7 +13,7 @@ namespace Halide { namespace Runtime { namespace Internal { namespace Ion {
 extern WEAK halide_device_interface ion_device_interface;
 
 // A ion fd defined in this module with weak linkage
-int WEAK ion_fd = -1;
+volatile int WEAK ion_fd = -1;
 volatile int WEAK thread_lock = 0;
 
 }}}} // namespace Halide::Runtime::Internal::Ion
