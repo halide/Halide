@@ -21,34 +21,10 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
     const int BLOCK_WIDTH  = 40;
     const int BLOCK_HEIGHT = 24;
 
-    // Image input = src.image();
-
-#if 0
-    // Check we're the right bayer pattern. If not crop and continue.
-    switch ((int)src.platform().bayerPattern()) {
-    case GRBG:
-        break;
-    case RGGB:
-        input = input.subImage(1, 0, Size(input.width()-2, input.height()));
-        break;
-    case BGGR:
-        input = input.subImage(0, 1, Size(input.width(), input.height()-2));
-        break;
-    case GBRG:
-        input = input.subImage(1, 1, Size(input.width()-2, input.height()-2));
-    default:
-        error(Event::DemosaicError, "Can't demosaic from a non-bayer sensor\n");
-        return Image();
-    }
-#endif
     const int VEC_WIDTH = ((BLOCK_WIDTH + 8)/8);
     const int VEC_HEIGHT = ((BLOCK_HEIGHT + 8)/2);
 
-#if 0
-    int rawPixelsPerRow = input.bytesPerRow()/2 ; // Assumes bytesPerRow is even
-#else
     int rawPixelsPerRow = input.extent(0); // input is monochrome, so x is dim(0)
-#endif
 
     int rawWidth = input.width();
     int rawHeight = input.height();
@@ -63,39 +39,10 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 
     int outYStride = out.stride(2);
 
-#if 0
-    // Check we're the right size, if not, crop center
-    if (((input.width() - 8) != (unsigned)outWidth) ||
-        ((input.height() - 8) != (unsigned)outHeight)) {
-        int offX = (input.width() - 8 - outWidth)/2;
-        int offY = (input.height() - 8 - outHeight)/2;
-        offX -= offX&1;
-        offY -= offY&1;
-
-        if (offX || offY) {
-            input = input.subImage(offX, offY, Size(outWidth+8, outHeight+8));
-        }
-    }
-#endif
-
-    // Time startTime = Time::now();
-
     // Prepare the color matrix in S8.8 fixed point
     float colorMatrix_f[12];
 
-#if 0
-    // Check if there's a custom color matrix
-    if (src.shot().colorMatrix().size() == 12) {
-        for (int i = 0; i < 12; i++) {
-            colorMatrix_f[i] = src.shot().colorMatrix()[i];
-        }
-    } else {
-        // Otherwise use the platform version
-        src.platform().rawToRGBColorMatrix(src.shot().whiteBalance, colorMatrix_f);
-    }
-#else
     makeColorMatrix(colorMatrix_f, colorTemp);
-#endif
 
     int16x4_t colorMatrix[3];
     for (int i = 0; i < 3; i++) {
@@ -158,19 +105,11 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
     makeLUT(contrast, blackLevel, gamma, lut);
 
     // For each block in the input
-#if 0
-    for (int by = 0; by < rawHeight-8-BLOCK_HEIGHT+1; by += BLOCK_HEIGHT) {
-#else
     #pragma omp parallel for
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
-#endif
         const short *__restrict__ blockPtr = (const short *)&input(0,by);
         unsigned char *__restrict__ outBlockPtr = &out(0, 0, by);
-#if 0
-        for (int bx = 0; bx < rawWidth-8-BLOCK_WIDTH+1; bx += BLOCK_WIDTH) {
-#else
         for (int bx = 0; bx < outWidth; bx += BLOCK_WIDTH) {
-#endif
             // Stage 1) Demux a block of input into L1
             if (1) {
                 register const int16_t *__restrict__ rawPtr = blockPtr;
@@ -719,6 +658,3 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 }
 
 }
-
-
-// #endif

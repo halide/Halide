@@ -52,8 +52,9 @@ int main(int argc, char **argv) {
     });
     save_image(output, argv[6]);
 
+    // These FCam comparisons are imperfect, since they store interleaved
+    // output while the Halide pipeline stores planar.
     Image<uint8_t> output_interleaved(3, output.width(), output.height());
-
     double best_c = benchmark(timing_iterations, 1, [&]() {
         FCam::demosaic(input, output_interleaved, color_temp, contrast, true, 25, gamma);
     });
