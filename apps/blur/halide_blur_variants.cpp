@@ -53,11 +53,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Size: %d x %d = %d megapixels\n",
+    printf("# Size: %d x %d = %d megapixels\n",
                         out.width(),
                         out.height(),
                         out.width()*out.height()/1000000);
-    printf("Kernel: %d x %d\n", kw, kh);
+    printf("# Kernel: %d x %d\n", kw, kh);
 
 TILED:
     for (int stripsize : {1, 2, 3, 4, 5, 6, 7, 8, 10, 16, 30, 32, 64, 96})
