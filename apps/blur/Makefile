@@ -8,6 +8,9 @@ halide_blur: halide_blur.cpp
 halide_blur.o: halide_blur
 	./halide_blur
 
+halide_blur_variants: halide_blur_variants.cpp
+	$(CXX) $(CXXFLAGS) -g $^ $(LIB_HALIDE) -o $@ -ldl -lpthread -lz $(LDFLAGS)
+
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
 ifeq (,$(findstring clang,$(CXX_VERSION)))
