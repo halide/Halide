@@ -74,6 +74,7 @@ void *memset(void *s, int val, size_t n);
 int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
+int ioctl(int fd, unsigned long request, ...);
 void exit(int);
 void abort();
 char *strncpy(char *dst, const char *src, size_t n);
@@ -123,7 +124,7 @@ struct mxArray;
 WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
-  
+
 }
 
 /** A macro that calls halide_print if the supplied condition is
