@@ -41,26 +41,27 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
         return Image();
     }
 #endif
-    int rawWidth = out.width();
-    int rawHeight = out.height();
-
     const int VEC_WIDTH = ((BLOCK_WIDTH + 8)/8);
     const int VEC_HEIGHT = ((BLOCK_HEIGHT + 8)/2);
 
 #if 0
     int rawPixelsPerRow = input.bytesPerRow()/2 ; // Assumes bytesPerRow is even
 #else
-    int rawPixelsPerRow = input.stride(1); // Assumes bytesPerRow is even
+    int rawPixelsPerRow = input.extent(0); // input is monochrome, so x is dim(0)
 #endif
 
-    int outWidth = rawWidth;
-    int outHeight = rawHeight;
-    outWidth = min(outWidth, out.width());
-    outHeight = min(outHeight, out.height());
+    int rawWidth = input.width();
+    int rawHeight = input.height();
+    int outWidth = rawWidth-32;
+    int outHeight = rawHeight-48;
+    outWidth = min(outWidth, out.extent(1));
+    outHeight = min(outHeight, out.extent(2));
     outWidth /= BLOCK_WIDTH;
     outWidth *= BLOCK_WIDTH;
     outHeight /= BLOCK_HEIGHT;
     outHeight *= BLOCK_HEIGHT;
+
+    int outYStride = out.stride(2);
 
 #if 0
     // Check we're the right size, if not, crop center
@@ -164,7 +165,7 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
 #endif
         const short *__restrict__ blockPtr = (const short *)&input(0,by);
-        unsigned char *__restrict__ outBlockPtr = &out(0, by);
+        unsigned char *__restrict__ outBlockPtr = &out(0, 0, by);
 #if 0
         for (int bx = 0; bx < rawWidth-8-BLOCK_WIDTH+1; bx += BLOCK_WIDTH) {
 #else
@@ -684,7 +685,7 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
                 const uint16_t *__restrict__ out16Ptr = out16;
 
                 for (int y = 0; y < BLOCK_HEIGHT; y++) {
-                    unsigned int *__restrict__ outPtr32 = (unsigned int *)(outBlockPtr + y * outWidth * 3);
+                    unsigned int *__restrict__ outPtr32 = (unsigned int *)(outBlockPtr + y * outYStride);
                     for (int x = 0; x < (BLOCK_WIDTH*3)/4; x++) {
                         unsigned val = ((lut[out16Ptr[0]] << 0) |
                                         (lut[out16Ptr[1]] << 8) |

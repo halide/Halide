@@ -47,7 +47,7 @@ void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut) {
     }
 
     // add a guard band
-    for (int i = maxRaw+1; i < 1024; i++) {
+    for (int i = maxRaw+1; i < 4096; i++) {
         lut[i] = 255;
     }
 }
@@ -86,15 +86,15 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     int rawHeight = input.height();
     int outWidth = rawWidth-32;
     int outHeight = rawHeight-48;
-    outWidth = min(outWidth, out.width());
-    outHeight = min(outHeight, out.height());
+    outWidth = min(outWidth, out.extent(1));
+    outHeight = min(outHeight, out.extent(2));
     outWidth /= BLOCK_WIDTH;
     outWidth *= BLOCK_WIDTH;
     outHeight /= BLOCK_HEIGHT;
     outHeight *= BLOCK_HEIGHT;
 
     // Prepare the lookup table
-    unsigned char lut[1024];
+    unsigned char lut[4096];
     makeLUT(contrast, blackLevel, gamma, lut);
 
     // Grab the color matrix
@@ -330,9 +330,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
-                    out(bx+(x-2)*2, by+(y-2)*2, 0) = lut[ri];
-                    out(bx+(x-2)*2, by+(y-2)*2, 1) = lut[gi];
-                    out(bx+(x-2)*2, by+(y-2)*2, 2) = lut[bi];
+                    out(0, bx+(x-2)*2, by+(y-2)*2) = lut[ri];
+                    out(1, bx+(x-2)*2, by+(y-2)*2) = lut[gi];
+                    out(2, bx+(x-2)*2, by+(y-2)*2) = lut[bi];
 
                     // Convert from sensor rgb to srgb
                     r = colorMatrix[0]*linear[R][R][y][x] +
@@ -356,9 +356,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
-                    out(bx+(x-2)*2+1, by+(y-2)*2, 0) = lut[ri];
-                    out(bx+(x-2)*2+1, by+(y-2)*2, 1) = lut[gi];
-                    out(bx+(x-2)*2+1, by+(y-2)*2, 2) = lut[bi];
+                    out(0, bx+(x-2)*2+1, by+(y-2)*2) = lut[ri];
+                    out(1, bx+(x-2)*2+1, by+(y-2)*2) = lut[gi];
+                    out(2, bx+(x-2)*2+1, by+(y-2)*2) = lut[bi];
 
                     // Convert from sensor rgb to srgb
                     r = colorMatrix[0]*linear[R][B][y][x] +
@@ -382,9 +382,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
-                    out(bx+(x-2)*2, by+(y-2)*2+1, 0) = lut[ri];
-                    out(bx+(x-2)*2, by+(y-2)*2+1, 1) = lut[gi];
-                    out(bx+(x-2)*2, by+(y-2)*2+1, 2) = lut[bi];
+                    out(0, bx+(x-2)*2, by+(y-2)*2+1) = lut[ri];
+                    out(1, bx+(x-2)*2, by+(y-2)*2+1) = lut[gi];
+                    out(2, bx+(x-2)*2, by+(y-2)*2+1) = lut[bi];
 
                     // Convert from sensor rgb to srgb
                     r = colorMatrix[0]*linear[R][GB][y][x] +
@@ -408,9 +408,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
                     bi = b < 0 ? 0 : (b > 1023 ? 1023 : (unsigned short)(b+0.5f));
 
                     // Gamma correct and store
-                    out(bx+(x-2)*2+1, by+(y-2)*2+1, 0) = lut[ri];
-                    out(bx+(x-2)*2+1, by+(y-2)*2+1, 1) = lut[gi];
-                    out(bx+(x-2)*2+1, by+(y-2)*2+1, 2) = lut[bi];
+                    out(0, bx+(x-2)*2+1, by+(y-2)*2+1) = lut[ri];
+                    out(1, bx+(x-2)*2+1, by+(y-2)*2+1) = lut[gi];
+                    out(2, bx+(x-2)*2+1, by+(y-2)*2+1) = lut[bi];
                 }
             }
         }

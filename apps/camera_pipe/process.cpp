@@ -52,17 +52,32 @@ int main(int argc, char **argv) {
     });
     save_image(output, argv[6]);
 
-    Image<uint8_t> output_c(output.width(), output.height(), output.channels());
-    best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output_c, color_temp, contrast, true, 25, gamma);
-    });
-    save_image(output_c, "fcam_c.png");
+    Image<uint8_t> output_interleaved(3, output.width(), output.height());
 
-    Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
-    best = benchmark(timing_iterations, 1, [&]() {;
-        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, 25, gamma);
+    double best_c = benchmark(timing_iterations, 1, [&]() {
+        FCam::demosaic(input, output_interleaved, color_temp, contrast, true, 25, gamma);
     });
-    save_image(output_asm, "fcam_arm.png");
+    for (int c = 0; c < 3; c++) {
+        for (int y = 0; y < output.height(); y++) {
+            for (int x = 0; x < output.width(); x++) {
+                output(x,y,c) = output_interleaved(c,x,y);
+            }
+        }
+    }
+    save_image(output, "fcam_c.png");
+
+    output_interleaved = Image<uint8_t>(3, output.width(), output.height());
+    double best_asm = benchmark(timing_iterations, 1, [&]() {;
+        FCam::demosaic_ARM(input, output_interleaved, color_temp, contrast, true, 25, gamma);
+    });
+    for (int c = 0; c < 3; c++) {
+        for (int y = 0; y < output.height(); y++) {
+            for (int x = 0; x < output.width(); x++) {
+                output(x,y,c) = output_interleaved(c,x,y);
+            }
+        }
+    }
+    save_image(output, "fcam_arm.png");
 
     printf("camera pipe\t%f\t%f\t%f\n", best_halide*1e3, best_c*1e3, best_asm*1e3);
 
