@@ -105,7 +105,7 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
     makeLUT(contrast, blackLevel, gamma, lut);
 
     // For each block in the input
-    #pragma omp parallel for
+    // #pragma omp parallel
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
         const short *__restrict__ blockPtr = (const short *)&input(0,by);
         unsigned char *__restrict__ outBlockPtr = &out(0, 0, by);

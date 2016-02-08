@@ -101,7 +101,7 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     float colorMatrix[12];
     makeColorMatrix(colorMatrix, colorTemp);
 
-    #pragma omp parallel for
+    // #pragma omp parallel
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
         for (int bx = 0; bx < outWidth; bx += BLOCK_WIDTH) {
             /*

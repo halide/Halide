@@ -6,6 +6,11 @@ else
   SCHEDULE=0
 endif
 
+PROC := $(shell uname -p)
+ifeq ($(PROC),aarch64)
+  CXXFLAGS += -mcpu=cortex-a57 -mfpu=neon
+endif
+
 all: process
 
 camera_pipe: ../../ camera_pipe.cpp
@@ -24,7 +29,7 @@ process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) $(CXXFLAGS) -Wall -O3 -fopenmp $^ -o $@ -lpthread -ldl $(PNGFLAGS)
 
 out.png: process
-	./process ../images/bayer_raw.png 3700 2.0 50 5 out.png
+	HL_NUM_THREADS=1 ./process ../images/bayer_raw.png 3700 2.0 50 5 out.png
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz

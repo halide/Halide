@@ -230,3 +230,5 @@ src/.tags
 src/.tags_sorted_by_file
 
 halide_blur_variants
+apps/camera_pipe/fcam_arm.png
+apps/camera_pipe/fcam_c.png
