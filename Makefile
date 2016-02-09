@@ -299,6 +299,7 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
   HexagonIRChecker.cpp \
+  HexagonOffload.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
@@ -424,6 +425,7 @@ HEADER_FILES = \
   FuseGPUThreadLoops.h \
   Generator.h \
   HexagonIRChecker.h \
+  HexagonOffload.h \
   runtime/HalideRuntime.h \
   Image.h \
   InjectHostDevBufferCopies.h \
@@ -509,6 +511,7 @@ RUNTIME_CPP_COMPONENTS = \
   float16_t \
   gcd_thread_pool \
   gpu_device_selection \
+  hexagon \
   hexagon_standalone \
   ion \
   ios_io \
