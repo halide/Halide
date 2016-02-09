@@ -31,6 +31,7 @@ set(RUNTIME_CPP
   float16_t
   gcd_thread_pool
   gpu_device_selection
+  hexagon
   ion
   ios_io
   linux_clock

@@ -112,6 +112,7 @@ DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
+DECLARE_CPP_INITMOD(hexagon)
 DECLARE_CPP_INITMOD(hexagon_standalone)
 DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(matlab)
@@ -461,14 +462,14 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     vector<string> retain = {"__stack_chk_guard",
                              "__stack_chk_fail"};
 
-    if (t.has_feature(Target::MinGW)) {      
+    if (t.has_feature(Target::MinGW)) {
         retain.insert(retain.end(),
                              {"sincos", "sincosf",
                               "asinh", "asinhf",
                               "acosh", "acoshf",
                               "atanh", "atanhf"});
     }
-    
+
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
@@ -691,7 +692,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.bits == 32) {
                     modules.push_back(get_initmod_win32_math_ll(c));
                 } else {
-                    modules.push_back(get_initmod_posix_math_ll(c));                
+                    modules.push_back(get_initmod_posix_math_ll(c));
                 }
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));

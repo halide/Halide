@@ -61,6 +61,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_get_library_symbol,
     (void *)&halide_get_symbol,
     (void *)&halide_get_trace_file,
+    (void *)&halide_hexagon_run,
     (void *)&halide_int64_to_string,
     (void *)&halide_ion_detach_device_ptr,
     (void *)&halide_ion_device_interface,

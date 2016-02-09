@@ -19,6 +19,7 @@
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "HexagonIRChecker.h"
+#include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -77,6 +78,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(1) << "Creating initial loop nests...\n";
     Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
+
+    std::vector<Module> device_modules;
 
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
@@ -174,7 +177,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::Renderscript)) {
+        t.has_feature(Target::Renderscript) ||
+        t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n" << s << "\n\n";
@@ -245,6 +249,15 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(1) << "Moving varying attribute expressions out of the shader...\n";
         s = setup_gpu_vertex_buffer(s);
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
+    }
+
+    debug(1) << "Splitting off Hexagon offload...\n";
+    s = inject_hexagon_rpc(s, device_modules);
+    debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
+
+    for (auto& i : device_modules) {
+        debug(1) << "Device module:\n";
+        debug(1) << i << "\n";
     }
 
     s = remove_trivial_for_loops(s);
