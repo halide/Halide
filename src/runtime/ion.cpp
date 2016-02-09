@@ -323,6 +323,10 @@ WEAK uintptr_t halide_ion_get_device_ptr(void *user_context, struct buffer_t *bu
     return (uintptr_t)dev_ptr;
 }
 
+WEAK const halide_device_interface *halide_ion_device_interface() {
+    return &ion_device_interface;
+}
+
 namespace {
 __attribute__((destructor))
 WEAK void halide_ion_cleanup() {
