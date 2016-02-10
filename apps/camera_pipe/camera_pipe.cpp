@@ -42,10 +42,10 @@ Func deinterleave(Func raw) {
     // Deinterleave the color channels
     Func deinterleaved;
 
-    deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
-                                    select(c == 1, raw(2*x+1, 2*y),
-                                           select(c == 2, raw(2*x, 2*y+1),
-                                                  raw(2*x+1, 2*y+1))));
+    deinterleaved(x, y) = {raw(2*x, 2*y),
+                           raw(2*x+1, 2*y),
+                           raw(2*x, 2*y+1),
+                           raw(2*x+1, 2*y+1)};
     return deinterleaved;
 }
 
@@ -57,10 +57,10 @@ Func demosaic(Func deinterleaved) {
 
     // Give more convenient names to the four channels we know
     Func r_r, g_gr, g_gb, b_b;
-    g_gr(x, y) = deinterleaved(x, y, 0);
-    r_r(x, y)  = deinterleaved(x, y, 1);
-    b_b(x, y)  = deinterleaved(x, y, 2);
-    g_gb(x, y) = deinterleaved(x, y, 3);
+    g_gr(x, y) = deinterleaved(x, y)[0];
+    r_r(x, y)  = deinterleaved(x, y)[1];
+    b_b(x, y)  = deinterleaved(x, y)[2];
+    g_gb(x, y) = deinterleaved(x, y)[3];
 
     // These are the ones we need to interpolate
     Func b_r, g_r, b_gr, r_gr, b_gb, r_gb, r_b, g_b;
@@ -238,7 +238,7 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
 
     Expr val = cast(result_type, clamp(z*256.0f, 0.0f, 255.0f));
     curve(x) = val;
-    curve.compute_root(); // It's a LUT, compute it once ahead of time.
+    curve.compute_root().memoize(); // It's a LUT, compute it once ahead of time.
 
     Func curved;
     curved(x, y, c) = curve(input(x, y, c));
@@ -265,9 +265,9 @@ Func process(Func raw, Type result_type,
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.compute_at(processed, tx).vectorize(x, 8);
-        deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
-        corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
-        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 8);
+        corrected.compute_at(processed, yi).vectorize(x, 8).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 80, 24).reorder(xi, c, yi, tx, ty).vectorize(xi, 16);
         processed.parallel(ty);
     } else if (schedule == 1) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
@@ -317,8 +317,8 @@ int main(int argc, char **argv) {
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
     processed
-        .bound(tx, 0, (out_width/32)*32)
-        .bound(ty, 0, (out_height/32)*32);
+        .bound(tx, 0, (out_width/80)*80)
+        .bound(ty, 0, (out_height/24)*24);
 
     //string s = processed.serialize();
     //printf("%s\n", s.c_str());
