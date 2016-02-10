@@ -289,6 +289,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     }
 
     buf->host = (uint8_t *)mxGetData(arr);
+    buf->host_dirty = true;
     buf->elem_size = mxGetElementSize(arr);
 
     for (int i = 0; i < dim_count && i < expected_dims; i++) {
@@ -442,6 +443,11 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
         if (arg_metadata->kind == halide_argument_kind_output_buffer) {
             buffer_t *buf = (buffer_t *)args[i];
             halide_copy_to_host(user_context, buf);
+        }
+        if (arg_metadata->kind == halide_argument_kind_input_buffer ||
+            arg_metadata->kind == halide_argument_kind_output_buffer) {
+            buffer_t *buf = (buffer_t *)args[i];
+            halide_device_free(user_context, buf);
         }
     }
 

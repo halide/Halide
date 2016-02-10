@@ -208,6 +208,7 @@ set(HEADER_FILES
   BoundsInference.h
   Buffer.h
   CSE.h
+  Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
   CodeGen_GPU_Dev.h
@@ -228,6 +229,7 @@ set(HEADER_FILES
   DebugToFile.h
   Deinterleave.h
   Derivative.h
+  DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
   Error.h
@@ -349,7 +351,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Bounds.cpp
   BoundsInference.cpp
   Buffer.cpp
-  CSE.cpp
+  Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
   CodeGen_GPU_Dev.cpp
@@ -367,11 +369,13 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
+  CSE.cpp
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
   Deinterleave.cpp
   Derivative.cpp
+  DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
   Error.cpp
@@ -459,7 +463,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
        set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
      endif()
    endif()
-   
+
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support
 # See the output of ``llvm-config --components`` for a list of possible components
