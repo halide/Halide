@@ -6,6 +6,7 @@
 #include "HalideRuntimeRenderscript.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeIon.h"
+#include "HalideRuntimeHexagon.h"
 #include "runtime_internal.h"
 
 // This runtime module will contain extern declarations of the Halide
