@@ -42,15 +42,30 @@ public:
             device_code.append(LoweredFunc(hex_name, args, loop, LoweredFunc::External));
 
             // Generate a call to hexagon_device_run.
+            std::vector<Expr> arg_sizes;
+            std::vector<Expr> arg_ptrs;
+            std::vector<Expr> arg_is_buffer;
+
+            for (const auto& i : c.buffers) {
+                arg_sizes.push_back(Expr((size_t)sizeof(buffer_t*)));
+                arg_ptrs.push_back(Variable::make(type_of<buffer_t *>(), i.first + ".buffer"));
+                arg_is_buffer.push_back(Expr((uint8_t)true));
+            }
+            for (const auto& i : c.vars) {
+                Expr arg = Variable::make(i.second, i.first);
+                Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
+
+                arg_sizes.push_back(Expr((size_t)i.second.bytes()));
+                arg_ptrs.push_back(arg_ptr);
+                arg_is_buffer.push_back(Expr((uint8_t)false));
+            }
+
             std::vector<Expr> params;
             params.push_back(user_context_value());
             params.push_back(hex_name);
-            for (const auto& i : c.buffers) {
-                params.push_back(Variable::make(Handle(), i.first + ".buffer"));
-            }
-            for (const auto& i : c.vars) {
-                params.push_back(Variable::make(i.second, i.first));
-            }
+            params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
+            params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
+            params.push_back(Call::make(type_of<uint8_t*>(), Call::make_struct, arg_is_buffer, Call::Intrinsic));
 
             stmt = Evaluate::make(Call::make(Int(32), "halide_hexagon_run", params, Call::Extern));
         } else {
