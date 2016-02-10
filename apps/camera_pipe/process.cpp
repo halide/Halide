@@ -36,10 +36,11 @@ int main(int argc, char **argv) {
     // save_image(input, "input.pgm");
     // fprintf(stderr, "       input.pgm\n");
 
+#if defined(__hexagon__)
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 48)/32)*32, 3);
-    // The ref output will have a width that is a multiple of 40, and a height
-    // which is a multiple of 24.
-    Image<uint8_t> output_c(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
+#else
+    Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
+#endif
 
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
@@ -141,6 +142,13 @@ int main(int argc, char **argv) {
 #endif
 
 #ifndef NOFCAM
+#if defined(__hexagon__)
+    // The C ref output will have a width that is a multiple of 40, and a height
+    // which is a multiple of 24.
+    Image<uint8_t> output_c(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
+#else
+    Image<uint8_t> output_c(output.width(), output.height(), output.channels());
+#endif
 #ifdef PCYCLES
     RESET_PMU();
     start_time = READ_PCYCLES();
