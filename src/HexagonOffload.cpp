@@ -67,7 +67,11 @@ public:
             params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
             params.push_back(Call::make(type_of<uint8_t*>(), Call::make_struct, arg_is_buffer, Call::Intrinsic));
 
-            stmt = Evaluate::make(Call::make(Int(32), "halide_hexagon_run", params, Call::Extern));
+            Expr call = Call::make(Int(32), "halide_hexagon_run", params, Call::Extern);
+            string call_result_name = unique_name("hexagon_run_result");
+            Expr call_result_var = Variable::make(Int(32), call_result_name);
+            stmt = LetStmt::make(call_result_name, call,
+                                 AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
         } else {
             IRMutator::visit(loop);
         }
