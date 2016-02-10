@@ -1355,7 +1355,7 @@ void check_hvx_all() {
     check("vshuffe(v*.uh,v*.uh)", hvx_width/1, u8(u16_1));
     check("vshuffe(v*.uw,v*.uw)", hvx_width/2, u16(u32_1));
     check("vshuffo(v*.uh,v*.uh)", hvx_width/1, u8(u16_1 >> 8));
-    check("vshuffo(v*.uw,v*.uw)", hvx_width/2, u16(u32_1 >> 8));
+    check("vshuffo(v*.uw,v*.uw)", hvx_width/2, u16(u32_1 >> 16));
 
     check("vabsdiff(v*.ub,v*.ub)", hvx_width/1, absd(u8_1, u8_2));
     check("vabsdiff(v*.uh,v*.uh)", hvx_width/2, absd(u16_1, u16_2));
