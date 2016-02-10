@@ -11,135 +11,43 @@ using std::pair;
 
 using namespace llvm;
 
-void Closure::visit(const Let *op) {
-    op->value.accept(this);
-    ignore.push(op->name, 0);
-    op->body.accept(this);
-    ignore.pop(op->name);
-}
+namespace {
 
-void Closure::visit(const LetStmt *op) {
-    op->value.accept(this);
-    ignore.push(op->name, 0);
-    op->body.accept(this);
-    ignore.pop(op->name);
-}
-
-void Closure::visit(const For *op) {
-    ignore.push(op->name, 0);
-    op->min.accept(this);
-    op->extent.accept(this);
-    op->body.accept(this);
-    ignore.pop(op->name);
-}
-
-void Closure::visit(const Load *op) {
-    op->index.accept(this);
-    if (!ignore.contains(op->name)) {
-        debug(3) << "Adding buffer " << op->name << " to closure\n";
-        BufferRef & ref = buffers[op->name];
-        ref.type = op->type; // TODO: Validate type is the same as existing refs?
-        ref.read = true;
-
-        // If reading an image/buffer, compute the size.
-        if (op->image.defined()) {
-            ref.dimensions = op->image.dimensions();
-            ref.size = 1;
-            for (int i = 0; i < op->image.dimensions(); i++) {
-                ref.size += (op->image.extent(i) - 1)*op->image.stride(i);
-            }
-            ref.size *= op->image.type().bytes();
-        }
-    } else {
-        debug(3) << "Not adding " << op->name << " to closure\n";
-    }
-}
-
-void Closure::visit(const Store *op) {
-    op->index.accept(this);
-    op->value.accept(this);
-    if (!ignore.contains(op->name)) {
-        debug(3) << "Adding buffer " << op->name << " to closure\n";
-        BufferRef & ref = buffers[op->name];
-        ref.type = op->value.type(); // TODO: Validate type is the same as existing refs?
-        // TODO: do we need to set ref.dimensions?
-        ref.write = true;
-    } else {
-        debug(3) << "Not adding " << op->name << " to closure\n";
-    }
-}
-
-void Closure::visit(const Allocate *op) {
-    if (op->new_expr.defined()) {
-        op->new_expr.accept(this);
-    }
-    ignore.push(op->name, 0);
-    for (size_t i = 0; i < op->extents.size(); i++) {
-        op->extents[i].accept(this);
-    }
-    op->body.accept(this);
-    ignore.pop(op->name);
-}
-
-void Closure::visit(const Variable *op) {
-    if (ignore.contains(op->name)) {
-        debug(3) << "Not adding " << op->name << " to closure\n";
-    } else {
-        debug(3) << "Adding " << op->name << " to closure\n";
-        vars[op->name] = op->type;
-    }
-}
-
-Closure::Closure(Stmt s, const string &loop_variable, llvm::StructType *buffer_t) : buffer_t(buffer_t) {
-    ignore.push(loop_variable, 0);
-    s.accept(this);
-}
-
-vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
+vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_t, LLVMContext &context) {
     vector<llvm::Type *> res;
-    for (const pair<string, Type> &i : vars) {
-        res.push_back(llvm_type_of(context, i.second));
+    for (const pair<string, Type> &i : closure.vars) {
+        res.push_back(llvm_type_of(&context, i.second));
     }
-    for (const pair<string, BufferRef> &i : buffers) {
-        res.push_back(llvm_type_of(context, i.second.type)->getPointerTo());
+    for (const pair<string, Closure::BufferRef> &i : closure.buffers) {
+        res.push_back(llvm_type_of(&context, i.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
     return res;
 }
 
-vector<string> Closure::names() {
-    vector<string> res;
-    for (const pair<string, Type> &i : vars) {
-        debug(2) << "vars:  " << i.first << "\n";
-        res.push_back(i.first);
-    }
-    for (const pair<string, BufferRef> &i : buffers) {
-        debug(2) << "buffers: " << i.first << "\n";
-        res.push_back(i.first + ".host");
-        res.push_back(i.first + ".buffer");
-    }
-    return res;
-}
+}  // namespace
 
-StructType *Closure::build_type(LLVMContext *context) {
+StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_t, LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(context), false);
+    struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
     return struct_t;
 }
 
-void Closure::pack_struct(llvm::Type *
+void pack_closure(llvm::Type *
 #if LLVM_VERSION >= 37
-                          type
+                  type
 #endif
-                          ,
-                          Value *dst,
-                          const Scope<Value *> &src,
-                          IRBuilder<> *builder) {
+                  ,
+                  Value *dst,
+                  const Closure& closure,
+                  const Scope<Value *> &src,
+                  llvm::StructType *buffer_t,
+                  IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();
-    vector<string> nm = names();
-    vector<llvm::Type*> ty = llvm_types(&context);
+    vector<string> nm = closure.names();
+    vector<llvm::Type*> ty = llvm_types(closure, buffer_t, context);
     for (size_t i = 0; i < nm.size(); i++) {
 #if LLVM_VERSION >= 37
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
@@ -161,18 +69,19 @@ void Closure::pack_struct(llvm::Type *
     }
 }
 
-void Closure::unpack_struct(Scope<Value *> &dst,
-                            llvm::Type *
+void unpack_closure(const Closure& closure,
+                    Scope<Value *> &dst,
+                    llvm::Type *
 #if LLVM_VERSION >= 37
-                            type
+                    type
 #endif
-                            ,
-                            Value *src,
-                            IRBuilder<> *builder) {
+                    ,
+                    Value *src,
+                    IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();
-    vector<string> nm = names();
+    vector<string> nm = closure.names();
     for (size_t i = 0; i < nm.size(); i++) {
 #if LLVM_VERSION >= 37
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);

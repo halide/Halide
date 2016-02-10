@@ -23,7 +23,7 @@ public:
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
      * since a GPU device module will often have many kernels compiled into it
@@ -35,7 +35,7 @@ public:
     std::string get_current_kernel_name();
 
     void dump();
-    
+
     virtual std::string print_gpu_name(const std::string &name);
 
     std::string api_unique_name() { return "metal"; }
@@ -47,7 +47,7 @@ protected:
         CodeGen_Metal_C(std::ostream &s) : CodeGen_C(s) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
-                        const std::vector<GPU_Argument> &args);
+                        const std::vector<DeviceArgument> &args);
 
     protected:
         using CodeGen_C::visit;
