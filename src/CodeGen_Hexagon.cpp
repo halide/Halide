@@ -437,6 +437,31 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
                                IPICK(Intrinsic::hexagon_V6_vmpyih)));
 
 }
+
+std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
+    auto llvm_module = CodeGen_Posix::compile(module);
+
+    // TODO: This should be set on the module itself, or some other
+    // safer way to pass this through to the target specific lowering
+    // passes. We set the option here (after the base class'
+    // implementaiton of compile) because it is the last
+    // Hexagon-specific code to run prior to invoking the target
+    // specific lowering in LLVM, minimizing the chances of the wrong
+    // flag being set for the wrong module.
+    cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
+                                "Halide HVX internal compiler\n");
+    if (module.target().has_feature(Halide::Target::HVX_128)) {
+        char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
+        ::putenv(s);
+        cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",
+                                    "Halide HVX internal options\n");
+        if (module.target().has_feature(Halide::Target::HVX_64))
+                internal_error << "Both HVX_64 and HVX_128 set at same time\n";
+    }
+    return llvm_module;
+}
+
+
 llvm::Value *
 CodeGen_Hexagon::CallLLVMIntrinsic(llvm::Function *F,
                                std::vector<Value *> &Ops) {
