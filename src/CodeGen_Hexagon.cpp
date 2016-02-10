@@ -2787,7 +2787,50 @@ void CodeGen_Hexagon::visit(const Load *op) {
           }
         }
       }
-    }
+    } else if (ramp && stride && stride->value == 2) {
+        // Load two vectors worth and then shuffle
+        Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
+
+        // False indicates we should take the even-numbered lanes
+        // from the load, true indicates we should take the
+        // odd-numbered-lanes.
+        bool shifted_a = false, shifted_b = false;
+        // If the base ends in an odd constant, then subtract one
+        // and do a different shuffle. This helps expressions like
+        // (f(2*x) + f(2*x+1) share loads
+        const Add *add = ramp->base.as<Add>();
+        const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
+        if (offset && offset->value & 1) {
+          base_a -= 1;
+          shifted_a = true;
+          base_b -= 1;
+          shifted_b = true;
+        }
+
+        // Do each load.
+        Expr ramp_a = Ramp::make(base_a, 1, ramp->lanes);
+        Expr ramp_b = Ramp::make(base_b, 1, ramp->lanes);
+        Expr load_a = Load::make(op->type, op->name, ramp_a, op->image,
+                                 op->param);
+        Expr load_b = Load::make(op->type, op->name, ramp_b, op->image,
+                                 op->param);
+        Value *vec_a = codegen(load_a);
+        Value *vec_b = codegen(load_b);
+
+        // Shuffle together the results.
+        vector<Constant *> indices(ramp->lanes);
+        for (int i = 0; i < (ramp->lanes + 1)/2; i++) {
+          indices[i] = ConstantInt::get(i32, i*2 + (shifted_a ? 1 : 0));
+        }
+        for (int i = (ramp->lanes + 1)/2; i < ramp->lanes; i++) {
+          indices[i] = ConstantInt::get(i32, i*2 + (shifted_b ? 1 : 0));
+        }
+
+        debug(2) << "Loading two vectors and shuffle: \n";
+        value = builder->CreateShuffleVector(vec_a, vec_b,
+                                             ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value -> dump();
+      }
   }
   if (!value)
     CodeGen_Posix::visit(op);
