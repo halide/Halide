@@ -40,6 +40,9 @@ WEAK int halide_ion_get_descriptor(void *user_context, int *fd, bool create = tr
     // If the context has not been initialized, initialize it now.
     if (ion_fd == -1 && create) {
         ion_fd = open("/dev/ion", O_RDONLY, 0);
+        if (ion_fd == -1) {
+            error(user_context) << "Failed to open /dev/ion.\n";
+        }
     }
 
     __sync_lock_release(&thread_lock);
@@ -113,12 +116,14 @@ WEAK int halide_ion_device_malloc(void *user_context, buffer_t *buf) {
 //    data.heap_id_mask = heap_mask;
 //    data.flags = flags;
 
-    if (ioctl(fd, ION_IOC_ALLOC, &data) < 0)
+    if (ioctl(fd, ION_IOC_ALLOC, &data) < 0) {
+        error(user_context) << "ION_IOC_ALLOC failed.\n";
         return -1;
+    }
 
     buf->dev = halide_new_device_wrapper((uint64_t)data.handle, &ion_device_interface);
     if (buf->dev == 0) {
-        error(user_context) << "Ion: out of memory allocating device wrapper.\n";
+        error(user_context) << "Out of memory allocating device wrapper.\n";
         ioctl(fd, ION_IOC_FREE, &data.handle);
         return -1;
     }
@@ -145,8 +150,10 @@ WEAK int halide_ion_device_free(void *user_context, buffer_t* buf) {
     #endif
 
     ion_user_handle_t handle = (ion_user_handle_t)halide_get_device_handle(buf->dev);
-    if (ioctl(fd, ION_IOC_FREE, &handle) < 0)
+    if (ioctl(fd, ION_IOC_FREE, &handle) < 0) {
+        error(user_context) << "ION_IOC_FREE failed.\n";
         return -1;
+    }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -176,14 +183,18 @@ WEAK int halide_ion_copy_to_device(void *user_context, buffer_t* buf) {
     ion_fd_data data;
     data.handle = (ion_user_handle_t)halide_get_device_handle(c.dst);
     int ret = ioctl(fd, ION_IOC_MAP, &data);
-    if (ret < 0)
+    if (ret < 0) {
+        error(user_context) << "ION_IOC_MAP failed.\n";
         return ret;
+    }
     if (data.fd == -1) {
+        error(user_context) << "ION_IOC_MAP failed to return a valid file descriptor.\n";
         return -1;
     }
     size_t map_size = buf_size(user_context, buf);
     char *c_dst = (char *)mmap(NULL, map_size, PROT_WRITE, 0, data.fd, 0);
     if (c_dst == MAP_FAILED) {
+        error(user_context) << "mmap failed.\n";
         return -1;
     }
 
@@ -239,14 +250,18 @@ WEAK int halide_ion_copy_to_host(void *user_context, buffer_t* buf) {
     ion_fd_data data;
     data.handle = (ion_user_handle_t)halide_get_device_handle(c.src);
     int ret = ioctl(fd, ION_IOC_MAP, &data);
-    if (ret < 0)
+    if (ret < 0) {
+        error(user_context) << "ION_IOC_MAP failed.\n";
         return ret;
+    }
     if (data.fd == -1) {
+        error(user_context) << "ION_IOC_MAP failed to return a valid file descriptor.\n";
         return -1;
     }
     size_t map_size = buf_size(user_context, buf);
     char *c_src = (char *)mmap(NULL, map_size, PROT_READ, 0, data.fd, 0);
     if (c_src == MAP_FAILED) {
+        error(user_context) << "mmap failed.\n";
         return -1;
     }
 
