@@ -1,6 +1,116 @@
 #include "HalideRuntime.h"
 #include "printer.h"
 #include "runtime_internal.h"
+
+//---------------------------------------------------------------------------
+//#define MEMINFO   1
+//
+// Define MEMINFO to make default_malloc/free produce memory tracing info:
+//
+//   default_malloc => [0x9e400, 0xa27ff] # size:17408, 1Kbyte aligned
+//   default_header => [0x9e390, 0x9e3ff] # size:112, 16 byte aligned
+//   default_malloc => [0xa2880, 0xa6e9f] # size:17952, 128 byte aligned
+//   default_header => [0xa2820, 0xa287f] # size:96, 32 byte aligned
+//   default_free   => [0x9e390, 0x9e3ff] # size:112, 16 byte aligned
+//   default_free   => [0xa2820, 0xa287f] # size:96, 32 byte aligned
+//
+
+#ifdef MEMINFO
+#define MEMBUFLEN  128
+
+// lightweight string generation routines that can be called from malloc/free
+static char *lw_val2str(char *dst, const char *end, intptr_t val, int base = 16) {
+    const char *dig2char = "0123456789abcdef";
+    int maxdigits = sizeof(intptr_t)*8;
+    char numbuf[maxdigits], *numptr = numbuf;
+    if ((base < 2) || (base > 16)) {
+        base = 16;
+    }
+    // Collect the digits (least to most significant digit)
+    if (base == 16) {
+        do { *numptr++ = dig2char[val & 0xf];  val >>= 4;   } while(val);
+    } else if (base == 8) {
+        do { *numptr++ = dig2char[val & 0x7];  val >>= 3;   } while(val);
+    } else if (base == 4) {
+        do { *numptr++ = dig2char[val & 0x3];  val >>= 2;   } while(val);
+    } else if (base == 2) {
+        do { *numptr++ = dig2char[val & 0x1];  val >>= 1;   } while(val);
+    } else if (base < 10) {
+        do { *numptr++ = (val % base) + '0';   val /= base; } while(val);
+    } else {
+        do { *numptr++ = dig2char[val % base]; val /= base; } while(val);
+    }
+    int numdigits = numptr - numbuf;
+    --numptr;   // Point to the most significant digit
+
+    // Add a prefix to identify the base
+    switch (base) {
+        case 16: if (dst < end) *dst++='0'; if (dst < end) *dst++='x'; break;
+        case 10: break;
+        case 8:  if (dst < end) *dst++='0'; break;
+        case 2:  if (dst < end) *dst++='0'; if (dst < end) *dst++='b'; break;
+        default:
+            if (dst < end) *dst++ = 'B';
+            if (dst < end) *dst++ = dig2char[base & 0xf];
+            if (dst < end) *dst++ = '_';
+            break;
+    }
+
+    // Skip leading zeros (all but the least significant digit)
+    int i = numdigits;
+    while ((i > 1) && (*numptr == '0')) {
+        numptr--; i--;
+    }
+    // Copy the digits to dst
+    while (i > 0) {
+        if (dst < end) {
+            *dst++ = *numptr--; i--;
+        } else {
+            break;
+        }
+    }
+    if (dst <= end) *dst = '\0';
+    return dst;
+}
+
+static char *lw_strcpy(char *dst, const char *end, const char *src) {
+    while (*src) {
+        if (dst < end)
+           *dst++ = *src++;
+        else
+           break;
+    }
+    if (dst <= end) *dst = '\0';
+    return dst;
+}
+
+static char *lw_align2str(char *dst, const char *end, intptr_t val) {
+    intptr_t align_chk = 1024*1024;
+    while (align_chk > 0) {
+        if ((val & (align_chk-1)) == 0) {
+            char aunit = ' ';
+            if (align_chk >= 1024) {
+                align_chk >>= 10;
+                aunit = 'K';
+            }
+            if (align_chk >= 1024) {
+                align_chk >>= 10;
+                aunit = 'M';
+            }
+
+            dst = lw_val2str(dst, end, align_chk, 10);
+            if (dst < end) *dst++ = aunit;
+            dst = lw_strcpy(dst, end, "byte aligned\n");
+            break;
+        }
+        align_chk >>= 1;
+    }
+    if (dst <= end) *dst = '\0';
+    return dst;
+}
+#endif // MEMINFO
+//---------------------------------------------------------------------------
+
 #ifdef __cplusplus
 extern "C" {
   WEAK void halide_mutex_lock(struct halide_mutex *mutex) {
@@ -36,10 +146,47 @@ extern "C" {
           // can fit the original pointer.
           void *ptr = (void *)((((size_t)orig + 128) >> 7) << 7);
           ((void **)ptr)[-1] = orig;
+
+#ifdef MEMINFO
+          char mem_buf[MEMBUFLEN], *dst, *end = &(mem_buf[MEMBUFLEN-1]);
+          dst = mem_buf;
+          dst = lw_strcpy(dst, end, "default_malloc => [");
+          dst = lw_val2str(dst, end, (intptr_t)ptr);
+          dst = lw_strcpy(dst, end, ", ");
+          dst = lw_val2str(dst, end, (intptr_t)ptr + x-1);
+          dst = lw_strcpy(dst, end, "] # size:");
+          dst = lw_val2str(dst, end, (intptr_t)x, 10);
+          dst = lw_strcpy(dst, end, ", ");
+          dst = lw_align2str(dst, end, (intptr_t)ptr);
+          halide_print(user_context, mem_buf);
+          dst = mem_buf;
+          dst = lw_strcpy(dst, end, "default_header => [");
+          dst = lw_val2str(dst, end, (intptr_t)orig);
+          dst = lw_strcpy(dst, end, ", ");
+          dst = lw_val2str(dst, end, (intptr_t)ptr - 1);
+          dst = lw_strcpy(dst, end, "] # size:");
+          dst = lw_val2str(dst, end, (intptr_t)ptr - (intptr_t)orig, 10);
+          dst = lw_strcpy(dst, end, ", ");
+          dst = lw_align2str(dst, end, (intptr_t)orig);
+          halide_print(user_context, mem_buf);
+#endif
           return ptr;
         }
 
         WEAK void default_free(void *user_context, void *ptr) {
+#ifdef MEMINFO
+          char mem_buf[MEMBUFLEN], *dst, *end = &(mem_buf[MEMBUFLEN-1]);
+          dst = mem_buf;
+          dst = lw_strcpy(dst, end, "default_free =>   [");
+          dst = lw_val2str(dst, end, (intptr_t)((void**)ptr)[-1]);
+          dst = lw_strcpy(dst, end, ", ");
+          dst = lw_val2str(dst, end, (intptr_t)ptr - 1);
+          dst = lw_strcpy(dst, end, "] # size:");
+          dst = lw_val2str(dst, end, (intptr_t)ptr - (intptr_t)((void**)ptr)[-1], 10);
+          dst = lw_strcpy(dst, end, ", ");
+          dst = lw_align2str(dst, end, (intptr_t)((void**)ptr)[-1]);
+          halide_print(user_context, mem_buf);
+#endif
           free(((void**)ptr)[-1]);
         }
 
