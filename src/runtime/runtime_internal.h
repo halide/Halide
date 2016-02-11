@@ -49,6 +49,8 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+#define O_RDONLY 0
+
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);

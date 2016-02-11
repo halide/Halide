@@ -61,6 +61,4 @@ struct ion_custom_data {
 #define ION_IOC_CUSTOM _IOWR(ION_IOC_MAGIC, 6, struct ion_custom_data)
 #define ION_IOC_SYNC   _IOWR(ION_IOC_MAGIC, 7, struct ion_fd_data)
 
-#define O_RDONLY 0
-
 }}}}  // namespace Halide::Runtime::Internal::Ion
