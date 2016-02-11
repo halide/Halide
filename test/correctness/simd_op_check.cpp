@@ -1451,12 +1451,15 @@ int main(int argc, char **argv) {
 
     for (ImageParam p : image_params) {
         // Make a buffer filled with noise to use as a sample input.
-        Buffer b(p.type(), {W*2+32, H});
+        Buffer b(p.type(), {W*4+H, H});
         Expr r;
         if (p.type().is_float()) {
             r = cast(p.type(), random_float() * 1024 - 512);
         } else {
-            r = cast(p.type(), random_int());
+            // Avoid cases where vector vs scalar do different things
+            // on signed integer overflow by limiting ourselves to 28
+            // bit numbers.
+            r = cast(p.type(), random_int() / 4);
         }
         lambda(x, y, r).realize(b);
         p.set(b);
