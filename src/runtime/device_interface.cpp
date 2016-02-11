@@ -87,7 +87,8 @@ WEAK uint64_t halide_get_device_handle(uint64_t dev_field) {
     debug(NULL) << "Getting device handle for interface " << wrapper->interface
                 << " device_handle " << (void *)wrapper->device_handle
                 << " at addr " << wrapper << "\n";
-    return wrapper->device_handle;
+    uint64_t ret = wrapper->device_handle;
+    return ret;
 }
 
 WEAK const halide_device_interface *halide_get_device_interface(uint64_t dev_field) {

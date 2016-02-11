@@ -24,7 +24,9 @@ int main(int argc, char **argv) {
     buffer_t out = in;
     out.host = out_host;
 
+    printf("Running pipeline...");
     int result = scale(2, &in, &out);
+    printf("done: %d\n", result);
 
     return result;
 }
