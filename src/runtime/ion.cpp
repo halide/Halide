@@ -42,6 +42,8 @@ WEAK int halide_ion_get_descriptor(void *user_context, int *fd, bool create = tr
         ion_fd = open("/dev/ion", O_RDONLY, 0);
         if (ion_fd == -1) {
             error(user_context) << "Failed to open /dev/ion.\n";
+        } else {
+            debug(user_context) << "Ion: opened /dev/ion, fd=" << ion_fd << "\n";
         }
     }
 
@@ -110,14 +112,31 @@ WEAK int halide_ion_device_malloc(void *user_context, buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    // From rpcmem_android.c.
+    const int adsp_heap_id = 22;
+    static uint32_t align[] = {
+        0x100000, 0x40000, 0x10000, 0x4000, 0x1000
+    };
+
     ion_allocation_data data;
-    data.len = size;
-    data.align = 32;
-//    data.heap_id_mask = heap_mask;
-//    data.flags = flags;
+    data.len = (size + 4096 - 1) & ~(4096 - 1);
+    data.align = 4096;
+    for (size_t i = 0; i < sizeof(align)/sizeof(align[0]); i++) {
+        if (data.len >= align[i]) {
+            data.align = align[i];
+            break;
+        }
+    }
+    data.heap_id_mask = 1 << adsp_heap_id;
+    data.flags = 0;
 
     if (ioctl(fd, ION_IOC_ALLOC, &data) < 0) {
-        error(user_context) << "ION_IOC_ALLOC failed.\n";
+        debug(user_context)
+            << "data{.len=" << (int)data.len
+            << ", .align=" << (int)data.align
+            << ", .heap_id_mask=" << data.heap_id_mask
+            << ", .flags=" << data.flags << "}\n";
+        error(user_context) << "ION_IOC_ALLOC (" << (unsigned int)ION_IOC_ALLOC << ") failed.\n";
         return -1;
     }
 
