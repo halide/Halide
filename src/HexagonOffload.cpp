@@ -61,7 +61,6 @@ public:
             }
 
             std::vector<Expr> params;
-            params.push_back(user_context_value());
             params.push_back(hex_name);
             params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
             params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
