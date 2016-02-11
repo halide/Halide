@@ -75,6 +75,7 @@ DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
+DECLARE_CPP_INITMOD(ion)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(destructors)
@@ -703,32 +704,31 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
-          if (t.arch != Target::Hexagon)
-          {
-            //PDB: Disabling all that is posix for the time being. We'll need to deal with
-            // write_debug_image soon, at the very least.
+            if (t.arch != Target::Hexagon) {
+                //PDB: Disabling all that is posix for the time being. We'll need to deal with
+                // write_debug_image soon, at the very least.
 
-            modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-          }
-          modules.push_back(get_initmod_tracing(c, bits_64, debug));
-          modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-          modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-          modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-          if (t.arch != Target::Hexagon) {
-            modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-          } else {
-            modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
-          }
-          modules.push_back(get_initmod_cache(c, bits_64, debug));
-          // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
-          // from the tutorials.
-          if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
-            modules.push_back(get_initmod_to_string(c, bits_64, debug));
+                modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
+            }
+            modules.push_back(get_initmod_tracing(c, bits_64, debug));
+            modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+            modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+            modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+            if (t.arch != Target::Hexagon) {
+                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
+            }
+            modules.push_back(get_initmod_cache(c, bits_64, debug));
+            // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
+            // from the tutorials.
+            if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
+                modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
-          modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-          modules.push_back(get_initmod_metadata(c, bits_64, debug));
-          modules.push_back(get_initmod_profiler(c, bits_64, debug));
-          modules.push_back(get_initmod_float16_t(c, bits_64, debug));
+            modules.push_back(get_initmod_device_interface(c, bits_64, debug));
+            modules.push_back(get_initmod_metadata(c, bits_64, debug));
+            modules.push_back(get_initmod_profiler(c, bits_64, debug));
+            modules.push_back(get_initmod_float16_t(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
@@ -819,6 +819,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
+        } else if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
+            modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
+            modules.push_back(get_initmod_ion(c, bits_64, debug));
+            modules.push_back(get_initmod_hexagon(c, bits_64, debug));
         }
     }
 
