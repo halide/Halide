@@ -188,6 +188,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_openglcompute_run",
         "halide_renderscript_run",
         "halide_metal_run",
+        "halide_hexagon_run",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
