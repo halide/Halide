@@ -6,6 +6,11 @@
 #include "mmap.h"
 #include "cuda_opencl_shared.h"
 
+// TODO: Remove errno, this is probably not going to work on all but a
+// few android platforms.
+extern "C" volatile int* __errno(void);
+#define errno (*__errno())
+
 #define INLINE inline __attribute__((always_inline))
 
 #define ALIGNMENT 4096
@@ -115,7 +120,7 @@ WEAK int halide_ion_device_malloc(void *user_context, buffer_t *buf) {
     #endif
 
     // From rpcmem_android.c.
-    const int adsp_heap_id = 22;
+    const int adsp_heap_id = 25;
     ion_allocation_data data;
     data.len = (size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
     data.align = ALIGNMENT;
@@ -128,7 +133,7 @@ WEAK int halide_ion_device_malloc(void *user_context, buffer_t *buf) {
         << ", heap_id_mask=" << data.heap_id_mask
         << ", flags=" << data.flags << " -> ";
     if (ioctl(fd, ION_IOC_ALLOC, &data) < 0) {
-        debug(user_context) << " error\n";
+        debug(user_context) << "        error\n";
         error(user_context) << "ioctl(ION_IOC_ALLOC) failed.\n";
         return -1;
     } else {
@@ -179,50 +184,35 @@ WEAK int halide_ion_device_free(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK int halide_ion_copy_to_device(void *user_context, buffer_t* buf) {
-    debug(user_context)
-        <<  "Ion: halide_ion_copy_to_device (user_context: " << user_context
-        << ", buf: " << buf << ")\n";
+namespace {
 
+// Use ION_IOC_MAP to get a file descriptor for a buffer.
+WEAK int ion_ioc_map(void *user_context, int handle) {
+    // Get ion file descriptor.
     int fd = -1;
     int err = halide_ion_get_descriptor(user_context, &fd);
-    if (err != 0) return err;
+    if (err != 0) return -1;
 
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
-    halide_assert(user_context, buf->host && buf->dev);
-
-    device_copy c = make_host_to_device_copy(buf);
-
+    // Get file descriptor of the buffer.
+    debug(user_context) << "    ioctl(ION_IOC_MAP) handle=" << handle << " -> ";
     ion_fd_data data;
-    data.handle = c.dst;
-
-    debug(user_context) << "    ioctl(ION_IOC_MAP) handle=" << data.handle << " -> ";
+    data.handle = handle;
     int ret = ioctl(fd, ION_IOC_MAP, &data);
     if (ret < 0) {
         error(user_context) << "ioctl(ION_IOC_MAP) failed.\n";
-        return ret;
+        return -1;
     } else {
         debug(user_context) << "        " << data.fd << "\n";
     }
     if (data.fd == -1) {
         error(user_context) << "ION_IOC_MAP failed to return a valid file descriptor.\n";
-        return -1;
     }
 
-    size_t map_size = buf_size(user_context, buf);
-    map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_WRITE MAP_SHARED fd=" << data.fd << " -> ";
-    char *c_dst = (char *)mmap(NULL, map_size, PROT_WRITE, MAP_SHARED, data.fd, 0);
-    if (c_dst == MAP_FAILED) {
-        error(user_context) << "mmap failed.\n";
-        return -1;
-    } else {
-        debug(user_context) << "         " << c_dst << "\n";
-    }
+    return data.fd;
+}
 
+// Implement a device copy using memcpy.
+WEAK void do_memcpy(void *user_context, device_copy c) {
     // TODO: Is this 32-bit or 64-bit? Leaving signed for now
     // in case negative strides.
     for (int w = 0; w < (int)c.extent[3]; w++) {
@@ -234,7 +224,7 @@ WEAK int halide_ion_copy_to_device(void *user_context, buffer_t* buf) {
                                     z * c.stride_bytes[2] +
                                     w * c.stride_bytes[3]);
                     void *src = (void *)(c.src + off);
-                    void *dst = (void *)(c_dst + off);
+                    void *dst = (void *)(c.dst + off);
                     uint64_t size = c.chunk_size;
                     debug(user_context) << "    memcpy "
                                         << "(" << x << ", " << y << ", " << z << ", " << w << "), "
@@ -244,6 +234,40 @@ WEAK int halide_ion_copy_to_device(void *user_context, buffer_t* buf) {
             }
         }
     }
+}
+
+}  // namespace
+
+WEAK int halide_ion_copy_to_device(void *user_context, buffer_t* buf) {
+    debug(user_context)
+        <<  "Ion: halide_ion_copy_to_device (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    halide_assert(user_context, buf->host && buf->dev);
+
+    device_copy c = make_host_to_device_copy(buf);
+
+    int buf_fd = ion_ioc_map(user_context, c.dst);
+    if (buf_fd == -1) return -1;
+
+    size_t map_size = buf_size(user_context, buf);
+    map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
+    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_WRITE MAP_SHARED fd=" << buf_fd << " -> ";
+    void *c_dst = mmap(NULL, map_size, PROT_WRITE, MAP_SHARED, buf_fd, 0);
+    if (c_dst == MAP_FAILED) {
+        debug(user_context) << "        MAP_FAILED\n";
+        error(user_context) << "mmap failed (errno=" << errno << ")\n";
+        return -1;
+    } else {
+        debug(user_context) << "        " << c_dst << "\n";
+    }
+    c.dst = (uintptr_t)c_dst;
+
+    do_memcpy(user_context, c);
 
     munmap(c_dst, map_size);
 
@@ -260,10 +284,6 @@ WEAK int halide_ion_copy_to_host(void *user_context, buffer_t* buf) {
         << "Ion: halide_ion_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
-    int fd = -1;
-    int err = halide_ion_get_descriptor(user_context, &fd);
-    if (err != 0) return err;
-
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
@@ -272,55 +292,23 @@ WEAK int halide_ion_copy_to_host(void *user_context, buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    ion_fd_data data;
-    data.handle = c.src;
-    debug(user_context) << "    ioctl(ION_IOC_MAP) handle=" << data.handle << " -> ";
-    int ret = ioctl(fd, ION_IOC_MAP, &data);
-    if (ret < 0) {
-        error(user_context) << "ioctl(ION_IOC_MAP) failed.\n";
-        return ret;
-    } else {
-        debug(user_context) << "         " << data.fd << "\n";
-    }
-    if (data.fd == -1) {
-        error(user_context) << "ION_IOC_MAP failed to return a valid file descriptor.\n";
-        return -1;
-    }
+    int buf_fd = ion_ioc_map(user_context, c.src);
+    if (buf_fd == -1) return -1;
 
     size_t map_size = buf_size(user_context, buf);
     map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_READ MAP_SHARED fd=" << data.fd << " -> ";
-    char *c_src = (char *)mmap(NULL, map_size, PROT_READ, MAP_SHARED, data.fd, 0);
+    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_READ MAP_SHARED fd=" << buf_fd << " -> ";
+    void *c_src = mmap(NULL, map_size, PROT_READ, MAP_SHARED, buf_fd, 0);
     if (c_src == MAP_FAILED) {
-        error(user_context) << "mmap failed.\n";
+        debug(user_context) << "        MAP_FAILED\n";
+        error(user_context) << "mmap failed (errno=" << errno << ")\n";
         return -1;
     } else {
         debug(user_context) << "        " << c_src << "\n";
     }
+    c.src = (uintptr_t)c_src;
 
-    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-    // in case negative strides.
-    for (int w = 0; w < (int)c.extent[3]; w++) {
-        for (int z = 0; z < (int)c.extent[2]; z++) {
-            for (int y = 0; y < (int)c.extent[1]; y++) {
-                for (int x = 0; x < (int)c.extent[0]; x++) {
-                    uint64_t off = (x * c.stride_bytes[0] +
-                                    y * c.stride_bytes[1] +
-                                    z * c.stride_bytes[2] +
-                                    w * c.stride_bytes[3]);
-                    void *src = (void *)(c_src + off);
-                    void *dst = (void *)(c.dst + off);
-                    uint64_t size = c.chunk_size;
-
-                    debug(user_context) << "    memcpy "
-                                        << "(" << x << ", " << y << ", " << z << ", " << w << "), "
-                                        << (void *)src << " -> " << dst << ", " << size << " bytes\n";
-
-                    memcpy(dst, src, size);
-                }
-            }
-        }
-    }
+    do_memcpy(user_context, c);
 
     munmap(c_src, map_size);
 
