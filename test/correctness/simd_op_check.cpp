@@ -1352,10 +1352,10 @@ void check_hvx_all() {
     check("vnavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) - u16(u8_2))/2));
     check("vnavg(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) - i32(i16_2))/2));
 
-    check("vshuffe(v*.uh,v*.uh)", hvx_width/1, u8(u16_1));
-    check("vshuffe(v*.uw,v*.uw)", hvx_width/2, u16(u32_1));
-    check("vshuffo(v*.uh,v*.uh)", hvx_width/1, u8(u16_1 >> 8));
-    check("vshuffo(v*.uw,v*.uw)", hvx_width/2, u16(u32_1 >> 16));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(u32_1 >> 16));
 
     check("vabsdiff(v*.ub,v*.ub)", hvx_width/1, absd(u8_1, u8_2));
     check("vabsdiff(v*.uh,v*.uh)", hvx_width/2, absd(u16_1, u16_2));
