@@ -7,9 +7,6 @@ extern "C" {
   }
   WEAK void halide_mutex_unlock(struct halide_mutex *mutex) {}
   WEAK void halide_mutex_cleanup(struct halide_mutex *mutex_arg) {}
-  WEAK void halide_error(void *user_context, const char *s) {
-        write(STDERR_FILENO, s, strlen(s));
-  }
   WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                              int min, int size, uint8_t *closure) {
     return -1;
@@ -54,12 +51,6 @@ extern "C" {
 
   WEAK void halide_free(void *user_context, void *ptr) {
     custom_free(user_context, ptr);
-  }
-
-  WEAK int halide_error_out_of_memory(void *user_context) {
-    // The error message builder uses malloc, so we can't use it here.
-    halide_error(user_context, "Out of memory (halide_malloc returned NULL)");
-    return halide_error_code_out_of_memory;
   }
 
 struct spawn_thread_task {
