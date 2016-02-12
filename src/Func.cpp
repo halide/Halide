@@ -1650,9 +1650,6 @@ void Func::compile_to_assembly(const string &filename, const vector<Argument> &a
     pipeline().compile_to_assembly(filename, args, "", target);
 }
 
-void Func::compile_to_assembly(const string &filename, const Target &target) {
-    compile_to_assembly(filename, vector<Argument>(), "", target);
-}
 // JIT-related code
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
