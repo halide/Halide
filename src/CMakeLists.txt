@@ -22,6 +22,7 @@ set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
   android_io
+  android_ion
   android_opengl_context
   cache
   cuda

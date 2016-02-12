@@ -6,11 +6,6 @@
 #include "mmap.h"
 #include "cuda_opencl_shared.h"
 
-// TODO: Remove errno, this is probably not going to work on all but a
-// few android platforms.
-extern "C" volatile int* __errno(void);
-#define errno (*__errno())
-
 #define INLINE inline __attribute__((always_inline))
 
 #define ALIGNMENT 4096
@@ -47,7 +42,7 @@ WEAK int halide_ion_get_descriptor(void *user_context, int *fd, bool create = tr
     // If the context has not been initialized, initialize it now.
     if (ion_fd == -1 && create) {
         debug(user_context) << "    open /dev/ion -> ";
-        ion_fd = open("/dev/ion", O_RDONLY, 0);
+        ion_fd = ion_open();
         debug(user_context) << "        " << ion_fd << "\n";
         if (ion_fd == -1) {
             error(user_context) << "Failed to open /dev/ion.\n";
@@ -76,7 +71,7 @@ WEAK int halide_ion_device_release(void *user_context) {
         // Only destroy the context if we own it
         if (fd == ion_fd) {
             debug(user_context) << "    close " << ion_fd << "\n";
-            close(ion_fd);
+            ion_close(ion_fd);
             ion_fd = -1;
         }
     }
@@ -89,15 +84,22 @@ WEAK int halide_ion_device_malloc(void *user_context, buffer_t *buf) {
         << "Ion: halide_ion_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
-    int fd = -1;
-    int err = halide_ion_get_descriptor(user_context, &fd);
-    if (err != 0) return err;
-
-    size_t size = buf_size(user_context, buf);
     if (buf->dev) {
         // This buffer already has a device allocation
         return 0;
     }
+
+    int fd = -1;
+    int err = halide_ion_get_descriptor(user_context, &fd);
+    if (err != 0) return err;
+
+    // From rpcmem_android.c.
+    unsigned int heap_id = 25;
+
+    size_t size = buf_size(user_context, buf);
+    size_t align = 4096;
+    unsigned int heap_id_mask = 1 << heap_id;
+    unsigned int flags = 0;
 
     halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
@@ -119,30 +121,24 @@ WEAK int halide_ion_device_malloc(void *user_context, buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    // From rpcmem_android.c.
-    const int adsp_heap_id = 25;
-    ion_allocation_data data;
-    data.len = (size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-    data.align = ALIGNMENT;
-    data.heap_id_mask = 1 << adsp_heap_id;
-    data.flags = 0;
 
     debug(user_context)
-        << "    ioctl(ION_IOC_ALLOC) len=" << (uint64_t)data.len
-        << ", align=" << (uint64_t)data.align
-        << ", heap_id_mask=" << data.heap_id_mask
-        << ", flags=" << data.flags << " -> ";
-    if (ioctl(fd, ION_IOC_ALLOC, &data) < 0) {
+        << "    ion_alloc len=" << (uint64_t)size
+        << ", align=" << (uint64_t)align
+        << ", heap_id_mask=" << heap_id_mask
+        << ", flags=" << flags << " -> ";
+    ion_user_handle_t handle = ion_alloc(fd, size, align, heap_id_mask, flags);
+    if (handle == -1) {
         debug(user_context) << "        error\n";
-        error(user_context) << "ioctl(ION_IOC_ALLOC) failed.\n";
+        error(user_context) << "ion_alloc failed\n";
         return -1;
     } else {
-        debug(user_context) << "        " << data.handle << "\n";
+        debug(user_context) << "        " << handle << "\n";
     }
 
-    buf->dev = halide_new_device_wrapper((uint64_t)data.handle, &ion_device_interface);
+    buf->dev = halide_new_device_wrapper((uint64_t)handle, &ion_device_interface);
     if (buf->dev == 0) {
-        ioctl(fd, ION_IOC_FREE, &data.handle);
+        ion_free(fd, handle);
         error(user_context) << "Out of memory allocating device wrapper.\n";
         return -1;
     }
@@ -170,11 +166,8 @@ WEAK int halide_ion_device_free(void *user_context, buffer_t* buf) {
 
     ion_user_handle_t handle = halide_ion_get_device_handle(user_context, buf);
 
-    debug(user_context) << "    ioctl(ION_IOC_FREE) handle=" << handle << "\n";
-    if (ioctl(fd, ION_IOC_FREE, &handle) < 0) {
-        error(user_context) << "ioctl(ION_IOC_FREE) failed.\n";
-        return -1;
-    }
+    debug(user_context) << "    ion_free handle=" << handle << "\n";
+    ion_free(fd, handle);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -187,28 +180,24 @@ WEAK int halide_ion_device_free(void *user_context, buffer_t* buf) {
 namespace {
 
 // Use ION_IOC_MAP to get a file descriptor for a buffer.
-WEAK int ion_ioc_map(void *user_context, int handle) {
+WEAK int get_buffer_descriptor(void *user_context, int handle) {
     // Get ion file descriptor.
     int fd = -1;
     int err = halide_ion_get_descriptor(user_context, &fd);
     if (err != 0) return -1;
 
-    // Get file descriptor of the buffer.
-    debug(user_context) << "    ioctl(ION_IOC_MAP) handle=" << handle << " -> ";
-    ion_fd_data data;
-    data.handle = handle;
-    int ret = ioctl(fd, ION_IOC_MAP, &data);
-    if (ret < 0) {
-        error(user_context) << "ioctl(ION_IOC_MAP) failed.\n";
+    // Get the descriptor associated with the ion buffer.
+    int buf_fd = ion_map(fd, handle);
+    debug(user_context) << "    ion_map handle=" << handle << " -> ";
+    if (buf_fd == -1) {
+        debug(user_context) << "        failed\n";
+        error(user_context) << "ion_map failed\n";
         return -1;
     } else {
-        debug(user_context) << "        " << data.fd << "\n";
-    }
-    if (data.fd == -1) {
-        error(user_context) << "ION_IOC_MAP failed to return a valid file descriptor.\n";
+        debug(user_context) << "        " << buf_fd << "\n";
     }
 
-    return data.fd;
+    return buf_fd;
 }
 
 // Implement a device copy using memcpy.
@@ -248,19 +237,20 @@ WEAK int halide_ion_copy_to_device(void *user_context, buffer_t* buf) {
     #endif
 
     halide_assert(user_context, buf->host && buf->dev);
-
     device_copy c = make_host_to_device_copy(buf);
 
-    int buf_fd = ion_ioc_map(user_context, c.dst);
+    // Get the descriptor associated with the ion buffer.
+    int buf_fd = get_buffer_descriptor(user_context, c.dst);
     if (buf_fd == -1) return -1;
 
+    // Map the descriptor.
     size_t map_size = buf_size(user_context, buf);
     map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
     debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_WRITE MAP_SHARED fd=" << buf_fd << " -> ";
     void *c_dst = mmap(NULL, map_size, PROT_WRITE, MAP_SHARED, buf_fd, 0);
     if (c_dst == MAP_FAILED) {
         debug(user_context) << "        MAP_FAILED\n";
-        error(user_context) << "mmap failed (errno=" << errno << ")\n";
+        error(user_context) << "mmap failed\n";
         return -1;
     } else {
         debug(user_context) << "        " << c_dst << "\n";
@@ -288,20 +278,21 @@ WEAK int halide_ion_copy_to_host(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    halide_assert(user_context, buf->dev && buf->dev);
-
+    halide_assert(user_context, buf->host && buf->dev);
     device_copy c = make_device_to_host_copy(buf);
 
-    int buf_fd = ion_ioc_map(user_context, c.src);
+    // Get the descriptor associated with the ion buffer.
+    int buf_fd = get_buffer_descriptor(user_context, c.src);
     if (buf_fd == -1) return -1;
 
+    // Map the descriptor.
     size_t map_size = buf_size(user_context, buf);
     map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
     debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_READ MAP_SHARED fd=" << buf_fd << " -> ";
     void *c_src = mmap(NULL, map_size, PROT_READ, MAP_SHARED, buf_fd, 0);
     if (c_src == MAP_FAILED) {
         debug(user_context) << "        MAP_FAILED\n";
-        error(user_context) << "mmap failed (errno=" << errno << ")\n";
+        error(user_context) << "mmap failed\n";
         return -1;
     } else {
         debug(user_context) << "        " << c_src << "\n";
