@@ -726,8 +726,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
             // from the tutorials.
-            if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
+            if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone)) {
                 modules.push_back(get_initmod_to_string(c, bits_64, debug));
+            }
 
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
