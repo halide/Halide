@@ -2741,7 +2741,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         bool takes_user_context = function_takes_user_context(op->name);
         if (takes_user_context) {
             internal_assert(fn) << "External function " << op->name << " is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
-
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
