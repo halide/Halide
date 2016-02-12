@@ -2719,7 +2719,8 @@ void CodeGen_Hexagon::visit(const Load *op) {
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
     if (ramp && stride && stride->value == 1) {
       int width = ramp->lanes;
-      ModulusRemainder mod_rem = getAlignmentInfo(ramp->base);
+      ModulusRemainder mod_rem = get_alignment_info(ramp->base);
+
       int alignment_required = CPICK(128, 64);
       if (width != alignment_required) {
         // This will happen only under two cases.
