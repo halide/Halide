@@ -552,23 +552,6 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
-    for (size_t i = 0; i < args.size(); i++) {
-      if (args[i].is_buffer()) {
-        const int *sm = &(args[i].stride_multiples[0]);
-        if (sm) {
-          int dims = args[i].dimensions;
-          string arg_name = args[i].name;
-          for (int j=0; j < dims; j++) {
-            if (sm[j] != -1) {
-              string dim = std::to_string(j);
-              string stride_name = arg_name + ".stride." + dim;
-              ModulusRemainder MR(sm[j], 0);
-              alignment_info.push(stride_name, MR);
-            }
-          }
-        }
-      }
-    }
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
     function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module.get());
@@ -1672,9 +1655,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
     inst->setMetadata("tbaa", tbaa);
 }
-ModulusRemainder CodeGen_LLVM::getAlignmentInfo(Expr e) {
-  return modulus_remainder(e, alignment_info);
-}
+
 void CodeGen_LLVM::visit(const Load *op) {
 
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
@@ -1708,7 +1689,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             // can infer based on the index alone.
 
             // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            ModulusRemainder mod_rem = get_alignment_info(ramp->base);
             if (!possibly_misaligned) {
                 while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
@@ -3168,7 +3149,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             int native_bytes = native_bits / 8;
 
             // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            ModulusRemainder mod_rem = get_alignment_info(ramp->base);
             if (!possibly_misaligned) {
                 while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
@@ -3485,6 +3466,10 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     }
 
     return std::make_pair<llvm::Function *, int>(NULL, 0);
+}
+
+ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {
+    return modulus_remainder(e, alignment_info);
 }
 
 }}

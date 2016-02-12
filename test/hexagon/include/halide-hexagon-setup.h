@@ -61,12 +61,11 @@ void set_min(ImageParam &I, int dim, Expr a) {
 void set_output_buffer_min(Func &f, int dim, Expr a) {
   f.output_buffer().set_min(dim, a);
 }
-void set_stride_multiple(ImageParam &I, int dim, int m) {
-  I.set_stride_multiple(dim, m);
+void set_stride_multiple(OutputImageParam I, int dim, int m) {
+  I.set_stride(dim, (I.stride(dim) / m) * m);
 }
-void set_stride_multiple(Func &f, int dim, int m) {
-  Expr stride = f.output_buffer().stride(dim);
-  f.output_buffer().set_stride_multiple(dim, m);
+void set_stride_multiple(Func f, int dim, int m) {
+  set_stride_multiple(f.output_buffer(), dim, m);
 }
 
 Expr sat_8(Expr e) {
