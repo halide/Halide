@@ -97,10 +97,6 @@ typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-      WEAK void halide_print_impl(void *user_context, const char * str) {
-        write(STDERR_FILENO, str, strlen(str));
-      }
-
       WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         stringstream ss(user_context);
 
@@ -193,7 +189,6 @@ namespace Halide { namespace Runtime { namespace Internal {
         return 0;
       }
       WEAK trace_fn halide_custom_trace = default_trace;
-      WEAK void (*halide_custom_print)(void *, const char *) = halide_print_impl;
     }}} // namespace Halide::Runtime::Internal
 
   WEAK trace_fn halide_set_custom_trace(trace_fn t) {
@@ -207,9 +202,5 @@ namespace Halide { namespace Runtime { namespace Internal {
   WEAK int halide_shutdown_trace() {
         return 0;
   }
-  WEAK void halide_print(void *user_context, const char *msg) {
-    (*halide_custom_print)(user_context, msg);
-  }
-
 }
 #endif

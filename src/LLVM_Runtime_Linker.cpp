@@ -678,6 +678,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_ssp(c, bits_64, debug));
+            } else if (t.os == Target::HexagonStandalone) {
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
             }
         }
 
@@ -712,11 +715,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
             modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
             modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-            if (t.arch != Target::Hexagon) {
-                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-            } else {
-                modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
-            }
+            modules.push_back(get_initmod_posix_print(c, bits_64, debug));
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
             // from the tutorials.
