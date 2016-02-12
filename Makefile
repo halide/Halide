@@ -514,7 +514,6 @@ RUNTIME_CPP_COMPONENTS = \
   gcd_thread_pool \
   gpu_device_selection \
   hexagon \
-  hexagon_standalone \
   ion \
   ios_io \
   linux_clock \

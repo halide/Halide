@@ -34,7 +34,11 @@ WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *) =
 
 extern "C" {
 
-WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
+WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
+    halide_error(user_context, "halide_spawn_thread not implemented on this platform");
+}
+
+WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
 }
 
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
