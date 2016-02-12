@@ -461,14 +461,14 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     vector<string> retain = {"__stack_chk_guard",
                              "__stack_chk_fail"};
 
-    if (t.has_feature(Target::MinGW)) {      
+    if (t.has_feature(Target::MinGW)) {
         retain.insert(retain.end(),
                              {"sincos", "sincosf",
                               "asinh", "asinhf",
                               "acosh", "acoshf",
                               "atanh", "atanhf"});
     }
-    
+
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
@@ -691,7 +691,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.bits == 32) {
                     modules.push_back(get_initmod_win32_math_ll(c));
                 } else {
-                    modules.push_back(get_initmod_posix_math_ll(c));                
+                    modules.push_back(get_initmod_posix_math_ll(c));
                 }
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
@@ -702,32 +702,32 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
-          if (t.arch != Target::Hexagon)
-          {
-            //PDB: Disabling all that is posix for the time being. We'll need to deal with
-            // write_debug_image soon, at the very least.
+            if (t.arch != Target::Hexagon) {
+                //PDB: Disabling all that is posix for the time being. We'll need to deal with
+                // write_debug_image soon, at the very least.
 
-            modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-          }
-          modules.push_back(get_initmod_tracing(c, bits_64, debug));
-          modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-          modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-          modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-          if (t.arch != Target::Hexagon) {
-            modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-          } else {
-            modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
-          }
-          modules.push_back(get_initmod_cache(c, bits_64, debug));
-          // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
-          // from the tutorials.
-          if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone))
-            modules.push_back(get_initmod_to_string(c, bits_64, debug));
+                modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
+            }
+            modules.push_back(get_initmod_tracing(c, bits_64, debug));
+            modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+            modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+            modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+            if (t.arch != Target::Hexagon) {
+                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
+            }
+            modules.push_back(get_initmod_cache(c, bits_64, debug));
+            // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
+            // from the tutorials.
+            if (!(t.arch == Target::Hexagon && t.os == Target::HexagonStandalone)) {
+                modules.push_back(get_initmod_to_string(c, bits_64, debug));
+            }
 
-          modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-          modules.push_back(get_initmod_metadata(c, bits_64, debug));
-          modules.push_back(get_initmod_profiler(c, bits_64, debug));
-          modules.push_back(get_initmod_float16_t(c, bits_64, debug));
+            modules.push_back(get_initmod_device_interface(c, bits_64, debug));
+            modules.push_back(get_initmod_metadata(c, bits_64, debug));
+            modules.push_back(get_initmod_profiler(c, bits_64, debug));
+            modules.push_back(get_initmod_float16_t(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
