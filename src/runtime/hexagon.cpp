@@ -37,6 +37,8 @@ WEAK int halide_hexagon_run(void *user_context,
         }
     }
 
+    debug(user_context) << "    not implemented!\n";
+
     return 0;
 }
 
