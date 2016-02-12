@@ -71,10 +71,6 @@ OutputImageParam &OutputImageParam::set_stride(int dim, Expr stride) {
     param.set_stride_constraint(dim, stride);
     return *this;
 }
-OutputImageParam &OutputImageParam::set_stride_multiple(int dim, int stride) {
-    param.set_stride_multiple(dim, stride);
-    return *this;
-}
 
 OutputImageParam &OutputImageParam::set_bounds(int dim, Expr min, Expr extent) {
     return set_min(dim, min).set_extent(dim, extent);
@@ -124,7 +120,7 @@ Internal::Parameter OutputImageParam::parameter() const {
 }
 
 OutputImageParam::operator Argument() const {
-  return Argument(name(), kind, type(), dimensions(), Expr(), Expr(), Expr(), param.stride_multiples());
+  return Argument(name(), kind, type(), dimensions(), Expr(), Expr(), Expr());
 }
 
 OutputImageParam::operator ExternFuncArgument() const {
