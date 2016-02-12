@@ -60,6 +60,9 @@ public:
                 arg_is_buffer.push_back(Expr((uint8_t)false));
             }
 
+            // The argument list is terminated with an argument of size 0.
+            arg_sizes.push_back(Expr((size_t)0));
+
             std::vector<Expr> params;
             params.push_back(hex_name);
             params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
