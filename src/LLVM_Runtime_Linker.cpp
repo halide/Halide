@@ -680,6 +680,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_ssp(c, bits_64, debug));
             } else if (t.os == Target::HexagonStandalone) {
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                // TODO: Replace fake thread pool with a real implementation.
+                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_hexagon_standalone(c, bits_64, debug));
             }
         }
