@@ -29,15 +29,15 @@ struct ion_handle_data {
 #define ION_IOC_MAP    _IOWR(ION_IOC_MAGIC, 2, struct ion_fd_data)
 
 // Halide ion interface implementation.
-int ion_open() {
+WEAK int ion_open() {
     return open("/dev/ion", O_RDONLY, 0);
 }
 
-void ion_close(int ion_fd) {
+WEAK void ion_close(int ion_fd) {
     close(ion_fd);
 }
 
-ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
+WEAK ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
     ion_allocation_data alloc;
     alloc.len = len;
     alloc.align = align;
@@ -49,13 +49,13 @@ ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int h
     return alloc.handle;
 }
 
-void ion_free(int ion_fd, ion_user_handle_t ion_handle) {
+WEAK void ion_free(int ion_fd, ion_user_handle_t ion_handle) {
     if(ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
         // warn?
     }
 }
 
-int ion_map(int ion_fd, ion_user_handle_t ion_handle) {
+WEAK int ion_map(int ion_fd, ion_user_handle_t ion_handle) {
     ion_fd_data map;
     map.handle = ion_handle;
     if (ioctl(ion_fd, ION_IOC_MAP, &map) < 0) {

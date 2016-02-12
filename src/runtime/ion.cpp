@@ -3,7 +3,7 @@
 #include "HalideRuntimeIon.h"
 #include "printer.h"
 #include "mini_ion.h"
-#include "mmap.h"
+#include "mini_mman.h"
 #include "cuda_opencl_shared.h"
 
 #define INLINE inline __attribute__((always_inline))
@@ -246,8 +246,8 @@ WEAK int halide_ion_copy_to_device(void *user_context, buffer_t* buf) {
     // Map the descriptor.
     size_t map_size = buf_size(user_context, buf);
     map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_WRITE MAP_SHARED fd=" << buf_fd << " -> ";
-    void *c_dst = mmap(NULL, map_size, PROT_WRITE, MAP_SHARED, buf_fd, 0);
+    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " Write Shared fd=" << buf_fd << " -> ";
+    void *c_dst = mmap(NULL, map_size, MapProtocol::Write, MapFlags::Shared, buf_fd, 0);
     if (c_dst == MAP_FAILED) {
         debug(user_context) << "        MAP_FAILED\n";
         error(user_context) << "mmap failed\n";
@@ -288,8 +288,8 @@ WEAK int halide_ion_copy_to_host(void *user_context, buffer_t* buf) {
     // Map the descriptor.
     size_t map_size = buf_size(user_context, buf);
     map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " PROT_READ MAP_SHARED fd=" << buf_fd << " -> ";
-    void *c_src = mmap(NULL, map_size, PROT_READ, MAP_SHARED, buf_fd, 0);
+    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " Read Shared fd=" << buf_fd << " -> ";
+    void *c_src = mmap(NULL, map_size, MapProtocol::Read, MapFlags::Shared, buf_fd, 0);
     if (c_src == MAP_FAILED) {
         debug(user_context) << "        MAP_FAILED\n";
         error(user_context) << "mmap failed\n";
