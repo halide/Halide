@@ -1,3 +1,12 @@
+// waitpid, etc doesn't exist on windows.
+#ifdef _WIN32
+#include <stdio.h>
+int main(int argc, char **argv) {
+    printf("Skipping test on windows\n");
+    return 0;
+}
+#else
+
 #include <fstream>
 
 #include "Halide.h"
@@ -24,8 +33,13 @@ string filter = "";
 
 Target target;
 
+ImageParam in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64;
+
 int num_processes = 16;
 int my_process_id = 0;
+
+// width and height of test images
+const int W = 256*3, H = 100;
 
 void check(string op, int vector_width, Expr e) {
     static int counter = 0;
@@ -44,8 +58,6 @@ void check(string op, int vector_width, Expr e) {
     if ((!filter.empty()) && (op.find(filter) == string::npos)) return;
     if (counter % num_processes != my_process_id) return;
 
-    const int W = 256*3, H = 100;
-
     // Define a vectorized Func that uses the pattern.
     Func f(name);
     f(x, y) = e;
@@ -63,17 +75,7 @@ void check(string op, int vector_width, Expr e) {
     Func error("error_" + name);
     error() = maximum(abs(cast<double>(f(r.x, r.y)) - f_scalar(r.x, r.y)));
 
-    vector<Argument> arg_types;
-    arg_types.push_back(Argument("in_f32", Argument::InputBuffer, Float(32), 1));
-    arg_types.push_back(Argument("in_f64", Argument::InputBuffer, Float(64), 1));
-    arg_types.push_back(Argument("in_i8",  Argument::InputBuffer, Int(8),    1));
-    arg_types.push_back(Argument("in_u8",  Argument::InputBuffer, UInt(8),   1));
-    arg_types.push_back(Argument("in_i16", Argument::InputBuffer, Int(16),   1));
-    arg_types.push_back(Argument("in_u16", Argument::InputBuffer, UInt(16),  1));
-    arg_types.push_back(Argument("in_i32", Argument::InputBuffer, Int(32),   1));
-    arg_types.push_back(Argument("in_u32", Argument::InputBuffer, UInt(32),  1));
-    arg_types.push_back(Argument("in_i64", Argument::InputBuffer, Int(64),   1));
-    arg_types.push_back(Argument("in_u64", Argument::InputBuffer, UInt(64),  1));
+    vector<Argument> arg_types {in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
 
     {
         // Compile just the vector Func to assembly
@@ -99,7 +101,7 @@ void check(string op, int vector_width, Expr e) {
 
         if (!found_it) {
             failed = true;
-            std::cerr << msg.str();
+            std::cerr << "Failed: " << msg.str();
         }
 
         asm_file.close();
@@ -108,6 +110,22 @@ void check(string op, int vector_width, Expr e) {
     // Also compile the error checking Func
     error.compile_to_file("test_" + name, arg_types, target);
 
+    // If we can (target matches host), run the error checking Func.
+    Target host_target = get_host_target();
+    if (target.arch == host_target.arch &&
+        target.bits == host_target.bits &&
+        target.os == host_target.os) {
+        Realization r = error.realize(0, target.without_feature(Target::NoRuntime));
+        double e = Image<double>(r[0])(0);
+        // Use a very loose tolerance for floating point tests. The
+        // kinds of bugs we're looking for are codegen bugs that
+        // return the wrong value entirely, not floating point
+        // accuracy differences between vectors and scalars.
+        if (e > 0.001) {
+            failed = true;
+            std::cerr << "The vector and scalar versions of " << name << " disagree. Maximum error: " << e << "\n";
+        }
+    }
 }
 
 Expr i64(Expr e) {
@@ -151,17 +169,6 @@ Expr f64(Expr e) {
 }
 
 void check_sse_all() {
-    ImageParam in_f32(Float(32), 1, "in_f32");
-    ImageParam in_f64(Float(64), 1, "in_f64");
-    ImageParam in_i8(Int(8), 1, "in_i8");
-    ImageParam in_u8(UInt(8), 1, "in_u8");
-    ImageParam in_i16(Int(16), 1, "in_i16");
-    ImageParam in_u16(UInt(16), 1, "in_u16");
-    ImageParam in_i32(Int(32), 1, "in_i32");
-    ImageParam in_u32(UInt(32), 1, "in_u32");
-    ImageParam in_i64(Int(64), 1, "in_i64");
-    ImageParam in_u64(UInt(64), 1, "in_u64");
-
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
     Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
@@ -513,17 +520,6 @@ void check_sse_all() {
 }
 
 void check_neon_all() {
-    ImageParam in_f32(Float(32), 1, "in_f32");
-    ImageParam in_f64(Float(64), 1, "in_f64");
-    ImageParam in_i8(Int(8), 1, "in_i8");
-    ImageParam in_u8(UInt(8), 1, "in_u8");
-    ImageParam in_i16(Int(16), 1, "in_i16");
-    ImageParam in_u16(UInt(16), 1, "in_u16");
-    ImageParam in_i32(Int(32), 1, "in_i32");
-    ImageParam in_u32(UInt(32), 1, "in_u32");
-    ImageParam in_i64(Int(64), 1, "in_i64");
-    ImageParam in_u64(UInt(64), 1, "in_u64");
-
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
     Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
@@ -1294,16 +1290,6 @@ void check_neon_all() {
 }
 
 void check_altivec_all() {
-    ImageParam in_f32(Float(32), 1, "in_f32");
-    ImageParam in_f64(Float(64), 1, "in_f64");
-    ImageParam in_i8(Int(8), 1, "in_i8");
-    ImageParam in_u8(UInt(8), 1, "in_u8");
-    ImageParam in_i16(Int(16), 1, "in_i16");
-    ImageParam in_u16(UInt(16), 1, "in_u16");
-    ImageParam in_i32(Int(32), 1, "in_i32");
-    ImageParam in_u32(UInt(32), 1, "in_u32");
-    ImageParam in_i64(Int(64), 1, "in_i64");
-    ImageParam in_u64(UInt(64), 1, "in_u64");
 
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
@@ -1449,6 +1435,36 @@ int main(int argc, char **argv) {
     use_vsx = target.has_feature(Target::VSX);
     use_power_arch_2_07 = target.has_feature(Target::POWER_ARCH_2_07);
 
+
+    ImageParam image_params[] = {
+        in_f32 = ImageParam(Float(32), 1, "in_f32"),
+        in_f64 = ImageParam(Float(64), 1, "in_f64"),
+        in_i8  = ImageParam(Int(8), 1, "in_i8"),
+        in_u8  = ImageParam(UInt(8), 1, "in_u8"),
+        in_i16 = ImageParam(Int(16), 1, "in_i16"),
+        in_u16 = ImageParam(UInt(16), 1, "in_u16"),
+        in_i32 = ImageParam(Int(32), 1, "in_i32"),
+        in_u32 = ImageParam(UInt(32), 1, "in_u32"),
+        in_i64 = ImageParam(Int(64), 1, "in_i64"),
+        in_u64 = ImageParam(UInt(64), 1, "in_u64")
+    };
+
+    for (ImageParam p : image_params) {
+        // Make a buffer filled with noise to use as a sample input.
+        Buffer b(p.type(), {W*4+H, H});
+        Expr r;
+        if (p.type().is_float()) {
+            r = cast(p.type(), random_float() * 1024 - 512);
+        } else {
+            // Avoid cases where vector vs scalar do different things
+            // on signed integer overflow by limiting ourselves to 28
+            // bit numbers.
+            r = cast(p.type(), random_int() / 4);
+        }
+        lambda(x, y, r).realize(b);
+        p.set(b);
+    }
+
     if (target.arch == Target::X86) {
         check_sse_all();
     } else if (target.arch == Target::ARM) {
@@ -1464,12 +1480,28 @@ int main(int argc, char **argv) {
     for (int child : children) {
         int child_status = 0;
         waitpid(child, &child_status, 0);
-        if (child_status) failed = true;
+        if (child_status) {
+            failed = true;
+        }
     }
 
     if (!children.empty() && !failed) {
         printf("Success!\n");
     }
 
+    // Avoid any static destructor issues.
+    in_f32 = ImageParam();
+    in_f64 = ImageParam();
+    in_i8  = ImageParam();
+    in_u8  = ImageParam();
+    in_i16 = ImageParam();
+    in_u16 = ImageParam();
+    in_i32 = ImageParam();
+    in_u32 = ImageParam();
+    in_i64 = ImageParam();
+    in_u64 = ImageParam();
+
     return failed ? -1 : 0;
 }
+
+#endif

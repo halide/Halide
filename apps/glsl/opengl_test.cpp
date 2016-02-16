@@ -52,7 +52,7 @@ void test_blur() {
     Image output(W, H, C, Image::Planar);
 
     fprintf(stderr, "test_blur\n");
-    blur_filter(&input.buf, &output.buf);
+    blur(&input.buf, &output.buf);
     fprintf(stderr, "test_blur complete\n");
 }
 
@@ -62,7 +62,7 @@ void test_ycc() {
     Image output(W, H, C, Image::Planar);
 
     fprintf(stderr, "test_ycc\n");
-    ycc_filter(&input.buf, &output.buf);
+    ycc(&input.buf, &output.buf);
     fprintf(stderr, "Ycc complete\n");
 }
 

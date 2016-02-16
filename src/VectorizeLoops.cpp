@@ -451,19 +451,11 @@ class VectorizeLoops : public IRMutator {
                 << "vectorized dimension.";
 
             if (min.type().is_vector()) {
-                // for (x from vector_min to scalar_extent)
-                // becomes
-                // for (x.scalar from 0 to scalar_extent) {
-                //   let x = vector_min + broadcast(scalar_extent)
-                // }
-                Expr var = Variable::make(Int(32), op->name + ".scalar");
-                Expr value = Add::make(min, Broadcast::make(var, min.type().lanes()));
-                scope.push(op->name, value);
-                Stmt body = mutate(op->body);
-                scope.pop(op->name);
-                body = LetStmt::make(op->name, value, body);
-                Stmt transformed = For::make(op->name + ".scalar", 0, extent, for_type, op->device_api, body);
-                stmt = transformed;
+                // Rebase the loop to zero and try again
+                Expr var = Variable::make(Int(32), op->name);
+                Stmt body = substitute(op->name, var + op->min, op->body);
+                Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->device_api, body);
+                stmt = mutate(transformed);
                 return;
             }
 

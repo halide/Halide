@@ -240,7 +240,8 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 
     if (target.arch == Target::PNaCl) {
         compile_module_to_llvm_bitcode(m, filename_prefix + ".bc");
-    } else if (target.os == Target::Windows) {
+    } else if (target.os == Target::Windows &&
+               !target.has_feature(Target::MinGW)) {
         compile_module_to_object(m, filename_prefix + ".obj");
     } else {
         compile_module_to_object(m, filename_prefix + ".o");
@@ -787,14 +788,18 @@ struct JITFuncCallContext {
     ErrorBuffer error_buffer;
     JITUserContext jit_context;
     Parameter &user_context_param;
+    bool custom_error_handler;
 
     JITFuncCallContext(const JITHandlers &handlers, Parameter &user_context_param)
         : user_context_param(user_context_param) {
         void *user_context = NULL;
         JITHandlers local_handlers = handlers;
         if (local_handlers.custom_error == NULL) {
+            custom_error_handler = false;
             local_handlers.custom_error = ErrorBuffer::handler;
             user_context = &error_buffer;
+        } else {
+            custom_error_handler = true;
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
         user_context_param.set_scalar(&jit_context);
@@ -809,13 +814,16 @@ struct JITFuncCallContext {
     }
 
     void report_if_error(int exit_status) {
-        if (exit_status) {
+        // Only report the errors if no custom error handler was installed
+        if (exit_status && !custom_error_handler) {
             std::string output = error_buffer.str();
-            if (!output.empty()) {
-                // Only report the errors if no custom error handler was installed
-                halide_runtime_error << error_buffer.str();
-                error_buffer.end = 0;
+            if (output.empty()) {
+                output = ("The pipeline returned exit status " +
+                          std::to_string(exit_status) +
+                          " but halide_error was never called.\n");
             }
+            halide_runtime_error << output;
+            error_buffer.end = 0;
         }
     }
 

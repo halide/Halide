@@ -12,6 +12,7 @@
 #include "Error.h"
 #include "Type.h"
 #include "Util.h"
+#include "Expr.h"
 
 namespace Halide {
 
@@ -77,8 +78,8 @@ struct Target {
         NoRuntime, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
         Metal, ///< Enable the (Apple) Metal runtime.
-
-        FeatureEnd
+        MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
+        FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     };
 
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -90,26 +91,26 @@ struct Target {
     }
 
     void set_feature(Feature f, bool value = true) {
+        if (f == FeatureEnd) return;
         user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
         features.set(f, value);
     }
 
     void set_features(std::vector<Feature> features_to_set, bool value = true) {
-        for (size_t i = 0; i < features_to_set.size(); i++) {
-            set_feature(features_to_set[i], value);
+        for (Feature f : features_to_set) {
+            set_feature(f, value);
         }
     }
 
     bool has_feature(Feature f) const {
+        if (f == FeatureEnd) return true;
         user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
         return features[f];
     }
 
     bool features_any_of(std::vector<Feature> test_features) const {
-        for (size_t i = 0; i < test_features.size(); i++) {
-            user_assert(test_features[i] < FeatureEnd) << "Invalid Target feature.\n";
-
-            if (features[test_features[i]]) {
+        for (Feature f : test_features) {
+            if (has_feature(f)) {
                 return true;
             }
         }
@@ -117,10 +118,8 @@ struct Target {
     }
 
     bool features_all_of(std::vector<Feature> test_features) const {
-        for (size_t i = 0; i < test_features.size(); i++) {
-            user_assert(test_features[i] < FeatureEnd) << "Invalid Target feature.\n";
-
-            if (!features[test_features[i]]) {
+        for (Feature f : test_features) {
+            if (!has_feature(f)) {
                 return false;
             }
         }
@@ -172,6 +171,10 @@ struct Target {
         }
         return true;
     }
+
+    /** Returns whether a particular device API can be used with this
+     * Target. */
+    bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
       return os == other.os &&
@@ -252,6 +255,9 @@ struct Target {
         return natural_vector_size(type_of<data_t>());
     }
 
+    /** Was libHalide compiled with support for this target? */
+    EXPORT bool supported() const;
+
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
@@ -278,6 +284,12 @@ EXPORT Target get_jit_target_from_environment();
  * will be used instead. An empty string is exactly equivalent to get_host_target().
  */
 EXPORT Target parse_target_string(const std::string &target);
+
+
+/** Get the Target feature corresponding to a DeviceAPI. For device
+ * apis that do not correspond to any single target feature, returns
+ * Target::FeatureEnd */
+EXPORT Target::Feature target_feature_for_device_api(DeviceAPI api);
 
 namespace Internal {
 
