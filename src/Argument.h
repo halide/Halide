@@ -56,13 +56,11 @@ struct Argument {
      * By default, they are left unset, implying "no default, no min, no max". */
     Expr def, min, max;
 
-  int stride_multiples[4];
     Argument() : kind(InputScalar), dimensions(0) {}
     Argument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions,
                 Expr _def = Expr(),
                 Expr _min = Expr(),
-                Expr _max = Expr(),
-                int *_stride_multiples = nullptr) :
+                Expr _max = Expr()) :
         name(_name), kind(_kind), dimensions(_dimensions), type(_type), def(_def), min(_min), max(_max) {
         user_assert(!(is_scalar() && dimensions != 0))
             << "Scalar Arguments must specify dimensions of 0";
@@ -72,13 +70,6 @@ struct Argument {
             << "Scalar min must not be defined for Buffer Arguments";
         user_assert(!(is_buffer() && max.defined()))
             << "Scalar max must not be defined for Buffer Arguments";
-        if (_stride_multiples) {
-          for (int i = 0; i < _dimensions; i++)
-            stride_multiples[i] = _stride_multiples[i];
-        } else {
-          for (int i = 0; i < _dimensions; i++)
-            stride_multiples[i] = -1;
-        }
     }
 
     bool is_buffer() const { return kind == InputBuffer || kind == OutputBuffer; }
