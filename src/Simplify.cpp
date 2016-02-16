@@ -2821,7 +2821,9 @@ private:
                 expr = make_const(op->type, ia);
             } else if (ta.is_uint()) {
               // abs(uint) is a no-op.
-              expr = a;
+              // For Hexagon, do not treat this as a no-op. See explanation
+              // in IROperator.h:inline Expr abs(Expr a)
+              expr = abs(a);
             } else if (const_float(a, &fa)) {
                 if (fa < 0) {
                     fa = -fa;

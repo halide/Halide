@@ -1,0 +1,69 @@
+#!/bin/bash
+
+declare -a schedule_descriptors=('ARM' 'Scalar (128x128 tiles)' 'HVX (32x32 tiles; VF 32; Single Mode)' \
+    'HVX (32x32 tiles; Scalar; Single Mode)' 'HVX (64x64 tiles; VF 64; Double Mode)' \
+    'HVX (64x64 tiles; Scalar; Double Mode)' 'HVX (VF 32; No Tiling)' 'HVX (VF 64; No Tiling)' \
+    'No tiling; Scalar' 'HVX (32x32 tiles; VF 32; Single Mode; Func Output unrolled in x (BEST SCHEDULE)' \
+    'HVX (64x64 tiles; VF 64; Double Mode; Func Output unrolled in x (BEST SCHEDULE)');
+
+declare -a log2vlens=(0 0 6  6  7  7  6  7  6  6  7);
+export TOP=`pwd`
+export LD_LIBRARY_PATH=$TOP/../../bin
+#export LLVM_CONFIG=$TOP/llvm/build/bin/llvm-config
+export HEX_TOOLS=/pkg/qct/software/hexagon/releases/tools/7.4/Tools
+
+#export HL_DEBUG_CODEGEN=2
+#export HALIDE_LLVM_ARGS="-debug-only=isel"
+#export HALIDE_LLVM_ARGS="-print-before-all"
+export ARCHSTRING="--l2cache_perfect 1"
+
+GDB="/pkg/qct/software/gnu64/gdb/7.2/bin/gdb --args"
+GDB=
+TIMING="--timing"
+TARGET="all out_small.ppm"
+#MYCXXFLAGS="-DLOG2VLEN=6 -DNOFCAM -g"
+
+which clang++
+date
+for i in `seq 2 10`;
+do
+    MYCXXFLAGS="-DLOG2VLEN=${log2vlens[$i]} -DNOFCAM -g"
+    echo $MYCXXFLAGS
+    LOG=cam_$i.log
+    make clean
+    make CXX=clang++ \
+        EXTRA_FLAGS="-DDEBUG" \
+        TIMING=$TIMING \
+        HALIDE_BIN_PATH=${TOP}/../.. \
+        HALIDE_SRC_PATH=${TOP}/../.. \
+        EXTRA_CXXFLAGS="$MYCXXFLAGS" \
+        EXTRA_TGT_CXXFLAGS="$MYCXXFLAGS" \
+        LDFLAGS="-L ${TOP}/../../bin  -lHalide" \
+        GDB="${GDB}" \
+        SCHEDULE=${i} \
+        ${TARGET} 2>&1 | tee $LOG
+    if [ -f "out_small.ppm" ]; then
+        cmp -s out_small.ppm ref_small/out_small.ppm > /dev/null
+        if [ $? -eq 1 ]; then
+            results[$i]="FAIL"
+        else
+            results[$i]="PASS"
+            echo "${results[$i]}"
+        fi
+    else
+        results[$i]="FAIL"
+    fi
+done
+for i in `seq 2 10`;
+do
+    if [ "${results[$i]}" == "PASS" ]; then
+        LOG=cam_$i.log
+        cyc_pixel=`grep "Halide:" $LOG | grep cycles/pixel | awk '{print $2}'`
+        echo "${schedule_descriptors[$i]}, $cyc_pixel"
+    else
+        echo "${schedule_descriptors[$i]}, ${results[$i]}"
+    fi
+done
+
+date
+

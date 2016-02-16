@@ -2,6 +2,7 @@
 HALIDE_TOP = $(shell pwd)/../../..
 CXXFLAGS = "--std=c++11"
 CLANG = hexagon-clang++
+CXX=clang++
 CURR_DIR = $(shell pwd)
 LIT = $(shell ${LLVM_CONFIG} --src-root)/utils/lit/lit.py
 FILECHECK_PATH = $(shell ${LLVM_CONFIG} --bindir)

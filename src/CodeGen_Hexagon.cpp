@@ -114,6 +114,21 @@ Expr vnavg(Expr A, Expr B) {
   Type wider = A.type().with_bits(A.type().bits() * 2);
   return cast(A.type(), (cast(wider, A) - cast(wider, B))/2);
 }
+Expr sat_sub(Expr A, Expr B) {
+  Type wider = Int(A.type().bits() * 2, A.type().lanes());
+  Expr max_v = A.type().max();
+  Expr min_v = A.type().min();
+  return cast(A.type(), max(min(cast(wider, A) - cast(wider, B),
+                                max_v), min_v));
+
+}
+Expr sat_add(Expr A, Expr B) {
+  Type wider = Int(A.type().bits() * 2, A.type().lanes());
+  Expr max_v = A.type().max();
+  Expr min_v = A.type().min();
+  return cast(A.type(), max(min(cast(wider, A) + cast(wider, B),
+                                max_v), min_v));
+}
 #ifdef THESE_ARE_UNUSED
 Expr bitwiseNot(Expr A) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_not, {A},
@@ -293,13 +308,14 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
                            IPICK(Intrinsic::hexagon_V6_vaddh)));
   varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) +
                            WPICK(wild_u16x64,wild_u16x32),
-                           IPICK(Intrinsic::hexagon_V6_vadduhsat)));
+                           IPICK(Intrinsic::hexagon_V6_vaddh)));
   // Word Vectors.
   varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
                            WPICK(wild_i32x32,wild_i32x16),
                            IPICK(Intrinsic::hexagon_V6_vaddw)));
+// Hexagon v62 feature.
+#include <v62feat1.inc>
   {
-    // Note: no 32-bit saturating unsigned add in V60, use vaddw
     varith.push_back(Pattern(WPICK(wild_u32x32,wild_u32x16) +
                            WPICK(wild_u32x32,wild_u32x16),
                            IPICK(Intrinsic::hexagon_V6_vaddw)));
@@ -324,8 +340,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) +
                            WPICK(wild_i32x64,wild_i32x32),
                            IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
+// Hexagon v62 feature
+#include <v62feat2.inc>
   {
-    // Note: no 32-bit saturating unsigned add in V60, use vaddw
     varith.push_back(Pattern(WPICK(wild_u32x64,wild_u32x32) +
                            WPICK(wild_u32x64,wild_u32x32),
                            IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
@@ -346,7 +363,7 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
                            IPICK(Intrinsic::hexagon_V6_vsubh)));
   varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) -
                            WPICK(wild_u16x64,wild_u16x32),
-                           IPICK(Intrinsic::hexagon_V6_vsubuhsat)));
+                           IPICK(Intrinsic::hexagon_V6_vsubh)));
   // Word Vectors.
   varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) -
                            WPICK(wild_i32x32,wild_i32x16),
@@ -450,6 +467,13 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     // flag being set for the wrong module.
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                 "Halide HVX internal compiler\n");
+#ifdef LLVM_HAS_QUIC_ENABLE
+      // We need to EnableQuIC for LLVM and Halide (Unrolling).
+      char *s = strdup("HALIDE_LLVM_QUIC=-enable-quic -hexagon-small-data-threshold=0");
+      ::putenv(s);
+      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
+                                  "Halide HVX quic option\n");
+#endif
     if (module.target().has_feature(Halide::Target::HVX_128)) {
         char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
         ::putenv(s);
@@ -1053,6 +1077,7 @@ bool CodeGen_Hexagon::possiblyGenerateVMPAAccumulate(const Add *op) {
   return false;
 }
 void CodeGen_Hexagon::visit(const Add *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
   debug(4) << "HexagonCodegen: " << op->type << ", " << op->a
            << " + " << op->b << "\n";
   if (isLargerThanDblVector(op->type, native_vector_bits())) {
@@ -1066,7 +1091,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
     Value *Lt = LLVMValues[0];
     Value *Rt = LLVMValues[1];
     llvm::Function *F =
-      Intrinsic::getDeclaration(module.get(), Intrinsic::hexagon_V6_vmpabuuv);
+      Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vmpabuuv));
     llvm::FunctionType *FType = F->getFunctionType();
     llvm::Type *T0 = FType->getParamType(0);
     llvm::Type *T1 = FType->getParamType(1);
@@ -1094,7 +1119,7 @@ void CodeGen_Hexagon::visit(const Add *op) {
     Value *Lt = LLVMValues[0];
     Value *Rt = LLVMValues[1];
     llvm::Function *F =
-      Intrinsic::getDeclaration(module.get(), Intrinsic::hexagon_V6_vdmpyhvsat);
+      Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vdmpyhvsat));
     llvm::FunctionType *FType = F->getFunctionType();
     llvm::Type *T0 = FType->getParamType(0);
     llvm::Type *T1 = FType->getParamType(1);
@@ -1611,6 +1636,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
       // into u16x64/i16x64
       Patterns.clear();
       matches.clear();
+#include <v62feat3.inc>
       Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
                                             UINT_16_IMAX)),
                                    IPICK(Intrinsic::hexagon_V6_vsatwh)));
@@ -1697,6 +1723,40 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 // End of handleLargeVectors
 /////////////////////////////////////////////////////////////////////////////
 
+bool CodeGen_Hexagon::possiblyCodeGenSaturatingArith(const Cast *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
+  std::vector<Pattern> patterns;
+  vector<Expr> matches;
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_u8x128, wild_u8x64),
+                                     WPICK(wild_u8x128, wild_u8x64)),
+                                     IPICK(Intrinsic::hexagon_V6_vsububsat)));
+  patterns.push_back(Pattern(sat_add(WPICK(wild_u8x128, wild_u8x64),
+                                     WPICK(wild_u8x128, wild_u8x64)),
+                                     IPICK(Intrinsic::hexagon_V6_vaddubsat)));
+
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_u16x64, wild_u16x32),
+                                     WPICK(wild_u16x64, wild_u16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vsubuhsat)));
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_i16x64, wild_i16x32),
+                                     WPICK(wild_i16x64, wild_i16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vsubhsat)));
+
+  patterns.push_back(Pattern(sat_add(WPICK(wild_u16x64, wild_u16x32),
+                                     WPICK(wild_u16x64, wild_u16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vadduhsat)));
+  patterns.push_back(Pattern(sat_add(WPICK(wild_i16x64, wild_i16x32),
+                                     WPICK(wild_i16x64, wild_i16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vaddhsat)));
+
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_i32x32, wild_i32x16),
+                                     WPICK(wild_i32x32, wild_i32x16)),
+                                     IPICK(Intrinsic::hexagon_V6_vsubwsat)));
+  patterns.push_back(Pattern(sat_add(WPICK(wild_i32x32, wild_i32x16),
+                                     WPICK(wild_i32x32, wild_i32x16)),
+                                     IPICK(Intrinsic::hexagon_V6_vaddwsat)));
+  value = emitBinaryOp(op, patterns);
+  return value != NULL;
+}
 bool CodeGen_Hexagon::possiblyCodeGenVavg(const Cast *op) {
   bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> avgs;
@@ -1851,6 +1911,9 @@ void CodeGen_Hexagon::visit(const Cast *op) {
       }
     bool B128 = target.has_feature(Halide::Target::HVX_128);
     if (possiblyCodeGenVavg(op)) {
+      return;
+    }
+    if (possiblyCodeGenSaturatingArith(op)) {
       return;
     }
     // Looking for shuffles
@@ -2551,6 +2614,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
       if (is_zero(op->value)) {
         ID = IPICK(Intrinsic::hexagon_V6_vd0);
         zero_bcast = true;
+#include <v62feat4.inc>
       } else {
         ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
         if (match8 || match16) {
@@ -2756,7 +2820,50 @@ void CodeGen_Hexagon::visit(const Load *op) {
           }
         }
       }
-    }
+    } else if (ramp && stride && stride->value == 2) {
+        // Load two vectors worth and then shuffle
+        Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
+
+        // False indicates we should take the even-numbered lanes
+        // from the load, true indicates we should take the
+        // odd-numbered-lanes.
+        bool shifted_a = false, shifted_b = false;
+        // If the base ends in an odd constant, then subtract one
+        // and do a different shuffle. This helps expressions like
+        // (f(2*x) + f(2*x+1) share loads
+        const Add *add = ramp->base.as<Add>();
+        const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
+        if (offset && offset->value & 1) {
+          base_a -= 1;
+          shifted_a = true;
+          base_b -= 1;
+          shifted_b = true;
+        }
+
+        // Do each load.
+        Expr ramp_a = Ramp::make(base_a, 1, ramp->lanes);
+        Expr ramp_b = Ramp::make(base_b, 1, ramp->lanes);
+        Expr load_a = Load::make(op->type, op->name, ramp_a, op->image,
+                                 op->param);
+        Expr load_b = Load::make(op->type, op->name, ramp_b, op->image,
+                                 op->param);
+        Value *vec_a = codegen(load_a);
+        Value *vec_b = codegen(load_b);
+
+        // Shuffle together the results.
+        vector<Constant *> indices(ramp->lanes);
+        for (int i = 0; i < (ramp->lanes + 1)/2; i++) {
+          indices[i] = ConstantInt::get(i32, i*2 + (shifted_a ? 1 : 0));
+        }
+        for (int i = (ramp->lanes + 1)/2; i < ramp->lanes; i++) {
+          indices[i] = ConstantInt::get(i32, i*2 + (shifted_b ? 1 : 0));
+        }
+
+        debug(2) << "Loading two vectors and shuffle: \n";
+        value = builder->CreateShuffleVector(vec_a, vec_b,
+                                             ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value -> dump();
+      }
   }
   if (!value)
     CodeGen_Posix::visit(op);

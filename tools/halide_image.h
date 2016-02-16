@@ -76,6 +76,10 @@ class Image {
         buf.dev = 0;
         while ((size_t)buf.host & (ALIGN_CONTENTS-1)) buf.host++;
         contents = new Contents(buf, ptr);
+
+#ifdef IMGINIT
+        info("init");
+#endif
     }
 
 public:
@@ -228,9 +232,14 @@ public:
         contents->buf.min[2] = z;
         contents->buf.min[3] = w;
     }
+
+    void info(const char *tag = "Image") const;
+    void dump(const char *tag = "Image") const;
+    void stats(const char *tag = "Image") const;
 };
 
 }  // namespace Tools
 }  // namespace Halide
 
+#include "halide_image_info.h"
 #endif  // HALIDE_TOOLS_IMAGE_H

@@ -105,6 +105,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%4d ", _lut[i]);
     }
     fprintf(stderr, "\n");
+    Image_info(lut);
+    Image_dump(lut);
+    Image_stats(lut);
 #endif
 #endif // FCAMLUT
 
