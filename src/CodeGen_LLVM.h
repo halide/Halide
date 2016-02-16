@@ -424,7 +424,10 @@ protected:
      * If there's no match, returns (NULL, 0).
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
-    ModulusRemainder getAlignmentInfo(Expr e);
+
+    /** Get the result of modulus-remainder analysis for a given expr. */
+    ModulusRemainder get_alignment_info(Expr e);
+
 private:
 
     /** All the values in scope at the current code location during

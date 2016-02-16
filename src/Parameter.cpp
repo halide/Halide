@@ -20,7 +20,6 @@ struct ParameterContents {
     Expr min_constraint[4];
     Expr extent_constraint[4];
     Expr stride_constraint[4];
-    int stride_multiple[4];
     Expr min_value, max_value;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
         : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r), name(n), buffer(Buffer()), data(0) {
@@ -28,9 +27,6 @@ struct ParameterContents {
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
         stride_constraint[0] = 1;
-        int i;
-        for (i = 0; i < 4; i++)
-          stride_multiple[i] = -1;
     }
 };
 
@@ -212,12 +208,6 @@ void Parameter::set_stride_constraint(int dim, Expr e) {
     contents.ptr->stride_constraint[dim] = e;
 }
 
-void Parameter::set_stride_multiple(int dim, int i) {
-    check_is_buffer();
-    check_dim_ok(dim);
-    contents.ptr->stride_multiple[dim] = i;
-}
-
 Expr Parameter::min_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
@@ -234,16 +224,6 @@ Expr Parameter::stride_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
     return contents.ptr->stride_constraint[dim];
-}
-
-int Parameter::stride_multiple(int dim) const {
-    check_is_buffer();
-    check_dim_ok(dim);
-    return contents.ptr->stride_multiple[dim];
-}
-int * Parameter::stride_multiples() const {
-    check_is_buffer();
-    return &(contents.ptr->stride_multiple[0]);
 }
 
 void Parameter::set_min_value(Expr e) {

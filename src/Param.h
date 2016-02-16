@@ -188,7 +188,7 @@ protected:
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
     Argument::Kind kind;
-    
+
     void add_implicit_args_if_placeholder(std::vector<Expr> &args,
                                           Expr last_arg,
                                           int total_args,
@@ -255,7 +255,6 @@ public:
      * vectorizing. Known strides for the vectorized dimension
      * generate better code. */
     EXPORT OutputImageParam &set_stride(int dim, Expr stride);
-    EXPORT OutputImageParam &set_stride_multiple(int dim, int stride);
 
     /** Set the min and extent in one call. */
     EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
