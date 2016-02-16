@@ -13,6 +13,7 @@ SUBDIRS = \
   conv3x3a32
 
 NOT_READY4PRIMTIME = \
+  histogram \
   nv12torgb888 \
   sigma3x3 \
   bilateral \
