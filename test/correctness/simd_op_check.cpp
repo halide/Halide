@@ -109,7 +109,7 @@ void check(string op, int vector_width, Expr e) {
 
     {
         // Compile just the vector Func to assembly. Compile without
-        // asserts make the assembly easier to read.
+        // asserts to make the assembly easier to read.
         string asm_filename = "check_" + name + ".s";
         f.compile_to_assembly(asm_filename, arg_types, target.with_feature(Target::NoAsserts));
 
