@@ -21,7 +21,7 @@ CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN}
 
 
 sobel.o sobel.h: sobel.cpp
-	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} sobel.cpp -g  -o sobel.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./sobel.generate.out
 
 
@@ -37,13 +37,13 @@ clean:
 .PHONY: assembly
 
 assembly: sobel.cpp
-	${X86_CLANG} sobel.cpp -g -o sobel.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} sobel.cpp -g -o sobel.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}  ; ./sobel.generate.out
 
 .PHONY: bitcode
 
 bitcode: sobel.cpp
-	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} sobel.cpp -g  -o sobel.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ;  ./sobel.generate.out
 
 .PHONY: all
@@ -88,7 +88,7 @@ run: sobel.out
 .PHONY: stmt
 
 stmt: sobel.cpp
-	${X86_CLANG} sobel.cpp -g  -o sobel.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} sobel.cpp -g  -o sobel.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./sobel.generate.out
 
 .PHONY: synthetic

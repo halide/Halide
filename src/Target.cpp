@@ -189,8 +189,8 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arm", Target::ARM},
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
-    {"hexagon", Target::Hexagon},
     {"powerpc", Target::POWERPC},
+    {"hexagon", Target::Hexagon},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -228,9 +228,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
-    {"hvx-64", Target::HVX_64},
-    {"hvx-128", Target::HVX_128},
-    {"hvx-v62", Target::HVX_V62},
+    {"hvx_64", Target::HVX_64},
+    {"hvx_128", Target::HVX_128},
+    {"hvx_v62", Target::HVX_V62},
     {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
@@ -440,6 +440,9 @@ bool Target::supported() const {
 #endif
 #if !(WITH_POWERPC)
     bad |= arch == Target::POWERPC;
+#endif
+#if !(WITH_HEXAGON)
+    bad |= arch == Target::Hexagon;
 #endif
 #if !(WITH_PTX)
     bad |= has_feature(Target::CUDA);

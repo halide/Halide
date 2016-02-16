@@ -14,7 +14,6 @@ endif
 TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -24,7 +23,7 @@ CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 CXXFLAGS += ${EXTRA_FLAGS}
 HALIDE_FUNC_CFLAGS = -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 gaussian5x5.o gaussian5x5.h: gaussian5x5.cpp
-	${X86_CLANG}  gaussian5x5.cpp -g -o gaussian5x5.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  gaussian5x5.cpp -g -o gaussian5x5.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./gaussian5x5.generate.out  ${B128_MODE}
 
 
@@ -42,13 +41,13 @@ clean:
 .PHONY: assembly
 
 assembly: gaussian5x5.cpp
-	${X86_CLANG}  gaussian5x5.cpp -g  -o gaussian5x5.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  gaussian5x5.cpp -g  -o gaussian5x5.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian5x5.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: gaussian5x5.cpp
-	${X86_CLANG}  gaussian5x5.cpp -g  -lHalide -lpthread -ldl -o gaussian5x5.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  gaussian5x5.cpp -g  -lHalide -lpthread -ldl -o gaussian5x5.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian5x5.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
@@ -94,7 +93,7 @@ run: gaussian5x5.out
 .PHONY: stmt
 
 stmt: gaussian5x5.cpp
-	${X86_CLANG}  gaussian5x5.cpp -g  -lHalide -lpthread -ldl -o gaussian5x5.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  gaussian5x5.cpp -g  -lHalide -lpthread -ldl -o gaussian5x5.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian5x5.generate.out
 
 .PHONY: synthetic

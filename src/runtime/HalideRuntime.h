@@ -158,8 +158,7 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_consume = 6,
                               halide_trace_end_consume = 7,
                               halide_trace_begin_pipeline = 8,
-                              halide_trace_end_pipeline = 9,
-                              halide_trace_no_event = 65540};
+                              halide_trace_end_pipeline = 9};
 
 // TODO: Update to use halide_type_t
 // Tracking issue filed here: https://github.com/halide/Halide/issues/980

@@ -110,16 +110,16 @@ using std::stack;
 #define InitializeMipsAsmPrinter()   InitializeAsmPrinter(Mips)
 #endif
 
-#ifdef WITH_HEXAGON
-#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
-#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
-#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
-#endif
-
 #ifdef WITH_POWERPC
 #define InitializePowerPCTarget()       InitializeTarget(PowerPC)
 #define InitializePowerPCAsmParser()    InitializeAsmParser(PowerPC)
 #define InitializePowerPCAsmPrinter()   InitializeAsmPrinter(PowerPC)
+#endif
+
+#ifdef WITH_HEXAGON
+#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
+#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
+#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
 #endif
 
 namespace {
@@ -419,40 +419,11 @@ void CodeGen_LLVM::init_context() {
 }
 
 
-void CodeGen_LLVM::init_env_flags() {
-  static bool OneTimeOnlyVasili = false;
-  if (OneTimeOnlyVasili) return;
-  OneTimeOnlyVasili = true;
-
-  if (CodeGen_LLVM::llvm_Hexagon_enabled) {
-      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
-                                  "Halide HVX internal compiler\n");
-      // We need to EnableQuIC for LLVM and Halide (Unrolling).
-      char *s = strdup("HALIDE_LLVM_QUIC=-enable-quic -hexagon-small-data-threshold=0");
-      ::putenv(s);
-      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
-                                  "Halide HVX quic option\n");
-
-      // HVX double mode.
-      if (target.has_feature(Halide::Target::HVX_128)) {
-        char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
-        ::putenv(s);
-        cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",
-                                    "Halide HVX internal options\n");
-        if (target.has_feature(Halide::Target::HVX_64))
-           internal_error << "Both HVX_64 and HVX_128 set at same time\n";
-      }
-  }
-}
-
 void CodeGen_LLVM::init_module() {
     init_context();
 
     // Start with a module containing the initial module for this target.
     module = get_initial_module_for_target(target, context);
-
-    // Add flags for llvm here.
-    init_env_flags();
 }
 
 CodeGen_LLVM::~CodeGen_LLVM() {
@@ -2772,7 +2743,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         bool takes_user_context = function_takes_user_context(op->name);
         if (takes_user_context) {
             internal_assert(fn) << "External function " << op->name << " is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
-
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
@@ -2888,9 +2858,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     }
                     call->setDoesNotThrow();
                     if (!call->getType()->isVoidTy()) {
-                       debug(2) << "Generate InsertElement call\n";
-                       if (debug::debug_level >= 2) value -> dump();
-                         value = builder->CreateInsertElement(value, call, idx);
+                        value = builder->CreateInsertElement(value, call, idx);
+                        debug(2) << "Generate InsertElement call\n";
+                        if (debug::debug_level >= 2) value -> dump();
                     } // otherwise leave it as undef.
                 }
             }

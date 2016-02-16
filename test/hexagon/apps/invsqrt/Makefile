@@ -16,7 +16,6 @@ ARG12=256 1
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -25,7 +24,7 @@ VERSION_FLAG=-DRDOM
 GDB=
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 invsqrt.o invsqrt.h: invsqrt.cpp
-	${X86_CLANG}  invsqrt.cpp -g -o invsqrt.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} ${VERSION_FLAG} ; \
+	${CXX}  invsqrt.cpp -g -o invsqrt.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} ${VERSION_FLAG} ; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./invsqrt.generate.out  ${B128_MODE}
 
 
@@ -43,13 +42,13 @@ clean:
 .PHONY: assembly
 
 assembly: invsqrt.cpp
-	${X86_CLANG}  invsqrt.cpp -g  -o invsqrt.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
+	${CXX}  invsqrt.cpp -g  -o invsqrt.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./invsqrt.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: invsqrt.cpp
-	${X86_CLANG}  invsqrt.cpp -g  -lHalide -lpthread -ldl -o invsqrt.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
+	${CXX}  invsqrt.cpp -g  -lHalide -lpthread -ldl -o invsqrt.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./invsqrt.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
@@ -95,7 +94,7 @@ run: invsqrt.out
 .PHONY: stmt
 
 stmt: invsqrt.cpp
-	${X86_CLANG}  invsqrt.cpp -g  -lHalide -lpthread -ldl -o invsqrt.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
+	${CXX}  invsqrt.cpp -g  -lHalide -lpthread -ldl -o invsqrt.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS} -DLOG2VLEN=${LOG2VLEN} ${VERSION_FLAG}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./invsqrt.generate.out
 
 .PHONY: synthetic

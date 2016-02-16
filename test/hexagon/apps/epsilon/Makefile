@@ -16,7 +16,6 @@ ARG12=1920 1080
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -24,7 +23,7 @@ B128_MODE=
 GDB=
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 sigma9x9.o sigma9x9.h: sigma9x9.cpp
-	${X86_CLANG}  sigma9x9.cpp -g -o sigma9x9.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} ; \
+	${CXX}  sigma9x9.cpp -g -o sigma9x9.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS} ; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./sigma9x9.generate.out  ${B128_MODE}
 
 
@@ -42,13 +41,13 @@ clean:
 .PHONY: assembly
 
 assembly: sigma9x9.cpp
-	${X86_CLANG}  sigma9x9.cpp -g  -o sigma9x9.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
+	${CXX}  sigma9x9.cpp -g  -o sigma9x9.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./sigma9x9.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: sigma9x9.cpp
-	${X86_CLANG}  sigma9x9.cpp -g  -lHalide -lpthread -ldl -o sigma9x9.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
+	${CXX}  sigma9x9.cpp -g  -lHalide -lpthread -ldl -o sigma9x9.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./sigma9x9.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
@@ -94,7 +93,7 @@ run: sigma9x9.out
 .PHONY: stmt
 
 stmt: sigma9x9.cpp
-	${X86_CLANG}  sigma9x9.cpp -g  -lHalide -lpthread -ldl -o sigma9x9.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
+	${CXX}  sigma9x9.cpp -g  -lHalide -lpthread -ldl -o sigma9x9.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./sigma9x9.generate.out
 
 .PHONY: synthetic

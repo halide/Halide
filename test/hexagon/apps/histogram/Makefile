@@ -14,7 +14,6 @@ endif
 TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
 LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
@@ -23,7 +22,7 @@ CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 CXXFLAGS += ${EXTRA_FLAGS}
 HALIDE_FUNC_CFLAGS = -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 histogram.o histogram.h: histogram.cpp
-	${X86_CLANG}  histogram.cpp -g -o histogram.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  histogram.cpp -g -o histogram.generate.out -O0 -DRUN --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ${GDB} ./histogram.generate.out
 
 
@@ -41,13 +40,13 @@ clean:
 .PHONY: assembly
 
 assembly: histogram.cpp
-	${X86_CLANG}  histogram.cpp -g  -o histogram.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  histogram.cpp -g  -o histogram.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./histogram.generate.out
 
 .PHONY: bitcode
 
 bitcode: histogram.cpp
-	${X86_CLANG}  histogram.cpp -g  -lHalide -lpthread -ldl -o histogram.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  histogram.cpp -g  -lHalide -lpthread -ldl -o histogram.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./histogram.generate.out
 
 .PHONY: all run bmark-report
@@ -93,7 +92,7 @@ run: histogram.out
 .PHONY: stmt
 
 stmt: histogram.cpp
-	${X86_CLANG}  histogram.cpp -g  -lHalide -lpthread -ldl -o histogram.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
+	${CXX}  histogram.cpp -g  -lHalide -lpthread -ldl -o histogram.generate.out -O0 -DSTMT --std=c++11 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./histogram.generate.out
 
 .PHONY: synthetic
