@@ -329,8 +329,7 @@ private:
         InferredArgument a = {
             Argument(p.name(),
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                     p.type(), p.dimensions(), def, min, max, p.is_buffer() ?
-                     p.stride_multiples() : nullptr),
+                     p.type(), p.dimensions(), def, min, max),
             p,
             Buffer()};
         args.push_back(a);
@@ -521,11 +520,10 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Add the output buffer arguments
     for (Function out : contents.ptr->outputs) {
         for (Parameter buf : out.output_buffers()) {
-          // FIXME: PDB: Patch this up for stride_multiples
             public_args.push_back(Argument(buf.name(),
                                            Argument::OutputBuffer,
                                            buf.type(), buf.dimensions(), Expr(),
-                                           Expr(), Expr(), buf.stride_multiples()));
+                                           Expr(), Expr()));
         }
     }
 
@@ -537,7 +535,6 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     vector<Argument> private_args = public_args;
     for (Buffer buf : global_images) {
         module.append(buf);
-        // FIXME: PDB: Patch this up for stride_multiples.
         private_args.push_back(Argument(buf.name(),
                                         Argument::InputBuffer,
                                         buf.type(), buf.dimensions()));
