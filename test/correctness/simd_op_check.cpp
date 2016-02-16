@@ -29,7 +29,7 @@ Var x("x"), y("y");
 bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2;
 bool use_vsx, use_power_arch_2_07;
 
-string filter = "";
+string filter = "*";
 
 Target target;
 
@@ -40,6 +40,36 @@ int my_process_id = 0;
 
 // width and height of test images
 const int W = 256*3, H = 100;
+
+// Check if pattern p matches str, allowing for wildcards (*).
+bool wildcard_match(const char* p, const char* str) {
+    // Match all non-wildcard characters.
+    while (*p && *str && *p == *str && *p != '*') {
+        str++;
+        p++;
+    }
+
+    if (!*p) {
+        return *str == 0;
+    } else if (*p == '*') {
+        p++;
+        do {
+            if (wildcard_match(p, str)) {
+                return true;
+            }
+        } while(*str++);
+    }
+    return !*p;
+}
+
+bool wildcard_match(const string& p, const string& str) {
+    return wildcard_match(p.c_str(), str.c_str());
+}
+
+// Check if a substring of str matches a pattern p.
+bool wildcard_search(const string& p, const string& str) {
+    return wildcard_match("*" + p + "*", str);
+}
 
 void check(string op, int vector_width, Expr e) {
     static int counter = 0;
@@ -55,7 +85,7 @@ void check(string op, int vector_width, Expr e) {
     // Bail out after generating the unique_name, so that names are
     // unique across different processes and don't depend on filter
     // settings.
-    if ((!filter.empty()) && (op.find(filter) == string::npos)) return;
+    if (!wildcard_match(filter, op)) return;
     if (counter % num_processes != my_process_id) return;
 
     // Define a vectorized Func that uses the pattern.
@@ -78,9 +108,10 @@ void check(string op, int vector_width, Expr e) {
     vector<Argument> arg_types {in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
 
     {
-        // Compile just the vector Func to assembly
+        // Compile just the vector Func to assembly. Compile without
+        // asserts make the assembly easier to read.
         string asm_filename = "check_" + name + ".s";
-        f.compile_to_assembly(asm_filename, arg_types, target);
+        f.compile_to_assembly(asm_filename, arg_types, target.with_feature(Target::NoAsserts));
 
         std::ifstream asm_file;
         asm_file.open(asm_filename);
@@ -95,8 +126,7 @@ void check(string op, int vector_width, Expr e) {
             msg << line << "\n";
 
             // Check for the op in question
-            found_it |= (line.find(op) != string::npos &&
-                         line.find("_" + op) == string::npos);
+            found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
         }
 
         if (!found_it) {
