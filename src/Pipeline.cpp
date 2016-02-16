@@ -522,8 +522,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         for (Parameter buf : out.output_buffers()) {
             public_args.push_back(Argument(buf.name(),
                                            Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions(), Expr(),
-                                           Expr(), Expr()));
+                                           buf.type(), buf.dimensions()));
         }
     }
 

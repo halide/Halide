@@ -120,7 +120,7 @@ Internal::Parameter OutputImageParam::parameter() const {
 }
 
 OutputImageParam::operator Argument() const {
-  return Argument(name(), kind, type(), dimensions(), Expr(), Expr(), Expr());
+    return Argument(name(), kind, type(), dimensions());
 }
 
 OutputImageParam::operator ExternFuncArgument() const {
