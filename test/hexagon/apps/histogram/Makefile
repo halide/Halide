@@ -14,7 +14,7 @@ endif
 TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
 GDB=
@@ -30,7 +30,7 @@ histogram_run.o: histogram.o histogram.h histogram_run.cpp
 	${HEXAGON_CLANG} -c histogram_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 histogram.out: histogram_run.o histogram.o histogram.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o histogram.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 histogram_run.o histogram.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o histogram.out histogram_run.o histogram.o -lhexagon
 
 all: histogram.out
 
@@ -102,7 +102,7 @@ histogram_run.synthetic.o: histogram.o histogram.h histogram_run.cpp
 
 
 histogram.synthetic.out: histogram_run.synthetic.o histogram.o histogram.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o histogram.synthetic.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 histogram_run.synthetic.o histogram.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o histogram.synthetic.out histogram_run.synthetic.o histogram.o -lhexagon
 
 
 synthetic: histogram.synthetic.out
