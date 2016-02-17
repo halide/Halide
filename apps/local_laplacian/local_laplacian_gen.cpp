@@ -168,9 +168,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    output.compile_to_bitcode("x.bc",  {levels, alpha, beta, input}, target);
+//  output.compile_to_bitcode("x.bc",  {levels, alpha, beta, input}, target);
 
-//  output.compile_to_file("local_laplacian", {levels, alpha, beta, input}, target);
+    output.compile_to_file("local_laplacian", {levels, alpha, beta, input}, target);
 
     return 0;
 }
