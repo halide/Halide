@@ -191,7 +191,7 @@ Expr max_u32 = UInt(32).max();
 Expr i32c(Expr e) { return cast(Int(32), clamp(e, min_i32, max_i32)); }
 Expr u32c(Expr e) { return cast(UInt(32), clamp(e, 0, max_u32)); }
 Expr i16c(Expr e) { return cast(Int(16), clamp(e, min_i16, max_i16)); }
-Expr u16c(Expr e) { return cast(UInt(16), clamp(e, 0, max_u32)); }
+Expr u16c(Expr e) { return cast(UInt(16), clamp(e, 0, max_u16)); }
 Expr i8c(Expr e) { return cast(Int(8), clamp(e, min_i8, max_i8)); }
 Expr u8c(Expr e) { return cast(UInt(8), clamp(e, 0, max_u8)); }
 
