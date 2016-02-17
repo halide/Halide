@@ -17,14 +17,13 @@ ARG12="1920 1080"
 GDB=
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-X86_CLANG=clang++
-LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 
 
 conv3x3a16.o conv3x3a16.h: conv3x3a16.cpp
-	${X86_CLANG} conv3x3a16.cpp -g  -o conv3x3a16.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} conv3x3a16.cpp -g  -o conv3x3a16.generate.out -O0 -DRUN  ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ${GDB} ./conv3x3a16.generate.out
 
 
@@ -32,7 +31,7 @@ conv3x3a16_run.o: conv3x3a16.o conv3x3a16.h conv3x3a16_run.cpp
 	${HEXAGON_CLANG} -c conv3x3a16_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 conv3x3a16.out: conv3x3a16_run.o conv3x3a16.o conv3x3a16.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o conv3x3a16.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 conv3x3a16_run.o conv3x3a16.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEX_TOOLS}/bin/hexagon-clang -mv60 -o conv3x3a16.out conv3x3a16_run.o conv3x3a16.o -lhexagon
 
 clean:
 	rm -rf *.o median.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result run.std* pa_dump.core.0 stats_dump.v60.iss.0
@@ -40,13 +39,13 @@ clean:
 .PHONY: assembly
 
 assembly: conv3x3a16.cpp
-	${X86_CLANG} conv3x3a16.cpp -g -o conv3x3a16.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} conv3x3a16.cpp -g -o conv3x3a16.generate.out -O0 -DASSEMBLY ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./conv3x3a16.generate.out
 
 .PHONY: bitcode
 
 bitcode: conv3x3a16.cpp
-	${X86_CLANG} conv3x3a16.cpp -g  -o conv3x3a16.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} conv3x3a16.cpp -g  -o conv3x3a16.generate.out -O0 -DBITCODE ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH} ; ./conv3x3a16.generate.out
 
 .PHONY: all
@@ -91,7 +90,7 @@ run: conv3x3a16.out
 .PHONY: stmt
 
 stmt: conv3x3a16.cpp
-	${X86_CLANG} conv3x3a16.cpp -g  -o conv3x3a16.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
+	${CXX} conv3x3a16.cpp -g  -o conv3x3a16.generate.out -O0 -DSTMT ${INCLUDES} ${LDFLAGS} ${CXXFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}  ; ./conv3x3a16.generate.out
 
 .PHONY: synthetic
@@ -101,7 +100,7 @@ conv3x3a16_run.synthetic.o: conv3x3a16.o conv3x3a16.h conv3x3a16_run.cpp
 
 
 conv3x3a16.synthetic.out: conv3x3a16_run.synthetic.o conv3x3a16.o conv3x3a16.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o conv3x3a16.synthetic.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 conv3x3a16_run.synthetic.o conv3x3a16.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o conv3x3a16.synthetic.out conv3x3a16_run.synthetic.o conv3x3a16.o -lhexagon
 
 
 synthetic: conv3x3a16.synthetic.out
