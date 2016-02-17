@@ -18,7 +18,7 @@ ARG12="1920 1080"
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 CFLAGS:=${MHVX} -mv60 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 
@@ -32,7 +32,7 @@ integrate_run.o: integrate.o integrate.h integrate_run.cpp
 	${HEXAGON_CLANG} -c integrate_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 integrate.out: integrate_run.o integrate.o integrate.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o integrate.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 integrate_run.o integrate.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o integrate.out integrate_run.o integrate.o -lhexagon
 
 clean:
 	rm -rf *.o median.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result run.std* pa_dump.core.0 stats_dump.v60.iss.0
@@ -101,7 +101,7 @@ integrate_run.synthetic.o: integrate.o integrate.h integrate_run.cpp
 
 
 integrate.synthetic.out: integrate_run.synthetic.o integrate.o integrate.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o integrate.synthetic.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 integrate_run.synthetic.o integrate.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o integrate.synthetic.out integrate_run.synthetic.o integrate.o -lhexagon
 
 
 synthetic: integrate.synthetic.out

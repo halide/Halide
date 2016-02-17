@@ -15,7 +15,7 @@ TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
 X86_CLANG=clang++
-LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl   -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
 B128_MODE=
@@ -33,7 +33,7 @@ gaussian3x3_run.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
 	${HEXAGON_CLANG} -c gaussian3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 gaussian3x3.out: gaussian3x3_run.o gaussian3x3.o gaussian3x3.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian3x3.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian3x3_run.o gaussian3x3.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o gaussian3x3.out gaussian3x3_run.o gaussian3x3.o -lhexagon
 
 all: gaussian3x3.out
 
@@ -95,8 +95,7 @@ run: gaussian3x3.out
 .PHONY: stmt
 
 stmt: gaussian3x3.cpp
-	${X86_CLANG} gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}
-	${X86_CLANG} -I/pkg/qct/software/llvm/build_tools/libc++_140306/include/c++/v1 -stdlib=libc++ gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS}
+	${CXX} gaussian3x3.cpp -std=c++11 -g -o gaussian3x3.generate.out -DSTMT -O0 ${INCLUDES} ${LDFLAGS} ${HALIDE_FUNC_CFLAGS}
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./gaussian3x3.generate.out
 
 .PHONY: synthetic
@@ -106,7 +105,7 @@ gaussian3x3_run.synthetic.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
 
 
 gaussian3x3.synthetic.out: gaussian3x3_run.synthetic.o gaussian3x3.o gaussian3x3.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian3x3.synthetic.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian3x3_run.synthetic.o gaussian3x3.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o gaussian3x3.synthetic.out gaussian3x3_run.synthetic.o gaussian3x3.o -lhexagon
 
 
 synthetic: gaussian3x3.synthetic.out
