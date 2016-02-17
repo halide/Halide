@@ -16,7 +16,7 @@ ARG12=1920 1080
 
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
 B128_MODE=
@@ -31,7 +31,7 @@ sigma9x9_run.o: sigma9x9.o sigma9x9.h sigma9x9_run.cpp
 	${HEXAGON_CLANG} -c sigma9x9_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 sigma9x9.out: sigma9x9_run.o sigma9x9.o sigma9x9.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o sigma9x9.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 sigma9x9_run.o sigma9x9.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o sigma9x9.out sigma9x9_run.o sigma9x9.o -lhexagon
 
 all: sigma9x9.out
 
@@ -103,7 +103,7 @@ sigma9x9_run.synthetic.o: sigma9x9.o sigma9x9.h sigma9x9_run.cpp
 
 
 sigma9x9.synthetic.out: sigma9x9_run.synthetic.o sigma9x9.o sigma9x9.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o sigma9x9.synthetic.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 sigma9x9_run.synthetic.o sigma9x9.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o sigma9x9.synthetic.out sigma9x9_run.synthetic.o sigma9x9.o -lhexagon
 
 
 synthetic: sigma9x9.synthetic.out
