@@ -114,6 +114,21 @@ Expr vnavg(Expr A, Expr B) {
   Type wider = A.type().with_bits(A.type().bits() * 2);
   return cast(A.type(), (cast(wider, A) - cast(wider, B))/2);
 }
+Expr sat_sub(Expr A, Expr B) {
+  Type wider = Int(A.type().bits() * 2, A.type().lanes());
+  Expr max_v = A.type().max();
+  Expr min_v = A.type().min();
+  return cast(A.type(), max(min(cast(wider, A) - cast(wider, B),
+                                max_v), min_v));
+
+}
+Expr sat_add(Expr A, Expr B) {
+  Type wider = Int(A.type().bits() * 2, A.type().lanes());
+  Expr max_v = A.type().max();
+  Expr min_v = A.type().min();
+  return cast(A.type(), max(min(cast(wider, A) + cast(wider, B),
+                                max_v), min_v));
+}
 #ifdef THESE_ARE_UNUSED
 Expr bitwiseNot(Expr A) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_not, {A},
@@ -293,7 +308,7 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
                            IPICK(Intrinsic::hexagon_V6_vaddh)));
   varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) +
                            WPICK(wild_u16x64,wild_u16x32),
-                           IPICK(Intrinsic::hexagon_V6_vadduhsat)));
+                           IPICK(Intrinsic::hexagon_V6_vaddh)));
   // Word Vectors.
   varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
                            WPICK(wild_i32x32,wild_i32x16),
@@ -346,7 +361,7 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
                            IPICK(Intrinsic::hexagon_V6_vsubh)));
   varith.push_back(Pattern(WPICK(wild_u16x64,wild_u16x32) -
                            WPICK(wild_u16x64,wild_u16x32),
-                           IPICK(Intrinsic::hexagon_V6_vsubuhsat)));
+                           IPICK(Intrinsic::hexagon_V6_vsubh)));
   // Word Vectors.
   varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) -
                            WPICK(wild_i32x32,wild_i32x16),
@@ -1697,6 +1712,40 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 // End of handleLargeVectors
 /////////////////////////////////////////////////////////////////////////////
 
+bool CodeGen_Hexagon::possiblyCodeGenSaturatingArith(const Cast *op) {
+  bool B128 = target.has_feature(Halide::Target::HVX_128);
+  std::vector<Pattern> patterns;
+  vector<Expr> matches;
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_u8x128, wild_u8x64),
+                                     WPICK(wild_u8x128, wild_u8x64)),
+                                     IPICK(Intrinsic::hexagon_V6_vsububsat)));
+  patterns.push_back(Pattern(sat_add(WPICK(wild_u8x128, wild_u8x64),
+                                     WPICK(wild_u8x128, wild_u8x64)),
+                                     IPICK(Intrinsic::hexagon_V6_vaddubsat)));
+
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_u16x64, wild_u16x32),
+                                     WPICK(wild_u16x64, wild_u16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vsubuhsat)));
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_i16x64, wild_i16x32),
+                                     WPICK(wild_i16x64, wild_i16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vsubhsat)));
+
+  patterns.push_back(Pattern(sat_add(WPICK(wild_u16x64, wild_u16x32),
+                                     WPICK(wild_u16x64, wild_u16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vadduhsat)));
+  patterns.push_back(Pattern(sat_add(WPICK(wild_i16x64, wild_i16x32),
+                                     WPICK(wild_i16x64, wild_i16x32)),
+                                     IPICK(Intrinsic::hexagon_V6_vaddhsat)));
+
+  patterns.push_back(Pattern(sat_sub(WPICK(wild_i32x32, wild_i32x16),
+                                     WPICK(wild_i32x32, wild_i32x16)),
+                                     IPICK(Intrinsic::hexagon_V6_vsubwsat)));
+  patterns.push_back(Pattern(sat_add(WPICK(wild_i32x32, wild_i32x16),
+                                     WPICK(wild_i32x32, wild_i32x16)),
+                                     IPICK(Intrinsic::hexagon_V6_vaddwsat)));
+  value = emitBinaryOp(op, patterns);
+  return value != NULL;
+}
 bool CodeGen_Hexagon::possiblyCodeGenVavg(const Cast *op) {
   bool B128 = target.has_feature(Halide::Target::HVX_128);
   std::vector<Pattern> avgs;
@@ -1851,6 +1900,9 @@ void CodeGen_Hexagon::visit(const Cast *op) {
       }
     bool B128 = target.has_feature(Halide::Target::HVX_128);
     if (possiblyCodeGenVavg(op)) {
+      return;
+    }
+    if (possiblyCodeGenSaturatingArith(op)) {
       return;
     }
     // Looking for shuffles
