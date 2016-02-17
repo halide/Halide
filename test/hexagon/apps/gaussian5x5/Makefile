@@ -14,7 +14,7 @@ endif
 TIMING=--timing
 CXXFLAGS=--std=c++11 -DLOG2VLEN=${LOG2VLEN}
 HEXAGON_CLANG=${HEX_TOOLS}/bin/hexagon-clang++
-LDFLAGS=-L ${HALIDE_TOP}/bin -Wl,--start-group -lHalide -lpthread -ldl  -Wl,--end-group
+LDFLAGS=-L ${HALIDE_TOP}/bin -lHalide
 INCLUDES=-I${HALIDE_TOP}/include -I${HALIDE_TOP}/test/hexagon/include
 TEST_NAME= $(shell basename ${CURR_DIR})
 B128_MODE=
@@ -31,7 +31,7 @@ gaussian5x5_run.o: gaussian5x5.o gaussian5x5.h gaussian5x5_run.cpp
 	${HEXAGON_CLANG} -c gaussian5x5_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 gaussian5x5.out: gaussian5x5_run.o gaussian5x5.o gaussian5x5.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian5x5.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian5x5_run.o gaussian5x5.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o gaussian5x5.out gaussian5x5_run.o gaussian5x5.o -lhexagon
 
 all: gaussian5x5.out
 
@@ -103,7 +103,7 @@ gaussian5x5_run.synthetic.o: gaussian5x5.o gaussian5x5.h gaussian5x5_run.cpp
 
 
 gaussian5x5.synthetic.out: gaussian5x5_run.synthetic.o gaussian5x5.o gaussian5x5.h
-	${HEX_TOOLS}/bin/hexagon-link -march=hexagon -mcpu=hexagonv60 -o gaussian5x5.synthetic.out ${HEX_TOOLS}/target/hexagon/lib/v60/crt0_standalone.o ${HEX_TOOLS}/target/hexagon/lib/v60/crt0.o ${HEX_TOOLS}/target/hexagon/lib/v60/init.o -L${HEX_TOOLS}/target/hexagon/lib -L${HEX_TOOLS}/target/hexagon/lib/v60 gaussian5x5_run.synthetic.o gaussian5x5.o --start-group -lstandalone -lc -lgcc -lhexagon --end-group ${HEX_TOOLS}/target/hexagon/lib/v60/fini.o
+	${HEXAGON_CLANG} -mv60 -o gaussian5x5.synthetic.out gaussian5x5_run.synthetic.o gaussian5x5.o -lhexagon
 
 
 synthetic: gaussian5x5.synthetic.out

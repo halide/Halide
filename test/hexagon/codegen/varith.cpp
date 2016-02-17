@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
   //CHECK: vadd(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
   testAdd<int16_t>(target);
-  //CHECK: vadd(v{{[0-9]+}}.uh,v{{[0-9]+}}.uh):sat
+  //CHECK: vadd(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
   testAdd<uint16_t>(target);
 
   //CHECK: vadd(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
@@ -41,12 +41,12 @@ int main(int argc, char **argv) {
   /* Test variants of vector sub */
   //CHECK: vsub(v{{[0-9]+}}.b,v{{[0-9]+}}.b)
   testSub<int8_t>(target);
-  //CHECK: vsub(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub):sat
+  //CHECK: vsub(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
   testSub<uint8_t>(target);
 
   //CHECK: vsub(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
   testSub<int16_t>(target);
-  //CHECK: vsub(v{{[0-9]+}}.uh,v{{[0-9]+}}.uh):sat
+  //CHECK: vsub(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
   testSub<uint16_t>(target);
 
   //CHECK: vsub(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
