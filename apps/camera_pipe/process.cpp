@@ -5,6 +5,7 @@
 #include "curved.h"
 #include "halide_image.h"
 #include "halide_image_io.h"
+#include "halide_malloc_trace.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -19,6 +20,10 @@ int main(int argc, char **argv) {
                "e.g. ./process raw.png 3200 2 50 5 output.png");
         return 0;
     }
+
+#ifdef HL_MEMINFO
+    halide_enable_malloc_trace();
+#endif
 
     Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
