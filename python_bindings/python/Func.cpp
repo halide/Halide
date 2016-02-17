@@ -80,6 +80,41 @@ void func_compile_to_bitcode0(h::Func &that, const std::string &filename,
 
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_bitcode0_overloads, func_compile_to_bitcode0, 3, 5)
 
+void func_compile_to_object0(h::Func &that, const std::string &filename,
+                              const std::vector<h::Argument> &args,
+                              const std::string fn_name = "",
+                              const h::Target &target = h::get_target_from_environment())
+{
+    that.compile_to_object(filename, args, fn_name, target);
+    return;
+}
+
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_object0_overloads, func_compile_to_object0, 3, 5)
+
+void func_compile_to_header0(h::Func &that, const std::string &filename,
+                              const std::vector<h::Argument> &args,
+                              const std::string fn_name = "",
+                              const h::Target &target = h::get_target_from_environment())
+{
+    that.compile_to_header(filename, args, fn_name, target);
+    return;
+}
+
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_header0_overloads, func_compile_to_header0, 3, 5)
+
+void func_compile_to_assembly0(h::Func &that, const std::string &filename,
+                              const std::vector<h::Argument> &args,
+                              const std::string fn_name = "",
+                              const h::Target &target = h::get_target_from_environment())
+{
+    that.compile_to_assembly(filename, args, fn_name, target);
+    return;
+}
+
+
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_assembly0_overloads, func_compile_to_assembly0, 3, 5)
 
 void func_compile_to_c0(h::Func &that, const std::string &filename,
                         const std::vector<h::Argument> &args,
@@ -395,6 +430,30 @@ void defineFunc()
                        "given filename (which should probably end in .bc), type "
                        "signature, and C function name (which defaults to the same name "
                        "as this halide function."));
+
+    func_class.def("compile_to_object", &func_compile_to_object0,
+                  func_compile_to_object0_overloads(
+                      p::args("self", "filename", "args", "fn_name", "target"),
+                      "Statically compile this function to llvm bitcode, with the "
+                      "given filename (which should probably end in .bc), type "
+                      "signature, and C function name (which defaults to the same name "
+                      "as this halide function."));
+
+    func_class.def("compile_to_header", &func_compile_to_header0,
+                 func_compile_to_header0_overloads(
+                     p::args("self", "filename", "args", "fn_name", "target"),
+                     "Statically compile this function to llvm bitcode, with the "
+                     "given filename (which should probably end in .bc), type "
+                     "signature, and C function name (which defaults to the same name "
+                     "as this halide function."));
+
+     func_class.def("compile_to_assembly", &func_compile_to_assembly0,
+                  func_compile_to_assembly0_overloads(
+                      p::args("self", "filename", "args", "fn_name", "target"),
+                      "Statically compile this function to llvm bitcode, with the "
+                      "given filename (which should probably end in .bc), type "
+                      "signature, and C function name (which defaults to the same name "
+                      "as this halide function."));
 
     func_class.def("compile_to_c", &func_compile_to_c0,
                    func_compile_to_c0_overloads(
