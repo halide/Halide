@@ -1,16 +1,20 @@
 #define time_it(code)                               \
     double elapsed = 0;                             \
-    for (int iters = 20; ; iters *= 2) {            \
-        double start = current_time();              \
-        for (int i = 0; i < iters; i++) {           \
-            code;                                   \
-        }                                           \
-        double end = current_time();                \
-        elapsed = 1000 * (end - start);             \
-        if (elapsed > 100000) {                     \
-            elapsed /= iters;                       \
-            break;                                  \
-        }                                           \
+    for (int iters = 20; ; iters *= 2) {                    \
+        double best = 1e20;                                 \
+        for (int trials = 0; trials < 5; trials++) {        \
+            double start = current_time();                  \
+            for (int i = 0; i < iters; i++) {               \
+                code;                                       \
+            }                                               \
+            double end = current_time();                    \
+            best = std::min(end-start, best);               \
+        }                                                   \
+        elapsed = 1000 * best;                              \
+        if (elapsed > 1000000) {                            \
+            elapsed /= iters;                               \
+            break;                                          \
+        }                                                   \
     }
 
 #define L1GFLOPS(N) 2 * N * 1e-3 / elapsed
