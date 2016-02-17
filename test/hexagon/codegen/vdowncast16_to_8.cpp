@@ -12,14 +12,12 @@ void test_uh_u8_sat(Target& target) {
   Halide::Var x("x"), y("y");
   Var x_outer, x_inner;
 
-  std::vector<Argument> args(2);
-  Halide::Func res, F, G;
+  std::vector<Argument> args(1);
+  Halide::Func res;
   ImageParam f (type_of<uint8_t>(), 1);
-  ImageParam g (type_of<uint8_t>(), 1);
-  res(x) = cast<uint8_t>(usat_8(cast<uint16_t>(f(x)) + cast<uint16_t>(g(x))));
+  res(x) = cast<uint8_t>(usat_8(cast<uint16_t>(f(x))));
   res.vectorize(x, 64);
   args[0]  = f;
-  args[1] = g;
   COMPILE(res, "test_uh_u8_sat");
 }
 
@@ -29,14 +27,12 @@ void test_h_u8_sat(Target& target) {
   Halide::Var x("x"), y("y");
   Var x_outer, x_inner;
 
-  std::vector<Argument> args(2);
+  std::vector<Argument> args(1);
   Halide::Func res, F, G;
   ImageParam f (type_of<uint8_t>(), 1);
-  ImageParam g (type_of<uint8_t>(), 1);
-  res(x) = cast<uint8_t>(usat_8(cast<int16_t>(f(x)) + cast<int16_t>(g(x))));
+  res(x) = cast<uint8_t>(usat_8(cast<int16_t>(f(x))));
   res.vectorize(x, 64);
   args[0]  = f;
-  args[1] = g;
   COMPILE(res, "test_h_u8_sat");
 }
 //CHECK: __test_uh_i8_nosat
