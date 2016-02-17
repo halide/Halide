@@ -142,9 +142,21 @@ void check(string op, int vector_width, Expr e) {
 
     // If we can (target matches host), run the error checking Func.
     Target host_target = get_host_target();
-    if (target.arch == host_target.arch &&
-        target.bits == host_target.bits &&
-        target.os == host_target.os) {
+    bool can_run_the_code =
+        (target.arch == host_target.arch &&
+         target.bits == host_target.bits &&
+         target.os == host_target.os);
+    // A bunch of feature flags also need to match between the
+    // compiled code and the host in order to run the code.
+    for (Target::Feature f : {Target::SSE41, Target::AVX, Target::AVX2,
+                              Target::FMA, Target::FMA4, Target::F16C,
+                              Target::VSX, Target::POWER_ARCH_2_07,
+                              Target::ARMv7s, Target::NoNEON, Target::MinGW}) {
+        if (target.has_feature(f) != host_target.has_feature(f)) {
+            can_run_the_code = false;
+        }
+    }
+    if (can_run_the_code) {
         Realization r = error.realize(0, target.without_feature(Target::NoRuntime));
         double e = Image<double>(r[0])(0);
         // Use a very loose tolerance for floating point tests. The
