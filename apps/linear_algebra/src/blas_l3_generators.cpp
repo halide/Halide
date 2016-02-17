@@ -33,7 +33,7 @@ class GEMMGenerator :
     void SetupTarget() {
         if (!assertions_enabled_) {
             target.set(get_target()
-                       .with_feature(Target::NoAsserts)
+                       //.with_feature(Target::NoAsserts)
                        .with_feature(Target::NoBoundsQuery));
         }
 
@@ -59,7 +59,7 @@ class GEMMGenerator :
             .tile(i, j, ti, tj, i, j, 16, 16)
             .fuse(ti, tj, t).parallel(t);
 
-        transpose_tmp.compute_at(im_t, i)
+        transpose_tmp.compute_root()
             .specialize(rows >= 4 && cols >= 4).vectorize(j).unroll(i);
 
         return im_t;
@@ -68,127 +68,169 @@ class GEMMGenerator :
     Func build() {
         SetupTarget();
 
-        const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
-
-        Var i("i"), j("j");
+        // Thoughts on writing a fast matrix multiply:
+        //
+        // 1) There are three loops - rows of the output (i), columns of
+        // the output (j), and the direction you're summing over (k). You
+        // should do a 3D (possibly nested) tiling of these three loops.
+        //
+        // 2) It's worth copying pieces of A and B into temporary
+        // buffers at some loop level. You use them lots of times. The
+        // order of the temporary buffers should be setup so that the
+        // innermost loop walks them in increasing order, so that the
+        // prefetchers can do their thing, and so that you don't need
+        // addressing math in the inner loop. This may require tiled
+        // storage. For a given tile of i, j, k, you need a i*k piece
+        // of A, and a k*j piece of B. So you should size your loops
+        // such that these fit into some cache level.
+        //
+        // 3) The number of multiply-adds is fixed. You want to do the
+        // minimum amount of memory traffic per math op. The best way
+        // to do this is to make the inner loop do long dot products
+        // between rows of A and columns of B, so that there are loads
+        // but no stores. You don't do single dot products though, you
+        // do groups of them that share inputs together - i.e. some
+        // small tile of the output space. There are 16 vector
+        // registers. Use 12 of them as accumulators and 4 as
+        // temporaries. You want to compute a squarish block of dot
+        // products in the output to maximize the number of times you
+        // can reuse each loaded value. If the vector width is v, good
+        // options are (3xv)x4, (2xv)x6, etc.
+        //
+        // 4) You want tiles of i, j, k to be small so that the staged
+        // portions of A and B can fit into cache, but you want i and
+        // j to be large - you reuse each value of A j times, and you
+        // reuse each value of B i times. You also want k to be large,
+        // because that's the length of your inner loop. The answer is
+        // to just try lots of tilings.
+        
+        Var i("i"), j("j"), k("k");
         Var ii("ii"), ji("ji");
-        Var ti[3], tj[3], t;
+        Var io("io"), jo("jo"), iio("iio"), iii("iii");
+        Var t("t");
         Func result("result");
 
         const Expr num_rows = A_.width();
         const Expr num_cols = B_.height();
         const Expr sum_size = A_.height();
+        
+        // The vector width
+        int v = natural_vector_size(a_.type());
 
-        const Expr sum_size_vec = sum_size / vec_size;
+        // The size of the tiles of output we accumulate at a
+        // time. Always 4 high and either 3 vectors wide for large
+        // matrices (using 12 accumulators), or 2 vectors wide for
+        // smaller ones (using 8 accumulators).
+        Expr larger_than_64x64 = num_cols > 64;
 
-        // Pretranspose A and/or B as necessary
-        Func At, B;
-        if (transpose_A_) {
-            At(i, j) = A_(i, j);
+        Expr c2 = select(larger_than_64x64, 3 * v, 2 * v);
+        int c3 = 4;
+        
+        // some number less than 512 that divides up the rows nicely. Make it a multiple of c3.
+        Expr c0 = c3 * cast<int>(ceil((1.0f / c3) * num_rows / ceil(num_rows / 512.0f)));
+        // Once the sum over k exceeds this size it's worth breaking
+        // and moving to the next row/col instead to keep A and B in
+        // cache.
+        Expr c1 = 192; 
+
+        Expr has_k_tail = sum_size == (sum_size / c1) * c1;
+        
+
+        // Stage A and B, transposing if necessary.        
+        
+        Func A("A"), A_swizzled("As"), B("B");
+        
+        // A is going to be staged in swizzled order, so that the
+        // inner loop walks through it in order. While we can reorder
+        // storage dimensions in Halide, we can't split them, so I'll
+        // have to make it an explicit 3D Func for scheduling.
+        if (transpose_A_) {                
+            A_swizzled(ii, j, io) = BoundaryConditions::constant_exterior(A_, 0)(io*c3 + ii, j);
         } else {
-            At = transpose(A_);
+            A_swizzled(ii, j, io) = BoundaryConditions::constant_exterior(A_, 0)(j, io*c3 + ii);
         }
-
+        // Change indexing back into 2D to use it.
+        A(j, i) = A_swizzled(i % c3, j, i / c3);
+        
+        // No such fanciness is required for B
         if (transpose_B_) {
-            B = transpose(B_);
+            B(j, i) = BoundaryConditions::constant_exterior(B_, 0)(i, j);
         } else {
-            B(i, j) = B_(i, j);
+            B(j, i) = BoundaryConditions::constant_exterior(B_, 0)(j, i);
         }
+        
+        // We're going to factor the summation into two levels. It
+        // won't evenly divide the matrix size, so we'll need a tail
+        // case version too.
+        
+        RDom ki(0, c1);        
+        Func AB("AB");
+        AB(j, i, k) += A(k*c1 + ki, i) * B(j, k*c1 + ki);
+                                           
+        Expr tail_size = (((sum_size % c1) + 3) / 4) * 4; 
+        RDom ktail(sum_size - tail_size, tail_size);
+        Func AB_tail("AB_tail");
+        AB_tail(j, i) += A(ktail, i) * B(j, ktail);    
+        
+        // Sum across ko, and do the part that makes it a 'general' matrix multiply.
+        RDom ko(0, sum_size / c1);
+        result(j, i) = b_ * C_(j, i);
+        result(j, i) += a_ * AB(j, i, ko);
+        result(j, i) += select(has_k_tail, a_ * AB_tail(j, i), 0);
 
-        Var k("k");
-        Func prod;
-        // Express all the products we need to do a matrix multiply as a 3D Func.
-        prod(k, i, j) = At(k, i) * B(k, j);
+        // Copy from the computed result (which may have been padded for tiling)
+        // into the actual output buffer.                
+        Func output("output");
+        output(j, i) = result(j, i);
+        
+        result.compute_at(output, Var::outermost())
+            .vectorize(j, v).specialize(larger_than_64x64).parallel(i, 8);
 
-        // Reduce the products along k using whole vectors.
-        Func dot_vecs;
-        RDom rv(0, sum_size_vec);
-        dot_vecs(k, i, j) += prod(rv * vec_size + k, i, j);
+        result.update(0)
+            .reorder(j, i, ko)
+            .tile(j, i, jo, io, ji, ii, c2, c0)
+            .vectorize(ji, v).unroll(ji).unroll(ii, c3).specialize(larger_than_64x64).parallel(jo);
 
-        // Transpose the result to make summing the lanes vectorizable
-        Func dot_vecs_transpose;
-        dot_vecs_transpose(i, j, k) = dot_vecs(k, i, j);
+        result.update(1)
+            .specialize(has_k_tail)
+            .tile(j, i, jo, io, ji, ii, c2, c0)
+            .vectorize(ji, v).unroll(ji).unroll(ii, c3).specialize(larger_than_64x64).parallel(jo);
 
-        Func sum_lanes;
-        RDom lanes(0, vec_size);
-        sum_lanes(i, j) += dot_vecs_transpose(i, j, lanes);
+        // If there's no tail, just write some schedule that makes the
+        // schedule for A, AB_tail, etc valid. It'll get dead-code
+        // eliminated.
+        result.update(1)
+            .tile(j, i, jo, io, ji, ii, 1, 1);
+        
+        // AB is one output tile. It'll be stored in registers to accumulate it.
+        AB.compute_at(result, ii).vectorize(j, v).unroll(j).unroll(i)
+            .update().reorder(j, i, ki).vectorize(j, v).unroll(j).unroll(i).unroll(ki, 8);
+        
+        AB_tail.compute_at(result, ii).vectorize(j, v).unroll(j).unroll(i)
+            .update().reorder(j, i, ktail).vectorize(j, v).unroll(j).unroll(i).unroll(ktail, 4);       
+        
+        // Compute A swizzled at the loop over large strips of the output.
+        A_swizzled.compute_at(result, io).vectorize(j, v).unroll(ii);
 
-        // Add up any leftover elements when the sum size is not a
-        // multiple of the vector size.
-        Func sum_tail;
-        RDom tail(sum_size_vec * vec_size, sum_size - sum_size_vec * vec_size);
-        sum_tail(i, j) += prod(tail, i, j);
+        // Stage B per at the loop over columns of output tiles
+        B.compute_at(result, jo).vectorize(j, v).unroll(j); 
 
-        // Add the two.
-        Func AB;
-        AB(i, j) = sum_lanes(i, j) + sum_tail(i, j);
-
-        // Do the part that makes it a 'general' matrix multiply.
-        result(i, j) = a_ * AB(i, j) + b_ * C_(i, j);
-
-        // There's a mild benefit in specializing the case with no
-        // tail (the sum size is a whole number of vectors).  We do a
-        // z-order traversal of each block expressed using nested
-        // tiling.
-
-        result
-            .specialize(sum_size == (sum_size / 8) * 8)
-            .specialize(num_rows >= 4 && num_cols >= 2)
-            .tile(i, j, ii, ji, 4, 2).vectorize(ii).unroll(ji)
-            .specialize(num_rows >= 8 && num_cols >= 8)
-            .tile(i, j, ti[0], tj[0], i, j, 2, 4)
-            .specialize(num_rows >= 16 && num_cols >= 16)
-            .tile(ti[0], tj[0], ti[1], tj[1], 2, 2)
-            .specialize(num_rows >= 32 && num_cols >= 32)
-            .tile(ti[0], tj[0], ti[2], tj[2], 2, 2)
-            .specialize(num_rows >= 64 && num_cols >= 64)
-            .fuse(tj[0], ti[0], t).parallel(t);
-
-        // The general case with a tail (sum_size is not a multiple of
-        // vec_size). The same z-order traversal of blocks of the
-        // output.
-        result
-            .specialize(num_rows >= 4 && num_cols >= 2)
-            .tile(i, j, ii, ji, 4, 2).vectorize(ii).unroll(ji)
-            .specialize(num_rows >= 8 && num_cols >= 8)
-            .tile(i, j, ti[0], tj[0], i, j, 2, 4)
-            .specialize(num_rows >= 16 && num_cols >= 16)
-            .tile(ti[0], tj[0], ti[1], tj[1], 2, 2)
-            .specialize(num_rows >= 32 && num_cols >= 32)
-            .tile(ti[0], tj[0], ti[2], tj[2], 2, 2)
-            .specialize(num_rows >= 64 && num_cols >= 64)
-            .fuse(tj[0], ti[0], t).parallel(t);
-
-        dot_vecs
-            .compute_at(result, i).unroll(i).unroll(j)
-            .update().reorder(i, j, rv).unroll(i).unroll(j);
-        dot_vecs_transpose
-            .compute_at(result, i).unroll(i).unroll(j);
-        sum_lanes
-            .compute_at(result, i).update().unroll(lanes);
-        sum_tail
-            .compute_at(result, i)
-            .update().reorder(i, j, tail).unroll(i).unroll(j);
-
-        if (vectorize_) {
-            dot_vecs.vectorize(k).update().vectorize(k);
-            dot_vecs_transpose.vectorize(k);
-
-            // The following stages are only vectorizable when we're
-            // computing multiple dot products unrolled.
-            Expr can_vectorize = num_rows >= 4 && num_cols >= 2;
-            sum_tail.specialize(can_vectorize).fuse(i, j, t).vectorize(t);
-            sum_lanes.specialize(can_vectorize).fuse(i, j, t).vectorize(t);
-            sum_lanes.update().specialize(can_vectorize).fuse(i, j, t).vectorize(t);
-
-        }
-
+        output.compute_root().vectorize(j, 8).specialize(larger_than_64x64).parallel(i, 8);
+        
+        // We expect indices to start at zero, and the sizes should
+        // all make sense for a matrix multiply.
         A_.set_min(0, 0).set_min(1, 0);
         B_.set_bounds(0, 0, sum_size).set_min(1, 0);
         C_.set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
-        result.output_buffer().set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
+        output.output_buffer().set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
 
-        return result;
+        if (Expr(a_).type().bits() == 32) {
+            Target t;
+            t.from_string("host-no_runtime-no_asserts-no_bounds_query");
+            output.compile_to_assembly("/dev/stdout", {a_, b_, A_, B_, C_}, t);
+        }
+
+        return output;
     }
 };
 

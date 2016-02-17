@@ -64,6 +64,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         } else if (stack_bytes <= 1024 * 16) {
             // Round up to nearest multiple of 32.
             stack_bytes = ((stack_bytes + 31)/32)*32;
+            if (stack_bytes == 0) {
+                stack_bytes = 32;
+            }
         } else {
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
