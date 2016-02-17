@@ -33,36 +33,13 @@ class GEMMGenerator :
     void SetupTarget() {
         if (!assertions_enabled_) {
             target.set(get_target()
-                       //.with_feature(Target::NoAsserts)
+                       .with_feature(Target::NoAsserts)
                        .with_feature(Target::NoBoundsQuery));
         }
 
         if (use_fma_) {
             target.set(get_target().with_feature(Target::FMA));
         }
-    }
-
-    Func transpose(ImageParam im) {
-        Func transpose_tmp("transpose_tmp"), im_t("im_t");
-        Var i("i"), j("j"), ii("ii"), ji("ji"),
-            ti("ti"), tj("tj"), t("t");
-
-        transpose_tmp(i, j) = im(j, i);
-        im_t(i, j) = transpose_tmp(i, j);
-
-        Expr rows = im.width(), cols = im.height();
-
-        im_t.compute_root()
-            .specialize(rows >= 4 && cols >= 4)
-            .tile(i, j, ii, ji, 4, 4).vectorize(ii).unroll(ji)
-            .specialize(rows >= 128 && cols >= 128)
-            .tile(i, j, ti, tj, i, j, 16, 16)
-            .fuse(ti, tj, t).parallel(t);
-
-        transpose_tmp.compute_root()
-            .specialize(rows >= 4 && cols >= 4).vectorize(j).unroll(i);
-
-        return im_t;
     }
 
     Func build() {
@@ -103,7 +80,7 @@ class GEMMGenerator :
         // reuse each value of B i times. You also want k to be large,
         // because that's the length of your inner loop. The answer is
         // to just try lots of tilings.
-        
+
         Var i("i"), j("j"), k("k");
         Var ii("ii"), ji("ji");
         Var io("io"), jo("jo"), iio("iio"), iii("iii");
@@ -113,7 +90,7 @@ class GEMMGenerator :
         const Expr num_rows = A_.width();
         const Expr num_cols = B_.height();
         const Expr sum_size = A_.height();
-        
+
         // The vector width
         int v = natural_vector_size(a_.type());
 
@@ -125,53 +102,55 @@ class GEMMGenerator :
 
         Expr c2 = select(larger_than_64x64, 3 * v, 2 * v);
         int c3 = 4;
-        
+
         // some number less than 512 that divides up the rows nicely. Make it a multiple of c3.
         Expr c0 = c3 * cast<int>(ceil((1.0f / c3) * num_rows / ceil(num_rows / 512.0f)));
         // Once the sum over k exceeds this size it's worth breaking
         // and moving to the next row/col instead to keep A and B in
         // cache.
-        Expr c1 = 192; 
+        Expr c1 = 192;
 
         Expr has_k_tail = sum_size == (sum_size / c1) * c1;
-        
 
-        // Stage A and B, transposing if necessary.        
-        
+
+        // Stage A and B, transposing if necessary.
+
         Func A("A"), A_swizzled("As"), B("B");
-        
+
         // A is going to be staged in swizzled order, so that the
         // inner loop walks through it in order. While we can reorder
         // storage dimensions in Halide, we can't split them, so I'll
         // have to make it an explicit 3D Func for scheduling.
-        if (transpose_A_) {                
+        if (transpose_A_) {
             A_swizzled(ii, j, io) = BoundaryConditions::constant_exterior(A_, 0)(io*c3 + ii, j);
         } else {
             A_swizzled(ii, j, io) = BoundaryConditions::constant_exterior(A_, 0)(j, io*c3 + ii);
         }
         // Change indexing back into 2D to use it.
         A(j, i) = A_swizzled(i % c3, j, i / c3);
-        
+
         // No such fanciness is required for B
         if (transpose_B_) {
             B(j, i) = BoundaryConditions::constant_exterior(B_, 0)(i, j);
         } else {
             B(j, i) = BoundaryConditions::constant_exterior(B_, 0)(j, i);
         }
-        
+
         // We're going to factor the summation into two levels. It
         // won't evenly divide the matrix size, so we'll need a tail
         // case version too.
-        
-        RDom ki(0, c1);        
+
+        RDom ki(0, c1);
         Func AB("AB");
         AB(j, i, k) += A(k*c1 + ki, i) * B(j, k*c1 + ki);
-                                           
-        Expr tail_size = (((sum_size % c1) + 3) / 4) * 4; 
+
+        Expr tail_size = (((sum_size % c1) + 3) / 4) * 4;
         RDom ktail(sum_size - tail_size, tail_size);
+
         Func AB_tail("AB_tail");
-        AB_tail(j, i) += A(ktail, i) * B(j, ktail);    
-        
+
+        AB_tail(j, i) += A(ktail, i) * B(j, ktail);
+
         // Sum across ko, and do the part that makes it a 'general' matrix multiply.
         RDom ko(0, sum_size / c1);
         result(j, i) = b_ * C_(j, i);
@@ -179,10 +158,10 @@ class GEMMGenerator :
         result(j, i) += select(has_k_tail, a_ * AB_tail(j, i), 0);
 
         // Copy from the computed result (which may have been padded for tiling)
-        // into the actual output buffer.                
+        // into the actual output buffer.
         Func output("output");
         output(j, i) = result(j, i);
-        
+
         result.compute_at(output, Var::outermost())
             .vectorize(j, v).specialize(larger_than_64x64).parallel(i, 8);
 
@@ -201,22 +180,22 @@ class GEMMGenerator :
         // eliminated.
         result.update(1)
             .tile(j, i, jo, io, ji, ii, 1, 1);
-        
+
         // AB is one output tile. It'll be stored in registers to accumulate it.
         AB.compute_at(result, ii).vectorize(j, v).unroll(j).unroll(i)
             .update().reorder(j, i, ki).vectorize(j, v).unroll(j).unroll(i).unroll(ki, 8);
-        
+
         AB_tail.compute_at(result, ii).vectorize(j, v).unroll(j).unroll(i)
-            .update().reorder(j, i, ktail).vectorize(j, v).unroll(j).unroll(i).unroll(ktail, 4);       
-        
+            .update().reorder(j, i, ktail).vectorize(j, v).unroll(j).unroll(i).unroll(ktail, 4);
+
         // Compute A swizzled at the loop over large strips of the output.
-        A_swizzled.compute_at(result, io).vectorize(j, v).unroll(ii);
+        A_swizzled.compute_at(result, io).vectorize(j, v).unroll(ii).specialize(larger_than_64x64).parallel(io, 8);
 
         // Stage B per at the loop over columns of output tiles
-        B.compute_at(result, jo).vectorize(j, v).unroll(j); 
+        B.compute_at(result, jo).vectorize(j, v).unroll(j);
 
         output.compute_root().vectorize(j, 8).specialize(larger_than_64x64).parallel(i, 8);
-        
+
         // We expect indices to start at zero, and the sizes should
         // all make sense for a matrix multiply.
         A_.set_min(0, 0).set_min(1, 0);
@@ -224,7 +203,7 @@ class GEMMGenerator :
         C_.set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
         output.output_buffer().set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
 
-        if (Expr(a_).type().bits() == 32) {
+        if (Expr(a_).type().bits() == 32 && !transpose_A_ && !transpose_B_) {
             Target t;
             t.from_string("host-no_runtime-no_asserts-no_bounds_query");
             output.compile_to_assembly("/dev/stdout", {a_, b_, A_, B_, C_}, t);
