@@ -11,10 +11,10 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void *default_malloc(void *user_context, size_t x) {
     // We want to return an aligned address to the application.
-    // In addition we should have at least the sizeof a pointer number
-    // of bytes so we can fit the original pointer for book keeping.
+    // In addition, we should be able to read a double beyond the
+    // buffer. So we allocate more space then what was asked for.
     const size_t alignment = 128;
-    void *orig = malloc(x + alignment + sizeof(void *));
+    void *orig = malloc(x + alignment + sizeof(double));
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
         return NULL;
