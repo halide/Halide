@@ -12,7 +12,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 WEAK void *default_malloc(void *user_context, size_t x) {
     // We want to return an aligned address to the application.
     // In addition, we should be able to read a double beyond the
-    // buffer. So we allocate more space then what was asked for.
+    // buffer. So we allocate more space than what was asked for.
     const size_t alignment = 128;
     void *orig = malloc(x + alignment + sizeof(double));
     if (orig == NULL) {
