@@ -13,6 +13,13 @@ WEAK void *default_malloc(void *user_context, size_t x) {
     // We want to return an aligned address to the application.
     // In addition, we should be able to read a double beyond the
     // buffer. So we allocate more space than what was asked for.
+    //
+    // TODO: The double at the end is one maximum size vector element.
+    // At present there is an optimization for stride 2 vector
+    // loads that depends on being able to overread. The intention
+    // is to move this into codegen and this behavior of the allocator
+    // should not be relied on elsewhere.
+    // This is tracked here: https://github.com/halide/Halide/issues/1044
     const size_t alignment = 128;
     void *orig = malloc(x + alignment + sizeof(double));
     if (orig == NULL) {
