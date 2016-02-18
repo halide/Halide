@@ -10,13 +10,16 @@ extern void free(void *);
 namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void *default_malloc(void *user_context, size_t x) {
-    void *orig = malloc(x+136);
+    // We want to return an aligned address to the application.
+    // In addition we should have at least the sizeof a pointer number
+    // of bytes so we can fit the original pointer for book keeping.
+    const size_t alignment = 128;
+    void *orig = malloc(x + alignment + sizeof(void *));
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
         return NULL;
     }
-    // Round up to next multiple of 128. Should add at least 8 bytes so we can fit the original pointer.
-    void *ptr = (void *)((((size_t)orig + 128) >> 7) << 7);
+    void *ptr = (void *)(((size_t)orig + alignment) & ~(alignment - 1));
     ((void **)ptr)[-1] = orig;
     return ptr;
 }
