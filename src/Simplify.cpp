@@ -2820,8 +2820,8 @@ private:
                 }
                 expr = make_const(op->type, ia);
             } else if (ta.is_uint()) {
-              // abs(uint) is a no-op.
-              expr = a;
+                // abs(uint) is a no-op.
+                expr = a;
             } else if (const_float(a, &fa)) {
                 if (fa < 0) {
                     fa = -fa;
