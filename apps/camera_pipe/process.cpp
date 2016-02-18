@@ -29,6 +29,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
+#ifdef HL_MEMINFO
+    info(input, "input");
+    stats(input, "input");
+    // dump(input, "input");
+#endif
+
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
     float _matrix_3200[][4] = {{ 1.6697f, -0.2693f, -0.4004f, -42.4346f},

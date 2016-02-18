@@ -2,41 +2,15 @@
 // operate on the Image class supporting images with arbitrary dimensions.
 //
 //   Image<uint16_t> input = load_image(argv[1]);
-//   input.info("input");  // Output the Image header info
-//   input.dump("input");  // Dump the Image data
-//   input.stats("input"); // Collect statistics on the Image
 //
-// These can also be called through macros which automatically tag the
-// output with the symbol name used in the program:
+//   info(input, "input");  // Output the Image header info
+//   dump(input, "input");  // Dump the Image data
+//   stats(input, "input"); // Report statistics for the Image
 //
-//   Image_info(input);    // Output the Image header info
-//   Image_dump(input);    // Dump the Image data
-//   Image_stats(input);   // Collect statistics on the Image
-//
-// Info can also be output when an Image is initialized without making any
-// modifications the program by compiling with -DHL_MEMINIT
-//
-// These features are off by default.  To enable, compile with the following
-// flags:
-//
-//   -DHL_MEMINFO  Produce Image info output
-//   -DHL_MEMINIT  Produce Image info when Image is first initialized
 //
 #ifndef HALIDE_TOOLS_IMAGE_INFO_H
 #define HALIDE_TOOLS_IMAGE_INFO_H
 
-#ifndef HL_MEMINFO
-#define Image_info(img)
-#define Image_dump(img)
-#define Image_stats(img)
-#else
-// Stringifying macros to automatically fill in the Image info tag
-#define Image_info(img)  img.info(#img)
-#define Image_dump(img)  img.dump(#img)
-#define Image_stats(img) img.stats(#img)
-#endif // HL_MEMINFO
-
-#if defined(HL_MEMINFO) || defined(HL_MEMINIT)
 #include <cassert>
 #include <cstdlib>
 #include <limits>
@@ -44,7 +18,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
-#include <stdint.h>  // <cstdint> requires C++11
+#include <cstdint>
 
 #include "HalideRuntime.h"
 
@@ -94,12 +68,13 @@ static inline void print_memalign(intptr_t val) {
 }
 
 template<typename T>
-void Image<T>::info(const char *tag) const {
-    int32_t *min = contents->buf.min;
-    int32_t *extent = contents->buf.extent;
-    int32_t *stride = contents->buf.stride;
-    int dim = dimensions();
-    int bpp = contents->buf.elem_size;
+void info(Image<T> &img, const char *tag = "Image") {
+    buffer_t *buf = &(*img);
+    int32_t *min = buf->min;
+    int32_t *extent = buf->extent;
+    int32_t *stride = buf->stride;
+    int dim = img.dimensions();
+    int bpp = buf->elem_size;
     int32_t size = 1;
 
     std::cout << std::endl
@@ -111,22 +86,21 @@ void Image<T>::info(const char *tag) const {
         size *= extent[d];
     }
     std::cout << std::endl;
-    std::cout << tag << " class       = 0x" << std::left << std::setw(10) << (void*)this
+    std::cout << tag << " class       = 0x" << std::left << std::setw(10) << (void*)img
                      << std::right << " # ";
-    print_memalign((intptr_t)this); std::cout << std::endl;
-    std::cout << tag << " class size  = "<< sizeof(this)
-                     << " (0x"<< std::hex << sizeof(this) << std::dec <<")\n";
-    std::cout << tag << "-class => [ 0x" << (void*)this
-                     << ", 0x" << (void*)(((char*)this)+sizeof(this)-1)
-                     << " ], # size:" << sizeof(this) << ", ";
-    print_memalign((intptr_t)this); std::cout << std::endl;
-    int img_dim = dimensions();
+    print_memalign((intptr_t)&img); std::cout << std::endl;
+    std::cout << tag << " class size  = "<< sizeof(img)
+                     << " (0x"<< std::hex << sizeof(img) << std::dec <<")\n";
+    std::cout << tag << "-class => [ 0x" << (void*)&img
+                     << ", 0x" << (void*)(((char*)&img)+sizeof(img)-1)
+                     << " ], # size:" << sizeof(img) << ", ";
+    print_memalign((intptr_t)&img); std::cout << std::endl;
     int img_bpp = sizeof(T);
-    std::cout << tag << " img_dim     = " << img_dim << std::endl;
+    std::cout << tag << " img_dim     = " << dim << std::endl;
     std::cout << tag << " bytes/pix   = " << img_bpp << std::endl;
-    std::cout << tag << " width       = " << width() << std::endl;
-    std::cout << tag << " height      = " << height() << std::endl;
-    std::cout << tag << " channels    = " << channels() << std::endl;
+    std::cout << tag << " width       = " << img.width() << std::endl;
+    std::cout << tag << " height      = " << img.height() << std::endl;
+    std::cout << tag << " channels    = " << img.channels() << std::endl;
     std::cout << tag << " extent[]    = ";
     for (int d = 0; d < dim; d++) {
         std::cout << extent[d] << " ";
@@ -151,8 +125,8 @@ void Image<T>::info(const char *tag) const {
         }
     }
 
-    uint8_t *alloc = contents->alloc;
-    const T *img_data = data();
+    uint8_t *alloc = img.alloc();
+    const T *img_data = img.data();
     const T *img_next = img_data + size;
     int32_t img_size = size * img_bpp;
     int32_t data_size = (char*)img_next - (char*)img_data;
@@ -183,12 +157,13 @@ void Image<T>::info(const char *tag) const {
 }
 
 template<typename T>
-void Image<T>::dump(const char *tag) const {
-    int32_t *min = contents->buf.min;
-    int32_t *extent = contents->buf.extent;
-    int32_t *stride = contents->buf.stride;
-    int dim = dimensions();
-    int bpp = contents->buf.elem_size;
+void dump(Image<T> &img, const char *tag = "Image") {
+    buffer_t *buf = &(*img);
+    int32_t *min = buf->min;
+    int32_t *extent = buf->extent;
+    int32_t *stride = buf->stride;
+    int dim = img.dimensions();
+    int bpp = buf->elem_size;
     int32_t size = 1;
 
     std::cout << std::endl << "Image dump: " << tag
@@ -199,7 +174,7 @@ void Image<T>::dump(const char *tag) const {
     }
 
     // Arbitrary dimension image traversal
-    const T *ptr = (const T *)contents->buf.host;
+    const T *ptr = img.data();
     int32_t curloc[dim];
     for (int d = 1; d < dim; d++) {
         curloc[d] = -1;
@@ -246,12 +221,13 @@ void Image<T>::dump(const char *tag) const {
 }
 
 template<typename T>
-void Image<T>::stats(const char *tag) const {
-    int32_t *min = contents->buf.min;
-    int32_t *extent = contents->buf.extent;
-    int32_t *stride = contents->buf.stride;
-    int dim = dimensions();
-    int bpp = contents->buf.elem_size;
+void stats(Image<T> &img, const char *tag = "Image") {
+    buffer_t *buf = &(*img);
+    int32_t *min = buf->min;
+    int32_t *extent = buf->extent;
+    int32_t *stride = buf->stride;
+    int dim = img.dimensions();
+    int bpp = buf->elem_size;
     int32_t size = 1;
     std::cout << std::endl << "Image stats: " << tag
               << " dim:" << dim << " bpp:" << bpp;
@@ -261,7 +237,7 @@ void Image<T>::stats(const char *tag) const {
     }
 
     // Arbitrary dimension image traversal
-    const T *ptr = (const T *)contents->buf.host;
+    const T *ptr = img.data();
     int32_t curloc[dim];
     for (int d = 1; d < dim; d++) {
         curloc[d] = -1;
@@ -324,19 +300,7 @@ void Image<T>::stats(const char *tag) const {
     std::cout << std::endl;
 }
 
-}} // namespace Halide::Tools
-
-#else  // ! (HL_MEMINFO || HL_MEMINIT)
-namespace Halide { namespace Tools {
-
-template<typename T>
-void Image<T>::info(const char *tag) const { }
-template<typename T>
-void Image<T>::dump(const char *tag) const { }
-template<typename T>
-void Image<T>::stats(const char *tag) const { }
-
 } // namespace Tools
 } // namespace Halide
-#endif  // HL_MEMINFO || HL_MEMINIT
+
 #endif  // HALIDE_TOOLS_IMAGE_INFO_H
