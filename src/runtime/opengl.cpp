@@ -568,6 +568,11 @@ WEAK int halide_opengl_init(void *user_context) {
 
     global_state.init();
 
+#ifdef DEBUG_RUNTIME
+    // Initialize timer
+    halide_start_clock(user_context);
+#endif
+
     // Make a context if there isn't one
     if (halide_opengl_create_context(user_context)) {
         error(user_context) << "Failed to make OpenGL context";
