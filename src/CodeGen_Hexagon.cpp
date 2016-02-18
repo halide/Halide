@@ -459,6 +459,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
 
 std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     auto llvm_module = CodeGen_Posix::compile(module);
+    static bool options_processed = false;
+    if (options_processed) return llvm_module;
+    options_processed = true;
 
     // TODO: This should be set on the module itself, or some other
     // safer way to pass this through to the target specific lowering
@@ -469,13 +472,11 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     // flag being set for the wrong module.
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                 "Halide HVX internal compiler\n");
-#ifdef NEED_TO_RUN_ONCE
     // We need to EnableQuIC for LLVM and Halide (Unrolling).
     char *s = strdup("HALIDE_LLVM_QUIC=-hexagon-small-data-threshold=0");
     ::putenv(s);
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
                                 "Halide HVX quic option\n");
-#endif
     if (module.target().has_feature(Halide::Target::HVX_128)) {
         char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
         ::putenv(s);
