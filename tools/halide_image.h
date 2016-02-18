@@ -71,10 +71,6 @@ class Image {
         buf.dev = 0;
         while ((size_t)buf.host & 0x1f) buf.host++;
         contents = new Contents(buf, ptr);
-
-#ifdef HL_MEMINIT
-        info("init");
-#endif
     }
 
 public:
@@ -188,6 +184,10 @@ public:
         return &(contents->buf);
     }
 
+    uint8_t *alloc() const {
+        return contents->alloc;
+    }
+
     int width() const {
         return dimensions() > 0 ? contents->buf.extent[0] : 1;
     }
@@ -227,10 +227,6 @@ public:
         contents->buf.min[2] = z;
         contents->buf.min[3] = w;
     }
-
-    void info(const char *tag = "Image") const;
-    void dump(const char *tag = "Image") const;
-    void stats(const char *tag = "Image") const;
 };
 
 }  // namespace Tools
