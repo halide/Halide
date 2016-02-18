@@ -1,4 +1,4 @@
-// This header defines a several methods useful for debugging programs that
+// This header defines several methods useful for debugging programs that
 // operate on the Image class supporting images with arbitrary dimensions.
 //
 //   Image<uint16_t> input = load_image(argv[1]);
@@ -48,20 +48,24 @@
 
 #include "HalideRuntime.h"
 
-namespace Halide { namespace Tools {
+namespace Halide {
+namespace Tools {
 
 static inline void print_dimid(int d, int val) {
     static const char *dimid[] = {"x", "y", "z", "w"};
     int numdimid = 4;
-    if (d < numdimid)
+    if (d < numdimid) {
         std::cout << " " << dimid[d] << ":" << val;
-    else
+    } else {
         std::cout << " extent[" << d << "]:" << val;
+    }
 }
 
 static inline void print_loc(int32_t *loc, int dim, int32_t *min) {
     for (int d = 0; d < dim; d++) {
-        if (d) std::cout << ",";
+        if (d) { 
+            std::cout << ",";
+        }
         std::cout << loc[d] + min[d];
     }
 }
@@ -332,6 +336,7 @@ void Image<T>::dump(const char *tag) const { }
 template<typename T>
 void Image<T>::stats(const char *tag) const { }
 
-}} // namespace Halide::Tools
+} // namespace Tools
+} // namespace Halide
 #endif  // HL_MEMINFO || HL_MEMINIT
 #endif  // HALIDE_TOOLS_IMAGE_INFO_H
