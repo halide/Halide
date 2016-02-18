@@ -10,13 +10,13 @@ extern void free(void *);
 namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void *default_malloc(void *user_context, size_t x) {
-    void *orig = malloc(x+40);
+    void *orig = malloc(x+136);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
         return NULL;
     }
-    // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
-    void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
+    // Round up to next multiple of 128. Should add at least 8 bytes so we can fit the original pointer.
+    void *ptr = (void *)((((size_t)orig + 128) >> 7) << 7);
     ((void **)ptr)[-1] = orig;
     return ptr;
 }
