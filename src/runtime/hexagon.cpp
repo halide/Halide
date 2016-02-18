@@ -23,9 +23,9 @@ WEAK int halide_hexagon_run(void *user_context,
         num_args++;
     }
 
-    void** translated_args = (void **)__builtin_alloca((num_args + 1) * sizeof(void *));
+    void** translated_args = (void **)__builtin_alloca(num_args * sizeof(void *));
     uint64_t *dev_handles = (uint64_t *)__builtin_alloca(num_args * sizeof(uint64_t));
-    for (size_t i = 0; i <= num_args; i++) { // Get NULL at end.
+    for (size_t i = 0; i < num_args; i++) {
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
             dev_handles[i] = halide_get_device_handle(*(uint64_t *)args[i]);
