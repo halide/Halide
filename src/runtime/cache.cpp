@@ -115,7 +115,7 @@ struct CacheEntry {
     buffer_t buf[1];
     // ADDITIONAL buffer_t STRUCTS HERE
 
-    WEAK bool init(const uint8_t *cache_key, size_t cache_key_size,
+    bool init(const uint8_t *cache_key, size_t cache_key_size,
               uint32_t key_hash, const buffer_t &computed_buf,
               int32_t tuples, buffer_t **tuple_buffers);
     void destroy();
