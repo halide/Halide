@@ -313,6 +313,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   varith.push_back(Pattern(WPICK(wild_i32x32,wild_i32x16) +
                            WPICK(wild_i32x32,wild_i32x16),
                            IPICK(Intrinsic::hexagon_V6_vaddw)));
+// Hexagon v62 feature.
+#include <v62feat1.inc>
   {
     // Note: no 32-bit saturating unsigned add in V60, use vaddw
     varith.push_back(Pattern(WPICK(wild_u32x32,wild_u32x16) +
@@ -339,6 +341,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   varith.push_back(Pattern(WPICK(wild_i32x64,wild_i32x32) +
                            WPICK(wild_i32x64,wild_i32x32),
                            IPICK(Intrinsic::hexagon_V6_vaddw_dv)));
+// Hexagon v62 feature
+#include <v62feat2.inc>
   {
     // Note: no 32-bit saturating unsigned add in V60, use vaddw
     varith.push_back(Pattern(WPICK(wild_u32x64,wild_u32x32) +
@@ -455,6 +459,9 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
 
 std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     auto llvm_module = CodeGen_Posix::compile(module);
+    static bool options_processed = false;
+    if (options_processed) return llvm_module;
+    options_processed = true;
 
     // TODO: This should be set on the module itself, or some other
     // safer way to pass this through to the target specific lowering
@@ -465,13 +472,11 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     // flag being set for the wrong module.
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                 "Halide HVX internal compiler\n");
-#ifdef NEED_TO_RUN_ONCE
     // We need to EnableQuIC for LLVM and Halide (Unrolling).
     char *s = strdup("HALIDE_LLVM_QUIC=-hexagon-small-data-threshold=0");
     ::putenv(s);
     cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
                                 "Halide HVX quic option\n");
-#endif
     if (module.target().has_feature(Halide::Target::HVX_128)) {
         char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
         ::putenv(s);
@@ -1634,6 +1639,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
       // into u16x64/i16x64
       Patterns.clear();
       matches.clear();
+#include <v62feat3.inc>
       Patterns.push_back(Pattern(u16_(min(WPICK(wild_u32x128, wild_u32x64),
                                             UINT_16_IMAX)),
                                    IPICK(Intrinsic::hexagon_V6_vsatwh)));
@@ -2611,6 +2617,7 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
       if (is_zero(op->value)) {
         ID = IPICK(Intrinsic::hexagon_V6_vd0);
         zero_bcast = true;
+#include <v62feat4.inc>
       } else {
         ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
         if (match8 || match16) {
