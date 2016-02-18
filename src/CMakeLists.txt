@@ -78,6 +78,7 @@ set (RUNTIME_LL
   aarch64
   arm
   arm_no_neon
+  hexagon
   mips
   pnacl_math
   posix_math
@@ -213,6 +214,7 @@ set(HEADER_FILES
   CodeGen_C.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_Hexagon.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
@@ -242,6 +244,7 @@ set(HEADER_FILES
   Func.h
   Function.h
   Generator.h
+  HexagonIRChecker.h
   IR.h
   IREquality.h
   IRMatch.h
@@ -356,6 +359,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_C.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
+  CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
@@ -386,6 +390,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Function.cpp
   FuseGPUThreadLoops.cpp
   Generator.cpp
+  HexagonIRChecker.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -500,6 +505,11 @@ endif()
 if (TARGET_AARCH64)
   target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
   list(APPEND LLVM_COMPONENTS aarch64)
+endif()
+
+if (TARGET_HEXAGON)
+  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON")
+  list(APPEND LLVM_COMPONENTS hexagon)
 endif()
 
 if (TARGET_PTX)
