@@ -48,6 +48,11 @@ out_small.ppm: process
 	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_small.pgm 3700 2.0 50 1 out_small.ppm
 	- cmp fcam_c.ppm ref_small/fcam_c.ppm
 	cmp out_small.ppm ref_small/out_small.ppm
+
+out_2592_200.ppm: process
+	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_2592_200.pgm 3700 2.0 50 1 out_2592_200.ppm
+	- cmp fcam_c.ppm ref_2592_200/fcam_c.ppm
+	cmp out_2592_200.ppm ref_2592_200/out_2592_200.ppm
 endif
 
 ../../bin/HalideTraceViz:
