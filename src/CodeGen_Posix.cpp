@@ -88,6 +88,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     Allocation allocation;
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = new_expr.defined() ? 0 : stack_bytes;
+    allocation.type = type;
     allocation.ptr = NULL;
     allocation.destructor = NULL;
     allocation.destructor_function = NULL;
@@ -101,6 +102,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
             if (allocated_in == current_func &&
+                free->type == type &&
                 free->stack_bytes >= stack_bytes) {
                 break;
             }
@@ -120,7 +122,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
-            allocation.ptr = create_alloca_at_entry(i8, stack_bytes, false, name);
+            int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
+            allocation.ptr = create_alloca_at_entry(llvm_type_of(type), stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
     } else {
