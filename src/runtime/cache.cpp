@@ -74,21 +74,12 @@ WEAK size_t full_extent(const buffer_t &buf) {
     }
     return result;
 }
-#ifdef HEXAGON_TYPES
-WEAK int32_t
-#else
-WEAK bool
-#endif
-keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
+
+WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return memcmp(key1, key2, key_size) == 0;
 }
 
-#ifdef HEXAGON_TYPES
-WEAK int32_t
-#else
-WEAK bool
-#endif
-bounds_equal(const buffer_t &buf1, const buffer_t &buf2) {
+WEAK bool bounds_equal(const buffer_t &buf1, const buffer_t &buf2) {
     if (buf1.elem_size != buf2.elem_size)
         return false;
     for (size_t i = 0; i < 4; i++) {
@@ -124,12 +115,7 @@ struct CacheEntry {
     buffer_t buf[1];
     // ADDITIONAL buffer_t STRUCTS HERE
 
-#ifdef HEXAGON_TYPES
-    WEAK int32_t
-#else
-    WEAK bool
-#endif
-    init(const uint8_t *cache_key, size_t cache_key_size,
+    WEAK bool init(const uint8_t *cache_key, size_t cache_key_size,
               uint32_t key_hash, const buffer_t &computed_buf,
               int32_t tuples, buffer_t **tuple_buffers);
     void destroy();
@@ -137,12 +123,7 @@ struct CacheEntry {
 
 };
 
-#ifdef HEXAGON_TYPES
-WEAK int32_t
-#else
-WEAK bool
-#endif
-CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
+WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
                            uint32_t key_hash, const buffer_t &computed_buf,
                            int32_t tuples, buffer_t **tuple_buffers) {
     next = NULL;
@@ -258,7 +239,7 @@ WEAK void prune_cache() {
     while (current_cache_size > max_cache_size &&
            prune_candidate != NULL) {
         CacheEntry *more_recent = prune_candidate->more_recent;
-        
+
         if (prune_candidate->in_use_count == 0) {
             uint32_t h = prune_candidate->hash;
             uint32_t index = h % kHashTableSize;
