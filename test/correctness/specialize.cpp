@@ -394,7 +394,10 @@ int main(int argc, char **argv) {
         out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
 
         if_then_else_count = 0;
-        out.add_custom_lowering_pass(new CountIfThenElse());
+        CountIfThenElse *pass1 = new CountIfThenElse();
+        for (auto ff : out.compile_to_module(out.infer_arguments()).functions) {
+            pass1->mutate(ff.body);
+        }
 
         Image<int> input(3, 3), output(3, 3);
         // Shouldn't throw a bounds error:
@@ -402,7 +405,7 @@ int main(int argc, char **argv) {
         out.realize(output);
 
         if (if_then_else_count != 1) {
-            printf("Found other than 1 IfThenElse stmts.\n");
+            printf("Expected 1 IfThenElse stmts. Found %d.\n", if_then_else_count);
             return -1;
         }
     }
@@ -420,7 +423,10 @@ int main(int argc, char **argv) {
         out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
 
         if_then_else_count = 0;
-        out.add_custom_lowering_pass(new CountIfThenElse());
+        CountIfThenElse *pass2 = new CountIfThenElse();
+        for (auto ff : out.compile_to_module(out.infer_arguments()).functions) {
+            pass2->mutate(ff.body);
+        }
 
         Image<int> input(3, 3), output(3, 3);
         // Shouldn't throw a bounds error:
@@ -431,7 +437,7 @@ int main(int argc, char **argv) {
         // the condition in the true case should have been simplified
         // away. The If in the false branch cannot be simplified.
         if (if_then_else_count != 2) {
-            printf("Found other than 2 IfThenElse stmts.\n");
+            printf("Expected 2 IfThenElse stmts. Found %d.\n", if_then_else_count);
             return -1;
         }
     }
