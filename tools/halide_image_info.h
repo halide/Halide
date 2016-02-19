@@ -79,6 +79,9 @@ void info(Image<T> &img, const char *tag = "Image") {
     int img_csize = sizeof(Image<T>);
     int img_bsize = sizeof(buffer_t);
     int32_t size = 1;
+    uint64_t dev = buf->dev;
+    bool host_dirty = buf->host_dirty;
+    bool dev_dirty = buf->dev_dirty;
 
     std::cout << std::endl
               << "-----------------------------------------------------------------------------";
@@ -107,6 +110,9 @@ void info(Image<T> &img, const char *tag = "Image") {
     if (img_bpp != img_tsize) {
         std::cout << tag << " sizeof(T)   = " << img_tsize << std::endl;
     }
+    std::cout << tag << " host_dirty  = " << host_dirty << std::endl;
+    std::cout << tag << " dev_dirty   = " << dev_dirty << std::endl;
+    std::cout << tag << " dev handle  = " << dev << std::endl;
     std::cout << tag << " elem_size   = " << img_bpp << std::endl;
     std::cout << tag << " img_dim     = " << dim << std::endl;
     std::cout << tag << " width       = " << img.width() << std::endl;
