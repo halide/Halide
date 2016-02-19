@@ -510,6 +510,8 @@ endif()
 if (TARGET_HEXAGON)
   target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON")
   list(APPEND LLVM_COMPONENTS hexagon)
+  include_directories(${Halide_SOURCE_DIR}/src/hvx_arch_dev)
+  include_directories(${Halide_SOURCE_DIR}/src/hvx_arch_stubs)
 endif()
 
 if (TARGET_PTX)
