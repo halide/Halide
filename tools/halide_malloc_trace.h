@@ -49,10 +49,10 @@ static inline void print_meminfoalign(intptr_t val) {
 
 void *halide_malloc_trace(void *user_context, size_t x) {
     // Halide requires halide_malloc to allocate memory that can be
-    // read 8 bytes before the start and 8 bytes beyond the end.
+    // read 8 bytes before the start to store the original pointer.
     // Additionally, we also need to align it to the natural vector
     // width.
-    void *orig = malloc(x+(128+8));
+    void *orig = malloc(x+128);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
         return NULL;
