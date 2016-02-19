@@ -18,6 +18,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <stdint.h>
 
 #include "HalideRuntime.h"
 
@@ -73,13 +74,16 @@ void info(Image<T> &img, const char *tag = "Image") {
     int32_t *extent = buf->extent;
     int32_t *stride = buf->stride;
     int dim = img.dimensions();
-    int bpp = buf->elem_size;
+    int img_bpp = buf->elem_size;
+    int img_tsize = sizeof(T);
+    int img_csize = sizeof(Image<T>);
+    int img_bsize = sizeof(buffer_t);
     int32_t size = 1;
 
     std::cout << std::endl
               << "-----------------------------------------------------------------------------";
     std::cout << std::endl << "Image info: " << tag
-              << " dim:" << dim << " bpp:" << bpp;
+              << " dim:" << dim << " bpp:" << img_bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
         size *= extent[d];
@@ -88,15 +92,23 @@ void info(Image<T> &img, const char *tag = "Image") {
     std::cout << tag << " class       = 0x" << std::left << std::setw(10) << (void*)img
                      << std::right << " # ";
     print_memalign((intptr_t)&img); std::cout << std::endl;
-    std::cout << tag << " class size  = "<< sizeof(img)
-                     << " (0x"<< std::hex << sizeof(img) << std::dec <<")\n";
+    std::cout << tag << " class size  = "<< img_csize
+                     << " (0x"<< std::hex << img_csize << std::dec <<")\n";
     std::cout << tag << "-class => [ 0x" << (void*)&img
-                     << ", 0x" << (void*)(((char*)&img)+sizeof(img)-1)
-                     << " ], # size:" << sizeof(img) << ", ";
+                     << ", 0x" << (void*)(((char*)&img)+img_csize-1)
+                     << " ], # size:" << img_csize << ", ";
     print_memalign((intptr_t)&img); std::cout << std::endl;
-    int img_bpp = sizeof(T);
+    std::cout << tag << " buf_t size  = "<< img_bsize
+                     << " (0x"<< std::hex << img_bsize << std::dec <<")\n";
+    std::cout << tag << "-buf_t => [ 0x" << (void*)&buf
+                     << ", 0x" << (void*)(((char*)&buf)+img_bsize-1)
+                     << " ], # size:" << img_bsize << ", ";
+    print_memalign((intptr_t)&buf); std::cout << std::endl;
+    if (img_bpp != img_tsize) {
+        std::cout << tag << " sizeof(T)   = " << img_tsize << std::endl;
+    }
+    std::cout << tag << " elem_size   = " << img_bpp << std::endl;
     std::cout << tag << " img_dim     = " << dim << std::endl;
-    std::cout << tag << " bytes/pix   = " << img_bpp << std::endl;
     std::cout << tag << " width       = " << img.width() << std::endl;
     std::cout << tag << " height      = " << img.height() << std::endl;
     std::cout << tag << " channels    = " << img.channels() << std::endl;
