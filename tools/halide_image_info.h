@@ -125,7 +125,6 @@ void info(Image<T> &img, const char *tag = "Image") {
         }
     }
 
-    uint8_t *alloc = img.alloc();
     const T *img_data = img.data();
     const T *img_next = img_data + size;
     int32_t img_size = size * img_bpp;
@@ -140,20 +139,12 @@ void info(Image<T> &img, const char *tag = "Image") {
     std::cout << tag << " next        = 0x" << std::left << std::setw(10) << (void *)img_next
                      << std::right << " # ";
     print_memalign((intptr_t)img_next); std::cout << std::endl;
-    std::cout << tag << " alloc       = 0x" << std::left << std::setw(10) << (void *)alloc
-                     << std::right << " # ";
-    print_memalign((intptr_t)alloc); std::cout << std::endl;
     std::cout << tag << " data_size   = " << data_size  << " (0x"
                              << std::hex << data_size  << ")" << std::dec << std::endl;
     std::cout << tag << " => [ 0x" << (void *)img_data
                          << ", 0x" << (void *)(((char*)img_next)-1)
                          << "], # size:" << data_size << ", ";
     print_memalign((intptr_t)img_data); std::cout << std::endl;
-    uint8_t *img_headend = (alloc == (uint8_t *)img_data) ? alloc : (uint8_t*)img_data - 1;
-    std::cout << tag << "-header => [ 0x" << (void *)alloc
-                         << ", 0x" << (void *)(img_headend)
-                         << "], # size:" << (char*)img_data - (char*)alloc << ", ";
-    print_memalign((intptr_t)alloc); std::cout << std::endl;
 }
 
 template<typename T>

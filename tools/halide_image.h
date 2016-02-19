@@ -184,10 +184,6 @@ public:
         return &(contents->buf);
     }
 
-    uint8_t *alloc() const {
-        return contents->alloc;
-    }
-
     int width() const {
         return dimensions() > 0 ? contents->buf.extent[0] : 1;
     }
