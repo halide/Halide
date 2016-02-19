@@ -394,9 +394,9 @@ int main(int argc, char **argv) {
         out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
 
         if_then_else_count = 0;
-        CountIfThenElse *pass1 = new CountIfThenElse();
+        CountIfThenElse pass1;
         for (auto ff : out.compile_to_module(out.infer_arguments()).functions) {
-            pass1->mutate(ff.body);
+            pass1.mutate(ff.body);
         }
 
         Image<int> input(3, 3), output(3, 3);
@@ -423,9 +423,9 @@ int main(int argc, char **argv) {
         out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
 
         if_then_else_count = 0;
-        CountIfThenElse *pass2 = new CountIfThenElse();
+        CountIfThenElse pass2;
         for (auto ff : out.compile_to_module(out.infer_arguments()).functions) {
-            pass2->mutate(ff.body);
+            pass2.mutate(ff.body);
         }
 
         Image<int> input(3, 3), output(3, 3);
