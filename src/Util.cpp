@@ -19,8 +19,9 @@ using std::ostringstream;
 using std::map;
 
 std::string get_env_variable(char const *env_var_name, size_t &read) {
-    if (!env_var_name)
+    if (!env_var_name) {
         return "";
+    }
     read = 0;
 
     #ifdef _MSC_VER
@@ -34,8 +35,9 @@ std::string get_env_variable(char const *env_var_name, size_t &read) {
     if (read) {
         return std::string(lvl);
     }
-    else
+    else {
         return "";
+    }
 }
 
 string running_program_name() {
@@ -51,8 +53,9 @@ string running_program_name() {
         string tmp = std::string(path);
         program_name = tmp.substr(tmp.find_last_of("/")+1);
     }
-    else
+    else {
         return "";
+    }
     return program_name;
     #endif
 }
