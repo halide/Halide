@@ -25,6 +25,7 @@ EXPORT std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module 
 /** Compile an LLVM module to native targets (objects, native assembly). */
 // @{
 EXPORT void compile_llvm_module_to_object(llvm::Module &module, const std::string &filename);
+EXPORT void compile_llvm_module_to_object(llvm::Module &module, std::vector<uint8_t> &object);
 EXPORT void compile_llvm_module_to_assembly(llvm::Module &module, const std::string &filename);
 EXPORT void compile_llvm_module_to_native(llvm::Module &module,
                                           const std::string &object_filename,
