@@ -72,7 +72,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **module, co
                         << ", *module: " << *module
                         << ", code: " << code
                         << ", size: " << (int)size << ")\n";
-
     halide_assert(user_context, module != 0);
 
     if (*module != 0) {
@@ -80,7 +79,8 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **module, co
         return 0;
     }
 
-    *module = 0;
+    // Set dummy module for now.
+    *module = (void *)1;
 
     return 0;
 }
@@ -142,8 +142,6 @@ WEAK int halide_hexagon_run(void *user_context,
     void** translated_output_args = (void **)__builtin_alloca(output_arg_count * sizeof(void *));
     uint64_t *output_dev_handles = (uint64_t *)__builtin_alloca(output_arg_count * sizeof(uint64_t));
     translate_arguments(user_context, output_arg_count, output_arg_sizes, output_args, output_arg_flags, translated_output_args, output_dev_handles);
-
-
 
     return 0;
 }

@@ -4,6 +4,7 @@
 #include "Closure.h"
 #include "Param.h"
 #include "Image.h"
+#include "Output.h"
 
 namespace Halide {
 namespace Internal {
@@ -122,9 +123,19 @@ public:
     Stmt inject(Stmt s) {
         s = mutate(s);
 
-        // Compile the code and put it in a buffer.
-        size_t code_size = 0;
+        // Skip if there are no device kernels.
+        if (device_code.functions.empty()) {
+            return s;
+        }
+
+        // Compile the device code.
+        std::vector<uint8_t> object;
+        compile_module_to_object(device_code, object);
+
+        // Put the compiled object into a buffer.
+        size_t code_size = object.size();
         Buffer code(type_of<uint8_t>(), {(int)code_size}, nullptr, "code");
+        memcpy(code.host_ptr(), &object[0], (int)code_size);
 
         Expr code_ptr_0 = Load::make(type_of<uint8_t>(), "code", 0, code, Parameter());
         Expr code_ptr = Call::make(Handle(), Call::address_of, {code_ptr_0}, Call::Intrinsic);
@@ -132,6 +143,7 @@ public:
         // Determine the device code offsets from the start of the compiled code and substitute them in.
         std::map<std::string, Expr> kernel_offsets;
         for (auto i : this->kernel_offsets) {
+            // TODO: Find the offset of this kernel in the object.
             kernel_offsets[i] = Expr((size_t)0);
         }
         s = substitute(kernel_offsets, s);

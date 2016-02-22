@@ -24,6 +24,12 @@ void compile_module_to_object(const Module &module, std::string filename) {
     compile_llvm_module_to_object(*llvm, filename);
 }
 
+void compile_module_to_object(const Module &module, std::vector<uint8_t> &object) {
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
+    compile_llvm_module_to_object(*llvm, object);
+}
+
 void compile_module_to_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".s";
 
