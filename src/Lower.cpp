@@ -79,8 +79,6 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
-    std::vector<Module> device_modules;
-
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
         s = inject_memoization(s, env, pipeline_name, outputs);
@@ -252,13 +250,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     }
 
     debug(1) << "Splitting off Hexagon offload...\n";
-    s = inject_hexagon_rpc(s, device_modules);
+    s = inject_hexagon_rpc(s);
     debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
-
-    for (auto& i : device_modules) {
-        debug(1) << "Device module:\n";
-        debug(1) << i << "\n";
-    }
 
     s = remove_trivial_for_loops(s);
     s = simplify(s);
