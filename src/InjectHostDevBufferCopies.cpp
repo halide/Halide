@@ -176,7 +176,7 @@ class InjectBufferCopies : public IRMutator {
             interface_name = "halide_renderscript_device_interface";
             break;
           case DeviceAPI::Hexagon:
-            interface_name = "halide_ion_device_interface";
+            interface_name = "halide_hexagon_device_interface";
             break;
           default:
             internal_error << "Bad DeviceAPI " << static_cast<int>(device_api) << "\n";

@@ -12,7 +12,7 @@ namespace Internal {
 
 /* Lowering pass for Hexagon
  */
-Stmt inject_hexagon_rpc(Stmt s, std::vector<Module>& device_code);
+Stmt inject_hexagon_rpc(Stmt s);
 
 }
 }

@@ -5,7 +5,6 @@
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeRenderscript.h"
 #include "HalideRuntimeMetal.h"
-#include "HalideRuntimeIon.h"
 #include "HalideRuntimeHexagon.h"
 #include "runtime_internal.h"
 
@@ -62,12 +61,14 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_get_library_symbol,
     (void *)&halide_get_symbol,
     (void *)&halide_get_trace_file,
+    (void *)&halide_hexagon_detach_device_handle,
+    (void *)&halide_hexagon_device_interface,
+    (void *)&halide_hexagon_get_device_handle,
+    (void *)&halide_hexagon_wrap_device_handle,
+    (void *)&halide_hexagon_initialize_kernels,
     (void *)&halide_hexagon_run,
+    (void *)&halide_hexagon_device_release,
     (void *)&halide_int64_to_string,
-    (void *)&halide_ion_detach_device_handle,
-    (void *)&halide_ion_device_interface,
-    (void *)&halide_ion_get_device_handle,
-    (void *)&halide_ion_wrap_device_handle,
     (void *)&halide_load_library,
     (void *)&halide_malloc,
     (void *)&halide_matlab_call_pipeline,

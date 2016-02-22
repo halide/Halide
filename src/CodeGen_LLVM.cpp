@@ -739,7 +739,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
-        create_constant_binary_blob(array, buf.name() + ".data"), // host
+        create_binary_blob(array, buf.name() + ".data"), // host
         ConstantArray::get(i32_array, get_constants(i32, b.extent, b.extent + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
@@ -1657,7 +1657,6 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
-
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
 
     // If it's a Handle, load it as a uint64_t and then cast
@@ -2889,7 +2888,7 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
         data.reserve(s.size()+1);
         data.insert(data.end(), s.begin(), s.end());
         data.push_back(0);
-        Constant *val = create_constant_binary_blob(data, "str");
+        Constant *val = create_binary_blob(data, "str");
         string_constants[s] = val;
         return val;
     } else {
@@ -2897,11 +2896,11 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
     }
 }
 
-Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, const string &name) {
-
+Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name) {
     llvm::Type *type = ArrayType::get(i8, data.size());
+    bool constant = data.size() > 1024;
     GlobalVariable *global = new GlobalVariable(*module, type,
-                                                true, GlobalValue::PrivateLinkage,
+                                                constant, GlobalValue::PrivateLinkage,
                                                 0, name);
     ArrayRef<unsigned char> data_array((const unsigned char *)&data[0], data.size());
     global->setInitializer(ConstantDataArray::get(*context, data_array));
