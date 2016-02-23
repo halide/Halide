@@ -1,4 +1,4 @@
-interface halide_remote
+interface halide_hexagon_remote
 {
   typedef sequence<octet> buffer;
   typedef unsigned long uintptr_t;
