@@ -56,25 +56,9 @@ class GEMMGenerator :
         } else {
             As(i, j, io) = Atmp(io*s + i, j);
         }
+
         A(i, j) = As(i % s, j, i / s);
-
-        As.compute_root()
-            .split(j, jo, ji, s).reorder(i, ji, io, jo)
-            .unroll(i).vectorize(ji)
-            .specialize(A_.width() >= 256 && A_.height() >= 256).parallel(jo, 4);
-        Atmp.compute_at(As, io).vectorize(i).unroll(j);
-
-        if (transpose_B_) {
-            Func tmp;
-            tmp(i, j) = B_(j, i);
-            B(i, j) = tmp(i, j);
-
-            B.compute_at(result, Var::outermost()).tile(i, j, ii, ji, 4, 4).vectorize(ii).unroll(ji).parallel(j);
-            B.bound(i, 0, sum_size).bound(j, 0, num_cols);
-            tmp.compute_at(B, i).vectorize(j).unroll(i);
-        } else {
-            B(i, j) = B_(i, j);
-        }
+        B(i, j) = B_(i, j);
 
         Var k("k");
         Func prod;
@@ -120,9 +104,18 @@ class GEMMGenerator :
 
         result.bound(i, 0, num_rows).bound(j, 0, num_cols);
 
-        AB
-            .compute_at(result, i).unroll(j).vectorize(i)
-            .update().reorder(i, j, rv).unroll(j).unroll(rv, 2).vectorize(i);
+        As.compute_root()
+            .split(j, jo, ji, s).reorder(i, ji, io, jo)
+            .unroll(i).vectorize(ji)
+            .specialize(A_.width() >= 256 && A_.height() >= 256).parallel(jo, 4);
+
+        Atmp.compute_at(As, io)
+            .vectorize(i).unroll(j);
+
+        AB.compute_at(result, i)
+            .unroll(j).vectorize(i)
+            .update()
+            .reorder(i, j, rv).unroll(j).unroll(rv, 2).vectorize(i);
 
         if (transpose_AB) {
             ABt.compute_at(result, i).unroll(i).vectorize(j);
