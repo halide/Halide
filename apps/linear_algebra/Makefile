@@ -99,8 +99,8 @@ tests/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
 # Large powers of two are a pathological case for the cache, so avoid
 # them for the benchmarks.
 L1_BENCHMARK_SIZES = 16 64 288 1056 2080
-L2_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
-L3_BENCHMARK_SIZES = 8 16 32 64 128 288 544 1056 2080
+L2_BENCHMARK_SIZES = 32 64 128 288 544 1056 2080
+L3_BENCHMARK_SIZES = 32 64 128 288 544 1056 2080
 L1_BENCHMARKS = scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum
 L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger
 L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB
