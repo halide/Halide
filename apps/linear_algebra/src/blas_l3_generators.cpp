@@ -32,6 +32,9 @@ class GEMMGenerator :
         const Expr num_cols = (B_.height()/32)*32;
         const Expr sum_size = (A_.height()/32)*32;
 
+        const int vec = natural_vector_size(a_.type());
+        const int s = vec * 2;
+
         // Instead of transposing B, swap A and B, transpose A, and
         // then transpose AB.
         bool transpose_AB = false;
@@ -49,14 +52,14 @@ class GEMMGenerator :
         Func A("A"), B("B"), As("As"), Atmp("Atmp");
         Atmp(i, j) = A_(i, j);
         if (transpose_A_) {
-            As(i, j, io) = Atmp(j, io*16 + i);
+            As(i, j, io) = Atmp(j, io*s + i);
         } else {
-            As(i, j, io) = Atmp(io*16 + i, j);
+            As(i, j, io) = Atmp(io*s + i, j);
         }
-        A(i, j) = As(i % 16, j, i / 16);
+        A(i, j) = As(i % s, j, i / s);
 
         As.compute_root()
-            .split(j, jo, ji, 16).reorder(i, ji, io, jo)
+            .split(j, jo, ji, s).reorder(i, ji, io, jo)
             .unroll(i).vectorize(ji)
             .specialize(A_.width() >= 256 && A_.height() >= 256).parallel(jo, 4);
         Atmp.compute_at(As, io).vectorize(i).unroll(j);
@@ -96,12 +99,12 @@ class GEMMGenerator :
 
         if (transpose_AB) {
             result
-                .tile(i, j, ii, ji, 4, 16).vectorize(ii).unroll(ji)
-                .tile(i, j, ti[0], tj[0], i, j, 4, 1);
+                .tile(i, j, ii, ji, 4, s).vectorize(ii).unroll(ji)
+                .tile(i, j, ti[0], tj[0], i, j, s/4, 1);
         } else {
             result
-                .tile(i, j, ii, ji, 16, 4).vectorize(ii).unroll(ji)
-                .tile(i, j, ti[0], tj[0], i, j, 1, 4);
+                .tile(i, j, ii, ji, s, 4).vectorize(ii).unroll(ji)
+                .tile(i, j, ti[0], tj[0], i, j, 1, s/4);
         }
         result.tile(ti[0], tj[0], ti[0], tj[0], ti[1], tj[1], 2, 2);
 
