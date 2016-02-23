@@ -627,9 +627,19 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     JITModule jit_module(module, module.functions.back(),
                          make_externs_jit_module(target_arg, lowered_externs));
 
-    if (debug::debug_level >= 3) {
-        compile_module_to_native(module, name + ".bc", name + ".s");
-        compile_module_to_text(module, name + ".stmt");
+    // Dump bitcode to a file if the environment variable
+    // HL_GENBITCODE is non-zero.
+    size_t gen;
+    get_env_variable("HL_GENBITCODE", gen);
+    if (gen) {
+        string program_name = running_program_name();
+        if (program_name.empty()) {
+            program_name = "unknown" + unique_name('_').substr(1);
+        }
+
+        string function_name = name + "_" + unique_name('g').substr(1);
+        compile_to_bitcode(program_name + "_" + function_name + ".bc",
+                           infer_arguments(), function_name);
     }
 
     contents.ptr->jit_module = jit_module;

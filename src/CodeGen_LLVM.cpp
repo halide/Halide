@@ -3270,10 +3270,10 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
         builder->SetInsertPoint(entry, entry->getFirstInsertionPt());
     }
     Value *size = ConstantInt::get(i32, n);
-    AllocaInst *alloca = builder->CreateAlloca(t, size, name);
-    if (t->isVectorTy() || n > 1)
-      alloca->setAlignment(native_vector_bits()/8);
-    Value *ptr = alloca;
+    AllocaInst *ptr = builder->CreateAlloca(t, size, name);
+    if (t->isVectorTy() || n > 1) {
+        ptr->setAlignment(native_vector_bits() / 8);
+    }
 
     if (zero_initialize) {
         internal_assert(n == 1) << "Zero initialization for stack arrays not implemented\n";
