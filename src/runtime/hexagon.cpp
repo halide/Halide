@@ -66,21 +66,37 @@ WEAK int halide_hexagon_get_descriptor(void *user_context, int *fd, bool create 
 }
 
 
-WEAK int halide_hexagon_initialize_kernels(void *user_context, void **module, const uint8_t *code, size_t size) {
+WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr, const uint8_t *code, size_t size) {
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
-                        << ", module: " << module
-                        << ", *module: " << *module
+                        << ", module_state: " << state_ptr
                         << ", code: " << code
                         << ", size: " << (int)size << ")\n";
-    halide_assert(user_context, module != 0);
+    halide_assert(user_context, state_ptr != 0);
 
-    if (*module != 0) {
-        // Already initialized.
-        return 0;
+    // Create the state object if necessary. This only happens once,
+    // regardless of how many times halide_hexagon_initialize_kernels
+    // or halide_hexagon_device_release is called.
+    // halide_hexagon_device_release traverses this list and releases
+    // the module objects, but it does not modify the list nodes
+    // created/inserted here.
+    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
+
+    module_state **state = (module_state**)state_ptr;
+    if (!(*state)) {
+        *state = (module_state*)malloc(sizeof(module_state));
+        (*state)->module = NULL;
+        (*state)->next = state_list;
+        state_list = *state;
     }
 
-    // Set dummy module for now.
-    *module = (void *)1;
+    // Create the module itself if necessary.
+    if (!(*state)->module) {
+        debug(user_context) << "    halide_remote_initialize_kernels -> ";
+
+        debug(user_context) << "        not implemented!\n";
+    }
+
+    __sync_lock_release(&thread_lock);
 
     return 0;
 }
@@ -134,14 +150,18 @@ WEAK int halide_hexagon_run(void *user_context,
                         << "name: " << name << ")\n";
 
     size_t input_arg_count = count_arguments(user_context, input_arg_sizes, input_args, input_arg_flags);
-    size_t output_arg_count = count_arguments(user_context, output_arg_sizes, output_args, output_arg_flags);
-
     void** translated_input_args = (void **)__builtin_alloca(input_arg_count * sizeof(void *));
     uint64_t *input_dev_handles = (uint64_t *)__builtin_alloca(input_arg_count * sizeof(uint64_t));
-    translate_arguments(user_context, input_arg_count, input_arg_sizes, input_args, input_arg_flags, translated_input_args, input_dev_handles);
+    translate_arguments(user_context,
+                        input_arg_count, input_arg_sizes, input_args, input_arg_flags,
+                        translated_input_args, input_dev_handles);
+
+    size_t output_arg_count = count_arguments(user_context, output_arg_sizes, output_args, output_arg_flags);
     void** translated_output_args = (void **)__builtin_alloca(output_arg_count * sizeof(void *));
     uint64_t *output_dev_handles = (uint64_t *)__builtin_alloca(output_arg_count * sizeof(uint64_t));
-    translate_arguments(user_context, output_arg_count, output_arg_sizes, output_args, output_arg_flags, translated_output_args, output_dev_handles);
+    translate_arguments(user_context,
+                        output_arg_count, output_arg_sizes, output_args, output_arg_flags,
+                        translated_output_args, output_dev_handles);
 
     return 0;
 }
@@ -160,13 +180,12 @@ WEAK int halide_hexagon_device_release(void *user_context) {
         module_state *state = state_list;
         while (state) {
             if (state->module) {
-                debug(user_context) << "    hexagon_remote_release_kernels" << state->module << "\n";
+                debug(user_context) << "    hexagon_remote_release_kernels " << state->module << " -> ";
                 //hexagon_remote_release_kernels(state->module);
+                debug(user_context) << "        0\n";
                 state->module = 0;
             }
-            module_state *to_free = state;
             state = state->next;
-            free(to_free);
         }
         __sync_lock_release(&thread_lock);
 
