@@ -10,13 +10,15 @@ extern void free(void *);
 namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void *default_malloc(void *user_context, size_t x) {
-    void *orig = malloc(x+40);
+    // Allocate enough space for aligning the pointer we return.
+    const size_t alignment = 128;
+    void *orig = malloc(x + alignment);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
         return NULL;
     }
-    // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
-    void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
+    // We want to store the original pointer prior to the pointer we return.
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
     ((void **)ptr)[-1] = orig;
     return ptr;
 }

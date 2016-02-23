@@ -61,13 +61,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
             user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
-        } else if (stack_bytes <= 1024 * 16) {
-            // Round up to nearest multiple of 32.
-            stack_bytes = ((stack_bytes + 31)/32)*32;
-            if (stack_bytes == 0) {
-                stack_bytes = 32;
-            }
-        } else {
+        } else if (stack_bytes > 1024 * 16) {
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
         }
@@ -77,6 +71,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
     // Only allocate memory if the condition is true, otherwise 0.
     if (llvm_size != NULL) {
+        // We potentially load one scalar value past the end of the
+        // buffer, so pad the allocation with an extra instance of the
+        // scalar type. If the allocation is on the stack, we can just
+        // read one past the top of the stack, so we only need this
+        // for heap allocations.
+        llvm_size = builder->CreateAdd(llvm_size,
+                                       ConstantInt::get(llvm_size->getType(), type.bytes()));
+
         Value *llvm_condition = codegen(condition);
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
@@ -86,6 +88,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     Allocation allocation;
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = new_expr.defined() ? 0 : stack_bytes;
+    allocation.type = type;
     allocation.ptr = NULL;
     allocation.destructor = NULL;
     allocation.destructor_function = NULL;
@@ -99,6 +102,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
             if (allocated_in == current_func &&
+                free->type == type &&
                 free->stack_bytes >= stack_bytes) {
                 break;
             }
@@ -118,7 +122,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
-            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, false, name);
+            int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
+            allocation.ptr = create_alloca_at_entry(llvm_type_of(type), stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
     } else {
