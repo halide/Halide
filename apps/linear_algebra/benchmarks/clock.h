@@ -22,6 +22,7 @@ std::string items_per_second(int N, double elapsed) {
 }
 
 double current_time() {
-    auto now = std::chrono::system_clock::now().time_since_epoch();
+    static auto start_time = std::chrono::system_clock::now().time_since_epoch();
+    auto now = std::chrono::system_clock::now().time_since_epoch() - start_time;
     return std::chrono::duration_cast<std::chrono::microseconds>(now).count() / 1e3;
 }
