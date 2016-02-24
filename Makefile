@@ -513,7 +513,7 @@ RUNTIME_CPP_COMPONENTS = \
   float16_t \
   gcd_thread_pool \
   gpu_device_selection \
-  hexagon \
+  hexagon_host \
   ios_io \
   linux_clock \
   linux_host_cpu_count \

@@ -114,7 +114,7 @@ DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(device_interface)
-DECLARE_CPP_INITMOD(hexagon)
+DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(posix_get_symbol)
@@ -814,7 +814,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
         } else if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
-            modules.push_back(get_initmod_hexagon(c, bits_64, debug));
+            modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
         }
     }
 
