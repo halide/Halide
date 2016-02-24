@@ -391,7 +391,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Cast *op) {
 
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
-                                   const vector<GPU_Argument> &args) {
+                                   const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -415,7 +415,7 @@ struct BufferSize {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
                                                     const string &name,
-                                                    const vector<GPU_Argument> &args) {
+                                                    const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding Metal kernel " << name << "\n";
 

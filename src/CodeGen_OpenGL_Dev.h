@@ -24,7 +24,7 @@ public:
 
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt, const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     void init_module();
 
@@ -77,7 +77,7 @@ public:
 
     void add_kernel(Stmt stmt,
                     std::string name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     EXPORT static void test();
 

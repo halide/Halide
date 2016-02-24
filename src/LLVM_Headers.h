@@ -5,8 +5,14 @@
 #include <stddef.h>
 
 // No msvc warnings from llvm headers please
-#ifdef _WIN32
+#ifdef _MSC_VER
 #pragma warning(push, 0)
+#endif
+#ifdef __GNUC__
+#pragma GCC system_header
+#endif
+#ifdef __clang__
+#pragma clang system_header
 #endif
 
 #include <llvm/ExecutionEngine/MCJIT.h>
@@ -81,7 +87,7 @@
 #endif
 
 // No msvc warnings from llvm headers please
-#ifdef _WIN32
+#ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 

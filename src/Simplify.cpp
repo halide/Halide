@@ -658,6 +658,13 @@ private:
                    (!mod_a_a || !equal(mod_a_a->b, mul_b->b))) {
             // (y + (x%3)) + z*3 -> y + (z*3 + x%3)
             expr = mutate(add_a->a + (b + add_a->b));
+        } else if (mul_a && mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   ia % ib == 0) {
+            // x*4 + y*2 -> (x*2 + y)*2
+            Expr ratio = make_const(a.type(), div_imp(ia, ib));
+            expr = mutate((mul_a->a * ratio + mul_b->a) * mul_b->b);                   
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             // If we've made no changes, and can't find a rule to apply, return the operator unchanged.
             expr = op;
@@ -1022,6 +1029,7 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();        
 
         if (is_zero(a)) {
             expr = a;
@@ -1045,12 +1053,18 @@ private:
         } else if (broadcast_a && ramp_b) {
             Expr m = broadcast_a->value;
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->lanes));
-        } else if (add_a && !(add_a->b.as<Ramp>() && ramp_b) && is_simple_const(add_a->b) && is_simple_const(b)) {
+        } else if (add_a &&
+                   !(add_a->b.as<Ramp>() && ramp_b) &&
+                   is_simple_const(add_a->b) &&
+                   is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
         } else if (sub_a && is_negative_negatable_const(b)) {
             expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -b));
         } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
+        } else if (mul_b && is_simple_const(mul_b->b)) {
+            // Pull constants outside
+            expr = mutate((a * mul_b->a) * mul_b->b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2225,8 +2239,8 @@ private:
                        equal(add_b->b, a)) {
                 expr = mutate(make_zero(add_b->a.type()) < add_b->a);
             } else if (add_b &&
-                       is_const(a) &&
-                       is_const(add_b->b)) {
+                       is_simple_const(a) &&
+                       is_simple_const(add_b->b)) {
                 // a < x + b -> (a - b) < x
                 expr = mutate((a - add_b->b) < add_b->a);
             } else if (sub_b &&
@@ -3287,6 +3301,26 @@ private:
         }
     }
 
+    void visit(const ProducerConsumer *op) {
+        Stmt produce = mutate(op->produce);
+        Stmt update = op->update;
+        if (update.defined()) {
+            update = mutate(update);
+        }
+        Stmt consume = mutate(op->consume);
+        if (is_no_op(produce) &&
+            is_no_op(consume) &&
+            is_no_op(update)) {
+            stmt = Evaluate::make(0);
+        } else if (produce.same_as(op->produce) &&
+                   update.same_as(op->update) &&
+                   consume.same_as(op->consume)) {
+            stmt = op;
+        } else {
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+        }
+    }
+    
     void visit(const Block *op) {
         Stmt first = mutate(op->first);
 

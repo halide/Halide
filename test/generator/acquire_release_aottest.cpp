@@ -1,5 +1,14 @@
-#include <math.h>
 #include <stdio.h>
+
+#ifdef _WIN32
+// This test requires weak linkage
+int main(int argc, char **argv) {
+  printf("Skipping test on windows\n");
+  return 0;
+}
+#else
+
+#include <math.h>
 #include "HalideRuntime.h"
 #include <assert.h>
 #include <string.h>
@@ -232,3 +241,5 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
+
+#endif
