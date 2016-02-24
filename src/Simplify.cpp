@@ -3423,13 +3423,8 @@ Expr broadcast(Expr base, int w) {
     return Broadcast::make(base, w);
 }
 
-}
-
-void simplify_test() {
-    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
-    Expr xf = cast<float>(x);
-    Expr yf = cast<float>(y);
-    Expr t = const_true(), f = const_false();
+void check_constants() {
+    Expr x = Var("x");
 
     check(cast(Int(32), cast(Int(32), x)), x);
     check(cast(Float(32), 3), 3.0f);
@@ -3466,7 +3461,6 @@ void simplify_test() {
     check(cast(UInt(32), (int) 4000000023UL) == cast(UInt(32), 1000), const_false());
 
     check(cast(Float(64), 0.5f), Expr(0.5));
-
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
 
@@ -3482,9 +3476,23 @@ void simplify_test() {
     check(Expr(23) % -4, Expr(3));
     check(Expr(-2000000000) % 1000000001, Expr(2));
 
-    check(3 + x, x + 3);
     check(Expr(3) + Expr(8), 11);
     check(Expr(3.25f) + Expr(7.75f), 11.0f);
+
+    check(Expr(7) % 2, 1);
+    check(Expr(7.25f) % 2.0f, 1.25f);
+    check(Expr(-7.25f) % 2.0f, 0.75f);
+    check(Expr(-7.25f) % -2.0f, -1.25f);
+    check(Expr(7.25f) % -2.0f, -0.75f);
+}
+
+void check_algebra() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
+    Expr xf = cast<float>(x);
+    Expr yf = cast<float>(y);
+    Expr t = const_true(), f = const_false();
+
+    check(3 + x, x + 3);
     check(x + 0, x);
     check(0 + x, x);
     check(Expr(ramp(x, 2, 3)) + Expr(ramp(y, 4, 3)), ramp(x+y, 6, 3));
@@ -3571,6 +3579,36 @@ void simplify_test() {
     check((xf - yf)*-2.0f, (yf - xf)*2.0f);
 
     check(xf / 4.0f, xf * 0.25f);
+
+    // Some quaternary rules with cancellations
+    check((x + y) - (z + y), x - z);
+    check((x + y) - (y + z), x - z);
+    check((y + x) - (z + y), x - z);
+    check((y + x) - (y + z), x - z);
+
+    check((x - y) - (z - y), x - z);
+    check((y - z) - (y - x), x - z);
+
+    check((x*8) % 4, 0);
+    check((x*8 + y) % 4, y % 4);
+    check((y + 8) % 4, y % 4);
+    check((y + x*8) % 4, y % 4);
+    check((y*16 + 13) % 2, 1);
+
+    // Check an optimization important for fusing dimensions
+    check((x/3)*3 + x%3, x);
+    check(x%3 + (x/3)*3, x);
+
+    check(((x/3)*3 + y) + x%3, x + y);
+    check((x%3 + y) + (x/3)*3, x + y);
+
+    check((y + x%3) + (x/3)*3, y + x);
+    check((y + (x/3*3)) + x%3, y + x);
+}
+
+void check_vectors() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
+
     check(Expr(broadcast(y, 4)) / Expr(broadcast(x, 4)),
           Expr(broadcast(y/x, 4)));
     check(Expr(ramp(x, 4, 4)) / 2, ramp(x/2, 2, 4));
@@ -3591,22 +3629,19 @@ void simplify_test() {
     check(Expr(ramp(x*8+17, 1, 8)) % 8, Expr(ramp(1, 1, 8) % 8));
 
 
-    check(Expr(7) % 2, 1);
-    check(Expr(7.25f) % 2.0f, 1.25f);
-    check(Expr(-7.25f) % 2.0f, 0.75f);
-    check(Expr(-7.25f) % -2.0f, -1.25f);
-    check(Expr(7.25f) % -2.0f, -0.75f);
     check(Expr(broadcast(x, 4)) % Expr(broadcast(y, 4)),
           Expr(broadcast(x % y, 4)));
-    check((x*8) % 4, 0);
-    check((x*8 + y) % 4, y % 4);
-    check((y + 8) % 4, y % 4);
-    check((y + x*8) % 4, y % 4);
-    check((y*16 + 13) % 2, 1);
     check(Expr(ramp(x, 2, 4)) % (broadcast(2, 4)),
           broadcast(x % 2, 4));
     check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),
           broadcast(1, 4));
+
+    check(ramp(0, 1, 4) == broadcast(2, 4),
+          ramp(-2, 1, 4) == broadcast(0, 4));
+}
+
+void check_bounds() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
 
     check(min(Expr(7), 3), 3);
     check(min(Expr(4.25f), 1.25f), 1.25f);
@@ -3633,6 +3668,151 @@ void simplify_test() {
     check(max(max(x, y), y), max(x, y));
     check(max(x, max(x, y)), max(x, y));
     check(max(y, max(x, y)), max(x, y));
+
+    // Check that simplifier can recognise instances where the extremes of the
+    // datatype appear as constants in comparisons, Min and Max expressions.
+    // The result of min/max with extreme is known to be either the extreme or
+    // the other expression.  The result of < or > comparison is known to be true or false.
+    check(x <= Int(32).max(), const_true());
+    check(cast(Int(16), x) >= Int(16).min(), const_true());
+    check(x < Int(32).min(), const_false());
+    check(min(cast(UInt(16), x), cast(UInt(16), 65535)), cast(UInt(16), x));
+    check(min(x, Int(32).max()), x);
+    check(min(Int(32).min(), x), Int(32).min());
+    check(max(cast(Int(8), x), cast(Int(8), -128)), cast(Int(8), x));
+    check(max(x, Int(32).min()), x);
+    check(max(x, Int(32).max()), Int(32).max());
+    // Check that non-extremes do not lead to incorrect simplification
+    check(max(cast(Int(8), x), cast(Int(8), -127)), max(cast(Int(8), x), make_const(Int(8), -127)));
+
+    // Some quaternary rules with cancellations
+    check(x - min(x + y, z), max(-y, x-z));
+    check(x - min(y + x, z), max(-y, x-z));
+    check(x - min(z, x + y), max(-y, x-z));
+    check(x - min(z, y + x), max(-y, x-z));
+
+    check(min(x + y, z) - x, min(y, z-x));
+    check(min(y + x, z) - x, min(y, z-x));
+    check(min(z, x + y) - x, min(y, z-x));
+    check(min(z, y + x) - x, min(y, z-x));
+
+    check(min(x + y, z + y), min(x, z) + y);
+    check(min(y + x, z + y), min(x, z) + y);
+    check(min(x + y, y + z), min(x, z) + y);
+    check(min(y + x, y + z), min(x, z) + y);
+
+    check(min(x, y) - min(y, x), 0);
+    check(max(x, y) - max(y, x), 0);
+
+    check(min(123 - x, 1 - x), 1 - x);
+    check(max(123 - x, 1 - x), 123 - x);
+
+    check(min(x*43, y*43), min(x, y)*43);
+    check(max(x*43, y*43), max(x, y)*43);
+    check(min(x*-43, y*-43), max(x, y)*-43);
+    check(max(x*-43, y*-43), min(x, y)*-43);
+
+    check(min(min(x, 4), y), min(min(x, y), 4));
+    check(max(max(x, 4), y), max(max(x, y), 4));
+
+    check(min(x*8, 24), min(x, 3)*8);
+    check(max(x*8, 24), max(x, 3)*8);
+    check(min(x*-8, 24), max(x, -3)*-8);
+    check(max(x*-8, 24), min(x, -3)*-8);
+
+    check(min(clamp(x, -10, 14), clamp(y, -10, 14)), clamp(min(x, y), -10, 14));
+
+    check(min(x/4, y/4), min(x, y)/4);
+    check(max(x/4, y/4), max(x, y)/4);
+
+    check(min(x/(-4), y/(-4)), max(x, y)/(-4));
+    check(max(x/(-4), y/(-4)), min(x, y)/(-4));
+
+    //check(max(x, 16) - 16, max(x + -16, 0));
+    //check(min(x, -4) + 7, min(x + 7, 3));
+
+    // Min and max of clamped expressions
+    check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
+    check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
+
+    // Additions that cancel a term inside a min or max
+    check(x + min(y - x, z), min(y, z + x));
+    check(x + max(y - x, z), max(y, z + x));
+    check(min(y + (-2), z) + 2, min(y, z + 2));
+    check(max(y + (-2), z) + 2, max(y, z + 2));
+
+    check(x + min(y - x, z), min(y, z + x));
+    check(x + max(y - x, z), max(y, z + x));
+    check(min(y + (-2), z) + 2, min(y, z + 2));
+    check(max(y + (-2), z) + 2, max(y, z + 2));
+
+    // Min/Max distributive law
+    check(max(max(x, y), max(x, z)), max(max(y, z), x));
+    check(min(max(x, y), max(x, z)), max(min(y, z), x));
+    check(min(min(x, y), min(x, z)), min(min(y, z), x));
+    check(max(min(x, y), min(x, z)), min(max(y, z), x));
+
+    // Mins of expressions and rounded up versions of them
+    check(min(((x+7)/8)*8, x), x);
+    check(min(x, ((x+7)/8)*8), x);
+
+    check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
+    check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
+
+    // Pull constants all the way outside of a clamp
+    //check(clamp(x + 1, -10, 15), clamp(x, -11, 14) + 1);
+    //check(clamp(x + 1, y - 10, 15), clamp(x, y + (-11), 14) + 1);
+
+    check(min(x, likely(x)), likely(x));
+    check(min(likely(x), x), likely(x));
+    check(max(x, likely(x)), likely(x));
+    check(max(likely(x), x), likely(x));
+    check(select(x > y, likely(x), x), likely(x));
+    check(select(x > y, x, likely(x)), likely(x));
+
+    check(min(x + 1, y) - min(x, y - 1), 1);
+    check(max(x + 1, y) - max(x, y - 1), 1);
+    check(min(x + 1, y) - min(y - 1, x), 1);
+    check(max(x + 1, y) - max(y - 1, x), 1);
+
+    // min and max on constant ramp v broadcast
+    check(max(ramp(0, 1, 8), 0), ramp(0, 1, 8));
+    check(min(ramp(0, 1, 8), 7), ramp(0, 1, 8));
+    check(max(ramp(0, 1, 8), 7), broadcast(7, 8));
+    check(min(ramp(0, 1, 8), 0), broadcast(0, 8));
+    check(min(ramp(0, 1, 8), 4), min(ramp(0, 1, 8), 4));
+
+    check(max(ramp(7, -1, 8), 0), ramp(7, -1, 8));
+    check(min(ramp(7, -1, 8), 7), ramp(7, -1, 8));
+    check(max(ramp(7, -1, 8), 7), broadcast(7, 8));
+    check(min(ramp(7, -1, 8), 0), broadcast(0, 8));
+    check(min(ramp(7, -1, 8), 4), min(ramp(7, -1, 8), 4));
+
+    check(max(0, ramp(0, 1, 8)), ramp(0, 1, 8));
+    check(min(7, ramp(0, 1, 8)), ramp(0, 1, 8));
+
+    check(min(8 - x, 2), 8 - max(x, 6));
+    check(max(3, 77 - x), 77 - min(x, 74));
+    check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
+
+    check(x - min(x, 2), max(x + -2, 0));
+    check(x - max(x, 2), min(x + -2, 0));
+    check(min(x, 2) - x, 2 - max(x, 2));
+    check(max(x, 2) - x, 2 - min(x, 2));
+    check(x - min(2, x), max(x + -2, 0));
+    check(x - max(2, x), min(x + -2, 0));
+    check(min(2, x) - x, 2 - max(x, 2));
+    check(max(2, x) - x, 2 - min(x, 2));
+
+}
+
+void check_boolean() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w");
+    Expr xf = cast<float>(x);
+    Expr yf = cast<float>(y);
+    Expr t = const_true(), f = const_false();
+    Expr b1 = Variable::make(Bool(), "b1");
+    Expr b2 = Variable::make(Bool(), "b2");
 
     check(x == x, t);
     check(x == (x+1), f);
@@ -3673,145 +3853,6 @@ void simplify_test() {
 
     check((1 - xf)*6 < 3, 0.5f < xf);
 
-    // Check that simplifier can recognise instances where the extremes of the
-    // datatype appear as constants in comparisons, Min and Max expressions.
-    // The result of min/max with extreme is known to be either the extreme or
-    // the other expression.  The result of < or > comparison is known to be true or false.
-    check(x <= Int(32).max(), const_true());
-    check(cast(Int(16), x) >= Int(16).min(), const_true());
-    check(x < Int(32).min(), const_false());
-    check(min(cast(UInt(16), x), cast(UInt(16), 65535)), cast(UInt(16), x));
-    check(min(x, Int(32).max()), x);
-    check(min(Int(32).min(), x), Int(32).min());
-    check(max(cast(Int(8), x), cast(Int(8), -128)), cast(Int(8), x));
-    check(max(x, Int(32).min()), x);
-    check(max(x, Int(32).max()), Int(32).max());
-    // Check that non-extremes do not lead to incorrect simplification
-    check(max(cast(Int(8), x), cast(Int(8), -127)), max(cast(Int(8), x), make_const(Int(8), -127)));
-
-    // Check an optimization important for fusing dimensions
-    check((x/3)*3 + x%3, x);
-    check(x%3 + (x/3)*3, x);
-
-    check(((x/3)*3 + y) + x%3, x + y);
-    check((x%3 + y) + (x/3)*3, x + y);
-
-    check((y + x%3) + (x/3)*3, y + x);
-    check((y + (x/3*3)) + x%3, y + x);
-
-    // Check bitshift operations
-    check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
-    check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
-    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
-    // Correctly triggers a warning:
-    //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
-
-    // Check that chains of widening casts don't lose the distinction
-    // between zero-extending and sign-extending.
-    check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
-          UIntImm::make(UInt(64), 0xffffffffULL));
-
-    // Some quaternary rules with cancellations
-    check((x + y) - (z + y), x - z);
-    check((x + y) - (y + z), x - z);
-    check((y + x) - (z + y), x - z);
-    check((y + x) - (y + z), x - z);
-
-    check((x - y) - (z - y), x - z);
-    check((y - z) - (y - x), x - z);
-
-    check(x - min(x + y, z), max(-y, x-z));
-    check(x - min(y + x, z), max(-y, x-z));
-    check(x - min(z, x + y), max(-y, x-z));
-    check(x - min(z, y + x), max(-y, x-z));
-
-    check(min(x + y, z) - x, min(y, z-x));
-    check(min(y + x, z) - x, min(y, z-x));
-    check(min(z, x + y) - x, min(y, z-x));
-    check(min(z, y + x) - x, min(y, z-x));
-
-    check(min(x + y, z + y), min(x, z) + y);
-    check(min(y + x, z + y), min(x, z) + y);
-    check(min(x + y, y + z), min(x, z) + y);
-    check(min(y + x, y + z), min(x, z) + y);
-
-    check(min(x, y) - min(y, x), 0);
-    check(max(x, y) - max(y, x), 0);
-
-    check(min(123 - x, 1 - x), 1 - x);
-    check(max(123 - x, 1 - x), 123 - x);
-
-    check(min(x*43, y*43), min(x, y)*43);
-    check(max(x*43, y*43), max(x, y)*43);
-    check(min(x*-43, y*-43), max(x, y)*-43);
-    check(max(x*-43, y*-43), min(x, y)*-43);
-
-    check(min(min(x, 4), y), min(min(x, y), 4));
-    check(max(max(x, 4), y), max(max(x, y), 4));
-
-    check(min(x*8, 24), min(x, 3)*8);
-    check(max(x*8, 24), max(x, 3)*8);
-    check(min(x*-8, 24), max(x, -3)*-8);
-    check(max(x*-8, 24), min(x, -3)*-8);
-
-    check(log(0.5f + 0.5f), 0.0f);
-    check(exp(log(2.0f)), 2.0f);
-
-    check(floor(0.98f), 0.0f);
-    check(ceil(0.98f), 1.0f);
-    check(round(0.6f), 1.0f);
-    check(round(-0.5f), 0.0f);
-    check(trunc(-1.6f), -1.0f);
-    check(floor(round(x)), round(x));
-    check(ceil(ceil(x)), ceil(x));
-
-    //check(max(x, 16) - 16, max(x + -16, 0));
-    //check(min(x, -4) + 7, min(x + 7, 3));
-
-    // Min and max of clamped expressions
-    check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
-    check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
-
-    // Additions that cancel a term inside a min or max
-    check(x + min(y - x, z), min(y, z + x));
-    check(x + max(y - x, z), max(y, z + x));
-    check(min(y + (-2), z) + 2, min(y, z + 2));
-    check(max(y + (-2), z) + 2, max(y, z + 2));
-
-    check(x + min(y - x, z), min(y, z + x));
-    check(x + max(y - x, z), max(y, z + x));
-    check(min(y + (-2), z) + 2, min(y, z + 2));
-    check(max(y + (-2), z) + 2, max(y, z + 2));
-
-    // Min/Max distributive law
-    check(max(max(x, y), max(x, z)), max(max(y, z), x));
-    check(min(max(x, y), max(x, z)), max(min(y, z), x));
-    check(min(min(x, y), min(x, z)), min(min(y, z), x));
-    check(max(min(x, y), min(x, z)), min(max(y, z), x));
-
-    // Mins of expressions and rounded up versions of them
-    check(min(((x+7)/8)*8, x), x);
-    check(min(x, ((x+7)/8)*8), x);
-
-    check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
-    check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
-
-    // Pull constants all the way outside of a clamp
-    //check(clamp(x + 1, -10, 15), clamp(x, -11, 14) + 1);
-    //check(clamp(x + 1, y - 10, 15), clamp(x, y + (-11), 14) + 1);
-
-    // The min of two matching clamps is the clamp of the mins
-    check(min(clamp(x, -10, 14), clamp(y, -10, 14)), clamp(min(x, y), -10, 14));
-
-    check(ramp(0, 1, 4) == broadcast(2, 4),
-          ramp(-2, 1, 4) == broadcast(0, 4));
-
-    check(min(x/4, y/4), min(x, y)/4);
-    check(max(x/4, y/4), max(x, y)/4);
-
-    check(min(x/(-4), y/(-4)), max(x, y)/(-4));
-    check(max(x/(-4), y/(-4)), min(x, y)/(-4));
-
     check(!f, t);
     check(!t, f);
     check(!(x < y), y <= x);
@@ -3823,6 +3864,19 @@ void simplify_test() {
     check(!(!(x == 0)), x == 0);
     check(!Expr(broadcast(x > y, 4)),
           broadcast(x <= y, 4));
+
+    check(b1 || !b1, t);
+    check(!b1 || b1, t);
+    check(b1 && !b1, f);
+    check(!b1 && b1, f);
+    check(b1 && b1, b1);
+    check(b1 || b1, b1);
+    check(broadcast(b1, 4) || broadcast(!b1, 4), broadcast(t, 4));
+    check(broadcast(!b1, 4) || broadcast(b1, 4), broadcast(t, 4));
+    check(broadcast(b1, 4) && broadcast(!b1, 4), broadcast(f, 4));
+    check(broadcast(!b1, 4) && broadcast(b1, 4), broadcast(f, 4));
+    check(broadcast(b1, 4) && broadcast(b1, 4), broadcast(b1, 4));
+    check(broadcast(b1, 4) || broadcast(b1, 4), broadcast(b1, 4));
 
     check(t && (x < 0), x < 0);
     check(f && (x < 0), f);
@@ -3885,18 +3939,6 @@ void simplify_test() {
     check(ramp(x*8 + 5, -1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
     check(ramp(x*8 - 1, -1, 4) < broadcast(y*8, 4), broadcast(x < y + 1, 4));
 
-    check(min(x, likely(x)), likely(x));
-    check(min(likely(x), x), likely(x));
-    check(max(x, likely(x)), likely(x));
-    check(max(likely(x), x), likely(x));
-    check(select(x > y, likely(x), x), likely(x));
-    check(select(x > y, x, likely(x)), likely(x));
-
-    check(min(x + 1, y) - min(x, y - 1), 1);
-    check(max(x + 1, y) - max(x, y - 1), 1);
-    check(min(x + 1, y) - min(y - 1, x), 1);
-    check(max(x + 1, y) - max(y - 1, x), 1);
-
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
                            Evaluate::make(z + x + y),
@@ -3906,8 +3948,6 @@ void simplify_test() {
                            Evaluate::make(z + x - y)));
 
     // Check ored conditions apply to the else case only
-    Expr b1 = Variable::make(Bool(), "b1");
-    Expr b2 = Variable::make(Bool(), "b2");
     check(IfThenElse::make(b1 || b2,
                            Evaluate::make(select(b1, x+3, x+4) + select(b2, x+5, x+7)),
                            Evaluate::make(select(b1, x+3, x+8) - select(b2, x+5, x+7))),
@@ -3969,18 +4009,63 @@ void simplify_test() {
                            Evaluate::make(x+foo_simple+1),
                            Evaluate::make(x+19)));
 
-    check(b1 || !b1, t);
-    check(!b1 || b1, t);
-    check(b1 && !b1, f);
-    check(!b1 && b1, f);
-    check(b1 && b1, b1);
-    check(b1 || b1, b1);
-    check(broadcast(b1, 4) || broadcast(!b1, 4), broadcast(t, 4));
-    check(broadcast(!b1, 4) || broadcast(b1, 4), broadcast(t, 4));
-    check(broadcast(b1, 4) && broadcast(!b1, 4), broadcast(f, 4));
-    check(broadcast(!b1, 4) && broadcast(b1, 4), broadcast(f, 4));
-    check(broadcast(b1, 4) && broadcast(b1, 4), broadcast(b1, 4));
-    check(broadcast(b1, 4) || broadcast(b1, 4), broadcast(b1, 4));
+    // Simplifications of selects
+    check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
+    check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
+    check(select(x == 3, 5, y) - y, select(x == 3, 5 - y, 0));
+    check(select(x == 3, y, 5) - y, select(x == 3, 0, 5 - y));
+    check(y - select(x == 3, 5, y), select(x == 3, y + (-5), 0));
+    check(y - select(x == 3, y, 5), select(x == 3, 0, y + (-5)));
+
+    check(select(x == 3, 5, 7) == 7, x != 3);
+    check(select(x == 3, z, y) == z, (x == 3) || (y == z));
+
+    check(select(x == 3, 4, 2) == 0, const_false());
+    check(select(x == 3, y, 2) == 4, (x == 3) && (y == 4));
+    check(select(x == 3, 2, y) == 4, (x != 3) && (y == 4));
+}
+
+void check_math() {
+    Var x = Var("x");
+
+    check(log(0.5f + 0.5f), 0.0f);
+    check(exp(log(2.0f)), 2.0f);
+
+    check(floor(0.98f), 0.0f);
+    check(ceil(0.98f), 1.0f);
+    check(round(0.6f), 1.0f);
+    check(round(-0.5f), 0.0f);
+    check(trunc(-1.6f), -1.0f);
+    check(floor(round(x)), round(x));
+    check(ceil(ceil(x)), ceil(x));
+}
+
+}
+
+void simplify_test() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
+    Expr xf = cast<float>(x);
+    Expr yf = cast<float>(y);
+    Expr t = const_true(), f = const_false();
+
+    check_constants();
+    check_algebra();
+    check_vectors();
+    check_bounds();
+    check_math();
+    check_boolean();
+
+    // Check bitshift operations
+    check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
+    check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
+    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
+    // Correctly triggers a warning:
+    //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
+
+    // Check that chains of widening casts don't lose the distinction
+    // between zero-extending and sign-extending.
+    check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
+          UIntImm::make(UInt(64), 0xffffffffULL));
 
     v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
@@ -4016,50 +4101,6 @@ void simplify_test() {
     check_in_bounds(ramp(x, 1,4) < broadcast(8,4),  const_true(4),  bounds_info);
     check_in_bounds(ramp(x,-1,4) < broadcast(-4,4), const_false(4), bounds_info);
     check_in_bounds(ramp(x,-1,4) < broadcast(5,4),  const_true(4),  bounds_info);
-
-    // min and max on constant ramp v broadcast
-    check(max(ramp(0, 1, 8), 0), ramp(0, 1, 8));
-    check(min(ramp(0, 1, 8), 7), ramp(0, 1, 8));
-    check(max(ramp(0, 1, 8), 7), broadcast(7, 8));
-    check(min(ramp(0, 1, 8), 0), broadcast(0, 8));
-    check(min(ramp(0, 1, 8), 4), min(ramp(0, 1, 8), 4));
-
-    check(max(ramp(7, -1, 8), 0), ramp(7, -1, 8));
-    check(min(ramp(7, -1, 8), 7), ramp(7, -1, 8));
-    check(max(ramp(7, -1, 8), 7), broadcast(7, 8));
-    check(min(ramp(7, -1, 8), 0), broadcast(0, 8));
-    check(min(ramp(7, -1, 8), 4), min(ramp(7, -1, 8), 4));
-
-    check(max(0, ramp(0, 1, 8)), ramp(0, 1, 8));
-    check(min(7, ramp(0, 1, 8)), ramp(0, 1, 8));
-
-    check(min(8 - x, 2), 8 - max(x, 6));
-    check(max(3, 77 - x), 77 - min(x, 74));
-    check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
-
-    check(x - min(x, 2), max(x + -2, 0));
-    check(x - max(x, 2), min(x + -2, 0));
-    check(min(x, 2) - x, 2 - max(x, 2));
-    check(max(x, 2) - x, 2 - min(x, 2));
-    check(x - min(2, x), max(x + -2, 0));
-    check(x - max(2, x), min(x + -2, 0));
-    check(min(2, x) - x, 2 - max(x, 2));
-    check(max(2, x) - x, 2 - min(x, 2));
-
-    // Simplifications of selects
-    check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
-    check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
-    check(select(x == 3, 5, y) - y, select(x == 3, 5 - y, 0));
-    check(select(x == 3, y, 5) - y, select(x == 3, 0, 5 - y));
-    check(y - select(x == 3, 5, y), select(x == 3, y + (-5), 0));
-    check(y - select(x == 3, y, 5), select(x == 3, 0, y + (-5)));
-
-    check(select(x == 3, 5, 7) == 7, x != 3);
-    check(select(x == 3, z, y) == z, (x == 3) || (y == z));
-
-    check(select(x == 3, 4, 2) == 0, const_false());
-    check(select(x == 3, y, 2) == 4, (x == 3) && (y == 4));
-    check(select(x == 3, 2, y) == 4, (x != 3) && (y == 4));
 
     // Collapse some vector interleaves
     check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));
