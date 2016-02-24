@@ -157,27 +157,25 @@ void Pipeline::compile_to(const Outputs &output_files,
     Module m = compile_to_module(args, fn_name, target);
 
     llvm::LLVMContext context;
-    llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, context));
 
     if (!output_files.object_name.empty()) {
         if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.object_name);
+            compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.object_name);
         } else {
-            compile_llvm_module_to_object(llvm_module, output_files.object_name);
+            compile_llvm_module_to_object(*llvm_module, output_files.object_name);
         }
     }
     if (!output_files.assembly_name.empty()) {
         if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_assembly(llvm_module, output_files.assembly_name);
+            compile_llvm_module_to_llvm_assembly(*llvm_module, output_files.assembly_name);
         } else {
-            compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
+            compile_llvm_module_to_assembly(*llvm_module, output_files.assembly_name);
         }
     }
     if (!output_files.bitcode_name.empty()) {
-        compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
+        compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.bitcode_name);
     }
-
-    delete llvm_module;
 }
 
 
@@ -242,7 +240,8 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 
     if (target.arch == Target::PNaCl) {
         compile_module_to_llvm_bitcode(m, filename_prefix + ".bc");
-    } else if (target.os == Target::Windows) {
+    } else if (target.os == Target::Windows &&
+               !target.has_feature(Target::MinGW)) {
         compile_module_to_object(m, filename_prefix + ".obj");
     } else {
         compile_module_to_object(m, filename_prefix + ".o");
@@ -619,9 +618,19 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     JITModule jit_module(module, module.functions.back(),
                          make_externs_jit_module(target_arg, lowered_externs));
 
-    if (debug::debug_level >= 3) {
-        compile_module_to_native(module, name + ".bc", name + ".s");
-        compile_module_to_text(module, name + ".stmt");
+    // Dump bitcode to a file if the environment variable
+    // HL_GENBITCODE is non-zero.
+    size_t gen;
+    get_env_variable("HL_GENBITCODE", gen);
+    if (gen) {
+        string program_name = running_program_name();
+        if (program_name.empty()) {
+            program_name = "unknown" + unique_name('_').substr(1);
+        }
+
+        string function_name = name + "_" + unique_name('g').substr(1);
+        compile_to_bitcode(program_name + "_" + function_name + ".bc",
+                           infer_arguments(), function_name);
     }
 
     contents.ptr->jit_module = jit_module;
@@ -789,14 +798,18 @@ struct JITFuncCallContext {
     ErrorBuffer error_buffer;
     JITUserContext jit_context;
     Parameter &user_context_param;
+    bool custom_error_handler;
 
     JITFuncCallContext(const JITHandlers &handlers, Parameter &user_context_param)
         : user_context_param(user_context_param) {
         void *user_context = NULL;
         JITHandlers local_handlers = handlers;
         if (local_handlers.custom_error == NULL) {
+            custom_error_handler = false;
             local_handlers.custom_error = ErrorBuffer::handler;
             user_context = &error_buffer;
+        } else {
+            custom_error_handler = true;
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
         user_context_param.set_scalar(&jit_context);
@@ -811,13 +824,16 @@ struct JITFuncCallContext {
     }
 
     void report_if_error(int exit_status) {
-        if (exit_status) {
+        // Only report the errors if no custom error handler was installed
+        if (exit_status && !custom_error_handler) {
             std::string output = error_buffer.str();
-            if (!output.empty()) {
-                // Only report the errors if no custom error handler was installed
-                halide_runtime_error << error_buffer.str();
-                error_buffer.end = 0;
+            if (output.empty()) {
+                output = ("The pipeline returned exit status " +
+                          std::to_string(exit_status) +
+                          " but halide_error was never called.\n");
             }
+            halide_runtime_error << output;
+            error_buffer.end = 0;
         }
     }
 

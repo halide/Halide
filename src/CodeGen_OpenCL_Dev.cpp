@@ -614,7 +614,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
                                     const string &name,
-                                    const vector<GPU_Argument> &args) {
+                                    const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -638,7 +638,7 @@ struct BufferSize {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                                                       const string &name,
-                                                      const vector<GPU_Argument> &args) {
+                                                      const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding OpenCL kernel " << name << "\n";
 

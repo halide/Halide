@@ -11,7 +11,8 @@ namespace Halide {
 
 void compile_module_to_object(const Module &module, std::string filename) {
     if (filename.empty()) {
-        if (module.target().os == Target::Windows) {
+        if (module.target().os == Target::Windows &&
+            !module.target().has_feature(Target::MinGW)) {
             filename = module.name() + ".obj";
         } else {
             filename = module.name() + ".o";
@@ -19,25 +20,24 @@ void compile_module_to_object(const Module &module, std::string filename) {
     }
 
     llvm::LLVMContext context;
-    llvm::Module *llvm = compile_module_to_llvm_module(module, context);
-    compile_llvm_module_to_object(llvm, filename);
-    delete llvm;
+    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
+    compile_llvm_module_to_object(*llvm, filename);
 }
 
 void compile_module_to_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".s";
 
     llvm::LLVMContext context;
-    llvm::Module *llvm = compile_module_to_llvm_module(module, context);
-    compile_llvm_module_to_assembly(llvm, filename);
-    delete llvm;
+    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
+    compile_llvm_module_to_assembly(*llvm, filename);
 }
 
 void compile_module_to_native(const Module &module,
                    std::string object_filename,
                    std::string assembly_filename) {
     if (object_filename.empty()) {
-        if (module.target().os == Target::Windows) {
+        if (module.target().os == Target::Windows &&
+            !module.target().has_feature(Target::MinGW)) {
             object_filename = module.name() + ".obj";
         } else {
             object_filename = module.name() + ".o";
@@ -48,28 +48,25 @@ void compile_module_to_native(const Module &module,
     }
 
     llvm::LLVMContext context;
-    llvm::Module *llvm = compile_module_to_llvm_module(module, context);
-    compile_llvm_module_to_object(llvm, object_filename);
-    compile_llvm_module_to_assembly(llvm, assembly_filename);
-    delete llvm;
+    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
+    compile_llvm_module_to_object(*llvm, object_filename);
+    compile_llvm_module_to_assembly(*llvm, assembly_filename);
 }
 
 void compile_module_to_llvm_bitcode(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".bc";
 
     llvm::LLVMContext context;
-    llvm::Module *llvm = compile_module_to_llvm_module(module, context);
-    compile_llvm_module_to_llvm_bitcode(llvm, filename);
-    delete llvm;
+    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
+    compile_llvm_module_to_llvm_bitcode(*llvm, filename);
 }
 
 void compile_module_to_llvm_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".ll";
 
     llvm::LLVMContext context;
-    llvm::Module *llvm = compile_module_to_llvm_module(module, context);
-    compile_llvm_module_to_llvm_assembly(llvm, filename);
-    delete llvm;
+    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
+    compile_llvm_module_to_llvm_assembly(*llvm, filename);
 }
 
 void compile_module_to_llvm(const Module &module,
@@ -79,10 +76,9 @@ void compile_module_to_llvm(const Module &module,
     if (llvm_assembly_filename.empty()) llvm_assembly_filename = module.name() + ".ll";
 
     llvm::LLVMContext context;
-    llvm::Module *llvm = compile_module_to_llvm_module(module, context);
-    compile_llvm_module_to_llvm_bitcode(llvm, bitcode_filename);
-    compile_llvm_module_to_llvm_assembly(llvm, llvm_assembly_filename);
-    delete llvm;
+    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
+    compile_llvm_module_to_llvm_bitcode(*llvm, bitcode_filename);
+    compile_llvm_module_to_llvm_assembly(*llvm, llvm_assembly_filename);
 }
 
 void compile_module_to_html(const Module &module, std::string filename) {

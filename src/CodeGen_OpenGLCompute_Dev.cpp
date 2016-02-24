@@ -243,7 +243,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op)
 
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
                                            const string &name,
-                                           const vector<GPU_Argument> &args) {
+                                           const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_OpenGLCompute_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -270,7 +270,7 @@ public:
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                                     Target target,
                                                                     const string &name,
-                                                                    const vector<GPU_Argument> &args) {
+                                                                    const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding OpenGLCompute kernel " << name << "\n";
     cache.clear();
