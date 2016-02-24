@@ -41,6 +41,9 @@ protected:
         /** Function to accomplish the destruction. */
         llvm::Function *destructor_function;
 
+        /** The (Halide) type of the allocation. */
+        Type type;
+
         /** How many bytes this allocation is, or 0 if not
          * constant. */
         int constant_bytes;
