@@ -18,15 +18,16 @@ class InjectHexagonRpc : public IRMutator {
 
     Module device_code;
     std::vector<std::string> kernel_offsets;
-    Expr module_state_ptr_ptr;
+    Expr module_state_ptr;
+    Expr module_state_ptr_ptr() {
+        return Call::make(Handle(), Call::address_of, {module_state_ptr}, Call::Intrinsic);
+    }
 
 public:
     InjectHexagonRpc() : device_code("hexagon", Target(Target::HexagonStandalone, Target::Hexagon, 32)) {
-        Buffer module_state_ptr(type_of<void*>(), {}, nullptr, "module_state_ptr");
-        *(void **)module_state_ptr.host_ptr() = nullptr;
-
-        Expr module_state_ptr_0 = Load::make(type_of<void*>(), "module_state_ptr", 0, module_state_ptr, Parameter());
-        module_state_ptr_ptr = Call::make(Handle(), Call::address_of, {module_state_ptr_0}, Call::Intrinsic);
+        Buffer module_state_storage(type_of<void*>(), {}, nullptr, "module_state_ptr");
+        *(void **)module_state_storage.host_ptr() = nullptr;
+        module_state_ptr = Load::make(type_of<void*>(), "module_state_ptr", 0, module_state_storage, Parameter());
     }
 
     void visit(const For *loop) {
@@ -100,7 +101,7 @@ public:
             kernel_offsets.push_back(hex_offset);
 
             std::vector<Expr> params;
-            params.push_back(module_state_ptr_ptr);
+            params.push_back(module_state_ptr);
             params.push_back(Variable::make(type_of<size_t>(), hex_offset));
             params.push_back(hex_name);
             params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, input_arg_sizes, Call::Intrinsic));
@@ -150,7 +151,7 @@ public:
 
         // Wrap the statement in calls to halide_initialize_kernels.
         Expr call = Call::make(Int(32), "halide_hexagon_initialize_kernels",
-                               {module_state_ptr_ptr, code_ptr, Expr(code_size)}, Call::Extern);
+                               {module_state_ptr_ptr(), code_ptr, Expr(code_size)}, Call::Extern);
         string call_result_name = unique_name("initialize_kernels_result");
         Expr call_result_var = Variable::make(Int(32), call_result_name);
         s = Block::make(LetStmt::make(call_result_name, call,
