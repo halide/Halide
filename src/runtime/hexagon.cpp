@@ -5,6 +5,7 @@
 #include "mini_ion.h"
 #include "mini_mman.h"
 #include "cuda_opencl_shared.h"
+#include "scoped_mutex_lock.h"
 
 #include "hexagon_remote/halide_hexagon_remote.h"
 
@@ -34,8 +35,8 @@ namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 extern WEAK halide_device_interface hexagon_device_interface;
 
 // A ion fd defined in this module with weak linkage
-int WEAK ion_fd = -1;
-volatile int WEAK thread_lock = 0;
+WEAK int ion_fd = -1;
+WEAK halide_mutex thread_lock = { { 0 } };
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -66,6 +67,8 @@ WEAK int halide_hexagon_get_descriptor(void *user_context, int *fd, bool create 
     // TODO: Should we use a more "assertive" assert? these asserts do
     // not block execution on failure.
     halide_assert(user_context, fd != NULL);
+
+    ScopedMutexLock lock(&thread_lock);
 
     // If the context has not been initialized, initialize it now.
     if (ion_fd == -1 && create) {
@@ -100,7 +103,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     // halide_hexagon_device_release traverses this list and releases
     // the module objects, but it does not modify the list nodes
     // created/inserted here.
-    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
+    ScopedMutexLock lock(&thread_lock);
 
     module_state **state = (module_state**)state_ptr;
     if (!(*state)) {
@@ -131,8 +134,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     } else {
         debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
     }
-
-    __sync_lock_release(&thread_lock);
 
     return result != 0 ? -1 : 0;
 }
@@ -288,9 +289,10 @@ WEAK int halide_hexagon_device_release(void *user_context) {
     int err = halide_hexagon_get_descriptor(user_context, &fd, false);
     if (err != 0) return err;
 
+    ScopedMutexLock lock(&thread_lock);
+
     if (fd != -1) {
         // Release all of the remote side modules.
-        while (__sync_lock_test_and_set(&thread_lock, 1)) { }
         module_state *state = state_list;
         while (state) {
             if (state->module) {
@@ -303,7 +305,6 @@ WEAK int halide_hexagon_device_release(void *user_context) {
             }
             state = state->next;
         }
-        __sync_lock_release(&thread_lock);
 
         // Only destroy the context if we own it
         if (fd == ion_fd) {
