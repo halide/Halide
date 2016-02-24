@@ -3423,7 +3423,7 @@ Expr broadcast(Expr base, int w) {
     return Broadcast::make(base, w);
 }
 
-void check_constants() {
+void check_casts() {
     Expr x = Var("x");
 
     check(cast(Int(32), cast(Int(32), x)), x);
@@ -3463,27 +3463,6 @@ void check_constants() {
     check(cast(Float(64), 0.5f), Expr(0.5));
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
-
-    // Check some specific expressions involving div and mod
-    check(Expr(23) / 4, Expr(5));
-    check(Expr(-23) / 4, Expr(-6));
-    check(Expr(-23) / -4, Expr(6));
-    check(Expr(23) / -4, Expr(-5));
-    check(Expr(-2000000000) / 1000000001, Expr(-2));
-    check(Expr(23) % 4, Expr(3));
-    check(Expr(-23) % 4, Expr(1));
-    check(Expr(-23) % -4, Expr(1));
-    check(Expr(23) % -4, Expr(3));
-    check(Expr(-2000000000) % 1000000001, Expr(2));
-
-    check(Expr(3) + Expr(8), 11);
-    check(Expr(3.25f) + Expr(7.75f), 11.0f);
-
-    check(Expr(7) % 2, 1);
-    check(Expr(7.25f) % 2.0f, 1.25f);
-    check(Expr(-7.25f) % 2.0f, 0.75f);
-    check(Expr(-7.25f) % -2.0f, -1.25f);
-    check(Expr(7.25f) % -2.0f, -0.75f);
 }
 
 void check_algebra() {
@@ -3604,6 +3583,27 @@ void check_algebra() {
 
     check((y + x%3) + (x/3)*3, y + x);
     check((y + (x/3*3)) + x%3, y + x);
+
+    // Check some specific expressions involving div and mod
+    check(Expr(23) / 4, Expr(5));
+    check(Expr(-23) / 4, Expr(-6));
+    check(Expr(-23) / -4, Expr(6));
+    check(Expr(23) / -4, Expr(-5));
+    check(Expr(-2000000000) / 1000000001, Expr(-2));
+    check(Expr(23) % 4, Expr(3));
+    check(Expr(-23) % 4, Expr(1));
+    check(Expr(-23) % -4, Expr(1));
+    check(Expr(23) % -4, Expr(3));
+    check(Expr(-2000000000) % 1000000001, Expr(2));
+
+    check(Expr(3) + Expr(8), 11);
+    check(Expr(3.25f) + Expr(7.75f), 11.0f);
+
+    check(Expr(7) % 2, 1);
+    check(Expr(7.25f) % 2.0f, 1.25f);
+    check(Expr(-7.25f) % 2.0f, 0.75f);
+    check(Expr(-7.25f) % -2.0f, -1.25f);
+    check(Expr(7.25f) % -2.0f, -0.75f);
 }
 
 void check_vectors() {
@@ -4048,7 +4048,7 @@ void simplify_test() {
     Expr yf = cast<float>(y);
     Expr t = const_true(), f = const_false();
 
-    check_constants();
+    check_casts();
     check_algebra();
     check_vectors();
     check_bounds();
