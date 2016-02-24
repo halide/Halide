@@ -7,8 +7,8 @@ interface halide_hexagon_remote
   long initialize_kernels(in buffer code, rout uintptr_t module_ptr);
 
   // Routine to run a pipeline on the remote side.
-  long run(in uintptr_t module_ptr, in long offset, in sequence<buffer> arg_ptrs, in sequence<long> arg_sizes, rout sequence<buffer> outputs);
+  long run(in uintptr_t module_ptr, in long offset, in sequence<buffer> inputs, rout sequence<buffer> outputs);
 
   // Routine to clean up a module on the remote side.
-  long release_kernels(in uintptr_t module_ptr);
+  long release_kernels(in uintptr_t module_ptr, in long size);
 };
