@@ -7,28 +7,9 @@
 #include "cuda_opencl_shared.h"
 #include "scoped_mutex_lock.h"
 
-#include "hexagon_remote/halide_hexagon_remote.h"
-
 #define INLINE inline __attribute__((always_inline))
 
 #define ALIGNMENT 4096
-
-// TODO: Remove these dummy implementations and use the real RPC calls.
-WEAK int halide_hexagon_remote_initialize_kernels(const unsigned char* code, int codeLen, halide_hexagon_remote_uintptr_t* module_ptr) {
-    debug(NULL) << "fake halide_hexagon_remote_initialize_kernels\n";
-    *module_ptr = 0xf00d;
-    return 0;
-}
-
-WEAK int halide_hexagon_remote_run(halide_hexagon_remote_uintptr_t module_ptr, int offset, const halide_hexagon_remote_buffer* inputs, int inputsLen, halide_hexagon_remote_buffer* outputs, int outputsLen) {
-    debug(NULL) << "fake halide_hexagon_remote_run\n";
-    return 0;
-}
-
-WEAK int halide_hexagon_remote_release_kernels(halide_hexagon_remote_uintptr_t module_ptr, int size) {
-    debug(NULL) << "fake halide_hexagon_remote_release_kernels\n";
-    return 0;
-}
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
@@ -38,16 +19,72 @@ extern WEAK halide_device_interface hexagon_device_interface;
 WEAK int ion_fd = -1;
 WEAK halide_mutex thread_lock = { { 0 } };
 
+// Define dynamic version of hexagon_remote/halide_hexagon_remote.h
+typedef struct _remote_buffer__seq_octet _remote_buffer__seq_octet;
+typedef _remote_buffer__seq_octet remote_buffer;
+struct _remote_buffer__seq_octet {
+   unsigned char* data;
+   int dataLen;
+};
+typedef unsigned int remote_uintptr_t;
+
+typedef int (*remote_initialize_kernels_fn)(const unsigned char*, int, remote_uintptr_t*);
+typedef int (*remote_run_fn)(remote_uintptr_t, int, const remote_buffer*, int, remote_buffer*, int);
+typedef int (*remote_release_kernels_fn)(remote_uintptr_t, int);
+
+WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
+WEAK remote_run_fn remote_run = NULL;
+WEAK remote_release_kernels_fn remote_release_kernels = NULL;
+
+template <typename T>
+T load_symbol(void *user_context, void *remote_lib, const char* name) {
+    debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
+    T sym = (T)halide_get_library_symbol(remote_lib, name);
+    debug(user_context) << "        " << (void *)sym << "\n";
+    if (!sym) {
+        error(user_context) << "Hexagon runtime symbol '" << name << "' not found.\n";
+    }
+    return sym;
+}
+
+// Load the hexagon remote runtime.
+WEAK int init_hexagon_runtime(void *user_context) {
+    if (remote_initialize_kernels && remote_run && remote_release_kernels) {
+        // Already loaded.
+        return 0;
+    }
+
+    debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
+
+    debug(user_context) << "    halide_load_library('libhalide_hexagon_v60_host.so') -> \n";
+    void *remote_lib = halide_load_library("libhalide_hexagon_v60_host.so");
+    debug(user_context) << "        " << remote_lib << "\n";
+    if (!remote_lib) {
+        error(user_context) << "libhalide_hexagon_remote.so not found.\n";
+        return -1;
+    }
+
+    remote_initialize_kernels = load_symbol<remote_initialize_kernels_fn>(user_context, remote_lib, "halide_hexagon_remote_initialize_kernels");
+    if (!remote_initialize_kernels) return -1;
+    remote_run = load_symbol<remote_run_fn>(user_context, remote_lib, "halide_hexagon_remote_run");
+    if (!remote_run) return -1;
+    remote_release_kernels = load_symbol<remote_release_kernels_fn>(user_context, remote_lib, "halide_hexagon_remote_release_kernels");
+    if (!remote_release_kernels) return -1;
+
+    return 0;
+}
+
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
 // modules that are attached to a context in order to release them all
 // when then context is released.
 struct module_state {
-    halide_hexagon_remote_uintptr_t module;
+    remote_uintptr_t module;
     size_t size;
     module_state *next;
 };
 WEAK module_state *state_list = NULL;
+
 
 }}}}  // namespace Halide::Runtime::Internal::Hexagon
 
@@ -90,6 +127,8 @@ WEAK int halide_hexagon_get_descriptor(void *user_context, int *fd, bool create 
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, size_t code_size) {
+    init_hexagon_runtime(user_context);
+
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
                         << ", module_state: " << state_ptr
                         << ", *module_state: " << *state_ptr
@@ -122,8 +161,8 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     if (!(*state)->module) {
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
 
-        halide_hexagon_remote_uintptr_t module = 0;
-        result = halide_hexagon_remote_initialize_kernels(code, code_size, &module);
+        remote_uintptr_t module = 0;
+        result = remote_initialize_kernels(code, code_size, &module);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
             (*state)->module = module;
@@ -169,11 +208,11 @@ WEAK size_t count_arguments(void *user_context, size_t arg_sizes[], void *args[]
     return count;
 }
 
-// Prepare an array of halide_hexagon_remote_buffer arguments, mapping
+// Prepare an array of remote_buffer arguments, mapping
 // buffers if necessary.
 WEAK int map_arguments(void *user_context, size_t count,
                        size_t arg_sizes[], void *args[], int arg_flags[],
-                       halide_hexagon_remote_buffer *mapped_args) {
+                       remote_buffer *mapped_args) {
     for (size_t i = 0; i < count; i++) {
         if (arg_flags[i] != 0) {
             // This is a buffer, map it and put the mapped buffer into the result.
@@ -212,7 +251,7 @@ WEAK int map_arguments(void *user_context, size_t count,
 }
 
 // Unmap an array of arguments previously mapped with map_arguments.
-WEAK void unmap_arguments(void *user_context, size_t count, int arg_flags[], halide_hexagon_remote_buffer *mapped_args) {
+WEAK void unmap_arguments(void *user_context, size_t count, int arg_flags[], remote_buffer *mapped_args) {
     for (size_t i = 0; i < count; i++) {
         if (arg_flags[i] != 0) {
             // This is a buffer, we need to unmap it.
@@ -235,7 +274,9 @@ WEAK int halide_hexagon_run(void *user_context,
                             size_t output_arg_sizes[],
                             void *output_args[],
                             int output_arg_flags[]) {
-    halide_hexagon_remote_uintptr_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
+    init_hexagon_runtime(user_context);
+
+    remote_uintptr_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
     debug(user_context) << "Hexagon: halide_hexagon_run ("
                         << "user_context: " << user_context << ", "
                         << "state_ptr: " << state_ptr << " (" << module << ") "
@@ -247,8 +288,8 @@ WEAK int halide_hexagon_run(void *user_context,
     // Map the arguments.
     size_t input_arg_count = count_arguments(user_context, input_arg_sizes, input_args, input_arg_flags);
     debug(user_context) << "    map_arguments -> \n";
-    halide_hexagon_remote_buffer *mapped_input_args =
-        (halide_hexagon_remote_buffer *)__builtin_alloca(input_arg_count * sizeof(halide_hexagon_remote_buffer));
+    remote_buffer *mapped_input_args =
+        (remote_buffer *)__builtin_alloca(input_arg_count * sizeof(remote_buffer));
     result = map_arguments(user_context, input_arg_count, input_arg_sizes, input_args, input_arg_flags,
                            mapped_input_args);
     debug(user_context) << "        " << result << "\n";
@@ -258,8 +299,8 @@ WEAK int halide_hexagon_run(void *user_context,
 
     size_t output_arg_count = count_arguments(user_context, output_arg_sizes, output_args, output_arg_flags);
     debug(user_context) << "    map_arguments -> \n";
-    halide_hexagon_remote_buffer * mapped_output_args =
-        (halide_hexagon_remote_buffer *)__builtin_alloca(output_arg_count * sizeof(halide_hexagon_remote_buffer));
+    remote_buffer * mapped_output_args =
+        (remote_buffer *)__builtin_alloca(output_arg_count * sizeof(remote_buffer));
     result = map_arguments(user_context, output_arg_count, output_arg_sizes, output_args, output_arg_flags,
                            mapped_output_args);
     debug(user_context) << "        " << result << "\n";
@@ -269,7 +310,7 @@ WEAK int halide_hexagon_run(void *user_context,
 
     // Call the pipeline on the device side.
     debug(user_context) << "    halide_hexagon_remote_run " << name << " -> \n";
-    halide_hexagon_remote_run(module, offset,
+    remote_run(module, offset,
                               mapped_input_args, input_arg_count,
                               mapped_output_args, output_arg_count);
     debug(user_context) << "        " << result << "\n";
@@ -298,7 +339,7 @@ WEAK int halide_hexagon_device_release(void *user_context) {
             if (state->module) {
                 debug(user_context) << "    halide_hexagon_remote_release_kernels " << state
                                     << " (" << state->module << ") -> ";
-                int result = halide_hexagon_remote_release_kernels(state->module, state->size);
+                int result = remote_release_kernels(state->module, state->size);
                 debug(user_context) << "        " << result << "\n";
                 state->module = 0;
                 state->size = 0;
