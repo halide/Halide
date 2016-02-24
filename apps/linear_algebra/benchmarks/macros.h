@@ -1,20 +1,14 @@
-#define time_it(code)                               \
-    double elapsed = 0;                             \
-    for (int iters = 20; ; iters *= 2) {                    \
-        double best = 1e20;                                 \
-        for (int trials = 0; trials < 5; trials++) {        \
-            double start = current_time();                  \
-            for (int i = 0; i < iters; i++) {               \
-                code;                                       \
-            }                                               \
-            double end = current_time();                    \
-            best = std::min(end-start, best);               \
-        }                                                   \
-        elapsed = 1000 * best;                              \
-        if (elapsed > 100000) {                             \
-            elapsed /= iters;                               \
-            break;                                          \
-        }                                                   \
+#include "../support/benchmark.h"
+
+#define time_it(code)                                        \
+    double elapsed = 0;                                      \
+    for (int iters = 1; ; iters *= 2) {                      \
+        /* Best of 5 */                                      \
+        elapsed = 1e6 * benchmark(5, iters, [&]() {code;});  \
+        /* spend at least 5x20ms benchmarking */             \
+        if (elapsed * iters > 20000) {                       \
+            break;                                           \
+        }                                                    \
     }
 
 #define L1GFLOPS(N) 2.0 * N * 1e-3 / elapsed
