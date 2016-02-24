@@ -5,17 +5,20 @@
 
 extern "C" {
 
+static const int alignment = 4096;
+
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen, halide_hexagon_remote_uintptr_t *module_ptr) {
     // Map some memory for the code and copy it in.
-    void *exec = mmap(0, codeLen, PROT_READ | PROT_WRITE, MAP_ANON, -1, 0);
+    int aligned_codeLen = (codeLen + alignment - 1) & (alignment - 1);
+    void *exec = mmap(0, aligned_codeLen, PROT_READ | PROT_WRITE, MAP_ANON, -1, 0);
     if (exec == MAP_FAILED) {
         return -1;
     }
     memcpy(exec, code, codeLen);
 
     // Change memory to be executable (but not writable).
-    if (mprotect(exec, codeLen, PROT_READ | PROT_EXEC) < 0) {
-        munmap(exec, codeLen);
+    if (mprotect(exec, aligned_codeLen, PROT_READ | PROT_EXEC) < 0) {
+        munmap(exec, aligned_codeLen);
         return -1;
     }
 
@@ -46,6 +49,7 @@ int halide_hexagon_remote_run(halide_hexagon_remote_uintptr_t module_ptr, int of
 
 int halide_hexagon_remote_release_kernels(halide_hexagon_remote_uintptr_t module_ptr, int codeLen) {
     void *exec = (void *)module_ptr;
+    codeLen = (codeLen + alignment - 1) & (alignment - 1);
     munmap(exec, codeLen);
     return 0;
 }
