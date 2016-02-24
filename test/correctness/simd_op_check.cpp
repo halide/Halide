@@ -1466,21 +1466,21 @@ int main(int argc, char **argv) {
     // host. This check is in no ways really a complete check, but
     // it works for now.
     if (can_run_code()) {
-      for (ImageParam p : image_params) {
-        // Make a buffer filled with noise to use as a sample input.
-        Buffer b(p.type(), {W*4+H, H});
-        Expr r;
-        if (p.type().is_float()) {
-          r = cast(p.type(), random_float() * 1024 - 512);
-        } else {
-          // Avoid cases where vector vs scalar do different things
-          // on signed integer overflow by limiting ourselves to 28
-          // bit numbers.
-          r = cast(p.type(), random_int() / 4);
+        for (ImageParam p : image_params) {
+            // Make a buffer filled with noise to use as a sample input.
+            Buffer b(p.type(), {W*4+H, H});
+            Expr r;
+            if (p.type().is_float()) {
+                r = cast(p.type(), random_float() * 1024 - 512);
+            } else {
+                // Avoid cases where vector vs scalar do different things
+                // on signed integer overflow by limiting ourselves to 28
+                // bit numbers.
+                r = cast(p.type(), random_int() / 4);
+            }
+            lambda(x, y, r).realize(b);
+            p.set(b);
         }
-        lambda(x, y, r).realize(b);
-        p.set(b);
-      }
     }
     if (target.arch == Target::X86) {
         check_sse_all();
