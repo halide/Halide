@@ -33,15 +33,14 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 halide_hexagon_remote_skel-%.o: halide_hexagon_remote_skel.c
 	$(CC-$*) $(CCFLAGS-$*) -c $^ -o $@
 
-halide_hexagon_remote-%.so: halide_hexagon_remote.cpp halide_hexagon_remote_skel-%.o
+libhalide_hexagon_remote-%.so: halide_hexagon_remote.cpp halide_hexagon_remote_skel-%.o
 	$(CXX-$*) $(CCFLAGS-$*) $(CXXFLAGS-$*) $^ -shared -o $@
 
-halide_hexagon_host-%.so: halide_hexagon_remote_stub.c
+libhalide_hexagon_host-%.so: halide_hexagon_remote_stub.c
 	$(CC-$*) $(CCFLAGS-$*) $^ -shared -o $@
 
 clean:
 	rm -rf halide_hexagon_remote.h halide_hexagon_remote_skel.c halide_hexagon_remote_stub.c
-	rm -rf halide_hexagon_host-arm-32-android.so
-	rm -rf halide_hexagon_host-arm-64-android.so
-	rm -rf halide_hexagon_remote-v60.so
-
+	rm -rf libhalide_hexagon_host-arm-32-android.so
+	rm -rf libhalide_hexagon_host-arm-64-android.so
+	rm -rf libhalide_hexagon_remote-v60.so
