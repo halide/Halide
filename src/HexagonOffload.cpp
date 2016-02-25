@@ -5,6 +5,7 @@
 #include "Param.h"
 #include "Image.h"
 #include "Output.h"
+#include "LLVM_Headers.h"
 
 namespace Halide {
 namespace Internal {
@@ -17,7 +18,7 @@ class InjectHexagonRpc : public IRMutator {
     using IRMutator::visit;
 
     Module device_code;
-    std::vector<std::string> kernel_offsets;
+    std::map<std::string, int> kernel_offsets;
     Expr module_state_ptr;
     Expr module_state_ptr_ptr() {
         return Call::make(Handle(), Call::address_of, {module_state_ptr}, Call::Intrinsic);
@@ -98,7 +99,7 @@ public:
 
             // Remember the name of this function, so we can patch in the offset later.
             std::string hex_offset = hex_name + "_kernel_offset";
-            kernel_offsets.push_back(hex_offset);
+            kernel_offsets[hex_offset] = -1;
 
             std::vector<Expr> params;
             params.push_back(module_state_ptr);
@@ -141,13 +142,37 @@ public:
         Expr code_ptr_0 = Load::make(type_of<uint8_t>(), "code", 0, code, Parameter());
         Expr code_ptr = Call::make(Handle(), Call::address_of, {code_ptr_0}, Call::Intrinsic);
 
-        // Determine the device code offsets from the start of the compiled code and substitute them in.
-        std::map<std::string, Expr> kernel_offsets;
-        for (auto i : this->kernel_offsets) {
-            // TODO: Find the offset of this kernel in the object.
-            kernel_offsets[i] = Expr((size_t)0);
+        // Determine the device code offsets from the start of the compiled code.
+        llvm::MemoryBufferRef object_ref(llvm::StringRef((char *)object.data(), object.size()), "hexagon_object");
+        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> obj_file_or_error =
+            llvm::object::ObjectFile::createObjectFile(object_ref);
+        internal_assert (!obj_file_or_error)
+            << "Failed to open hexagon object file\n";
+        std::unique_ptr<llvm::object::ObjectFile> obj_file = std::move(*obj_file_or_error);
+        for (const llvm::object::SectionRef& i : obj_file->sections()) {
+            llvm::StringRef name;
+            if (!i.getName(name)) continue;
+            debug(0) << "Found section " << name.data() << "\n";
+
+            // If this section is a function we care about, update the offset.
+            std::map<std::string, int>::iterator kernel_offset_i = kernel_offsets.find(name);
+            if (kernel_offset_i != kernel_offsets.end()) {
+                internal_assert(kernel_offset_i->second == -1)
+                    << "Found duplicate section " << name.data() << ".\n";
+                uint64_t offset = i.getAddress();
+                internal_assert(offset < std::numeric_limits<int>::max())
+                    << "Offset to function " << name.data() << " is not a 32 bit address\n";
+                kernel_offset_i->second = (int)offset;
+            }
         }
-        s = substitute(kernel_offsets, s);
+
+        // Substitute in the offsets we found.
+        std::map<std::string, Expr> substitutions;
+        for (const auto& i : kernel_offsets) {
+            internal_assert(i.second != -1) << "Did not find compiled function " << i.first << ".\n";
+            substitutions[i.first] = Expr((size_t)i.second);
+        }
+        s = substitute(substitutions, s);
 
         // Wrap the statement in calls to halide_initialize_kernels.
         Expr call = Call::make(Int(32), "halide_hexagon_initialize_kernels",
