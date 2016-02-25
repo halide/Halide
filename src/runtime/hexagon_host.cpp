@@ -37,7 +37,7 @@ WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 
 template <typename T>
-T load_symbol(void *user_context, void *remote_lib, const char* name) {
+T get_symbol(void *user_context, void *remote_lib, const char* name) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
     T sym = (T)halide_get_library_symbol(remote_lib, name);
     debug(user_context) << "        " << (void *)sym << "\n";
@@ -56,19 +56,29 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
-    debug(user_context) << "    halide_load_library('libhalide_hexagon_v60_host.so') -> \n";
-    void *remote_lib = halide_load_library("libhalide_hexagon_v60_host.so");
-    debug(user_context) << "        " << remote_lib << "\n";
-    if (!remote_lib) {
-        error(user_context) << "libhalide_hexagon_remote.so not found.\n";
+    // Figure out which library to load.
+    // TODO: Maybe we should support other OSes/architectures here...
+#ifdef BITS_32
+    const char *host_lib_name = "libhalide_hexagon_host-arm-32-android.so";
+#else
+    const char *host_lib_name = "libhalide_hexagon_host-arm-64-android.so";
+#endif
+
+    // Load the library.
+    debug(user_context) << "    halide_load_library('" << host_lib_name << "') -> \n";
+    void *host_lib = halide_load_library(host_lib_name);
+    debug(user_context) << "        " << host_lib << "\n";
+    if (!host_lib) {
+        error(user_context) << host_lib_name << " not found.\n";
         return -1;
     }
 
-    remote_initialize_kernels = load_symbol<remote_initialize_kernels_fn>(user_context, remote_lib, "halide_hexagon_remote_initialize_kernels");
+    // Get the symbols we need from the library.
+    remote_initialize_kernels = get_symbol<remote_initialize_kernels_fn>(user_context, host_lib, "halide_hexagon_remote_initialize_kernels");
     if (!remote_initialize_kernels) return -1;
-    remote_run = load_symbol<remote_run_fn>(user_context, remote_lib, "halide_hexagon_remote_run");
+    remote_run = get_symbol<remote_run_fn>(user_context, host_lib, "halide_hexagon_remote_run");
     if (!remote_run) return -1;
-    remote_release_kernels = load_symbol<remote_release_kernels_fn>(user_context, remote_lib, "halide_hexagon_remote_release_kernels");
+    remote_release_kernels = get_symbol<remote_release_kernels_fn>(user_context, host_lib, "halide_hexagon_remote_release_kernels");
     if (!remote_release_kernels) return -1;
 
     return 0;
@@ -84,7 +94,6 @@ struct module_state {
     module_state *next;
 };
 WEAK module_state *state_list = NULL;
-
 
 }}}}  // namespace Halide::Runtime::Internal::Hexagon
 
