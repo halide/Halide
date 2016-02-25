@@ -13,19 +13,29 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
+Target hexagon_remote_target(Target::HexagonStandalone, Target::Hexagon, 32);
+
+}
+
 /////////////////////////////////////////////////////////////////////////////
 class InjectHexagonRpc : public IRMutator {
     using IRMutator::visit;
 
     Module device_code;
-    std::map<std::string, int> kernel_offsets;
+    std::map<std::string, int> section_map;
     Expr module_state_ptr;
     Expr module_state_ptr_ptr() {
         return Call::make(Handle(), Call::address_of, {module_state_ptr}, Call::Intrinsic);
     }
 
+    static std::string section_name(const std::string &fn) {
+        return ".text." + fn;
+    }
+
 public:
-    InjectHexagonRpc() : device_code("hexagon", Target(Target::HexagonStandalone, Target::Hexagon, 32)) {
+    InjectHexagonRpc() : device_code("hexagon", hexagon_remote_target) {
         Buffer module_state_storage(type_of<void*>(), {}, nullptr, "module_state_ptr");
         *(void **)module_state_storage.host_ptr() = nullptr;
         module_state_ptr = Load::make(type_of<void*>(), "module_state_ptr", 0, module_state_storage, Parameter());
@@ -98,12 +108,12 @@ public:
             output_arg_sizes.push_back(Expr((size_t)0));
 
             // Remember the name of this function, so we can patch in the offset later.
-            std::string hex_offset = hex_name + "_kernel_offset";
-            kernel_offsets[hex_offset] = -1;
+            std::string section = section_name(hex_name + "_argv");
+            section_map[section] = -1;
 
             std::vector<Expr> params;
             params.push_back(module_state_ptr);
-            params.push_back(Variable::make(type_of<size_t>(), hex_offset));
+            params.push_back(Variable::make(type_of<size_t>(), section));
             params.push_back(hex_name);
             params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, input_arg_sizes, Call::Intrinsic));
             params.push_back(Call::make(type_of<void**>(), Call::make_struct, input_arg_ptrs, Call::Intrinsic));
@@ -146,19 +156,20 @@ public:
         llvm::MemoryBufferRef object_ref(llvm::StringRef((char *)object.data(), object.size()), "hexagon_object");
         llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> obj_file_or_error =
             llvm::object::ObjectFile::createObjectFile(object_ref);
-        internal_assert (!obj_file_or_error)
-            << "Failed to open hexagon object file\n";
         std::unique_ptr<llvm::object::ObjectFile> obj_file = std::move(*obj_file_or_error);
+        internal_assert (!!obj_file)
+            << "Failed to open hexagon object file\n";
         for (const llvm::object::SectionRef& i : obj_file->sections()) {
-            llvm::StringRef name;
-            if (!i.getName(name)) continue;
-            debug(0) << "Found section " << name.data() << "\n";
+            llvm::StringRef name_ref;
+            if (i.getName(name_ref)) continue;
+            std::string name(name_ref.data(), name_ref.size());
 
             // If this section is a function we care about, update the offset.
-            std::map<std::string, int>::iterator kernel_offset_i = kernel_offsets.find(name);
-            if (kernel_offset_i != kernel_offsets.end()) {
+            std::map<std::string, int>::iterator kernel_offset_i = section_map.find(name);
+            if (kernel_offset_i != section_map.end()) {
                 internal_assert(kernel_offset_i->second == -1)
                     << "Found duplicate section " << name.data() << ".\n";
+                debug(1) << "Found section " << name << " at " << i.getAddress() << ", " << i.getSize() << "\n";
                 uint64_t offset = i.getAddress();
                 internal_assert(offset < std::numeric_limits<int>::max())
                     << "Offset to function " << name.data() << " is not a 32 bit address\n";
@@ -168,7 +179,7 @@ public:
 
         // Substitute in the offsets we found.
         std::map<std::string, Expr> substitutions;
-        for (const auto& i : kernel_offsets) {
+        for (const auto& i : section_map) {
             internal_assert(i.second != -1) << "Did not find compiled function " << i.first << ".\n";
             substitutions[i.first] = Expr((size_t)i.second);
         }
