@@ -6,6 +6,7 @@
 #include "Image.h"
 #include "Output.h"
 #include "LLVM_Headers.h"
+#include <llvm/Object/ELFObjectFile.h>
 
 namespace Halide {
 namespace Internal {
@@ -169,12 +170,9 @@ public:
 
         // Determine the device code offsets from the start of the compiled code.
         llvm::MemoryBufferRef object_ref(llvm::StringRef((char *)object.data(), object.size()), "hexagon_object");
-        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> obj_file_or_error =
-            llvm::object::ObjectFile::createObjectFile(object_ref);
-        std::unique_ptr<llvm::object::ObjectFile> obj_file = std::move(*obj_file_or_error);
-        internal_assert (!!obj_file)
-            << "Failed to open hexagon object file\n";
-        for (const llvm::object::SectionRef& i : obj_file->sections()) {
+        std::error_code error;
+        llvm::object::ELF32LEObjectFile obj_file(object_ref, error);
+        for (const llvm::object::SectionRef& i : obj_file.sections()) {
             llvm::StringRef name_ref;
             if (i.getName(name_ref)) continue;
             std::string name(name_ref.data(), name_ref.size());
@@ -184,8 +182,8 @@ public:
             if (kernel_offset_i != section_map.end()) {
                 internal_assert(kernel_offset_i->second == -1)
                     << "Found duplicate section " << name.data() << ".\n";
-                debug(1) << "Found section " << name << " at " << i.getAddress() << ", " << i.getSize() << "\n";
-                uint64_t offset = i.getAddress();
+                size_t offset = obj_file.getSection(i.getRawDataRefImpl())->sh_offset;
+                debug(1) << "Found section " << name << " at " << offset << "\n";
                 internal_assert(offset < std::numeric_limits<int>::max())
                     << "Offset to function " << name.data() << " is not a 32 bit address\n";
                 kernel_offset_i->second = (int)offset;
