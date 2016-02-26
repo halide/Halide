@@ -5,6 +5,11 @@
 #include <sstream>
 #include <map>
 
+#ifdef __linux__
+#include <unistd.h>
+#include <linux/limits.h>
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -12,6 +17,48 @@ using std::string;
 using std::vector;
 using std::ostringstream;
 using std::map;
+
+std::string get_env_variable(char const *env_var_name, size_t &read) {
+    if (!env_var_name) {
+        return "";
+    }
+    read = 0;
+
+    #ifdef _MSC_VER
+    char lvl[32];
+    getenv_s(&read, lvl, env_var_name);
+    #else
+    char *lvl = getenv(env_var_name);
+    read = (lvl)?1:0;
+    #endif
+
+    if (read) {
+        return std::string(lvl);
+    }
+    else {
+        return "";
+    }
+}
+
+string running_program_name() {
+    // linux specific currently.
+    #ifndef __linux__
+    return "";
+    #else
+    string program_name;
+    char path[PATH_MAX];
+    ssize_t len = ::readlink("/proc/self/exe", path, sizeof(path)-1);
+    if (len != -1) {
+        path[len] = '\0';
+        string tmp = std::string(path);
+        program_name = tmp.substr(tmp.find_last_of("/")+1);
+    }
+    else {
+        return "";
+    }
+    return program_name;
+    #endif
+}
 
 string unique_name(char prefix) {
     // arrays with static storage duration should be initialized to zero automatically
