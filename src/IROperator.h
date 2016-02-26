@@ -7,6 +7,8 @@
  * it more pleasant to work with Halide expressions.
  */
 
+#include <atomic>
+
 #include "IR.h"
 
 namespace Halide {
@@ -1665,8 +1667,8 @@ inline Expr count_trailing_zeros(Expr x) {
  */
 inline Expr random_float(Expr seed = Expr()) {
     // Random floats get even IDs
-    static int counter = -2;
-    counter += 2;
+    static std::atomic<int> counter;
+    int id = (counter++)*2;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -1675,7 +1677,7 @@ inline Expr random_float(Expr seed = Expr()) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(seed);
     }
-    args.push_back(counter);
+    args.push_back(id);
 
     return Internal::Call::make(Float(32), Internal::Call::random,
                                 args, Internal::Call::Intrinsic);
@@ -1685,8 +1687,8 @@ inline Expr random_float(Expr seed = Expr()) {
  * unsigned 32-bit integer. See \ref random_float. Vectorizes cleanly. */
 inline Expr random_uint(Expr seed = Expr()) {
     // Random ints get odd IDs
-    static int counter = -1;
-    counter += 2;
+    static std::atomic<int> counter;
+    int id = (counter++)*2 + 1;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -1695,7 +1697,7 @@ inline Expr random_uint(Expr seed = Expr()) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(seed);
     }
-    args.push_back(counter);
+    args.push_back(id);
 
     return Internal::Call::make(UInt(32), Internal::Call::random,
                                 args, Internal::Call::Intrinsic);

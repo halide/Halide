@@ -8,6 +8,7 @@
  */
 
 #include <stdlib.h>
+#include <atomic>
 
 #include "Util.h"
 
@@ -16,11 +17,11 @@ namespace Internal {
 
 /** A class representing a reference count to be used with IntrusivePtr */
 class RefCount {
-    int count;
+    std::atomic<int> count;
 public:
     RefCount() : count(0) {}
-    void increment() {count++;}
-    void decrement() {count--;}
+    int increment() {return ++count;} // Increment and return new value
+    int decrement() {return --count;} // Decrement and return new value
     bool is_zero() const {return count == 0;}
 };
 
@@ -70,8 +71,7 @@ private:
             // the counts due to the cycle. The next line then makes
             // the ref_count negative, which prevents actually
             // entering the destructor recursively.
-            ref_count(p).decrement();
-            if (ref_count(p).is_zero()) {
+            if (ref_count(p).decrement() == 0) {
                 destroy(p);
             }
         }
