@@ -118,6 +118,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%4d ", _lut[i]);
     }
     fprintf(stderr, "\n");
+    info(lut, "lut");
+    dump(lut, "lut");
+    stats(lut, "lut");
 #endif
 #endif // FCAMLUT
 
