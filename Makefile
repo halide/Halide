@@ -527,6 +527,9 @@ RUNTIME_CPP_COMPONENTS = \
   mingw_math \
   module_aot_ref_count \
   module_jit_ref_count \
+  null_allocator \
+  null_error_handler \
+  null_print \
   nacl_host_cpu_count \
   opencl \
   opengl \

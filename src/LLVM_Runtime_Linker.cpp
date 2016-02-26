@@ -113,6 +113,9 @@ DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
+DECLARE_CPP_INITMOD(null_allocator)
+DECLARE_CPP_INITMOD(null_error_handler)
+DECLARE_CPP_INITMOD(null_print)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(hexagon_remote)
@@ -688,6 +691,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::HexagonRemote) {
                 // The offload runtime can't have any symbols resolving externally.
+                modules.push_back(get_initmod_null_allocator(c, bits_64, debug));
+                modules.push_back(get_initmod_null_error_handler(c, bits_64, debug));
+                modules.push_back(get_initmod_null_print(c, bits_64, debug));
                 modules.push_back(get_initmod_hexagon_remote(c, bits_64, debug));
             }
         }

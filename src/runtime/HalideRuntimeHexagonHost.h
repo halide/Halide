@@ -64,4 +64,4 @@ extern int halide_hexagon_device_release(void* user_context);
 } // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEHEXAGON_H
+#endif // HALIDE_HALIDERUNTIMEHEXAGONHOST_H
