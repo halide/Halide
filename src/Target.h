@@ -21,7 +21,7 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl, HexagonStandalone, HexagonQurt} os;
+    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl, Qurt, HexagonRemote} os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction

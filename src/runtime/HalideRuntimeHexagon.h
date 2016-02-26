@@ -1,5 +1,5 @@
-#ifndef HALIDE_HALIDERUNTIMEHEXAGON_H
-#define HALIDE_HALIDERUNTIMEHEXAGON_H
+#ifndef HALIDE_HALIDERUNTIMEHEXAGONHOST_H
+#define HALIDE_HALIDERUNTIMEHEXAGONHOST_H
 
 #include "HalideRuntime.h"
 
@@ -45,7 +45,8 @@ extern uintptr_t halide_hexagon_get_device_handle(void *user_context, struct buf
 extern int halide_hexagon_initialize_kernels(void *user_context,
                                              void **module_ptr,
                                              const uint8_t *code,
-                                             size_t size);
+                                             size_t size,
+                                             size_t init_runtime_offset);
 extern int halide_hexagon_run(void *user_context,
                               void *module_ptr,
                               size_t offset,
