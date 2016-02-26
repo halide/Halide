@@ -49,6 +49,9 @@ set(RUNTIME_CPP
   metal
   metal_objc_arm
   metal_objc_x86
+  null_allocator
+  null_error_handler
+  null_print
   opengl
   openglcompute
   osx_clock

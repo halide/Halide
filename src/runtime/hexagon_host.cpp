@@ -1,6 +1,6 @@
 #include "runtime_internal.h"
 #include "device_interface.h"
-#include "HalideRuntimeHexagon.h"
+#include "HalideRuntimeHexagonHost.h"
 #include "printer.h"
 #include "mini_ion.h"
 #include "mini_mman.h"
