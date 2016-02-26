@@ -5,6 +5,7 @@
 #include "curved.h"
 #include "halide_image.h"
 #include "halide_image_io.h"
+#include "halide_malloc_trace.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -31,6 +32,10 @@ int main(int argc, char **argv) {
     }
 
     fprintf(stderr, "input: %s\n", argv[1]);
+#ifdef HL_MEMINFO
+    halide_enable_malloc_trace();
+#endif
+
     Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "       %d %d\n", input.width(), input.height());
     // save_image(input, "input.pgm");
@@ -40,6 +45,12 @@ int main(int argc, char **argv) {
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 48)/32)*32, 3);
 #else
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
+#endif
+
+#ifdef HL_MEMINFO
+    info(input, "input");
+    stats(input, "input");
+    // dump(input, "input");
 #endif
 
     // These color matrices are for the sensor in the Nokia N900 and are
