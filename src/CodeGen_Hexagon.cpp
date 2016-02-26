@@ -2696,32 +2696,37 @@ void CodeGen_Hexagon::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
     if (ramp && stride && stride->value == 1) {
-      int width = ramp->lanes;
-      ModulusRemainder mod_rem = get_alignment_info(ramp->base);
+      int lanes = ramp->lanes;
+      // int alignment = op->type.bytes(); // The size of a single element
+      int native_vector_bytes = native_vector_bits() / 8;
 
-      int alignment_required = CPICK(128, 64);
-      if (width != alignment_required) {
-        // This will happen only under two cases.
-        // 1. We are loading a partial vector.
-        // 2. We are loading a type other than u8 or i8.
-        // FIXME: PDB: Relax the second condition.
+      // We are loading a partial vector. if we are, default to vanilla codegen.
+      if (lanes * op->type.bytes() != native_vector_bytes) {
         CodeGen_Posix::visit(op);
         return;
       }
+      // At this point we are satisfied that we are loading a native vector.
+      ModulusRemainder mod_rem = get_alignment_info(ramp->base);
       if (mod_rem.modulus == 1 &&
           mod_rem.remainder == 0) {
         // We know nothing about alignment. Just fall back upon vanilla codegen.
         CodeGen_Posix::visit(op);
         return;
       }
-      if (!possibly_misaligned && mod_rem.modulus == alignment_required) {
+      // ModulusRemainder tells us if something can be written in the
+      // form
+      // (ModulusRemainder.modulus * c1) + ModulusRemainder.remainder.
+      // So for us to be able to generate an aligned load, ramp->base
+      // should be
+      // (lanes * c1) + c2.
+      if (!possibly_misaligned && !(mod_rem.modulus % lanes)) {
         if (mod_rem.remainder == 0) {
           // This is a perfectly aligned address. Vanilla codegen can deal with
           // this.
           CodeGen_Posix::visit(op);
           return;
         } else {
-          Expr base = ramp->base;
+          Expr base = simplify(ramp->base);
           const Add *add = base.as<Add>();
           const IntImm *b = add->b.as<IntImm>();
           // We can generate a combination of two vmems (aligned) followed by
@@ -2734,16 +2739,23 @@ void CodeGen_Hexagon::visit(const Load *op) {
             CodeGen_Posix::visit(op);
             return;
           }
-          int offset = b->value;
-          if (mod_rem.remainder != ((bytes_in_vector() + offset) % bytes_in_vector())) {
+          int offset = (b->value % lanes);
+          // If the offset is negative, it is because we are trying to load something like
+          // f(x-1). In this case, the remainder should be (vector_width + offset) % vector_width
+          // Or in general for any type, it would be (lanes + offset) % lanes.
+          if (mod_rem.remainder != (lanes + offset) % lanes) {
             CodeGen_Posix::visit(op);
             return;
           }
-          int bytes_off = std::abs(offset) * (op->type.bits() / 8);
-          Expr base_low = offset > 0 ? add->a : simplify(add->a - width);
-          Expr base_high = offset > 0 ? simplify(add->a + width) : add->a;
-          Expr ramp_low = Ramp::make(base_low, 1, width);
-          Expr ramp_high = Ramp::make(base_high, 1, width);
+          // offset tells us that we are off by those many elements from the vector
+          // width. For e.g. a value of -1 when we are loading a half-word vector
+          // means we are reading one half-word left of an aligned address.
+          // so we are 1 * (64 / 32) = 2 bytes off (assuming 64 byte mode).
+          int bytes_off = std::abs(offset) * (native_vector_bytes / lanes);
+          Expr base_low = offset > 0 ? add->a : simplify(add->a - lanes);
+          Expr base_high = offset > 0 ? simplify(add->a + lanes) : add->a;
+          Expr ramp_low = Ramp::make(base_low, 1, lanes);
+          Expr ramp_high = Ramp::make(base_high, 1, lanes);
           Expr load_low = Load::make(op->type, op->name, ramp_low, op->image,
                                      op->param);
           Expr load_high = Load::make(op->type, op->name, ramp_high, op->image,
