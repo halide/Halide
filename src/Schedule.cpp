@@ -96,8 +96,17 @@ const Specialization &Schedule::add_specialization(Expr condition) {
     s.schedule = IntrusivePtr<ScheduleContents>(new ScheduleContents);
 
     // The sub-schedule inherits everything about its parent except for its specializations.
-    *s.schedule.ptr = *contents.ptr;
-    s.schedule.ptr->specializations.clear();
+    s.schedule.ptr->store_level      = contents.ptr->store_level;
+    s.schedule.ptr->compute_level    = contents.ptr->compute_level;
+    s.schedule.ptr->splits           = contents.ptr->splits;
+    s.schedule.ptr->dims             = contents.ptr->dims;
+    s.schedule.ptr->storage_dims     = contents.ptr->storage_dims;
+    s.schedule.ptr->bounds           = contents.ptr->bounds;
+    s.schedule.ptr->reduction_domain = contents.ptr->reduction_domain;
+    s.schedule.ptr->memoized         = contents.ptr->memoized;
+    s.schedule.ptr->touched          = contents.ptr->touched;
+    s.schedule.ptr->allow_race_conditions = contents.ptr->allow_race_conditions;
+
     contents.ptr->specializations.push_back(s);
     return contents.ptr->specializations.back();
 }

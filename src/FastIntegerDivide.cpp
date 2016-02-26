@@ -1,3 +1,5 @@
+#include <mutex>
+
 #include "FastIntegerDivide.h"
 #include "IntegerDivisionTable.h"
 
@@ -6,82 +8,107 @@ namespace Halide {
 using namespace Halide::Internal::IntegerDivision;
 
 namespace IntegerDivideTable {
+
 Image<uint8_t> integer_divide_table_u8() {
-    static Image<uint8_t> im(256, 2);
-    static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        for (size_t i = 0; i < 256; i++) {
-            im(i, 0) = table_runtime_u8[i][2];
-            im(i, 1) = table_runtime_u8[i][3];
+    static std::mutex initialize_lock;
+    std::lock_guard<std::mutex> lock_guard(initialize_lock);
+    {
+        static Image<uint8_t> im(256, 2);
+        static bool initialized = false;
+        if (!initialized) {
+            initialized = true;
+            for (size_t i = 0; i < 256; i++) {
+                im(i, 0) = table_runtime_u8[i][2];
+                im(i, 1) = table_runtime_u8[i][3];
+            }
         }
+        return im;
     }
-    return im;
 }
 
 Image<uint8_t> integer_divide_table_s8() {
-    static Image<uint8_t> im(256, 2);
-    static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        for (size_t i = 0; i < 256; i++) {
-            im(i, 0) = table_runtime_s8[i][2];
-            im(i, 1) = table_runtime_s8[i][3];
+    static std::mutex initialize_lock;
+    std::lock_guard<std::mutex> lock_guard(initialize_lock);
+    {
+        static Image<uint8_t> im(256, 2);
+        static bool initialized = false;
+        if (!initialized) {
+            initialized = true;
+            for (size_t i = 0; i < 256; i++) {
+                im(i, 0) = table_runtime_s8[i][2];
+                im(i, 1) = table_runtime_s8[i][3];
+            }
         }
+        return im;
     }
-    return im;
 }
 
 Image<uint16_t> integer_divide_table_u16() {
-    static Image<uint16_t> im(256, 2);
-    static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        for (size_t i = 0; i < 256; i++) {
-            im(i, 0) = table_runtime_u16[i][2];
-            im(i, 1) = table_runtime_u16[i][3];
+    static std::mutex initialize_lock;
+    std::lock_guard<std::mutex> lock_guard(initialize_lock);
+    {
+        static Image<uint16_t> im(256, 2);
+        static bool initialized = false;
+        if (!initialized) {
+            initialized = true;
+            for (size_t i = 0; i < 256; i++) {
+                im(i, 0) = table_runtime_u16[i][2];
+                im(i, 1) = table_runtime_u16[i][3];
+            }
         }
+        return im;
     }
-    return im;
 }
 
 Image<uint16_t> integer_divide_table_s16() {
-    static Image<uint16_t> im(256, 2);
-    static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        for (size_t i = 0; i < 256; i++) {
-            im(i, 0) = table_runtime_s16[i][2];
-            im(i, 1) = table_runtime_s16[i][3];
+    static std::mutex initialize_lock;
+    std::lock_guard<std::mutex> lock_guard(initialize_lock);
+    {
+        static Image<uint16_t> im(256, 2);
+        static bool initialized = false;
+        if (!initialized) {
+            initialized = true;
+            for (size_t i = 0; i < 256; i++) {
+                im(i, 0) = table_runtime_s16[i][2];
+                im(i, 1) = table_runtime_s16[i][3];
+            }
         }
+        return im;
     }
-    return im;
 }
 
 Image<uint32_t> integer_divide_table_u32() {
-    static Image<uint32_t> im(256, 2);
-    static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        for (size_t i = 0; i < 256; i++) {
-            im(i, 0) = table_runtime_u32[i][2];
-            im(i, 1) = table_runtime_u32[i][3];
+    static std::mutex initialize_lock;
+    std::lock_guard<std::mutex> lock_guard(initialize_lock);
+    {
+        static Image<uint32_t> im(256, 2);
+        static bool initialized = false;
+        if (!initialized) {
+            initialized = true;
+            for (size_t i = 0; i < 256; i++) {
+                im(i, 0) = table_runtime_u32[i][2];
+                im(i, 1) = table_runtime_u32[i][3];
+            }
         }
+        return im;
     }
-    return im;
 }
 
 Image<uint32_t> integer_divide_table_s32() {
-    static Image<uint32_t> im(256, 2);
-    static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        for (size_t i = 0; i < 256; i++) {
-            im(i, 0) = table_runtime_s32[i][2];
-            im(i, 1) = table_runtime_s32[i][3];
+    static std::mutex initialize_lock;
+    std::lock_guard<std::mutex> lock_guard(initialize_lock);
+    {
+        static Image<uint32_t> im(256, 2);
+        static bool initialized = false;
+        if (!initialized) {
+            initialized = true;
+            for (size_t i = 0; i < 256; i++) {
+                im(i, 0) = table_runtime_s32[i][2];
+                im(i, 1) = table_runtime_s32[i][3];
+            }
         }
+        return im;
     }
-    return im;
 }
 }
 
@@ -200,4 +227,3 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 
 }
 }
-
