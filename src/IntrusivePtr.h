@@ -95,7 +95,12 @@ public:
         incref(ptr);
     }
 
+    IntrusivePtr(IntrusivePtr<T> &&other) : ptr(other.ptr) {
+        other.ptr = NULL;
+    }
+
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
+        if (other.ptr == ptr) return *this;
         // Other can be inside of something owned by this, so we
         // should be careful to incref other before we decref
         // ourselves.
@@ -103,6 +108,11 @@ public:
         incref(temp);
         decref(ptr);
         ptr = temp;
+        return *this;
+    }
+
+    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) {
+        std::swap(ptr, other.ptr);
         return *this;
     }
 
