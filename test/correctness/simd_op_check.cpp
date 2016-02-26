@@ -41,6 +41,26 @@ int my_process_id = 0;
 // width and height of test images
 const int W = 256*3, H = 100;
 
+bool can_run_code() {
+
+    // If we can (target matches host), run the error checking Func.
+    Target host_target = get_host_target();
+    bool can_run_the_code =
+        (target.arch == host_target.arch &&
+         target.bits == host_target.bits &&
+         target.os == host_target.os);
+    // A bunch of feature flags also need to match between the
+    // compiled code and the host in order to run the code.
+    for (Target::Feature f : {Target::SSE41, Target::AVX, Target::AVX2,
+                Target::FMA, Target::FMA4, Target::F16C,
+                Target::VSX, Target::POWER_ARCH_2_07,
+                Target::ARMv7s, Target::NoNEON, Target::MinGW}) {
+        if (target.has_feature(f) != host_target.has_feature(f)) {
+            can_run_the_code = false;
+        }
+    }
+    return can_run_the_code;
+}
 // Check if pattern p matches str, allowing for wildcards (*).
 bool wildcard_match(const char* p, const char* str) {
     // Match all non-wildcard characters.
@@ -142,22 +162,7 @@ void check(string op, int vector_width, Expr e) {
     // Also compile the error checking Func
     error.compile_to_file("test_" + name, arg_types, target);
 
-    // If we can (target matches host), run the error checking Func.
-    Target host_target = get_host_target();
-    bool can_run_the_code =
-        (target.arch == host_target.arch &&
-         target.bits == host_target.bits &&
-         target.os == host_target.os);
-    // A bunch of feature flags also need to match between the
-    // compiled code and the host in order to run the code.
-    for (Target::Feature f : {Target::SSE41, Target::AVX, Target::AVX2,
-                              Target::FMA, Target::FMA4, Target::F16C,
-                              Target::VSX, Target::POWER_ARCH_2_07,
-                              Target::ARMv7s, Target::NoNEON, Target::MinGW}) {
-        if (target.has_feature(f) != host_target.has_feature(f)) {
-            can_run_the_code = false;
-        }
-    }
+    bool can_run_the_code = can_run_code();
     if (can_run_the_code) {
         Realization r = error.realize(0, target.without_feature(Target::NoRuntime));
         double e = Image<double>(r[0])(0);
@@ -1513,23 +1518,28 @@ int main(int argc, char **argv) {
         in_i64 = ImageParam(Int(64), 1, "in_i64"),
         in_u64 = ImageParam(UInt(64), 1, "in_u64")
     };
-
-    for (ImageParam p : image_params) {
-        // Make a buffer filled with noise to use as a sample input.
-        Buffer b(p.type(), {W*4+H, H});
-        Expr r;
-        if (p.type().is_float()) {
-            r = cast(p.type(), random_float() * 1024 - 512);
-        } else {
-            // Avoid cases where vector vs scalar do different things
-            // on signed integer overflow by limiting ourselves to 28
-            // bit numbers.
-            r = cast(p.type(), random_int() / 4);
+    // We are going to call realize, i.e. we are going to JIT code.
+    // Not all platforms support JITting. One indirect yet quick
+    // way of identifying this is to see if we can run code on the
+    // host. This check is in no ways really a complete check, but
+    // it works for now.
+    if (can_run_code()) {
+        for (ImageParam p : image_params) {
+            // Make a buffer filled with noise to use as a sample input.
+            Buffer b(p.type(), {W*4+H, H});
+            Expr r;
+            if (p.type().is_float()) {
+                r = cast(p.type(), random_float() * 1024 - 512);
+            } else {
+                // Avoid cases where vector vs scalar do different things
+                // on signed integer overflow by limiting ourselves to 28
+                // bit numbers.
+                r = cast(p.type(), random_int() / 4);
+            }
+            lambda(x, y, r).realize(b);
+            p.set(b);
         }
-        lambda(x, y, r).realize(b);
-        p.set(b);
     }
-
     if (target.arch == Target::X86) {
         check_sse_all();
     } else if (target.arch == Target::ARM) {
