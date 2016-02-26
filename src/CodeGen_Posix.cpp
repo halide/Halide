@@ -123,7 +123,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
             int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
-            allocation.ptr = create_alloca_at_entry(llvm_type_of(type), stack_size, false, name);
+            // Handles are stored as uint64s
+            llvm::Type *t = llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);
+            allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
     } else {
