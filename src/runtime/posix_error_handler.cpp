@@ -29,7 +29,7 @@ WEAK void halide_error(void *user_context, const char *msg) {
 }
 
 WEAK halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler) {
-    halide_error_handler_t result = handler;
+    halide_error_handler_t result = error_handler;
     error_handler = handler;
     return result;
 }
