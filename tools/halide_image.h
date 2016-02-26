@@ -228,4 +228,5 @@ public:
 }  // namespace Tools
 }  // namespace Halide
 
+#include "halide_image_info.h"
 #endif  // HALIDE_TOOLS_IMAGE_H
