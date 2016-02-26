@@ -18,19 +18,19 @@ WEAK void default_error_handler(void *user_context, const char *msg) {
     abort();
 }
 
-WEAK void (*halide_error_handler)(void *, const char *) = default_error_handler;
+WEAK halide_error_handler_t error_handler = default_error_handler;
 
 }}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
 WEAK void halide_error(void *user_context, const char *msg) {
-    (*halide_error_handler)(user_context, msg);
+    (*error_handler)(user_context, msg);
 }
 
-WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *) {
-    void (*result)(void *, const char *) = halide_error_handler;
-    halide_error_handler = handler;
+WEAK halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler) {
+    halide_error_handler_t result = handler;
+    error_handler = handler;
     return result;
 }
 
