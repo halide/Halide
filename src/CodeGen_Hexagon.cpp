@@ -13,38 +13,11 @@
 #include "IntegerDivisionTable.h"
 #include "IRPrinter.h"
 
-// Native client llvm relies on global flags to control sandboxing on
-// arm, because they expect you to be coming from the command line.
-#ifdef WITH_NATIVE_CLIENT
-#if LLVM_VERSION < 34
-#include <llvm/Support/CommandLine.h>
-namespace llvm {
-extern cl::opt<bool> FlagSfiData,
-    FlagSfiLoad,
-    FlagSfiStore,
-    FlagSfiStack,
-    FlagSfiBranch,
-    FlagSfiDisableCP,
-    FlagSfiZeroMask;
-}
-extern llvm::cl::opt<bool> ReserveR9;
-#endif
-#endif
-
 #define HEXAGON_SINGLE_MODE_VECTOR_SIZE 64
 #define HEXAGON_SINGLE_MODE_VECTOR_SIZE_IN_BITS 64 * 8
 #define CPICK(c128, c64) (B128 ? c128 : c64)
 #define WPICK(w128, w64) (B128 ? w128 : w64)
 #define IPICK(i64) (B128 ? i64##_128B : i64)
-
-#define UINT_8_MAX UInt(8).max()
-#define UINT_8_MIN UInt(8).min()
-#define UINT_16_MAX UInt(16).max()
-#define UINT_16_MIN UInt(16).min()
-#define INT_8_MAX Int(8).max()
-#define INT_8_MIN Int(8).min()
-#define INT_16_MAX Int(16).max()
-#define INT_16_MIN Int(16).min()
 
 #define UINT_8_IMAX 255
 #define UINT_8_IMIN 0
