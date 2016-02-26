@@ -34,6 +34,7 @@ set(RUNTIME_CPP
   gcd_thread_pool
   gpu_device_selection
   hexagon_host
+  hexagon_remote
   ios_io
   linux_clock
   linux_host_cpu_count

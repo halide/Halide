@@ -28,7 +28,7 @@ struct _remote_buffer__seq_octet {
 };
 typedef unsigned int remote_uintptr_t;
 
-typedef int (*remote_initialize_kernels_fn)(const unsigned char*, int, remote_uintptr_t*);
+typedef int (*remote_initialize_kernels_fn)(const unsigned char*, int, int, remote_uintptr_t*);
 typedef int (*remote_run_fn)(remote_uintptr_t, int, const remote_buffer*, int, remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(remote_uintptr_t, int);
 
@@ -135,7 +135,7 @@ WEAK int halide_hexagon_get_descriptor(void *user_context, int *fd, bool create 
 }
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                           const uint8_t *code, size_t code_size) {
+                                           const uint8_t *code, size_t code_size, size_t init_runtime_offset) {
     init_hexagon_runtime(user_context);
 
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
@@ -171,7 +171,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
 
         remote_uintptr_t module = 0;
-        result = remote_initialize_kernels(code, code_size, &module);
+        result = remote_initialize_kernels(code, code_size, init_runtime_offset, &module);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
             (*state)->module = module;

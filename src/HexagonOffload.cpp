@@ -15,7 +15,7 @@ using std::vector;
 
 namespace {
 
-Target hexagon_remote_target(Target::HexagonStandalone, Target::Hexagon, 32);
+Target hexagon_remote_target(Target::HexagonRemote, Target::Hexagon, 32);
 
 }
 
@@ -30,8 +30,13 @@ class InjectHexagonRpc : public IRMutator {
         return Call::make(Handle(), Call::address_of, {module_state_ptr}, Call::Intrinsic);
     }
 
-    static std::string section_name(const std::string &fn) {
-        return ".text." + fn;
+    // Create a variable representing the offset to a function with
+    // the given name. This remembers the section for substitution
+    // after the object is compiled and we can find the actual offset.
+    Expr section(const std::string &fn) {
+        std::string section = ".text." + fn;
+        section_map[section] = -1;
+        return Variable::make(type_of<size_t>(), section);
     }
 
 public:
@@ -50,7 +55,8 @@ public:
             // or the loop itself? Currently, this moves the loop itself.
             Closure c(loop);
 
-            // Make an argument list, and generate a function in the device_code module.
+            // Make an argument list, and generate a function in the
+            // device_code module.
             std::vector<Argument> args;
             for (const auto& i : c.buffers) {
                 // Output buffers are last (below).
@@ -107,13 +113,11 @@ public:
             input_arg_sizes.push_back(Expr((size_t)0));
             output_arg_sizes.push_back(Expr((size_t)0));
 
-            // Remember the name of this function, so we can patch in the offset later.
-            std::string section = section_name(hex_name + "_argv");
-            section_map[section] = -1;
+            Expr pipeline_argv = section(hex_name + "_argv");
 
             std::vector<Expr> params;
             params.push_back(module_state_ptr);
-            params.push_back(Variable::make(type_of<size_t>(), section));
+            params.push_back(pipeline_argv);
             params.push_back(hex_name);
             params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, input_arg_sizes, Call::Intrinsic));
             params.push_back(Call::make(type_of<void**>(), Call::make_struct, input_arg_ptrs, Call::Intrinsic));
@@ -152,6 +156,17 @@ public:
         Expr code_ptr_0 = Load::make(type_of<uint8_t>(), "code", 0, code, Parameter());
         Expr code_ptr = Call::make(Handle(), Call::address_of, {code_ptr_0}, Call::Intrinsic);
 
+        // Wrap the statement in calls to halide_initialize_kernels.
+        Expr init_runtime = section("halide_hexagon_init_runtime");
+        Expr call = Call::make(Int(32), "halide_hexagon_initialize_kernels",
+                               {module_state_ptr_ptr(), code_ptr, Expr(code_size), init_runtime},
+                               Call::Extern);
+        string call_result_name = unique_name("initialize_kernels_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        s = Block::make(LetStmt::make(call_result_name, call,
+                                      AssertStmt::make(EQ::make(call_result_var, 0), call_result_var)),
+                        s);
+
         // Determine the device code offsets from the start of the compiled code.
         llvm::MemoryBufferRef object_ref(llvm::StringRef((char *)object.data(), object.size()), "hexagon_object");
         llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> obj_file_or_error =
@@ -184,15 +199,6 @@ public:
             substitutions[i.first] = Expr((size_t)i.second);
         }
         s = substitute(substitutions, s);
-
-        // Wrap the statement in calls to halide_initialize_kernels.
-        Expr call = Call::make(Int(32), "halide_hexagon_initialize_kernels",
-                               {module_state_ptr_ptr(), code_ptr, Expr(code_size)}, Call::Extern);
-        string call_result_name = unique_name("initialize_kernels_result");
-        Expr call_result_var = Variable::make(Int(32), call_result_name);
-        s = Block::make(LetStmt::make(call_result_name, call,
-                                      AssertStmt::make(EQ::make(call_result_var, 0), call_result_var)),
-                        s);
 
         return s;
     }
