@@ -53,13 +53,13 @@ WEAK void halide_set_num_threads(int) {
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
-    halide_do_task_t result = f;
+    halide_do_task_t result = custom_do_task;
     custom_do_task = f;
     return result;
 }
 
 WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
-    halide_do_par_for_t result = f;
+    halide_do_par_for_t result = custom_do_par_for;
     custom_do_par_for = f;
     return result;
 }
