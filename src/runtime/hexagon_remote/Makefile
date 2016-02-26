@@ -9,17 +9,21 @@ CXX-v60 = ${HEX_TOOLS_ROOT}Tools/bin/hexagon-clang++
 
 CC-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
 #CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
-CCFLAGS-arm-64-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64 -llog -fPIE -pie
+CCFLAGS-arm-64-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64
 #CXXFLAGS-arm-64-android=
 
 CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-gcc
 #CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
-CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm -llog -fPIE -pie
+CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 #CXXFLAGS-arm-32-android=
 
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS}
-CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS}
-CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS}
+CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
+	-L${HEX_SDK_ROOT}lib/common/remote/ship/android_Release_aarch64/ -ladsprpc \
+	${HEX_SDK_ROOT}lib/common/adspmsgd/ship/android_Release_aarch64/adspmsgd.a
+CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
+	-L${HEX_SDK_ROOT}lib/common/remote/ship/android_Release/ -ladsprpc \
+	${HEX_SDK_ROOT}lib/common/adspmsgd/ship/android_Release/adspmsgd.a
 
 halide_hexagon_remote.h: halide_hexagon_remote.idl
 	$(QAIC) $(QAICFLAGS) $^
@@ -30,17 +34,20 @@ halide_hexagon_remote_skel.c: halide_hexagon_remote.idl
 halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	$(QAIC) $(QAICFLAGS) $^
 
-halide_hexagon_remote_skel-%.o: halide_hexagon_remote_skel.c
+%/halide_hexagon_remote_skel.o: halide_hexagon_remote_skel.c
+	mkdir -p $*
 	$(CC-$*) $(CCFLAGS-$*) -c $^ -o $@
 
-libhalide_hexagon_remote-%.so: halide_hexagon_remote.cpp halide_hexagon_remote_skel-%.o
+%/halide_hexagon_remote.so: halide_hexagon_remote.cpp %/halide_hexagon_remote_skel.o
+	mkdir -p $*
 	$(CXX-$*) $(CCFLAGS-$*) $(CXXFLAGS-$*) $^ -shared -o $@
 
-libhalide_hexagon_host-%.so: halide_hexagon_remote_stub.c
+%/halide_hexagon_host.so: halide_hexagon_remote_stub.c
+	mkdir -p $*
 	$(CC-$*) $(CCFLAGS-$*) $^ -shared -o $@
 
 clean:
 	rm -rf halide_hexagon_remote.h halide_hexagon_remote_skel.c halide_hexagon_remote_stub.c
-	rm -rf libhalide_hexagon_host-arm-32-android.so
-	rm -rf libhalide_hexagon_host-arm-64-android.so
-	rm -rf libhalide_hexagon_remote-v60.so
+	rm -rf arm-32-android/
+	rm -rf arm-64-android/
+	rm -rf v60/

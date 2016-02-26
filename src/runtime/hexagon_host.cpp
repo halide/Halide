@@ -37,9 +37,9 @@ WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 
 template <typename T>
-T get_symbol(void *user_context, void *remote_lib, const char* name) {
+T get_symbol(void *user_context, void *host_lib, const char* name) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
-    T sym = (T)halide_get_library_symbol(remote_lib, name);
+    T sym = (T)halide_get_library_symbol(host_lib, name);
     debug(user_context) << "        " << (void *)sym << "\n";
     if (!sym) {
         error(user_context) << "Hexagon runtime symbol '" << name << "' not found.\n";
@@ -56,15 +56,8 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
-    // Figure out which library to load.
-    // TODO: Maybe we should support other OSes/architectures here...
-#ifdef BITS_32
-    const char *host_lib_name = "libhalide_hexagon_host-arm-32-android.so";
-#else
-    const char *host_lib_name = "libhalide_hexagon_host-arm-64-android.so";
-#endif
-
     // Load the library.
+    const char *host_lib_name = "halide_hexagon_host.so";
     debug(user_context) << "    halide_load_library('" << host_lib_name << "') -> \n";
     void *host_lib = halide_load_library(host_lib_name);
     debug(user_context) << "        " << host_lib << "\n";
