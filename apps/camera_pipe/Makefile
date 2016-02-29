@@ -44,15 +44,22 @@ out.ppm: process
 	- cmp fcam_c.ppm ref_raw/fcam_c.ppm
 	cmp out.ppm ref_raw/out.ppm
 
-out_small.ppm: process
-	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_small.pgm 3700 2.0 50 1 out_small.ppm
-	- cmp fcam_c.ppm ref_small/fcam_c.ppm
-	cmp out_small.ppm ref_small/out_small.ppm
-
-out_2592_200.ppm: process
-	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_2592_200.pgm 3700 2.0 50 1 out_2592_200.ppm
-	- cmp fcam_c.ppm ref_2592_200/fcam_c.ppm
-	cmp out_2592_200.ppm ref_2592_200/out_2592_200.ppm
+out_%.ppm: process
+	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_$*.pgm 3700 2.0 50 1 out_$*.ppm
+	- if [ -r ref_$*_LV$(LOG2VLEN)/fcam_c.ppm ]; then \
+	    echo "cmp fcam_c.ppm ref_$*_LV$(LOG2VLEN)/fcam_c.ppm"; \
+	    cmp fcam_c.ppm ref_$*_LV$(LOG2VLEN)/fcam_c.ppm; \
+	else \
+	    echo "cmp fcam_c.ppm ref_$*/fcam_c.ppm"; \
+	    cmp fcam_c.ppm ref_$*/fcam_c.ppm; \
+	fi
+	if [ -r ref_$*_LV$(LOG2VLEN)/out_$*.ppm ]; then \
+	    echo "cmp out_$*.ppm ref_$*_LV$(LOG2VLEN)/out_$*.ppm"; \
+	    cmp out_$*.ppm ref_$*_LV$(LOG2VLEN)/out_$*.ppm; \
+	else \
+	    echo "cmp out_$*.ppm ref_$*/out_$*.ppm"; \
+	    cmp out_$*.ppm ref_$*/out_$*.ppm; \
+	fi
 endif
 
 ../../bin/HalideTraceViz:

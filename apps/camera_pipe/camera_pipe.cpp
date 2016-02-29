@@ -1,7 +1,12 @@
 #include "Halide.h"
 #include <stdint.h>
+
 #ifdef HEXAGON
+#define VLEN    (1<<LOG2VLEN)
+#define BLOCK   (VLEN/2)
 #include "halide-hexagon-setup.h"
+#else
+#define BLOCK   32
 #endif
 
 using namespace Halide;
@@ -626,8 +631,8 @@ int main(int argc, char **argv) {
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
     processed
-        .bound(tx, 0, (out_width/32)*32)
-        .bound(ty, 0, (out_height/32)*32);
+        .bound(tx, 0, (out_width/BLOCK)*BLOCK)
+        .bound(ty, 0, (out_height/BLOCK)*BLOCK);
 
     //string s = processed.serialize();
     //printf("%s\n", s.c_str());
