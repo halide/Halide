@@ -913,6 +913,11 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
 void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
+    // Make sure the buffer object itself is not null
+    create_assertion(builder->CreateIsNotNull(buffer),
+                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
+                                {name}, Call::Extern));
+
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
 
@@ -933,11 +938,6 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
     might_be_misaligned.insert(name);
-
-    // Make sure the buffer object itself is not null
-    create_assertion(builder->CreateIsNotNull(buffer),
-                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                {name}, Call::Extern));
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
