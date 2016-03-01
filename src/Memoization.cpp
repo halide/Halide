@@ -268,9 +268,9 @@ public:
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
-        static int32_t memoize_instance = 0;
+        static std::atomic<int> memoize_instance {0};
         writes.push_back(Store::make(key_name,
-                                     memoize_instance++, // Use and increment counter
+                                     memoize_instance++,
                                      (index / Int(32).bytes())));
         alignment += 4;
         index += 4;

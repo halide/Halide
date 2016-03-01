@@ -1,6 +1,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <mutex>
 
 #include "IRPrinter.h"
 #include "CodeGen_LLVM.h"
@@ -310,6 +311,9 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
 }
 
 void CodeGen_LLVM::initialize_llvm() {
+    static std::mutex initialize_llvm_mutex;
+    std::lock_guard<std::mutex> lock(initialize_llvm_mutex);
+
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
     if (!llvm_initialized) {
