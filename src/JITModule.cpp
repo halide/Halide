@@ -600,6 +600,7 @@ enum RuntimeKind {
 };
 
 JITModule &shared_runtimes(RuntimeKind k) {
+    // We're already guarded by the shared_runtimes_mutex
     static JITModule *m = NULL;
     if (!m) {
         // Note that this is never freed. On windows this would invoke

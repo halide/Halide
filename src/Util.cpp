@@ -4,6 +4,8 @@
 #include "Error.h"
 #include <sstream>
 #include <map>
+#include <atomic>
+#include <mutex>
 
 #ifdef __linux__
 #include <unistd.h>
@@ -62,7 +64,7 @@ string running_program_name() {
 
 string unique_name(char prefix) {
     // arrays with static storage duration should be initialized to zero automatically
-    static int instances[256];
+    static std::atomic<int> instances[256];
     ostringstream str;
     str << prefix << instances[(unsigned char)prefix]++;
     return str.str();
@@ -95,35 +97,39 @@ string replace_all(string &str, const string &find, const string &replace) {
 }
 
 string unique_name(const string &name, bool user) {
-    static map<string, int> known_names;
+    static std::mutex known_names_lock;
+    static map<string, int> *known_names = new map<string, int>();
+    {
+        std::lock_guard<std::mutex> lock(known_names_lock);
 
-    // An empty string really does not make sense, but use 'z' as prefix.
-    if (name.length() == 0) {
-        return unique_name('z');
-    }
-
-    // Check the '$' character doesn't appear in the prefix. This lets
-    // us separate the name from the number using '$' as a delimiter,
-    // which guarantees uniqueness of the generated name, without
-    // having to track all names generated so far.
-    if (user) {
-        for (size_t i = 0; i < name.length(); i++) {
-            user_assert(name[i] != '$')
-                << "Name \"" << name << "\" is invalid. "
-                << "Halide names may not contain the character '$'\n";
+        // An empty string really does not make sense, but use 'z' as prefix.
+        if (name.length() == 0) {
+            return unique_name('z');
         }
-    }
 
-    int &count = known_names[name];
-    count++;
-    if (count == 1) {
-        // The very first unique name is the original function name itself.
-        return name;
-    } else {
-        // Use the programmer-specified name but append a number to make it unique.
-        ostringstream oss;
-        oss << name << '$' << count;
-        return oss.str();
+        // Check the '$' character doesn't appear in the prefix. This lets
+        // us separate the name from the number using '$' as a delimiter,
+        // which guarantees uniqueness of the generated name, without
+        // having to track all names generated so far.
+        if (user) {
+            for (size_t i = 0; i < name.length(); i++) {
+                user_assert(name[i] != '$')
+                    << "Name \"" << name << "\" is invalid. "
+                    << "Halide names may not contain the character '$'\n";
+            }
+        }
+
+        int &count = (*known_names)[name];
+        count++;
+        if (count == 1) {
+            // The very first unique name is the original function name itself.
+            return name;
+        } else {
+            // Use the programmer-specified name but append a number to make it unique.
+            ostringstream oss;
+            oss << name << '$' << count;
+            return oss.str();
+        }
     }
 }
 
