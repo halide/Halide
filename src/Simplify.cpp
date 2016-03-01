@@ -355,12 +355,11 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        // rearrange const + varying to varying + const, to cut down
-        // on cases to check
-        if (is_simple_const(a) && !is_simple_const(b)) std::swap(a, b);
-
-        // Rearrange a + min or a + max to min + a or max + a to cut down on cases to check
-        if (b.as<Min>() || b.as<Max>()) {
+        // Rearrange a few patterns to cut down on the number of cases
+        // to check later.
+        if ((is_simple_const(a) && !is_simple_const(b)) ||
+            (b.as<Min>() && !a.as<Min>()) ||
+            (b.as<Max>() && !a.as<Max>())) {
             std::swap(a, b);
         }
 
@@ -664,7 +663,7 @@ private:
                    ia % ib == 0) {
             // x*4 + y*2 -> (x*2 + y)*2
             Expr ratio = make_const(a.type(), div_imp(ia, ib));
-            expr = mutate((mul_a->a * ratio + mul_b->a) * mul_b->b);                   
+            expr = mutate((mul_a->a * ratio + mul_b->a) * mul_b->b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             // If we've made no changes, and can't find a rule to apply, return the operator unchanged.
             expr = op;
@@ -1029,7 +1028,7 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
-        const Mul *mul_b = b.as<Mul>();        
+        const Mul *mul_b = b.as<Mul>();
 
         if (is_zero(a)) {
             expr = a;
@@ -3320,7 +3319,7 @@ private:
             stmt = ProducerConsumer::make(op->name, produce, update, consume);
         }
     }
-    
+
     void visit(const Block *op) {
         Stmt first = mutate(op->first);
 
