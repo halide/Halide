@@ -56,14 +56,14 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
-static const int alignment = 4096;
-
 extern "C" {
+
+const int map_alignment = 4096;
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen, int init_runtime_offset,
                                              halide_hexagon_remote_uintptr_t *module_ptr) {
     // Map some memory for the code and copy it in.
-    int aligned_codeLen = (codeLen + alignment - 1) & ~(alignment - 1);
+    int aligned_codeLen = (codeLen + map_alignment - 1) & ~(map_alignment - 1);
     void *executable = mmap(0, aligned_codeLen, PROT_READ | PROT_WRITE, MAP_ANON, -1, 0);
     if (executable == MAP_FAILED) {
         return -1;
@@ -124,7 +124,7 @@ int halide_hexagon_remote_run(halide_hexagon_remote_uintptr_t module_ptr, int of
 
 int halide_hexagon_remote_release_kernels(halide_hexagon_remote_uintptr_t module_ptr, int codeLen) {
     void *executable = (void *)module_ptr;
-    codeLen = (codeLen + alignment - 1) & (alignment - 1);
+    codeLen = (codeLen + map_alignment - 1) & (map_alignment - 1);
     munmap(executable, codeLen);
     return 0;
 }
