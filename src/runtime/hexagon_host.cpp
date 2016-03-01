@@ -57,7 +57,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Load the library.
-    const char *host_lib_name = "halide_hexagon_host.so";
+    const char *host_lib_name = "libhalide_hexagon_host.so";
     debug(user_context) << "    halide_load_library('" << host_lib_name << "') -> \n";
     void *host_lib = halide_load_library(host_lib_name);
     debug(user_context) << "        " << host_lib << "\n";
@@ -162,7 +162,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     // Create the module itself if necessary.
     if (!(*state)->module) {
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
-
         remote_uintptr_t module = 0;
         result = remote_initialize_kernels(code, code_size, init_runtime_offset, &module);
         if (result == 0) {
@@ -313,8 +312,8 @@ WEAK int halide_hexagon_run(void *user_context,
     // Call the pipeline on the device side.
     debug(user_context) << "    halide_hexagon_remote_run " << name << " -> \n";
     remote_run(module, offset,
-                              mapped_input_args, input_arg_count,
-                              mapped_output_args, output_arg_count);
+               mapped_input_args, input_arg_count,
+               mapped_output_args, output_arg_count);
     debug(user_context) << "        " << result << "\n";
 
     // Unmap the arguments.

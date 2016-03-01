@@ -1,11 +1,26 @@
+extern "C" {
+
 #include "halide_hexagon_remote.h"
-
-#include "../HalideRuntime.h"
-
 #include <sys/mman.h>
 #include <memory.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+#define FARF_LOW 1
+#include "HAP_farf.h"
+
+}
+
+#include "../HalideRuntime.h"
+
+
+void halide_print(void *user_context, const char *str) {
+    FARF(LOW, "%s", str);
+}
+
+void halide_error(void *user_context, const char *str) {
+    halide_print(user_context, str);
+}
 
 void *halide_malloc(void *user_context, size_t x) {
     // Allocate enough space for aligning the pointer we return.
@@ -25,14 +40,6 @@ void halide_free(void *user_context, void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
-void halide_print(void *user_context, const char *str) {
-    printf("%s", str);
-}
-
-void halide_error(void *user_context, const char *str) {
-    halide_print(user_context, str);
-}
-
 int halide_do_task(void *user_context, halide_task_t f, int idx,
                    uint8_t *closure) {
     return f(user_context, idx, closure);
@@ -49,14 +56,14 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
-extern "C" {
-
 static const int alignment = 4096;
+
+extern "C" {
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen, int init_runtime_offset,
                                              halide_hexagon_remote_uintptr_t *module_ptr) {
     // Map some memory for the code and copy it in.
-    int aligned_codeLen = (codeLen + alignment - 1) & (alignment - 1);
+    int aligned_codeLen = (codeLen + alignment - 1) & ~(alignment - 1);
     void *executable = mmap(0, aligned_codeLen, PROT_READ | PROT_WRITE, MAP_ANON, -1, 0);
     if (executable == MAP_FAILED) {
         return -1;
