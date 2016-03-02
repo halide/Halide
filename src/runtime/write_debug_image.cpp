@@ -32,7 +32,7 @@ WEAK int16_t pixel_type_to_tiff_sample_type[] = {
 #pragma pack(2)
 
 struct tiff_tag {
-    int16_t tag_code;
+    uint16_t tag_code;
     int16_t type_code;
     int32_t count;
     union {
@@ -41,21 +41,21 @@ struct tiff_tag {
         int32_t i32;
     } value;
 
-    void assign16(int16_t tag_code, int32_t count, int16_t value) __attribute__((always_inline)) {
+    void assign16(uint16_t tag_code, int32_t count, int16_t value) __attribute__((always_inline)) {
         this->tag_code = tag_code;
         this->type_code = 3;
         this->count = count;
         this->value.i16 = value;
     }
 
-    void assign32(int16_t tag_code, int32_t count, int32_t value) __attribute__((always_inline)) {
+    void assign32(uint16_t tag_code, int32_t count, int32_t value) __attribute__((always_inline)) {
         this->tag_code = tag_code;
         this->type_code = 4;
         this->count = count;
         this->value.i32 = value;
     }
 
-    void assign32(int16_t tag_code, int16_t type_code, int32_t count, int32_t value)  __attribute__((always_inline)) {
+    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value)  __attribute__((always_inline)) {
         this->tag_code = tag_code;
         this->type_code = type_code;
         this->count = count;

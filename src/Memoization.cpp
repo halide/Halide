@@ -90,9 +90,9 @@ public:
         } else if (info.type.is_handle()) {
             internal_error << "Handle parameter " << parameter.name() <<
                 " encountered in computed_cached computation.\n" <<
-                "Computations which depend on buffer parameters " <<
+                "Computations which depend on handle parameters " <<
                 "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for buffer.\n";
+                "Use memoize_tag to provide cache key information for handle.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);
@@ -268,9 +268,9 @@ public:
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
-        static int32_t memoize_instance = 0;
+        static std::atomic<int> memoize_instance {0};
         writes.push_back(Store::make(key_name,
-                                     memoize_instance++, // Use and increment counter
+                                     memoize_instance++,
                                      (index / Int(32).bytes())));
         alignment += 4;
         index += 4;

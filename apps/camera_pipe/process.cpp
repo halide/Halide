@@ -5,6 +5,7 @@
 #include "curved.h"
 #include "halide_image.h"
 #include "halide_image_io.h"
+#include "halide_malloc_trace.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -20,9 +21,19 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+#ifdef HL_MEMINFO
+    halide_enable_malloc_trace();
+#endif
+
     Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "%d %d\n", input.width(), input.height());
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
+
+#ifdef HL_MEMINFO
+    info(input, "input");
+    stats(input, "input");
+    // dump(input, "input");
+#endif
 
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
@@ -55,17 +66,19 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
     save_image(output, argv[6]);
 
+    Image<uint8_t> output_c(output.width(), output.height(), output.channels());
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
+        FCam::demosaic(input, output_c, color_temp, contrast, true, 25, 1023, gamma);
     });
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
-    save_image(output, "fcam_c.png");
+    save_image(output_c, "fcam_c.png");
 
-    best = benchmark(timing_iterations, 1, [&]() {;
-        FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
+    Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
+    best = benchmark(timing_iterations, 1, [&]() {
+        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, 25, 1023, gamma);
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    save_image(output, "fcam_arm.png");
+    save_image(output_asm, "fcam_arm.png");
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms

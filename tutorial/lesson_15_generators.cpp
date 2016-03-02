@@ -4,7 +4,7 @@
 // resuable components called generators.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_15*.cpp ../tools/GenGen.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_15_generate
+// g++ lesson_15*.cpp ../tools/GenGen.cpp -g -std=c++11 -fno-rtti -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 
 // On os x:
@@ -169,4 +169,3 @@ RegisterGenerator<MySecondGenerator> my_second_generator{"my_second_generator"};
 
 // After compiling this file, see how to use it in
 // lesson_15_generators_build.sh
-

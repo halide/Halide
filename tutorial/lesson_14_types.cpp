@@ -44,12 +44,12 @@ int main(int argc, char **argv) {
         // You can programmatically examine the properties of a Halide
         // type. This is useful when you write a C++ function that has
         // Expr arguments and you wish to check their types:
-        assert(UInt(8).bits == 8);
+        assert(UInt(8).bits() == 8);
         assert(Int(8).is_int());
 
         // You can also programmatically construct Types as a function of other Types.
         Type t = UInt(8);
-        t.bits *= 2;
+        t = t.with_bits(t.bits() * 2);
         assert(t == UInt(16));
 
         // Or construct a Type from a C++ scalar type
@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
 
         // Handles are always stored as 64-bit, regardless of the compilation
         // target.
-        assert(Handle().bits == 64);
+        assert(Handle().bits() == 64);
 
         // The main use of an Expr of type Handle is to pass
         // it through Halide to other external code.
@@ -228,8 +228,7 @@ Expr average(Expr a, Expr b) {
     // For integer types, we must compute the intermediate value in a
     // wider type to avoid overflow.
     Type narrow = a.type();
-    Type wider = narrow;
-    wider.bits *= 2;
+    Type wider = narrow.with_bits(narrow.bits() * 2);
     a = cast(wider, a);
     b = cast(wider, b);
     return cast(narrow, (a + b)/2);

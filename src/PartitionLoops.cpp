@@ -494,6 +494,9 @@ class PartitionLoops : public IRMutator {
             std::sort(min_vals.begin(), min_vals.end(), IRDeepCompare());
             min_vals.push_back(op->min);
             prologue_val = fold_left(min_vals, Max::make);
+            // Stop the prologue from running past the end of the loop
+            prologue_val = min(prologue_val, op->extent + op->min);
+            // prologue_val = print(prologue_val, prologue_name);
             min_steady = Variable::make(Int(32), prologue_name);
 
             internal_assert(!expr_uses_var(prologue_val, op->name));
@@ -505,6 +508,7 @@ class PartitionLoops : public IRMutator {
             if (make_prologue) {
                 epilogue_val = max(epilogue_val, prologue_val);
             }
+            // epilogue_val = print(epilogue_val, epilogue_name);
             max_steady = Variable::make(Int(32), epilogue_name);
 
             internal_assert(!expr_uses_var(epilogue_val, op->name));
@@ -557,6 +561,23 @@ class PartitionLoops : public IRMutator {
     }
 };
 
+class ExprContainsLoad : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Load *op) {
+        result = true;
+    }
+
+public:
+    bool result = false;
+};
+
+bool expr_contains_load(Expr e) {
+    ExprContainsLoad l;
+    e.accept(&l);
+    return l.result;
+}
+
 // The loop partitioning logic can introduce if and let statements in
 // between GPU loop levels. This pass moves them inwards or outwards.
 class RenormalizeGPULoops : public IRMutator {
@@ -564,7 +585,7 @@ class RenormalizeGPULoops : public IRMutator {
 
     using IRMutator::visit;
 
-    // Track all vars that depend on GPU loop indices
+    // Track all vars that depend on GPU loop indices or loops inside GPU kernels.
     Scope<int> gpu_vars;
 
     vector<pair<string, Expr> > lifted_lets;
@@ -579,7 +600,7 @@ class RenormalizeGPULoops : public IRMutator {
 
         bool old_in_gpu_loop = in_gpu_loop;
 
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (in_gpu_loop || CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             gpu_vars.push(op->name, 0);
             in_gpu_loop = true;
         }
@@ -597,8 +618,6 @@ class RenormalizeGPULoops : public IRMutator {
         }
 
         in_gpu_loop = old_in_gpu_loop;
-
-
     }
 
     void visit(const LetStmt *op) {
@@ -607,7 +626,7 @@ class RenormalizeGPULoops : public IRMutator {
             return;
         }
 
-        if (!expr_uses_vars(op->value, gpu_vars)) {
+        if (!expr_uses_vars(op->value, gpu_vars) && !expr_contains_load(op->value)) {
             // This let value doesn't depend in the gpu vars. We
             // should lift it outermost. Note that this might expand
             // its scope to encompass other uses of the same name, so
@@ -619,12 +638,12 @@ class RenormalizeGPULoops : public IRMutator {
             return;
         }
 
+        gpu_vars.push(op->name, 0);
+
         if (in_thread_loop) {
             IRMutator::visit(op);
             return;
         }
-
-        gpu_vars.push(op->name, 0);
 
         Stmt body = mutate(op->body);
         const For *f = body.as<For>();
@@ -637,10 +656,19 @@ class RenormalizeGPULoops : public IRMutator {
             inner = For::make(f->name, f->min, f->extent, f->for_type, f->device_api, inner);
             stmt = mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
-            internal_assert(a->name == "__shared");
-            Stmt inner = LetStmt::make(op->name, op->value, a->body);
-            inner = Allocate::make(a->name, a->type, a->extents, a->condition, inner);
-            stmt = mutate(inner);
+            internal_assert(a->name == "__shared" && a->extents.size() == 1);
+            if (expr_uses_var(a->extents[0], op->name)) {
+                // This var depends on the block index, and is used to
+                // define the size of shared memory. Can't move it
+                // inwards or outwards. Codegen will have to deal with
+                // it when it deduces how much shared memory to
+                // allocate.
+                IRMutator::visit(op);
+            } else {
+                Stmt inner = LetStmt::make(op->name, op->value, a->body);
+                inner = Allocate::make(a->name, a->type, a->extents, a->condition, inner);
+                stmt = mutate(inner);
+            }
         } else {
             IRMutator::visit(op);
         }

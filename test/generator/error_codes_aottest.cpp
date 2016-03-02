@@ -5,7 +5,7 @@
 
 #include "error_codes.h"
 
-extern "C" void halide_error(void *user_context, const char *msg) {
+void my_halide_error(void *user_context, const char *msg) {
     // Silently drop the error
     //printf("%s\n", msg);
 }
@@ -19,6 +19,8 @@ void check(int result, int correct) {
 
 int main(int argc, char **argv) {
 
+    halide_set_error_handler(&my_halide_error);
+  
     buffer_t in = {0}, out = {0};
 
     in.host = (uint8_t *)malloc(64*64*4);

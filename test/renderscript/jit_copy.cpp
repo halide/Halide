@@ -200,9 +200,7 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
         .set_stride(2, 1)
         .set_bounds(2, 0, channels);  // expecting interleaved image
     uint8_t *in_buf = new uint8_t[128 * 128 * channels];
-    uint8_t *out_buf = new uint8_t[128 * 128 * channels];
     Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, channels);
-    Image<uint8_t> out = make_interleaved_image(out_buf, 128, 128, channels);
     input8.set(in);
 
     Var x, y, c;
@@ -222,10 +220,10 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
         vectorized?
             new ValidateInterleavedVectorizedPipeline(channels):
             new ValidateInterleavedPipeline(channels));
-    result.realize(out);
+
+    result.compile_jit();
 
     delete[] in_buf;
-    delete[] out_buf;
 }
 
 int main(int argc, char **argv) {
