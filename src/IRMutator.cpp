@@ -36,7 +36,7 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     } else {
         *expr = T::make(a, b);
     }
-    *stmt = NULL;
+    *stmt = nullptr;
 }
 }
 

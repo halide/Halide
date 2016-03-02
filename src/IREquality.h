@@ -94,7 +94,7 @@ struct ExprWithCompareCache {
     Expr expr;
     mutable IRCompareCache *cache;
 
-    ExprWithCompareCache() : cache(NULL) {}
+    ExprWithCompareCache() : cache(nullptr) {}
     ExprWithCompareCache(const Expr &e, IRCompareCache *c) : expr(e), cache(c) {}
 
     /** The comparison uses (and updates) the cache */

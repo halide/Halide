@@ -43,7 +43,7 @@ CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
-    internal_assert(module != NULL);
+    internal_assert(module != nullptr);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 

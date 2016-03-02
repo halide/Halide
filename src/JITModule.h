@@ -51,7 +51,7 @@ struct JITModule {
     struct Symbol {
         void *address;
         llvm::Type *llvm_type;
-        Symbol() : address(NULL), llvm_type(NULL) {}
+        Symbol() : address(nullptr), llvm_type(nullptr) {}
         Symbol(void *address, llvm::Type *llvm_type) : address(address), llvm_type(llvm_type) {}
     };
 
@@ -73,14 +73,14 @@ struct JITModule {
      * on the Argument vector passed to CodeGen_LLVM::compile. Image
      * parameters become (buffer_t *), and scalar parameters become
      * pointers to the appropriate values. The final argument is a
-     * pointer to the buffer_t defining the output. This will be NULL for
+     * pointer to the buffer_t defining the output. This will be nullptr for
      * a JITModule which has not yet been compiled or one that is not
      * a Halide Func compilation at all. */
     EXPORT void *main_function() const;
 
     /** Returns the Symbol structure for the routine documented in
      * main_function. Returning a Symbol allows access to the LLVM
-     * type as well as the address. The address and type will be NULL
+     * type as well as the address. The address and type will be nullptr
      * if the module has not been compiled. */
     EXPORT Symbol entrypoint_symbol() const;
 
@@ -88,14 +88,14 @@ struct JITModule {
      * corresponding to the entrypoint. The argv wrapper is callable
      * via an array of void * pointers to the arguments for the
      * call. Returning a Symbol allows access to the LLVM type as well
-     * as the address. The address and type will be NULL if the module
+     * as the address. The address and type will be nullptr if the module
      * has not been compiled. */
     EXPORT Symbol argv_entrypoint_symbol() const;
 
     /** A slightly more type-safe wrapper around the raw halide
      * module. Takes it arguments as an array of pointers that
      * correspond to the arguments to \ref main_function . This will
-     * be NULL for a JITModule which has not yet been compiled or one
+     * be nullptr for a JITModule which has not yet been compiled or one
      * that is not a Halide Func compilation at all. */
     // @{
     typedef int (*argv_wrapper)(const void **args);
@@ -148,9 +148,9 @@ struct JITHandlers {
     int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
     void (*custom_error)(void *, const char *);
     int32_t (*custom_trace)(void *, const halide_trace_event *);
-    JITHandlers() : custom_print(NULL), custom_malloc(NULL), custom_free(NULL),
-                    custom_do_task(NULL), custom_do_par_for(NULL),
-                    custom_error(NULL), custom_trace(NULL) {
+    JITHandlers() : custom_print(nullptr), custom_malloc(nullptr), custom_free(nullptr),
+                    custom_do_task(nullptr), custom_do_par_for(nullptr),
+                    custom_error(nullptr), custom_trace(nullptr) {
     }
 };
 

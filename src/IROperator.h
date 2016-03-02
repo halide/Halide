@@ -24,15 +24,15 @@ EXPORT bool is_const(Expr e);
 EXPORT bool is_const(Expr e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
- * a pointer to its value. Otherwise returns NULL. */
+ * a pointer to its value. Otherwise returns nullptr. */
 EXPORT const int64_t *as_const_int(Expr e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
- * a pointer to its value. Otherwise returns NULL. */
+ * a pointer to its value. Otherwise returns nullptr. */
 EXPORT const uint64_t *as_const_uint(Expr e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
- * return a pointer to its value. Otherwise returns NULL. */
+ * return a pointer to its value. Otherwise returns nullptr. */
 EXPORT const double *as_const_float(Expr e);
 
 /** Is the expression a constant integer power of two. Also returns

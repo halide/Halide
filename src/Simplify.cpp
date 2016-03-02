@@ -376,21 +376,21 @@ private:
 
         const Div *div_a = a.as<Div>();
 
-        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
+        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
         const Mod *mod_a = a.as<Mod>();
         const Mod *mod_b = b.as<Mod>();
 
-        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>(): NULL;
-        const Mod *mod_a_a = add_a ? add_a->a.as<Mod>(): NULL;
-        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>(): NULL;
-        const Mod *mod_a_b = add_a ? add_a->b.as<Mod>(): NULL;
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>(): nullptr;
+        const Mod *mod_a_a = add_a ? add_a->a.as<Mod>(): nullptr;
+        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>(): nullptr;
+        const Mod *mod_a_b = add_a ? add_a->b.as<Mod>(): nullptr;
 
         const Min *min_a = a.as<Min>();
         const Max *max_a = a.as<Max>();
-        const Sub *sub_a_a = min_a ? min_a->a.as<Sub>() : NULL;
-        const Sub *sub_a_b = min_a ? min_a->b.as<Sub>() : NULL;
-        const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
-        const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
+        const Sub *sub_a_a = min_a ? min_a->a.as<Sub>() : nullptr;
+        const Sub *sub_a_b = min_a ? min_a->b.as<Sub>() : nullptr;
+        const Add *add_a_a = min_a ? min_a->a.as<Add>() : nullptr;
+        const Add *add_a_b = min_a ? min_a->b.as<Add>() : nullptr;
         sub_a_a = max_a ? max_a->a.as<Sub>() : sub_a_a;
         sub_a_b = max_a ? max_a->b.as<Sub>() : sub_a_b;
         add_a_a = max_a ? max_a->a.as<Add>() : add_a_a;
@@ -692,12 +692,12 @@ private:
         const Mul *mul_b = b.as<Mul>();
 
         const Min *min_b = b.as<Min>();
-        const Add *add_b_a = min_b ? min_b->a.as<Add>() : NULL;
-        const Add *add_b_b = min_b ? min_b->b.as<Add>() : NULL;
+        const Add *add_b_a = min_b ? min_b->a.as<Add>() : nullptr;
+        const Add *add_b_b = min_b ? min_b->b.as<Add>() : nullptr;
 
         const Min *min_a = a.as<Min>();
-        const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
-        const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
+        const Add *add_a_a = min_a ? min_a->a.as<Add>() : nullptr;
+        const Add *add_a_b = min_a ? min_a->b.as<Add>() : nullptr;
 
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
@@ -1083,9 +1083,9 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Div *div_a = a.as<Div>();
-        const Div *div_a_a = NULL;
-        const Mul *mul_a_a = NULL;
-        const Mul *mul_a_b = NULL;
+        const Div *div_a_a = nullptr;
+        const Mul *mul_a_a = nullptr;
+        const Mul *mul_a_b = nullptr;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
@@ -1256,8 +1256,8 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Mul *mul_a = a.as<Mul>();
         const Add *add_a = a.as<Add>();
-        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : NULL;
-        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : NULL;
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : nullptr;
+        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : nullptr;
         const Ramp *ramp_a = a.as<Ramp>();
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
@@ -1403,9 +1403,9 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
-        const Min *min_a_a = min_a ? min_a->a.as<Min>() : NULL;
-        const Min *min_a_a_a = min_a_a ? min_a_a->a.as<Min>() : NULL;
-        const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
+        const Min *min_a_a = min_a ? min_a->a.as<Min>() : nullptr;
+        const Min *min_a_a_a = min_a_a ? min_a_a->a.as<Min>() : nullptr;
+        const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : nullptr;
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
         const Call *call_a = a.as<Call>();
@@ -1743,9 +1743,9 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
-        const Max *max_a_a = max_a ? max_a->a.as<Max>() : NULL;
-        const Max *max_a_a_a = max_a_a ? max_a_a->a.as<Max>() : NULL;
-        const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : NULL;
+        const Max *max_a_a = max_a ? max_a->a.as<Max>() : nullptr;
+        const Max *max_a_a_a = max_a_a ? max_a_a->a.as<Max>() : nullptr;
+        const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : nullptr;
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
         const Call *call_a = a.as<Call>();
@@ -2151,7 +2151,7 @@ private:
         const Min *min_b = b.as<Min>();
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
-        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
+        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
@@ -2930,7 +2930,7 @@ private:
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
             vector<Expr> new_args;
-            const StringImm *last = NULL;
+            const StringImm *last = nullptr;
             for (size_t i = 0; i < op->args.size(); i++) {
                 Expr arg = mutate(op->args[i]);
                 if (!arg.same_as(op->args[i])) {
@@ -3057,7 +3057,7 @@ private:
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
-            const Variable *var_b = NULL;
+            const Variable *var_b = nullptr;
             if (add) {
                 var_b = add->b.as<Variable>();
             } else if (sub) {
