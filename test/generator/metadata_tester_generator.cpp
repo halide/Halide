@@ -22,7 +22,7 @@ public:
     Param<uint64_t> u64{ "u64", 640, 64, 2550 };
     Param<float> f32{ "f32", 32.1234f, -3200.1234f, 3200.1234f };
     Param<double> f64{ "f64", 64.25f, -6400.25f, 6400.25f };
-    Param<void *> h{ "h", NULL };
+    Param<void *> h{ "h", nullptr };
 
     Func build() {
         input = ImageParam(input_type, input.dimensions(), input.name());

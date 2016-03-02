@@ -662,7 +662,7 @@ public:
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
-     * it to NULL if you wish to retain ownership of the object. */
+     * it to nullptr if you wish to retain ownership of the object. */
     EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass, void (*deleter)(Internal::IRMutator *));
 
     /** Remove all previously-set custom lowering passes */
