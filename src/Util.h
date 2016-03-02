@@ -57,6 +57,16 @@ DstType reinterpret_bits(const SrcType &src) {
  * debug symbols, just uses unique_name with the given prefix. */
 EXPORT std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
 
+/** Get value of an environment variable. Returns its value
+ * is defined in the environment. Input: env_var_name. Output: var_defined.
+ * Sets to true var_defined if the environment var is defined; false otherwise.
+ */
+EXPORT std::string get_env_variable(char const *env_var_name, size_t &var_defined);
+
+/** Get the name of the currently running executable. Platform-specific.
+ * If program name cannot be retrieved, function returns an empty string. */
+EXPORT std::string running_program_name();
+
 /** Generate a unique name starting with the given character. It's
  * unique relative to all other calls to unique_name done by this
  * process. Not thread-safe. */

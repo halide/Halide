@@ -27,17 +27,6 @@ else()
   message(WARNING "Internal tests disabled")
 endif()
 
-# Generate the Halide runtime object file used by pure runtime tests
-set(HALIDE_RUNTIME_DIR "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build")
-set(HALIDE_RUNTIME_FILE_NAME "halide_runtime.debug${CMAKE_CXX_OUTPUT_EXTENSION}")
-set(HALIDE_RUNTIME_FILE_PATH "${HALIDE_RUNTIME_DIR}/${HALIDE_RUNTIME_FILE_NAME}")
-add_custom_command(OUTPUT "${HALIDE_RUNTIME_FILE_PATH}"
-                   COMMAND runtime.generator
-                           -r "${HALIDE_RUNTIME_FILE_NAME}"
-                           -o "${HALIDE_RUNTIME_DIR}"
-                           "target=host-debug"
-                  )
-
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
   if (WIN32)
@@ -45,19 +34,8 @@ function(tests folder)
   endif()
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
-    if (${name} MATCHES "^runtime_")
-      # By convention test names that start with the ``runtime_`` prefix
-      # are treated as pure runtime tests so the test will not be linked against
-      # libHalide and instead is linked against's Halide's generated runtime
-      add_executable("${folder}_${name}" "${folder}/${file}" "${HALIDE_RUNTIME_FILE_PATH}")
-      target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
-      if (NOT WIN32)
-        target_link_libraries("${folder}_${name}" dl pthread z)
-      endif()
-    else()
-      # Test links against libHalide
-      halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
-    endif()
+    # Test links against libHalide
+    halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
   endforeach()
 endfunction(tests)
 
@@ -221,8 +199,12 @@ if (WITH_TEST_GENERATORS)
     target_include_directories("${TEST_RUNNER}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
     set_target_properties("${TEST_RUNNER}" PROPERTIES FOLDER "generator")
     if (WIN32)
-      # /FORCE:multiple allows clobbering the halide runtime symbols in the lib
-      set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple")
+      if (MSVC)
+        # /FORCE:multiple allows clobbering the halide runtime symbols in the lib
+        set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple")
+      else()
+        set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "-Wl,--allow-multiple-definition")
+      endif()
     else()
       target_link_libraries("${TEST_RUNNER}" dl pthread z)
       set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "-L ${SCRATCH_DIR}")

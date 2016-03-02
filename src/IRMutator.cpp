@@ -106,14 +106,14 @@ void IRMutator::visit(const Ramp *op) {
         stride.same_as(op->stride)) {
         expr = op;
     } else {
-        expr = Ramp::make(base, stride, op->width);
+        expr = Ramp::make(base, stride, op->lanes);
     }
 }
 
 void IRMutator::visit(const Broadcast *op) {
     Expr value = mutate(op->value);
     if (value.same_as(op->value)) expr = op;
-    else expr = Broadcast::make(value, op->width);
+    else expr = Broadcast::make(value, op->lanes);
 }
 
 void IRMutator::visit(const Call *op) {

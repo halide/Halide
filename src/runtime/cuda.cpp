@@ -37,7 +37,7 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
         "/Library/Frameworks/CUDA.framework/CUDA",
 #endif
     };
-    for (int i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
+    for (size_t i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
         lib_cuda = halide_load_library(lib_names[i]);
         if (lib_cuda) {
             debug(user_context) << "    Loaded CUDA runtime library: " << lib_names[i] << "\n";
@@ -193,8 +193,29 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     }
 
     int device = halide_get_gpu_device(user_context);
-    if (device == -1) {
-        device = deviceCount - 1;
+    if (device == -1 && deviceCount == 1) {
+        device = 0;
+    } else if (device == -1) {
+        debug(user_context) << "CUDA: Multiple CUDA devices detected. Selecting the one with the most cores.\n";
+        int best_core_count = 0;
+        for (int i = 0; i < deviceCount; i++) {
+            CUdevice dev;
+            CUresult status = cuDeviceGet(&dev, i);
+            if (status != CUDA_SUCCESS) {
+                debug(user_context) << "      Failed to get device " << i << "\n";
+                continue;
+            }
+            int core_count = 0;
+            status = cuDeviceGetAttribute(&core_count, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, dev);
+            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
+            if (status != CUDA_SUCCESS) {
+                continue;
+            }
+            if (core_count >= best_core_count) {
+                device = i;
+                best_core_count = core_count;
+            }
+        }
     }
 
     // Get device
@@ -451,7 +472,10 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // It's possible that this is being called from the destructor of
         // a static variable, in which case the driver may already be
         // shutting down.
-        err = cuCtxSynchronize();
+        err = cuCtxPushCurrent(ctx);
+        if (err != CUDA_SUCCESS) {
+            err = cuCtxSynchronize();
+        }
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
         // Unload the modules attached to this context. Note that the list
@@ -469,6 +493,9 @@ WEAK int halide_cuda_device_release(void *user_context) {
             }
             state = state->next;
         }
+
+        CUcontext old_ctx;
+        cuCtxPopCurrent(&old_ctx);
 
         // Only destroy the context if we own it
         if (ctx == context) {
@@ -567,10 +594,12 @@ WEAK int halide_cuda_copy_to_device(void *user_context, buffer_t* buf) {
 
     device_copy c = make_host_to_device_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
@@ -620,10 +649,12 @@ WEAK int halide_cuda_copy_to_host(void *user_context, buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
