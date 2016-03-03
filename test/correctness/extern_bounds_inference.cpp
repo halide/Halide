@@ -10,7 +10,7 @@
 // An extern stage that translates.
 extern "C" DLLEXPORT int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
 
-    if (in->host == NULL) {
+    if (in->host == nullptr) {
         in->dim[0].min = out->dim[0].min + dx;
         in->dim[1].min = out->dim[1].min + dy;
         in->dim[0].extent = out->dim[0].extent;

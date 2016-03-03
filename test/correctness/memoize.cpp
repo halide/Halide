@@ -59,7 +59,7 @@ extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, halide_buffe
 int call_count_staged[4];
 
 extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_buffer_t *in, halide_buffer_t *out) {
-    if (in->host == NULL) {
+    if (in->host == nullptr) {
         for (int i = 0; i < out->dimensions; i++) {
             in->dim[i] = out->dim[i];
         }
@@ -82,7 +82,7 @@ void simple_free(void *user_context, void *ptr) {
 
 void *flakey_malloc(void */* user_context */, size_t x) {
     if ((rand() % 4) == 0) {
-        return NULL;
+        return nullptr;
     } else {
         return malloc(x);
     }

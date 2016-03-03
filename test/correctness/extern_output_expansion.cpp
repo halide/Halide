@@ -11,14 +11,14 @@
 extern "C" DLLEXPORT int extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     assert(in->type == halide_type_of<int>());
     assert(out->type == halide_type_of<int>());
-    if (in->host == NULL || out->host == NULL) {
+    if (in->host == nullptr || out->host == nullptr) {
         // We require input size = output size, and just for fun,
         // we'll require that the output size must be a multiple of 17
 
-        if (out->host == NULL) {
+        if (out->host == nullptr) {
             out->dim[0].extent = ((out->dim[0].extent + 16)/17)*17;
         }
-        if (in->host == NULL) {
+        if (in->host == nullptr) {
             in->dim[0].extent = out->dim[0].extent;
             in->dim[0].min = out->dim[0].min;
         }

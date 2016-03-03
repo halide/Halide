@@ -22,7 +22,7 @@ extern "C" DLLEXPORT int copy(halide_buffer_t *in, halide_buffer_t *out) {
     dump_buffer_shape(in);
     */
 
-    if (in->host == NULL) {
+    if (in->host == nullptr) {
         // Give it the same shape as the output
         in->dim[0] = out->dim[0];
         in->dim[1] = out->dim[1];
