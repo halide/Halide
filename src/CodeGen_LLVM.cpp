@@ -318,6 +318,7 @@ void CodeGen_LLVM::initialize_llvm() {
     // in llvm configuration
     if (!llvm_initialized) {
 
+        #if LLVM_VERSION >= 36
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
         size_t defined = 0;
@@ -331,6 +332,7 @@ void CodeGen_LLVM::initialize_llvm() {
             }
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
         }
+        #endif
 
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
