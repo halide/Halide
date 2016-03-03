@@ -91,8 +91,8 @@ int main(int argc, char **argv) {
     in.extent[0] = 64;
     out.extent[0] = 64;
 
-    // You can't pass NULL as a buffer_t argument.
-    result = error_codes(NULL, 64, &out);
+    // You can't pass nullptr as a buffer_t argument.
+    result = error_codes(nullptr, 64, &out);
     correct = halide_error_code_buffer_argument_is_null;
     check(result, correct);
 

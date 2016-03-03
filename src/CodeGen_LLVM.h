@@ -140,7 +140,7 @@ protected:
 
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
-     * returns NULL. */
+     * returns nullptr. */
     llvm::Value* sym_get(const std::string &name,
                          bool must_succeed = true) const;
 
@@ -246,7 +246,7 @@ protected:
      * null), or evaluates and returns the message, which must be an
      * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = NULL);
+    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
 
     /** Return the the pipeline with the given error code. Will run
@@ -421,7 +421,7 @@ protected:
      *
      * So for a 5-wide vector, it tries: 5, 8, 4, 2, 16.
      *
-     * If there's no match, returns (NULL, 0).
+     * If there's no match, returns (nullptr, 0).
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 

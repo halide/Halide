@@ -342,7 +342,7 @@ public:
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
-     * it to NULL if you wish to retain ownership of the object. */
+     * it to nullptr if you wish to retain ownership of the object. */
     EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass,
                                          void (*deleter)(Internal::IRMutator *));
 
@@ -468,7 +468,7 @@ void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
 }
 
 struct JITExtern {
-    // assert pipeline.defined() == (c_function == NULL) -- strictly one or the other
+    // assert pipeline.defined() == (c_function == nullptr) -- strictly one or the other
     // which should be enforced by the constructors.
     Pipeline pipeline;
 

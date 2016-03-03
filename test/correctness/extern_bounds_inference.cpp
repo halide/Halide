@@ -10,7 +10,7 @@
 // An extern stage that translates.
 extern "C" DLLEXPORT int translate(buffer_t *in, int dx, int dy, buffer_t *out) {
 
-    if (in->host == NULL) {
+    if (in->host == nullptr) {
         in->min[0] = out->min[0] + dx;
         in->min[1] = out->min[1] + dy;
         in->extent[0] = out->extent[0];

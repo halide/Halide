@@ -936,7 +936,7 @@ public:
 
     }
     virtual void visit(const Let *op) {
-        stmt = NULL;
+        stmt = nullptr;
 
         Stmt mutated_value = mutate(op->value);
         Stmt mutated_body = mutate(op->body);
