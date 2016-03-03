@@ -278,7 +278,7 @@ void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, const std::string
 
 void compile_llvm_module_to_llvm_assembly(llvm::Module &module, const std::string &filename) {
     llvm::raw_fd_ostream *file = new_raw_fd_ostream(filename);
-    module.print(*file, NULL);
+    module.print(*file, nullptr);
     delete file;
 }
 

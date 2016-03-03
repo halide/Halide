@@ -357,7 +357,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                         // The arm32 llvm backend wants right shifts to come in as negative values.
                         shift_amount = -shift_amount;
                     }
-                    Value *shift = NULL;
+                    Value *shift = nullptr;
                     // The arm64 llvm backend wants i32 constants for right shifts.
                     if (target.bits == 64 && pattern.type == Pattern::RightShift) {
                         shift = ConstantInt::get(i32, shift_amount);
@@ -453,7 +453,7 @@ void CodeGen_ARM::visit(const Mul *op) {
             if (expr_match(pattern.pattern, op, matches)) {
                 llvm::Type *t_arg = llvm_type_of(matches[0].type());
                 llvm::Type *t_result = llvm_type_of(op->type);
-                Value *shift = NULL;
+                Value *shift = nullptr;
                 if (target.bits == 32) {
                     shift = ConstantInt::get(t_arg, shift_amount);
                 } else {
@@ -656,7 +656,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         } else if (op->type.bits() == 64) {
             a = ConstantFP::getNegativeZero(f64);
         } else {
-            a = NULL;
+            a = nullptr;
             internal_error << "Unknown bit width for floating point type: " << op->type << "\n";
         }
 
@@ -1021,7 +1021,7 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
-    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
     // If the stride is one or minus one, we can deal with that using vanilla codegen
     if (stride && (stride->value == 1 || stride->value == -1)) {
@@ -1039,7 +1039,7 @@ void CodeGen_ARM::visit(const Load *op) {
         ModulusRemainder mod_rem = modulus_remainder(ramp->base);
 
         const Add *add = base.as<Add>();
-        const IntImm *add_b = add ? add->b.as<IntImm>() : NULL;
+        const IntImm *add_b = add ? add->b.as<IntImm>() : nullptr;
 
         if ((mod_rem.modulus % stride->value) == 0) {
             offset = mod_rem.remainder % stride->value;
@@ -1129,7 +1129,7 @@ void CodeGen_ARM::visit(const Load *op) {
             Expr slice_base = simplify(base + i*ramp->stride);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-            CallInst *call = NULL;
+            CallInst *call = nullptr;
             if (target.bits == 32) {
                 // The arm32 versions always take an i8* pointer.
                 ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());

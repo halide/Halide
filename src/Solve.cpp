@@ -393,12 +393,12 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Div *div_a = a.as<Div>();
 
-        bool is_eq = Expr(op).as<EQ>() != NULL;
-        bool is_ne = Expr(op).as<NE>() != NULL;
-        bool is_lt = Expr(op).as<LT>() != NULL;
-        bool is_le = Expr(op).as<LE>() != NULL;
-        bool is_ge = Expr(op).as<GE>() != NULL;
-        bool is_gt = Expr(op).as<GT>() != NULL;
+        bool is_eq = Expr(op).as<EQ>() != nullptr;
+        bool is_ne = Expr(op).as<NE>() != nullptr;
+        bool is_lt = Expr(op).as<LT>() != nullptr;
+        bool is_le = Expr(op).as<LE>() != nullptr;
+        bool is_ge = Expr(op).as<GE>() != nullptr;
+        bool is_gt = Expr(op).as<GT>() != nullptr;
 
         expr = Expr();
 

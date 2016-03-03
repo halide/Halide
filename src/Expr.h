@@ -108,7 +108,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
     }
 
     /** Downcast this ir node to its actual type (e.g. Add, or
-     * Select). This returns NULL if the node is not of the requested
+     * Select). This returns nullptr if the node is not of the requested
      * type. Example usage:
      *
      * if (const Add *add = node->as<Add>()) {
@@ -119,7 +119,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
         if (ptr->type_info() == &T::_type_info) {
             return (const T *)ptr;
         }
-        return NULL;
+        return nullptr;
     }
 };
 
@@ -127,14 +127,14 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
 struct IntImm : public ExprNode<IntImm> {
     int64_t value;
 
-    static IntImm *make(Type t, int64_t value) {
+    static const IntImm *make(Type t, int64_t value) {
         internal_assert(t.is_int() && t.is_scalar()) << "IntImm must be a scalar Int\n";
         internal_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "IntImm must be 8, 16, 32, or 64-bit\n";
 
         if (t.bits() == 32 && value >= -8 && value <= 8 &&
-            !small_int_cache[(int)value + 8].ref_count.is_zero()) {
-            return &small_int_cache[(int)value + 8];
+            small_int_cache[(int)value + 8]) {
+            return small_int_cache[(int)value + 8];
         }
 
         IntImm *node = new IntImm;
@@ -149,14 +149,14 @@ struct IntImm : public ExprNode<IntImm> {
 
 private:
     /** ints from -8 to 8 */
-    EXPORT static IntImm small_int_cache[17];
+    EXPORT static const IntImm *small_int_cache[17];
 };
 
 /** Unsigned integer constants */
 struct UIntImm : public ExprNode<UIntImm> {
     uint64_t value;
 
-    static UIntImm *make(Type t, uint64_t value) {
+    static const UIntImm *make(Type t, uint64_t value) {
         internal_assert(t.is_uint() && t.is_scalar())
             << "UIntImm must be a scalar UInt\n";
         internal_assert(t.bits() == 1 || t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
@@ -175,7 +175,7 @@ struct UIntImm : public ExprNode<UIntImm> {
 struct FloatImm : public ExprNode<FloatImm> {
     double value;
 
-    static FloatImm *make(Type t, double value) {
+    static const FloatImm *make(Type t, double value) {
         internal_assert(t.is_float() && t.is_scalar()) << "FloatImm must be a scalar Float\n";
         FloatImm *node = new FloatImm;
         node->type = t;
@@ -201,7 +201,7 @@ struct FloatImm : public ExprNode<FloatImm> {
 struct StringImm : public ExprNode<StringImm> {
     std::string value;
 
-    static StringImm *make(const std::string &val) {
+    static const StringImm *make(const std::string &val) {
         StringImm *node = new StringImm;
         node->type = Handle();
         node->value = val;

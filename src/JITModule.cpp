@@ -17,12 +17,12 @@
 #ifdef _WIN32
 #include <windows.h>
 static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
+    return GetProcAddress(GetModuleHandle(nullptr), s) != nullptr;
 }
 #else
 #include <dlfcn.h>
 static bool have_symbol(const char *s) {
-    return dlsym(NULL, s) != NULL;
+    return dlsym(nullptr, s) != nullptr;
 }
 #endif
 
@@ -59,7 +59,7 @@ struct SharedOpenCLContext {
     cl_command_queue command_queue;
     volatile int lock;
 
-    SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
+    SharedOpenCLContext() : context(nullptr), command_queue(nullptr), lock(0) {
     }
 
     // We never free the context, for the same reason as above.
@@ -117,11 +117,11 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents() : execution_engine(NULL) {
+    JITModuleContents() : execution_engine(nullptr) {
     }
 
     ~JITModuleContents() {
-        if (execution_engine != NULL) {
+        if (execution_engine != nullptr) {
             execution_engine->runStaticConstructorsDestructors(true);
             delete execution_engine;
         }
@@ -157,7 +157,7 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
     void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
-        internal_error << "Compiling " << name << " returned NULL\n";
+        internal_error << "Compiling " << name << " returned nullptr\n";
     }
 
     JITModule::Symbol symbol(f, fn->getFunctionType());
@@ -165,7 +165,7 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
     debug(2) << "Function " << name << " is at " << f << "\n";
 
 #ifdef __arm__
-    if (start == NULL) {
+    if (start == nullptr) {
         start = (char *)f;
         end = (char *)f;
     } else {
@@ -284,7 +284,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     internal_assert(ee) << "Couldn't create execution engine\n";
 
     #ifdef __arm__
-    start = end = NULL;
+    start = end = nullptr;
     #endif
 
     // Do any target-specific initialization
@@ -423,7 +423,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module.ptr->context);
     llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
-    if (buffer_t == NULL) {
+    if (buffer_t == nullptr) {
         buffer_t = llvm::StructType::create(jit_module.ptr->context, "struct.buffer_t");
     }
     llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
@@ -457,7 +457,7 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
 }
 
 bool JITModule::compiled() const {
-  return jit_module.ptr->execution_engine != NULL;
+  return jit_module.ptr->execution_engine != nullptr;
 }
 
 namespace {
@@ -600,7 +600,8 @@ enum RuntimeKind {
 };
 
 JITModule &shared_runtimes(RuntimeKind k) {
-    static JITModule *m = NULL;
+    // We're already guarded by the shared_runtimes_mutex
+    static JITModule *m = nullptr;
     if (!m) {
         // Note that this is never freed. On windows this would invoke
         // static destructors that use threading objects, and these
