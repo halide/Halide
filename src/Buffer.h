@@ -69,14 +69,14 @@ public:
         }
     };
 
-    Buffer() : contents(NULL) {}
+    Buffer() : contents(nullptr) {}
 
     /** Make a new buffer of the given type with the given size. If
      * data is null the Buffer allocates and owns the memory. If data
      * is non-null then the Buffer points to it, but does not own it
      * and won't delete it. */
     EXPORT Buffer(Type t, const std::vector<int32_t> &sizes,
-                  uint8_t* data = NULL, const std::string &name = "");
+                  uint8_t* data = nullptr, const std::string &name = "");
 
     /** Wrap an existing halide_buffer_t. Makes a copy of the metadata
      * but not the data itself. */

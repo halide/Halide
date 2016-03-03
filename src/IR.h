@@ -273,7 +273,7 @@ struct Allocate : public StmtNode<Allocate> {
 
     // These override the code generator dependent malloc and free
     // equivalents if provided. If the new_expr succeeds, that is it
-    // returns non-NULL, the function named be free_function is
+    // returns non-nullptr, the function named be free_function is
     // guaranteed to be called. The free function signature must match
     // that of the code generator dependent free (typically
     // halide_free). If free_function is left empty, code generator

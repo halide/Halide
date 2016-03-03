@@ -183,7 +183,7 @@ namespace {
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp_one(Expr e) {
     const Ramp *r = e.as<Ramp>();
-    if (r == NULL) {
+    if (r == nullptr) {
         return Expr();
     }
 

@@ -513,15 +513,15 @@ private:
             internal_assert(call->args.size() > 0) << "RewriteMemoizedAllocations: create_buffer_t call with zero args.\n";
 
             const Call *arg0 = call->args[0].as<Call>();
-            if (arg0 != NULL && arg0->call_type == Call::Intrinsic && arg0->name == Call::address_of) {
+            if (arg0 != nullptr && arg0->call_type == Call::Intrinsic && arg0->name == Call::address_of) {
                 internal_assert(arg0->args.size() > 0) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
                 const Load *load = arg0->args[0].as<Load>();
-                if (load != NULL) {
+                if (load != nullptr) {
                     const IntImm *index = load->index.as<IntImm>();
 
-                    if (index != NULL && index->value == 0 &&
+                    if (index != nullptr && index->value == 0 &&
                         get_realization_name(load->name) == innermost_realization_name) {
-                        // Everything matches, rewrite create_buffer_t to use a NULL handle for address.
+                        // Everything matches, rewrite create_buffer_t to use a nullptr handle for address.
                         std::vector<Expr> args = call->args;
                         args[0] = Call::make(Handle(), Call::null_handle, {}, Call::Intrinsic);
                         expr = Call::make(Handle(), Call::create_buffer_t, args, Call::Intrinsic);

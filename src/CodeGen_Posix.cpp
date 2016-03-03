@@ -52,7 +52,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition,
                                                            Expr new_expr, std::string free_function) {
-    Value *llvm_size = NULL;
+    Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = 0;
     if (constant_allocation_size(extents, name, constant_bytes)) {
@@ -73,7 +73,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     }
 
     // Only allocate memory if the condition is true, otherwise 0.
-    if (llvm_size != NULL) {
+    if (llvm_size != nullptr) {
         Value *llvm_condition = codegen(condition);
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
@@ -83,16 +83,16 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     Allocation allocation;
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = new_expr.defined() ? 0 : stack_bytes;
-    allocation.ptr = NULL;
-    allocation.destructor = NULL;
-    allocation.destructor_function = NULL;
+    allocation.ptr = nullptr;
+    allocation.destructor = nullptr;
+    allocation.destructor_function = nullptr;
 
     if (!new_expr.defined() && stack_bytes != 0) {
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
         for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
             AllocaInst *alloca_inst = dyn_cast<AllocaInst>(free->ptr);
-            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : NULL;
+            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : nullptr;
             llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
             if (allocated_in == current_func &&

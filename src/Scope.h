@@ -84,7 +84,7 @@ private:
 
 
 public:
-    Scope() : containing_scope(NULL) {}
+    Scope() : containing_scope(nullptr) {}
 
     /** Set the parent scope. If lookups fail in this scope, they
      * check the containing scope before returning an error. Caller is

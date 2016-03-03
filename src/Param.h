@@ -271,7 +271,7 @@ public:
         int d;
     };
 
-    /** Construct a NULL image parameter handle. */
+    /** Construct a nullptr image parameter handle. */
     OutputImageParam() {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
@@ -283,7 +283,7 @@ public:
     /** Get the type of the image data this Param refers to */
     EXPORT Type type() const;
 
-    /** Is this parameter handle non-NULL */
+    /** Is this parameter handle non-nullptr */
     EXPORT bool defined() const;
 
     /** Get a handle on one of the dimensions for the purposes of
@@ -343,7 +343,7 @@ class ImageParam : public OutputImageParam {
 
 public:
 
-    /** Construct a NULL image parameter handle. */
+    /** Construct a nullptr image parameter handle. */
     ImageParam() : OutputImageParam() {}
 
     /** Construct an image parameter of the given type and

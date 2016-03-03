@@ -49,7 +49,7 @@ protected:
                                           bool placeholder_seen) const;
 public:
     /** Construct an undefined image handle */
-    ImageBase() : origin(NULL), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
+    ImageBase() : origin(nullptr), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
 
     /** Allocate an image with the given dimensions. */
     EXPORT ImageBase(Type t, const std::vector<int> &size, const std::string &name = "");

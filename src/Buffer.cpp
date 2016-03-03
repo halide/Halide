@@ -23,7 +23,7 @@ struct BufferContents {
     /** If we made the allocation ourselves via a Buffer constructor,
      * and hence should delete it when this buffer dies, then this
      * pointer is set to the memory we need to free. Otherwise it's
-     * NULL. */
+     * nullptr. */
     uint8_t *allocation;
 
     /** How many Buffer objects point to this BufferContents */
@@ -34,7 +34,7 @@ struct BufferContents {
 
     BufferContents(Type t, const std::vector<int> &sizes, uint8_t *data, const std::string &n) :
         buf {0},
-        allocation(NULL),
+        allocation(nullptr),
         name(n.empty() ? unique_name('b') : n) {
 
         user_assert(t.lanes() == 1) << "Can't create of a buffer of a vector type";
@@ -71,7 +71,7 @@ struct BufferContents {
 
     BufferContents(const halide_buffer_t *b, const std::string &n) :
         buf(*b),
-        allocation(NULL),
+        allocation(nullptr),
         name(n.empty() ? unique_name('b') : n) {
         if (b->dim) {
             shape = std::vector<halide_dimension_t>(b->dim, b->dim + b->dimensions);
@@ -87,7 +87,7 @@ EXPORT RefCount &ref_count<BufferContents>(const BufferContents *p) {
 
 template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
-    int error = halide_device_free(NULL, const_cast<halide_buffer_t *>(&p->buf));
+    int error = halide_device_free(nullptr, const_cast<halide_buffer_t *>(&p->buf));
     user_assert(!error) << "Failed to free device buffer\n";
     free(p->allocation);
 
@@ -196,19 +196,19 @@ Buffer::operator Argument() const {
 }
 
 int Buffer::copy_to_host() {
-    return halide_copy_to_host(NULL, raw_buffer());
+    return halide_copy_to_host(nullptr, raw_buffer());
 }
 
 int Buffer::device_sync() {
-    return halide_device_sync(NULL, raw_buffer());
+    return halide_device_sync(nullptr, raw_buffer());
 }
 
 int Buffer::copy_to_device() {
-  return halide_copy_to_device(NULL, raw_buffer(), NULL);
+  return halide_copy_to_device(nullptr, raw_buffer(), nullptr);
 }
 
 int Buffer::free_device_buffer() {
-    return halide_device_free(NULL, raw_buffer());
+    return halide_device_free(nullptr, raw_buffer());
 }
 
 

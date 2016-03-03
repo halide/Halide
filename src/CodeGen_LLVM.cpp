@@ -133,36 +133,36 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
-    function(NULL), context(NULL),
-    builder(NULL),
-    value(NULL),
-    very_likely_branch(NULL),
+    function(nullptr), context(nullptr),
+    builder(nullptr),
+    value(nullptr),
+    very_likely_branch(nullptr),
     target(t),
-    void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
-    f16(NULL), f32(NULL), f64(NULL),
-    buffer_t_type(NULL),
-    metadata_t_type(NULL),
-    argument_t_type(NULL),
-    scalar_value_t_type(NULL),
-    device_interface_t_type(NULL),
+    void_t(nullptr), i1(nullptr), i8(nullptr), i16(nullptr), i32(nullptr), i64(nullptr),
+    f16(nullptr), f32(nullptr), f64(nullptr),
+    buffer_t_type(nullptr),
+    metadata_t_type(nullptr),
+    argument_t_type(nullptr),
+    scalar_value_t_type(nullptr),
+    device_interface_t_type(nullptr),
 
     // Vector types. These need an LLVMContext before they can be initialized.
-    i8x8(NULL),
-    i8x16(NULL),
-    i8x32(NULL),
-    i16x4(NULL),
-    i16x8(NULL),
-    i16x16(NULL),
-    i32x2(NULL),
-    i32x4(NULL),
-    i32x8(NULL),
-    i64x2(NULL),
-    i64x4(NULL),
-    f32x2(NULL),
-    f32x4(NULL),
-    f32x8(NULL),
-    f64x2(NULL),
-    f64x4(NULL),
+    i8x8(nullptr),
+    i8x16(nullptr),
+    i8x32(nullptr),
+    i16x4(nullptr),
+    i16x8(nullptr),
+    i16x16(nullptr),
+    i32x2(nullptr),
+    i32x4(nullptr),
+    i32x8(nullptr),
+    i64x2(nullptr),
+    i64x4(nullptr),
+    f32x2(nullptr),
+    f32x4(nullptr),
+    f32x8(nullptr),
+    f64x2(nullptr),
+    f64x4(nullptr),
 
     // Wildcards for pattern matching
     wild_i8x8(Variable::make(Int(8, 8), "*")),
@@ -235,7 +235,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
-    destructor_block(NULL) {
+    destructor_block(nullptr) {
     initialize_llvm();
 }
 
@@ -292,7 +292,7 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
 
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
-        return NULL;
+        return nullptr;
 
     } else if (target.arch == Target::X86) {
         return make_codegen<CodeGen_X86>(target, context);
@@ -307,7 +307,7 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     }
     user_error << "Unknown target architecture: "
                << target.to_string() << "\n";
-    return NULL;
+    return nullptr;
 }
 
 void CodeGen_LLVM::initialize_llvm() {
@@ -529,7 +529,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     debug(1) << "Generating llvm bitcode for function " << name << "...\n";
 
     // Null out the destructor block.
-    destructor_block = NULL;
+    destructor_block = nullptr;
 
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
@@ -637,7 +637,7 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     }
 
     // Switch to the destructor block, and add code that cleans up
-    // this object if the contents of the stack slot is not NULL.
+    // this object if the contents of the stack slot is not nullptr.
     IRBuilderBase::InsertPoint here = builder->saveIP();
     BasicBlock *dtors = get_destructor_block();
 
@@ -914,7 +914,7 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
 
             internal_error << err.str();
         } else {
-            return NULL;
+            return nullptr;
         }
     }
     return symbol_table.get(name);
@@ -1156,7 +1156,7 @@ Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
 Value *CodeGen_LLVM::codegen(Expr e) {
     internal_assert(e.defined());
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
-    value = NULL;
+    value = nullptr;
     e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
     return value;
@@ -1165,7 +1165,7 @@ Value *CodeGen_LLVM::codegen(Expr e) {
 void CodeGen_LLVM::codegen(Stmt s) {
     internal_assert(s.defined());
     debug(3) << "Codegen: " << s << "\n";
-    value = NULL;
+    value = nullptr;
     s.accept(this);
 }
 
@@ -1664,7 +1664,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         value = load;
     } else {
         const Ramp *ramp = op->index.as<Ramp>();
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
         if (ramp && stride && stride->value == 1) {
             int alignment = op->type.bytes(); // The size of a single element
@@ -1727,7 +1727,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 // and do a different shuffle. This helps expressions like
                 // (f(2*x) + f(2*x+1) share loads
                 const Add *add = ramp->base.as<Add>();
-                const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
+                const IntImm *offset = add ? add->b.as<IntImm>() : nullptr;
                 if (offset && offset->value & 1) {
                     base_a -= 1;
                     shifted_a = true;
@@ -2981,7 +2981,7 @@ void CodeGen_LLVM::visit(const For *op) {
 
         // Save the destructor block
         BasicBlock *parent_destructor_block = destructor_block;
-        destructor_block = NULL;
+        destructor_block = nullptr;
 
         // Make a new scope to use
         Scope<Value *> saved_symbol_table;
@@ -3175,7 +3175,7 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
     codegen(op->value);
 
     // Discard result
-    value = NULL;
+    value = nullptr;
 }
 
 Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_initialize, const string &name) {
@@ -3379,7 +3379,7 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
         }
     }
 
-    return std::make_pair<llvm::Function *, int>(NULL, 0);
+    return std::make_pair<llvm::Function *, int>(nullptr, 0);
 }
 
 }}
