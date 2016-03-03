@@ -11,7 +11,12 @@ extern "C" {
 
 }
 
+#include "elf.h"
+
 #include "../HalideRuntime.h"
+
+typedef halide_hexagon_remote_handle_t handle_t;
+typedef halide_hexagon_remote_buffer buffer;
 
 
 void halide_print(void *user_context, const char *str) {
@@ -60,8 +65,10 @@ extern "C" {
 
 const int map_alignment = 4096;
 
-int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen, int init_runtime_offset,
-                                             halide_hexagon_remote_uintptr_t *module_ptr) {
+int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
+                                             handle_t *module_ptr) {
+    int result;
+
     // Map some memory for the code and copy it in.
     int aligned_codeLen = (codeLen + map_alignment - 1) & ~(map_alignment - 1);
     void *executable = mmap(0, aligned_codeLen, PROT_READ | PROT_WRITE, MAP_ANON, -1, 0);
@@ -69,6 +76,19 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         return -1;
     }
     memcpy(executable, code, codeLen);
+
+    Elf::Object<uint32_t> obj;
+    result = obj.init(executable);
+    if (result != 0) {
+        return result;
+    }
+
+    result = obj.do_relocations();
+    if (result != 0) {
+        return result;
+    }
+
+    handle_t base_addr = (handle_t)executable;
 
     // Change memory to be executable (but not writable).
     if (mprotect(executable, aligned_codeLen, PROT_READ | PROT_EXEC) < 0) {
@@ -86,28 +106,43 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
                                   halide_error_handler_t error_handler,
                                   halide_do_par_for_t do_par_for,
                                   halide_do_task_t do_task);
-    init_runtime_t init_runtime = (init_runtime_t)((char *)executable + init_runtime_offset);
-    int result = init_runtime(halide_malloc,
-                              halide_free,
-                              halide_print,
-                              halide_error,
-                              halide_do_par_for,
-                              halide_do_task);
+    init_runtime_t init_runtime =
+        (init_runtime_t)halide_hexagon_remote_get_symbol(base_addr, "halide_noos_init_runtime", 0);
+    if (init_runtime == 0) {
+        munmap(executable, aligned_codeLen);
+        return -1;
+    }
+    result = init_runtime(halide_malloc,
+                          halide_free,
+                          halide_print,
+                          halide_error,
+                          halide_do_par_for,
+                          halide_do_task);
     if (result != 0) {
         munmap(executable, aligned_codeLen);
         return result;
     }
 
-    *module_ptr = (halide_hexagon_remote_uintptr_t)executable;
+    *module_ptr = base_addr;
     return 0;
 }
 
-int halide_hexagon_remote_run(halide_hexagon_remote_uintptr_t module_ptr, int offset,
-                              const halide_hexagon_remote_buffer *arg_ptrs, int arg_ptrsLen,
-                              halide_hexagon_remote_buffer *outputs, int outputsLen) {
+handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
+    Elf::Object<uint32_t> obj;
+    int result = obj.init((void*)module_ptr);
+    if (result != 0) {
+        return 0;
+    }
+
+    return (handle_t)obj.symbol_address(name);
+}
+
+int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
+                              const buffer *arg_ptrs, int arg_ptrsLen,
+                              buffer *outputs, int outputsLen) {
     // Get a pointer to the argv version of the pipeline.
     typedef int (*pipeline_argv_t)(void **);
-    pipeline_argv_t pipeline = (pipeline_argv_t)(module_ptr + offset);
+    pipeline_argv_t pipeline = (pipeline_argv_t)(function);
 
     // Construct a list of arguments.
     void **args = (void **)__builtin_alloca((arg_ptrsLen + outputsLen) * sizeof(void *));
@@ -122,7 +157,7 @@ int halide_hexagon_remote_run(halide_hexagon_remote_uintptr_t module_ptr, int of
     return pipeline(args);
 }
 
-int halide_hexagon_remote_release_kernels(halide_hexagon_remote_uintptr_t module_ptr, int codeLen) {
+int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     void *executable = (void *)module_ptr;
     codeLen = (codeLen + map_alignment - 1) & (map_alignment - 1);
     munmap(executable, codeLen);

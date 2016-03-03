@@ -509,12 +509,12 @@ RUNTIME_CPP_COMPONENTS = \
   cuda \
   destructors \
   device_interface \
+  errors \
   fake_thread_pool \
   float16_t \
   gcd_thread_pool \
   gpu_device_selection \
   hexagon_host \
-  hexagon_remote \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
@@ -527,9 +527,7 @@ RUNTIME_CPP_COMPONENTS = \
   mingw_math \
   module_aot_ref_count \
   module_jit_ref_count \
-  null_allocator \
-  null_error_handler \
-  null_print \
+  noos \
   nacl_host_cpu_count \
   opencl \
   opengl \

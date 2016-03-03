@@ -8,6 +8,11 @@
 #include "LLVM_Headers.h"
 #include <llvm/Object/ELFObjectFile.h>
 
+#include <iostream>
+#include <fstream>
+
+#include "runtime/hexagon_remote/elf.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -16,7 +21,7 @@ using std::vector;
 
 namespace {
 
-Target hexagon_remote_target(Target::HexagonRemote, Target::Hexagon, 32);
+Target hexagon_remote_target(Target::NoOS, Target::Hexagon, 32);
 
 }
 
@@ -24,28 +29,49 @@ Target hexagon_remote_target(Target::HexagonRemote, Target::Hexagon, 32);
 class InjectHexagonRpc : public IRMutator {
     using IRMutator::visit;
 
+    std::map<std::string, Expr> state_vars;
+
     Module device_code;
-    std::map<std::string, int> section_map;
-    Expr module_state_ptr;
-    Expr module_state_ptr_ptr() {
-        return Call::make(Handle(), Call::address_of, {module_state_ptr}, Call::Intrinsic);
+
+    Expr state_var(const std::string& name, Type type) {
+        Expr& var = state_vars[name];
+        if (!var.defined()) {
+            Buffer storage(type, {}, nullptr, name + "_buf");
+            *(void **)storage.host_ptr() = nullptr;
+            var = Load::make(type_of<void*>(), name, 0, storage, Parameter());
+        }
+        return var;
     }
 
-    // Create a variable representing the offset to a function with
-    // the given name. This remembers the section for substitution
-    // after the object is compiled and we can find the actual offset.
-    Expr section(const std::string &fn) {
-        std::string section = ".text." + fn;
-        section_map[section] = -1;
-        return Variable::make(type_of<size_t>(), section);
+    Expr state_var_ptr(const std::string& name, Type type) {
+        Expr var = state_var(name, type);
+        return Call::make(Handle(), Call::address_of, {var}, Call::Intrinsic);
+    }
+
+    Expr module_state_ptr() {
+        return state_var_ptr("module_state", type_of<void*>());
+    }
+
+    // Create a Buffer containing the given buffer/size, and return an
+    // expression for a pointer to the first element.
+    Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
+        Buffer code(type_of<uint8_t>(), {(int)size}, nullptr, name);
+        memcpy(code.host_ptr(), buffer, (int)size);
+
+        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter());
+        return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
+    }
+
+    Stmt call_extern_and_assert(const std::string& name, const std::vector<Expr>& args) {
+        Expr call = Call::make(Int(32), name, args, Call::Extern);
+        string call_result_name = unique_name(name + "_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        return LetStmt::make(call_result_name, call,
+                             AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
     }
 
 public:
-    InjectHexagonRpc() : device_code("hexagon", hexagon_remote_target) {
-        Buffer module_state_storage(type_of<void*>(), {}, nullptr, "module_state_ptr");
-        *(void **)module_state_storage.host_ptr() = nullptr;
-        module_state_ptr = Load::make(type_of<void*>(), "module_state_ptr", 0, module_state_storage, Parameter());
-    }
+    InjectHexagonRpc() : device_code("hexagon", hexagon_remote_target) {}
 
     void visit(const For *loop) {
         if (loop->device_api == DeviceAPI::Hexagon) {
@@ -114,12 +140,11 @@ public:
             input_arg_sizes.push_back(Expr((size_t)0));
             output_arg_sizes.push_back(Expr((size_t)0));
 
-            Expr pipeline_argv = section(hex_name + "_argv");
-
+            std::string pipeline_name = hex_name + "_argv";
             std::vector<Expr> params;
-            params.push_back(module_state_ptr);
-            params.push_back(pipeline_argv);
-            params.push_back(hex_name);
+            params.push_back(module_state_ptr());
+            params.push_back(pipeline_name);
+            params.push_back(state_var_ptr(hex_name, type_of<int>()));
             params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, input_arg_sizes, Call::Intrinsic));
             params.push_back(Call::make(type_of<void**>(), Call::make_struct, input_arg_ptrs, Call::Intrinsic));
             params.push_back(Call::make(type_of<int*>(), Call::make_struct, input_arg_flags, Call::Intrinsic));
@@ -127,14 +152,29 @@ public:
             params.push_back(Call::make(type_of<void**>(), Call::make_struct, output_arg_ptrs, Call::Intrinsic));
             params.push_back(Call::make(type_of<int*>(), Call::make_struct, output_arg_flags, Call::Intrinsic));
 
-            Expr call = Call::make(Int(32), "halide_hexagon_run", params, Call::Extern);
-            string call_result_name = unique_name("hexagon_run_result");
-            Expr call_result_var = Variable::make(Int(32), call_result_name);
-            stmt = LetStmt::make(call_result_name, call,
-                                 AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
+            stmt = call_extern_and_assert("halide_hexagon_run", params);
+
         } else {
             IRMutator::visit(loop);
         }
+    }
+
+    template <typename ObjFileType>
+    static int get_symbol_offset(const ObjFileType& obj_file, const std::string& symbol) {
+        for (const llvm::object::SymbolRef& i : obj_file.symbols()) {
+            llvm::ErrorOr<llvm::StringRef> name_ref = i.getName();
+            if (!name_ref || name_ref.get() != symbol) continue;
+
+            int section_offset = 0;
+            llvm::ErrorOr<llvm::object::section_iterator> sec_i = i.getSection();
+            if (sec_i) {
+                const llvm::object::SectionRef& sec = *sec_i.get();
+                section_offset = static_cast<int>(obj_file.getSection(sec.getRawDataRefImpl())->sh_offset);
+            }
+
+            return section_offset + static_cast<int>(i.getValue());
+        }
+        return -1;
     }
 
     Stmt inject(Stmt s) {
@@ -149,54 +189,24 @@ public:
         std::vector<uint8_t> object;
         compile_module_to_object(device_code, object);
 
+        compile_module_to_object(device_code, "/tmp/hex.o");
+
+        Elf::Object<uint32_t> test;
+        std::cout << test.init(&object[0]) << std::endl;
+        std::cout << test.do_relocations() << std::endl;
+
+        std::ofstream temp("/tmp/hex2.o");
+        temp.write((char*)&object[0], object.size());
+        temp.close();
+
         // Put the compiled object into a buffer.
         size_t code_size = object.size();
-        Buffer code(type_of<uint8_t>(), {(int)code_size}, nullptr, "code");
-        memcpy(code.host_ptr(), &object[0], (int)code_size);
-
-        Expr code_ptr_0 = Load::make(type_of<uint8_t>(), "code", 0, code, Parameter());
-        Expr code_ptr = Call::make(Handle(), Call::address_of, {code_ptr_0}, Call::Intrinsic);
+        Expr code_ptr = buffer_ptr(&object[0], code_size, "hexagon_code");
 
         // Wrap the statement in calls to halide_initialize_kernels.
-        Expr init_runtime = section("halide_hexagon_init_runtime");
-        Expr call = Call::make(Int(32), "halide_hexagon_initialize_kernels",
-                               {module_state_ptr_ptr(), code_ptr, Expr(code_size), init_runtime},
-                               Call::Extern);
-        string call_result_name = unique_name("initialize_kernels_result");
-        Expr call_result_var = Variable::make(Int(32), call_result_name);
-        s = Block::make(LetStmt::make(call_result_name, call,
-                                      AssertStmt::make(EQ::make(call_result_var, 0), call_result_var)),
-                        s);
-
-        // Determine the device code offsets from the start of the compiled code.
-        llvm::MemoryBufferRef object_ref(llvm::StringRef((char *)object.data(), object.size()), "hexagon_object");
-        std::error_code error;
-        llvm::object::ELF32LEObjectFile obj_file(object_ref, error);
-        for (const llvm::object::SectionRef& i : obj_file.sections()) {
-            llvm::StringRef name_ref;
-            if (i.getName(name_ref)) continue;
-            std::string name(name_ref.data(), name_ref.size());
-
-            // If this section is a function we care about, update the offset.
-            std::map<std::string, int>::iterator kernel_offset_i = section_map.find(name);
-            if (kernel_offset_i != section_map.end()) {
-                internal_assert(kernel_offset_i->second == -1)
-                    << "Found duplicate section " << name.data() << ".\n";
-                size_t offset = obj_file.getSection(i.getRawDataRefImpl())->sh_offset;
-                debug(1) << "Found section " << name << " at " << offset << "\n";
-                internal_assert(offset < std::numeric_limits<int>::max())
-                    << "Offset to function " << name.data() << " is not a 32 bit address\n";
-                kernel_offset_i->second = (int)offset;
-            }
-        }
-
-        // Substitute in the offsets we found.
-        std::map<std::string, Expr> substitutions;
-        for (const auto& i : section_map) {
-            internal_assert(i.second != -1) << "Did not find compiled function " << i.first << ".\n";
-            substitutions[i.first] = Expr((size_t)i.second);
-        }
-        s = substitute(substitutions, s);
+        Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+                                                   {module_state_ptr(), code_ptr, Expr(code_size)});
+        s = Block::make(init_kernels, s);
 
         return s;
     }

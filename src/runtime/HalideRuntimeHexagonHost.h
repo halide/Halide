@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide Hexagon host-side runtime.
  */
 
+typedef int halide_hexagon_handle_t;
+
 extern const struct halide_device_interface *halide_hexagon_device_interface();
 
 /** Set the underlying ion device handle for a buffer. The device
@@ -44,13 +46,11 @@ extern uintptr_t halide_hexagon_get_device_handle(void *user_context, struct buf
 // @{
 extern int halide_hexagon_initialize_kernels(void *user_context,
                                              void **module_ptr,
-                                             const uint8_t *code,
-                                             size_t size,
-                                             size_t init_runtime_offset);
+                                             const uint8_t *code, size_t code_size);
 extern int halide_hexagon_run(void *user_context,
                               void *module_ptr,
-                              size_t offset,
                               const char *name,
+                              halide_hexagon_handle_t *function,
                               size_t input_arg_sizes[],
                               void *input_args[],
                               int input_arg_flags[],

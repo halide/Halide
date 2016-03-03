@@ -171,8 +171,7 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"ios", Target::IOS},
     {"nacl", Target::NaCl},
     {"qurt", Target::Qurt},
-    // HexagonRemote is purposely not available here, it is not
-    // useful outside of the offload interface.
+    {"noos", Target::NoOS},
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
