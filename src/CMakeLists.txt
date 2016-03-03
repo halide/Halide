@@ -29,12 +29,12 @@ set(RUNTIME_CPP
   cuda
   destructors
   device_interface
+  errors
   fake_thread_pool
   float16_t
   gcd_thread_pool
   gpu_device_selection
   hexagon_host
-  hexagon_remote
   ios_io
   linux_clock
   linux_host_cpu_count
@@ -49,9 +49,7 @@ set(RUNTIME_CPP
   metal
   metal_objc_arm
   metal_objc_x86
-  null_allocator
-  null_error_handler
-  null_print
+  noos
   opengl
   openglcompute
   osx_clock
