@@ -271,7 +271,7 @@ public:
         int d;
     };
 
-    /** Construct a nullptr image parameter handle. */
+    /** Construct a null image parameter handle. */
     OutputImageParam() {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */

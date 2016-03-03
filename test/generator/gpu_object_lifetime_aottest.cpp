@@ -41,9 +41,9 @@ int main(int argc, char **argv) {
         }
 
 #if COMPILING_FOR_CUDA
-        halide_device_release(NULL, halide_cuda_device_interface());
+        halide_device_release(nullptr, halide_cuda_device_interface());
 #elif COMPILING_FOR_OPENCL
-        halide_device_release(NULL, halide_opencl_device_interface());
+        halide_device_release(nullptr, halide_opencl_device_interface());
 #endif
     }
 

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <mutex>
 
 #include "IRPrinter.h"
 #include "CodeGen_LLVM.h"
@@ -311,9 +312,29 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
 }
 
 void CodeGen_LLVM::initialize_llvm() {
+    static std::mutex initialize_llvm_mutex;
+    std::lock_guard<std::mutex> lock(initialize_llvm_mutex);
+
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
     if (!llvm_initialized) {
+
+        #if LLVM_VERSION >= 36
+        // You can hack in command-line args to llvm with the
+        // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
+        size_t defined = 0;
+        std::string args = get_env_variable("HL_LLVM_ARGS", defined);
+        if (!args.empty()) {
+            vector<std::string> arg_vec = split_string(args, " ");
+            vector<const char *> c_arg_vec;
+            c_arg_vec.push_back("llc");
+            for (const std::string &s : arg_vec) {
+                c_arg_vec.push_back(s.c_str());
+            }
+            cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
+        }
+        #endif
+
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
@@ -927,6 +948,11 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
 void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *buffer) {
+    // Make sure the buffer object itself is not null
+    create_assertion(builder->CreateIsNotNull(buffer),
+                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
+                                {name}, Call::Extern));
+
     Value *host_ptr = buffer_host(buffer);
     Value *device_ptr = buffer_device(buffer);
 
@@ -947,11 +973,6 @@ void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
     might_be_misaligned.insert(name);
-
-    // Make sure the buffer object itself is not null
-    create_assertion(builder->CreateIsNotNull(buffer),
-                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                {name}, Call::Extern));
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -3187,7 +3208,10 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
         builder->SetInsertPoint(entry, entry->getFirstInsertionPt());
     }
     Value *size = ConstantInt::get(i32, n);
-    Value *ptr = builder->CreateAlloca(t, size, name);
+    AllocaInst *ptr = builder->CreateAlloca(t, size, name);
+    if (t->isVectorTy() || n > 1) {
+        ptr->setAlignment(native_vector_bits() / 8);
+    }
 
     if (zero_initialize) {
         if (n == 1) {

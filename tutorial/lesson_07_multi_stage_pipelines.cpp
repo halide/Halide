@@ -108,6 +108,8 @@ int main(int argc, char **argv) {
         // Define an expression that clamps x to lie within the
         // range [0, input.width()-1].
         Expr clamped_x = clamp(x, 0, input.width()-1);
+        // clamp(x, a, b) is equivalent to max(min(x, b), a).
+
         // Similarly clamp y.
         Expr clamped_y = clamp(y, 0, input.height()-1);
         // Load from input at the clamped coordinates. This means that

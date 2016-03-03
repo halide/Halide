@@ -69,6 +69,7 @@ struct BufferContents {
         }
     }
 
+
     BufferContents(const halide_buffer_t *b, const std::string &n) :
         buf(*b),
         allocation(nullptr),

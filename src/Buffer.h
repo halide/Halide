@@ -32,6 +32,7 @@ private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
 
 public:
+
     /** Information about the shape of a Buffer in some
      * dimension. Wraps halide_dimension_t. */
     class Dimension {

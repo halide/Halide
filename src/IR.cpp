@@ -7,33 +7,33 @@ namespace Internal {
 
 namespace {
 
-IntImm make_immortal_int(int x) {
-    IntImm i;
-    i.ref_count.increment();
-    i.type = Int(32);
-    i.value = x;
+const IntImm *make_immortal_int(int x) {
+    IntImm *i = new IntImm;
+    i->ref_count.increment();
+    i->type = Int(32);
+    i->value = x;
     return i;
 }
 
 }
 
-IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
-                                    make_immortal_int(-7),
-                                    make_immortal_int(-6),
-                                    make_immortal_int(-5),
-                                    make_immortal_int(-4),
-                                    make_immortal_int(-3),
-                                    make_immortal_int(-2),
-                                    make_immortal_int(-1),
-                                    make_immortal_int(0),
-                                    make_immortal_int(1),
-                                    make_immortal_int(2),
-                                    make_immortal_int(3),
-                                    make_immortal_int(4),
-                                    make_immortal_int(5),
-                                    make_immortal_int(6),
-                                    make_immortal_int(7),
-                                    make_immortal_int(8)};
+const IntImm *IntImm::small_int_cache[] = {make_immortal_int(-8),
+                                           make_immortal_int(-7),
+                                           make_immortal_int(-6),
+                                           make_immortal_int(-5),
+                                           make_immortal_int(-4),
+                                           make_immortal_int(-3),
+                                           make_immortal_int(-2),
+                                           make_immortal_int(-1),
+                                           make_immortal_int(0),
+                                           make_immortal_int(1),
+                                           make_immortal_int(2),
+                                           make_immortal_int(3),
+                                           make_immortal_int(4),
+                                           make_immortal_int(5),
+                                           make_immortal_int(6),
+                                           make_immortal_int(7),
+                                           make_immortal_int(8)};
 
 
 Expr Cast::make(Type t, Expr v) {

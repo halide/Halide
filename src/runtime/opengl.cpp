@@ -566,6 +566,10 @@ WEAK int halide_opengl_init(void *user_context) {
         return 0;
     }
 
+#ifdef DEBUG_RUNTIME
+    halide_start_clock(user_context);
+#endif
+
     global_state.init();
 
     // Make a context if there isn't one

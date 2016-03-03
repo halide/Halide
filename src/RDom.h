@@ -252,7 +252,7 @@ public:
     /** Get at the internal reduction domain object that this wraps. */
     Internal::ReductionDomain domain() const {return dom;}
 
-    /** Check if this reduction domain is non-nullptr */
+    /** Check if this reduction domain is non-null */
     bool defined() const {return dom.defined();}
 
     /** Compare two reduction domains for equality of reference */

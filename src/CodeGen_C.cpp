@@ -772,7 +772,7 @@ void CodeGen_C::visit(const Call *op) {
             }
 
             rhs << "halide_debug_to_file(";
-            rhs << (have_user_context ? "__user_context_" : "nullptr");
+            rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ", \"" + filename + "\", (uint8_t *)(" + func + ")";
             for (size_t i = 0; i < args.size(); i++) {
                 rhs << ", " << args[i];
@@ -1455,7 +1455,7 @@ void CodeGen_C::test() {
         "int test1(halide_buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
-        " const bool _buf_host_and_device_are_null = (_buf_buffer->host == nullptr) && (_buf_buffer->device == 0);\n"
+        " const bool _buf_host_and_device_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->device == 0);\n"
         " (void)_buf_host_and_device_are_null;\n"
         " const int32_t _buf_min_0 = _buf_buffer->dim[0].min;\n"
         " (void)_buf_min_0;\n"

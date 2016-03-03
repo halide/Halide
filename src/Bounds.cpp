@@ -744,7 +744,7 @@ private:
         } else if (op->call_type == Call::Intrinsic &&
                    (op->name == Call::shift_left || op->name == Call::shift_right || op->name == Call::bitwise_and)) {
             Expr simplified = simplify(op);
-            if (!simplified.same_as(op)) {
+            if (!equal(simplified, op)) {
                 simplified.accept(this);
             } else {
                 // Just use the bounds of the type
