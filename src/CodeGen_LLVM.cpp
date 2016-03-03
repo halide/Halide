@@ -317,6 +317,21 @@ void CodeGen_LLVM::initialize_llvm() {
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
     if (!llvm_initialized) {
+
+        // You can hack in command-line args to llvm with the
+        // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
+        size_t defined = 0;
+        std::string args = get_env_variable("HL_LLVM_ARGS", defined);
+        if (!args.empty()) {
+            vector<std::string> arg_vec = split_string(args, " ");
+            vector<const char *> c_arg_vec;
+            c_arg_vec.push_back("llc");
+            for (const std::string &s : arg_vec) {
+                c_arg_vec.push_back(s.c_str());
+            }
+            cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
+        }
+
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
