@@ -4,9 +4,10 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "ModulusRemainder.h"
-
+#include "Simplify.h"
 namespace Halide {
 namespace Internal {
+using std::vector;
 
 class AlignLoads : public IRMutator {
 public:
@@ -50,8 +51,8 @@ private:
                         // We know nothing about alignment. Give up.
                         // TODO: Fix this.
                         debug(4) << "AlignLoads: Cannot reason about alignment.\n";
-                        debug(4) << "Type: " << op->type << "\n";
-                        debug(4) << "Index: " << index << "\n";
+                        debug(4) << "AlignLoads: Type: " << op->type << "\n";
+                        debug(4) << "AlignLoads: Index: " << index << "\n";
                         expr = op;
                         return;
                     }
@@ -62,7 +63,7 @@ private:
                     // should be
                     // (lanes * c1) + c2.
                     if (!(mod_rem.modulus % lanes)) {
-                        int offset_elements = mod_imp(modulus.remainder, lanes);
+                        int offset_elements = mod_imp(mod_rem.remainder, lanes);
                         if (mod_rem.remainder == 0 ||
                             offset_elements == 0) {
                             // The first case is obvious.
@@ -70,14 +71,14 @@ private:
                             // ramp(64 * c1 + 128, 1, 64)
                             // This is a perfectly aligned address. Nothing to do here.
                             debug(4) << "AlignLoads: Encountered a perfectly aligned load.\n";
-                            debug(4) << "Type: " << op->type << "\n";
-                            debug(4) << "Index: " << index << "\n";
+                            debug(4) << "AlignLoads: Type: " << op->type << "\n";
+                            debug(4) << "AlignLoads: Index: " << index << "\n";
                             expr = op;
                             return;
                         } else {
                             debug(4) << "AlignLoads: Unaligned load.\n";
-                            debug(4) << "Type: " << op->type << "\n";
-                            debug(4) << "Index: " << index << "\n";
+                            debug(4) << "AlignLoads: Type: " << op->type << "\n";
+                            debug(4) << "AlignLoads: Index: " << index << "\n";
                             // We can generate two aligned loads followed by a shuffle_vectors if the
                             // base is like so
                             // 1. (aligned_expr + const)
@@ -91,8 +92,8 @@ private:
                                 // Should we be expecting the index to be in simplified
                                 // canonical form, i.e. expression + IntImm?
                                 debug(4) << "AlignLoads: add->b is not a constant\n";
-                                debug(4) << "Type: " << op->type << "\n";
-                                debug(4) << "Index: " << index << "\n";
+                                debug(4) << "AlignLoads: Type: " << op->type << "\n";
+                                debug(4) << "AlignLoads: Index: " << index << "\n";
                                 expr = op;
                                 return;
                             }
@@ -108,7 +109,15 @@ private:
                             Expr ramp_high = Ramp::make(base_high, 1, lanes);
                             Expr load_low = Load::make(op->type, op->name, ramp_low, op->image, op->param);
                             Expr load_high = Load::make(op->type, op->name, ramp_high, op->image, op->param);
-                            expr = op;
+                            Expr two = IntImm::make(Int(32), 2);
+                            Expr start_lane = IntImm::make(Int(32), offset_elements);
+                            Expr num_lanes = IntImm::make(Int(32), lanes);
+                            vector<Expr> args = {two, load_low, load_high, start_lane, num_lanes};
+                            debug(4) << "AlignLoads: Replacing with two aligned loads and slice_vector\n";
+                            debug(4) << "AlignLoads: load_low  : " << load_low << "\n";
+                            debug(4) << "AlignLoads: load_high : " << load_high << "\n";
+                            expr = Call::make(op->type, Call::slice_vector, args, Call::Intrinsic);
+                            debug(4) << "AlignLoads: slice_vector : " << expr << "\n";
                             return;
                         } // (mod_rem.remainder != 0)
                     } else {
