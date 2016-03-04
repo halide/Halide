@@ -2300,6 +2300,19 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
         internal_assert(0 < op->args.size());
         value = interleave_vectors(op->type, op->args);
+    } else if (op->is_intrinsic(Call::slice_vector)) {
+        const IntImm *num_vector_args = op->args[0].as<IntImm>();
+        internal_assert(num_vector_args);
+        int num_vectors = num_vector_args->value;
+        internal_assert(op->args.size() == (unsigned) (num_vectors + 3));
+        vector<Value *>vectors;
+        for (int i = 0; i < num_vectors; ++i) {
+            vectors.push_back(codegen(op->args[i+1]));
+        }
+        Value *big_vector = concat_vectors(vectors);
+        int start_lane = op->args[op->args.size() - 2].as<IntImm>()->value;
+        int size = op->args[op->args.size() - 1].as<IntImm>()->value;
+        value = slice_vector(big_vector, start_lane, size);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
