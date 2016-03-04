@@ -103,6 +103,14 @@ WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_sleep_ms(void *user_context, int ms);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 
+WEAK void halide_profiler_memory_allocate(void *user_context,
+                                          const char *pipeline_name,
+                                          int func_id,
+                                          unsigned int incr);
+WEAK void halide_profiler_memory_free(void *user_context,
+                                      const char *pipeline_name,
+                                      int func_id,
+                                      unsigned int incr);
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
@@ -123,7 +131,7 @@ struct mxArray;
 WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
-  
+
 }
 
 /** A macro that calls halide_print if the supplied condition is

@@ -40,6 +40,8 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     p->runs = 0;
     p->time = 0;
     p->samples = 0;
+    p->memory_current = 0;
+    p->memory_peak = 0;
     p->funcs = (halide_profiler_func_stats *)malloc(num_funcs * sizeof(halide_profiler_func_stats));
     if (!p->funcs) {
         free(p);
@@ -48,6 +50,8 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].time = 0;
         p->funcs[i].name = (const char *)(func_names[i]);
+        p->funcs[i].memory_current = 0;
+        p->funcs[i].memory_peak = 0;
     }
     s->first_free_id += num_funcs;
     s->pipelines = p;
@@ -140,6 +144,72 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
     return p->first_func_id;
 }
 
+WEAK void halide_profiler_memory_allocate(void *user_context,
+                                          const char *pipeline_name,
+                                          int func_id,
+                                          unsigned int incr) {
+    halide_profiler_state *s = halide_profiler_get_state();
+    ScopedMutexLock lock(&s->lock);
+
+    halide_profiler_pipeline_stats *p_stats = NULL;
+    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
+         p = (halide_profiler_pipeline_stats *)(p->next)) {
+        // The same pipeline will deliver the same global constant
+        // string, so they can be compared by pointer.
+        if (p->name == pipeline_name) {
+            p_stats = p;
+            break;
+        }
+    }
+    halide_assert(user_context, p_stats != NULL);
+    halide_assert(user_context, (func_id - p_stats->first_func_id) >= 0);
+    halide_assert(user_context, (func_id - p_stats->first_func_id) < p_stats->num_funcs);
+
+    halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id - p_stats->first_func_id];
+
+    // Update per-pipeline memory stats
+    p_stats->memory_current += incr;
+    if (p_stats->memory_current > p_stats->memory_peak) {
+        p_stats->memory_peak = p_stats->memory_current;
+    }
+
+    // Update per-func memory stats
+    f_stats->memory_current += incr;
+    if (f_stats->memory_current > f_stats->memory_peak) {
+        f_stats->memory_peak = f_stats->memory_current;
+    }
+}
+
+WEAK void halide_profiler_memory_free(void *user_context,
+                                      const char *pipeline_name,
+                                      int func_id,
+                                      unsigned int decr) {
+    halide_profiler_state *s = halide_profiler_get_state();
+    ScopedMutexLock lock(&s->lock);
+
+    halide_profiler_pipeline_stats *p_stats = NULL;
+    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
+         p = (halide_profiler_pipeline_stats *)(p->next)) {
+        // The same pipeline will deliver the same global constant
+        // string, so they can be compared by pointer.
+        if (p->name == pipeline_name) {
+            p_stats = p;
+            break;
+        }
+    }
+    halide_assert(user_context, p_stats != NULL);
+    halide_assert(user_context, (func_id - p_stats->first_func_id) >= 0);
+    halide_assert(user_context, (func_id - p_stats->first_func_id) < p_stats->num_funcs);
+
+    halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id - p_stats->first_func_id];
+
+    // Update per-pipeline memory stats
+    p_stats->memory_current -= decr;
+
+    // Update per-func memory stats
+    f_stats->memory_current -= decr;
+}
+
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
 
     char line_buf[160];
@@ -154,7 +224,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
              << "  total time: " << t << " ms"
              << "  samples: " << p->samples
              << "  runs: " << p->runs
-             << "  time per run: " << t / p->runs << " ms\n";
+             << "  time per run: " << t / p->runs << " ms"
+             << "  current memory: " << p->memory_current << " bytes" // Should be zero
+             << "  peak memory: " << p->memory_peak << " bytes\n";
         halide_print(user_context, sstr.str());
         if (p->time) {
             for (int i = 0; i < p->num_funcs; i++) {
@@ -173,7 +245,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 while (sstr.size() < 40) sstr << " ";
 
                 int percent = fs->time / (p->time / 100);
-                sstr << "(" << percent << "%)\n";
+                sstr << "(" << percent << "%) ";
+
+                sstr << "(" << fs->memory_current << ", " << fs->memory_peak << ")bytes\n";
 
                 halide_print(user_context, sstr.str());
             }
