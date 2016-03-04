@@ -35,9 +35,15 @@ private:
             else {
                 const Ramp *ramp = index.as<Ramp>();
                 const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+                // We will work only on natural vectors supported by the target.
+                if (ramp->lanes != target.natural_vector_size(op->type)) {
+                    expr = op;
+                    return;
+                }
                 if (ramp && stride && stride->value == 1) {
                     int lanes = ramp->lanes;
                     // At this point we are satisfied that we are loading a native vector.
+                    // So to gauge alignment we require the index to be a mulitple of lanes.
                     ModulusRemainder mod_rem = get_alignment_info(ramp->base);
                     if (mod_rem.modulus == 1 &&
                         mod_rem.remainder == 0) {
@@ -56,7 +62,12 @@ private:
                     // should be
                     // (lanes * c1) + c2.
                     if (!(mod_rem.modulus % lanes)) {
-                        if (mod_rem.remainder == 0) {
+                        int offset_elements = mod_imp(modulus.remainder, lanes);
+                        if (mod_rem.remainder == 0 ||
+                            offset_elements == 0) {
+                            // The first case is obvious.
+                            // The second handles ramps such as
+                            // ramp(64 * c1 + 128, 1, 64)
                             // This is a perfectly aligned address. Nothing to do here.
                             debug(4) << "AlignLoads: Encountered a perfectly aligned load.\n";
                             debug(4) << "Type: " << op->type << "\n";
@@ -67,6 +78,36 @@ private:
                             debug(4) << "AlignLoads: Unaligned load.\n";
                             debug(4) << "Type: " << op->type << "\n";
                             debug(4) << "Index: " << index << "\n";
+                            // We can generate two aligned loads followed by a shuffle_vectors if the
+                            // base is like so
+                            // 1. (aligned_expr + const)
+                            // So, we have the following conditions.
+                            // (mod_rem.modulus % alignment_required) = 0
+                            // mod_rem.remainder = mod_imp(const, alignment_required)
+                            Expr base = ramp->base;
+                            const Add *add = base.as<Add>();
+                            const IntImm *b = add->b.as<IntImm>();
+                            if (!b) {
+                                // Should we be expecting the index to be in simplified
+                                // canonical form, i.e. expression + IntImm?
+                                debug(4) << "AlignLoads: add->b is not a constant\n";
+                                debug(4) << "Type: " << op->type << "\n";
+                                debug(4) << "Index: " << index << "\n";
+                                expr = op;
+                                return;
+                            }
+                            int b_val = b->value;
+                            // If the index is A + b, then we know that A is already aligned. We need
+                            // to know if b, which is an IntImm also contains an aligned vector inside.
+                            // For e.g. if b is 65 and lanes is 64, then we have 1 aligned vector in it.
+                            // and base_low should be (A + 64)
+                            int offset_vector = div_imp(b_val, lanes) * lanes;
+                            Expr base_low = simplify(add->a + offset_vector);
+                            Expr base_high = simplify(base_low + lanes);
+                            Expr ramp_low = Ramp::make(base_low, 1, lanes);
+                            Expr ramp_high = Ramp::make(base_high, 1, lanes);
+                            Expr load_low = Load::make(op->type, op->name, ramp_low, op->image, op->param);
+                            Expr load_high = Load::make(op->type, op->name, ramp_high, op->image, op->param);
                             expr = op;
                             return;
                         } // (mod_rem.remainder != 0)
