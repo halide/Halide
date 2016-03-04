@@ -743,6 +743,11 @@ Realization Pipeline::realize(int x_size,
     return realize(v, target);
 }
 
+
+Realization Pipeline::realize(const Target &target) {
+    return realize(std::vector<int32_t>(), target);
+}
+
 namespace {
 struct ErrorBuffer {
     enum { MaxBufSize = 4096 };

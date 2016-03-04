@@ -360,8 +360,9 @@ public:
                                const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
                                const Target &target = Target());
-    EXPORT Realization realize(int x_size = 0,
+    EXPORT Realization realize(int x_size,
                                const Target &target = Target());
+    EXPORT Realization realize(const Target &target = Target());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
