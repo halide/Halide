@@ -168,7 +168,7 @@ public:
 
         // We can't rely on the cached strides for the extra dimensions.
         const int extra[] = {args...};
-        for (int i = 0; i < sizeof...(Args); i++) {
+        for (size_t i = 0; i < sizeof...(Args); i++) {
             offset += extra[i] * buffer.dim(i+4).stride();
         }
         return (void *)(ptr + offset * elem_size);
