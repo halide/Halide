@@ -6,6 +6,7 @@
 #include "Profiling.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,7 +21,11 @@ public:
 
     vector<int> stack; // What produce nodes are we currently inside of.
 
-    InjectProfiling() {
+    string pipeline_name;
+
+    Scope<int> func_memory_sizes;
+
+    InjectProfiling(const string& pipeline_name) : pipeline_name(pipeline_name) {
         indices["overhead"] = 0;
         stack.push_back(0);
     }
@@ -28,15 +33,71 @@ public:
 private:
     using IRMutator::visit;
 
-    void visit(const ProducerConsumer *op) {
-        int idx;
-        map<string, int>::iterator iter = indices.find(op->name);
+    int get_func_id(const string& name) {
+        int idx = -1;
+        map<string, int>::iterator iter = indices.find(name);
         if (iter == indices.end()) {
             idx = (int)indices.size();
-            indices[op->name] = idx;
+            indices[name] = idx;
         } else {
             idx = iter->second;
         }
+        return idx;
+    }
+
+    void visit(const Allocate *op) {
+        int idx = get_func_id(op->name);
+
+        std::vector<Expr> new_extents;
+        bool all_extents_unmodified = true;
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            new_extents.push_back(mutate(op->extents[i]));
+            all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
+        }
+        int size = 10; //TODO(psuriana): compute the alloc size
+        func_memory_sizes.push(op->name, size);
+        //debug(0) << "  Injecting profiler into Allocate " << op->name << " in pipeline " << pipeline_name << "\n";
+
+        //TODO(psuriana): need to fix the case when the condition is never executed
+        Stmt body = mutate(op->body);
+        Expr condition = mutate(op->condition);
+        Expr new_expr;
+        if (op->new_expr.defined()) {
+            new_expr = mutate(op->new_expr);
+        }
+        if (all_extents_unmodified &&
+            body.same_as(op->body) &&
+            condition.same_as(op->condition) &&
+            new_expr.same_as(op->new_expr)) {
+            stmt = op;
+        } else {
+            stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
+        }
+
+        Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
+                                   {pipeline_name, idx, size}, Call::Extern);
+
+        stmt = Block::make(Evaluate::make(set_task), stmt);
+    }
+
+    void visit(const Free *op) {
+        int idx = get_func_id(op->name);
+
+        int size = func_memory_sizes.get(op->name);
+        //debug(0) << "  Injecting profiler into Free " << op->name << " in pipeline " << pipeline_name << "\n";
+        Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
+                                   {pipeline_name, idx, size}, Call::Extern);
+
+        IRMutator::visit(op);
+
+        stmt = Block::make(Evaluate::make(set_task), stmt);
+
+        func_memory_sizes.pop(op->name);
+    }
+
+    void visit(const ProducerConsumer *op) {
+        //debug(0) << "  Injecting profiler into ProducerConsumer " << op->name << " in pipeline " << pipeline_name << "\n";
+        int idx = get_func_id(op->name);
 
         stack.push_back(idx);
         Stmt produce = mutate(op->produce);
@@ -75,7 +136,7 @@ private:
 };
 
 Stmt inject_profiling(Stmt s, string pipeline_name) {
-    InjectProfiling profiling;
+    InjectProfiling profiling(pipeline_name);
     s = profiling.mutate(s);
 
     int num_funcs = (int)(profiling.indices.size());
@@ -105,6 +166,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
         s = Block::make(Store::make("profiling_func_names", p.first, p.second), s);
     }
 
+    s = Block::make(s, Free::make("profiling_func_names"));
     s = Allocate::make("profiling_func_names", Handle(), {num_funcs}, const_true(), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 

@@ -739,6 +739,12 @@ struct halide_profiler_func_stats {
 
     /** The name of this Func. A global constant string. */
     const char *name;
+
+    /** The current memory allocation of this Func. */
+    int memory_current;
+
+    /** The peak memory allocation of this Func. */
+    int memory_peak;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -768,6 +774,12 @@ struct halide_profiler_pipeline_stats {
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;
+
+    /** The current memory allocation of funcs in this pipeline. */
+    int memory_current;
+
+    /** The peak memory allocation of funcs in this pipeline. */
+    int memory_peak;    
 };
 
 /** The global state of the profiler. */

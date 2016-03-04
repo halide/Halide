@@ -173,6 +173,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_free",
         "halide_malloc",
         "halide_print",
+        "halide_profiler_memory_allocate",
+        "halide_profiler_memory_free",
         "halide_profiler_pipeline_start",
         "halide_profiler_pipeline_end",
         "halide_spawn_thread",
