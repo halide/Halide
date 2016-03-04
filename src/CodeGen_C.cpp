@@ -352,7 +352,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
         stream << "extern const struct halide_filter_metadata_t " << f.name << "_metadata;\n";
 
         // And a stub to accept and upgrade old buffer_t's
-        string ucon = have_user_context ? "__user_context" : "nullptr";
+        string ucon = have_user_context ? "__user_context" : "NULL";
         stream
             << "\n// A shim to support use of the old buffer_t struct. This is deprecated and will be removed at some point.\n"
             << "#ifdef __cplusplus\n"
@@ -404,7 +404,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
             for (size_t i = 0; i < args.size(); i++) {
                 if (args[i].is_buffer()) {
                     string name = print_name(args[i].name);
-                    stream << "    if (" << name << "_buffer->host == nullptr) {\n"
+                    stream << "    if (" << name << "_buffer->host == NULL) {\n"
                            << "        err = halide_downgrade_buffer_t(" << ucon << ", "
                            << "\"" << args[i].name << "\", "
                            << "&" << name << "_upgraded, "
@@ -464,7 +464,7 @@ void CodeGen_C::compile(const Buffer &buffer, const Target &target) {
     // Emit the buffer struct
     stream << "static halide_buffer_t " << name << "_buffer = {"
            << "0, "             // device
-           << "nullptr, "          // device_interface
+           << "NULL, "          // device_interface
            << "&" << name << "_data[0], " // host
            << "0, "             // flags
            << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
@@ -498,7 +498,7 @@ void CodeGen_C::push_buffer(Type t, int dims, const std::string &buffer_name) {
     stream << "const bool "
            << name
            << "_host_and_device_are_null = ("
-           << buf_name << "->host == nullptr) && ("
+           << buf_name << "->host == NULL) && ("
            << buf_name << "->device == 0);\n";
     do_indent();
     stream << "(void)" << name << "_host_and_device_are_null;\n";
@@ -848,7 +848,7 @@ void CodeGen_C::visit(const Call *op) {
             Expr e = select(a < b, b - a, a - b);
             rhs << print_expr(e);
         } else if (op->name == Call::null_handle) {
-            rhs << "nullptr";
+            rhs << "NULL";
         } else if (op->name == Call::address_of) {
             const Load *l = op->args[0].as<Load>();
             internal_assert(op->args.size() == 1 && l);
@@ -952,7 +952,7 @@ void CodeGen_C::visit(const Call *op) {
             do_indent();
             stream << "halide_buffer_t " << buf_id << " = {"
                    << "0, "    // device
-                   << "nullptr, " // device_interface
+                   << "NULL, " // device_interface
                    << host << ", "
                    << "0, "    // flags
                    << "halide_type_t(halide_type_code_t(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
@@ -1071,7 +1071,7 @@ void CodeGen_C::visit(const Call *op) {
 
             string call =
                 fn->value + "(" +
-                (have_user_context ? "__user_context_, " : "nullptr, ")
+                (have_user_context ? "__user_context_, " : "NULL, ")
                 + "arg);";
 
             do_indent();
@@ -1098,7 +1098,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << op->name << "(";
 
         if (function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context_, " : "nullptr, ");
+            rhs << (have_user_context ? "__user_context_, " : "NULL, ");
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -1312,7 +1312,7 @@ void CodeGen_C::visit(const Allocate *op) {
             open_scope();
             do_indent();
             stream << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << (have_user_context ? "__user_context_" : "NULL")
                    << ", \"32-bit signed overflow computing size of allocation "
                    << op->name << "\\n\");\n";
             do_indent();
@@ -1348,7 +1348,7 @@ void CodeGen_C::visit(const Allocate *op) {
                    << " = ("
                    << print_type(op->type)
                    << " *)halide_malloc("
-                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << (have_user_context ? "__user_context_" : "NULL")
                    << ", sizeof("
                    << print_type(op->type)
                    << ")*" << size_id << ");\n";
@@ -1373,7 +1373,7 @@ void CodeGen_C::visit(const Free *op) {
 
         do_indent();
         stream << free_function << "("
-               << (have_user_context ? "__user_context_, " : "nullptr, ")
+               << (have_user_context ? "__user_context_, " : "NULL, ")
                << print_name(op->name)
                << ");\n";
         heap_allocations.pop(op->name);
