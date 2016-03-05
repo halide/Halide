@@ -23,7 +23,7 @@ public:
 
     string pipeline_name;
 
-    Scope<int> func_memory_sizes;
+    Scope<Expr> func_memory_sizes;
 
     InjectProfiling(const string& pipeline_name) : pipeline_name(pipeline_name) {
         indices["overhead"] = 0;
@@ -45,22 +45,63 @@ private:
         return idx;
     }
 
+    bool constant_allocation_size(const std::vector<Expr> &extents, int32_t &size) {
+        int64_t result = 1;
+        for (size_t i = 0; i < extents.size(); i++) {
+            if (const IntImm *int_size = extents[i].as<IntImm>()) {
+                result *= int_size->value;
+                if (result > (static_cast<int64_t>(1)<<31) - 1) { // Out of memory
+                    size = 0;
+                    return true;
+                }
+            } else {
+                return false;
+            }
+        }
+        size = static_cast<int32_t>(result);
+        return true;
+    }
+
+    Expr compute_allocation_size(const vector<Expr> &extents, const Expr& condition, const Type& type) {
+        int32_t constant_size;
+        if (constant_allocation_size(extents, constant_size)) {
+            int64_t stack_bytes = constant_size * type.bytes();
+            if (stack_bytes > ((int64_t(1) << 31) - 1)) { // Out of memory
+                return 0;
+            } else {
+                if (stack_bytes <= 1024 * 8) { // Allocation on stack
+                    return 0;
+                }
+            }
+        }
+        // Check that the allocation is not scalar (if it were scalar
+        // it would have constant size).
+        internal_assert(extents.size() > 0);
+
+        Expr size = extents[0];
+        for (size_t i = 1; i < extents.size(); i++) {
+            size *= extents[i];
+        }
+        size = Select::make(condition, size, 0);
+        return size;
+    }
+
     void visit(const Allocate *op) {
         int idx = get_func_id(op->name);
 
-        std::vector<Expr> new_extents;
+        vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
             all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
-        int size = 10; //TODO(psuriana): compute the alloc size
-        func_memory_sizes.push(op->name, size);
-        //debug(0) << "  Injecting profiler into Allocate " << op->name << " in pipeline " << pipeline_name << "\n";
-
-        //TODO(psuriana): need to fix the case when the condition is never executed
-        Stmt body = mutate(op->body);
         Expr condition = mutate(op->condition);
+
+        Expr size = compute_allocation_size(new_extents, condition, op->type);
+        debug(0) << "  Injecting profiler into Allocate " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+        func_memory_sizes.push(op->name, size);
+
+        Stmt body = mutate(op->body);
         Expr new_expr;
         if (op->new_expr.defined()) {
             new_expr = mutate(op->new_expr);
@@ -83,8 +124,8 @@ private:
     void visit(const Free *op) {
         int idx = get_func_id(op->name);
 
-        int size = func_memory_sizes.get(op->name);
-        //debug(0) << "  Injecting profiler into Free " << op->name << " in pipeline " << pipeline_name << "\n";
+        Expr size = func_memory_sizes.get(op->name);
+        debug(0) << "  Injecting profiler into Free " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
         Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
                                    {pipeline_name, idx, size}, Call::Extern);
 
