@@ -163,9 +163,20 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
+        const char *filename = "/data/local/tmp/halide_kernels.so";
+        debug(user_context) << "    open " << filename << " -> ";
+        int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0);
+        debug(user_context) << "        " << so_fd << "\n";
+        if (so_fd == -1) {
+            error(user_context) << "open failed.\n";
+            return -1;
+        }
+        write(so_fd, code, code_size);
+        close(so_fd);
+
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
-        result = remote_initialize_kernels(code, code_size, &module);
+        result = remote_initialize_kernels((uint8_t*)filename, strlen(filename), &module);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
             (*state)->module = module;

@@ -709,7 +709,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // TODO: Replace fake thread pool with a real implementation.
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
-                // The offload runtime can't have any symbols resolving externally.
+                // No externally resolved symbols are allowed here.
+                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_noos(c, bits_64, debug));
             }
         }
