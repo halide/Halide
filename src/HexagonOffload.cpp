@@ -11,6 +11,8 @@
 #include <iostream>
 #include <fstream>
 
+#define DEBUG_PRINT(x) std::cout << x << std::endl;
+
 #include "runtime/hexagon_remote/elf.h"
 
 namespace Halide {
@@ -38,7 +40,7 @@ class InjectHexagonRpc : public IRMutator {
         if (!var.defined()) {
             Buffer storage(type, {}, nullptr, name + "_buf");
             *(void **)storage.host_ptr() = nullptr;
-            var = Load::make(type_of<void*>(), name, 0, storage, Parameter());
+            var = Load::make(type_of<void*>(), name + "_buf", 0, storage, Parameter());
         }
         return var;
     }
@@ -187,17 +189,19 @@ public:
 
         // Compile the device code.
         std::vector<uint8_t> object;
-        compile_module_to_object(device_code, object);
+        compile_module_to_shared_object(device_code, object);
 
-        compile_module_to_object(device_code, "/tmp/hex.o");
+        compile_module_to_shared_object(device_code, "/tmp/hex.so");
 
-        Elf::Object<uint32_t> test;
-        std::cout << test.init(&object[0]) << std::endl;
-        std::cout << test.do_relocations() << std::endl;
+        compile_module_to_object(device_code, "hex.o");
 
-        std::ofstream temp("/tmp/hex2.o");
-        temp.write((char*)&object[0], object.size());
-        temp.close();
+        system("$HEX_CLANG hex.o -shared -o hex_clang_hex.so");
+
+        object.clear();
+        std::ifstream so("hex_clang_hex.so", std::ios::binary | std::ios::ate);
+        object.resize(so.tellg());
+        so.seekg(0, std::ios::beg);
+        so.read(reinterpret_cast<char*>(&object[0]), object.size());
 
         // Put the compiled object into a buffer.
         size_t code_size = object.size();

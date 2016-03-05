@@ -50,6 +50,9 @@ typedef int32_t intptr_t;
 #define STDERR_FILENO 2
 
 #define O_RDONLY 0
+#define O_RDWR 2
+#define O_TRUNC 00001000
+#define O_CREAT 00000100
 
 // Commonly-used extern functions
 extern "C" {

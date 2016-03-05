@@ -1,6 +1,10 @@
 #ifndef HALIDE_RUNTIME_HEXAGON_ELF
 #define HALIDE_RUNTIME_HEXAGON_ELF
 
+#ifndef DEBUG_PRINT
+#define DEBUG_PRINT(x)
+#endif
+
 // An elf parser that does not allocate any non-stack memory :)
 
 namespace Elf {
@@ -64,7 +68,7 @@ class Object {
         Word32_B15 = 0x00df20fe,
         Word32_B22 = 0x01ff3ffe,
         Word32_R6  = 0x000007e0,
-        Word32_U6  = 0,
+        Word32_U6  = 0xffffffff,
         Word32_U16 = 0,
         Word32_X26 = 0x0fff3fff,
     };
@@ -128,7 +132,7 @@ class Object {
     };
 
     struct Rela : public Rel {
-        uint32_t addend;
+        int32_t addend;
 
         using Rel::offset;
         using Rel::info;
@@ -155,7 +159,10 @@ class Object {
 public:
     uint16_t section_count() const { return section_headers.count; }
     uint16_t program_count() const { return program_headers.count; }
-    uint16_t symbol_count() const { return symtab_shdr.size / symtab_shdr.entsize; }
+    uint16_t symbol_count(const Shdr* symtab = 0) const {
+        if (symtab == 0) symtab = &symtab_shdr;
+        return symtab->size / symtab->entsize;
+    }
 
     Shdr section_header(uint16_t i) {
         return Shdr((char *)section_headers.header + i*section_headers.entry_size);
@@ -165,8 +172,9 @@ public:
         return (char *)base + shdr.offset;
     }
 
-    const char *string(uint32_t index) {
-        return (const char *)section_ptr(strtab_shdr) + index;
+    const char *string(uint32_t index, const Shdr* strtab = 0) {
+        if (strtab == 0) strtab = &strtab_shdr;
+        return (const char *)section_ptr(*strtab) + index;
     }
 
     const char *section_name(const Shdr& shdr) {
@@ -176,8 +184,9 @@ public:
         return section_name(section_header(i));
     }
 
-    Sym symbol(uint32_t i) {
-        return Sym((char *)base + symtab_shdr.offset + i*symtab_shdr.entsize);
+    Sym symbol(uint32_t i, const Shdr* symtab = 0) {
+        if (symtab == 0) symtab = &symtab_shdr;
+        return Sym((char *)base + symtab->offset + i*symtab->entsize);
     }
 
     int find_section(const char *name) {
@@ -186,32 +195,39 @@ public:
                 return i;
             }
         }
+        DEBUG_PRINT("Failed to find section:");
+        DEBUG_PRINT(name);
         return -1;
     }
 
-    int find_symbol(const char *name) {
-        for (uint32_t i = 0; i < symbol_count(); i++) {
-            Sym sym(symbol(i));
-            if (strcmp(string(sym.name), name) == 0) {
+    int find_symbol(const char *name, const Shdr* symtab = 0) {
+        if (symtab == 0) symtab = &symtab_shdr;
+        Shdr strtab = section_header(symtab->link);
+        for (uint32_t i = 0; i < symbol_count(symtab); i++) {
+            Sym sym(symbol(i, symtab));
+            if (strcmp(string(sym.name, &strtab), name) == 0) {
                 return i;
             }
         }
+        DEBUG_PRINT("Failed to find symbol:");
+        DEBUG_PRINT(name);
         return -1;
     }
 
-    AddrType symbol_value(uint32_t i) {
-        return symbol(i).value;
+    AddrType symbol_offset(uint32_t i, const Shdr* symtab = 0) {
+        Sym sym = symbol(i, symtab);
+        return sym.value + section_header(sym.shndx).offset;
     }
-    void *symbol_address(uint32_t i) {
-        return (char *)base + symbol_value(i);
+    void *symbol_address(uint32_t i, const Shdr* symtab = 0) {
+        return (char *)base + symbol_offset(i, symtab);
     }
 
-    void *symbol_address(const char *name) {
-        int sym = find_symbol(name);
+    void *symbol_address(const char *name, const Shdr* symtab = 0) {
+        int sym = find_symbol(name, symtab);
         if (sym == -1) {
             return 0;
         }
-        return symbol_address(sym);
+        return symbol_address(sym, symtab);
     }
 
     int init(void *obj) {
@@ -224,14 +240,22 @@ public:
 
         // Read the header.
         void *header = obj;
-        if (read<uint32_t>(header) != elf_magic)
-            return __LINE__;
-        if (read<uint8_t>(header) != elf_32bit)
-            return __LINE__;
-        if (read<uint8_t>(header) != elf_little_endian)
-            return __LINE__;
-        if (read<uint8_t>(header) != elf_version_ident)
-            return __LINE__;
+        if (read<uint32_t>(header) != elf_magic) {
+            DEBUG_PRINT("Not an ELF object");
+            return -1;
+        }
+        if (read<uint8_t>(header) != elf_32bit) {
+            DEBUG_PRINT("Not a 32-bit ELF object");
+            return -1;
+        }
+        if (read<uint8_t>(header) != elf_little_endian) {
+            DEBUG_PRINT("Not a little endian ELF object");
+            return -1;
+        }
+        if (read<uint8_t>(header) != elf_version_ident) {
+            DEBUG_PRINT("Not a version 1 ELF object");
+            return -1;
+        }
         read<uint8_t>(header);  // abi
         read<uint8_t>(header);  // abi version
         read_padding(header, 7);
@@ -263,78 +287,79 @@ public:
 
     int do_relocations() {
         AddrType B = (AddrType)(uintptr_t)base;
-        uint32_t G = 0;
-        //uint32_t GOT = 0;
+        //uint32_t GOT = (AddrType)(uintptr_t)symbol_address("_GLOBAL_OFFSET_TABLE_");
         //uint32_t GP = 0;
         //uint32_t L = 0;
 
+        // Since we are not doing any real dynamic linking, we just
+        // store a list of the global offsets allocated on the stack
+        // here.
+        uint32_t *global_offsets = (uint32_t *)__builtin_alloca(symbol_count() * sizeof(uint32_t));
+        for (uint32_t i = 0; i < symbol_count(); i++) {
+            global_offsets[i] = -1;
+        }
+        uint32_t global_offset_allocator = 0;
+
         for (uint16_t i = 0; i < section_count(); i++) {
             Shdr rel_shdr = section_header(i);
-            const char *rel_shdr_name = section_name(rel_shdr);
-
-            // Find the section these relocations apply to.
-            // TODO: Maybe there's a better way to do this than searching by name?
-            int section_idx = -1;
             if (rel_shdr.type == SHT_REL) {
-                section_idx = find_section(rel_shdr_name + 4);  // 4 = strlen(".rel")
             } else if (rel_shdr.type == SHT_RELA) {
-                section_idx = find_section(rel_shdr_name + 5);  // 5 = strlen(".rela")
             } else {
                 continue;
             }
-            if (section_idx == -1) {
-                // Couldn't find the section these relocations apply to.
-                continue;
-            }
-
-            Shdr target_section = section_header((uint16_t)section_idx);
-            //std::cout << rel_shdr_name << " -> " << section_name(target_section) << std::endl;
+            Shdr target_shdr = section_header(rel_shdr.info);
+            Shdr symtab = section_header(rel_shdr.link);
 
             for (uint32_t i = 0; i < rel_shdr.size / rel_shdr.entsize; i++) {
                 Rel *rel = (Rel *)((char *)base + rel_shdr.offset + i * rel_shdr.entsize);
-                int64_t P = B + target_section.offset + rel->offset;
-                uint32_t S = symbol_value(rel->sym());
-                if (rel_shdr.type == SHT_REL) {
-                } else if (rel_shdr.type == SHT_RELA) {
-                    uint32_t A = ((Rela *)rel)->addend;
-
-                    uint32_t field;
-                    int64_t result;
-                    switch (rel->type()) {
-                    case R_HEX_B22_PCREL:
-                        field = Word32_B22;
-                        result = (S + A - P) >> 2;
-                        break;
-                    case R_HEX_32:
-                        field = Word32;
-                        result = S + A;
-                        break;
-                    case R_HEX_B32_PCREL_X:
-                        field = Word32_X26;
-                        result = (S + A - P) >> 6;
-                        break;
-                    case R_HEX_B15_PCREL_X:
-                        field = Word32_B15;
-                        result = (S + A - P) & 0x3f;
-                        break;
-                    case R_HEX_6_PCREL_X:
-                        field = Word32_U6;
-                        result = (S + A - P);
-                        break;
-                    case R_HEX_GOT_32_6_X:
-                        field = Word32_X26;
-                        result = G >> 6;
-                        break;
-                    case R_HEX_GOT_11_X:
-                        field = Word32_U6;
-                        result = G;
-                        break;
-                    default:
-                        return (int)rel->type() << 16;
-                    }
-                    uint32_t* target = (uint32_t*)((char *)base + target_section.offset + rel->offset);
-                    *target = (*target & (~field)) | (result & field);
+                AddrType P = B + target_shdr.offset + rel->offset;
+                uint32_t S = symbol_offset(rel->sym(), &symtab);
+                int32_t A = rel_shdr.type == SHT_RELA ? ((Rela *)rel)->addend : 0;
+                uint32_t& G = global_offsets[rel->sym()];
+                if (G == -1) {
+                    G = global_offset_allocator;
+                    global_offset_allocator += sizeof(uint32_t);
                 }
+
+                uint32_t mask;
+                uint32_t field;
+                uint32_t result;
+                switch (rel->type()) {
+                case R_HEX_B22_PCREL:
+                    mask = field = Word32_B22;
+                    result = static_cast<uint32_t>((static_cast<int32_t>(S) + A - static_cast<int32_t>(P)) >> 2);
+                    break;
+                case R_HEX_32:
+                    mask = field = Word32;
+                    result = S + A;
+                    break;
+                case R_HEX_B32_PCREL_X:
+                    mask = field = Word32_X26;
+                    result = static_cast<uint32_t>((static_cast<int32_t>(S) + A - static_cast<int32_t>(P)) >> 6);
+                    break;
+                case R_HEX_B15_PCREL_X:
+                    mask = field = Word32_B15;
+                    result = static_cast<uint32_t>((static_cast<int32_t>(S) + A - static_cast<int32_t>(P)) & 0x3f);
+                    break;
+                case R_HEX_6_PCREL_X:
+                    mask = field = Word32_U6;
+                    result = (S + A - P);
+                    break;
+                case R_HEX_GOT_32_6_X:
+                    mask = field = Word32_X26;
+                    result = static_cast<uint32_t>(static_cast<int32_t>(G) >> 6);
+                    break;
+                case R_HEX_GOT_11_X:
+                    mask = 0;
+                    field = Word32_U6;
+                    result = G;
+                    break;
+                default:
+                    DEBUG_PRINT("Unknown relocation type");
+                    return (int)rel->type();
+                }
+                uint32_t* target = (uint32_t*)((char *)base + target_shdr.offset + rel->offset);
+                *target = (*target & (~mask)) | (result & field);
             }
         }
         return 0;
