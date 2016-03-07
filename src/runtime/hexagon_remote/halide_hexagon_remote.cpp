@@ -111,12 +111,14 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         return -1;
     }
 
+    FARF(LOW, "before init_runtime.");
     int result = init_runtime(halide_malloc,
                               halide_free,
                               halide_print,
                               halide_error,
                               halide_do_par_for,
                               halide_do_task);
+    FARF(LOW, "after init_runtime.");
     if (result != 0) {
         dlclose(lib);
         FARF(LOW, "init_runtime failed %d", result);
