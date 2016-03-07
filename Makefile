@@ -258,7 +258,6 @@ SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AllocationBoundsInference.cpp \
-  BlockFlattening.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
@@ -351,6 +350,7 @@ SOURCE_FILES = \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
+  StoreForwarding.cpp \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
@@ -381,7 +381,6 @@ HEADER_FILES = \
   AddParameterChecks.h \
   AllocationBoundsInference.h \
   Argument.h \
-  BlockFlattening.h \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
