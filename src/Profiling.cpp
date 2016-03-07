@@ -68,10 +68,8 @@ private:
             int64_t stack_bytes = constant_size * type.bytes();
             if (stack_bytes > ((int64_t(1) << 31) - 1)) { // Out of memory
                 return 0;
-            } else {
-                if (stack_bytes <= 1024 * 8) { // Allocation on stack
-                    return 0;
-                }
+            } else if (stack_bytes <= 1024 * 8) { // Allocation on stack
+                return 0;
             }
         }
         // Check that the allocation is not scalar (if it were scalar
@@ -82,7 +80,7 @@ private:
         for (size_t i = 1; i < extents.size(); i++) {
             size *= extents[i];
         }
-        size = Select::make(condition, size, 0);
+        size = Select::make(condition, size * type.bytes(), 0);
         return size;
     }
 
@@ -98,7 +96,7 @@ private:
         Expr condition = mutate(op->condition);
 
         Expr size = compute_allocation_size(new_extents, condition, op->type);
-        debug(0) << "  Injecting profiler into Allocate " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+        debug(1) << "  Injecting profiler into Allocate " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
         func_memory_sizes.push(op->name, size);
 
         Stmt body = mutate(op->body);
@@ -115,6 +113,8 @@ private:
             stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
         }
 
+        //debug(0) << stmt << "\n\n";
+
         Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
                                    {pipeline_name, idx, size}, Call::Extern);
 
@@ -125,7 +125,7 @@ private:
         int idx = get_func_id(op->name);
 
         Expr size = func_memory_sizes.get(op->name);
-        debug(0) << "  Injecting profiler into Free " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+        debug(1) << "  Injecting profiler into Free " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
         Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
                                    {pipeline_name, idx, size}, Call::Extern);
 
@@ -137,7 +137,7 @@ private:
     }
 
     void visit(const ProducerConsumer *op) {
-        //debug(0) << "  Injecting profiler into ProducerConsumer " << op->name << " in pipeline " << pipeline_name << "\n";
+        //debug(1) << "  Injecting profiler into ProducerConsumer " << op->name << " in pipeline " << pipeline_name << "\n";
         int idx = get_func_id(op->name);
 
         stack.push_back(idx);

@@ -106,11 +106,11 @@ WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           const char *pipeline_name,
                                           int func_id,
-                                          unsigned int incr);
+                                          int incr);
 WEAK void halide_profiler_memory_free(void *user_context,
                                       const char *pipeline_name,
                                       int func_id,
-                                      unsigned int incr);
+                                      int incr);
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
