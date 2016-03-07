@@ -1564,7 +1564,7 @@ Expr promote_64(Expr e) {
     } else if (const Max *m = e.as<Max>()) {
         return Max::make(promote_64(m->a), promote_64(m->b));
     } else {
-        return Cast::make(Int(64), e);
+        return cast(Int(64), e);
     }
 }
 }
@@ -1598,6 +1598,11 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Va
         base_address = builder->CreatePointerCast(base_address, load_type);
     }
 
+    llvm::Constant *constant_index = dyn_cast<llvm::Constant>(index);
+    if (constant_index && constant_index->isZeroValue()) {
+        return base_address;
+    }
+
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
@@ -1619,7 +1624,6 @@ int next_power_of_two(int x) {
 }
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
-
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;
