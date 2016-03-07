@@ -79,6 +79,7 @@ option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
+option(HALIDE_ENABLE_RTTI "Build with RTTI enabled" OFF)
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})

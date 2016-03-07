@@ -23,8 +23,8 @@ struct ReductionDomainContents;
 class ReductionDomain {
     IntrusivePtr<ReductionDomainContents> contents;
 public:
-    /** Construct a new NULL reduction domain */
-    ReductionDomain() : contents(NULL) {}
+    /** Construct a new nullptr reduction domain */
+    ReductionDomain() : contents(nullptr) {}
 
     /** Construct a reduction domain that spans the outer product of
      * all values of the given ReductionVariable in scanline order,
@@ -32,7 +32,7 @@ public:
      * the vector being outermost. */
     EXPORT ReductionDomain(const std::vector<ReductionVariable> &domain);
 
-    /** Is this handle non-NULL */
+    /** Is this handle non-nullptr */
     bool defined() const {
         return contents.defined();
     }
