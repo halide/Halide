@@ -1223,13 +1223,14 @@ class RenameVars : public IRMutator {
     }
 };
 
-vector<const Store *> find_non_aliasing_stores(Stmt stmt) {
+vector<Stmt> find_non_aliasing_stores(Stmt stmt) {
     FindLoadsAndStores finder;
     stmt.accept(&finder);
 
-    vector<const Store *> result;
+    vector<Stmt> result;
 
-    for (const Store *s : finder.stores) {
+    for (Stmt st : finder.stores) {
+        const Store *s = st.as<Store>();
         MightAliasWithAStore alias_tester(s);
         stmt.accept(&alias_tester);
         if (!alias_tester.result) {
@@ -1267,9 +1268,11 @@ class LoopCarry2 : public IRMutator {
 
         // Also make loads equivalent to the stores this loop body
         // will do. It will follow along with our rewriting of lets.
-        vector<const Store *> stores = find_non_aliasing_stores(body);
+        vector<Stmt> store_stmts = find_non_aliasing_stores(body);
         vector<Expr> values_stored, equivalent_loads;
-        for (const Store *s : stores) {
+        //here pdb
+        for (Stmt store_stmt : store_stmts) {
+            const Store *s = store_stmt.as<Store>();
             Expr equivalent_load = Load::make(s->value.type(), s->name, s->index, Buffer(), Parameter());
             values_stored.push_back(s->value);
             equivalent_loads.push_back(equivalent_load);
