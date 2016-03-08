@@ -233,7 +233,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
              << "  peak memory: " << p->memory_peak << " bytes"
              << "  total memory: " << p->memory_total << " bytes\n";
         halide_print(user_context, sstr.str());
-        if (p->time) {
+        if (p->time || p->memory_total) {
             for (int i = 0; i < p->num_funcs; i++) {
                 sstr.clear();
                 halide_profiler_func_stats *fs = p->funcs + i;
@@ -249,7 +249,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr << ft << "ms";
                 while (sstr.size() < 40) sstr << " ";
 
-                int percent = fs->time / (p->time / 100);
+                int percent = 0;
+                if (p->time != 0) {
+                    percent = fs->time / (p->time / 100);
+                }
                 sstr << "(" << percent << "%)";
                 while (sstr.size() < 55) sstr << " ";
 

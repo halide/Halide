@@ -51,18 +51,17 @@ int main(int argc, char **argv) {
 
     {
         printf("Running simple stack allocation test...\n");
+        // On stack allocation (less than 1024*8 and buffer g1 size is constant 10x10)
+        Func f1("f_1"), g1("g_1");
+        g1(x, y) = x;
+        f1(x, y) = g1(x%10, y%10);
+        g1.compute_root();
+
+        f1.set_custom_print(&my_print);
+        //f1.print_loop_nest();
+
         reset_stats();
-        // On stack allocation (less than 1024*8)
-        Func f("f_1"), g("g_1");
-        g(x, y) = x;
-        f(x, y) = g(x-1, y) + g(x, y-1);
-        g.compute_root();
-
-        f.set_custom_print(&my_print);
-        Image<int> im = f.realize(10, 10, t);
-
-        //f.print_loop_nest();
-
+        f1.realize(10, 10, t);
         if (check_error(0, 0, 0) != 0) {
             return -1;
         }
@@ -70,21 +69,20 @@ int main(int argc, char **argv) {
 
     {
         printf("Running simple heap allocation test...\n");
-        reset_stats();
         // On heap allocation (bigger than 1024*8)
         const int size_x = 1000;
         const int size_y = 1000;
 
-        Func f("f_2"), g("g_2");
-        g(x, y) = x;
-        f(x, y) = g(x-1, y) + g(x, y-1);
-        g.compute_root();
+        Func f2("f_2"), g2("g_2");
+        g2(x, y) = x;
+        f2(x, y) = g2(x-1, y) + g2(x, y-1);
+        g2.compute_root();
 
-        f.set_custom_print(&my_print);
-        Image<int> im = f.realize(size_x, size_y, t);
+        f2.set_custom_print(&my_print);
+        //f2.print_loop_nest();
 
-        //f.print_loop_nest();
-
+        reset_stats();
+        f2.realize(size_x, size_y, t);
         int total = (size_x+1)*(size_y+1)*sizeof(int);
         if (check_error(0, total, total) != 0) {
             return -1;
@@ -93,28 +91,82 @@ int main(int argc, char **argv) {
 
     {
         printf("Running allocate condition is always false test...\n");
-        reset_stats();
         // Allocate condiiton is always false
-        Func f("f_3"), g("g_3");
-        g(x, y) = x*y;
-        f(x, y) = select(1 == 2, g(x-1, y), 0);
-        g.compute_root();
+        Func f3("f_3"), g3("g_3");
+        g3(x, y) = x*y;
+        f3(x, y) = select(1 == 2, g3(x-1, y), 0);
+        g3.compute_root();
 
-        f.set_custom_print(&my_print);
-        Image<int> im = f.realize(1000, 1000, t);
+        f3.set_custom_print(&my_print);
+        //f3.print_loop_nest();
 
-        //f.print_loop_nest();
-
+        reset_stats();
+        f3.realize(1000, 1000, t);
         int total = 0;
         if (check_error(0, total, total) != 0) {
             return -1;
         }
     }
 
-    // TODO(psuriana): Add test for Allocate with non-trivial condition
-    
-    // TODO(psuriana): Add test for Allocate with non-trivial extent size (force
-    // alloc on the heap)
+    {
+        printf("Running allocate with non-trivial condition test...\n");
+
+        const int size_x = 10000;
+
+        Param<bool> toggle1, toggle2;
+
+        Func g4("g_4"), f4("f_4"), f5("f_5"), f6("f_6");
+
+        g4(x) = sin(x);
+        f4(x) = g4(x) + 1;
+        f5(x) = g4(x) + 2;
+        f6(x) = select(toggle1, f4(x), 0) + select(toggle2, f5(x), 0);
+
+        g4.compute_root();
+        f4.compute_root();
+        f5.compute_root();
+
+        f6.set_custom_print(&my_print);
+        //f6.print_loop_nest();
+
+        int total = 0;
+
+        reset_stats();
+        toggle1.set(true);
+        toggle2.set(true);
+        f6.realize(size_x, t);
+        total = size_x*sizeof(float);
+        if (check_error(0, total, total) != 0) {
+            return -1;
+        }
+
+        reset_stats();
+        toggle1.set(true);
+        toggle2.set(false);
+        f6.realize(size_x, t);
+        total = size_x*sizeof(float);
+        if (check_error(0, total, total) != 0) {
+            return -1;
+        }
+
+        reset_stats();
+        toggle1.set(false);
+        toggle2.set(true);
+        f6.realize(size_x, t);
+        total = size_x*sizeof(float);
+        if (check_error(0, total, total) != 0) {
+            return -1;
+        }
+
+        reset_stats();
+        toggle1.set(false);
+        toggle2.set(false);
+        f6.realize(size_x, t);
+        total = 0;
+        if (check_error(0, total, total) != 0) {
+            return -1;
+        }
+    }
 
     printf("Success!\n");
     return 0;
