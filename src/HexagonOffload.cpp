@@ -189,12 +189,11 @@ public:
 
         // Compile the device code.
         std::vector<uint8_t> object;
+#if 0
         compile_module_to_shared_object(device_code, object);
-
-        compile_module_to_shared_object(device_code, "/tmp/hex.so");
-
+        //compile_module_to_shared_object(device_code, "/tmp/hex.so");
+#else
         compile_module_to_object(device_code, "hex.o");
-
         system("$HEX_CLANG hex.o -shared -o hex_clang_hex.so");
 
         object.clear();
@@ -202,6 +201,7 @@ public:
         object.resize(so.tellg());
         so.seekg(0, std::ios::beg);
         so.read(reinterpret_cast<char*>(&object[0]), object.size());
+#endif
 
         // Put the compiled object into a buffer.
         size_t code_size = object.size();
