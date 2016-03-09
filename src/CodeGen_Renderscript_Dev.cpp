@@ -75,7 +75,7 @@ CodeGen_Renderscript_Dev::~CodeGen_Renderscript_Dev() {
 
 void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
                                 const std::vector<DeviceArgument> &args) {
-    internal_assert(module != NULL);
+    internal_assert(module != nullptr);
 
     // Use [kernel_name] as the function name.
     debug(2) << "In CodeGen_Renderscript_Dev::add_kernel name=" << kernel_name << "\n";
@@ -98,13 +98,13 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types_1(args.size());
-    llvm::Type *output_type = NULL;
+    llvm::Type *output_type = nullptr;
     for (size_t i = 0; i < args.size(); i++) {
         string arg_name = args[i].name;
         debug(1) << "CodeGen_Renderscript_Dev arg[" << i << "].name=" << arg_name << "\n";
         if (args[i].is_buffer && args[i].write) {
             // Remember actual type of buffer argument - will use it for kernel output buffer type.
-            internal_assert(output_type == NULL) << "Already found an output buffer for kernel.\n";
+            internal_assert(output_type == nullptr) << "Already found an output buffer for kernel.\n";
             output_type = llvm_type_of(args[i].type);
             debug(1) << "  this is our output buffer type\n";
         }
@@ -158,7 +158,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
     // Make our function with arguments for kernel defined per Renderscript
     // convention: (in_type in, i32 x, i32 y)
     vector<llvm::Type *> arg_types;
-    internal_assert(output_type != NULL) << "Did not find an output buffer for kernel.\n";
+    internal_assert(output_type != nullptr) << "Did not find an output buffer for kernel.\n";
     arg_types.push_back(output_type);  // "in"
     for (int i = 0; i < 4; i++) {
         debug(2) << "  adding argument type at " << i << ": "
@@ -211,7 +211,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         // Buffer symbols are bit-casted to rs_allocation*.
         Value *value = std::get<1>(name_and_value);
         llvm::PointerType *p = llvm::cast<llvm::PointerType>(value->getType());
-        if (p != NULL) {
+        if (p != nullptr) {
             if (p->getElementType() == StructTy_struct_rs_allocation) {
                 value = builder->CreateBitCast(
                     value,
@@ -414,7 +414,7 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
     const Broadcast *b_x = x.as<Broadcast>();
     const Broadcast *b_y = y.as<Broadcast>();
     const Ramp *ramp_c = c.as<Ramp>();
-    if (b_name != NULL && b_x != NULL && b_y != NULL && ramp_c != NULL) {
+    if (b_name != nullptr && b_x != nullptr && b_y != nullptr && ramp_c != nullptr) {
         // vectorized over c, use x and y to retrieve 4-byte RGBA chunk.
         const IntImm *stride = ramp_c->stride.IRHandle::as<IntImm>();
         user_assert(stride->value == 1 && ramp_c->lanes == 4)
@@ -428,7 +428,7 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
         args.push_back(codegen(b_y->value));
     } else {
         // Use all three coordinates to retrieve single byte.
-        user_assert(b_name == NULL && b_x == NULL && b_y == NULL && ramp_c == NULL);
+        user_assert(b_name == nullptr && b_x == nullptr && b_y == nullptr && ramp_c == nullptr);
         args.push_back(sym_get(name.as<StringImm>()->value));
         args.push_back(codegen(x));
         args.push_back(codegen(y));

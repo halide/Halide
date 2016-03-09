@@ -706,41 +706,31 @@ Stmt IRFilter::mutate(Stmt s) {
 }
 
 namespace {
+Stmt make_block(Stmt a, Stmt b = Stmt(), Stmt c = Stmt()) {
+    std::vector<Stmt> s;
+    if (a.defined()) s.push_back(a);
+    if (b.defined()) s.push_back(b);
+    if (c.defined()) s.push_back(c);
+    return fold_right(s, Block::make);
+}
+
     template<typename T, typename A>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
-        *stmt = Stmt();
-        if (a.defined()) {
-            *stmt = a;
-        }
+        *stmt = make_block(a);
     }
     template<typename T, typename A, typename B>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
-        *stmt = Stmt();
-        if (b.defined()) {
-            *stmt = Block::make(b, *stmt);
-        }
-        if (a.defined()) {
-            *stmt = Block::make(a, *stmt);
-        }
+        *stmt = make_block(a, b);
     }
     template<typename T, typename A, typename B, typename C>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, const C op_c, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
         Stmt c = mutator->mutate(op_c);
-        *stmt = Stmt();
-        if (c.defined()) {
-            *stmt = Block::make(c, *stmt);
-        }
-        if (b.defined()) {
-            *stmt = Block::make(b, *stmt);
-        }
-        if (a.defined()) {
-            *stmt = Block::make(a, *stmt);
-        }
+        *stmt = make_block(a, b, c);
     }
 }
 
@@ -936,7 +926,7 @@ public:
 
     }
     virtual void visit(const Let *op) {
-        stmt = NULL;
+        stmt = nullptr;
 
         Stmt mutated_value = mutate(op->value);
         Stmt mutated_body = mutate(op->body);

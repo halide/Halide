@@ -52,7 +52,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition,
                                                            Expr new_expr, std::string free_function) {
-    Value *llvm_size = NULL;
+    Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = 0;
     if (constant_allocation_size(extents, name, constant_bytes)) {
@@ -70,7 +70,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     }
 
     // Only allocate memory if the condition is true, otherwise 0.
-    if (llvm_size != NULL) {
+    if (llvm_size != nullptr) {
         // We potentially load one scalar value past the end of the
         // buffer, so pad the allocation with an extra instance of the
         // scalar type. If the allocation is on the stack, we can just
@@ -89,16 +89,22 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = new_expr.defined() ? 0 : stack_bytes;
     allocation.type = type;
-    allocation.ptr = NULL;
-    allocation.destructor = NULL;
-    allocation.destructor_function = NULL;
+    allocation.ptr = nullptr;
+    allocation.destructor = nullptr;
+    allocation.destructor_function = nullptr;
 
-    if (!new_expr.defined() && stack_bytes != 0) {
+    if (!new_expr.defined() && extents.empty()) {
+        // If it's a scalar allocation, don't try anything clever. We
+        // want llvm to be able to promote it to a register.
+        allocation.ptr = create_alloca_at_entry(llvm_type_of(type), 1, false, name);
+        allocation.stack_bytes = stack_bytes;
+    } else if (!new_expr.defined() && stack_bytes != 0) {
+
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
         for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
             AllocaInst *alloca_inst = dyn_cast<AllocaInst>(free->ptr);
-            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : NULL;
+            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : nullptr;
             llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
             if (allocated_in == current_func &&

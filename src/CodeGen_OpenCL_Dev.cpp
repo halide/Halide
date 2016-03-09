@@ -296,12 +296,12 @@ const char * vector_elements = "0123456789ABCDEF";
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp1(Expr e) {
     const Ramp *r = e.as<Ramp>();
-    if (r == NULL) {
+    if (r == nullptr) {
         return Expr();
     }
 
     const IntImm *i = r->stride.as<IntImm>();
-    if (i != NULL && i->value == 1) {
+    if (i != nullptr && i->value == 1) {
         return r->base;
     }
 

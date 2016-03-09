@@ -7,33 +7,33 @@ namespace Internal {
 
 namespace {
 
-IntImm make_immortal_int(int x) {
-    IntImm i;
-    i.ref_count.increment();
-    i.type = Int(32);
-    i.value = x;
+const IntImm *make_immortal_int(int x) {
+    IntImm *i = new IntImm;
+    i->ref_count.increment();
+    i->type = Int(32);
+    i->value = x;
     return i;
 }
 
 }
 
-IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
-                                    make_immortal_int(-7),
-                                    make_immortal_int(-6),
-                                    make_immortal_int(-5),
-                                    make_immortal_int(-4),
-                                    make_immortal_int(-3),
-                                    make_immortal_int(-2),
-                                    make_immortal_int(-1),
-                                    make_immortal_int(0),
-                                    make_immortal_int(1),
-                                    make_immortal_int(2),
-                                    make_immortal_int(3),
-                                    make_immortal_int(4),
-                                    make_immortal_int(5),
-                                    make_immortal_int(6),
-                                    make_immortal_int(7),
-                                    make_immortal_int(8)};
+const IntImm *IntImm::small_int_cache[] = {make_immortal_int(-8),
+                                           make_immortal_int(-7),
+                                           make_immortal_int(-6),
+                                           make_immortal_int(-5),
+                                           make_immortal_int(-4),
+                                           make_immortal_int(-3),
+                                           make_immortal_int(-2),
+                                           make_immortal_int(-1),
+                                           make_immortal_int(0),
+                                           make_immortal_int(1),
+                                           make_immortal_int(2),
+                                           make_immortal_int(3),
+                                           make_immortal_int(4),
+                                           make_immortal_int(5),
+                                           make_immortal_int(6),
+                                           make_immortal_int(7),
+                                           make_immortal_int(8)};
 
 
 Expr Cast::make(Type t, Expr v) {
@@ -442,11 +442,19 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
 
 Stmt Block::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
-    // rest is allowed to be null
+    internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
-    node->first = first;
-    node->rest = rest;
+
+    if (const Block *b = first.as<Block>()) {
+        // Use a canonical block nesting order
+        node->first = b->first;
+        node->rest  = Block::make(b->rest, rest);
+    } else {
+        node->first = first;
+        node->rest = rest;
+    }
+
     return node;
 }
 
@@ -638,8 +646,6 @@ Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
 Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
-Call::ConstString Call::make_int64 = "make_int64";
-Call::ConstString Call::make_float64 = "make_float64";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::get_high_register = "get_high_register";
 Call::ConstString Call::get_low_register = "get_low_register";

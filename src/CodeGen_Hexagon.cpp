@@ -2696,32 +2696,37 @@ void CodeGen_Hexagon::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
     if (ramp && stride && stride->value == 1) {
-      int width = ramp->lanes;
-      ModulusRemainder mod_rem = get_alignment_info(ramp->base);
+      int lanes = ramp->lanes;
+      // int alignment = op->type.bytes(); // The size of a single element
+      int native_vector_bytes = native_vector_bits() / 8;
 
-      int alignment_required = CPICK(128, 64);
-      if (width != alignment_required) {
-        // This will happen only under two cases.
-        // 1. We are loading a partial vector.
-        // 2. We are loading a type other than u8 or i8.
-        // FIXME: PDB: Relax the second condition.
+      // We are loading a partial vector. if we are, default to vanilla codegen.
+      if (lanes * op->type.bytes() != native_vector_bytes) {
         CodeGen_Posix::visit(op);
         return;
       }
+      // At this point we are satisfied that we are loading a native vector.
+      ModulusRemainder mod_rem = get_alignment_info(ramp->base);
       if (mod_rem.modulus == 1 &&
           mod_rem.remainder == 0) {
         // We know nothing about alignment. Just fall back upon vanilla codegen.
         CodeGen_Posix::visit(op);
         return;
       }
-      if (!possibly_misaligned && mod_rem.modulus == alignment_required) {
+      // ModulusRemainder tells us if something can be written in the
+      // form
+      // (ModulusRemainder.modulus * c1) + ModulusRemainder.remainder.
+      // So for us to be able to generate an aligned load, ramp->base
+      // should be
+      // (lanes * c1) + c2.
+      if (!possibly_misaligned && !(mod_rem.modulus % lanes)) {
         if (mod_rem.remainder == 0) {
           // This is a perfectly aligned address. Vanilla codegen can deal with
           // this.
           CodeGen_Posix::visit(op);
           return;
         } else {
-          Expr base = ramp->base;
+          Expr base = simplify(ramp->base);
           const Add *add = base.as<Add>();
           const IntImm *b = add->b.as<IntImm>();
           // We can generate a combination of two vmems (aligned) followed by
@@ -2734,16 +2739,33 @@ void CodeGen_Hexagon::visit(const Load *op) {
             CodeGen_Posix::visit(op);
             return;
           }
-          int offset = b->value;
-          if (mod_rem.remainder != ((bytes_in_vector() + offset) % bytes_in_vector())) {
+          int b_val = b->value;
+          // offset_elements is an expr that tells us how many elements away we
+          // are from an aligned vector;
+          int offset_elements = mod_imp(b_val, lanes);
+          if (offset_elements == 0) {
             CodeGen_Posix::visit(op);
             return;
           }
-          int bytes_off = std::abs(offset) * (op->type.bits() / 8);
-          Expr base_low = offset > 0 ? add->a : simplify(add->a - width);
-          Expr base_high = offset > 0 ? simplify(add->a + width) : add->a;
-          Expr ramp_low = Ramp::make(base_low, 1, width);
-          Expr ramp_high = Ramp::make(base_high, 1, width);
+          // If the index is A + b, then we know that A is already aligned. We need
+          // to know if b, which is an IntImm also contains an aligned vector inside.
+          // For e.g. if b is 65 and lanes is 64, then we have 1 aligned vector in it.
+          // and base_low should be (A + 64)
+          int offset_vector = div_imp(b_val, lanes) * lanes;
+          // offset_elements tells us that we are off by those many elements
+          // from the vector width. We will load two vectors
+          // v_low = load(add->a + offset_vector)
+          // v_high = load(add->a + offset_vector + lanes)
+          // Now,
+          // valign (v_high, v_low, x) = vlalign(v_high, v_low, vec_length - x);
+          // Since offset_elements is always between 0 and (lanes-1), we need to
+          // look at the sign of b_val to create the right offset for vlalign.
+          int bytes_off = b_val > 0 ? offset_elements * op->type.bytes() :
+              (lanes - offset_elements)  * op->type.bytes();
+          Expr base_low =  simplify(add->a + offset_vector);
+          Expr base_high =  simplify(base_low + lanes);
+          Expr ramp_low = Ramp::make(base_low, 1, lanes);
+          Expr ramp_high = Ramp::make(base_high, 1, lanes);
           Expr load_low = Load::make(op->type, op->name, ramp_low, op->image,
                                      op->param);
           Expr load_high = Load::make(op->type, op->name, ramp_high, op->image,
@@ -2753,7 +2775,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
 
           Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
           std::vector<Value *> Ops;
-          if (offset > 0) {
+          if (b_val > 0) {
             Value *Scalar;
             if (bytes_off < 7) {
               IntrinsID = IPICK(Intrinsic::hexagon_V6_valignbi);

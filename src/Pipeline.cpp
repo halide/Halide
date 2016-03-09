@@ -114,7 +114,7 @@ EXPORT void destroy<PipelineContents>(const PipelineContents *p) {
 }
 }
 
-Pipeline::Pipeline() : contents(NULL) {
+Pipeline::Pipeline() : contents(nullptr) {
 }
 
 bool Pipeline::defined() const {
@@ -811,9 +811,9 @@ struct JITFuncCallContext {
 
     JITFuncCallContext(const JITHandlers &handlers, Parameter &user_context_param)
         : user_context_param(user_context_param) {
-        void *user_context = NULL;
+        void *user_context = nullptr;
         JITHandlers local_handlers = handlers;
-        if (local_handlers.custom_error == NULL) {
+        if (local_handlers.custom_error == nullptr) {
             custom_error_handler = false;
             local_handlers.custom_error = ErrorBuffer::handler;
             user_context = &error_buffer;
@@ -848,7 +848,7 @@ struct JITFuncCallContext {
 
     void finalize(int exit_status) {
         report_if_error(exit_status);
-        user_context_param.set_scalar((void *)NULL); // Don't leave param hanging with pointer to stack.
+        user_context_param.set_scalar((void *)nullptr); // Don't leave param hanging with pointer to stack.
     }
 };
 }
@@ -916,7 +916,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
                 arg_values.push_back(buf.raw_buffer());
             } else {
                 // Unbound
-                arg_values.push_back(NULL);
+                arg_values.push_back(nullptr);
             }
             debug(1) << "JIT input ImageParam argument ";
         } else if (arg.param.defined()) {
@@ -1015,7 +1015,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
         const InferredArgument &arg = contents.ptr->inferred_args[i];
         const void *arg_value = args[i];
         if (arg.param.defined()) {
-            user_assert(arg_value != NULL)
+            user_assert(arg_value != nullptr)
                 << "Can't realize a pipeline because ImageParam "
                 << arg.param.name() << " is not bound to a Buffer\n";
         }
@@ -1121,7 +1121,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
 
     vector<size_t> query_indices;
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i] == NULL) {
+        if (args[i] == nullptr) {
             query_indices.push_back(i);
             memset(&tracked_buffers[i], 0, sizeof(TrackedBuffer));
             args[i] = &tracked_buffers[i].query;
@@ -1239,11 +1239,11 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline(pipeline), c_function(NULL) {
+    : pipeline(pipeline), c_function(nullptr) {
 }
 
 JITExtern::JITExtern(Func func)
-    : pipeline(func), c_function(NULL) {
+    : pipeline(func), c_function(nullptr) {
 }
 
 }  // namespace Halide
