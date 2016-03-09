@@ -27,7 +27,7 @@ struct _remote_buffer__seq_octet {
    int dataLen;
 };
 typedef int (*remote_initialize_kernels_fn)(const unsigned char*, int, halide_hexagon_handle_t*);
-typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*);
+typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int, const remote_buffer*, int, remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 
@@ -134,8 +134,8 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     init_hexagon_runtime(user_context);
 
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
-                        << ", module_state: " << state_ptr
-                        << ", *module_state: " << *state_ptr
+                        << ", state_ptr: " << state_ptr
+                        << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
                         << ", code_size: " << (int)code_size << ")\n";
     halide_assert(user_context, state_ptr != NULL);
@@ -176,7 +176,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
-        result = remote_initialize_kernels((uint8_t*)filename, strlen(filename), &module);
+        result = remote_initialize_kernels((uint8_t*)filename, strlen(filename) + 1, &module);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
             (*state)->module = module;
@@ -304,7 +304,7 @@ WEAK int halide_hexagon_run(void *user_context,
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
         debug(user_context) << "    halide_hexagon_remote_get_symbol " << name << " -> \n";
-        *function = remote_get_symbol(module, name);
+        *function = remote_get_symbol(module, name, strlen(name) + 1);
         debug(user_context) << "        " << *function << "\n";
         if (*function == 0) {
             error(user_context) << "Failed to find function " << name << " in module.\n";
