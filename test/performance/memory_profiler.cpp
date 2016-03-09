@@ -33,8 +33,28 @@ int check_error(int expected_current, int expected_peak, int expected_total) {
         printf("Current memory was %d instead of %d\n", memory_current, expected_current);
         return -1;
     }
-    if (memory_peak != expected_peak) {
+    if (memory_peak > expected_peak) {
         printf("Peak memory was %d instead of %d\n", memory_peak, expected_peak);
+        return -1;
+    }
+    if (memory_total != expected_total) {
+        printf("Total memory was %d instead of %d\n", memory_total, expected_total);
+        return -1;
+    }
+    return 0;
+}
+
+
+// Return 0 if there is no error found
+int check_error_parallel(int expected_current, int min_peak, int max_peak, int expected_total) {
+    /*printf("Memory current: %d bytes, peak: %d bytes, total: %d bytes\n",
+            memory_current, memory_peak, memory_total);*/
+    if (memory_current != expected_current) {
+        printf("Current memory was %d instead of %d\n", memory_current, expected_current);
+        return -1;
+    }
+    if (memory_peak < min_peak || memory_peak > max_peak) {
+        printf("Peak memory was %d which was outside the range of [%d, %d]\n", memory_peak, min_peak, max_peak);
         return -1;
     }
     if (memory_total != expected_total) {
@@ -168,7 +188,59 @@ int main(int argc, char **argv) {
         }
     }
 
-    //TODO (psuriana): Add test for parallel update
+    {
+        printf("Running allocate within loop test...\n");
+        const int size_x = 1200;
+        const int size_y = 1000;
+
+        Func f7("f_7"), f8("f_8"), g5("g_5");
+        g5(x, y) = x*y;
+        f7(x, y) = g5(x, y);
+        f8(x, y) = g5(x, y) + f7(x, y);
+
+        g5.store_at(f8, y).compute_at(f8, y);
+        f7.compute_at(f8, y);
+
+        //f8.parallel(y);
+
+        f8.set_custom_print(&my_print);
+        //f8.print_loop_nest();
+
+        reset_stats();
+        f8.realize(size_x, size_y, t);
+        int peak = size_x*sizeof(int);
+        int total = size_x*size_y*sizeof(int);
+        if (check_error(0, peak, total) != 0) {
+            return -1;
+        }
+    }
+
+    {
+        printf("Running parallel allocate test...\n");
+        const int size_x = 1200;
+        const int size_y = 1000;
+
+        Func f9("f_9"), f10("f_10"), g6("g_6");
+        g6(x, y) = x*y;
+        f9(x, y) = g6(x, y);
+        f10(x, y) = g6(x, y) + f9(x, y);
+
+        g6.store_at(f10, y).compute_at(f10, y);
+        f9.compute_at(f10, y);
+
+        f10.parallel(y);
+
+        f10.set_custom_print(&my_print);
+        //f10.print_loop_nest();
+
+        reset_stats();
+        f10.realize(size_x, size_y, t);
+        int min_peak = size_x*sizeof(int);
+        int total = size_x*size_y*sizeof(int);
+        if (check_error_parallel(0, min_peak, total, total) != 0) {
+            return -1;
+        }
+    }
 
     printf("Success!\n");
     return 0;
