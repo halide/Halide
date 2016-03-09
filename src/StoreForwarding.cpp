@@ -87,7 +87,7 @@ Expr extreme_lane(Expr e, bool max) {
         return b->value;
     }
     if (const Ramp *r = e.as<Ramp>()) {
-        Expr last_lane = r->base + r->stride * (r->width - 1);
+        Expr last_lane = r->base + r->stride * (r->lanes - 1);
         Expr first_lane = r->base;
         if (is_positive_const(r->stride)) {
             if (max) {
@@ -130,10 +130,10 @@ bool might_overlap(Expr a, Expr b) {
 }
 
 Expr scratch_index(Type t) {
-    if (t.width == 1) {
+    if (t.lanes() == 1) {
         return 0;
     } else {
-        return Ramp::make(0, 1, t.width);
+        return Ramp::make(0, 1, t.lanes());
     }
 }
 
@@ -1011,8 +1011,9 @@ class LiftFixedExpressionsSingleLoop : public IRMutator {
         } else {
             value = mutate(op->value);
         }
-        debug(3) << "Visiting let: " << op->name << ", " << op->value << ", " << value << "\n";
-        if (const Variable *v = value.as<Variable>()) {
+        debug(3) << "Visitinge let: " << op->name << ", " << op->value << ", " << value << "\n";
+        const Variable *v = value.as<Variable>();
+        if (v) {
             // The value was successfully lifted into a var
             return mutate(substitute(op->name, value, op->body));
         } else {
@@ -1222,17 +1223,18 @@ class RenameVars : public IRMutator {
     }
 };
 
-vector<Store> find_non_aliasing_stores(Stmt stmt) {
+vector<Stmt> find_non_aliasing_stores(Stmt stmt) {
     FindLoadsAndStores finder;
     stmt.accept(&finder);
 
-    vector<Store> result;
+    vector<Stmt> result;
 
-    for (const Store *s : finder.stores) {
+    for (Stmt st : finder.stores) {
+        const Store *s = st.as<Store>();
         MightAliasWithAStore alias_tester(s);
         stmt.accept(&alias_tester);
         if (!alias_tester.result) {
-            result.push_back(*s);
+            result.push_back(s);
         }
     }
 
@@ -1266,11 +1268,13 @@ class LoopCarry2 : public IRMutator {
 
         // Also make loads equivalent to the stores this loop body
         // will do. It will follow along with our rewriting of lets.
-        vector<Store> stores = find_non_aliasing_stores(body);
+        vector<Stmt> store_stmts = find_non_aliasing_stores(body);
         vector<Expr> values_stored, equivalent_loads;
-        for (Store s : stores) {
-            Expr equivalent_load = Load::make(s.value.type(), s.name, s.index, Buffer(), Parameter());
-            values_stored.push_back(s.value);
+        //here pdb
+        for (Stmt store_stmt : store_stmts) {
+            const Store *s = store_stmt.as<Store>();
+            Expr equivalent_load = Load::make(s->value.type(), s->name, s->index, Buffer(), Parameter());
+            values_stored.push_back(s->value);
             equivalent_loads.push_back(equivalent_load);
         }
 
