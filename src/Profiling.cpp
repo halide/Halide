@@ -87,6 +87,8 @@ private:
     void visit(const Allocate *op) {
         int idx = get_func_id(op->name);
 
+        Expr profiler_token = Variable::make(Int(32), "profiler_token");
+
         vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
@@ -116,7 +118,7 @@ private:
         //debug(0) << stmt << "\n\n";
 
         Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
-                                   {pipeline_name, idx, size}, Call::Extern);
+                                   {pipeline_name, profiler_token, idx, size}, Call::Extern);
 
         stmt = Block::make(Evaluate::make(set_task), stmt);
     }
@@ -124,10 +126,12 @@ private:
     void visit(const Free *op) {
         int idx = get_func_id(op->name);
 
+        Expr profiler_token = Variable::make(Int(32), "profiler_token");
+
         Expr size = func_memory_sizes.get(op->name);
         debug(1) << "  Injecting profiler into Free " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
         Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
-                                   {pipeline_name, idx, size}, Call::Extern);
+                                   {pipeline_name, profiler_token, idx, size}, Call::Extern);
 
         IRMutator::visit(op);
 

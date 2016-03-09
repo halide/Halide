@@ -148,10 +148,13 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           const char *pipeline_name,
+                                          int token,
                                           int func_id,
                                           int incr) {
     halide_profiler_state *s = halide_profiler_get_state();
     ScopedMutexLock lock(&s->lock);
+
+    func_id += token;
 
     halide_profiler_pipeline_stats *p_stats = NULL;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -163,6 +166,7 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
             break;
         }
     }
+
     halide_assert(user_context, p_stats != NULL);
     halide_assert(user_context, (func_id - p_stats->first_func_id) >= 0);
     halide_assert(user_context, (func_id - p_stats->first_func_id) < p_stats->num_funcs);
@@ -186,10 +190,13 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
 
 WEAK void halide_profiler_memory_free(void *user_context,
                                       const char *pipeline_name,
+                                      int token,
                                       int func_id,
                                       int decr) {
     halide_profiler_state *s = halide_profiler_get_state();
     ScopedMutexLock lock(&s->lock);
+
+    func_id += token;
 
     halide_profiler_pipeline_stats *p_stats = NULL;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -216,7 +223,7 @@ WEAK void halide_profiler_memory_free(void *user_context,
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
 
-    char line_buf[160];
+    char line_buf[400];
     Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -228,10 +235,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
              << "  total time: " << t << " ms"
              << "  samples: " << p->samples
              << "  runs: " << p->runs
-             << "  time per run: " << t / p->runs << " ms"
-             << "  current memory: " << p->memory_current << " bytes" // Should be zero
-             << "  peak memory: " << p->memory_peak << " bytes"
-             << "  total memory: " << p->memory_total << " bytes\n";
+             << "  time/run: " << t / p->runs << " ms"
+             //<< "  mem_current: " << p->memory_current << " bytes" // Should be zero
+             << "  mem_peak: " << p->memory_peak << " bytes"
+             << "  mem_total: " << p->memory_total << " bytes\n";
         halide_print(user_context, sstr.str());
         if (p->time || p->memory_total) {
             for (int i = 0; i < p->num_funcs; i++) {
