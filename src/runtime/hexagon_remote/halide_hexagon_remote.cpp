@@ -111,20 +111,18 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         return -1;
     }
 
-    FARF(LOW, "before init_runtime.");
     int result = init_runtime(halide_malloc,
                               halide_free,
                               halide_print,
                               halide_error,
                               halide_do_par_for,
                               halide_do_task);
-    FARF(LOW, "after init_runtime.");
     if (result != 0) {
         dlclose(lib);
         FARF(LOW, "init_runtime failed %d", result);
         return result;
     }
-    *module_ptr = (handle_t)lib;
+    *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
 #else
     // Map some memory for the code and copy it in.
@@ -187,7 +185,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
 
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
 #if 1
-    return (handle_t)dlsym((void *)module_ptr, name);
+    return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
 #else
     Elf::Object<uint32_t> obj;
     int result = obj.init((void*)module_ptr);
@@ -205,7 +203,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               buffer *outputs, int outputsLen) {
     // Get a pointer to the argv version of the pipeline.
     typedef int (*pipeline_argv_t)(void **);
-    pipeline_argv_t pipeline = (pipeline_argv_t)(function);
+    pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
     // Construct a list of arguments.
     void **args = (void **)__builtin_alloca((arg_ptrsLen + outputsLen) * sizeof(void *));
@@ -221,9 +219,13 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+#if 1
+    dlclose(reinterpret_cast<void*>(module_ptr));
+#else
     void *executable = (void *)module_ptr;
     codeLen = (codeLen + map_alignment - 1) & (map_alignment - 1);
     munmap(executable, codeLen);
+#endif
     return 0;
 }
 
