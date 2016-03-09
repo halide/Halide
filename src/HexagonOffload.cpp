@@ -50,6 +50,10 @@ class InjectHexagonRpc : public IRMutator {
         return Call::make(Handle(), Call::address_of, {var}, Call::Intrinsic);
     }
 
+    Expr module_state() {
+        return state_var("module_state", type_of<void*>());
+    }
+
     Expr module_state_ptr() {
         return state_var_ptr("module_state", type_of<void*>());
     }
@@ -144,7 +148,7 @@ public:
 
             std::string pipeline_name = hex_name + "_argv";
             std::vector<Expr> params;
-            params.push_back(module_state_ptr());
+            params.push_back(module_state());
             params.push_back(pipeline_name);
             params.push_back(state_var_ptr(hex_name, type_of<int>()));
             params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, input_arg_sizes, Call::Intrinsic));
