@@ -1,5 +1,4 @@
 #include "Deinterleave.h"
-#include "BlockFlattening.h"
 #include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -19,11 +18,12 @@ class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
     const int store_stride, max_stores;
-    std::vector<LetStmt>& let_stmts;
-    std::vector<Store>& stores;
+    std::vector<Stmt> &let_stmts;
+    std::vector<Stmt> &stores;
 
-    StoreCollector(const std::string& name, int stride, int ms,
-                   std::vector<LetStmt>& lets, std::vector<Store>& ss) :
+    StoreCollector(const std::string &name, int stride, int ms,
+                   std::vector<Stmt> &lets,
+                   std::vector<Stmt> &ss) :
         store_name(name), store_stride(stride), max_stores(ms),
         let_stmts(lets), stores(ss), collecting(true) {}
 private:
@@ -41,7 +41,7 @@ private:
     // These are lets that we've encountered since the last collected
     // store. If we collect another store, these "potential" lets
     // become lets used by the collected stores.
-    std::vector<LetStmt> potential_lets;
+    std::vector<Stmt> potential_lets;
 
     void visit(const Load *op) {
         if (!collecting) {
@@ -97,7 +97,7 @@ private:
         }
 
         // This store is good, collect it and replace with a no-op.
-        stores.push_back(*op);
+        stores.push_back(op);
         stmt = Evaluate::make(0);
 
         // Because we collected this store, we need to save the
@@ -115,7 +115,7 @@ private:
 
         // If we're still collecting, we need to save the let as a potential let.
         if (collecting) {
-            potential_lets.push_back(*op);
+            potential_lets.push_back(op);
         }
     }
 
@@ -136,7 +136,7 @@ private:
 };
 
 Stmt collect_strided_stores(Stmt stmt, const std::string& name, int stride, int max_stores,
-                            std::vector<LetStmt> lets, std::vector<Store>& stores) {
+                            std::vector<Stmt> lets, std::vector<Stmt> &stores) {
 
     StoreCollector collect(name, stride, max_stores, lets, stores);
     return collect.mutate(stmt);
@@ -535,9 +535,9 @@ class Interleaver : public IRMutator {
             if (!op->rest.defined()) goto fail;
 
             // Gather all the let stmts surrounding the first.
-            std::vector<LetStmt> let_stmts;
+            std::vector<Stmt> let_stmts;
             while (let) {
-                let_stmts.push_back(*let);
+                let_stmts.push_back(let);
                 store = let->body.as<Store>();
                 let = let->body.as<LetStmt>();
             }
@@ -560,8 +560,8 @@ class Interleaver : public IRMutator {
             const int64_t expected_stores = stride == 1 ? lanes : stride;
 
             // Collect the rest of the stores.
-            std::vector<Store> stores;
-            stores.push_back(*store);
+            std::vector<Stmt> stores;
+            stores.push_back(store);
             Stmt rest = collect_strided_stores(op->rest, store->name,
                                                stride, expected_stores,
                                                let_stmts, stores);
@@ -584,7 +584,7 @@ class Interleaver : public IRMutator {
             Buffer load_image;
             Parameter load_param;
             for (size_t i = 0; i < stores.size(); ++i) {
-                const Ramp *ri = stores[i].index.as<Ramp>();
+                const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
                 internal_assert(ri);
 
                 // Mismatched store vector laness.
@@ -607,7 +607,7 @@ class Interleaver : public IRMutator {
 
                     // This case only triggers if we have an immediate load of the correct stride on the RHS.
                     // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
-                    const Load *load = stores[i].value.as<Load>();
+                    const Load *load = stores[i].as<Store>()->value.as<Load>();
                     if (!load) goto fail;
 
                     const Ramp *ramp = load->index.as<Ramp>();
@@ -634,7 +634,7 @@ class Interleaver : public IRMutator {
                 }
 
                 if (j == 0) {
-                    base = stores[i].index.as<Ramp>()->base;
+                    base = stores[i].as<Store>()->index.as<Ramp>()->base;
                 }
 
                 // The offset is not between zero and the stride.
@@ -644,9 +644,9 @@ class Interleaver : public IRMutator {
                 if (args[j].defined()) goto fail;
 
                 if (stride == 1) {
-                    args[j] = Load::make(t, load_name, stores[i].index, load_image, load_param);
+                    args[j] = Load::make(t, load_name, stores[i].as<Store>()->index, load_image, load_param);
                 } else {
-                    args[j] = stores[i].value;
+                    args[j] = stores[i].as<Store>()->value;
                 }
             }
 
@@ -665,8 +665,8 @@ class Interleaver : public IRMutator {
 
             // Rewrap the let statements we pulled off.
             while (!let_stmts.empty()) {
-                LetStmt let = let_stmts.back();
-                stmt = LetStmt::make(let.name, let.value, stmt);
+                const LetStmt *let = let_stmts.back().as<LetStmt>();
+                stmt = LetStmt::make(let->name, let->value, stmt);
                 let_stmts.pop_back();
             }
 
@@ -684,7 +684,6 @@ class Interleaver : public IRMutator {
 };
 
 Stmt rewrite_interleavings(Stmt s) {
-    s = flatten_blocks(s);
     return Interleaver().mutate(s);
 }
 
@@ -724,4 +723,3 @@ void deinterleave_vector_test() {
 
 }
 }
-

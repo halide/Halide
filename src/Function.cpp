@@ -1,5 +1,6 @@
 #include <set>
 #include <stdlib.h>
+#include <atomic>
 
 #include "IR.h"
 #include "Function.h"
@@ -208,7 +209,7 @@ public:
 
 // A counter to use in tagging random variables
 namespace {
-static int rand_counter = 0;
+static std::atomic<int> rand_counter;
 }
 
 Function::Function() : contents(new FunctionContents) {
@@ -461,8 +462,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     for (int i = 0; i < counter.count; i++) {
-        contents.ptr->ref_count.decrement();
-        internal_assert(!contents.ptr->ref_count.is_zero());
+        int count = contents.ptr->ref_count.decrement();
+        internal_assert(count != 0);
     }
 
     // First add any reduction domain

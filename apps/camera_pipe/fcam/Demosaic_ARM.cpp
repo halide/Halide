@@ -222,8 +222,8 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
             // A pixel can't be brighter than its brightest neighbor
 
             if (denoise) {
-                register int16_t *__restrict__ ptr_in = NULL;
-                register int16_t *__restrict__ ptr_out = NULL;
+                register int16_t *__restrict__ ptr_in = nullptr;
+                register int16_t *__restrict__ ptr_out = nullptr;
                 asm volatile("#Stage 1.5: Denoise\n\t");
                 for (int b=0; b<4; b++) {
                     if (b==0) { ptr_in = G_GR_NOISY(0); }

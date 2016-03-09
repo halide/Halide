@@ -89,37 +89,37 @@ bool is_no_op(Stmt s) {
 
 const int64_t *as_const_int(Expr e) {
     if (!e.defined()) {
-        return NULL;
+        return nullptr;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_int(b->value);
     } else if (const IntImm *i = e.as<IntImm>()) {
         return &(i->value);
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
 const uint64_t *as_const_uint(Expr e) {
     if (!e.defined()) {
-        return NULL;
+        return nullptr;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_uint(b->value);
     } else if (const UIntImm *i = e.as<UIntImm>()) {
         return &(i->value);
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
 const double *as_const_float(Expr e) {
     if (!e.defined()) {
-        return NULL;
+        return nullptr;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_float(b->value);
     } else if (const FloatImm *f = e.as<FloatImm>()) {
         return &(f->value);
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
