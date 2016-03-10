@@ -19,6 +19,9 @@ struct Type;
 EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
 EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
 
+class Module;
+EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
+
 namespace Internal {
 
 struct Stmt;
