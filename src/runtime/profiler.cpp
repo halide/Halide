@@ -186,6 +186,20 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     if (f_stats->memory_current > f_stats->memory_peak) {
         f_stats->memory_peak = f_stats->memory_current;
     }
+
+    /*// Update per-pipeline memory stats
+    __sync_add_and_fetch(&p_stats->memory_total, incr);
+    int p_mem_current = __sync_add_and_fetch(&p_stats->memory_current, incr);
+    if (p_mem_current > p_stats->memory_peak) {
+        p_stats->memory_peak = p_mem_current;
+    }
+
+    // Update per-func memory stats
+    __sync_add_and_fetch(&f_stats->memory_total, incr);
+    int f_mem_current = __sync_add_and_fetch(&f_stats->memory_current, incr);
+    if (f_mem_current > f_stats->memory_peak) {
+        f_stats->memory_peak = f_mem_current;
+    }*/
 }
 
 WEAK void halide_profiler_memory_free(void *user_context,
@@ -219,6 +233,12 @@ WEAK void halide_profiler_memory_free(void *user_context,
 
     // Update per-func memory stats
     f_stats->memory_current -= decr;
+
+    /*// Update per-pipeline memory stats
+    __sync_sub_and_fetch(&p_stats->memory_current, decr);
+
+    // Update per-func memory stats
+    __sync_sub_and_fetch(&f_stats->memory_current, decr);*/
 }
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {

@@ -18,6 +18,7 @@ void my_print(void *, const char *msg) {
     int idx, this_percentage, this_memory_current, this_memory_peak, this_memory_total;
     int val = sscanf(msg, " g_%d: %fms (%d%%) (%d, %d, %d",
         &idx, &this_ms, &this_percentage, &this_memory_current, &this_memory_peak, &this_memory_total);
+    //printf("%s\n", msg);
     if (val == 6) {
         memory_current = this_memory_current;
         memory_peak = this_memory_peak;
@@ -33,7 +34,7 @@ int check_error(int expected_current, int expected_peak, int expected_total) {
         printf("Current memory was %d instead of %d\n", memory_current, expected_current);
         return -1;
     }
-    if (memory_peak > expected_peak) {
+    if (memory_peak != expected_peak) {
         printf("Peak memory was %d instead of %d\n", memory_peak, expected_peak);
         return -1;
     }

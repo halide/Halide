@@ -7,6 +7,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -80,14 +81,12 @@ private:
         for (size_t i = 1; i < extents.size(); i++) {
             size *= extents[i];
         }
-        size = Select::make(condition, size * type.bytes(), 0);
+        size = simplify(Select::make(condition, size * type.bytes(), 0));
         return size;
     }
 
     void visit(const Allocate *op) {
         int idx = get_func_id(op->name);
-
-        Expr profiler_token = Variable::make(Int(32), "profiler_token");
 
         vector<Expr> new_extents;
         bool all_extents_unmodified = true;
@@ -98,7 +97,6 @@ private:
         Expr condition = mutate(op->condition);
 
         Expr size = compute_allocation_size(new_extents, condition, op->type);
-        debug(1) << "  Injecting profiler into Allocate " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
         func_memory_sizes.push(op->name, size);
 
         Stmt body = mutate(op->body);
@@ -117,27 +115,34 @@ private:
 
         //debug(0) << stmt << "\n\n";
 
-        Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
-                                   {pipeline_name, profiler_token, idx, size}, Call::Extern);
-
-        stmt = Block::make(Evaluate::make(set_task), stmt);
+        if (!is_zero(size)) {
+            debug(1) << "  Injecting profiler into Allocate " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+            Expr profiler_token = Variable::make(Int(32), "profiler_token");
+            Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
+                                       {pipeline_name, profiler_token, idx, size}, Call::Extern);
+            stmt = Block::make(Evaluate::make(set_task), stmt);
+        } else {
+            debug(1) << "  No Allocate on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+        }
     }
 
     void visit(const Free *op) {
         int idx = get_func_id(op->name);
 
-        Expr profiler_token = Variable::make(Int(32), "profiler_token");
-
         Expr size = func_memory_sizes.get(op->name);
-        debug(1) << "  Injecting profiler into Free " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
-        Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
-                                   {pipeline_name, profiler_token, idx, size}, Call::Extern);
+        func_memory_sizes.pop(op->name);
 
         IRMutator::visit(op);
 
-        stmt = Block::make(Evaluate::make(set_task), stmt);
-
-        func_memory_sizes.pop(op->name);
+        if (!is_zero(size)) {
+            debug(1) << "  Injecting profiler into Free " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+            Expr profiler_token = Variable::make(Int(32), "profiler_token");
+            Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
+                                       {pipeline_name, profiler_token, idx, size}, Call::Extern);
+            stmt = Block::make(Evaluate::make(set_task), stmt);
+        } else {
+            debug(1) << "  No Free on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+        }
     }
 
     void visit(const ProducerConsumer *op) {
