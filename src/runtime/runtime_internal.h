@@ -51,8 +51,6 @@ typedef int32_t intptr_t;
 
 #define O_RDONLY 0
 #define O_RDWR 2
-#define O_TRUNC 00001000
-#define O_CREAT 00000100
 
 // Commonly-used extern functions
 extern "C" {
@@ -160,6 +158,18 @@ __attribute__((always_inline)) void swap(T &a, T &b) {
 template <typename T>
 __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
+}
+
+template <typename T>
+__attribute__((always_inline)) T min(const T &a, const T &b) {
+    return a < b ? a : b;
+}
+
+template <typename T, typename U>
+__attribute__((always_inline)) T reinterpret(const U &x) {
+    T ret;
+    memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
+    return ret;
 }
 
 }}}

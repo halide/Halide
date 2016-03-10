@@ -22,7 +22,8 @@ extern const struct halide_device_interface *halide_hexagon_device_interface();
  * routine is called. This call can fail due to running out of memory
  * or being passed an invalid device handle. The device and host
  * dirty bits are left unmodified. */
-extern int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *buf, uintptr_t device_handle);
+extern int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *buf,
+                                             int ion_handle, size_t size);
 
 /** Disconnect this buffer_t from the device handle it was previously
  * wrapped around. Should only be called for a buffer_t that
@@ -32,14 +33,15 @@ extern int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t
  * wrapped device handle is returned. . The dev field of the buffer_t
  * will be NULL on return.
  */
-extern uintptr_t halide_hexagon_detach_device_handle(void *user_context, struct buffer_t *buf);
+extern int halide_hexagon_detach_device_handle(void *user_context, struct buffer_t *buf);
 
 /** Return the underlying device handle for a buffer_t. This buffer
  *  must be valid on a Ion device, or not have any associated device
  *  memory. If there is no device memory (dev field is NULL), this
  *  returns 0.
  */
-extern uintptr_t halide_hexagon_get_device_handle(void *user_context, struct buffer_t *buf);
+extern int halide_hexagon_get_device_handle(void *user_context, struct buffer_t *buf);
+extern size_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf);
 
 /** These are forward declared here to allow clients to override the
  *  Halide Hexagon runtime. Do not call them. */
