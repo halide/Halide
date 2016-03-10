@@ -748,6 +748,9 @@ struct halide_profiler_func_stats {
 
     /** The total memory allocation of this Func. */
     int memory_total;
+
+    /** The total number of memory allocation of this Func. */
+    int num_allocs;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -786,6 +789,9 @@ struct halide_profiler_pipeline_stats {
 
     /** The total memory allocation of funcs in this pipeline. */
     int memory_total;
+
+    /** The total number of memory allocation of funcs in this pipeline. */
+    int num_allocs;
 };
 
 /** The global state of the profiler. */
