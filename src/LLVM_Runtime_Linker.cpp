@@ -96,6 +96,7 @@ DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
+DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(windows_io)
@@ -717,6 +718,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_profiler(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
+            modules.push_back(get_initmod_errors(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {
