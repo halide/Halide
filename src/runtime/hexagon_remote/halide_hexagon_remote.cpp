@@ -71,12 +71,12 @@ extern "C" {
 
 const int map_alignment = 4096;
 
-typedef int (*init_runtime_t)(halide_malloc_t user_malloc,
-                              halide_free_t custom_free,
-                              halide_print_t print,
-                              halide_error_handler_t error_handler,
-                              halide_do_par_for_t do_par_for,
-                              halide_do_task_t do_task);
+typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
+                             halide_free_t custom_free,
+                             halide_print_t print,
+                             halide_error_handler_t error_handler,
+                             halide_do_par_for_t do_par_for,
+                             halide_do_task_t do_task);
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
@@ -104,22 +104,22 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    init_runtime_t init_runtime = (init_runtime_t)dlsym(lib, "halide_noos_init_runtime");
-    if (!init_runtime) {
+    set_runtime_t set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+    if (!set_runtime) {
         dlclose(lib);
-        FARF(LOW, "halide_noos_init_runtime not found in shared object");
+        FARF(LOW, "halide_noos_set_runtime not found in shared object");
         return -1;
     }
 
-    int result = init_runtime(halide_malloc,
-                              halide_free,
-                              halide_print,
-                              halide_error,
-                              halide_do_par_for,
-                              halide_do_task);
+    int result = set_runtime(halide_malloc,
+                             halide_free,
+                             halide_print,
+                             halide_error,
+                             halide_do_par_for,
+                             halide_do_task);
     if (result != 0) {
         dlclose(lib);
-        FARF(LOW, "init_runtime failed %d", result);
+        FARF(LOW, "set_runtime failed %d", result);
         return result;
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
@@ -160,21 +160,21 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    init_runtime_t init_runtime = (init_runtime_t)obj.symbol_address("halide_noos_init_runtime");
-    if (init_runtime == 0) {
+    set_runtime_t set_runtime = (set_runtime_t)obj.symbol_address("halide_noos_set_runtime");
+    if (set_runtime == 0) {
         munmap(executable, aligned_codeLen);
-        FARF(LOW, "Failed to find symbol halide_noos_init_runtime");
+        FARF(LOW, "Failed to find symbol halide_noos_set_runtime");
         return -1;
     }
-    int result = init_runtime(halide_malloc,
-                              halide_free,
-                              halide_print,
-                              halide_error,
-                              halide_do_par_for,
-                              halide_do_task);
+    int result = set_runtime(halide_malloc,
+                             halide_free,
+                             halide_print,
+                             halide_error,
+                             halide_do_par_for,
+                             halide_do_task);
     if (result != 0) {
         munmap(executable, aligned_codeLen);
-        FARF(LOW, "init_runtime failed %d", result);
+        FARF(LOW, "set_runtime failed %d", result);
         return result;
     }
 
