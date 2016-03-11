@@ -38,7 +38,7 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $*
 	$(CC-$*) $(CCFLAGS-$*) -c $^ -o $@
 
-%/halide_hexagon_remote.o: halide_hexagon_remote.cpp elf.h
+%/halide_hexagon_remote.o: halide_hexagon_remote.cpp
 	mkdir -p $*
 	$(CXX-$*) $(CCFLAGS-$*) -c halide_hexagon_remote.cpp -o $@
 
