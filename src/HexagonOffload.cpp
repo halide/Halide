@@ -6,14 +6,9 @@
 #include "Image.h"
 #include "Output.h"
 #include "LLVM_Headers.h"
-#include <llvm/Object/ELFObjectFile.h>
 
 #include <iostream>
 #include <fstream>
-
-#define DEBUG_PRINT(x) std::cout << x << std::endl;
-
-#include "runtime/hexagon_remote/elf.h"
 
 namespace Halide {
 namespace Internal {
@@ -186,10 +181,9 @@ public:
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         compile_module_to_object(device_code, "hex.o");
-        system("$HEX_CLANG hex.o -shared -o hex_clang_hex.so");
+        system("$HEX_CLANG hex.o -shared -o hex.so");
 
-        object.clear();
-        std::ifstream so("hex_clang_hex.so", std::ios::binary | std::ios::ate);
+        std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
         object.resize(so.tellg());
         so.seekg(0, std::ios::beg);
         so.read(reinterpret_cast<char*>(&object[0]), object.size());
