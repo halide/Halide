@@ -597,7 +597,7 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
     stream << "const bool "
            << name
            << "_host_and_dev_are_null = ("
-           << buf_name << "->host == NULL) && ("
+           << buf_name << "->host == nullptr) && ("
            << buf_name << "->dev == 0);\n";
     do_indent();
     stream << "(void)" << name << "_host_and_dev_are_null;\n";
@@ -885,7 +885,7 @@ void CodeGen_C::visit(const Call *op) {
             }
 
             rhs << "halide_debug_to_file(";
-            rhs << (have_user_context ? "__user_context_" : "NULL");
+            rhs << (have_user_context ? "__user_context_" : "nullptr");
             rhs << ", \"" + filename + "\", " + func;
             for (size_t i = 0; i < args.size(); i++) {
                 rhs << ", " << args[i];
@@ -955,7 +955,7 @@ void CodeGen_C::visit(const Call *op) {
             Expr e = select(a < b, b - a, a - b);
             rhs << print_expr(e);
         } else if (op->name == Call::null_handle) {
-            rhs << "NULL";
+            rhs << "nullptr";
         } else if (op->name == Call::address_of) {
             const Load *l = op->args[0].as<Load>();
             internal_assert(op->args.size() == 1 && l);
@@ -1143,7 +1143,7 @@ void CodeGen_C::visit(const Call *op) {
 
             string call =
                 fn->value + "(" +
-                (have_user_context ? "__user_context_, " : "NULL, ")
+                (have_user_context ? "__user_context_, " : "nullptr, ")
                 + "arg);";
 
             do_indent();
@@ -1170,7 +1170,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << op->name << "(";
 
         if (function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context_, " : "NULL, ");
+            rhs << (have_user_context ? "__user_context_, " : "nullptr, ");
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -1384,7 +1384,7 @@ void CodeGen_C::visit(const Allocate *op) {
             open_scope();
             do_indent();
             stream << "halide_error("
-                   << (have_user_context ? "__user_context_" : "NULL")
+                   << (have_user_context ? "__user_context_" : "nullptr")
                    << ", \"32-bit signed overflow computing size of allocation "
                    << op->name << "\\n\");\n";
             do_indent();
@@ -1420,7 +1420,7 @@ void CodeGen_C::visit(const Allocate *op) {
                    << " = ("
                    << print_type(op->type)
                    << " *)halide_malloc("
-                   << (have_user_context ? "__user_context_" : "NULL")
+                   << (have_user_context ? "__user_context_" : "nullptr")
                    << ", sizeof("
                    << print_type(op->type)
                    << ")*" << size_id << ");\n";
@@ -1445,7 +1445,7 @@ void CodeGen_C::visit(const Free *op) {
 
         do_indent();
         stream << free_function << "("
-               << (have_user_context ? "__user_context_, " : "NULL, ")
+               << (have_user_context ? "__user_context_, " : "nullptr, ")
                << print_name(op->name)
                << ");\n";
         heap_allocations.pop(op->name);
@@ -1528,7 +1528,7 @@ void CodeGen_C::test() {
         "int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
-        " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
+        " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == nullptr) && (_buf_buffer->dev == 0);\n"
         " (void)_buf_host_and_dev_are_null;\n"
         " const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
         " (void)_buf_min_0;\n"

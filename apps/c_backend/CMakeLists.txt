@@ -9,6 +9,7 @@ set(pipeline_native_obj "${CMAKE_CURRENT_BINARY_DIR}/pipeline_native.o")
 # Final executable
 set(run_target run_c_backend_and_native)
 add_executable(${run_target} run.cpp ${pipeline_c_src} ${pipeline_c_h} ${pipeline_native_h})
+target_compile_options(${run_target} PUBLIC "-std=c++11")
 target_link_libraries(${run_target} PRIVATE ${pipeline_native_obj})
 target_include_directories(${run_target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 if (NOT WIN32)

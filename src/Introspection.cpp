@@ -68,7 +68,7 @@ class DebugSections {
         uint64_t def_loc, spec_loc;
         uint64_t addr;
         GlobalVariable() : name(""),
-                           type(NULL),
+                           type(nullptr),
                            type_def_loc(0),
                            def_loc(0),
                            spec_loc(0),
@@ -106,7 +106,7 @@ class DebugSections {
         // function.
         vector<LiveRange> live_ranges;
         LocalVariable() : name(""),
-                          type(NULL),
+                          type(nullptr),
                           stack_offset(0),
                           type_def_loc(0),
                           def_loc(0),
@@ -340,7 +340,7 @@ public:
         for (; (size_t)idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
 
             GlobalVariable &v = global_variables[idx];
-            TypeInfo *elem_type = NULL;
+            TypeInfo *elem_type = nullptr;
             if (v.type && v.type->type == TypeInfo::Array && v.type->size) {
                 elem_type = v.type->members[0].type;
             }
@@ -586,7 +586,7 @@ public:
         };
 
         frame_info *fp = (frame_info *)__builtin_frame_address(0);
-        frame_info *next_fp = NULL;
+        frame_info *next_fp = nullptr;
 
         // Walk up the stack until we pass the pointer.
         debug(5) << "Walking up the stack\n";
@@ -671,7 +671,7 @@ public:
             }
 
             TypeInfo *type = var.type;
-            TypeInfo *elem_type = NULL;
+            TypeInfo *elem_type = nullptr;
             if (type && type->type == TypeInfo::Array && type->size) {
                 elem_type = type->members[0].type;
             }
@@ -865,7 +865,7 @@ public:
 private:
 
     void load_and_parse_object_file(const std::string &binary) {
-        llvm::object::ObjectFile *obj = NULL;
+        llvm::object::ObjectFile *obj = nullptr;
 
         // Open the object file in question. The API to do this keeps changing.
         #if LLVM_VERSION >= 36
@@ -1156,7 +1156,7 @@ private:
                     // A field can either be a constant value:
                     uint64_t val = 0;
                     // Or a variable length payload:
-                    const uint8_t *payload = NULL;
+                    const uint8_t *payload = nullptr;
                     // If payload is non-null, val indicates the
                     // payload size. If val is zero the payload is a
                     // null-terminated string.
@@ -2142,7 +2142,7 @@ private:
             }
         }
 
-        return NULL;
+        return nullptr;
     }
 
     int64_t get_sleb128(const uint8_t *ptr) {
@@ -2187,7 +2187,7 @@ private:
 };
 
 namespace {
-DebugSections *debug_sections = NULL;
+DebugSections *debug_sections = nullptr;
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
