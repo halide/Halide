@@ -205,13 +205,23 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
-    // Construct a list of arguments.
+    // Construct a list of arguments. This is only part of a
+    // buffer_t. We know that the only field of buffer_t that the
+    // generated code should access is the host field (any other
+    // fields should be passed as their own parameters) so we can just
+    // make this dummy buffer_t type.
+    struct fake_buffer_t {
+        uint64_t dev;
+        uint8_t* host;
+    };
     void **args = (void **)__builtin_alloca((arg_ptrsLen + outputsLen) * sizeof(void *));
+    fake_buffer_t *buffers = (fake_buffer_t *)__builtin_alloca((arg_ptrsLen + outputsLen) * sizeof(fake_buffer_t));
     for (int i = 0; i < arg_ptrsLen; i++) {
         args[i] = arg_ptrs[i].data;
     }
     for (int i = 0; i < outputsLen; i++) {
-        args[i + arg_ptrsLen] = outputs[i].data;
+        buffers[i].host = outputs[i].data;
+        args[i + arg_ptrsLen] = &buffers[i];
     }
 
     // Call the pipeline and return the result.
