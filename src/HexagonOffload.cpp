@@ -89,10 +89,11 @@ public:
             Closure c(loop);
 
             // Make an argument list, and generate a function in the
-            // device_code module.
+            // device_code module. The hexagon runtime code expects
+            // the arguments to appear in the order of (input buffers,
+            // input scalars, output buffers).
             std::vector<Argument> args;
             for (const auto& i : c.buffers) {
-                // Output buffers are last (below).
                 if (i.second.write) {
                     continue;
                 }
@@ -102,7 +103,6 @@ public:
             for (const auto& i : c.vars) {
                 args.push_back(Argument(i.first, Argument::InputScalar, i.second, 0));
             }
-            // Output buffers come last.
             for (const auto& i : c.buffers) {
                 if (i.second.write) {
                     Argument::Kind kind = Argument::OutputBuffer;
