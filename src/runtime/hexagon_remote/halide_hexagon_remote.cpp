@@ -15,10 +15,6 @@ extern "C" {
 
 }
 
-#define DEBUG_PRINT(x) FARF(LOW, "%s", x);
-
-#include "elf.h"
-
 #include "../HalideRuntime.h"
 
 typedef halide_hexagon_remote_handle_t handle_t;
@@ -80,7 +76,6 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
-#if 1  // Use shared object
 #if 1  // Use shared object from file
     const char *filename = (const char *)code;
 #else
@@ -124,78 +119,10 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
-#else
-    // Map some memory for the code and copy it in.
-    int aligned_codeLen = (codeLen + map_alignment - 1) & ~(map_alignment - 1);
-    void *executable = mmap(0, aligned_codeLen, PROT_READ | PROT_WRITE, MAP_ANON, -1, 0);
-    if (executable == MAP_FAILED) {
-        FARF(LOW, "mmap failed");
-        return -1;
-    }
-    memcpy(executable, code, codeLen);
-
-    Elf::Object<uint32_t> obj;
-    result = obj.init(executable);
-    if (result != 0) {
-        FARF(LOW, "obj.init failed");
-        return result;
-    }
-
-    result = obj.do_relocations();
-    if (result != 0) {
-        FARF(LOW, "obj.do_relocations failed");
-        return result;
-    }
-
-    handle_t base_addr = (handle_t)executable;
-
-    // Change memory to be executable (but not writable).
-    if (mprotect(executable, aligned_codeLen, PROT_READ | PROT_EXEC) < 0) {
-        munmap(executable, aligned_codeLen);
-        FARF(LOW, "mprotect failed");
-        return -1;
-    }
-
-    // Initialize the runtime. The Hexagon runtime can't call any
-    // system functions (because we can't link them), so we put all
-    // the implementations that need to do so here, and pass poiners
-    // to them in here.
-    set_runtime_t set_runtime = (set_runtime_t)obj.symbol_address("halide_noos_set_runtime");
-    if (set_runtime == 0) {
-        munmap(executable, aligned_codeLen);
-        FARF(LOW, "Failed to find symbol halide_noos_set_runtime");
-        return -1;
-    }
-    int result = set_runtime(halide_malloc,
-                             halide_free,
-                             halide_print,
-                             halide_error,
-                             halide_do_par_for,
-                             halide_do_task);
-    if (result != 0) {
-        munmap(executable, aligned_codeLen);
-        FARF(LOW, "set_runtime failed %d", result);
-        return result;
-    }
-
-    *module_ptr = base_addr;
-    return 0;
-#endif
 }
 
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-#if 1
     return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
-#else
-    Elf::Object<uint32_t> obj;
-    int result = obj.init((void*)module_ptr);
-    if (result != 0) {
-        FARF(LOW, "Object::init failed: %d", result);
-        return 0;
-    }
-
-    return (handle_t)obj.symbol_address(name);
-#endif
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
@@ -240,13 +167,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
-#if 1
     dlclose(reinterpret_cast<void*>(module_ptr));
-#else
-    void *executable = (void *)module_ptr;
-    codeLen = (codeLen + map_alignment - 1) & (map_alignment - 1);
-    munmap(executable, codeLen);
-#endif
     return 0;
 }
 
