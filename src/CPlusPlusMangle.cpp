@@ -113,7 +113,10 @@ clang::QualType halide_type_to_clang_type(clang::ASTContext &context, Type type)
             if (type.handle_type->inner_name.cpp_type_qualifiers && halide_cplusplus_type_name::Volatile) {
                 base_type.addVolatile();
             }
-            return context.getPointerType(base_type);
+            for (int32_t i = 0; i <= type.handle_type->extra_indirection_levels; i++)  {
+                base_type = context.getPointerType(base_type);
+            }
+            return base_type;
         }
         // Otherwise return void *
     }
@@ -122,9 +125,9 @@ clang::QualType halide_type_to_clang_type(clang::ASTContext &context, Type type)
 
 }
 
-std::string cplusplus_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
-                                   Type return_type, const std::vector<ExternFuncArgument> &args,
-                                   const Target &target) {
+std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
+                                            Type return_type, const std::vector<ExternFuncArgument> &args,
+                                            const Target &target) {
 #define COMPILER_INSTANCE 1
 #if COMPILER_INSTANCE
     clang::CompilerInstance compiler_instance;
@@ -165,14 +168,17 @@ std::string cplusplus_mangled_name(const std::string &name, const std::vector<st
 
     clang::DeclContext *decl_context = namespaced_decl_scope(context, namespaces);
 
+    clang::CXXRecordDecl *buffer_t_decl = nullptr;
     std::vector<clang::QualType> clang_args;
     for (auto &arg : args) {
         if (arg.is_expr()) {
             clang_args.push_back(halide_type_to_clang_type(context, arg.expr.type()));
         } else { // Otherwise, struct buffer_t *
-            clang::CXXRecordDecl *buffer_t_decl = clang::CXXRecordDecl::Create(context, clang::TTK_Struct, context.getTranslationUnitDecl(),
-                                                                               clang::SourceLocation(), clang::SourceLocation(),
-                                                                               &context.Idents.get("buffer_t"));
+            if (buffer_t_decl == nullptr) {
+                buffer_t_decl = clang::CXXRecordDecl::Create(context, clang::TTK_Struct, context.getTranslationUnitDecl(),
+                                                             clang::SourceLocation(), clang::SourceLocation(),
+                                                             &context.Idents.get("buffer_t"));
+            }
             clang_args.push_back(context.getPointerType(context.getRecordType(buffer_t_decl)));
         }
     }
@@ -204,13 +210,13 @@ std::string cplusplus_mangled_name(const std::string &name, const std::vector<st
 
 void cplusplus_mangle_test() {
     std::string simple_name =
-        cplusplus_mangled_name("test_function", { }, Int(32), { }, Target(Target::Linux, Target::X86, 64));
+        cplusplus_function_mangled_name("test_function", { }, Int(32), { }, Target(Target::Linux, Target::X86, 64));
     internal_assert(simple_name == "_Z13test_functionv") << "Expected mangling  for simple canse to produce _Z13test_functionv but got " << simple_name << "\n";
     std::string with_namespaces =
-        cplusplus_mangled_name("test_function", { "foo", "bar" }, Int(32), { }, Target(Target::Linux, Target::X86, 64));
+        cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32), { }, Target(Target::Linux, Target::X86, 64));
     internal_assert(with_namespaces == "_ZN3foo3bar13test_functionEv") << "Expected mangling namespace case to produce _ZN3foo3bar13test_functionEv but got " << simple_name << "\n";
     std::string with_args =
-      cplusplus_mangled_name("test_function", { "foo", "bar" }, Int(32), { ExternFuncArgument(42) }, Target(Target::Linux, Target::X86, 64));
+      cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32), { ExternFuncArgument(42) }, Target(Target::Linux, Target::X86, 64));
     internal_assert(with_args == "_ZN3foo3bar13test_functionEi") << "Expected mangling args case to produce _ZN3foo3bar13test_functionEi but got " << simple_name << "\n";
     // TODO: test struct types, Microsoft mangling.
 }

@@ -4,6 +4,7 @@
 
 #include "IRPrinter.h"
 #include "CodeGen_LLVM.h"
+#include "CPlusPlusMangle.h"
 #include "IROperator.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -492,8 +493,32 @@ llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std:
 }
 
 void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
-    const std::string &name = f.name;
+    std::vector<std::string> namespaces;
+    std::string simple_name = extract_namespaces(f.name, namespaces);
+    std::string extern_name;
+    std::string argv_name = simple_name + "_argv";
+    std::string metadata_name = simple_name + "_metadata";
     const std::vector<Argument> &args = f.args;
+
+    if (f.linkage == LoweredFunc::External &&
+        get_target().has_feature(Target::CPlusPlusMangling) &&
+        !get_target().has_feature(Target::JIT)) { // TODO: make this work with JIT or remove mangling flag in JIT target setup
+        std::vector<ExternFuncArgument> mangle_args;
+        for (const auto &arg : args) {
+            if (arg.kind == Argument::InputScalar) {
+                mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
+            } else if (arg.kind == Argument::InputBuffer ||
+                       arg.kind == Argument::OutputBuffer) {
+                mangle_args.push_back(ExternFuncArgument(Buffer()));
+            }
+        }
+        extern_name = cplusplus_function_mangled_name(simple_name, namespaces, type_of<int>(), mangle_args, get_target());
+        halide_handle_cplusplus_type inner_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {}, 1);
+        Type void_star_star(Handle(1, &inner_type));
+        argv_name = cplusplus_function_mangled_name(argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, get_target());
+    } else {
+        extern_name = simple_name;
+    }
 
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
@@ -507,7 +532,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module.get());
+    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), extern_name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -516,7 +541,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
-    debug(1) << "Generating llvm bitcode for function " << name << "...\n";
+    debug(1) << "Generating llvm bitcode for function " << simple_name << " as " << extern_name << "...\n";
 
     // Null out the destructor block.
     destructor_block = NULL;
@@ -552,7 +577,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
-    module->setModuleIdentifier("halide_module_" + name);
+    module->setModuleIdentifier("halide_module_" + simple_name);
     debug(2) << module.get() << "\n";
 
     internal_assert(!verifyFunction(*function));
@@ -560,14 +585,14 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
     if (f.linkage == LoweredFunc::External) {
-        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, name + "_argv");
-        llvm::Constant *metadata = embed_metadata(name + "_metadata", name, args);
+        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, argv_name);
+        llvm::Constant *metadata = embed_metadata(metadata_name, simple_name, args);
         if (target.has_feature(Target::RegisterMetadata)) {
-            register_metadata(name, metadata, wrapper);
+            register_metadata(simple_name, metadata, wrapper);
         }
 
         if (target.has_feature(Target::Matlab)) {
-            define_matlab_wrapper(module.get(), name);
+            define_matlab_wrapper(module.get(), wrapper, metadata);
         }
     }
 }

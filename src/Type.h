@@ -53,18 +53,25 @@ struct halide_cplusplus_type_name {
     std::string name;
 
     halide_cplusplus_type_name(CPPTypeType cpp_type_type, const std::string &name)
-        : cpp_type_type(cpp_type_type), name(name) {
+        : cpp_type_type(cpp_type_type), cpp_type_qualifiers(0), name(name) {
     }
 
     bool operator==(const halide_cplusplus_type_name &rhs) const {
          return cpp_type_type == rhs.cpp_type_type &&
-                 name == rhs.name;
+                cpp_type_qualifiers == rhs.cpp_type_qualifiers &&
+                name == rhs.name;
+    }
+
+    bool operator!=(const halide_cplusplus_type_name &rhs) const {
+        return !(*this == rhs);
     }
 
     bool operator<(const halide_cplusplus_type_name &rhs) const {
          return cpp_type_type < rhs.cpp_type_type ||
                 (cpp_type_type == rhs.cpp_type_type &&
-                 name < rhs.name);
+                 (cpp_type_qualifiers < rhs.cpp_type_qualifiers ||
+                  (cpp_type_qualifiers == rhs.cpp_type_qualifiers &&
+                   name < rhs.name)));
     }
 };
    
@@ -81,11 +88,13 @@ struct halide_handle_cplusplus_type {
     halide_cplusplus_type_name inner_name;
     std::vector<std::string> namespaces;
     std::vector<halide_cplusplus_type_name> enclosing_types;
+    int32_t extra_indirection_levels; // Hack to handle void** on argv wrapper
 
     halide_handle_cplusplus_type(const halide_cplusplus_type_name &inner_name,
                                  const std::vector<std::string> &namespaces = std::vector<std::string>(),
-                                 const std::vector<halide_cplusplus_type_name> &enclosing_types = std::vector<halide_cplusplus_type_name>())
-        : inner_name(inner_name), namespaces(namespaces), enclosing_types(enclosing_types) {
+                                 const std::vector<halide_cplusplus_type_name> &enclosing_types = std::vector<halide_cplusplus_type_name>(),
+                                 int32_t extra_indirection_levels = 0)
+        : inner_name(inner_name), namespaces(namespaces), enclosing_types(enclosing_types), extra_indirection_levels(extra_indirection_levels) {
     }
 };
 
@@ -103,7 +112,7 @@ template<typename T>
 struct halide_handle_traits {
     // NULL here means "void *". This trait must return a pointer to a
     // global structure. I.e. it should never be freed.
-    static const halide_handle_cplusplus_type *type_info() { return NULL; }
+    static const halide_handle_cplusplus_type *type_info() { return nullptr; }
 };
 //@}
 
@@ -151,7 +160,7 @@ struct Type {
     /** Type is a wrapper around halide_type_t with more methods for use
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */
-    Type(const halide_type_t &that) : type(that) {}
+    Type(const halide_type_t &that) : type(that), handle_type(nullptr) {}
 
     /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
      * Representation is exactly equivalent. */
@@ -300,70 +309,6 @@ inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_typ
 }
 
 namespace {
-template<typename T>
-struct type_of_helper;
-
-template<typename T>
-struct type_of_helper<T *> {
-    operator Type() {
-      return Handle(1, halide_handle_traits<T>::type_info());
-    }
-};
-
-template<>
-struct type_of_helper<float> {
-    operator Type() {return Float(32);}
-};
-
-template<>
-struct type_of_helper<double> {
-    operator Type() {return Float(64);}
-};
-
-template<>
-struct type_of_helper<uint8_t> {
-    operator Type() {return UInt(8);}
-};
-
-template<>
-struct type_of_helper<uint16_t> {
-    operator Type() {return UInt(16);}
-};
-
-template<>
-struct type_of_helper<uint32_t> {
-    operator Type() {return UInt(32);}
-};
-
-template<>
-struct type_of_helper<uint64_t> {
-    operator Type() {return UInt(64);}
-};
-
-template<>
-struct type_of_helper<int8_t> {
-    operator Type() {return Int(8);}
-};
-
-template<>
-struct type_of_helper<int16_t> {
-    operator Type() {return Int(16);}
-};
-
-template<>
-struct type_of_helper<int32_t> {
-    operator Type() {return Int(32);}
-};
-
-template<>
-struct type_of_helper<int64_t> {
-    operator Type() {return Int(64);}
-};
-
-template<>
-struct type_of_helper<bool> {
-    operator Type() {return Bool();}
-};
 
 /** Construct the halide equivalent of a C type */
 template<typename T> Type type_of() {

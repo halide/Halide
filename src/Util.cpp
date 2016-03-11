@@ -168,5 +168,12 @@ std::vector<std::string> split_string(const std::string &source, const std::stri
     return elements;
 }
 
+std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces) {
+    namespaces = split_string(name, "::");
+    std::string result = namespaces.back();
+    namespaces.pop_back();
+    return result;
+}
+
 }
 }
