@@ -35,7 +35,7 @@ struct _halide_hexagon_remote_buffer__seq_octet {
 typedef unsigned int halide_hexagon_remote_handle_t;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_initialize_kernels)(const unsigned char* code, int codeLen, halide_hexagon_remote_handle_t* module_ptr) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT halide_hexagon_remote_handle_t __QAIC_HEADER(halide_hexagon_remote_get_symbol)(halide_hexagon_remote_handle_t module_ptr, const char* name, int nameLen) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_run)(halide_hexagon_remote_handle_t module_ptr, halide_hexagon_remote_handle_t symbol, const halide_hexagon_remote_buffer* inputs, int inputsLen, halide_hexagon_remote_buffer* outputs, int outputsLen) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_run)(halide_hexagon_remote_handle_t module_ptr, halide_hexagon_remote_handle_t symbol, const halide_hexagon_remote_buffer* input_buffers, int input_buffersLen, const halide_hexagon_remote_buffer* input_scalars, int input_scalarsLen, halide_hexagon_remote_buffer* output_buffers, int output_buffersLen) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_release_kernels)(halide_hexagon_remote_handle_t module_ptr, int size) __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus
 }

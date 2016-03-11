@@ -31,7 +31,9 @@ struct _remote_buffer__seq_octet {
 };
 typedef int (*remote_initialize_kernels_fn)(const unsigned char*, int, halide_hexagon_handle_t*);
 typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int);
-typedef int (*remote_run_fn)(halide_hexagon_handle_t, int, const remote_buffer*, int, remote_buffer*, int);
+typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
+                             const remote_buffer*, int, const remote_buffer*, int,
+                             remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
@@ -217,22 +219,19 @@ WEAK int get_buffer_descriptor(void *user_context, ion_user_handle_t handle) {
     return buf_fd;
 }
 
-WEAK size_t count_arguments(void *user_context, size_t arg_sizes[], void *args[], int arg_flags[]) {
-    size_t count = 0;
-    while (arg_sizes[count] != 0) {
-        count++;
-    }
-    return count;
-}
-
-// Prepare an array of remote_buffer arguments, mapping
-// buffers if necessary.
-WEAK int map_arguments(void *user_context, size_t count,
-                       size_t arg_sizes[], void *args[], int arg_flags[],
+// Prepare an array of remote_buffer arguments, mapping buffers if
+// necessary. Only arguments with flags&flag_mask == flag_value are
+// added to the mapped_args array. Returns the number of arguments
+// mapped, or a negative number on error.
+WEAK int map_arguments(void *user_context, size_t arg_count,
+                       size_t arg_sizes[], void *args[], int arg_flags[], int flag_mask, int flag_value,
                        remote_buffer *mapped_args) {
-    for (size_t i = 0; i < count; i++) {
+    int mapped_count = 0;
+    for (size_t i = 0; i < arg_count; i++) {
+        if ((arg_flags[i] & flag_mask) != flag_value) continue;
         if (arg_flags[i] != 0) {
-            // This is a buffer, map it and put the mapped buffer into the result.
+            // This is a buffer, map it and put the mapped buffer into
+            // the result.
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
 
             int prot = 0;
@@ -249,32 +248,36 @@ WEAK int map_arguments(void *user_context, size_t count,
                                 << " prot=" << prot
                                 << " Shared "
                                 << "fd=" << buf_fd << " -> ";
-            mapped_args[i].data = (uint8_t*)mmap(NULL, map_size, prot, MapFlags::Shared, buf_fd, 0);
-            if (mapped_args[i].data == MAP_FAILED) {
+            mapped_args[mapped_count].data = (uint8_t*)mmap(NULL, map_size, prot, MapFlags::Shared, buf_fd, 0);
+            if (mapped_args[mapped_count].data == MAP_FAILED) {
                 debug(user_context) << "        MAP_FAILED\n";
                 error(user_context) << "mmap failed\n";
                 return -1;
             } else {
-                debug(user_context) << "        " << mapped_args[i].data << "\n";
+                debug(user_context) << "        " << mapped_args[mapped_count].data << "\n";
             }
-            mapped_args[i].dataLen = map_size;
+            mapped_args[mapped_count].dataLen = map_size;
         } else {
             // This is a scalar, just put the pointer/size in the result.
-            mapped_args[i].data = (uint8_t*)args[i];
-            mapped_args[i].dataLen = arg_sizes[i];
+            mapped_args[mapped_count].data = (uint8_t*)args[i];
+            mapped_args[mapped_count].dataLen = arg_sizes[i];
         }
+        mapped_count++;
     }
-    return 0;
+    return mapped_count;
 }
 
 // Unmap an array of arguments previously mapped with map_arguments.
-WEAK void unmap_arguments(void *user_context, size_t count, int arg_flags[], remote_buffer *mapped_args) {
+WEAK void unmap_arguments(void *user_context, size_t count, int arg_flags[],
+                          int flags_mask, int flag_value, remote_buffer *mapped_args) {
     for (size_t i = 0; i < count; i++) {
-        if (arg_flags[i] != 0) {
+        if ((arg_flags[i] & flags_mask) == flag_value) {
+            halide_assert(user_context, arg_flags[i] != 0);
             // This is a buffer, we need to unmap it.
-            debug(user_context) << "    munmap " << mapped_args[i].data << " " << mapped_args[i].dataLen << " -> \n";
-            int result = munmap(mapped_args[i].data, mapped_args[i].dataLen);
+            debug(user_context) << "    munmap " << mapped_args->data << " " << mapped_args->dataLen << " -> \n";
+            int result = munmap(mapped_args->data, mapped_args->dataLen);
             debug(user_context) << "        " << result << "\n";
+            mapped_args++;
         }
     }
 }
@@ -285,12 +288,9 @@ WEAK int halide_hexagon_run(void *user_context,
                             void *state_ptr,
                             const char *name,
                             halide_hexagon_handle_t* function,
-                            size_t input_arg_sizes[],
-                            void *input_args[],
-                            int input_arg_flags[],
-                            size_t output_arg_sizes[],
-                            void *output_args[],
-                            int output_arg_flags[]) {
+                            size_t arg_sizes[],
+                            void *args[],
+                            int arg_flags[]) {
     halide_assert(user_context, state_ptr != NULL);
     halide_assert(user_context, function != NULL);
     init_hexagon_runtime(user_context);
@@ -315,39 +315,42 @@ WEAK int halide_hexagon_run(void *user_context,
         }
     }
 
-    // Map the arguments.
-    size_t input_arg_count = count_arguments(user_context, input_arg_sizes, input_args, input_arg_flags);
-    debug(user_context) << "    map_arguments -> \n";
-    remote_buffer *mapped_input_args =
-        (remote_buffer *)__builtin_alloca(input_arg_count * sizeof(remote_buffer));
-    result = map_arguments(user_context, input_arg_count, input_arg_sizes, input_args, input_arg_flags,
-                           mapped_input_args);
-    debug(user_context) << "        " << result << "\n";
-    if (result < 0) {
-        return -1;
-    }
+    // Allocate some remote_buffer objects on the stack.
+    int arg_count = 0;
+    while(arg_sizes[arg_count] > 0) arg_count++;
+    remote_buffer *mapped_buffers =
+        (remote_buffer *)__builtin_alloca(arg_count * sizeof(remote_buffer));
 
-    size_t output_arg_count = count_arguments(user_context, output_arg_sizes, output_args, output_arg_flags);
-    debug(user_context) << "    map_arguments -> \n";
-    remote_buffer * mapped_output_args =
-        (remote_buffer *)__builtin_alloca(output_arg_count * sizeof(remote_buffer));
-    result = map_arguments(user_context, output_arg_count, output_arg_sizes, output_args, output_arg_flags,
-                           mapped_output_args);
-    debug(user_context) << "        " << result << "\n";
-    if (result < 0) {
-        return -1;
-    }
+    // Map the arguments.
+    // First grab the input buffers.
+    remote_buffer *input_buffers = mapped_buffers;
+    int input_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x1,
+                                           input_buffers);
+    if (input_buffer_count < 0) return input_buffer_count;
+
+    // Then the input scalars.
+    remote_buffer *input_scalars = input_buffers + input_buffer_count;
+    int input_scalar_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x0,
+                                           input_scalars);
+    if (input_scalar_count < 0) return input_scalar_count;
+
+    // And the output buffers.
+    remote_buffer *output_buffers = input_scalars + input_scalar_count;
+    int output_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x2, 0x2,
+                                            output_buffers);
+    if (output_buffer_count < 0) return output_buffer_count;
 
     // Call the pipeline on the device side.
     debug(user_context) << "    halide_hexagon_remote_run -> \n";
     result = remote_run(module, *function,
-                        mapped_input_args, input_arg_count,
-                        mapped_output_args, output_arg_count);
+                        input_buffers, input_buffer_count,
+                        input_scalars, input_scalar_count,
+                        output_buffers, output_buffer_count);
     debug(user_context) << "        " << result << "\n";
 
-    // Unmap the arguments.
-    unmap_arguments(user_context, input_arg_count, input_arg_flags, mapped_input_args);
-    unmap_arguments(user_context, output_arg_count, output_arg_flags, mapped_output_args);
+    // Unmap the arguments. Scalars don't need to be unmapped.
+    unmap_arguments(user_context, arg_count, arg_flags, 0x3, 0x1, input_buffers);
+    unmap_arguments(user_context, arg_count, arg_flags, 0x2, 0x2, output_buffers);
 
     return result != 0 ? -1 : 0;
 }
