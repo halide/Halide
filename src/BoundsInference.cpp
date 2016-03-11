@@ -655,7 +655,7 @@ public:
         }
 
         // If there are no pipelines at this loop level, we can skip most of the work.
-        bool no_pipelines = body.as<For>() != NULL;
+        bool no_pipelines = body.as<For>() != nullptr;
 
         // Figure out which stage of which function we're producing
         int producing = -1;

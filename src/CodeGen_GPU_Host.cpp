@@ -341,7 +341,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             debug(4) << "Slots taken = " << slots_taken << "\n";
         }
 
-        user_assert(gpu_codegen != NULL)
+        user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
@@ -357,7 +357,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
-        // NULL-terminated list
+        // nullptr-terminated list
         llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
         Value *gpu_args_arr =
             create_alloca_at_entry(
@@ -365,7 +365,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 num_args+1, false,
                 kernel_name + "_args");
 
-        // NULL-terminated list of size_t's
+        // nullptr-terminated list of size_t's
         llvm::Type *gpu_arg_sizes_arr_type = ArrayType::get(target_size_t_type,
                                                             num_args+1);
         Value *gpu_arg_sizes_arr =
@@ -391,7 +391,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 val = buffer_dev(sym_get(name + ".buffer"));
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
-                // expression mesh. Pass a non-NULL value in the argument array
+                // expression mesh. Pass a non-nullptr value in the argument array
                 // to keep it in sync with the argument names encoded in the
                 // shader header
                 val = ConstantInt::get(target_size_t_type, 1);
@@ -444,7 +444,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
         }
-        // NULL-terminate the lists
+        // nullptr-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
                              builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37

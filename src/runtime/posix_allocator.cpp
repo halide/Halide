@@ -1,5 +1,7 @@
 #include "runtime_internal.h"
 
+#include "HalideRuntime.h"
+
 extern "C" {
 
 extern void *malloc(size_t);
@@ -27,21 +29,21 @@ WEAK void default_free(void *user_context, void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
-WEAK void *(*custom_malloc)(void *, size_t) = default_malloc;
-WEAK void (*custom_free)(void *, void *) = default_free;
+WEAK halide_malloc_t custom_malloc = default_malloc;
+WEAK halide_free_t custom_free = default_free;
 
 }}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
-WEAK void *(*halide_set_custom_malloc(void *(*user_malloc)(void *, size_t)))(void *, size_t) {
-    void *(*result)(void *, size_t) = custom_malloc;
+WEAK halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc) {
+    halide_malloc_t result = custom_malloc;
     custom_malloc = user_malloc;
     return result;
 }
 
-WEAK void (*halide_set_custom_free(void (*user_free)(void *, void *)))(void *, void *) {
-    void (*result)(void *, void *) = custom_free;
+WEAK halide_free_t halide_set_custom_free(halide_free_t user_free) {
+    halide_free_t result = custom_free;
     custom_free = user_free;
     return result;
 }

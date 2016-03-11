@@ -199,7 +199,7 @@ protected:
                                           bool *placeholder_seen) const;
 public:
 
-    /** Construct a NULL image parameter handle. */
+    /** Construct a nullptr image parameter handle. */
     OutputImageParam() {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
@@ -211,7 +211,7 @@ public:
     /** Get the type of the image data this Param refers to */
     EXPORT Type type() const;
 
-    /** Is this parameter handle non-NULL */
+    /** Is this parameter handle non-nullptr */
     EXPORT bool defined() const;
 
     /** Get an expression representing the minimum coordinates of this image
@@ -312,7 +312,7 @@ class ImageParam : public OutputImageParam {
 
 public:
 
-    /** Construct a NULL image parameter handle. */
+    /** Construct a nullptr image parameter handle. */
     ImageParam() : OutputImageParam() {}
 
     /** Construct an image parameter of the given type and

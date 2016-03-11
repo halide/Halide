@@ -62,7 +62,7 @@ public:
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
-    ComputeModulusRemainder mr(NULL);
+    ComputeModulusRemainder mr(nullptr);
     return mr.analyze(e);
 }
 
