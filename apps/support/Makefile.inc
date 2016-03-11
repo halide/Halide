@@ -34,7 +34,7 @@ else
   TGT_CXXFLAGS:=$(CXXFLAGS)
   TGT_CXXFLAGS+=$(EXTRA_TGT_CXXFLAGS)
   CXXFLAGS+=$(EXTRA_CXXFLAGS)
-  LIB_HALIDE = $(HALIDE_BIN_PATH)/lib/libHalide.a
+  LIB_HALIDE = $(HALIDE_BIN_PATH)/bin/libHalide.so
 endif
 
 GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp

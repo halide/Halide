@@ -24,33 +24,6 @@ void compile_module_to_object(const Module &module, std::string filename) {
     compile_llvm_module_to_object(*llvm, filename);
 }
 
-void compile_module_to_object(const Module &module, std::vector<uint8_t> &object) {
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_object(*llvm, object);
-}
-
-void compile_module_to_shared_object(const Module &module, std::string filename) {
-    if (filename.empty()) {
-        if (module.target().os == Target::Windows &&
-            !module.target().has_feature(Target::MinGW)) {
-            internal_assert(false) << "Cannot compile shared object to Windows.";
-        } else {
-            filename = module.name() + ".so";
-        }
-    }
-
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_shared_object(*llvm, filename);
-}
-
-void compile_module_to_shared_object(const Module &module, std::vector<uint8_t> &object) {
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_shared_object(*llvm, object);
-}
-
 void compile_module_to_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".s";
 
