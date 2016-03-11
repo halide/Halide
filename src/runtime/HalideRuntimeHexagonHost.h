@@ -53,12 +53,9 @@ extern int halide_hexagon_run(void *user_context,
                               void *module_ptr,
                               const char *name,
                               halide_hexagon_handle_t *function,
-                              size_t input_arg_sizes[],
-                              void *input_args[],
-                              int input_arg_flags[],
-                              size_t output_arg_sizes[],
-                              void *output_args[],
-                              int output_arg_flags[]);
+                              size_t arg_sizes[],
+                              void *args[],
+                              int arg_flags[]);
 extern int halide_hexagon_device_release(void* user_context);
 // @}
 

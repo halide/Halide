@@ -112,51 +112,38 @@ public:
             device_code.append(LoweredFunc(hex_name, args, loop, LoweredFunc::External));
 
             // Generate a call to hexagon_device_run.
-            std::vector<Expr> input_arg_sizes;
-            std::vector<Expr> input_arg_ptrs;
-            std::vector<Expr> input_arg_flags;
-            std::vector<Expr> output_arg_sizes;
-            std::vector<Expr> output_arg_ptrs;
-            std::vector<Expr> output_arg_flags;
+            std::vector<Expr> arg_sizes;
+            std::vector<Expr> arg_ptrs;
+            std::vector<Expr> arg_flags;
 
             for (const auto& i : c.buffers) {
-                if (i.second.write) continue;
-
-                input_arg_sizes.push_back(Expr((size_t)sizeof(buffer_t*)));
-                input_arg_ptrs.push_back(Variable::make(type_of<buffer_t *>(), i.first + ".buffer"));
-                input_arg_flags.push_back(1);
+                arg_sizes.push_back(Expr((size_t)sizeof(buffer_t*)));
+                arg_ptrs.push_back(Variable::make(type_of<buffer_t *>(), i.first + ".buffer"));
+                int flags = 0;
+                if (i.second.read) flags |= 0x1;
+                if (i.second.write) flags |= 0x2;
+                arg_flags.push_back(flags);
             }
             for (const auto& i : c.vars) {
                 Expr arg = Variable::make(i.second, i.first);
                 Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
 
-                input_arg_sizes.push_back(Expr((size_t)i.second.bytes()));
-                input_arg_ptrs.push_back(arg_ptr);
-                input_arg_flags.push_back(0);
-            }
-            for (const auto& i : c.buffers) {
-                if (!i.second.write) continue;
-
-                output_arg_sizes.push_back(Expr((size_t)sizeof(buffer_t*)));
-                output_arg_ptrs.push_back(Variable::make(type_of<buffer_t *>(), i.first + ".buffer"));
-                output_arg_flags.push_back(i.second.read ? 3 : 2);
+                arg_sizes.push_back(Expr((size_t)i.second.bytes()));
+                arg_ptrs.push_back(arg_ptr);
+                arg_flags.push_back(0x0);
             }
 
             // The argument list is terminated with an argument of size 0.
-            input_arg_sizes.push_back(Expr((size_t)0));
-            output_arg_sizes.push_back(Expr((size_t)0));
+            arg_sizes.push_back(Expr((size_t)0));
 
             std::string pipeline_name = hex_name + "_argv";
             std::vector<Expr> params;
             params.push_back(module_state());
             params.push_back(pipeline_name);
             params.push_back(state_var_ptr(hex_name, type_of<int>()));
-            params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, input_arg_sizes, Call::Intrinsic));
-            params.push_back(Call::make(type_of<void**>(), Call::make_struct, input_arg_ptrs, Call::Intrinsic));
-            params.push_back(Call::make(type_of<int*>(), Call::make_struct, input_arg_flags, Call::Intrinsic));
-            params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, output_arg_sizes, Call::Intrinsic));
-            params.push_back(Call::make(type_of<void**>(), Call::make_struct, output_arg_ptrs, Call::Intrinsic));
-            params.push_back(Call::make(type_of<int*>(), Call::make_struct, output_arg_flags, Call::Intrinsic));
+            params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
+            params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
+            params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
             stmt = call_extern_and_assert("halide_hexagon_run", params);
 

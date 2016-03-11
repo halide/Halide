@@ -199,8 +199,9 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name,
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
-                              const buffer *arg_ptrs, int arg_ptrsLen,
-                              buffer *outputs, int outputsLen) {
+                              const buffer *input_buffersPtrs, int input_buffersLen,
+                              const buffer *input_scalarsPtrs, int input_scalarsLen,
+                              buffer *output_buffersPtrs, int output_buffersLen) {
     // Get a pointer to the argv version of the pipeline.
     typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
@@ -208,20 +209,30 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     // Construct a list of arguments. This is only part of a
     // buffer_t. We know that the only field of buffer_t that the
     // generated code should access is the host field (any other
-    // fields should be passed as their own parameters) so we can just
-    // make this dummy buffer_t type.
-    struct fake_buffer_t {
+    // fields should be passed as their own scalar parameters) so we
+    // can just make this dummy buffer_t type.
+    struct buffer_t {
         uint64_t dev;
         uint8_t* host;
     };
-    void **args = (void **)__builtin_alloca((arg_ptrsLen + outputsLen) * sizeof(void *));
-    fake_buffer_t *buffers = (fake_buffer_t *)__builtin_alloca((arg_ptrsLen + outputsLen) * sizeof(fake_buffer_t));
-    for (int i = 0; i < arg_ptrsLen; i++) {
-        args[i] = arg_ptrs[i].data;
+    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
+    buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
+
+    void **next_arg = &args[0];
+    buffer_t *next_buffer_t = &buffers[0];
+    // Input buffers come first.
+    for (int i = 0; i < input_buffersLen; i++, next_arg++, next_buffer_t++) {
+        next_buffer_t->host = input_buffersPtrs[i].data;
+        *next_arg = next_buffer_t;
     }
-    for (int i = 0; i < outputsLen; i++) {
-        buffers[i].host = outputs[i].data;
-        args[i + arg_ptrsLen] = &buffers[i];
+    // Input scalars are next.
+    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
+        *next_arg = input_scalarsPtrs[i].data;
+    }
+    // Output buffers are last.
+    for (int i = 0; i < output_buffersLen; i++, next_arg++, next_buffer_t++) {
+        next_buffer_t->host = output_buffersPtrs[i].data;
+        *next_arg = next_buffer_t;
     }
 
     // Call the pipeline and return the result.
