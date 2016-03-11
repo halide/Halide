@@ -53,19 +53,18 @@ void halide_print(void *user_context, const char *msg) {
     (*custom_print)(user_context, msg);
 }
 
-int halide_noos_init_runtime(halide_malloc_t user_malloc,
-                             halide_free_t user_free,
-                             halide_print_t print,
-                             halide_error_handler_t error,
-                             halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task) {
+int halide_noos_set_runtime(halide_malloc_t user_malloc,
+                            halide_free_t user_free,
+                            halide_print_t print,
+                            halide_error_handler_t error,
+                            halide_do_par_for_t do_par_for,
+                            halide_do_task_t do_task) {
     halide_set_custom_malloc(user_malloc);
     halide_set_custom_free(user_free);
     halide_set_custom_print(print);
     halide_set_error_handler(error);
     halide_set_custom_do_par_for(do_par_for);
     halide_set_custom_do_task(do_task);
-    halide_print(NULL, "init_runtime done");
     return 0;
 }
 
