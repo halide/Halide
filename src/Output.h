@@ -18,9 +18,6 @@ namespace Halide {
  * (.o for objects, .s for assembly). */
 // @{
 EXPORT void compile_module_to_object(const Module &module, std::string filename = "");
-EXPORT void compile_module_to_object(const Module &module, std::vector<uint8_t> &object);
-EXPORT void compile_module_to_shared_object(const Module &module, std::string filename = "");
-EXPORT void compile_module_to_shared_object(const Module &module, std::vector<uint8_t> &object);
 EXPORT void compile_module_to_assembly(const Module &module, std::string filename = "");
 EXPORT void compile_module_to_native(const Module &module,
                                      std::string object_filename = "",
