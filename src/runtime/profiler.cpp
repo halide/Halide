@@ -174,6 +174,11 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     func_id += token;
 
     halide_profiler_pipeline_stats *p_stats = find_pipeline_stats(pipeline_name);
+    // The pipeline stats should have had been created before this function is called.
+    // It's possible that bill_func reorders the pipeline stats linked list while
+    // we were searching (without grabbing the state's lock) which causes
+    // the first search to return a NULL pointer. We need to redo the search but
+    // now with grabbing the lock to ensure no one changes the stats order.
     if (p_stats == NULL) {
         ScopedMutexLock lock(&s->lock);
         p_stats = find_pipeline_stats(pipeline_name);
@@ -200,6 +205,12 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     if (f_stats->memory_current > f_stats->memory_peak) {
         f_stats->memory_peak = f_stats->memory_current;
     }*/
+
+    // Note: Update to the memory counter is done without grabbing the state's lock to
+    // reduce lock contention. One potential issue is that other call that frees the
+    // pipeline and function stats structs may be running in parallel. However, the
+    // current desctructor (called on profiler shutdown) does not free the structs
+    // unless user specifically calls halide_profiler_reset().
 
     // Update per-pipeline memory stats
     __sync_add_and_fetch(&p_stats->num_allocs, 1);
@@ -256,6 +267,12 @@ WEAK void halide_profiler_memory_free(void *user_context,
 
     // Update per-func memory stats
     f_stats->memory_current -= decr;*/
+
+    // Note: Update to the memory counter is done without grabbing the state's lock to
+    // reduce lock contention. One potential issue is that other call that frees the
+    // pipeline and function stats structs may be running in parallel. However, the
+    // current desctructor (called on profiler shutdown) does not free the structs
+    // unless user specifically calls halide_profiler_reset().
 
     // Update per-pipeline memory stats
     __sync_sub_and_fetch(&p_stats->memory_current, decr);
