@@ -244,18 +244,6 @@ WEAK void halide_profiler_memory_free(void *user_context,
         p_stats = find_pipeline_stats(pipeline_name);
     }
 
-    if (p_stats == NULL) {
-        ScopedMutexLock lock(&s->lock);
-        for (halide_profiler_pipeline_stats *p = s->pipelines; p;
-             p = (halide_profiler_pipeline_stats *)(p->next)) {
-            // The same pipeline will deliver the same global constant
-            // string, so they can be compared by pointer.
-            if (p->name == pipeline_name) {
-                p_stats = p;
-                break;
-            }
-        }
-    }
     halide_assert(user_context, p_stats != NULL);
     halide_assert(user_context, (func_id - p_stats->first_func_id) >= 0);
     halide_assert(user_context, (func_id - p_stats->first_func_id) < p_stats->num_funcs);
