@@ -57,7 +57,9 @@ clang::QualType halide_type_to_clang_type(clang::ASTContext &context, Type type)
                     "Simple handle type cannot be inside any namespace or type scopes.\n";
 
                 // Only handle explicitly sized types per Halide convention.
-                if (type.handle_type->inner_name.name == "bool") {
+                if (type.handle_type->inner_name.name == "void") {
+                    base_type = context.VoidTy;
+                } else if (type.handle_type->inner_name.name == "bool") {
                     base_type = context.BoolTy;
                 } else if (type.handle_type->inner_name.name == "int8_t") {
                     base_type = context.getIntTypeForBitwidth(8, true);
@@ -81,8 +83,9 @@ clang::QualType halide_type_to_clang_type(clang::ASTContext &context, Type type)
                     base_type = context.getRealTypeForBitwidth(32);
                 } else if (type.handle_type->inner_name.name == "double") {
                     base_type = context.getRealTypeForBitwidth(64);
+                } else {
+                    user_error << "Unknown simple handle type " << type.handle_type->inner_name.name << "\n";
                 }
-                user_error << "Unknown simple handle type " << type.handle_type->inner_name.name << "\n";
             } else {
                 clang::DeclContext *decl_context = namespaced_decl_scope(context, type.handle_type->namespaces);
                 for (auto &scope_inner_name : type.handle_type->enclosing_types) {
