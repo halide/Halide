@@ -504,6 +504,7 @@ RUNTIME_CPP_COMPONENTS = \
   cuda \
   destructors \
   device_interface \
+  errors \
   fake_thread_pool \
   float16_t \
   gcd_thread_pool \
