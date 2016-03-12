@@ -118,20 +118,40 @@ WEAK void sampling_profiler_thread(void *) {
     halide_mutex_unlock(&s->lock);
 }
 
-WEAK halide_profiler_pipeline_stats *find_pipeline_stats(const char *pipeline_name) {
+WEAK halide_profiler_pipeline_stats *find_pipeline_stats_unlocked(const char *pipeline_name) {
     halide_profiler_state *s = halide_profiler_get_state();
 
-    halide_profiler_pipeline_stats *p_stats = NULL;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
         // The same pipeline will deliver the same global constant
         // string, so they can be compared by pointer.
         if (p->name == pipeline_name) {
-            p_stats = p;
-            break;
+            return p;
         }
     }
-    return p_stats;
+    return NULL;
+}
+
+WEAK halide_profiler_pipeline_stats *find_pipeline_stats_locked(const char *pipeline_name) {
+    halide_profiler_state *s = halide_profiler_get_state();
+
+    halide_profiler_pipeline_stats *p_prev = NULL;
+    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
+         p = (halide_profiler_pipeline_stats *)(p->next)) {
+        // The same pipeline will deliver the same global constant
+        // string, so they can be compared by pointer.
+        if (p->name == pipeline_name) {
+            if (p_prev) {
+                // Bubble the pipeline to the top to speed up future queries.
+                p_prev->next = (halide_profiler_pipeline_stats *)(p->next);
+                p->next = s->pipelines;
+                s->pipelines = p;
+            }
+            return p;
+        }
+        p_prev = p;
+    }
+    return NULL;
 }
 
 }}}
@@ -173,15 +193,15 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
 
     func_id += token;
 
-    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats(pipeline_name);
+    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats_unlocked(pipeline_name);
     // The pipeline stats should have had been created before this function is called.
     // It's possible that bill_func reorders the pipeline stats linked list while
     // we were searching (without grabbing the state's lock) which causes
     // the first search to return a NULL pointer. We need to redo the search but
     // now with grabbing the lock to ensure no one changes the stats order.
-    if (p_stats == NULL) {
+    while (p_stats == NULL) {
         ScopedMutexLock lock(&s->lock);
-        p_stats = find_pipeline_stats(pipeline_name);
+        p_stats = find_pipeline_stats_locked(pipeline_name);
     }
 
     halide_assert(user_context, p_stats != NULL);
@@ -189,22 +209,6 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     halide_assert(user_context, (func_id - p_stats->first_func_id) < p_stats->num_funcs);
 
     halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id - p_stats->first_func_id];
-
-    // Update per-pipeline memory stats
-    /*p_stats->num_allocs += 1;
-    p_stats->memory_total += incr;
-    p_stats->memory_current += incr;
-    if (p_stats->memory_current > p_stats->memory_peak) {
-        p_stats->memory_peak = p_stats->memory_current;
-    }
-
-    // Update per-func memory stats
-    f_stats->num_allocs += 1;
-    f_stats->memory_total += incr;
-    f_stats->memory_current += incr;
-    if (f_stats->memory_current > f_stats->memory_peak) {
-        f_stats->memory_peak = f_stats->memory_current;
-    }*/
 
     // Note: Update to the memory counter is done without grabbing the state's lock to
     // reduce lock contention. One potential issue is that other call that frees the
@@ -221,7 +225,7 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     }
 
     // Update per-func memory stats
-    __sync_add_and_fetch(&f_stats->num_allocs, incr);
+    __sync_add_and_fetch(&f_stats->num_allocs, 1);
     __sync_add_and_fetch(&f_stats->memory_total, incr);
     int f_mem_current = __sync_add_and_fetch(&f_stats->memory_current, incr);
     if (f_mem_current > f_stats->memory_peak) {
@@ -238,10 +242,10 @@ WEAK void halide_profiler_memory_free(void *user_context,
 
     func_id += token;
 
-    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats(pipeline_name);
-    if (p_stats == NULL) {
+    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats_unlocked(pipeline_name);
+    while (p_stats == NULL) {
         ScopedMutexLock lock(&s->lock);
-        p_stats = find_pipeline_stats(pipeline_name);
+        p_stats = find_pipeline_stats_locked(pipeline_name);
     }
 
     halide_assert(user_context, p_stats != NULL);
@@ -249,12 +253,6 @@ WEAK void halide_profiler_memory_free(void *user_context,
     halide_assert(user_context, (func_id - p_stats->first_func_id) < p_stats->num_funcs);
 
     halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id - p_stats->first_func_id];
-
-    /*// Update per-pipeline memory stats
-    p_stats->memory_current -= decr;
-
-    // Update per-func memory stats
-    f_stats->memory_current -= decr;*/
 
     // Note: Update to the memory counter is done without grabbing the state's lock to
     // reduce lock contention. One potential issue is that other call that frees the
