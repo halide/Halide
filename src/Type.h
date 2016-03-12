@@ -237,7 +237,8 @@ struct Type {
 
         return first->inner_name == second->inner_name &&
                first->namespaces == second->namespaces &&
-               first->enclosing_types == second->enclosing_types;
+               first->enclosing_types == second->enclosing_types &&
+               first->extra_indirection_levels == second->extra_indirection_levels;
     }
 
     /** Compare two types for equality */

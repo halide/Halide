@@ -450,7 +450,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     if (!namespaces.empty()) {
         const char *separator = "";
         for (const auto &ns : namespaces) {
-            stream << separator << "namespace " << ns << "{";
+            stream << separator << "namespace " << ns << " {";
             separator = " ";
         }
         stream << "\n\n";
