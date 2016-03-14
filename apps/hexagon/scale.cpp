@@ -2,33 +2,41 @@
 
 using namespace Halide;
 
+Expr u16(Expr x) { return cast<uint16_t>(x); }
+Expr u8(Expr x) { return cast<uint8_t>(x); }
+
 int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
 
     Var x("x"), y("y"), c("c");
 
-    Param<int> scale;
     // Takes an 8-bit input
     ImageParam input(UInt(8), 3);
 
+    Func input_bounded = lambda(x, y, c, input(x, y, c)); //BoundaryConditions::repeat_edge(input);
+
+    int radius = 3;
+
+    RDom ry(-radius, 2*radius + 1);
+
     Func f("f");
-    f(x, y, c) = input(x, y, c) + 1;
-
+    f(x, y, c) = u8(sum(u16(input_bounded(x, y + ry, c)))/(2*radius + 1));
     Func g("g");
-    g(x, y, c) = f(x, y, c) * scale;
+    g(x, y, c) = f(x, y, c);
 
-    Func h("h");
-    h(x, y, c) = cast<uint8_t>(g(x, y, c) - 1);
+    f.bound(c, 0, 3);
 
-    f.compute_root();
-    g.compute_root().hexagon(c);
-    h.compute_root();
+#if 1
+    f.compute_root().hexagon(c);  //.vectorize(x, 64);
+#else
+    f.compute_root().vectorize(x, target.natural_vector_size<uint8_t>());
+#endif
 
-    h.compile_to_header("scale.h", {scale, input}, "scale");
+    g.compile_to_header("scale.h", {input}, "scale");
     std::stringstream obj;
     obj << "scale-" << argv[1] << ".o";
-    h.compile_to_object(obj.str(), {scale, input}, "scale", target);
+    g.compile_to_object(obj.str(), {input}, "scale", target);
 
     return 0;
 }
