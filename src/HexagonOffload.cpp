@@ -76,7 +76,9 @@ public:
 
     void visit(const For *loop) {
         if (loop->device_api == DeviceAPI::Hexagon) {
-            std::string hex_name = "hex_" + loop->name;
+            // Unrolling or loop partitioning might generate multiple
+            // loops with the same name, so we need to unique them.
+            std::string hex_name = unique_name("hex_" + loop->name);
 
             // Build a closure for the device code.
             // TODO: Should this move the body of the loop to Hexagon,

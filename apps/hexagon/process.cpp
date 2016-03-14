@@ -70,8 +70,6 @@ int main(int argc, char **argv) {
     int radius = 3;
 
     buffer_t out = in;
-    out.min[1] = radius;
-    out.extent[1] = H - 2*radius;
     out.host = out_host;
 
     in.host_dirty = true;
@@ -95,8 +93,8 @@ int main(int argc, char **argv) {
     }
 
 
-    for (int c = 0; c < 1; c++) {
-        for (int y = radius; y < H - radius; y++) {
+    for (int c = 0; c < 3; c++) {
+        for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 uint16_t blur = 0;
                 for (int ry = -radius; ry <= radius; ry++) {
@@ -107,6 +105,7 @@ int main(int argc, char **argv) {
 
                 if (a != b) {
                     printf("Mismatch at %d %d %d: %d != %d\n", x, y, c, a, b);
+                    return -1;
                 }
             }
         }

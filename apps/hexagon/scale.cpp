@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     // Takes an 8-bit input
     ImageParam input(UInt(8), 3);
 
-    Func input_bounded = lambda(x, y, c, input(x, y, c)); //BoundaryConditions::repeat_edge(input);
+    Func input_bounded = BoundaryConditions::repeat_edge(input);
 
     int radius = 3;
 
