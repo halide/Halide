@@ -315,6 +315,10 @@ WEAK int halide_hexagon_run(void *user_context,
         }
     }
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     // Allocate some remote_buffer objects on the stack.
     int arg_count = 0;
     while(arg_sizes[arg_count] > 0) arg_count++;
@@ -340,6 +344,10 @@ WEAK int halide_hexagon_run(void *user_context,
                                             output_buffers);
     if (output_buffer_count < 0) return output_buffer_count;
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before_run = halide_current_time_ns(user_context);
+    #endif
+
     // Call the pipeline on the device side.
     debug(user_context) << "    halide_hexagon_remote_run -> \n";
     result = remote_run(module, *function,
@@ -348,9 +356,19 @@ WEAK int halide_hexagon_run(void *user_context,
                         output_buffers, output_buffer_count);
     debug(user_context) << "        " << result << "\n";
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after_run = halide_current_time_ns(user_context);
+    debug(user_context) << "    remote time: " << (t_after_run - t_before_run) / 1.0e6 << " ms\n";
+    #endif
+
     // Unmap the arguments. Scalars don't need to be unmapped.
     unmap_arguments(user_context, arg_count, arg_flags, 0x3, 0x1, input_buffers);
     unmap_arguments(user_context, arg_count, arg_flags, 0x2, 0x2, output_buffers);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    total time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
 
     return result != 0 ? -1 : 0;
 }
