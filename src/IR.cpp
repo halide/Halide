@@ -442,11 +442,19 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
 
 Stmt Block::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
-    // rest is allowed to be null
+    internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
-    node->first = first;
-    node->rest = rest;
+
+    if (const Block *b = first.as<Block>()) {
+        // Use a canonical block nesting order
+        node->first = b->first;
+        node->rest  = Block::make(b->rest, rest);
+    } else {
+        node->first = first;
+        node->rest = rest;
+    }
+
     return node;
 }
 
@@ -638,9 +646,9 @@ Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
 Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
-Call::ConstString Call::make_int64 = "make_int64";
-Call::ConstString Call::make_float64 = "make_float64";
 Call::ConstString Call::register_destructor = "register_destructor";
+Call::ConstString Call::get_high_register = "get_high_register";
+Call::ConstString Call::get_low_register = "get_low_register";
 
 }
 }

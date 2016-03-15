@@ -72,7 +72,11 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
+void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma
+#ifdef FCAMLUT
+        , unsigned char *lut
+#endif
+        ) {
     const int BLOCK_WIDTH = 40;
     const int BLOCK_HEIGHT = 24;
     const int G = 0, GR = 0, R = 1, B = 2, GB = 3;
@@ -88,9 +92,11 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     outHeight /= BLOCK_HEIGHT;
     outHeight *= BLOCK_HEIGHT;
 
+#ifndef FCAMLUT
     // Prepare the lookup table
     unsigned char lut[whiteLevel+1];
     makeLUT(contrast, blackLevel, whiteLevel, gamma, lut);
+#endif
 
     // Grab the color matrix
     float colorMatrix[12];

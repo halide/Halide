@@ -49,6 +49,9 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+#define O_RDONLY 0
+#define O_RDWR 2
+
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);
@@ -74,6 +77,7 @@ void *memset(void *s, int val, size_t n);
 int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
+int ioctl(int fd, unsigned long request, ...);
 void exit(int);
 void abort();
 char *strncpy(char *dst, const char *src, size_t n);
@@ -123,7 +127,7 @@ struct mxArray;
 WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
-  
+
 }
 
 /** A macro that calls halide_print if the supplied condition is
@@ -154,6 +158,18 @@ __attribute__((always_inline)) void swap(T &a, T &b) {
 template <typename T>
 __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
+}
+
+template <typename T>
+__attribute__((always_inline)) T min(const T &a, const T &b) {
+    return a < b ? a : b;
+}
+
+template <typename T, typename U>
+__attribute__((always_inline)) T reinterpret(const U &x) {
+    T ret;
+    memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
+    return ret;
 }
 
 }}}

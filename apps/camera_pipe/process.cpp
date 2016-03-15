@@ -12,22 +12,42 @@
 #include <cstdlib>
 #include <cassert>
 
+#if defined(__hexagon__)
+#define VLEN    (1<<LOG2VLEN)
+#define BLOCK   (VLEN/2)
+#include "hexagon_standalone.h"
+#include "io.h"
+#define IMGEXT_IN ".pgm"
+#define IMGEXT    ".ppm"
+#else
+#define IMGEXT_IN ".png"
+#define IMGEXT    ".png"
+#endif
+
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc < 7) {
-        printf("Usage: ./process raw.png color_temp gamma contrast timing_iterations output.png\n"
-               "e.g. ./process raw.png 3200 2 50 5 output.png");
+        printf("Usage: ./process raw" IMGEXT_IN " color_temp gamma contrast timing_iterations output" IMGEXT "\n"
+               "e.g. ./process raw" IMGEXT_IN " 3200 2 50 5 output" IMGEXT);
         return 0;
     }
 
+    fprintf(stderr, "input: %s\n", argv[1]);
 #ifdef HL_MEMINFO
     halide_enable_malloc_trace();
 #endif
 
     Image<uint16_t> input = load_image(argv[1]);
-    fprintf(stderr, "%d %d\n", input.width(), input.height());
+    fprintf(stderr, "       %d %d\n", input.width(), input.height());
+    // save_image(input, "input.pgm");
+    // fprintf(stderr, "       input.pgm\n");
+
+#if defined(__hexagon__)
+    Image<uint8_t> output(((input.width() - 32)/BLOCK)*BLOCK, ((input.height() - 48)/BLOCK)*BLOCK, 3);
+#else
     Image<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
+#endif
 
 #ifdef HL_MEMINFO
     info(input, "input");
@@ -56,29 +76,138 @@ int main(int argc, char **argv) {
     float gamma = atof(argv[3]);
     float contrast = atof(argv[4]);
     int timing_iterations = atoi(argv[5]);
+    int blackLevel = 25;
+    int whiteLevel = 1023;
 
     double best;
+#if defined(__hexagon__)
+    long long start_time = 0;
+    long long total_cycles = 0;
+    SIM_ACQUIRE_HVX;
+#if LOG2VLEN == 7
+    SIM_SET_HVX_DOUBLE_MODE;
+#endif
+#endif
 
+#ifdef FCAMLUT
+    // Prepare the luminance lookup table
+    // compute it once ahead of time outside of main timing loop
+    unsigned char * _lut = new unsigned char[whiteLevel+1];
+#ifdef PCYCLES
+    RESET_PMU();
+    start_time = READ_PCYCLES();
+#endif
     best = benchmark(timing_iterations, 1, [&]() {
-        curved(color_temp, gamma, contrast,
-               input, matrix_3200, matrix_7000, output);
+    FCam::makeLUT(contrast, blackLevel, whiteLevel, gamma, _lut);
     });
+#ifdef PCYCLES
+    total_cycles = READ_PCYCLES() - start_time;
+    DUMP_PMU();
+    fprintf(stderr, "makeLUT:\t%0.4f cycles/pixel\n",
+            (float)total_cycles/output.height()/output.width()/timing_iterations);
+#else
+    fprintf(stderr, "makeLUT:\t%gus\n", best * 1e6);
+#endif
+    Image<unsigned char> lut(whiteLevel+1);
+    for (int i = 0; i < whiteLevel+1; i++) {
+        lut(i) = _lut[i];
+    }
+#ifdef DBGLUT
+    for (int i = 0; i < whiteLevel+1; i++) {
+        if (i%16 == 0) fprintf(stderr, "\n%4d: ", i);
+        fprintf(stderr, "%4d ", _lut[i]);
+    }
+    fprintf(stderr, "\n");
+    info(lut, "lut");
+    dump(lut, "lut");
+    stats(lut, "lut");
+#endif
+#endif // FCAMLUT
+
+#ifdef PCYCLES
+    RESET_PMU();
+    start_time = READ_PCYCLES();
+#endif
+    best = benchmark(timing_iterations, 1, [&]() {
+        curved(color_temp, gamma, contrast, blackLevel, whiteLevel,
+               input, matrix_3200, matrix_7000,
+#ifdef FCAMLUT
+               lut,
+#endif
+               output);
+    });
+#ifdef PCYCLES
+    total_cycles = READ_PCYCLES() - start_time;
+    DUMP_PMU();
+    fprintf(stderr, "Halide:\t%0.4f cycles/pixel\n",
+            (float)total_cycles/output.height()/output.width()/timing_iterations);
+#else
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
+#endif
+    fprintf(stderr, "output: %s\n", argv[6]);
+#ifndef NOSAVE
     save_image(output, argv[6]);
+#endif
+    fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
+#if defined(__hexagon__)
+    SIM_RELEASE_HVX;
+#if DEBUG
+    printf ("Done calling the halide func. and released the vector context\n");
+#endif
+#endif
+
+#ifndef NOFCAM
+#if defined(__hexagon__)
+    // The C ref output will have a width that is a multiple of 40, and a height
+    // which is a multiple of 24.
+    Image<uint8_t> output_c(((input.width() - 32)/40)*40, ((input.height() - 48)/24)*24, 3);
+#else
     Image<uint8_t> output_c(output.width(), output.height(), output.channels());
+#endif
+#ifdef PCYCLES
+    RESET_PMU();
+    start_time = READ_PCYCLES();
+#endif
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output_c, color_temp, contrast, true, 25, 1023, gamma);
+        FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma
+#ifdef FCAMLUT
+                        , _lut
+#endif
+                        );
     });
+#ifdef PCYCLES
+    total_cycles = READ_PCYCLES() - start_time;
+    DUMP_PMU();
+    fprintf(stderr, "C++:\t%0.4f cycles/pixel\n",
+            (float)total_cycles/output_c.height()/output_c.width()/timing_iterations);
+#else
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
-    save_image(output_c, "fcam_c.png");
+#endif
+    fprintf(stderr, "output_c: fcam_c" IMGEXT "\n");
+#ifndef NOSAVE
+    save_image(output_c, "fcam_c" IMGEXT);
+#endif
+    fprintf(stderr, "        %d %d\n", output_c.width(), output_c.height());
 
-    Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
+#if not defined(__hexagon__)
+    Image<uint8_t> output_asm(output_c.width(), output_c.height(), output_c.channels());
     best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, 25, 1023, gamma);
+        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, blackLevel, whiteLevel, gamma
+#ifdef FCAMLUT
+                        , _lut
+#endif
+                        );
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    save_image(output_asm, "fcam_arm.png");
+    fprintf(stderr, "output_asm: fcam_arm" IMGEXT "\n");
+#ifndef NOSAVE
+    save_image(output_asm, "fcam_arm" IMGEXT);
+#endif
+    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
+#endif
+
+#endif // NOFCAM
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms

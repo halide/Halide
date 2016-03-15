@@ -22,6 +22,7 @@
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_PNaCl.h"
+#include "CodeGen_Hexagon.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
@@ -116,6 +117,12 @@ using std::stack;
 #define InitializePowerPCAsmPrinter()   InitializeAsmPrinter(PowerPC)
 #endif
 
+#ifdef WITH_HEXAGON
+#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
+#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
+#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
+#endif
+
 namespace {
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
@@ -163,6 +170,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     f32x8(nullptr),
     f64x2(nullptr),
     f64x4(nullptr),
+    i32x16(nullptr),
 
     // Wildcards for pattern matching
     wild_i8x8(Variable::make(Int(8, 8), "*")),
@@ -193,6 +201,33 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     wild_u32x8(Variable::make(UInt(32, 8), "*")),
     wild_u64x4(Variable::make(UInt(64, 4), "*")),
 
+    wild_i32x16(Variable::make(Int(32, 16), "*")),
+    wild_u32x16(Variable::make(UInt(32, 16), "*")),
+    wild_i8x64(Variable::make(Int(8, 64), "*")),
+    wild_u8x64(Variable::make(UInt(8, 64), "*")),
+    wild_i16x32(Variable::make(Int(16, 32), "*")),
+    wild_u16x32(Variable::make(UInt(16, 32), "*")),
+
+    wild_i32x32(Variable::make(Int(32, 32), "*")),
+    wild_u32x32(Variable::make(UInt(32, 32), "*")),
+    wild_i8x128(Variable::make(Int(8, 128), "*")),
+    wild_u8x128(Variable::make(UInt(8, 128), "*")),
+    wild_i16x64(Variable::make(Int(16, 64), "*")),
+    wild_u16x64(Variable::make(UInt(16, 64), "*")),
+
+    wild_i32x64(Variable::make(Int(32, 64), "*")),
+    wild_u32x64(Variable::make(UInt(32, 64), "*")),
+    wild_i8x256(Variable::make(Int(8, 256), "*")),
+    wild_u8x256(Variable::make(UInt(8, 256), "*")),
+    wild_i16x128(Variable::make(Int(16, 128), "*")),
+    wild_u16x128(Variable::make(UInt(16, 128), "*")),
+
+    wild_i32x128(Variable::make(Int(32, 128), "*")),
+    wild_u32x128(Variable::make(UInt(32, 128), "*")),
+    wild_i8x512(Variable::make(Int(8, 512), "*")),
+    wild_u8x512(Variable::make(UInt(8, 512), "*")),
+    wild_i16x256(Variable::make(Int(16, 256), "*")),
+    wild_u16x256(Variable::make(UInt(16, 256), "*")),
     wild_f32x2(Variable::make(Float(32, 2), "*")),
 
     wild_f32x4(Variable::make(Float(32, 4), "*")),
@@ -304,7 +339,10 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_PowerPC>(target, context);
     } else if (target.arch == Target::PNaCl) {
         return make_codegen<CodeGen_PNaCl>(target, context);
+    } else if (target.arch == Target::Hexagon) {
+      return make_codegen<CodeGen_Hexagon>(target, context);
     }
+
     user_error << "Unknown target architecture: "
                << target.to_string() << "\n";
     return nullptr;
@@ -410,6 +448,7 @@ CodeGen_LLVM::~CodeGen_LLVM() {
 bool CodeGen_LLVM::llvm_initialized = false;
 bool CodeGen_LLVM::llvm_X86_enabled = false;
 bool CodeGen_LLVM::llvm_ARM_enabled = false;
+bool CodeGen_LLVM::llvm_Hexagon_enabled = false;
 bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
@@ -520,6 +559,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Verify the module is ok
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
+
+//  compile_for_device(stmt, name, args,images_to_embed);
 
     // Optimize
     CodeGen_LLVM::optimize_module();
@@ -720,7 +761,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
-        create_constant_binary_blob(array, buf.name() + ".data"), // host
+        create_binary_blob(array, buf.name() + ".data"), // host
         ConstantArray::get(i32_array, get_constants(i32, b.extent, b.extent + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
@@ -965,7 +1006,8 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
 
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
-    might_be_misaligned.insert(name);
+    if (!target.has_cgoption(Target::BuffersAligned))
+      might_be_misaligned.insert(name);
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -1523,7 +1565,7 @@ Expr promote_64(Expr e) {
     } else if (const Max *m = e.as<Max>()) {
         return Max::make(promote_64(m->a), promote_64(m->b));
     } else {
-        return Cast::make(Int(64), e);
+        return cast(Int(64), e);
     }
 }
 }
@@ -1557,6 +1599,11 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Va
         base_address = builder->CreatePointerCast(base_address, load_type);
     }
 
+    llvm::Constant *constant_index = dyn_cast<llvm::Constant>(index);
+    if (constant_index && constant_index->isZeroValue()) {
+        return base_address;
+    }
+
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
@@ -1578,7 +1625,6 @@ int next_power_of_two(int x) {
 }
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
-
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;
@@ -1637,7 +1683,6 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
-
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
 
     // If it's a Handle, load it as a uint64_t and then cast
@@ -1669,7 +1714,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             // can infer based on the index alone.
 
             // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            ModulusRemainder mod_rem = get_alignment_info(ramp->base);
             if (!possibly_misaligned) {
                 while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
@@ -1682,6 +1727,9 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             // For dense vector loads wider than the native vector
             // width, bust them up into native vectors
+            debug(4) << "Generating load w/ alignment: " << alignment << "\n";
+            debug(4) << "Type: " << op->type << "\n";
+            debug(4) << "Index: " << op->index << "\n";
             int load_lanes = op->type.lanes();
             int native_lanes = native_bits / op->type.bits();
             vector<Value *> slices;
@@ -1697,7 +1745,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 slices.push_back(load);
             }
             value = concat_vectors(slices);
-
+            debug(2) << "Concat_vectors 1:\n";
+            if (debug::debug_level >= 2) value -> dump();
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
@@ -1744,7 +1793,10 @@ void CodeGen_LLVM::visit(const Load *op) {
                 indices[i] = ConstantInt::get(i32, i*2 + (shifted_b ? 1 : 0));
             }
 
+            debug(2) << "Loading two vectors and shuffle: \n";
+
             value = builder->CreateShuffleVector(vec_a, vec_b, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -1759,7 +1811,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             }
 
             Constant *undef = UndefValue::get(flipped->getType());
+            debug(2) << "Load the vector and then flip it in-place\n";
             value = builder->CreateShuffleVector(flipped, undef, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
         } else if (ramp) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
@@ -1770,6 +1824,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
+                debug(2) << "Generate InsertElement without indices\n";
+                if (debug::debug_level >= 2) value -> dump();
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
         } else if (false /* should_scalarize(op->index) */) {
@@ -1785,6 +1841,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+                debug(2) << "Generate InsertElement with index as scalars\n";
+                if (debug::debug_level >= 2) vec -> dump();
             }
             value = vec;
         } else {
@@ -1797,6 +1855,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+                debug(2) << "Generate InsertElement general gathers\n";
+                if (debug::debug_level >= 2) vec -> dump();
             }
             value = vec;
         }
@@ -1829,6 +1889,8 @@ void CodeGen_LLVM::visit(const Ramp *op) {
                 }
             }
             value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
+            debug(2) << "Generate InsertElement Ramp adding stride to base\n";
+            if (debug::debug_level >= 2) value -> dump();
         }
     }
 }
@@ -1837,12 +1899,18 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
     Constant *undef = UndefValue::get(VectorType::get(v->getType(), lanes));
     Constant *zero = ConstantInt::get(i32, 0);
     v = builder->CreateInsertElement(undef, v, zero);
+    debug(2) << "Generate InsertElement broadcast v\n";
+    if (debug::debug_level >= 2) v -> dump();
     Constant *zeros = ConstantVector::getSplat(lanes, zero);
-    return builder->CreateShuffleVector(v, undef, zeros);
+    debug(2) << "Creating broadcast via shufflevector of zeros and V\n";
+    Value *value = builder->CreateShuffleVector(v, undef, zeros);
+    if (debug::debug_level >= 2) value -> dump();
+    return value;
 }
 
 void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->lanes);
+    if (debug::debug_level >= 2) value -> dump();
 }
 
 // Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
@@ -1870,7 +1938,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
             indices[i] = ConstantInt::get(i32, idx);
         }
 
-        return builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        debug(2) << "Interleaving vectors\n";
+        Value *value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value -> dump();
+        return value;
     } else if(vecs.size() == 3) {
         Expr a = vecs[0], b = vecs[1], c = vecs[2];
         debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << "\n";
@@ -1886,8 +1957,9 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 indices[i] = UndefValue::get(i32);
             }
         }
-
+        debug(2) << "Interleaving 3 vectors, ab first\n";
         Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_ab -> dump();
 
         // Then we create a vector of the output size that contains c...
         for (int i = 0; i < type.lanes(); i++) {
@@ -1899,7 +1971,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
         }
 
         Value *none = UndefValue::get(llvm_type_of(c.type()));
+        debug(2) << "Interleaving 3 vectors, now c\n";
         Value *value_c = builder->CreateShuffleVector(codegen(c), none, ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_c -> dump();
+
 
         // Finally, we shuffle the above 2 vectors together into the result.
         for (int i = 0; i < type.lanes(); i++) {
@@ -1909,8 +1984,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 indices[i] = ConstantInt::get(i32, i/3 + type.lanes());
             }
         }
-
-        return builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
+        debug(2) << "Interleaving 3 vectors, last c\n";
+        Value *value = builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value -> dump();
+        return value;
     } else if (vecs.size() == 4 && vecs[0].type().bits() <= 32) {
         Expr a = vecs[0], b = vecs[1], c = vecs[2], d = vecs[3];
         debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << ", " << d << "\n";
@@ -1924,10 +2001,16 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
         }
 
         // First we shuffle a & b together...
+        debug(2) << "Interleaving 4 vectors, a & b \n";
         Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_ab -> dump();
+
 
         // Next we shuffle c & d together...
+        debug(2) << "Interleaving 4 vectors, c & d \n";
         Value *value_cd = builder->CreateShuffleVector(codegen(c), codegen(d), ConstantVector::get(indices));
+        if (debug::debug_level >= 2) value_cd -> dump();
+
 
         // Now we reinterpret the shuffled vectors as vectors of pairs...
         Type t = a.type().with_bits(a.type().bits() * 2);
@@ -1935,8 +2018,13 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
         Value *vec_cd = builder->CreateBitCast(value_cd, llvm_type_of(t));
 
         // Finally, we shuffle the above 2 vectors together into the result.
+        debug(2) << "Interleaving 4 vectors, ab & cd \n";
         Value *vec = builder->CreateShuffleVector(vec_ab, vec_cd, ConstantVector::get(indices));
-        return builder->CreateBitCast(vec, llvm_type_of(type));
+        if (debug::debug_level >= 2) vec -> dump();
+
+        Value *value = builder->CreateBitCast(vec, llvm_type_of(type));
+        if (debug::debug_level >= 2) value -> dump();
+        return value;
     } else {
         Type even_t = type.with_lanes(0);
         Type odd_t  = type.with_lanes(0);
@@ -1968,7 +2056,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 indices[i] = ConstantInt::get(i32, idx);
             }
 
-            return builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+            debug(2) << "Interleaving 2 vectors, p1\n";
+            Value *value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
+            return value;
         } else {
             vector<Constant *> indices(type.lanes());
             for (int i = 0, idx = 0; i < type.lanes(); i++) {
@@ -1985,6 +2076,7 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 }
             }
 
+            debug(2) << "Interleaving 2 vectors, p2\n";
             Value *ab = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
 
             for (int i = 0; i < type.lanes(); i++) {
@@ -1995,8 +2087,11 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 }
             }
 
+            debug(2) << "Interleaving 2 vectors, p3\n";
             Value *none = UndefValue::get(llvm_type_of(last.type()));
             Value *c = builder->CreateShuffleVector(codegen(last), none, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) c -> dump();
+
 
             for (int i = 0; i < type.lanes(); i++) {
                 if (i % vecs.size() < vecs.size()-1) {
@@ -2006,7 +2101,10 @@ Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs
                 }
             }
 
-            return builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
+            debug(2) << "Interleaving 2 vectors, p4\n";
+            Value *value = builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
+            return value;
         }
     }
 }
@@ -2019,6 +2117,8 @@ void CodeGen_LLVM::scalarize(Expr e) {
     for (int i = 0; i < e.type().lanes(); i++) {
         Value *v = codegen(extract_lane(e, i));
         result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+        debug(2) << "Generate InsertElement scalarize\n";
+        if (debug::debug_level >= 2) result -> dump();
     }
     value = result;
 }
@@ -2046,8 +2146,9 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             // Make a size 1 vector of undef at the end to mix in undef values.
             Value *undefs = UndefValue::get(arg->getType());
-
+            debug(2) << "shuffle call intrin\n";
             value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
+            if (debug::debug_level >= 2) value -> dump();
 
             if (op->type.is_scalar()) {
                 value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
@@ -2393,6 +2494,11 @@ void CodeGen_LLVM::visit(const Call *op) {
                         trace_event,
                         0,
                         i);
+                // llvm::PointerType *field = cast<PointerType>(field_ptr->getType());
+                // llvm::Type *FieldType = field->getElementType();
+                // if (members[i]->getType() != FieldType)
+                //   builder->CreateBitCast(members[i], FieldType);
+
                 builder->CreateStore(members[i], field_ptr);
             }
 
@@ -2643,7 +2749,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Add a user context arg as needed. It's never a vector.
         bool takes_user_context = function_takes_user_context(op->name);
         if (takes_user_context) {
-            internal_assert(fn) << "External function " << op->name << "is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
+            internal_assert(fn) << "External function " << op->name << " is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
@@ -2760,6 +2866,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                     call->setDoesNotThrow();
                     if (!call->getType()->isVoidTy()) {
                         value = builder->CreateInsertElement(value, call, idx);
+                        debug(2) << "Generate InsertElement call\n";
+                        if (debug::debug_level >= 2) value -> dump();
                     } // otherwise leave it as undef.
                 }
             }
@@ -2806,7 +2914,7 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
         data.reserve(s.size()+1);
         data.insert(data.end(), s.begin(), s.end());
         data.push_back(0);
-        Constant *val = create_constant_binary_blob(data, "str");
+        Constant *val = create_binary_blob(data, "str");
         string_constants[s] = val;
         return val;
     } else {
@@ -2814,11 +2922,11 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
     }
 }
 
-Constant *CodeGen_LLVM::create_constant_binary_blob(const vector<char> &data, const string &name) {
-
+Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name) {
     llvm::Type *type = ArrayType::get(i8, data.size());
+    bool constant = data.size() > 1024;
     GlobalVariable *global = new GlobalVariable(*module, type,
-                                                true, GlobalValue::PrivateLinkage,
+                                                constant, GlobalValue::PrivateLinkage,
                                                 0, name);
     ArrayRef<unsigned char> data_array((const unsigned char *)&data[0], data.size());
     global->setInitializer(ConstantDataArray::get(*context, data_array));
@@ -3067,7 +3175,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             int native_bytes = native_bits / 8;
 
             // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            ModulusRemainder mod_rem = get_alignment_info(ramp->base);
             if (!possibly_misaligned) {
                 while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
@@ -3080,6 +3188,9 @@ void CodeGen_LLVM::visit(const Store *op) {
 
             // For dense vector stores wider than the native vector
             // width, bust them up into native vectors.
+            debug(4) << "Generating store w/ alignment: " << alignment << "\n";
+            debug(4) << "Type: " << value_type << "\n";
+            debug(4) << "Index: " << op->index << "\n";
             int store_lanes = value_type.lanes();
             int native_lanes = native_bits / value_type.bits();
 
@@ -3245,6 +3356,9 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
             results.push_back(call_intrin(result_slice_type, intrin_lanes, name, args));
         }
         Value *result = concat_vectors(results);
+        debug(2) << "Concat_vectors 2:\n";
+        if (debug::debug_level >= 2) result -> dump();
+
         return slice_vector(result, 0, arg_lanes);
     }
 
@@ -3288,7 +3402,10 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
     }
     Constant *indices_vec = ConstantVector::get(indices);
     Value *undefs = UndefValue::get(vec->getType());
-    return builder->CreateShuffleVector(vec, undefs, indices_vec);
+    debug(2) << "shuffle slice vector\n";
+    Value *value = builder->CreateShuffleVector(vec, undefs, indices_vec);
+    if (debug::debug_level >= 2) value -> dump();
+    return value;
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
@@ -3326,8 +3443,9 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
                 indices[w1 + i] = ConstantInt::get(i32, w_matched + i);
             }
             Constant *indices_vec = ConstantVector::get(indices);
-
+            debug(2) << "shuffle concat vectors\n";
             Value *merged = builder->CreateShuffleVector(v1, v2, indices_vec);
+            if (debug::debug_level >= 2) merged -> dump();
 
             new_vecs.push_back(merged);
         }
@@ -3374,6 +3492,10 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     }
 
     return std::make_pair<llvm::Function *, int>(nullptr, 0);
+}
+
+ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {
+    return modulus_remainder(e, alignment_info);
 }
 
 }}

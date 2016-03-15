@@ -22,6 +22,8 @@ set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
   android_io
+  android_ion
+  android_mman
   android_opengl_context
   cache
   cuda
@@ -32,6 +34,7 @@ set(RUNTIME_CPP
   float16_t
   gcd_thread_pool
   gpu_device_selection
+  hexagon_host
   ios_io
   linux_clock
   linux_host_cpu_count
@@ -46,6 +49,7 @@ set(RUNTIME_CPP
   metal
   metal_objc_arm
   metal_objc_x86
+  noos
   opengl
   openglcompute
   osx_clock
@@ -79,6 +83,7 @@ set (RUNTIME_LL
   aarch64
   arm
   arm_no_neon
+  hexagon
   mips
   pnacl_math
   posix_math
@@ -203,7 +208,6 @@ set(HEADER_FILES
   AddParameterChecks.h
   AllocationBoundsInference.h
   Argument.h
-  BlockFlattening.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -214,6 +218,7 @@ set(HEADER_FILES
   CodeGen_C.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_Hexagon.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
@@ -243,6 +248,7 @@ set(HEADER_FILES
   Func.h
   Function.h
   Generator.h
+  HexagonIRChecker.h
   IR.h
   IREquality.h
   IRMatch.h
@@ -347,7 +353,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AllocationBoundsInference.cpp
-  BlockFlattening.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
@@ -357,6 +362,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_C.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
+  CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
@@ -387,6 +393,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Function.cpp
   FuseGPUThreadLoops.cpp
   Generator.cpp
+  HexagonIRChecker.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -501,6 +508,13 @@ endif()
 if (TARGET_AARCH64)
   target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
   list(APPEND LLVM_COMPONENTS aarch64)
+endif()
+
+if (TARGET_HEXAGON)
+  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON")
+  list(APPEND LLVM_COMPONENTS hexagon)
+  include_directories(${Halide_SOURCE_DIR}/src/hvx_arch_dev)
+  include_directories(${Halide_SOURCE_DIR}/src/hvx_arch_stubs)
 endif()
 
 if (TARGET_PTX)

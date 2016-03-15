@@ -159,6 +159,7 @@ public:
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
+    EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -1199,6 +1200,9 @@ public:
 
     /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
+
+    /** Schedule for execution on Hexagon. */
+    EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For

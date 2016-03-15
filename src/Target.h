@@ -21,13 +21,13 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl} os;
+    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl, Qurt, NoOS} os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
      * set" is actually llvm bitcode.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, POWERPC} arch;
+    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, Hexagon, POWERPC} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -69,6 +69,9 @@ struct Target {
         Renderscript, ///< Enable the Renderscript runtime.
 
         UserContext,  ///< Generated code takes a user_context pointer as first argument
+        HVX_64, /// Enable HVX 64 Byte mode (hexagon) intrinsics
+        HVX_128, /// Enable HVX 128 Byte mode (hexagon) intrinsics
+        HVX_V62, /// Enable HVX v62, default is v60
 
         RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
@@ -81,7 +84,10 @@ struct Target {
         MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
         FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     };
-
+  enum CGOption {
+    BuffersAligned,
+    CGOptionEnd
+  };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
     Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
@@ -171,6 +177,15 @@ struct Target {
         }
         return true;
     }
+    void set_cgoption(CGOption c, bool value = true) {
+        user_assert(c < CGOptionEnd) << "Invalid Target CGOption.\n";
+        cgoptions.set(c, value);
+    }
+
+    bool has_cgoption(CGOption c) const {
+        user_assert(c < CGOptionEnd) << "Invalid Target CGOption.\n";
+        return cgoptions[c];
+    }
 
     /** Returns whether a particular device API can be used with this
      * Target. */
@@ -180,7 +195,8 @@ struct Target {
       return os == other.os &&
           arch == other.arch &&
           bits == other.bits &&
-          features == other.features;
+          features == other.features &&
+          cgoptions == other.cgoptions;
     }
 
     bool operator!=(const Target &other) const {
@@ -237,6 +253,16 @@ struct Target {
         const bool is_avx2 = has_feature(Halide::Target::AVX2);
         const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
         const bool is_integer = t.is_int() || t.is_uint();
+        const int data_size = t.bytes();
+
+        // HVX is either 64 or 128 byte vector size.
+        if (has_feature(Halide::Target::HVX_128)) {
+            user_warning << "128 Mode: natural vector size is " << 128/data_size << "\n";
+            return 128 / data_size;
+        } else if (has_feature(Halide::Target::HVX_64)) {
+            user_warning << "64 Mode: natural vector size is " << 64/data_size << "\n";
+            return 64 / data_size;
+        }
 
         // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
         // However, AVX has a very limited complement of integer instructions;
@@ -244,7 +270,6 @@ struct Target {
         // better performance. (AVX2 does have good integer operations for 256-bit
         // registers.)
         const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
-        const int data_size = t.bytes();
         return vector_byte_size / data_size;
     }
 
@@ -261,6 +286,7 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
+    std::bitset<CGOptionEnd> cgoptions;
 };
 
 /** Return the target corresponding to the host machine. */
