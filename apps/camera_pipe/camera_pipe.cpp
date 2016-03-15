@@ -15,18 +15,11 @@ Expr avg(Expr a, Expr b) {
 }
 
 Func hot_pixel_suppression(Func input) {
-    // hot pixel maximum
     Expr a = max(max(input(x-2, y), input(x+2, y)),
                  max(input(x, y-2), input(x, y+2)));
-    // cold pixel minimum
-    // Expr b = min(min(input(x-2, y), input(x+2, y)),
-    //             min(input(x, y-2), input(x, y+2)));
 
     Func denoised;
-    // hot pixel suppression
     denoised(x, y) = clamp(input(x, y), 0, a);
-    // hot & cold pixel suppression
-    // denoised(x, y) = clamp(input(x, y), b, a);
 
     return denoised;
 }
@@ -233,22 +226,6 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
     // copied from FCam
     Func curve("curve");
 
-#ifdef OLD_CURVE
-    Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
-    Expr g = pow(xf, 1.0f/gamma);
-    Expr b = 2.0f - pow(2.0f, contrast/100.0f);
-    Expr a = 2.0f - 2.0f*b;
-    Expr z = select(g > 0.5f,
-                    1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
-                    a*g*g + b*g);
-
-    Expr val = cast(result_type, clamp(z*256.0f, 0.0f, 255.0f));
-    curve(x) = val;
-    curve.compute_root(); // It's a LUT, compute it once ahead of time.
-
-    Func curved;
-    curved(x, y, c) = curve(input(x, y, c));
-#else // NEW_CURVE (from FCam makeLUT)
     Expr minRaw = 0 + blackLevel;
     Expr maxRaw = whiteLevel;
 
@@ -274,11 +251,7 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
 
     Func curved;
     // Use clamp to restrict size of LUT as allocated by compute_root
-    // - Clamp to variable whiteLevel
-    // curved(x, y, c) = curve(clamp(input(x, y, c), 0, whiteLevel));
-    // - Clamp to a constant upper value
     curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
-#endif
 
     return curved;
 }
