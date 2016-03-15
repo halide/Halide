@@ -528,29 +528,30 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     return std::move(module);
 }
 
-void CodeGen_LLVM::begin_func(const LoweredFunc &f) {
+void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
+                              const std::vector<Argument>& args) {
     // Deduce the types of the arguments to our function
-    vector<llvm::Type *> arg_types(f.args.size());
-    for (size_t i = 0; i < f.args.size(); i++) {
-        if (f.args[i].is_buffer()) {
+    vector<llvm::Type *> arg_types(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
-            arg_types[i] = llvm_type_of(f.args[i].type);
+            arg_types[i] = llvm_type_of(args[i].type);
         }
     }
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), f.name, module.get());
+    function = llvm::Function::Create(func_t, llvm_linkage(linkage), name, module.get());
 
     // Mark the buffer args as no alias
-    for (size_t i = 0; i < f.args.size(); i++) {
-        if (f.args[i].is_buffer()) {
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer()) {
             function->setDoesNotAlias(i+1);
         }
     }
 
-    debug(1) << "Generating llvm bitcode prolog for function " << f.name << "...\n";
+    debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
 
     // Null out the destructor block.
     destructor_block = nullptr;
@@ -563,9 +564,9 @@ void CodeGen_LLVM::begin_func(const LoweredFunc &f) {
     {
         size_t i = 0;
         for (auto &arg : function->args()) {
-            sym_push(f.args[i].name, &arg);
-            if (f.args[i].is_buffer()) {
-                push_buffer(f.args[i].name, &arg);
+            sym_push(args[i].name, &arg);
+            if (args[i].is_buffer()) {
+                push_buffer(args[i].name, &arg);
             }
 
             i++;
@@ -573,14 +574,14 @@ void CodeGen_LLVM::begin_func(const LoweredFunc &f) {
     }
 }
 
-void CodeGen_LLVM::end_func(const LoweredFunc &f) {
+void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
     return_with_error_code(ConstantInt::get(i32, 0));
 
     // Remove the arguments from the symbol table
-    for (size_t i = 0; i < f.args.size(); i++) {
-        sym_pop(f.args[i].name);
-        if (f.args[i].is_buffer()) {
-            pop_buffer(f.args[i].name);
+    for (size_t i = 0; i < args.size(); i++) {
+        sym_pop(args[i].name);
+        if (args[i].is_buffer()) {
+            pop_buffer(args[i].name);
         }
     }
 
@@ -589,14 +590,14 @@ void CodeGen_LLVM::end_func(const LoweredFunc &f) {
 
 void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     // Generate the function declaration and argument unpacking code.
-    begin_func(f);
+    begin_func(f.linkage, f.name, f.args);
 
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
 
     // Clean up and return.
-    end_func(f);
+    end_func(f.args);
 }
 
 // Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.
