@@ -512,32 +512,29 @@ llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std:
 
 }
 
-void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
-    const std::string &name = f.name;
-    const std::vector<Argument> &args = f.args;
-
+void CodeGen_LLVM::begin_func(const LoweredFunc &f) {
     // Deduce the types of the arguments to our function
-    vector<llvm::Type *> arg_types(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+    vector<llvm::Type *> arg_types(f.args.size());
+    for (size_t i = 0; i < f.args.size(); i++) {
+        if (f.args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
-            arg_types[i] = llvm_type_of(args[i].type);
+            arg_types[i] = llvm_type_of(f.args[i].type);
         }
     }
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module.get());
+    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), f.name, module.get());
 
     // Mark the buffer args as no alias
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
+    for (size_t i = 0; i < f.args.size(); i++) {
+        if (f.args[i].is_buffer()) {
             function->setDoesNotAlias(i+1);
         }
     }
 
-    debug(1) << "Generating llvm bitcode for function " << name << "...\n";
+    debug(1) << "Generating llvm bitcode prolog for function " << f.name << "...\n";
 
     // Null out the destructor block.
     destructor_block = nullptr;
@@ -550,45 +547,55 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
     {
         size_t i = 0;
         for (auto &arg : function->args()) {
-            sym_push(args[i].name, &arg);
-            if (args[i].is_buffer()) {
-                push_buffer(args[i].name, &arg);
+            sym_push(f.args[i].name, &arg);
+            if (f.args[i].is_buffer()) {
+                push_buffer(f.args[i].name, &arg);
             }
 
             i++;
         }
     }
+}
 
-    // Ok, we have a module, function, context, and a builder
-    // pointing at a brand new basic block. We're good to go.
-    f.body.accept(this);
-
+void CodeGen_LLVM::end_func(const LoweredFunc &f) {
     return_with_error_code(ConstantInt::get(i32, 0));
 
     // Remove the arguments from the symbol table
-    for (size_t i = 0; i < args.size(); i++) {
-        sym_pop(args[i].name);
-        if (args[i].is_buffer()) {
-            pop_buffer(args[i].name);
+    for (size_t i = 0; i < f.args.size(); i++) {
+        sym_pop(f.args[i].name);
+        if (f.args[i].is_buffer()) {
+            pop_buffer(f.args[i].name);
         }
     }
 
-    module->setModuleIdentifier("halide_module_" + name);
+    module->setModuleIdentifier("halide_module_" + f.name);
     debug(2) << module.get() << "\n";
 
     internal_assert(!verifyFunction(*function));
+}
+
+void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
+    // Generate the function declaration and argument unpacking code.
+    begin_func(f);
+
+    // Generate the function body.
+    debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
+    f.body.accept(this);
+
+    // Clean up and return.
+    end_func(f);
 
     // If the Func is externally visible, also create the argv wrapper
     // (useful for calling from JIT and other machine interfaces).
     if (f.linkage == LoweredFunc::External) {
-        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, name + "_argv");
-        llvm::Constant *metadata = embed_metadata(name + "_metadata", name, args);
+        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, f.name + "_argv");
+        llvm::Constant *metadata = embed_metadata(f.name + "_metadata", f.name, f.args);
         if (target.has_feature(Target::RegisterMetadata)) {
-            register_metadata(name, metadata, wrapper);
+            register_metadata(f.name, metadata, wrapper);
         }
 
         if (target.has_feature(Target::Matlab)) {
-            define_matlab_wrapper(module.get(), name);
+            define_matlab_wrapper(module.get(), f.name);
         }
     }
 }

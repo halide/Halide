@@ -84,6 +84,12 @@ protected:
     virtual void compile_buffer(const Buffer &buffer);
     // @}
 
+    /** Helper functions for compiling Halide functions to llvm functions. */
+    // @{
+    virtual void begin_func(const LoweredFunc &func);
+    virtual void end_func(const LoweredFunc &func);
+    // @}
+
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
      * define these. */
