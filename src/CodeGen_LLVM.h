@@ -86,12 +86,14 @@ protected:
 
     /** Helper functions for compiling Halide functions to llvm
      * functions. begin_func performs all the work necessary to begin
-     * generating code with the IRBuilder. A call to begin_func should
-     * be a followed by a call to end_func, to generate the
+     * generating code for a function with a given argument list with
+     * the IRBuilder. A call to begin_func should be a followed by a
+     * call to end_func with the same arguments, to generate the
      * appropriate cleanup code. */
     // @{
-    virtual void begin_func(const LoweredFunc &func);
-    virtual void end_func(const LoweredFunc &func);
+    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &name,
+                            const std::vector<Argument> &args);
+    virtual void end_func(const std::vector<Argument> &args);
     // @}
 
     /** What should be passed as -mcpu, -mattrs, and related for
