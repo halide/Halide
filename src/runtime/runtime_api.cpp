@@ -6,6 +6,7 @@
 #include "HalideRuntimeRenderscript.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeHexagonHost.h"
+#include "HalideRuntimeQurt.h"
 #include "runtime_internal.h"
 
 // This runtime module will contain extern declarations of the Halide
@@ -68,6 +69,8 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_hexagon_initialize_kernels,
     (void *)&halide_hexagon_run,
     (void *)&halide_hexagon_device_release,
+    (void *)&halide_qurt_hvx_lock,
+    (void *)&halide_qurt_hvx_unlock,
     (void *)&halide_int64_to_string,
     (void *)&halide_load_library,
     (void *)&halide_malloc,

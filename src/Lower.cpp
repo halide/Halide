@@ -255,7 +255,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     }
 
     debug(1) << "Splitting off Hexagon offload...\n";
-    s = inject_hexagon_rpc(s);
+    s = inject_hexagon_rpc(s, t);
     debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
 
     s = remove_dead_allocations(s);

@@ -170,7 +170,7 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"android", Target::Android},
     {"ios", Target::IOS},
     {"nacl", Target::NaCl},
-    {"qurt", Target::Qurt},
+    {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
 };
 
