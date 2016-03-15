@@ -126,7 +126,7 @@ DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(runtime_api)
-DECLARE_CPP_INITMOD(qurt)
+DECLARE_CPP_INITMOD(qurt_hvx)
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
 #ifdef WITH_ARM
@@ -775,7 +775,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_powerpc_ll(c));
             }
             if (t.arch == Target::Hexagon) {
-                modules.push_back(get_initmod_qurt(c, bits_64, debug));
+                modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
             }
             if (t.has_feature(Target::SSE41)) {
                 modules.push_back(get_initmod_x86_sse41_ll(c));
