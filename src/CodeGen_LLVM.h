@@ -11,9 +11,17 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+#if LLVM_VERSION >= 39
+class IRBuilderDefaultInserter;
+#else
 template<bool> class IRBuilderDefaultInserter;
+#endif
 class ConstantFolder;
+#if LLVM_VERSION >= 39
+template<typename, typename> class IRBuilder;
+#else
 template<bool, typename, typename> class IRBuilder;
+#endif
 class LLVMContext;
 class Type;
 class StructType;
@@ -76,6 +84,18 @@ protected:
     virtual void compile_buffer(const Buffer &buffer);
     // @}
 
+    /** Helper functions for compiling Halide functions to llvm
+     * functions. begin_func performs all the work necessary to begin
+     * generating code for a function with a given argument list with
+     * the IRBuilder. A call to begin_func should be a followed by a
+     * call to end_func with the same arguments, to generate the
+     * appropriate cleanup code. */
+    // @{
+    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &name,
+                            const std::vector<Argument> &args);
+    virtual void end_func(const std::vector<Argument> &args);
+    // @}
+
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
      * define these. */
@@ -111,7 +131,11 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
+#if LLVM_VERSION >= 39
+    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
+#else
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
+#endif
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     //@}
