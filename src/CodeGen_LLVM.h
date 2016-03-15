@@ -84,7 +84,9 @@ protected:
     virtual void compile_buffer(const Buffer &buffer);
     // @}
 
-    /** Helper functions for compiling Halide functions to llvm functions. */
+    /** Helper functions for compiling Halide functions to llvm
+     * functions. begin_func performs all the work necessary to begin
+     * generating code with the IRBuilder. */
     // @{
     virtual void begin_func(const LoweredFunc &func);
     virtual void end_func(const LoweredFunc &func);
