@@ -2,8 +2,6 @@
 #include <stdint.h>
 
 using namespace Halide;
-using namespace Halide::Internal;
-IRPrinter irp(std::cerr);
 
 int schedule;
 
