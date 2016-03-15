@@ -534,6 +534,21 @@ void CodeGen_LLVM::begin_func(const LoweredFunc &f) {
         }
     }
 
+    // If the Func is externally visible, also create the argv wrapper
+    // (useful for calling from JIT and other machine interfaces). Do
+    // this before setting up the IR builder for the new function.
+    if (f.linkage == LoweredFunc::External) {
+        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, f.name + "_argv");
+        llvm::Constant *metadata = embed_metadata(f.name + "_metadata", f.name, f.args);
+        if (target.has_feature(Target::RegisterMetadata)) {
+            register_metadata(f.name, metadata, wrapper);
+        }
+
+        if (target.has_feature(Target::Matlab)) {
+            define_matlab_wrapper(module.get(), f.name);
+        }
+    }
+
     debug(1) << "Generating llvm bitcode prolog for function " << f.name << "...\n";
 
     // Null out the destructor block.
@@ -584,20 +599,6 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
 
     // Clean up and return.
     end_func(f);
-
-    // If the Func is externally visible, also create the argv wrapper
-    // (useful for calling from JIT and other machine interfaces).
-    if (f.linkage == LoweredFunc::External) {
-        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, f.name + "_argv");
-        llvm::Constant *metadata = embed_metadata(f.name + "_metadata", f.name, f.args);
-        if (target.has_feature(Target::RegisterMetadata)) {
-            register_metadata(f.name, metadata, wrapper);
-        }
-
-        if (target.has_feature(Target::Matlab)) {
-            define_matlab_wrapper(module.get(), f.name);
-        }
-    }
 }
 
 // Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.
