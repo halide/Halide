@@ -18,6 +18,8 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "HexagonIRChecker.h"
+#include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -40,6 +42,7 @@
 #include "Simplify.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
+#include "StoreForwarding.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "UnifyDuplicateLets.h"
@@ -173,7 +176,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::Renderscript)) {
+        t.has_feature(Target::Renderscript) ||
+        t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n" << s << "\n\n";
@@ -195,6 +199,12 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
+    }
+
+    if (t.arch == Target::Hexagon) {
+        debug(1) << "Lowering for Hexagon...\n";
+        s = hexagon_lower(s);
+        debug(2) << "Lowering after Hexgaon:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";
@@ -223,6 +233,10 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
+    debug(1) << "Forwarding stores across loop iterations...\n";
+    s = store_forwarding(s);
+    debug(2) << "Lowering after forwarding stores:\n" << s << "\n\n";
+
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
@@ -240,11 +254,20 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
 
+    debug(1) << "Splitting off Hexagon offload...\n";
+    s = inject_hexagon_rpc(s);
+    debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
+
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
-    
+
+    if (t.arch == Target::Hexagon) {
+        s = hexagon_ir_checker(s, t);
+        debug(1) << "Lowering after hexagon_ir_checker: \n" << s << "\n\n";
+    }
+
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";

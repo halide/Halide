@@ -100,6 +100,7 @@ void check(string op, int vector_width, Expr e) {
     for (size_t i = 0; i < name.size(); i++) {
         if (!isalnum(name[i])) name[i] = '_';
     }
+
     name += "_" + std::to_string(counter);
 
     // Bail out after generating the unique_name, so that names are
@@ -126,6 +127,7 @@ void check(string op, int vector_width, Expr e) {
     error() = maximum(abs(cast<double>(f(r.x, r.y)) - f_scalar(r.x, r.y)));
 
     vector<Argument> arg_types {in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+
 
     {
         // Compile just the vector Func to assembly. Compile without
@@ -1308,8 +1310,64 @@ void check_neon_all() {
     // halide.
 }
 
-void check_altivec_all() {
+void check_hvx_all() {
+    Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
+    Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
+    Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
+    Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32);
+    Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16), i16_3 = in_i16(x+32);
+    Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16), u16_3 = in_u16(x+32);
+    Expr i32_1 = in_i32(x), i32_2 = in_i32(x+16), i32_3 = in_i32(x+32);
+    Expr u32_1 = in_u32(x), u32_2 = in_u32(x+16), u32_3 = in_u32(x+32);
+    Expr i64_1 = in_i64(x), i64_2 = in_i64(x+16), i64_3 = in_i64(x+32);
+    Expr u64_1 = in_u64(x), u64_2 = in_u64(x+16), u64_3 = in_u64(x+32);
+    Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
+    int hvx_width = 0;
+    if (target.has_feature(Target::HVX_64)) {
+        hvx_width = 64;
+    } else if (target.has_feature(Target::HVX_128)) {
+        hvx_width = 128;
+    }
+
+    check("vzxt(v*.ub)", hvx_width, u16(u8_1));
+    check("vzxt(v*.uh)", hvx_width, u32(u16_1));
+    check("vsxt(v*.b)", hvx_width, i16(i8_1));
+    check("vsxt(v*.h)", hvx_width, i32(i16_1));
+
+    // TODO: Verify that the intermediate result of vavg does not overflow.
+    check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
+    check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
+    check("vavg(v*.uh,v*.uh)", hvx_width/2, u16((u32(u16_1) + u32(u16_2))/2));
+    check("vavg(v*.uh,v*.uh):rnd", hvx_width/2, u16((u32(u16_1) + u32(u16_2) + 1)/2));
+    check("vavg(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) + i32(i16_2))/2));
+    check("vavg(v*.h,v*.h):rnd", hvx_width/2, i16((i32(i16_1) + i32(i16_2) + 1)/2));
+    check("vavg(v*.w,v*.w)", hvx_width/4, i32((i64(i32_1) + i64(i32_2))/2));
+    check("vavg(v*.w,v*.w):rnd", hvx_width/4, i32((i64(i32_1) + i64(i32_2) + 1)/2));
+    check("vnavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) - u16(u8_2))/2));
+    check("vnavg(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) - i32(i16_2))/2));
+
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(u32_1 >> 16));
+
+    check("vabsdiff(v*.ub,v*.ub)", hvx_width/1, absd(u8_1, u8_2));
+    check("vabsdiff(v*.uh,v*.uh)", hvx_width/2, absd(u16_1, u16_2));
+    check("vabsdiff(v*.uw,v*.uw)", hvx_width/4, absd(u32_1, u32_2));
+    check("vabsdiff(v*.b,v*.b)", hvx_width/1, absd(i8_1, i8_2));
+    check("vabsdiff(v*.h,v*.h)", hvx_width/2, absd(i16_1, i16_2));
+    check("vabsdiff(v*.w,v*.w)", hvx_width/4, absd(i32_1, i32_2));
+
+    check("vasr(v*.ub,v*.ub,r*):sat", hvx_width/1, u8c((u16(u8_1) + u16(u8_2)) >> 4));
+    check("vasr(v*.uh,v*.uh,r*):sat", hvx_width/1, u16c((u32(u16_1) + u32(u16_2)) >> 4));
+    check("vasr(v*.uw,v*.uw,r*):sat", hvx_width/1, u32c((u64(u32_1) + u64(u32_2)) >> 4));
+    check("vasr(v*.b,v*.b,r*):sat", hvx_width/1, i8c((i16(i8_1) + i16(i8_2)) >> 4));
+    check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, i16c((i32(i16_1) + i32(i16_2)) >> 4));
+    check("vasr(v*.w,v*.w,r*):sat", hvx_width/1, i32c((i64(i32_1) + i64(i32_2)) >> 4));
+}
+
+void check_altivec_all() {
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
@@ -1431,7 +1489,7 @@ int main(int argc, char **argv) {
     }
 
     target = get_target_from_environment();
-    target.set_features({Target::NoBoundsQuery, Target::NoRuntime});
+    target.set_features({Target::NoBoundsQuery, Target::NoAsserts, Target::NoRuntime});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
@@ -1486,6 +1544,8 @@ int main(int argc, char **argv) {
         check_sse_all();
     } else if (target.arch == Target::ARM) {
         check_neon_all();
+    } else if (target.arch == Target::Hexagon) {
+        check_hvx_all();
     } else if (target.arch == Target::POWERPC) {
         check_altivec_all();
     }

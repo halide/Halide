@@ -62,7 +62,7 @@ bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
     return false;
 }
 
-}
+}  // namespace Internal
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs) {
     bool use_soft_float_abi = false;
@@ -155,7 +155,7 @@ llvm::TargetMachine *get_target_machine(const llvm::Module &module) {
 }
 
 #if LLVM_VERSION < 37
-void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_legacy(llvm::Module &module, llvm::raw_ostream& raw_out, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file_legacy.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
 
@@ -188,7 +188,6 @@ void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::T
     // Override default to generate verbose assembly.
     target_machine->setAsmVerbosityDefault(true);
 
-    llvm::raw_fd_ostream *raw_out = new_raw_fd_ostream(filename);
     llvm::formatted_raw_ostream *out = new llvm::formatted_raw_ostream(*raw_out);
 
     // Ask the target to add backend passes as necessary.
@@ -197,15 +196,22 @@ void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::T
     pass_manager.run(module);
 
     delete out;
-    delete raw_out;
 
     delete target_machine;
 }
+
+void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+    llvm::raw_fd_ostream *raw_out = new_raw_fd_ostream(filename);
+
+    emit_legacy(module, *raw_out, file_type);
+
+    delete raw_out;
+}
 #endif
 
-void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit(llvm::Module &module, llvm::raw_pwrite_stream& raw_out, llvm::TargetMachine::CodeGenFileType file_type) {
 #if LLVM_VERSION < 37
-    emit_file_legacy(module, filename, file_type);
+    emit_legacy(module, ostream, file_type);
 #else
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
@@ -225,12 +231,14 @@ void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMa
                        << module.getDataLayout().getStringRepresentation() << "\n";
     }
 
-    std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
-
     // Build up all of the passes that we want to do to the module.
     llvm::legacy::PassManager pass_manager;
 
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module.getTargetTriple())));
+
+
+    // Add internal analysis passes from the target machine.
+    pass_manager.add(llvm::createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerPass());
@@ -239,12 +247,17 @@ void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMa
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
-    target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
+    target_machine->addPassesToEmitFile(pass_manager, raw_out, file_type);
 
     pass_manager.run(module);
 
     delete target_machine;
 #endif
+}
+
+void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+    std::unique_ptr<llvm::raw_fd_ostream> out(new_raw_fd_ostream(filename));
+    emit(module, *out, file_type);
 }
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {

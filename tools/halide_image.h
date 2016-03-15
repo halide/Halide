@@ -64,12 +64,17 @@ class Image {
         if (z) size *= z;
         if (w) size *= w;
 
-        uint8_t *ptr = new uint8_t[sizeof(T)*size + 40];
+#define ALIGN_CONTENTS  128
+        // Allocate a buffer that:
+        //  - can be aligned to ALIGN_CONTENTS bytes (must be a power of 2)
+        //  - has an additional 8 bytes available in the allocation
+        //    to allow for accessing one element beyond the end
+        uint8_t *ptr = new uint8_t[sizeof(T)*size + ALIGN_CONTENTS+8];
         buf.host = ptr;
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.dev = 0;
-        while ((size_t)buf.host & 0x1f) buf.host++;
+        while ((size_t)buf.host & (ALIGN_CONTENTS-1)) buf.host++;
         contents = new Contents(buf, ptr);
     }
 

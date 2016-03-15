@@ -27,6 +27,7 @@ PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
+
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
@@ -47,6 +48,7 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -f
 GENGEN_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # All WITH_* flags are either empty or not-empty. They do not behave
@@ -57,6 +59,7 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
+WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
@@ -111,14 +114,17 @@ AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
+HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
+HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
-CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare
-CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
+CXX_WARNING_FLAGS = -Wall -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare
+CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -g -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE) -I ${SRC_DIR}/hvx_arch_dev -I${SRC_DIR}/hvx_arch_stubs
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
+CXX_FLAGS += $(HEXAGON_CXX_FLAGS)
 CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
@@ -143,7 +149,7 @@ print-%:
 	@echo '$*=$($*)'
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
 LLVM_SHARED_LIBS =
 else
 LLVM_STATIC_LIBS =
@@ -252,7 +258,6 @@ SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AllocationBoundsInference.cpp \
-  BlockFlattening.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
@@ -262,6 +267,7 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
+  CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
@@ -291,6 +297,8 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
+  HexagonIRChecker.cpp \
+  HexagonOffload.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
@@ -343,6 +351,7 @@ SOURCE_FILES = \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
+  StoreForwarding.cpp \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
@@ -373,13 +382,13 @@ HEADER_FILES = \
   AddParameterChecks.h \
   AllocationBoundsInference.h \
   Argument.h \
-  BlockFlattening.h \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
   Buffer.h \
   Closure.h \
   CodeGen_ARM.h \
+  CodeGen_Hexagon.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
@@ -414,6 +423,8 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  HexagonIRChecker.h \
+  HexagonOffload.h \
   runtime/HalideRuntime.h \
   Image.h \
   InjectHostDevBufferCopies.h \
@@ -490,6 +501,8 @@ RUNTIME_CPP_COMPONENTS = \
   android_clock \
   android_host_cpu_count \
   android_io \
+  android_ion \
+  android_mman \
   android_opengl_context \
   cache \
   cuda \
@@ -500,6 +513,7 @@ RUNTIME_CPP_COMPONENTS = \
   float16_t \
   gcd_thread_pool \
   gpu_device_selection \
+  hexagon_host \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
@@ -512,6 +526,7 @@ RUNTIME_CPP_COMPONENTS = \
   mingw_math \
   module_aot_ref_count \
   module_jit_ref_count \
+  noos \
   nacl_host_cpu_count \
   opencl \
   opengl \
@@ -546,6 +561,7 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
+  hexagon \
   mips \
   pnacl_math \
   posix_math \
@@ -582,7 +598,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	# symbols. We only care about the libLLVM ones.
 	@rm -rf $(BUILD_DIR)/llvm_objects
 	@mkdir -p $(BUILD_DIR)/llvm_objects
-	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LIBDL) -lz -lpthread | grep libLLVM | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_LIBDIR)/*.a $(LIBDL) -lz -lpthread | grep libLLVM | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
 	# Extract the necessary object files from the llvm archives.
 	cd $(BUILD_DIR)/llvm_objects; xargs -n2 ar x < list
 	# Archive together all the halide and llvm object files
@@ -630,7 +646,6 @@ endif
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
 
-# -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
