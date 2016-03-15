@@ -415,60 +415,6 @@ bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 
-std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    init_module();
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    module->setModuleIdentifier(input.name());
-
-    // Add some target specific info to the module as metadata.
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
-    #if LLVM_VERSION < 36
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", ConstantDataArray::getString(*context, mcpu()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", ConstantDataArray::getString(*context, mattrs()));
-    #else
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    #endif
-
-    internal_assert(module && context && builder)
-        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
-
-    // Ensure some types we need are defined
-    buffer_t_type = module->getTypeByName("struct.buffer_t");
-    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
-
-    metadata_t_type = module->getTypeByName("struct.halide_filter_metadata_t");
-    internal_assert(metadata_t_type) << "Did not find halide_filter_metadata_t in initial module";
-
-    argument_t_type = module->getTypeByName("struct.halide_filter_argument_t");
-    internal_assert(argument_t_type) << "Did not find halide_filter_argument_t in initial module";
-
-    scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
-    internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
-
-    // Generate the code for this module.
-    debug(1) << "Generating llvm bitcode...\n";
-    for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile_buffer(input.buffers[i]);
-    }
-    for (size_t i = 0; i < input.functions.size(); i++) {
-        compile_func(input.functions[i]);
-    }
-
-    debug(2) << module.get() << "\n";
-
-    // Verify the module is ok
-    verifyModule(*module);
-    debug(2) << "Done generating llvm bitcode\n";
-
-    // Optimize
-    CodeGen_LLVM::optimize_module();
-
-    // Disown the module and return it.
-    return std::move(module);
-}
 
 namespace {
 
@@ -510,12 +456,80 @@ llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std:
     return wrapper;
 }
 
+}  // namespace
+
+std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    init_module();
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
+    module->setModuleIdentifier(input.name());
+
+    // Add some target specific info to the module as metadata.
+    module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
+    #if LLVM_VERSION < 36
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", ConstantDataArray::getString(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", ConstantDataArray::getString(*context, mattrs()));
+    #else
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    #endif
+
+    internal_assert(module && context && builder)
+        << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
+
+    // Ensure some types we need are defined
+    buffer_t_type = module->getTypeByName("struct.buffer_t");
+    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
+
+    metadata_t_type = module->getTypeByName("struct.halide_filter_metadata_t");
+    internal_assert(metadata_t_type) << "Did not find halide_filter_metadata_t in initial module";
+
+    argument_t_type = module->getTypeByName("struct.halide_filter_argument_t");
+    internal_assert(argument_t_type) << "Did not find halide_filter_argument_t in initial module";
+
+    scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
+    internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
+
+    // Generate the code for this module.
+    debug(1) << "Generating llvm bitcode...\n";
+    for (size_t i = 0; i < input.buffers.size(); i++) {
+        compile_buffer(input.buffers[i]);
+    }
+    for (size_t i = 0; i < input.functions.size(); i++) {
+        const LoweredFunc &f = input.functions[i];
+        compile_func(f);
+
+        // If the Func is externally visible, also create the argv wrapper
+        // (useful for calling from JIT and other machine interfaces).
+        if (f.linkage == LoweredFunc::External) {
+            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, f.name + "_argv");
+            llvm::Constant *metadata = embed_metadata(f.name + "_metadata", f.name, f.args);
+            if (target.has_feature(Target::RegisterMetadata)) {
+                register_metadata(f.name, metadata, wrapper);
+            }
+
+            if (target.has_feature(Target::Matlab)) {
+                define_matlab_wrapper(module.get(), f.name);
+            }
+        }
+    }
+
+    debug(2) << module.get() << "\n";
+
+    // Verify the module is ok
+    verifyModule(*module);
+    debug(2) << "Done generating llvm bitcode\n";
+
+    // Optimize
+    CodeGen_LLVM::optimize_module();
+
+    // Disown the module and return it.
+    return std::move(module);
 }
 
-void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
-    const std::string &name = f.name;
-    const std::vector<Argument> &args = f.args;
-
+void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
+                              const std::vector<Argument>& args) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -528,7 +542,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), name, module.get());
+    function = llvm::Function::Create(func_t, llvm_linkage(linkage), name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -537,7 +551,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
-    debug(1) << "Generating llvm bitcode for function " << name << "...\n";
+    debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
 
     // Null out the destructor block.
     destructor_block = nullptr;
@@ -558,11 +572,9 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
             i++;
         }
     }
+}
 
-    // Ok, we have a module, function, context, and a builder
-    // pointing at a brand new basic block. We're good to go.
-    f.body.accept(this);
-
+void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
     return_with_error_code(ConstantInt::get(i32, 0));
 
     // Remove the arguments from the symbol table
@@ -573,24 +585,19 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
         }
     }
 
-    module->setModuleIdentifier("halide_module_" + name);
-    debug(2) << module.get() << "\n";
-
     internal_assert(!verifyFunction(*function));
+}
 
-    // If the Func is externally visible, also create the argv wrapper
-    // (useful for calling from JIT and other machine interfaces).
-    if (f.linkage == LoweredFunc::External) {
-        llvm::Function *wrapper = add_argv_wrapper(module.get(), function, name + "_argv");
-        llvm::Constant *metadata = embed_metadata(name + "_metadata", name, args);
-        if (target.has_feature(Target::RegisterMetadata)) {
-            register_metadata(name, metadata, wrapper);
-        }
+void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
+    // Generate the function declaration and argument unpacking code.
+    begin_func(f.linkage, f.name, f.args);
 
-        if (target.has_feature(Target::Matlab)) {
-            define_matlab_wrapper(module.get(), name);
-        }
-    }
+    // Generate the function body.
+    debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
+    f.body.accept(this);
+
+    // Clean up and return.
+    end_func(f.args);
 }
 
 // Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.
