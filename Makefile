@@ -544,7 +544,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_thread_pool \
   profiler \
   profiler_inlined \
-  qurt \
+  qurt_hvx \
   renderscript \
   runtime_api \
   ssp \
