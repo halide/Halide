@@ -72,7 +72,7 @@ class InjectHexagonRpc : public IRMutator {
     }
 
 public:
-    InjectHexagonRpc() : device_code("hexagon", hexagon_remote_target) {}
+    InjectHexagonRpc(const Target &target) : device_code("hexagon", target) {}
 
     void visit(const For *loop) {
         if (loop->device_api == DeviceAPI::Hexagon) {
@@ -204,8 +204,12 @@ public:
     }
 };
 
-Stmt inject_hexagon_rpc(Stmt s) {
-    InjectHexagonRpc injector;
+Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
+    Target target = hexagon_remote_target;
+    if (host_target.has_feature(Target::Debug)) {
+        target = target.with_feature(Target::Debug);
+    }
+    InjectHexagonRpc injector(target);
     s = injector.inject(s);
     return s;
 }

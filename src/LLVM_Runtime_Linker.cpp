@@ -126,6 +126,7 @@ DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(runtime_api)
+DECLARE_CPP_INITMOD(qurt)
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
 #ifdef WITH_ARM
@@ -701,7 +702,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_ssp(c, bits_64, debug));
-            } else if (t.os == Target::Qurt) {
+            } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
@@ -711,6 +712,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else if (t.os == Target::NoOS) {
                 // No externally resolved symbols are allowed here.
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
                 modules.push_back(get_initmod_noos(c, bits_64, debug));
             }
         }
@@ -771,6 +773,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_ll(c));
+            }
+            if (t.arch == Target::Hexagon) {
+                modules.push_back(get_initmod_qurt(c, bits_64, debug));
             }
             if (t.has_feature(Target::SSE41)) {
                 modules.push_back(get_initmod_x86_sse41_ll(c));

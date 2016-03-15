@@ -463,6 +463,38 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     return llvm_module;
 }
 
+void CodeGen_Hexagon::begin_func(LoweredFunc::LinkageType linkage, const std::string &name,
+                                 const std::vector<Argument> &args) {
+    CodeGen_Posix::begin_func(linkage, name, args);
+
+    // Generate a call to hvx_lock.
+    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
+
+    Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
+    string hvx_lock_result_name = unique_name("hvx_lock_result");
+    Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
+    Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
+                                        AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
+    check_hvx_lock.accept(this);
+}
+
+void CodeGen_Hexagon::end_func(const std::vector<Argument> &args) {
+    debug(0) << "Generating call to hvx_unlock\n";
+    // Switch to the destructor block
+    IRBuilderBase::InsertPoint here = builder->saveIP();
+    BasicBlock *dtors = get_destructor_block();
+
+    builder->SetInsertPoint(dtors->getFirstNonPHI());
+
+    Stmt hvx_unlock = Evaluate::make(Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern));
+    hvx_unlock.accept(this);
+
+    // Switch back to the original location
+    builder->restoreIP(here);
+
+    CodeGen_Posix::end_func(args);
+}
+
 
 llvm::Value *
 CodeGen_Hexagon::CallLLVMIntrinsic(llvm::Function *F,

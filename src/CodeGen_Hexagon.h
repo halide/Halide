@@ -22,7 +22,10 @@ public:
     static void test();
 
 protected:
-
+    // Override begin_func to generate a call to hvx_lock.
+    void begin_func(LoweredFunc::LinkageType linkage, const std::string &name,
+                    const std::vector<Argument> &args);
+    void end_func(const std::vector<Argument> &args);
 
     using CodeGen_Posix::visit;
 

@@ -12,7 +12,7 @@ namespace Internal {
 
 /* Lowering pass for Hexagon
  */
-Stmt inject_hexagon_rpc(Stmt s);
+Stmt inject_hexagon_rpc(Stmt s, const Target &host_target);
 
 }
 }
