@@ -10,7 +10,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, false};
+    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, false, NULL};
     return &s;
 }
 }
@@ -63,22 +63,25 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
 }
 
 WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time) {
-    halide_profiler_pipeline_stats *p_prev = NULL;
+    halide_profiler_pipeline_stats *mru_p = s->mru_pipeline;
+    if (mru_p != NULL) {
+        if (func_id >= mru_p->first_func_id && func_id < mru_p->first_func_id + mru_p->num_funcs) {
+            mru_p->funcs[func_id - mru_p->first_func_id].time += time;
+            mru_p->time += time;
+            mru_p->samples++;
+            return;
+        }
+    }
+
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
         if (func_id >= p->first_func_id && func_id < p->first_func_id + p->num_funcs) {
-            if (p_prev) {
-                // Bubble the pipeline to the top to speed up future queries.
-                p_prev->next = (halide_profiler_pipeline_stats *)(p->next);
-                p->next = s->pipelines;
-                s->pipelines = p;
-            }
+            s->mru_pipeline = p; // Update pipeline cache
             p->funcs[func_id - p->first_func_id].time += time;
             p->time += time;
             p->samples++;
             return;
         }
-        p_prev = p;
     }
     // Someone must have called reset_state while a kernel was running. Do nothing.
 }
@@ -118,38 +121,22 @@ WEAK void sampling_profiler_thread(void *) {
     halide_mutex_unlock(&s->lock);
 }
 
-WEAK halide_profiler_pipeline_stats *find_pipeline_stats_unlocked(const char *pipeline_name) {
+WEAK halide_profiler_pipeline_stats *find_pipeline_stats(void *user_context, const char *pipeline_name) {
     halide_profiler_state *s = halide_profiler_get_state();
 
-    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
-         p = (halide_profiler_pipeline_stats *)(p->next)) {
-        // The same pipeline will deliver the same global constant
-        // string, so they can be compared by pointer.
-        if (p->name == pipeline_name) {
-            return p;
-        }
+    // Check cache first
+    halide_profiler_pipeline_stats *mru_p = s->mru_pipeline;
+    if ((mru_p != NULL) && (mru_p->name == pipeline_name)) {
+        return mru_p;
     }
-    return NULL;
-}
 
-WEAK halide_profiler_pipeline_stats *find_pipeline_stats_locked(const char *pipeline_name) {
-    halide_profiler_state *s = halide_profiler_get_state();
-
-    halide_profiler_pipeline_stats *p_prev = NULL;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
         // The same pipeline will deliver the same global constant
         // string, so they can be compared by pointer.
         if (p->name == pipeline_name) {
-            if (p_prev) {
-                // Bubble the pipeline to the top to speed up future queries.
-                p_prev->next = (halide_profiler_pipeline_stats *)(p->next);
-                p->next = s->pipelines;
-                s->pipelines = p;
-            }
             return p;
         }
-        p_prev = p;
     }
     return NULL;
 }
@@ -163,6 +150,8 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const uint64_t *func_names) {
+    //ctx = user_context;
+
     halide_profiler_state *s = halide_profiler_get_state();
 
     ScopedMutexLock lock(&s->lock);
@@ -193,15 +182,12 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
 
     func_id += token;
 
-    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats_unlocked(pipeline_name);
-    // The pipeline stats should have had been created before this function is called.
-    // It's possible that bill_func reorders the pipeline stats linked list while
-    // we were searching (without grabbing the state's lock) which causes
-    // the first search to return a NULL pointer. We need to redo the search but
-    // now with grabbing the lock to ensure no one changes the stats order.
+    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats(user_context, pipeline_name);
+    // It's unlikely that the pipeline has not been created at this point, but
+    // we add the check anyway.
     while (p_stats == NULL) {
         ScopedMutexLock lock(&s->lock);
-        p_stats = find_pipeline_stats_locked(pipeline_name);
+        p_stats = find_pipeline_stats(user_context, pipeline_name);
     }
 
     halide_assert(user_context, p_stats != NULL);
@@ -242,10 +228,12 @@ WEAK void halide_profiler_memory_free(void *user_context,
 
     func_id += token;
 
-    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats_unlocked(pipeline_name);
+    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats(user_context, pipeline_name);
+    // It's unlikely that the pipeline has not been created at this point, but
+    // we add the check anyway.
     while (p_stats == NULL) {
         ScopedMutexLock lock(&s->lock);
-        p_stats = find_pipeline_stats_locked(pipeline_name);
+        p_stats = find_pipeline_stats(user_context, pipeline_name);
     }
 
     halide_assert(user_context, p_stats != NULL);
@@ -337,10 +325,14 @@ WEAK void halide_profiler_report(void *user_context) {
 
 
 WEAK void halide_profiler_reset() {
+    // WARNING: Do not call this method while there is other halide_profiler_memory_allocate/free
+    // thread running; halide_profiler_memory_allocate/free updates the pipeline/func stats
+    // without grabbing the state's lock.
     halide_profiler_state *s = halide_profiler_get_state();
 
     ScopedMutexLock lock(&s->lock);
 
+    s->mru_pipeline = NULL;
     while (s->pipelines) {
         halide_profiler_pipeline_stats *p = s->pipelines;
         s->pipelines = (halide_profiler_pipeline_stats *)(p->next);
@@ -362,6 +354,8 @@ WEAK void halide_profiler_shutdown() {
                            &s->current_func);
     } while (s->started);
     s->current_func = halide_profiler_outside_of_halide;
+
+    s->mru_pipeline = NULL;
 
     // Print results. No need to lock anything because we just shut
     // down the thread.
