@@ -18,7 +18,7 @@ void my_print(void *, const char *msg) {
     int idx, this_percentage, this_memory_current, this_memory_peak, this_memory_total;
     int val = sscanf(msg, " g_%d: %fms (%d%%) (%d, %d, %d",
         &idx, &this_ms, &this_percentage, &this_memory_current, &this_memory_peak, &this_memory_total);
-    //printf("%s\n", msg);
+    printf("%s\n", msg);
     if (val == 6) {
         memory_current = this_memory_current;
         memory_peak = this_memory_peak;
