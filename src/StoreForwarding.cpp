@@ -1223,6 +1223,46 @@ class RenameVars : public IRMutator {
     }
 };
 
+class IsVarLoadOrStore : public IRVisitor {
+    using IRVisitor::visit;
+    std::string var_name;
+
+    template<typename LetStmtOrExpr>
+    void visit_let(const LetStmtOrExpr *op) {
+        if(op->name == var_name) {
+            Expr value = op->value;
+            const Load *l = value.as<Load>();
+            result = (l != NULL);
+        } else {
+            op->body.accept(this);
+        }
+    };
+
+    void visit(const Let *op) {
+        visit_let(op);
+    }
+
+    void visit(const LetStmt *op) {
+        visit_let(op);
+    }
+
+    void visit(const Store *op) {
+        const Variable *var = op->value.as<Variable>();
+        if (var && var->name == var_name)
+            result = true;
+    }
+public:
+    bool result = false;
+
+    IsVarLoadOrStore(const std::string &s) : var_name(s) {}
+};
+
+bool is_var_load_or_store(Expr e, const std::string &v) {
+    IsVarLoadOrStore i(v);
+    e.accept(&i);
+    return i.result;
+}
+
 vector<Stmt> find_non_aliasing_stores(Stmt stmt) {
     FindLoadsAndStores finder;
     stmt.accept(&finder);
@@ -1253,7 +1293,6 @@ class LoopCarry2 : public IRMutator {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             return;
         }
-
         Expr prev_var = Variable::make(Int(32), op->name) - 1;
         Expr next_var = Variable::make(Int(32), op->name) + 1;
 
@@ -1419,6 +1458,33 @@ class LoopCarry2 : public IRMutator {
             // sense for us to save it.
             if (!expr_uses_var(curr_bundle, prev->name) ||
                 !expr_uses_var(curr_bundle, curr->name)) {
+                continue;
+            }
+
+            // Make sure that the value we will ultimately store to
+            // a scratch buffer and load from the scratch buffer is
+            // a value that is loaded or stored in the first place. Not
+            // doing this has the unfortunate effect of storing CSEd
+            // indices of loads and stores to scratch buffers. This is
+            // sub-optimal for one reason because we then lose the ability
+            // to reason about the alignment of indices on loads and stores.
+            // For instance if we don't take this precaution we risk converting
+            //
+            //   for(y, 0, extent) {
+            //      t10 = input[ramp(y*32 + 100)]
+            //   }
+            //
+            //          to
+            // 
+            //   allocate b[1], int32
+            //   b[0] = 0
+            //   for (y, 0, extent) {
+            //      t1 = b[0]
+            //      t10 = input[ramp(b[0] + 100)]
+            //      b[0] = y*32
+            // }
+            if (!is_var_load_or_store(curr_bundle, prev->name) ||
+                !is_var_load_or_store(curr_bundle, curr->name)) {
                 continue;
             }
 
