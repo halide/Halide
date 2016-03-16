@@ -24,8 +24,6 @@ public:
 
     string pipeline_name;
 
-    Scope<Expr> func_memory_sizes;
-
     InjectProfiling(const string& pipeline_name) : pipeline_name(pipeline_name) {
         indices["overhead"] = 0;
         stack.push_back(0);
@@ -33,6 +31,13 @@ public:
 
 private:
     using IRMutator::visit;
+
+    struct AllocSize {
+        bool on_stack;
+        Expr size;
+    };
+
+    Scope<AllocSize> func_alloc_sizes;
 
     int get_func_id(const string& name) {
         int idx = -1;
@@ -63,20 +68,27 @@ private:
         return true;
     }
 
-    Expr compute_allocation_size(const vector<Expr> &extents, const Expr& condition, const Type& type) {
+    Expr compute_allocation_size(const vector<Expr> &extents,
+                                 const Expr& condition,
+                                 const Type& type,
+                                 const std::string &name,
+                                 bool& on_stack) {
+        on_stack = true;
         int32_t constant_size;
         if (constant_allocation_size(extents, constant_size)) {
             int64_t stack_bytes = constant_size * type.bytes();
             if (stack_bytes > ((int64_t(1) << 31) - 1)) { // Out of memory
                 return 0;
-            } else if (stack_bytes <= 1024 * 8) { // Allocation on stack
-                return 0;
+            } else if (stack_bytes <= 1024 * 16) { // Allocation on stack
+                Expr size = simplify(Select::make(condition, Expr((int32_t)stack_bytes), 0));
+                return size;
             }
         }
         // Check that the allocation is not scalar (if it were scalar
         // it would have constant size).
         internal_assert(extents.size() > 0);
 
+        on_stack = false;
         Expr size = extents[0];
         for (size_t i = 1; i < extents.size(); i++) {
             size *= extents[i];
@@ -96,8 +108,9 @@ private:
         }
         Expr condition = mutate(op->condition);
 
-        Expr size = compute_allocation_size(new_extents, condition, op->type);
-        func_memory_sizes.push(op->name, size);
+        bool on_stack;
+        Expr size = compute_allocation_size(new_extents, condition, op->type, op->name, on_stack);
+        func_alloc_sizes.push(op->name, {on_stack, size});
 
         Stmt body = mutate(op->body);
         Expr new_expr;
@@ -116,32 +129,44 @@ private:
         //debug(0) << stmt << "\n\n";
 
         if (!is_zero(size)) {
-            debug(1) << "  Injecting profiler into Allocate " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
             Expr profiler_token = Variable::make(Int(32), "profiler_token");
-            Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
-                                       {pipeline_name, profiler_token, idx, size}, Call::Extern);
-            stmt = Block::make(Evaluate::make(set_task), stmt);
-        } else {
-            debug(1) << "  No Allocate on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+            Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
+
+            if (!on_stack) {
+                debug(1) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+                Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
+                                           {profiler_pipeline_state, profiler_token, idx, size}, Call::Extern);
+                stmt = Block::make(Evaluate::make(set_task), stmt);
+            } else {
+                // TODO (psuriana): update stack counters
+                debug(1) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+
+            }
         }
     }
 
     void visit(const Free *op) {
         int idx = get_func_id(op->name);
 
-        Expr size = func_memory_sizes.get(op->name);
-        func_memory_sizes.pop(op->name);
+        AllocSize alloc = func_alloc_sizes.get(op->name);
+        func_alloc_sizes.pop(op->name);
 
         IRMutator::visit(op);
 
-        if (!is_zero(size)) {
-            debug(1) << "  Injecting profiler into Free " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+        if (!is_zero(alloc.size)) {
             Expr profiler_token = Variable::make(Int(32), "profiler_token");
-            Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
-                                       {pipeline_name, profiler_token, idx, size}, Call::Extern);
-            stmt = Block::make(Evaluate::make(set_task), stmt);
-        } else {
-            debug(1) << "  No Free on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
+            Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
+
+            if (!alloc.on_stack) {
+                debug(1) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
+                Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
+                                           {profiler_pipeline_state, profiler_token, idx, alloc.size}, Call::Extern);
+                stmt = Block::make(Evaluate::make(set_task), stmt);
+            } else {
+                // TODO (psuriana): update stack counters
+                debug(1) << "  Free on stack: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
+
+            }
         }
     }
 
@@ -199,12 +224,15 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
 
+    Expr get_pipeline_state = Call::make(Handle(), "halide_profiler_get_pipeline_state", {pipeline_name}, Call::Extern);
+
     Expr profiler_token = Variable::make(Int(32), "profiler_token");
 
     Expr stop_profiler = Call::make(Int(32), Call::register_destructor,
                                     {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
 
 
+    s = LetStmt::make("profiler_pipeline_state", get_pipeline_state, s);
     s = LetStmt::make("profiler_state", get_state, s);
     // If there was a problem starting the profiler, it will call an
     // appropriate halide error function and then return the

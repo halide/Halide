@@ -106,6 +106,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
     (void *)&halide_profiler_get_state,
+    (void *)&halide_profiler_get_pipeline_state,
     (void *)&halide_profiler_memory_allocate,
     (void *)&halide_profiler_memory_free,
     (void *)&halide_profiler_pipeline_start,
