@@ -30,6 +30,9 @@ public:
         stack.push_back(0);
     }
 
+    map<int, Expr> func_stack_current; // map from func id -> current stack allocation
+    map<int, Expr> func_stack_peak; // map from func id -> peak stack allocation
+
 private:
     using IRMutator::visit;
 
@@ -39,6 +42,16 @@ private:
     };
 
     Scope<AllocSize> func_alloc_sizes;
+
+    template <typename K, typename V>
+    V get_value(const map <K, V>& m, const K& key) {
+       typename map<K, V>::const_iterator it = m.find(key);
+       if (it == m.end()) {
+          return 0;
+       } else {
+          return it->second;
+       }
+    }
 
     int get_func_id(const string& name) {
         int idx = -1;
@@ -123,9 +136,10 @@ private:
                                            {profiler_pipeline_state, profiler_token, idx, size}, Call::Extern);
                 stmt = Block::make(Evaluate::make(set_task), stmt);
             } else {
-                // TODO (psuriana): update stack counters
                 debug(1) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
-
+                func_stack_current[idx] = size + get_value(func_stack_current, idx);
+                func_stack_peak[idx] = simplify(
+                    max(get_value(func_stack_peak, idx), get_value(func_stack_current, idx)));
             }
         }
     }
@@ -148,9 +162,8 @@ private:
                                            {profiler_pipeline_state, profiler_token, idx, alloc.size}, Call::Extern);
                 stmt = Block::make(Evaluate::make(set_task), stmt);
             } else {
-                // TODO (psuriana): update stack counters
                 debug(1) << "  Free on stack: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
-
+                func_stack_current[idx] = get_value(func_stack_current, idx) - alloc.size;
             }
         }
     }

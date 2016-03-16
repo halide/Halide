@@ -792,6 +792,9 @@ struct halide_profiler_pipeline_stats {
 
     /** The total number of memory allocation of funcs in this pipeline. */
     int num_allocs;
+
+    /** The peak stack allocation of funcs threads running in this pipeline. */
+    int stack_peak;
 };
 
 /** The global state of the profiler. */
