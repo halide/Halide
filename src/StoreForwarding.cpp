@@ -1460,6 +1460,29 @@ class LoopCarry2 : public IRMutator {
                 !expr_uses_var(curr_bundle, curr->name)) {
                 continue;
             }
+
+            // Make sure that the value we will ultimately store to
+            // a scratch buffer and load from the scratch buffer is
+            // a value that is loaded or stored in the first place. Not
+            // doing this has the unfortunate effect of storing CSEd
+            // indices of loads and stores to scratch buffers. This is
+            // sub-optimal for one reason because we then lose the ability
+            // to reason about the alignment of indices on loads and stores.
+            // For instance if we don't take this precaution we risk converting
+            //
+            //   for(y, 0, extent) {
+            //      t10 = input[ramp(y*32 + 100)]
+            //   }
+            //
+            //          to
+            // 
+            //   allocate b[1], int32
+            //   b[0] = 0
+            //   for (y, 0, extent) {
+            //      t1 = b[0]
+            //      t10 = input[ramp(b[0] + 100)]
+            //      b[0] = y*32
+            // }
             if (!is_var_load_or_store(curr_bundle, prev->name) ||
                 !is_var_load_or_store(curr_bundle, curr->name)) {
                 continue;
