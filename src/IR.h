@@ -285,6 +285,14 @@ struct Allocate : public StmtNode<Allocate> {
     EXPORT static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
                             Expr condition, Stmt body,
                             Expr new_expr = Expr(), std::string free_function = std::string());
+
+    /** A routine to check if the extents are all constants, and if so verify
+     * the total size is less than 2^31 - 1. If the result is constant, but
+     * overflows, this routine asserts. This returns 0 if the extents are
+     * not all constants; otherwise, it returns the total constant allocation
+     * size. */
+    EXPORT static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
+    int32_t constant_allocation_size() const;
 };
 
 /** Free the resources associated with the given buffer. */

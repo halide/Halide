@@ -331,9 +331,9 @@ WEAK void halide_profiler_report(void *user_context) {
 
 
 WEAK void halide_profiler_reset() {
-    // WARNING: Do not call this method while there is other halide_profiler_memory_allocate/free
-    // thread running; halide_profiler_memory_allocate/free updates the pipeline/func stats
-    // without grabbing the state's lock.
+    // WARNING: Do not call this method while there is other halide pipeline
+    // running; halide_profiler_memory_allocate/free updates the profiler
+    // pipeline's state without grabbing the global profiler state's lock.
     halide_profiler_state *s = halide_profiler_get_state();
 
     ScopedMutexLock lock(&s->lock);

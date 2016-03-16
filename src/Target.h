@@ -258,6 +258,16 @@ struct Target {
     /** Was libHalide compiled with support for this target? */
     EXPORT bool supported() const;
 
+    /** Given a size (in bytes), return True if the allocation size can fit
+     * on the stack; otherwise, return False. This routine asserts if size is
+     * non-positive. */
+    bool is_allocation_on_stack(int32_t size) const {
+        if (size <= 0) {
+            user_error << "Allocation size should be a positive number\n";
+        }
+        return (size <= 1024 * 16);
+    }
+
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;

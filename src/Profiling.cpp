@@ -8,6 +8,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -51,39 +52,23 @@ private:
         return idx;
     }
 
-    bool constant_allocation_size(const std::vector<Expr> &extents, int32_t &size) {
-        int64_t result = 1;
-        for (size_t i = 0; i < extents.size(); i++) {
-            if (const IntImm *int_size = extents[i].as<IntImm>()) {
-                result *= int_size->value;
-                if (result > (static_cast<int64_t>(1)<<31) - 1) { // Out of memory
-                    size = 0;
-                    return true;
-                }
-            } else {
-                return false;
-            }
-        }
-        size = static_cast<int32_t>(result);
-        return true;
-    }
-
     Expr compute_allocation_size(const vector<Expr> &extents,
                                  const Expr& condition,
                                  const Type& type,
                                  const std::string &name,
                                  bool& on_stack) {
         on_stack = true;
-        int32_t constant_size;
-        if (constant_allocation_size(extents, constant_size)) {
+        int32_t constant_size = Allocate::constant_allocation_size(extents, name);
+        if (constant_size > 0) {
             int64_t stack_bytes = constant_size * type.bytes();
             if (stack_bytes > ((int64_t(1) << 31) - 1)) { // Out of memory
                 return 0;
-            } else if (stack_bytes <= 1024 * 16) { // Allocation on stack
+            } else if (get_host_target().is_allocation_on_stack(stack_bytes)) { // Allocation on stack
                 Expr size = simplify(Select::make(condition, Expr((int32_t)stack_bytes), 0));
                 return size;
             }
         }
+
         // Check that the allocation is not scalar (if it were scalar
         // it would have constant size).
         internal_assert(extents.size() > 0);
