@@ -340,6 +340,8 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
+    target = input.target();
+
     for (size_t i = 0; i < input.buffers.size(); i++) {
         compile(input.buffers[i]);
     }
@@ -1251,7 +1253,8 @@ void CodeGen_C::visit(const Allocate *op) {
         heap_allocations.push(op->name, 0);
         stream << print_type(op->type) << "*" << print_name(op->name) << " = (" << print_expr(op->new_expr) << ");\n";
     } else {
-        if (constant_allocation_size(op->extents, op->name, constant_size)) {
+        constant_size = op->constant_allocation_size();
+        if (constant_size > 0) {
             int64_t stack_bytes = constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
@@ -1259,7 +1262,7 @@ void CodeGen_C::visit(const Allocate *op) {
                            << op->name << " is constant but exceeds 2^31 - 1.\n";
             } else {
                 size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
-                if (stack_bytes <= 1024 * 8) {
+                if (target.is_allocation_on_stack(stack_bytes)) {
                     on_stack = true;
                 }
             }

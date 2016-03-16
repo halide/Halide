@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        printf("Running simple heap allocation test...\n");
+        printf("Running simple heap allocation test 1...\n");
         // On heap allocation (bigger than 1024*16)
         const int size_x = 1000;
         const int size_y = 1000;
@@ -246,7 +246,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        printf("Running simple heap allocation test...\n");
+        printf("Running simple heap allocation test 2...\n");
         // On heap allocation (bigger than 1024*16 and buffer g7 size is constant 65x64)
         const int size_x = 65;
         const int size_y = 64;
