@@ -836,6 +836,10 @@ enum {
  * inspection. Lock it before using to pause the profiler. */
 extern halide_profiler_state *halide_profiler_get_state();
 
+/** Get a pointer to the pipeline state associated with pipeline_name.
+ * This function will lock the global state's lock on entry. */
+extern halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
+
 /** Reset all profiler state. */
 extern void halide_profiler_reset();
 

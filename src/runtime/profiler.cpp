@@ -144,6 +144,28 @@ WEAK halide_profiler_pipeline_stats *find_pipeline_stats(void *user_context, con
 }}}
 
 extern "C" {
+// Returns the address of the pipeline state associated with pipeline_name.
+WEAK halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name) {
+    halide_profiler_state *s = halide_profiler_get_state();
+
+    ScopedMutexLock lock(&s->lock);
+
+    // Check the cache first
+    halide_profiler_pipeline_stats *mru_p = s->mru_pipeline;
+    if ((mru_p != NULL) && (mru_p->name == pipeline_name)) {
+        return mru_p;
+    }
+
+    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
+         p = (halide_profiler_pipeline_stats *)(p->next)) {
+        // The same pipeline will deliver the same global constant
+        // string, so they can be compared by pointer.
+        if (p->name == pipeline_name) {
+            return p;
+        }
+    }
+    return NULL;
+}
 
 // Returns a token identifying this pipeline instance.
 WEAK int halide_profiler_pipeline_start(void *user_context,
@@ -174,21 +196,13 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 }
 
 WEAK void halide_profiler_memory_allocate(void *user_context,
-                                          const char *pipeline_name,
+                                          void *pipeline_state,
                                           int token,
                                           int func_id,
                                           int incr) {
-    halide_profiler_state *s = halide_profiler_get_state();
-
     func_id += token;
 
-    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats(user_context, pipeline_name);
-    // It's unlikely that the pipeline has not been created at this point, but
-    // we add the check anyway.
-    while (p_stats == NULL) {
-        ScopedMutexLock lock(&s->lock);
-        p_stats = find_pipeline_stats(user_context, pipeline_name);
-    }
+    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
 
     halide_assert(user_context, p_stats != NULL);
     halide_assert(user_context, (func_id - p_stats->first_func_id) >= 0);
@@ -220,21 +234,13 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
 }
 
 WEAK void halide_profiler_memory_free(void *user_context,
-                                      const char *pipeline_name,
+                                      void *pipeline_state,
                                       int token,
                                       int func_id,
                                       int decr) {
-    halide_profiler_state *s = halide_profiler_get_state();
-
     func_id += token;
 
-    halide_profiler_pipeline_stats *p_stats = find_pipeline_stats(user_context, pipeline_name);
-    // It's unlikely that the pipeline has not been created at this point, but
-    // we add the check anyway.
-    while (p_stats == NULL) {
-        ScopedMutexLock lock(&s->lock);
-        p_stats = find_pipeline_stats(user_context, pipeline_name);
-    }
+    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
 
     halide_assert(user_context, p_stats != NULL);
     halide_assert(user_context, (func_id - p_stats->first_func_id) >= 0);

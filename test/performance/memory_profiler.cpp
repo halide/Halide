@@ -18,7 +18,7 @@ void my_print(void *, const char *msg) {
     int idx, this_percentage, this_memory_current, this_memory_peak, this_memory_total;
     int val = sscanf(msg, " g_%d: %fms (%d%%) (%d, %d, %d",
         &idx, &this_ms, &this_percentage, &this_memory_current, &this_memory_peak, &this_memory_total);
-    printf("%s\n", msg);
+    //printf("%s\n", msg);
     if (val == 6) {
         memory_current = this_memory_current;
         memory_peak = this_memory_peak;
@@ -72,17 +72,19 @@ int main(int argc, char **argv) {
 
     {
         printf("Running simple stack allocation test...\n");
-        // On stack allocation (less than 1024*8 and buffer g1 size is constant 10x10)
+        // On stack allocation (less than or equal to 1024*16 and buffer g1 size is constant 64x64)
+        const int size_x = 64;
+        const int size_y = 64;
         Func f1("f_1"), g1("g_1");
         g1(x, y) = x;
-        f1(x, y) = g1(x%10, y%10);
+        f1(x, y) = g1(x%size_x, y%size_y);
         g1.compute_root();
 
         f1.set_custom_print(&my_print);
         //f1.print_loop_nest();
 
         reset_stats();
-        f1.realize(10, 10, t);
+        f1.realize(size_x, size_y, t);
         if (check_error(0, 0, 0) != 0) {
             return -1;
         }
@@ -90,7 +92,7 @@ int main(int argc, char **argv) {
 
     {
         printf("Running simple heap allocation test...\n");
-        // On heap allocation (bigger than 1024*8)
+        // On heap allocation (bigger than 1024*16)
         const int size_x = 1000;
         const int size_y = 1000;
 
@@ -239,6 +241,27 @@ int main(int argc, char **argv) {
         int min_peak = size_x*sizeof(int);
         int total = size_x*size_y*sizeof(int);
         if (check_error_parallel(0, min_peak, total, total) != 0) {
+            return -1;
+        }
+    }
+
+    {
+        printf("Running simple heap allocation test...\n");
+        // On heap allocation (bigger than 1024*16 and buffer g7 size is constant 65x64)
+        const int size_x = 65;
+        const int size_y = 64;
+        Func f11("f_11"), g7("g_7");
+        g7(x, y) = x;
+        f11(x, y) = g7(x%size_x, y%size_y);
+        g7.compute_root();
+
+        f11.set_custom_print(&my_print);
+        //f11.print_loop_nest();
+
+        reset_stats();
+        f11.realize(size_x, size_y, t);
+        int total = size_x*size_y*sizeof(int);
+        if (check_error(0, total, total) != 0) {
             return -1;
         }
     }
