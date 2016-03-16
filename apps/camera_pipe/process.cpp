@@ -80,8 +80,6 @@ int main(int argc, char **argv) {
 
     double best;
 #if defined(__hexagon__)
-    long long start_time = 0;
-    long long total_cycles = 0;
     SIM_ACQUIRE_HVX;
 #if LOG2VLEN == 7
     SIM_SET_HVX_DOUBLE_MODE;
@@ -92,18 +90,12 @@ int main(int argc, char **argv) {
     // Prepare the luminance lookup table
     // compute it once ahead of time outside of main timing loop
     unsigned char * _lut = new unsigned char[whiteLevel+1];
-#ifdef PCYCLES
-    RESET_PMU();
-    start_time = READ_PCYCLES();
-#endif
     best = benchmark(timing_iterations, 1, [&]() {
     FCam::makeLUT(contrast, blackLevel, whiteLevel, gamma, _lut);
     });
 #ifdef PCYCLES
-    total_cycles = READ_PCYCLES() - start_time;
-    DUMP_PMU();
     fprintf(stderr, "makeLUT:\t%0.4f cycles/pixel\n",
-            (float)total_cycles/output.height()/output.width()/timing_iterations);
+            best/output.height()/output.width()/timing_iterations);
 #else
     fprintf(stderr, "makeLUT:\t%gus\n", best * 1e6);
 #endif
@@ -123,10 +115,6 @@ int main(int argc, char **argv) {
 #endif
 #endif // FCAMLUT
 
-#ifdef PCYCLES
-    RESET_PMU();
-    start_time = READ_PCYCLES();
-#endif
     best = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast, blackLevel, whiteLevel,
                input, matrix_3200, matrix_7000,
@@ -139,10 +127,8 @@ int main(int argc, char **argv) {
                output);
     });
 #ifdef PCYCLES
-    total_cycles = READ_PCYCLES() - start_time;
-    DUMP_PMU();
     fprintf(stderr, "Halide:\t%0.4f cycles/pixel\n",
-            (float)total_cycles/output.height()/output.width()/timing_iterations);
+            best/output.height()/output.width()/timing_iterations);
 #else
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
 <<<<<<< HEAD
@@ -173,10 +159,6 @@ int main(int argc, char **argv) {
 #else
     Image<uint8_t> output_c(output.width(), output.height(), output.channels());
 #endif
-#ifdef PCYCLES
-    RESET_PMU();
-    start_time = READ_PCYCLES();
-#endif
     best = benchmark(timing_iterations, 1, [&]() {
 <<<<<<< HEAD
         FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma
@@ -189,10 +171,8 @@ int main(int argc, char **argv) {
 >>>>>>> master
     });
 #ifdef PCYCLES
-    total_cycles = READ_PCYCLES() - start_time;
-    DUMP_PMU();
     fprintf(stderr, "C++:\t%0.4f cycles/pixel\n",
-            (float)total_cycles/output_c.height()/output_c.width()/timing_iterations);
+            best/output_c.height()/output_c.width()/timing_iterations);
 #else
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
 <<<<<<< HEAD
