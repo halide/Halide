@@ -1352,6 +1352,13 @@ void check_hvx_all() {
     check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(u32_1 >> 16));
 
+    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, u8(x/2), u8(x/2)));
+    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, i8(x/2), i8(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, u16(x/2), u16(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, i16(x/2), i16(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, u32(x/2), u32(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, i32(x/2), i32(x/2)));
+
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0
