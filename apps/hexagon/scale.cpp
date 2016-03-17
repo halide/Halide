@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     // condition on y anyways.
     Func input_bounded = BoundaryConditions::repeat_edge(input, Expr(), Expr(), input.min(1), input.extent(1));
 
-    int radius = 1;
+    int radius = 3;
 
     RDom ry(-radius, 2*radius + 1);
 
@@ -30,13 +30,13 @@ int main(int argc, char **argv) {
     Func g("g");
     g(x, y, c) = f(x, y, c);
 
-    f.bound(c, 0, 3);
-
 #if 1
     f.compute_root().hexagon(c).vectorize(x, 64);
 #else
     f.compute_root().vectorize(x, target.natural_vector_size<uint8_t>());
 #endif
+
+    g.output_buffer().set_min(0, 0).set_extent(0, (g.output_buffer().extent(0)/128)*128);
 
     g.compile_to_header("scale.h", {input}, "scale");
     std::stringstream obj;
