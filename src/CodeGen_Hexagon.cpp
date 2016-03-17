@@ -2232,6 +2232,24 @@ void CodeGen_Hexagon::visit(const Call *op) {
       Value *Call = CallLLVMIntrinsic(F, Ops);
       value = convertValueType(Call, llvm_type_of(op->type));
       return;
+    } else if (op->name == Call::interleave_vectors) {
+      if (isDblVector(op->type, native_vector_bits()) &&
+                      op->args.size() == 2) {
+        Expr arg0 = op->args[0];
+        Expr arg1 = op->args[1];
+        if ((arg0.type() == arg1.type()) &&
+            op->type.element_of() == arg0.type().element_of()) {
+          internal_assert(op->type.lanes() == 2*arg0.type().lanes());
+          int scalar = -1 * op->type.bytes();
+          std::vector<Value *> Ops = {codegen(arg1), codegen(arg0), codegen(scalar)};
+          llvm::Function *F =
+            Intrinsic::getDeclaration(module.get(),
+                                      IPICK(Intrinsic::hexagon_V6_vshuffvdd));
+          Value * Call = CallLLVMIntrinsic(F, Ops);
+          value = convertValueType(Call, llvm_type_of(op->type));
+          return;
+        }
+      }
     }
 
     int chk_call = show_chk;
