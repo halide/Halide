@@ -78,4 +78,8 @@ WEAK int halide_qurt_hvx_unlock(void *user_context) {
     return 0;
 }
 
+WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*/) {
+    halide_qurt_hvx_unlock(user_context);
+}
+
 }
