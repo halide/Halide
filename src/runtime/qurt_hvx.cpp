@@ -1,6 +1,7 @@
 #include "runtime_internal.h"
 #include "HalideRuntimeQurt.h"
 #include "printer.h"
+#include "qurt.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Qurt {
 
@@ -9,22 +10,8 @@ enum qurt_hvx_mode_t {
     QURT_HVX_MODE_128B = 1,
 };
 
-enum { QURT_EOK = 0 };
-
-typedef int (*qurt_hvx_lock_t)(int mode);
-typedef int (*qurt_hvx_unlock_t)();
-
-WEAK qurt_hvx_lock_t qurt_hvx_lock = NULL;
-WEAK qurt_hvx_unlock_t qurt_hvx_unlock = NULL;
-
-template <typename T>
-T get_qurt_symbol(void *user_context, const char *name) {
-    T s = (T)halide_get_symbol(name);
-    if (!s) {
-        error(user_context) << "QuRT symbol '" << name << "' not found.\n";
-    }
-    return s;
-}
+WEAK int (*qurt_hvx_lock)(int) = NULL;
+WEAK int (*qurt_hvx_unlock)() = NULL;
 
 }}}} // namespace Halide::Runtime::Internal::Qurt
 
@@ -33,13 +20,7 @@ using namespace Halide::Runtime::Internal::Qurt;
 extern "C" {
 
 WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
-    if (!qurt_hvx_lock || !qurt_hvx_unlock) {
-        qurt_hvx_lock = get_qurt_symbol<qurt_hvx_lock_t>(user_context, "qurt_hvx_lock");
-        qurt_hvx_unlock = get_qurt_symbol<qurt_hvx_unlock_t>(user_context, "qurt_hvx_unlock");
-        if (!qurt_hvx_lock || !qurt_hvx_unlock) {
-            return -1;
-        }
-    }
+    if (!get_qurt_symbol(user_context, "qurt_hvx_lock", qurt_hvx_lock)) return -1;
 
     qurt_hvx_mode_t mode;
     switch (size) {
@@ -62,10 +43,7 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
 }
 
 WEAK int halide_qurt_hvx_unlock(void *user_context) {
-    if (!qurt_hvx_lock || !qurt_hvx_unlock) {
-        error(user_context) << "qurt_hvx_unlock must follow a successful call to qurt_hvx_lock.\n";
-        return -1;
-    }
+    if (!get_qurt_symbol(user_context, "qurt_hvx_unlock", qurt_hvx_unlock)) return -1;
 
     debug(user_context) << "QuRT: qurt_hvx_unlock ->\n";
     int result = qurt_hvx_unlock();
