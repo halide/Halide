@@ -38,10 +38,9 @@ int main(int argc, char **argv) {
     halide_enable_malloc_trace();
 #endif
 
+    fprintf(stderr, "input: %s\n", argv[1]);
     Image<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "       %d %d\n", input.width(), input.height());
-    // save_image(input, "input.pgm");
-    // fprintf(stderr, "       input.pgm\n");
 
 #if defined(__hexagon__)
     Image<uint8_t> output(((input.width() - 32)/BLOCK)*BLOCK, ((input.height() - 48)/BLOCK)*BLOCK, 3);
@@ -131,9 +130,12 @@ int main(int argc, char **argv) {
     best = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast, blackLevel, whiteLevel,
                input, matrix_3200, matrix_7000,
+<<<<<<< HEAD
 #ifdef FCAMLUT
                lut,
 #endif
+=======
+>>>>>>> master
                output);
     });
 #ifdef PCYCLES
@@ -143,6 +145,7 @@ int main(int argc, char **argv) {
             (float)total_cycles/output.height()/output.width()/timing_iterations);
 #else
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
+<<<<<<< HEAD
 #endif
     fprintf(stderr, "output: %s\n", argv[6]);
 #ifndef NOSAVE
@@ -156,6 +159,11 @@ int main(int argc, char **argv) {
     printf ("Done calling the halide func. and released the vector context\n");
 #endif
 #endif
+=======
+    fprintf(stderr, "output: %s\n", argv[6]);
+    save_image(output, argv[6]);
+    fprintf(stderr, "        %d %d\n", output.width(), output.height());
+>>>>>>> master
 
 #ifndef NOFCAM
 #if defined(__hexagon__)
@@ -170,11 +178,15 @@ int main(int argc, char **argv) {
     start_time = READ_PCYCLES();
 #endif
     best = benchmark(timing_iterations, 1, [&]() {
+<<<<<<< HEAD
         FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma
 #ifdef FCAMLUT
                         , _lut
 #endif
                         );
+=======
+        FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma);
+>>>>>>> master
     });
 #ifdef PCYCLES
     total_cycles = READ_PCYCLES() - start_time;
@@ -183,16 +195,22 @@ int main(int argc, char **argv) {
             (float)total_cycles/output_c.height()/output_c.width()/timing_iterations);
 #else
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
+<<<<<<< HEAD
 #endif
     fprintf(stderr, "output_c: fcam_c" IMGEXT "\n");
 #ifndef NOSAVE
     save_image(output_c, "fcam_c" IMGEXT);
 #endif
+=======
+    fprintf(stderr, "output_c: fcam_c.png\n");
+    save_image(output_c, "fcam_c.png");
+>>>>>>> master
     fprintf(stderr, "        %d %d\n", output_c.width(), output_c.height());
 
 #if not defined(__hexagon__)
     Image<uint8_t> output_asm(output_c.width(), output_c.height(), output_c.channels());
     best = benchmark(timing_iterations, 1, [&]() {
+<<<<<<< HEAD
         FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, blackLevel, whiteLevel, gamma
 #ifdef FCAMLUT
                         , _lut
@@ -208,6 +226,14 @@ int main(int argc, char **argv) {
 #endif
 
 #endif // NOFCAM
+=======
+        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, blackLevel, whiteLevel, gamma);
+    });
+    fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
+    fprintf(stderr, "output_asm: fcam_arm.png\n");
+    save_image(output_asm, "fcam_arm.png");
+    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
+>>>>>>> master
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms
