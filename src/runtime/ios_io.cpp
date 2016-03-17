@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 #include "objc_support.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
