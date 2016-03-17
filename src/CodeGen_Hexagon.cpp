@@ -672,7 +672,7 @@ checkVectorOp(const Expr op, string msg) {
     }
   }
   if (op.type().is_vector()) {
-    debug(1) << "VEC-EXPECT " << msg ;
+    debug(2) << "VEC-EXPECT " << msg ;
     if (enableVecAsserts)
       internal_error << "VEC-EXPECT " << msg;
     if (show_chk > 0) {
@@ -1197,7 +1197,7 @@ CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
   return NULL;
 }
 void CodeGen_Hexagon::visit(const Div *op) {
-  debug(1) << "HexCG: " << op->type <<  ", visit(Div)\n";
+  debug(2) << "HexCG: " << op->type <<  ", visit(Div)\n";
   if (!op->type.is_vector()) {
     CodeGen_Posix::visit(op);
     return;
@@ -1796,7 +1796,7 @@ bool CodeGen_Hexagon::possiblyCodeGenVavg(const Cast *op) {
 }
 void CodeGen_Hexagon::visit(const Cast *op) {
   vector<Expr> matches;
-  debug(1) << "HexCG: " << op->type << " <- " << op->value.type() << ", " << "visit(Cast)\n";
+  debug(2) << "HexCG: " << op->type << " <- " << op->value.type() << ", " << "visit(Cast)\n";
   if (isWideningVectorCast(op)) {
       // ******** Part 1: Up casts (widening) ***************
       // Two step extensions.
@@ -2144,7 +2144,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 }
 void CodeGen_Hexagon::visit(const Call *op) {
   vector<Expr> matches;
-  debug(1) << "HexCG: " << op->type << ", " << "visit(Call)\n";
+  debug(2) << "HexCG: " << op->type << ", " << "visit(Call)\n";
   for (size_t I = 0; I < combiners.size(); ++I) {
     const Pattern &P = combiners[I];
     if (expr_match(P.pattern, op, matches)) {
@@ -2398,7 +2398,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
   bool B128 = target.has_feature(Halide::Target::HVX_128);
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
-  debug(1) << "HexCG: " << op->type << ", " << "visit(Mul)\n";
+  debug(2) << "HexCG: " << op->type << ", " << "visit(Mul)\n";
   if (isLargerThanDblVector(op->type, native_vector_bits())) {
     // Consider such Halide code.
     //  ImageParam input(type_of<uint8_t>(), 2);
