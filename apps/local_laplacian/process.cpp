@@ -1,12 +1,8 @@
 #include <cstdio>
-#ifndef NOCHRONO
-#include <chrono>
-#endif
 
 #include "local_laplacian.h"
 
 #include "benchmark.h"
-#include "stdint.h"
 #include "halide_image.h"
 #include "halide_image_io.h"
 
@@ -50,8 +46,6 @@ int main(int argc, char **argv) {
 #else
     printf("%gus\n", best * 1e6);
 #endif
-
-    // local_laplacian(levels, alpha/(levels-1), beta, input, output);
 
 #if defined(__hexagon__)
     SIM_RELEASE_HVX;
