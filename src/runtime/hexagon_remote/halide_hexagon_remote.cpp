@@ -12,6 +12,7 @@ extern "C" {
 
 #define FARF_LOW 1
 #include "HAP_farf.h"
+#include "HAP_power.h"
 
 }
 
@@ -74,6 +75,8 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              halide_do_par_for_t do_par_for,
                              halide_do_task_t do_task);
 
+int context_count = 0;
+
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
 #if 1  // Use shared object from file
@@ -118,6 +121,21 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         return result;
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
+
+    if (context_count == 0) {
+        FARF(LOW, "Requesting power for HVX...");
+
+        HAP_power_request_t request;
+        request.type = HAP_power_set_HVX;
+        request.hvx.power_up = TRUE;
+        int retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            FARF(ERROR,"dspCV unable to power on HVX, status %d!", retval);
+            return -1;
+        }
+    }
+    context_count++;
+
     return 0;
 }
 
@@ -168,6 +186,11 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     dlclose(reinterpret_cast<void*>(module_ptr));
+
+    if (context_count-- == 0) {
+        HAP_power_request(0, 0, -1);
+    }
+
     return 0;
 }
 
