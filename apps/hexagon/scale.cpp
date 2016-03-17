@@ -14,9 +14,14 @@ int main(int argc, char **argv) {
     // Takes an 8-bit input
     ImageParam input(UInt(8), 3);
 
-    Func input_bounded = BoundaryConditions::repeat_edge(input);
+    input.set_min(0, 0).set_extent(0, (input.extent(0)/128)*128);
+    input.set_stride(1, (input.stride(1)/128)*128);
+    // Putting a boundary condition on x generates constant data,
+    // which currently gets miscompiled. We only need the boundary
+    // condition on y anyways.
+    Func input_bounded = BoundaryConditions::repeat_edge(input, Expr(), Expr(), input.min(1), input.extent(1));
 
-    int radius = 3;
+    int radius = 1;
 
     RDom ry(-radius, 2*radius + 1);
 
@@ -28,7 +33,7 @@ int main(int argc, char **argv) {
     f.bound(c, 0, 3);
 
 #if 1
-    f.compute_root().hexagon(c);  //.vectorize(x, 64);
+    f.compute_root().hexagon(c).vectorize(x, 64);
 #else
     f.compute_root().vectorize(x, target.natural_vector_size<uint8_t>());
 #endif
