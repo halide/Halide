@@ -329,6 +329,38 @@ Func demosaic(Func deinterleaved) {
         .unroll (x, 2)
         .unroll(y, 2)
         .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 11) {
+        // optimized for Hexagon
+        // Compute these in chunks over tiles, vectorized by 32
+        g_r.compute_at(processed, tx).vectorize(x, 32);
+        g_b.compute_at(processed, tx).vectorize(x, 32);
+        r_gr.compute_at(processed, tx).vectorize(x, 32);
+        b_gr.compute_at(processed, tx).vectorize(x, 32);
+        r_gb.compute_at(processed, tx).vectorize(x, 32);
+        b_gb.compute_at(processed, tx).vectorize(x, 32);
+        r_b.compute_at(processed, tx).vectorize(x, 32);
+        b_r.compute_at(processed, tx).vectorize(x, 32);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .vectorize(x, 64)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+    } else if (schedule == 12) {
+        // optimized for Hexagon
+        // Compute these in chunks over tiles, vectorized by 64
+        g_r.compute_at(processed, tx).vectorize(x, 64);
+        g_b.compute_at(processed, tx).vectorize(x, 64);
+        r_gr.compute_at(processed, tx).vectorize(x, 64);
+        b_gr.compute_at(processed, tx).vectorize(x, 64);
+        r_gb.compute_at(processed, tx).vectorize(x, 64);
+        b_gb.compute_at(processed, tx).vectorize(x, 64);
+        r_b.compute_at(processed, tx).vectorize(x, 64);
+        b_r.compute_at(processed, tx).vectorize(x, 64);
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .vectorize(x, 128)
+            .unroll(y, 2)
+            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
     } else {
         // Basic naive schedule
         g_r.compute_root();
@@ -600,6 +632,22 @@ Func process(Func raw, Type result_type,
         corrected.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
+    } else if (schedule == 11) {
+        // optimized for Hexagon
+        // Compute in chunks over 32x32 tiles, vectorized by 32
+        denoised.compute_at(processed, tx).vectorize(x, 32);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 32).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 64, 64).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
+    } else if (schedule == 12) {
+        // optimized for Hexagon 128 byte mode.
+        // Compute in chunks over 64x64 tiles, vectorized by 64
+        denoised.compute_at(processed, tx).vectorize(x, 64);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 64).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 128).reorder(c, x, y).unroll(c);
+        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
+        processed.parallel(ty);
     } else {
         denoised.compute_root();
         deinterleaved.compute_root();
@@ -681,7 +729,8 @@ int main(int argc, char **argv) {
 #ifdef HEXAGON
     processed.compile_to_file("curved", args, target);
     processed.compile_to_bitcode("curved.bc", args, target);
-//    processed.compile_to_assembly("curved.s", args, target);
+   //  processed.compile_to_lowered_stmt("curved.html", args, HTML);
+   // processed.compile_to_assembly("curved.s", args, target);
 #else
 =======
                                   input, matrix_3200, matrix_7000};
