@@ -2240,12 +2240,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
         if ((arg0.type() == arg1.type()) &&
             op->type.element_of() == arg0.type().element_of()) {
           internal_assert(op->type.lanes() == 2*arg0.type().lanes());
-          std::vector<Value *> Ops;
-          Ops.push_back(codegen(arg1));
-          Ops.push_back(codegen(arg0));
           int scalar = -1 * op->type.bytes();
-          Value *scalar_value = codegen(IntImm::make(Int(32), scalar));
-          Ops.push_back(scalar_value);
+          std::vector<Value *> Ops = {codegen(arg1), codegen(arg0), codegen(scalar)};
           llvm::Function *F =
             Intrinsic::getDeclaration(module.get(),
                                       IPICK(Intrinsic::hexagon_V6_vshuffvdd));
