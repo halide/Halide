@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 
 struct mach_timebase_info {
     uint32_t numer;
