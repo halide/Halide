@@ -1,4 +1,3 @@
-#include "runtime_internal.h"
 #include "HalideRuntime.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
@@ -239,7 +238,7 @@ WEAK void prune_cache() {
     while (current_cache_size > max_cache_size &&
            prune_candidate != NULL) {
         CacheEntry *more_recent = prune_candidate->more_recent;
-        
+
         if (prune_candidate->in_use_count == 0) {
             uint32_t h = prune_candidate->hash;
             uint32_t index = h % kHashTableSize;

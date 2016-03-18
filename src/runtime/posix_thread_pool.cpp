@@ -1,5 +1,3 @@
-#include "runtime_internal.h"
-
 #include "HalideRuntime.h"
 
 // TODO: This code currently doesn't work on OS X (Darwin) as we do
