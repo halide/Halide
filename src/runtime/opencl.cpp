@@ -1,7 +1,6 @@
-#include "runtime_internal.h"
+#include "HalideRuntimeOpenCL.h"
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
-#include "HalideRuntimeOpenCL.h"
 #include "printer.h"
 
 #include "mini_cl.h"

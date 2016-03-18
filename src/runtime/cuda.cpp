@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeCuda.h"
+#include "device_interface.h"
 #include "printer.h"
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
@@ -500,6 +499,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // Only destroy the context if we own it
         if (ctx == context) {
             debug(user_context) << "    cuCtxDestroy " << context << "\n";
+            err = cuProfilerStop();
             err = cuCtxDestroy(context);
             halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
             context = NULL;
