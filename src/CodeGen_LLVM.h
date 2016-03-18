@@ -321,6 +321,17 @@ protected:
      * different buffers */
     void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
 
+    /** Helpers for implementing fast integer division. */
+    // @{
+    // Compute high_half(a*b) >> shr. Note that this is a shift in
+    // addition to the implicit shift due to taking the upper half of
+    // the multiply result.
+    virtual llvm::Value *unsigned_mulhi_shr(llvm::Value *a, llvm::Value *b, int shr);
+    // Compute (a+b)/2, assuming a < b.
+    virtual llvm::Value *sorted_avg(llvm::Value *a, llvm::Value *b);
+    // @}
+
+
     using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
