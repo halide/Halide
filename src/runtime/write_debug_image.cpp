@@ -1,4 +1,3 @@
-#include "runtime_internal.h"
 #include "HalideRuntime.h"
 
 extern "C" void *fopen(const char *, const char *);

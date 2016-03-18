@@ -17,11 +17,9 @@ Expr avg(Expr a, Expr b) {
 Func hot_pixel_suppression(Func input) {
     Expr a = max(max(input(x-2, y), input(x+2, y)),
                  max(input(x, y-2), input(x, y+2)));
-    Expr b = min(min(input(x-2, y), input(x+2, y)),
-                 min(input(x, y-2), input(x, y+2)));
 
     Func denoised;
-    denoised(x, y) = clamp(input(x, y), b, a);
+    denoised(x, y) = clamp(input(x, y), 0, a);
 
     return denoised;
 }
@@ -224,31 +222,43 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
 }
 
 
-Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast) {
+Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
     // copied from FCam
     Func curve("curve");
 
-    Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
-    Expr g = pow(xf, 1.0f/gamma);
+    Expr minRaw = 0 + blackLevel;
+    Expr maxRaw = whiteLevel;
+
+    Expr invRange = 1.0f/(maxRaw - minRaw);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
     Expr a = 2.0f - 2.0f*b;
+
+    // Get a linear luminance in the range 0-1
+    Expr xf = clamp(cast<float>(x - minRaw)*invRange, 0.0f, 1.0f);
+    // Gamma correct it
+    Expr g = pow(xf, 1.0f/gamma);
+    // Apply a piecewise quadratic contrast curve
     Expr z = select(g > 0.5f,
                     1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
                     a*g*g + b*g);
 
-    Expr val = cast(result_type, clamp(z*256.0f, 0.0f, 255.0f));
-    curve(x) = val;
+    // Convert to 8 bit and save
+    Expr val = cast(result_type, clamp(z*255.0f+0.5f, 0.0f, 255.0f));
+    // makeLUT add guard band outside of (minRaw, maxRaw]:
+    curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
+
     curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
     Func curved;
-    curved(x, y, c) = curve(input(x, y, c));
+    // Use clamp to restrict size of LUT as allocated by compute_root
+    curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
 
     return curved;
 }
 
 Func process(Func raw, Type result_type,
              ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp,
-             Param<float> gamma, Param<float> contrast) {
+             Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
 
     Var xi, yi;
 
@@ -256,7 +266,7 @@ Func process(Func raw, Type result_type,
     Func deinterleaved = deinterleave(denoised);
     Func demosaiced = demosaic(deinterleaved);
     Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
-    Func curved = apply_curve(corrected, result_type, gamma, contrast);
+    Func curved = apply_curve(corrected, result_type, gamma, contrast, blackLevel, whiteLevel);
 
     processed(tx, ty, c) = curved(tx, ty, c);
 
@@ -294,6 +304,8 @@ int main(int argc, char **argv) {
     Param<float> color_temp("color_temp"); //, 3200.0f);
     Param<float> gamma("gamma"); //, 1.8f);
     Param<float> contrast("contrast"); //, 10.0f);
+    Param<int> blackLevel("blackLevel"); //, 25);
+    Param<int> whiteLevel("whiteLevel"); //, 1023);
 
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
@@ -311,7 +323,8 @@ int main(int argc, char **argv) {
     schedule = atoi(argv[2]);
 
     // Build the pipeline
-    Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
+    Func processed = process(shifted, result_type, matrix_3200, matrix_7000,
+                             color_temp, gamma, contrast, blackLevel, whiteLevel);
 
     // We can generate slightly better code if we know the output is a whole number of tiles.
     Expr out_width = processed.output_buffer().width();
@@ -323,7 +336,8 @@ int main(int argc, char **argv) {
     //string s = processed.serialize();
     //printf("%s\n", s.c_str());
 
-    std::vector<Argument> args = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
+    std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
+                                  input, matrix_3200, matrix_7000};
     processed.compile_to_file("curved", args);
     processed.compile_to_assembly("curved.s", args);
 

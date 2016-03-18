@@ -745,7 +745,7 @@ private:
         } else if (op->call_type == Call::Intrinsic &&
                    (op->name == Call::shift_left || op->name == Call::shift_right || op->name == Call::bitwise_and)) {
             Expr simplified = simplify(op);
-            if (!simplified.same_as(op)) {
+            if (!equal(simplified, op)) {
                 simplified.accept(this);
             } else {
                 // Just use the bounds of the type
@@ -947,7 +947,7 @@ Expr simple_min(Expr a, Expr b) {
     const IntImm *ia = a.as<IntImm>();
     const IntImm *ib = b.as<IntImm>();
     const Min *ma = a.as<Min>();
-    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : nullptr;
     if (ia && ib) {
         if (ia->value < ib->value) {
             // min(3, 4) -> 3
@@ -981,7 +981,7 @@ Expr simple_max(Expr a, Expr b) {
     const IntImm *ia = a.as<IntImm>();
     const IntImm *ib = b.as<IntImm>();
     const Max *ma = a.as<Max>();
-    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : nullptr;
     if (ia && ib) {
         if (ia->value > ib->value) {
             // max(4, 3) -> 4
@@ -1580,7 +1580,7 @@ void bounds_test() {
     vector<Expr> input_site_2 = {2*x+1};
     vector<Expr> output_site = {x+1};
 
-    Buffer in(Int(32), {10}, NULL, "input");
+    Buffer in(Int(32), {10}, nullptr, "input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
                           Provide::make("output",
