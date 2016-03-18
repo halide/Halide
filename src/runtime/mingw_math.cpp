@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 
 // mingw is missing some math library functions. This runtime module provides them.
 extern "C" {
