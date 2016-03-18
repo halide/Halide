@@ -248,18 +248,27 @@ private:
     }
 
 
+    // Check if an Expr is integer-division-rounding-up by the given
+    // factor. If so, return the core expression.
+    Expr is_round_up_div(Expr e, int64_t factor) {
+        if (!no_overflow(e.type())) return Expr();
+        const Div *div = e.as<Div>();
+        if (!div) return Expr();
+        if (!is_const(div->b, factor)) return Expr();
+        const Add *add = div->a.as<Add>();
+        if (!add) return Expr();
+        if (!is_const(add->b, factor-1)) return Expr();
+        return add->a;
+    }
+
+    // Check if an Expr is a rounding-up operation, and if so, return
+    // the factor.
     Expr is_round_up(Expr e, int64_t *factor) {
         if (!no_overflow(e.type())) return Expr();
         const Mul *mul = e.as<Mul>();
         if (!mul) return Expr();
         if (!const_int(mul->b, factor)) return Expr();
-        const Div *div = mul->a.as<Div>();
-        if (!div) return Expr();
-        if (!is_const(div->b, *factor)) return Expr();
-        const Add *add = div->a.as<Add>();
-        if (!add) return Expr();
-        if (!is_const(add->b, (*factor)-1)) return Expr();
-        return add->a;
+        return is_round_up_div(mul->a, *factor);
     }
 
     void visit(const Cast *op) {
@@ -685,6 +694,9 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
+
         const Min *min_b = b.as<Min>();
         const Add *add_b_a = min_b ? min_b->a.as<Add>() : NULL;
         const Add *add_b_b = min_b ? min_b->b.as<Add>() : NULL;
@@ -692,6 +704,15 @@ private:
         const Min *min_a = a.as<Min>();
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
+
+        if (div_a) {
+            add_a_a = div_a->a.as<Add>();
+            add_a_b = div_a->b.as<Add>();
+        }
+        if (div_b) {
+            add_b_a = div_b->a.as<Add>();
+            add_b_b = div_b->b.as<Add>();
+        }
 
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
@@ -998,6 +1019,42 @@ private:
                    is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
             expr = mutate(max_a->b - max_b->a);
+        } else if (no_overflow(op->type) &&
+                   div_b &&
+                   const_int(div_b->b, &ib) &&
+                   div_a &&
+                   const_int(div_a->b, &ia) &&
+                   ia == ib &&
+                   add_a_a &&
+                   add_b_a &&
+                   is_simple_const(add_b_a->b) && // This term gets duplicated, so it must be a simple const
+                   equal(add_a_a->a, add_b_a->a)) {
+            // (x + a) / 4 - (x + b) / 4 -> ((x + b) % 4 + (a - b)) / 4
+            Expr d = make_const(a.type(), ia);
+            expr = mutate(((div_b->a % d) + (add_a_a->b - add_b_a->b)) / d);
+        } else if (no_overflow(op->type) &&
+                   div_b &&
+                   const_int(div_b->b, &ib) &&
+                   div_a &&
+                   const_int(div_a->b, &ia) &&
+                   ia == ib &&
+                   add_a_a &&
+                   equal(add_a_a->a, div_b->a)) {
+            // (x + a) / 4 - x / 4 -> (x % 4 + a) / 4
+            Expr d = make_const(a.type(), ia);
+            expr = mutate(((add_a_a->a % d) + add_a_a->b) / d);
+        } else if (no_overflow(op->type) &&
+                   div_b &&
+                   const_int(div_b->b, &ib) &&
+                   div_a &&
+                   const_int(div_a->b, &ia) &&
+                   ia == ib &&
+                   add_b_a &&
+                   equal(div_a->a, add_b_a->a)) {
+            // x / 4 - (x + b) / 4 -> - (x % 4 + b) / 4
+            Expr d = make_const(a.type(), ia);
+            Expr zero = make_zero(a.type());
+            expr = mutate(zero - ((div_a->a % d) + add_b_a->b) / d);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2134,6 +2191,8 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
         const Max *max_a = a.as<Max>();
@@ -2260,6 +2319,19 @@ private:
                        is_const(a)) {
                 // (c1 < b * c2) <=> ((c1 / c2) < b)
                 expr = mutate((a / mul_b->b) < mul_b->a);
+            } else if (a.type().is_int() &&
+                       div_a &&
+                       is_positive_const(div_a->b) &&
+                       is_const(b)) {
+                // a / c1 < c2 <=> a < c1*c2
+                expr = mutate(div_a->a < (div_a->b * b));
+            } else if (a.type().is_int() &&
+                       div_b &&
+                       is_positive_const(div_b->b) &&
+                       is_const(a)) {
+                // c1 < b / c2 <=> (c1+1)*c2-1 < b
+                Expr one = make_one(a.type());
+                expr = mutate((a + one)*div_b->b - one < div_b->a);
             } else if (min_a) {
                 // (min(a, b) < c) <=> (a < c || b < c)
                 // See if that would simplify usefully:
@@ -2564,6 +2636,22 @@ private:
             expr = true_value;
         } else if (equal(true_value, false_value)) {
             expr = true_value;
+        } else if (true_value.type().is_bool() &&
+                   is_one(true_value) &&
+                   is_zero(false_value)) {
+            if (true_value.type().is_vector() && condition.type().is_scalar()) {
+                expr = Broadcast::make(condition, true_value.type().lanes());
+            } else {
+                expr = condition;
+            }
+        } else if (true_value.type().is_bool() &&
+                   is_zero(true_value) &&
+                   is_one(false_value)) {
+            if (true_value.type().is_vector() && condition.type().is_scalar()) {
+                expr = Broadcast::make(mutate(!condition), true_value.type().lanes());
+            } else {
+                expr = mutate(!condition);
+            }
         } else if (const Broadcast *b = condition.as<Broadcast>()) {
             // Select of broadcast -> scalar select
             expr = mutate(Select::make(b->value, true_value, false_value));
@@ -3325,6 +3413,7 @@ private:
             } else if (if_first &&
                        if_rest &&
                        equal(if_first->condition, if_rest->condition)) {
+                // Two ifs with matching conditions
                 Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
                 Stmt else_case;
                 if (if_first->else_case.defined() && if_rest->else_case.defined()) {
@@ -3335,6 +3424,17 @@ private:
                 } else {
                     else_case = if_rest->else_case;
                 }
+                stmt = IfThenElse::make(if_first->condition, then_case, else_case);
+            } else if (if_first &&
+                       if_rest &&
+                       !if_rest->else_case.defined() &&
+                       is_one(simplify((if_first->condition && if_rest->condition) == if_rest->condition))) {
+                // Two ifs where the second condition is tighter than
+                // the first condition.  The second if can be nested
+                // inside the first one, because if it's true the
+                // first one must also be true.
+                Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
+                Stmt else_case = mutate(if_first->else_case);
                 stmt = IfThenElse::make(if_first->condition, then_case, else_case);
             } else if (op->first.same_as(first) &&
                        op->rest.same_as(rest)) {
@@ -3720,6 +3820,8 @@ void simplify_test() {
     check((x - y) - (z - y), x - z);
     check((y - z) - (y - x), x - z);
 
+    check((x + 3) / 4 - (x + 2) / 4, ((x + 2) % 4 + 1)/4);
+
     check(x - min(x + y, z), max(-y, x-z));
     check(x - min(y + x, z), max(-y, x-z));
     check(x - min(z, x + y), max(-y, x-z));
@@ -3845,6 +3947,8 @@ void simplify_test() {
     check(max(x, y) <= y, x <= y);
     check(min(x, y) >= y, y <= x);
 
+    check((1 < y) && (2 < y), 2 < y);
+
     check(x*5 < 4, x < 1);
     check(x*5 < 5, x < 1);
     check(x*5 < 6, x < 2);
@@ -3857,6 +3961,9 @@ void simplify_test() {
     check(x*5 >= 4, 1 <= x);
     check(x*5 >= 5, 1 <= x);
     check(x*5 >= 6, 2 <= x);
+
+    check(x/4 < 3, x < 12);
+    check(3 < x/4, 15 < x);
 
     check(4 - x <= 0, 4 <= x);
 

@@ -123,6 +123,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
+    // This is the last time we need bounds promises
+    s = remove_bounds_promises(s);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
     debug(1) << "Removing code that depends on undef values...\n";

@@ -2,6 +2,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -11,6 +12,7 @@ class RemoveTrivialForLoops : public IRMutator {
 
     void visit(const For *for_loop) {
         Stmt body = mutate(for_loop->body);
+
         if (is_one(for_loop->extent) && !CodeGen_GPU_Dev::is_gpu_var(for_loop->name)) {
             if (for_loop->for_type == ForType::Parallel) {
                 std::cerr << "Warning: Parallel for loop over "
@@ -24,6 +26,10 @@ class RemoveTrivialForLoops : public IRMutator {
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
         } else if (is_zero(for_loop->extent)) {
             stmt = Evaluate::make(0);
+        } else if (is_zero(simplify(for_loop->extent > 1))) {
+            // Loop has at most one iteration
+            stmt = LetStmt::make(for_loop->name, for_loop->min, body);
+            stmt = IfThenElse::make(for_loop->extent > 0, stmt, Stmt());
         } else if (body.same_as(for_loop->body)) {
             stmt = for_loop;
         } else {

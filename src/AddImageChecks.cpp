@@ -2,6 +2,7 @@
 #include "Target.h"
 #include "IRVisitor.h"
 #include "Substitute.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -129,7 +130,7 @@ Stmt add_image_checks(Stmt s,
             replace_with_required[name + ".min." + dim] = min_required;
 
             Expr extent_required = Variable::make(Int(32), name + ".extent." + dim + ".required");
-            replace_with_required[name + ".extent." + dim] = extent_required;
+            replace_with_required[name + ".extent." + dim] = simplify(extent_required);
 
             Expr stride_required = Variable::make(Int(32), name + ".stride." + dim + ".required");
             replace_with_required[name + ".stride." + dim] = stride_required;
