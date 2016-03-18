@@ -1,4 +1,3 @@
-#include "runtime_internal.h"
 #include "HalideRuntime.h"
 
 // LLVM sometimes likes to generate calls to a stack smashing

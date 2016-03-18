@@ -1,4 +1,3 @@
-#include "runtime_internal.h"
 #include "HalideRuntime.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
