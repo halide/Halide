@@ -103,14 +103,16 @@ WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_sleep_ms(void *user_context, int ms);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 
+WEAK void halide_profiler_stack_peak_update(void *user_context,
+                                            void *pipeline_state,
+                                            int p_value,
+                                            int *f_values);
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           void *pipeline_state,
-                                          int token,
                                           int func_id,
                                           int incr);
 WEAK void halide_profiler_memory_free(void *user_context,
                                       void *pipeline_state,
-                                      int token,
                                       int func_id,
                                       int incr);
 WEAK int halide_profiler_pipeline_start(void *user_context,
