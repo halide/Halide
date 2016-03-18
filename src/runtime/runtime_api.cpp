@@ -7,7 +7,6 @@
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeQurt.h"
-#include "runtime_internal.h"
 
 // This runtime module will contain extern declarations of the Halide
 // API and the types it uses. It's useful for compiling modules that
