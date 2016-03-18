@@ -468,7 +468,7 @@ void CodeGen_ARM::visit(const Mul *op) {
     CodeGen_Posix::visit(op);
 }
 
-llvm::Value *CodeGen_ARM::sorted_avg(llvm::Value *a, llvm::Value *b) {
+Value *CodeGen_ARM::sorted_avg(Value *a, Value *b) {
     internal_assert(a->getType() == b->getType());
     llvm::Type *ty = a->getType();
     if (!neon_intrinsics_disabled() && ty->isVectorTy()) {
