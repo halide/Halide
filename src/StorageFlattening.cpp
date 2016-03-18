@@ -165,7 +165,7 @@ private:
                 args[3*i+3] = extent_var[i];
                 args[3*i+4] = stride_var[i];
             }
-            Expr buf = Call::make(Handle(), Call::create_buffer_t,
+            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                   args, Call::Intrinsic);
             stmt = LetStmt::make(buffer_name + ".buffer",
                                  buf,
@@ -314,7 +314,9 @@ private:
 
     void visit(const Call *call) {
 
-        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
+        if (call->call_type == Call::Extern ||
+            call->call_type == Call::ExternCPlusPlus ||
+            call->call_type == Call::Intrinsic) {
             vector<Expr> args(call->args.size());
             bool changed = false;
             for (size_t i = 0; i < args.size(); i++) {

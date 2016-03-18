@@ -763,7 +763,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type() == Handle()) {
+    if (!e.defined() || e.type().is_handle()) {
         // Handle is always emitted into metadata "undefined", regardless of
         // what sort of Expr is provided.
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
@@ -2042,9 +2042,10 @@ void CodeGen_LLVM::scalarize(Expr e) {
 }
 
 void CodeGen_LLVM::visit(const Call *op) {
-    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+  internal_assert((op->call_type == Call::Extern ||
+                   op->call_type == Call::ExternCPlusPlus ||
+                   op->call_type == Call::Intrinsic))
         << "Can only codegen extern calls and intrinsics\n";
-
 
     if (op->call_type == Call::Intrinsic) {
         // Some call nodes are actually injected at various stages as a
@@ -2325,11 +2326,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = ConstantInt::get(i32, 0);
         } else if (op->name == Call::null_handle) {
             internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
-            internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
+            internal_assert(op->type.is_handle()) << "null_handle must return a Handle type\n";
             value = ConstantPointerNull::get(i8->getPointerTo());
         } else if (op->name == Call::address_of) {
             internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
-            internal_assert(op->type == Handle()) << "address_of must return a Handle type\n";
+            internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
             const Load *load = op->args[0].as<Load>();
             internal_assert(load) << "The sole argument to address_of must be a Load node\n";
             internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
@@ -2614,7 +2615,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             const StringImm *fn = op->args[0].as<StringImm>();
             internal_assert(fn);
             Expr arg = op->args[1];
-            internal_assert(arg.type() == Handle());
+            internal_assert(arg.type().is_handle());
             llvm::Function *f = module->getFunction(fn->value);
             if (!f) {
                 llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
@@ -2648,13 +2649,30 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else {
         // It's an extern call.
 
+        std::string name;
+        if (op->call_type == Call::ExternCPlusPlus) {
+            user_assert(get_target().has_feature(Target::CPlusPlusMangling)) <<
+                "Target must specify C++ name mangling (\"c_plus_plus_name_mangling\") in order to call C++ externs. (" <<
+                op->name << ")\n";
+
+            std::vector<std::string> namespaces;
+            name = extract_namespaces(op->name, namespaces);
+            std::vector<ExternFuncArgument> mangle_args;
+            for (const auto &arg : op->args) {
+                mangle_args.push_back(ExternFuncArgument(arg));
+            }
+            name = cplusplus_function_mangled_name(name, namespaces, op->type, mangle_args, get_target());
+        } else {
+            name = op->name;
+        }
+
         // Codegen the args
         vector<Value *> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = codegen(op->args[i]);
         }
 
-        llvm::Function *fn = module->getFunction(op->name);
+        llvm::Function *fn = module->getFunction(name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
 
@@ -2685,12 +2703,16 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
 
-            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module.get());
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
             fn->setCallingConv(CallingConv::C);
             debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         } else {
             debug(4) << "Found " << op->name << "\n";
 
+            // TODO: Say something more accurate here as there is now
+            // partial information in the handle_type field, but it is
+            // not clear it can be matched to the LLVM types and it is
+            // not always there.
             // Halide's type system doesn't preserve pointer types
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
@@ -2730,10 +2752,10 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         // We also have several impure runtime functions that do not
         // take a handle.
-        if (op->name == "halide_current_time_ns" ||
-            op->name == "halide_gpu_thread_barrier" ||
-            op->name == "halide_profiler_get_state" ||
-            starts_with(op->name, "halide_error")) {
+        if (name == "halide_current_time_ns" ||
+            name == "halide_gpu_thread_barrier" ||
+            name == "halide_profiler_get_state" ||
+            starts_with(name, "halide_error")) {
             pure = false;
         }
 
@@ -2749,7 +2771,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             // Check if a vector version of the function already
             // exists at some useful width.
             pair<llvm::Function *, int> vec =
-                find_vector_runtime_function(op->name, op->type.lanes());
+                find_vector_runtime_function(name, op->type.lanes());
             llvm::Function *vec_fn = vec.first;
             int w = vec.second;
 

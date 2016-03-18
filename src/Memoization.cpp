@@ -437,7 +437,7 @@ private:
                 computed_bounds_args.push_back(0); // TODO: Verify there is no use for the stride.
             }
 
-            Expr computed_bounds = Call::make(Handle(), Call::create_buffer_t,
+            Expr computed_bounds = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                               computed_bounds_args,
                                               Call::Intrinsic);
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
@@ -524,7 +524,7 @@ private:
                         // Everything matches, rewrite create_buffer_t to use a nullptr handle for address.
                         std::vector<Expr> args = call->args;
                         args[0] = Call::make(Handle(), Call::null_handle, {}, Call::Intrinsic);
-                        expr = Call::make(Handle(), Call::create_buffer_t, args, Call::Intrinsic);
+                        expr = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
                         return;
                     }
                 }
@@ -548,7 +548,7 @@ private:
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::extract_buffer_host,
-                                                 { Variable::make(Handle(), allocation->name + ".buffer") }, Call::Intrinsic),
+                                                 { Variable::make(type_of<struct buffer_t *>(), allocation->name + ".buffer") }, Call::Intrinsic),
                                       "halide_memoization_cache_release");
             }
 

@@ -322,14 +322,46 @@ class ExternCallPrototypes : public IRGraphVisitor {
     ostream &stream;
     std::set<string> &emitted;
     using IRGraphVisitor::visit;
+    // TODO: This class should likely be able to signal an error if C++
+    // code shows up and started_in_c_plus_plus isn't true, but the logic
+    // is orthogonal.
+    const bool started_in_c_plus_plus;
+    bool in_c_plus_plus;
+
+    void switch_calling_convention(bool c_plus_plus) {
+      if (in_c_plus_plus != c_plus_plus) {
+          if (in_c_plus_plus) {
+              stream << "}\n";
+          } else {
+              stream << "extern \"C\" {\n";
+          }
+          in_c_plus_plus = c_plus_plus;
+      }
+    }
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
 
-        if (op->call_type == Call::Extern) {
-            if (!emitted.count(op->name)) {
-                stream << type_to_c_type(op->type, true) << " " << op->name << "(";
-                if (function_takes_user_context(op->name)) {
+        if (op->call_type == Call::Extern ||
+            op->call_type == Call::ExternCPlusPlus) {
+            switch_calling_convention(op->call_type == Call::ExternCPlusPlus);
+            // TODO: optimize generation of namespacing to reuse namespace decls.
+            int32_t namespace_count = 0;
+            std::string name;
+            if (op->call_type == Call::ExternCPlusPlus) {
+                std::vector<std::string> namespaces;
+                name = extract_namespaces(op->name, namespaces);
+                for (auto const &ns : namespaces) {
+                    stream << "namespace " << ns << " { ";
+                }
+                namespace_count = namespaces.size();
+            } else {
+                name = op->name;
+            }
+
+            if (!emitted.count(name)) {
+                stream << type_to_c_type(op->type, true) << " " << name << "(";
+                if (function_takes_user_context(name)) {
                     stream << "void *";
                     if (op->args.size()) {
                         stream << ", ";
@@ -345,14 +377,19 @@ class ExternCallPrototypes : public IRGraphVisitor {
                       stream << type_to_c_type(op->args[i].type(), true);
                     }
                 }
-                stream << ");\n";
-                emitted.insert(op->name);
+                stream << ");";
+                for (int32_t i = 0; i < namespace_count; i++) {
+                    stream << " }";
+                }
+                stream << "\n";
+                emitted.insert(op->name); // Keep namespacing here.
             }
         }
     }
 
 public:
-    ExternCallPrototypes(ostream &s, std::set<string> &emitted) : stream(s), emitted(emitted) {
+  ExternCallPrototypes(ostream &s, std::set<string> &emitted, bool in_c_plus_plus)
+      : stream(s), emitted(emitted), started_in_c_plus_plus(in_c_plus_plus), in_c_plus_plus(in_c_plus_plus) {
         size_t j = 0;
         // Make sure we don't catch calls that are already in the global declarations
         for (size_t i = 0; i < globals.size(); i++) {
@@ -373,6 +410,10 @@ public:
 
         }
     }
+
+  ~ExternCallPrototypes() {
+      switch_calling_convention(started_in_c_plus_plus);
+  }
 };
 }
 
@@ -435,7 +476,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     // Emit prototypes for any extern calls used.
     if (!is_header()) {
         stream << "\n";
-        ExternCallPrototypes e(stream, emitted);
+        ExternCallPrototypes e(stream, emitted, is_c_plus_plus_interface());
         f.body.accept(&e);
         stream << "\n";
     }
@@ -863,8 +904,10 @@ void CodeGen_C::visit(const FloatImm *op) {
 
 void CodeGen_C::visit(const Call *op) {
 
-    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
-        << "Can only codegen extern calls and intrinsics\n";
+    internal_assert((op->call_type == Call::Extern ||
+                     op->call_type == Call::ExternCPlusPlus ||
+                     op->call_type == Call::Intrinsic))
+        << "Can only codegen extern (C or C++) calls and intrinsics\n";
 
     ostringstream rhs;
 
@@ -1162,12 +1205,20 @@ void CodeGen_C::visit(const Call *op) {
         }
 
     } else {
+        std::string name;
+        if (op->call_type == Call::ExternCPlusPlus) {
+            std::vector<std::string> namespaces;
+            name = extract_namespaces(op->name, namespaces);
+        } else {
+            name = op->name;
+        }
+
         // Generic calls
         vector<string> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = print_expr(op->args[i]);
         }
-        rhs << op->name << "(";
+        rhs << name << "(";
 
         if (function_takes_user_context(op->name)) {
             rhs << (have_user_context ? "__user_context_, " : "nullptr, ");

@@ -654,7 +654,7 @@ Expr print(const std::vector<Expr> &args) {
 
     // Concat all the args at runtime using stringify.
     Expr combined_string =
-        Internal::Call::make(Handle(), Internal::Call::stringify,
+        Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
                              print_args, Internal::Call::Intrinsic);
 
     // Call halide_print.

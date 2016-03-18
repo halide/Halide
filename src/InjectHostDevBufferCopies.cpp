@@ -105,7 +105,7 @@ class FindBuffersToTrack : public IRVisitor {
     }
 
     void visit(const Variable *op) {
-        if (op->type == Handle() && ends_with(op->name, ".buffer")) {
+        if (op->type.is_handle() && ends_with(op->name, ".buffer")) {
             buffers_to_track.insert(op->name.substr(0, op->name.size() - 7));
         }
     }
@@ -180,11 +180,11 @@ class InjectBufferCopies : public IRMutator {
             break;
         }
         std::vector<Expr> no_args;
-        return Call::make(Handle(), interface_name, no_args, Call::Extern);
+        return Call::make(type_of<const char *>(), interface_name, no_args, Call::Extern);
     }
 
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api) {
-        Expr buf = Variable::make(Handle(), buf_name + ".buffer");
+        Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
         Expr call = Call::make(Int(32), "halide_device_malloc", {buf, device_interface}, Call::Extern);
         string call_result_name = unique_name("device_malloc_result");
@@ -202,7 +202,7 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_buffer_copy(CopyDirection direction, string buf_name, DeviceAPI target_device_api) {
         internal_assert(direction == ToHost || direction == ToDevice) << "make_buffer_copy caller logic error.\n";
         std::vector<Expr> args;
-        Expr buffer = Variable::make(Handle(), buf_name + ".buffer");
+        Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
         args.push_back(buffer);
         if (direction == ToDevice) {
             args.push_back(make_device_interface_call(target_device_api));
@@ -315,7 +315,7 @@ class InjectBufferCopies : public IRMutator {
                 debug(4) << "Invalidating host_current\n";
             }
 
-            Expr buffer = Variable::make(Handle(), i.first + ".buffer");
+            Expr buffer = Variable::make(type_of<struct buffer_t *>(), i.first + ".buffer");
             Expr t = make_one(UInt(8));
 
             if (host_wrote) {
@@ -533,7 +533,7 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
                 vector<Expr> args = create_buffer_t->args;
                 args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                Expr val = Call::make(Handle(), Call::create_buffer_t, args, Call::Intrinsic);
+                Expr val = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
 
                 stmt = LetStmt::make(op->name, val, op->body);
             }

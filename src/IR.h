@@ -354,7 +354,7 @@ struct Evaluate : public StmtNode<Evaluate> {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, Halide, Intrinsic} CallType;
+    typedef enum {Image, Extern, ExternCPlusPlus, Halide, Intrinsic} CallType;
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations

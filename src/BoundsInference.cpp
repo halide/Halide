@@ -206,9 +206,9 @@ public:
                 if (!in_pipeline.empty()) {
                     // 3)
                     string outer_query_name = func.name() + ".outer_bounds_query";
-                    Expr outer_query = Variable::make(Handle(), outer_query_name);
+                    Expr outer_query = Variable::make(type_of<struct buffer_t *>(), outer_query_name);
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(Handle(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
                                                     {outer_query, i}, Call::Intrinsic);
@@ -236,7 +236,7 @@ public:
 
                     // 1)
                     s = LetStmt::make(func.name() + ".outer_bounds_query",
-                                      Variable::make(Handle(), func.name() + ".o0.bounds_query"), s);
+                                      Variable::make(type_of<struct buffer_t *>(), func.name() + ".o0.bounds_query"), s);
                 } else {
                     // If we're at the outermost loop, there is no
                     // bounds query result from one level up, but we
@@ -247,7 +247,7 @@ public:
 
                     // 2)
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(Handle(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::extract_buffer_min,
                                                   {inner_query, i}, Call::Intrinsic);
@@ -332,24 +332,24 @@ public:
                     Function input(args[j].func);
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
-                        Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                        Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                               {null_handle, make_zero(input.output_types()[k])},
                                               Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
-                        bounds_inference_args.push_back(Variable::make(Handle(), name));
+                        bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
                     Buffer b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
 
-                    Expr in_buf = Variable::make(Handle(), name + ".buffer");
+                    Expr in_buf = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
-                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
+                    Expr query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
                     lets.push_back(make_pair(query_name, query_buf));
-                    Expr buf = Variable::make(Handle(), query_name, b, p, ReductionDomain());
+                    Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
@@ -372,18 +372,18 @@ public:
                     output_buffer_t_args.push_back(0); // stride
                 }
 
-                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                                   output_buffer_t_args, Call::Intrinsic);
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
-                bounds_inference_args.push_back(Variable::make(Handle(), buf_name));
+                bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
 
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
 
             // Make the extern call
-            Expr e = Call::make(Int(32), extern_name,
-                                bounds_inference_args, Call::Extern);
+            Expr e = Call::make(Int(32), extern_name, bounds_inference_args, 
+                                func.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus : Call::Extern);
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
@@ -539,7 +539,7 @@ public:
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
-                            Expr buf = Variable::make(Handle(), buf_name);
+                            Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
                                                   {buf, d}, Call::Intrinsic);
                             Expr max = Call::make(Int(32), Call::extract_buffer_max,
