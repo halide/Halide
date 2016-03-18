@@ -29,7 +29,6 @@ protected:
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
 
-    // Multiply two unsigned values, keep the high half, then shift it right.
     llvm::Value *unsigned_mulhi_shr(llvm::Value *a, llvm::Value *b, int shr);
 
     using CodeGen_Posix::visit;
