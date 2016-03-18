@@ -11,6 +11,7 @@
 #include "Var.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -750,6 +751,19 @@ private:
                 // Just use the bounds of the type
                 bounds_of_type(t);
             }
+        } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::promise_bounded) {
+            assert(op->args.size() == 3);
+
+            // Treat it like a clamp
+            //Expr equiv_clamp = clamp(op->args[0], op->args[1], op->args[2]);
+            //equiv_clamp.accept(this);
+
+            op->args[1].accept(this);
+            Expr min_a = min;
+            op->args[2].accept(this);
+            min = min_a;
+
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
@@ -1466,6 +1480,25 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
     }
 
     return fb;
+}
+
+namespace {
+class RemoveBoundsPromises : public IRMutator {
+    using IRMutator::visit;
+    void visit(const Call *op) {
+        if (op->call_type == Call::Intrinsic &&
+            op->name == Call::promise_bounded) {
+            internal_assert(op->args.size() == 3);
+            expr = mutate(op->args[0]);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+};
+}
+
+Stmt remove_bounds_promises(Stmt s) {
+    return RemoveBoundsPromises().mutate(s);
 }
 
 void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {

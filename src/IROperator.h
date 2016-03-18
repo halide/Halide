@@ -1839,6 +1839,16 @@ inline Expr likely(Expr e) {
                                 {e}, Internal::Call::Intrinsic);
 }
 
+/** Tell Halide to assume an expression is bounded by the provided min
+ * and max, and that the provided max is greater than or equal to the
+ * provided min. Useful in instances where Halide's bounds inference
+ * is too conservative. Use with great caution - if you're wrong, the
+ * code may segfault at runtime. */
+inline Expr promise_bounded(Expr e, Expr min, Expr max) {
+    return Internal::Call::make(e.type(), Internal::Call::promise_bounded,
+                                {e, min, max}, Internal::Call::Intrinsic);
+}
+
 }
 
 #endif

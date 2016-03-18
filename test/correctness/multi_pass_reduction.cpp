@@ -154,35 +154,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
-        // Walk down an image using a few different factors of splits
-        Func f;
-        RDom r(1, 99);
-        Var xo, xi;
-        ImageParam input(Float(32), 2);
-        f(x, y) = input(x, y);
-        f(x, r) += f(x, r-1) + input(x, r);
-        f(x, r) += f(x, r-1) + input(x, r);
-        f(x, r) += f(x, r-1) + input(x, r);
-        f(x, r) += f(x, r-1) + input(x, r);
-        f.update(0).split(x, x, xi, 11);
-        f.update(1).split(x, x, xi, 13);
-        f.update(2).split(x, x, xi, 17);
-        f.update(3);
-
-        // So if we ask for an output of size 100x10, we'll need an
-        // input of size 110 x 100. 110 is enough to cover rounding up
-        // 100 to be a multiple of 11, 13, and 17.
-        f.infer_input_bounds(100, 10);
-
-        Image<float> in = input.get();
-        if (in.width() != 110 || in.height() != 100) {
-            printf("Unexpected image size: %d x %d instead of 144 x 100\n",
-                   in.width(), in.height());
-            return -1;
-        }
-    }
-
     printf("Success!\n");
 
     return 0;

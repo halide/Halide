@@ -132,32 +132,64 @@ Stmt build_provide_loop_nest(Function f,
     map<string, pair<string, Expr>> base_values;
     for (const Split &split : splits) {
         Expr outer = Variable::make(Int(32), prefix + split.outer);
+        Expr outer_max = Variable::make(Int(32), prefix + split.outer + ".loop_max");
         if (split.is_split()) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
             Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
+            Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
 
             known_size_dims[split.inner] = split.factor;
 
             Expr base = outer * split.factor + old_min;
+            string base_name = prefix + split.inner + ".base";
+            Expr base_var = Variable::make(Int(32), base_name);
+            string old_var_name = prefix + split.old_var;
+            Expr old_var = Variable::make(Int(32), old_var_name);
 
             map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
             if ((iter != known_size_dims.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
 
                 // We have proved that the split factor divides the
-                // old extent. No need to adjust the base.
+                // old extent. No need to adjust the base or add an if
+                // statement.
                 known_size_dims[split.outer] = iter->second / split.factor;
-            } else if (split.exact) {
+            } else if (split.exact || is_update) {
                 // It's an exact split but we failed to prove that the
-                // extent divides the factor. This is a problem.
-                user_error << "When splitting " << split.old_var << " into "
-                           << split.outer << " and " << split.inner << ", "
-                           << "could not prove the split factor (" << split.factor << ") "
-                           << "divides the extent of " << split.old_var
-                           << " (" << iter->second << "). This is required when "
-                           << "the split originates from an RVar.\n";
-            } else if (!is_update) {
+                // extent divides the factor. Use predication.
+                Stmt unguarded = stmt;
+
+                string tail_size_var_name = prefix + split.old_var + ".tail_size";
+                Expr tail_size_var = Variable::make(Int(32), tail_size_var_name);
+                Stmt guarded = IfThenElse::make(inner < tail_size_var, stmt, Stmt());
+                guarded = LetStmt::make(tail_size_var_name, old_extent % split.factor, guarded);
+
+                Expr guards_not_necessary = outer < old_extent / split.factor;
+                guards_not_necessary = select(guards_not_necessary, likely(const_true()), const_false());
+
+                // Help out bounds inference
+                Expr bounded_var = promise_bounded(outer, 0, old_extent / split.factor - 1) * split.factor + inner;
+                unguarded = substitute(old_var_name, bounded_var, unguarded);
+
+                bounded_var = outer * split.factor + promise_bounded(inner, 0, tail_size_var);
+                guarded = substitute(old_var_name, bounded_var, guarded);
+
+                stmt = IfThenElse::make(guards_not_necessary,
+                                        unguarded,
+                                        guarded);
+
+
+                /*
+                Expr cond = outer * split.factor + inner < old_extent;
+                // Tell Halide to optimize for the case in which this condition is true.
+                cond = select(cond, likely(const_true()), const_false());
+                stmt = IfThenElse::make(cond, stmt, Stmt());
+                */
+
+
+
+            } else {
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
@@ -173,12 +205,10 @@ Stmt build_provide_loop_nest(Function f,
                 base = Min::make(base, old_max + (1 - split.factor));
             }
 
-            string base_name = prefix + split.inner + ".base";
-            Expr base_var = Variable::make(Int(32), base_name);
             // Substitute in the new expression for the split variable ...
-            stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
+            stmt = substitute(old_var_name, base_var + inner, stmt);
             // ... but also define it as a let for the benefit of bounds inference.
-            stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
+            stmt = LetStmt::make(old_var_name, base_var + inner, stmt);
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {

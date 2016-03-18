@@ -131,6 +131,9 @@ Box box_touched(Stmt s, std::string fn,
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
                                               const std::map<std::string, Function> &env);
 
+/** Remove all promise_bounded intrinsics */
+Stmt remove_bounds_promises(Stmt);
+
 EXPORT void bounds_test();
 
 }
