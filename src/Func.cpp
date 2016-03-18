@@ -1605,6 +1605,16 @@ void Func::compile_to_bitcode(const string &filename, const vector<Argument> &ar
     pipeline().compile_to_bitcode(filename, args, "", target);
 }
 
+void Func::compile_to_llvm_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
+                                    const Target &target) {
+    pipeline().compile_to_llvm_assembly(filename, args, fn_name, target);
+}
+
+void Func::compile_to_llvm_assembly(const string &filename, const vector<Argument> &args,
+                                    const Target &target) {
+    pipeline().compile_to_llvm_assembly(filename, args, "", target);
+}
+
 void Func::compile_to_object(const string &filename, const vector<Argument> &args,
                              const string &fn_name, const Target &target) {
     pipeline().compile_to_object(filename, args, fn_name, target);

@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 
 #ifndef __clockid_t_defined
 #define __clockid_t_defined 1
