@@ -1260,7 +1260,7 @@ void CodeGen_LLVM::visit(const Mul *op) {
     }
 }
 
-llvm::Value *CodeGen_LLVM::unsigned_mulhi_shr(llvm::Value *a, llvm::Value *b, int shr) {
+Value *CodeGen_LLVM::unsigned_mulhi_shr(Value *a, Value *b, int shr) {
     llvm::Type *ty = a->getType();
     llvm::VectorType *vty = dyn_cast<VectorType>(ty);
     llvm::Type *element_ty = vty ? vty->getElementType() : ty;
@@ -1269,7 +1269,7 @@ llvm::Value *CodeGen_LLVM::unsigned_mulhi_shr(llvm::Value *a, llvm::Value *b, in
         wide_ty = llvm::VectorType::get(wide_ty, vty->getNumElements());
     }
 
-    // flipped's high bit is zero, so it's ok to zero-extend it
+    // We assume the inputs are unsigned, so we zero extend.
     Value *a_wide = builder->CreateIntCast(a, wide_ty, false);
     Value *b_wide = builder->CreateIntCast(b, wide_ty, false);
     Value *p_wide = builder->CreateMul(a_wide, b_wide);
@@ -1280,7 +1280,7 @@ llvm::Value *CodeGen_LLVM::unsigned_mulhi_shr(llvm::Value *a, llvm::Value *b, in
     return builder->CreateIntCast(p, ty, true);
 }
 
-llvm::Value *CodeGen_LLVM::sorted_avg(llvm::Value *a, llvm::Value *b) {
+Value *CodeGen_LLVM::sorted_avg(Value *a, Value *b) {
     // b > a, so the following works without widening:
     // a + (b - a)/2
     Value *diff = builder->CreateSub(b, a);
@@ -1371,13 +1371,10 @@ void CodeGen_LLVM::visit(const Div *op) {
 
         // Widen, multiply, narrow
         Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
-        Value *val = num;
+        Value *val = unsigned_mulhi_shr(num, mult, method == 1 ? shift : 0);
 
-        val = unsigned_mulhi_shr(val, mult, method == 1 ? shift : 0);
-
-        // Average with original numerator. Can't use sse rounding ops
-        // because they round up.
         if (method == 2) {
+            // Average with original numerator.
             val = sorted_avg(val, num);
 
             // Do the final shift
