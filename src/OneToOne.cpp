@@ -15,7 +15,7 @@ public:
     bool multiple;
     Scope<int> internal;
 
-    FindVariable() : var(NULL), multiple(false) {}
+    FindVariable() : var(nullptr), multiple(false) {}
 
 private:
     using IRGraphVisitor::visit;
@@ -51,7 +51,7 @@ bool is_one_to_one(Expr e) {
         // More than one variable present.
         return false;
     }
-    if (finder.var == NULL) {
+    if (finder.var == nullptr) {
         // No variables present.
         return false;
     }
