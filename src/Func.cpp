@@ -149,8 +149,9 @@ EXPORT bool Func::is_extern() const {
 void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
-                         int dimensionality) {
-    func.define_extern(function_name, args, types, dimensionality);
+                         int dimensionality,
+                         bool is_c_plus_plus) {
+  func.define_extern(function_name, args, types, dimensionality, is_c_plus_plus);
 }
 
 /** Get the types of the buffers returned by an extern definition. */

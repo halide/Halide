@@ -42,7 +42,7 @@ struct halide_cplusplus_type_name {
         Class,  ///< "class Foo"
         Union,  ///< "union Foo" TODO: Do we need unions
         Enum,   ///< "enum Foo" TODO: Do we need enums
-    } cpp_type_type;
+    } cpp_type_type;  // Note: order is reflected in map_to_name table in CPlusPlusMangle.cpp
 
     enum CPPTypeQualifiers {
         Const = 1,    ///< flag for "const"
@@ -116,6 +116,22 @@ struct halide_handle_traits {
 };
 //@}
 
+template<>
+struct halide_handle_traits<int32_t *> {
+    static const halide_handle_cplusplus_type *type_info() {
+        static const halide_handle_cplusplus_type the_info{halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "int32_t")};
+        return &the_info;
+    }
+};
+
+template<>
+struct halide_handle_traits<struct buffer_t *> {
+    static const halide_handle_cplusplus_type *type_info() {
+        static const halide_handle_cplusplus_type the_info{halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "buffer_t")};
+        return &the_info;
+    }
+};
+
 namespace Halide {
 
 struct Expr;
@@ -160,7 +176,8 @@ struct Type {
     /** Type is a wrapper around halide_type_t with more methods for use
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */
-    Type(const halide_type_t &that) : type(that), handle_type(nullptr) {}
+    Type(const halide_type_t &that, const halide_handle_cplusplus_type *handle_type = nullptr)
+         : type(that), handle_type(handle_type) {}
 
     /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
      * Representation is exactly equivalent. */
@@ -313,7 +330,7 @@ namespace {
 
 /** Construct the halide equivalent of a C type */
 template<typename T> Type type_of() {
-    return Type(halide_type_of<T>());
+    return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
 }
 
 }

@@ -702,12 +702,14 @@ private:
 
         Type t = op->type.element_of();
 
-        if (t == Handle()) {
+        if (t.is_handle()) {
             min = max = Expr();
             return;
         }
 
-        if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
+        if (const_args && (op->call_type == Call::Image ||
+                           op->call_type == Call::Extern ||
+                           op->call_type == Call::ExternCPlusPlus)) {
             min = max = Call::make(t, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
         } else if (op->call_type == Call::Intrinsic && op->name == Call::abs) {
@@ -1142,7 +1144,8 @@ private:
         IRVisitor::visit(op);
 
         if (op->call_type == Call::Intrinsic ||
-            op->call_type == Call::Extern) {
+            op->call_type == Call::Extern ||
+            op->call_type == Call::ExternCPlusPlus) {
             return;
         }
 

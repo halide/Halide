@@ -819,11 +819,26 @@ $(FILTERS_DIR)/%.generator: $(ROOT_DIR)/test/generator/%_generator.cpp $(GENGEN_
 	@mkdir -p $(FILTERS_DIR)
 	$(CXX) -std=c++11 -g $(CXX_WARNING_FLAGS) -fno-rtti -I$(INCLUDE_DIR) $(filter %_generator.cpp,$^) $(ROOT_DIR)/tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread $(LIBDL) -o $@
 
+NON_EMPTY_TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
+NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
+
 # By default, %.o/.h are produced by executing %.generator. Runtimes are not included in these.
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
+
+# By default, %.o/.h are produced by executing %.generator. Runtimes are not included in these.
+$(FILTERS_DIR)/c_plus_plus_name_mangling.o $(FILTERS_DIR)/c_plus_plus_name_mangling.h: $(FILTERS_DIR)/c_plus_plus_name_mangling.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::c_plus_plus_name_mangling"
+
+# By default, %.o/.h are produced by executing %.generator. Runtimes are not included in these.
+$(FILTERS_DIR)/c_plus_plus_name_mangling_define_extern.o $(FILTERS_DIR)/c_plus_plus_name_mangling_define_extern.h: $(FILTERS_DIR)/c_plus_plus_name_mangling_define_extern.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::c_plus_plus_name_mangling_define_extern"
 
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
@@ -867,6 +882,7 @@ $(FILTERS_DIR)/tiled_blur.generator: $(ROOT_DIR)/test/generator/tiled_blur_blur_
 # is there a way to specify that in Make?
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
 $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
+$(BIN_DIR)/generator_aot_c_plus_plus_name_mangling_define_extern: $(FILTERS_DIR)/c_plus_plus_name_mangling.o
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;

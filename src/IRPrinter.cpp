@@ -455,6 +455,7 @@ void IRPrinter::visit(const Call *op) {
         }
     }
 
+    // TODO: Print indication of C vs C++?
     stream << op->name << "(";
     for (size_t i = 0; i < op->args.size(); i++) {
         print(op->args[i]);

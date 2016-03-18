@@ -63,7 +63,7 @@ private:
                 } else {
                     Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
                 }
-                expr = Call::make(Handle(), Call::address_of, {inner}, Call::Intrinsic);
+                expr = Call::make(op->type, Call::address_of, {inner}, Call::Intrinsic);
                 return;
             }
         }
