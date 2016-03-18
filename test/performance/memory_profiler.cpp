@@ -3,43 +3,62 @@
 
 using namespace Halide;
 
-int memory_current = 0;
 int memory_peak = 0;
-int memory_total = 0;
+int num_mallocs = 0;
+int malloc_avg = 0;
+int stack_peak = 0;
 
 void reset_stats() {
-    memory_current = 0;
     memory_peak = 0;
-    memory_total = 0;
+    num_mallocs = 0;
+    malloc_avg = 0;
+    stack_peak = 0;
 }
 
 void my_print(void *, const char *msg) {
     float this_ms;
-    int idx, this_percentage, this_memory_current, this_memory_peak, this_memory_total;
-    int val = sscanf(msg, " g_%d: %fms (%d%%) (%d, %d, %d",
-        &idx, &this_ms, &this_percentage, &this_memory_current, &this_memory_peak, &this_memory_total);
+    int idx, this_percentage, this_memory_peak;
+    int this_num_mallocs, this_malloc_avg, this_stack_peak;
+    int val;
+
+    val = sscanf(msg, " g_%d: %fms (%d%%) peak: %d num: %d avg: %d",
+        &idx, &this_ms, &this_percentage, &this_memory_peak,
+        &this_num_mallocs, &this_malloc_avg);
     printf("%s\n", msg);
     if (val == 6) {
-        memory_current = this_memory_current;
         memory_peak = this_memory_peak;
-        memory_total = this_memory_total;
+        num_mallocs = this_num_mallocs;
+        malloc_avg = this_malloc_avg;
+    }
+
+    val = sscanf(msg, " g_%d: %fms (%d%%) stack: %d",
+        &idx, &this_ms, &this_percentage, &this_stack_peak);
+    printf("%s\n", msg);
+    if (val == 4) {
+        stack_peak = this_stack_peak;
     }
 }
 
 // Return 0 if there is no error found
-int check_error(int expected_current, int expected_peak, int expected_total) {
-    /*printf("Memory current: %d bytes, peak: %d bytes, total: %d bytes\n",
-            memory_current, memory_peak, memory_total);*/
-    if (memory_current != expected_current) {
-        printf("Current memory was %d instead of %d\n", memory_current, expected_current);
+int check_error(int exp_mem_peak, int exp_num_mallocs,
+                int exp_malloc_avg, int exp_stack_peak) {
+    /*printf("Memory memory_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
+            "stack_peak: %d\n", memory_peak, memory_total, num_mallocs,
+            malloc_avg, stack_peak);*/
+    if (memory_peak != exp_mem_peak) {
+        printf("Peak memory was %d instead of %d\n", memory_peak, exp_mem_peak);
         return -1;
     }
-    if (memory_peak != expected_peak) {
-        printf("Peak memory was %d instead of %d\n", memory_peak, expected_peak);
+    if (num_mallocs != exp_num_mallocs) {
+        printf("Num of mallocs was %d instead of %d\n", num_mallocs, exp_num_mallocs);
         return -1;
     }
-    if (memory_total != expected_total) {
-        printf("Total memory was %d instead of %d\n", memory_total, expected_total);
+    if (malloc_avg != exp_malloc_avg) {
+        printf("Malloc average was %d instead of %d\n", malloc_avg, exp_malloc_avg);
+        return -1;
+    }
+    if (stack_peak != exp_stack_peak) {
+        printf("Stack peak was %d instead of %d\n", stack_peak, exp_stack_peak);
         return -1;
     }
     return 0;
@@ -47,19 +66,26 @@ int check_error(int expected_current, int expected_peak, int expected_total) {
 
 
 // Return 0 if there is no error found
-int check_error_parallel(int expected_current, int min_peak, int max_peak, int expected_total) {
-    /*printf("Memory current: %d bytes, peak: %d bytes, total: %d bytes\n",
-            memory_current, memory_peak, memory_total);*/
-    if (memory_current != expected_current) {
-        printf("Current memory was %d instead of %d\n", memory_current, expected_current);
+int check_error_parallel(int min_mem_peak, int max_mem_peak, int exp_num_mallocs,
+                         int exp_malloc_avg, int exp_stack_peak) {
+    /*printf("Memory memory_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
+            "stack_peak: %d\n", memory_peak, memory_total, num_mallocs,
+            malloc_avg, stack_peak);*/
+    if (memory_peak < min_mem_peak || memory_peak > max_mem_peak) {
+        printf("Peak memory was %d which was outside the range of [%d, %d]\n",
+               memory_peak, min_mem_peak, max_mem_peak);
         return -1;
     }
-    if (memory_peak < min_peak || memory_peak > max_peak) {
-        printf("Peak memory was %d which was outside the range of [%d, %d]\n", memory_peak, min_peak, max_peak);
+    if (num_mallocs != exp_num_mallocs) {
+        printf("Num of mallocs was %d instead of %d\n", num_mallocs, exp_num_mallocs);
         return -1;
     }
-    if (memory_total != expected_total) {
-        printf("Total memory was %d instead of %d\n", memory_total, expected_total);
+    if (malloc_avg != exp_malloc_avg) {
+        printf("Malloc average was %d instead of %d\n", malloc_avg, exp_malloc_avg);
+        return -1;
+    }
+    if (stack_peak != exp_stack_peak) {
+        printf("Stack peak was %d instead of %d\n", stack_peak, exp_stack_peak);
         return -1;
     }
     return 0;
@@ -85,7 +111,8 @@ int main(int argc, char **argv) {
 
         reset_stats();
         f1.realize(size_x, size_y, t);
-        if (check_error(0, 0, 0) != 0) {
+        int stack_size = size_x*size_y*sizeof(int);
+        if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;
         }
     }
@@ -107,7 +134,7 @@ int main(int argc, char **argv) {
         reset_stats();
         f2.realize(size_x, size_y, t);
         int total = (size_x+1)*(size_y+1)*sizeof(int);
-        if (check_error(0, total, total) != 0) {
+        if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
     }
@@ -125,8 +152,7 @@ int main(int argc, char **argv) {
 
         reset_stats();
         f3.realize(1000, 1000, t);
-        int total = 0;
-        if (check_error(0, total, total) != 0) {
+        if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
     }
@@ -159,7 +185,7 @@ int main(int argc, char **argv) {
         toggle2.set(true);
         f6.realize(size_x, t);
         total = size_x*sizeof(float);
-        if (check_error(0, total, total) != 0) {
+        if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
 
@@ -168,7 +194,7 @@ int main(int argc, char **argv) {
         toggle2.set(false);
         f6.realize(size_x, t);
         total = size_x*sizeof(float);
-        if (check_error(0, total, total) != 0) {
+        if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
 
@@ -177,7 +203,7 @@ int main(int argc, char **argv) {
         toggle2.set(true);
         f6.realize(size_x, t);
         total = size_x*sizeof(float);
-        if (check_error(0, total, total) != 0) {
+        if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
 
@@ -185,8 +211,7 @@ int main(int argc, char **argv) {
         toggle1.set(false);
         toggle2.set(false);
         f6.realize(size_x, t);
-        total = 0;
-        if (check_error(0, total, total) != 0) {
+        if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
     }
@@ -213,7 +238,7 @@ int main(int argc, char **argv) {
         f8.realize(size_x, size_y, t);
         int peak = size_x*sizeof(int);
         int total = size_x*size_y*sizeof(int);
-        if (check_error(0, peak, total) != 0) {
+        if (check_error(peak, size_y, total/size_y, 0) != 0) {
             return -1;
         }
     }
@@ -238,9 +263,9 @@ int main(int argc, char **argv) {
 
         reset_stats();
         f10.realize(size_x, size_y, t);
-        int min_peak = size_x*sizeof(int);
+        int min_mem_peak = size_x*sizeof(int);
         int total = size_x*size_y*sizeof(int);
-        if (check_error_parallel(0, min_peak, total, total) != 0) {
+        if (check_error_parallel(min_mem_peak, total, size_y, total/size_y, 0) != 0) {
             return -1;
         }
     }
@@ -261,7 +286,7 @@ int main(int argc, char **argv) {
         reset_stats();
         f11.realize(size_x, size_y, t);
         int total = size_x*size_y*sizeof(int);
-        if (check_error(0, total, total) != 0) {
+        if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
     }

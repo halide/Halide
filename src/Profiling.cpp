@@ -9,6 +9,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -57,12 +58,20 @@ private:
 
     Scope<AllocSize> func_alloc_sizes;
 
+    // Strip down the tupple name, e.g. f.0 into f
+    string normalize_name(const string& name) {
+        vector<string> v = split_string(name, ".");
+        internal_assert(v.size() > 0);
+        return v[0];
+    }
+
     int get_func_id(const string& name) {
+        string norm_name = normalize_name(name);
         int idx = -1;
-        map<string, int>::iterator iter = indices.find(name);
+        map<string, int>::iterator iter = indices.find(norm_name);
         if (iter == indices.end()) {
             idx = (int)indices.size();
-            indices[name] = idx;
+            indices[norm_name] = idx;
         } else {
             idx = iter->second;
         }
@@ -260,7 +269,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
             s = Block::make(Store::make("profiling_func_stack_peak_buf", get_value(profiling.func_stack_peak, i), i), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
-        s = Allocate::make("profiling_func_stack_peak_buf", Handle(), {num_funcs}, const_true(), s);
+        s = Allocate::make("profiling_func_stack_peak_buf", Int(32), {num_funcs}, const_true(), s);
     }
 
     for (std::pair<string, int> p : profiling.indices) {
