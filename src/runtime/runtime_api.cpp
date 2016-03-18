@@ -112,6 +112,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_profiler_pipeline_start,
     (void *)&halide_profiler_report,
     (void *)&halide_profiler_reset,
+    (void *)&halide_profiler_stack_peak_update,
     (void *)&halide_release_jit_module,
     (void *)&halide_renderscript_device_interface,
     (void *)&halide_renderscript_initialize_kernels,

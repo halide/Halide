@@ -145,6 +145,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_profiler_memory_free",
         "halide_profiler_pipeline_start",
         "halide_profiler_pipeline_end",
+        "halide_profiler_stack_peak_update",
         "halide_spawn_thread",
         "halide_device_release",
         "halide_start_clock",
