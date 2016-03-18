@@ -129,8 +129,12 @@ namespace {
 template <typename T>
 void sync_compare_max_and_swap(T *ptr, T val) {
     int old_val = *ptr;
-    if (val > old_val) {
-        *ptr = val;
+    while (val > old_val) {
+        int temp = old_val;
+        old_val = __sync_val_compare_and_swap(ptr, old_val, val);
+        if (temp == old_val) {
+            return;
+        }
     }
 }
 
@@ -165,8 +169,6 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const uint64_t *func_names) {
-    //ctx = user_context;
-
     halide_profiler_state *s = halide_profiler_get_state();
 
     ScopedMutexLock lock(&s->lock);
@@ -192,6 +194,12 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
                                             int p_value,
                                             int *f_values) {
+    // Note: Ideally this should not have happened. We shouldn't call this
+    // routine if the max pipeline's stack peak is zero for performance reason.
+    if (p_value == 0) {
+        return;
+    }
+
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
     halide_assert(user_context, p_stats != NULL);
 
@@ -207,7 +215,9 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
     // Update per-func memory stats
     for (int i = 0; i < p_stats->num_funcs; ++i) {
         halide_assert(user_context, p_value >= f_values[i]);
-        sync_compare_max_and_swap(&(p_stats->funcs[i]).stack_peak, f_values[i]);
+        if (f_values[i] != 0) {
+            sync_compare_max_and_swap(&(p_stats->funcs[i]).stack_peak, f_values[i]);
+        }
     }
 }
 
@@ -215,6 +225,11 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
                                           void *pipeline_state,
                                           int func_id,
                                           int incr) {
+    // It's possible to have 'incr' equal to zero if the allocation is not
+    // executed conditionally.
+    if (incr == 0) {
+        return;
+    }
 
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
     halide_assert(user_context, p_stats != NULL);
@@ -246,6 +261,12 @@ WEAK void halide_profiler_memory_free(void *user_context,
                                       void *pipeline_state,
                                       int func_id,
                                       int decr) {
+    // It's possible to have 'decr' equal to zero if the allocation is not
+    // executed conditionally.
+    if (decr == 0) {
+        return;
+    }
+
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
     halide_assert(user_context, p_stats != NULL);
     halide_assert(user_context, func_id >= 0);
@@ -268,7 +289,7 @@ WEAK void halide_profiler_memory_free(void *user_context,
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
 
-    char line_buf[400];
+    char line_buf[1024];
     Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
@@ -280,16 +301,14 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         if (p->num_allocs != 0) {
             alloc_avg = p->memory_total/p->num_allocs;
         }
-        sstr << p->name
-             << "  total time: " << t << " ms"
+        sstr << p->name << "\n"
+             << " total time: " << t << " ms"
              << "  samples: " << p->samples
              << "  runs: " << p->runs
-             << "  time/run: " << t / p->runs << " ms"
-             << "  num_allocs: " << p->num_allocs
-             << "  mem_peak: " << p->memory_peak << " bytes"
-             << "  mem_total: " << p->memory_total << " bytes"
-             << "  alloc_avg: " << alloc_avg << " bytes"
-             << "  stack_peak: " << p->stack_peak << " bytes\n";
+             << "  time/run: " << t / p->runs << " ms\n"
+             << " heap allocations: " << p->num_allocs
+             << "  peak heap usage: " << p->memory_peak << " bytes"
+             << "  peak stack usage: " << p->stack_peak << " bytes\n";
         halide_print(user_context, sstr.str());
         if (p->time || p->memory_total || p->stack_peak) {
             for (int i = 0; i < p->num_funcs; i++) {
@@ -312,16 +331,24 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     percent = fs->time / (p->time / 100);
                 }
                 sstr << "(" << percent << "%)";
-                while (sstr.size() < 55) sstr << " ";
+                while (sstr.size() < 50) sstr << " ";
 
                 int alloc_avg = 0;
                 if (fs->num_allocs != 0) {
                     alloc_avg = fs->memory_total/fs->num_allocs;
                 }
 
-                sstr << "(" << fs->memory_current << ", " << fs->memory_peak
-                     << ", " << fs->memory_total << ", " << fs->num_allocs
-                     << ", " << alloc_avg << ", " << fs->stack_peak << ") bytes\n";
+                if (fs->memory_peak) {
+                    sstr << " peak: " << fs->memory_peak;
+                    while (sstr.size() < 65) sstr << " ";
+                    sstr << " num: " << fs->num_allocs;
+                    while (sstr.size() < 80) sstr << " ";
+                    sstr << " avg: " << alloc_avg;
+                }
+                if (fs->stack_peak > 0) {
+                    sstr << " stack: " << fs->stack_peak;
+                }
+                sstr << "\n";
 
                 halide_print(user_context, sstr.str());
             }
