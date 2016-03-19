@@ -179,6 +179,22 @@ if (WITH_TEST_GENERATORS)
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}_ucon"
                                GENERATOR_ARGS "target=host-register_metadata-user_context")
+    elseif(TEST_SRC STREQUAL "c_plus_plus_name_mangling_aottest.cpp")
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "${GEN_NAME}"
+                               GENERATED_FUNCTION "${FUNC_NAME}"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling"
+                               OUTPUT_LIB_VAR LIB_c_plus_plus_name_mangling)
+    elseif(TEST_SRC STREQUAL "c_plus_plus_name_mangling_define_extern_aottest.cpp")
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "${GEN_NAME}"
+                               GENERATED_FUNCTION "${FUNC_NAME}"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling")
+      target_link_libraries("${TEST_RUNNER}" ${LIB_c_plus_plus_name_mangling})
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
