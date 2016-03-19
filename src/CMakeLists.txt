@@ -226,6 +226,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
   Deinterleave.h
@@ -370,6 +371,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
+  CPlusPlusMangle.cpp
   CSE.cpp
   Debug.cpp
   Debug.cpp
@@ -579,6 +581,26 @@ if (NOT MSVC)
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
+endif()
+
+if (WITH_C_PLUS_PLUS_NAME_MANGLING)
+  execute_process(COMMAND "${LLVM_CONFIG}" --libdir OUTPUT_VARIABLE LLVM_LIB_DIR_UNSTRIPPED)
+  string(STRIP "${LLVM_LIB_DIR_UNSTRIPPED}" LLVM_LIB_DIR)
+  execute_process(COMMAND "${LLVM_CONFIG}" --src-root OUTPUT_VARIABLE LLVM_SRC_ROOT_UNSTRIPPED)
+  string(STRIP "${LLVM_SRC_ROOT_UNSTRIPPED}" LLVM_SRC_ROOT)
+  execute_process(COMMAND "${LLVM_CONFIG}" --obj-root OUTPUT_VARIABLE LLVM_OBJ_ROOT_UNSTRIPPED)
+  string(STRIP "${LLVM_OBJ_ROOT_UNSTRIPPED}" LLVM_OBJ_ROOT)
+
+  foreach (CLANG_LIB clangAST clangFrontend clangBasic clangARCMigrate clangAST clangASTMatchers clangAnalysis clangBasic clangCodeGen clangDriver clangDynamicASTMatchers clangEdit clangFormat clangFrontend clangFrontendTool clangIndex clangLex clangParse clangRewrite clangRewriteCore clangRewriteFrontend clangSema clangSerialization clangStaticAnalyzerCheckers clangStaticAnalyzerCore clangStaticAnalyzerFrontend clangTooling LLVMOption)
+    # Because cmake: The first argument to find_library is sort of a
+    # var name but is used as directly as a cache key thus if we don't
+    # ensure to get a unique var name each time find_library is
+    # called, it reuses the first one it encountered.
+    find_library(RESOLVED_${CLANG_LIB} NAME "${CLANG_LIB}" PATHS ${LLVM_LIB_DIR} NO_DEFAULT_PATH)
+    target_link_libraries(Halide PUBLIC "${RESOLVED_${CLANG_LIB}}")    
+  endforeach()
+  target_include_directories(Halide PRIVATE "${LLVM_SRC_ROOT}/tools/clang/include" "${LLVM_OBJ_ROOT}/tools/clang/include/")
+  message(STATUS "Clang include directories for C++ name mangling: " "${LLVM_SRC_ROOT}/tools/clang/include" " " "${LLVM_OBJ_ROOT}/tools/clang/include/")
 endif()
 
 add_dependencies(Halide

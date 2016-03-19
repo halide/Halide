@@ -2,7 +2,7 @@
 #include "IRPrinter.h"
 #include "CodeGen_X86.h"
 #include "CodeGen_C.h"
-#include "CPlusPlusMangle.cpp"
+#include "CPlusPlusMangle.h"
 #include "Func.h"
 #include "Simplify.h"
 #include "Bounds.h"
