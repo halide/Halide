@@ -1375,6 +1375,22 @@ void check_hvx_all() {
     check("vasr(v*.b,v*.b,r*):sat", hvx_width/1, i8c((i16(i8_1) + i16(i8_2)) >> 4));
     check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, i16c((i32(i16_1) + i32(i16_2)) >> 4));
     check("vasr(v*.w,v*.w,r*):sat", hvx_width/1, i32c((i64(i32_1) + i64(i32_2)) >> 4));
+    // Todo: Move the following tests from test/hexagon/codegen into simd_op_check
+    // 1. vminmax.cpp
+    // 2. vsat.cpp
+    // 3. vselect.cpp
+    // 4. vshuff.cpp
+    // 5. vsplat.cpp
+    // 6. vzero.cpp
+    // 7. vmpyi.cpp
+    // 8. vmpyi-vector-by-scalar.cpp
+    // 9. vmpa.cpp
+    // 10. vmpy.cpp
+    // 11. valign.cpp
+    // 12. vbitwise.cpp
+    // 13. varith.cpp
+    // 14. vmpa-accumulate.cpp
+    // 15. vdmpy.cpp
 #endif
 }
 
