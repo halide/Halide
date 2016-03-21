@@ -80,6 +80,6 @@ private:
     Func mandelbrot{"mandelbrot"};
 };
 
-RegisterGenerator<Mandelbrot> register_my_gen{"mandelbrot"};
+RegisterGenerator<Mandelbrot> register_mandlebrot_gen{"mandelbrot"};
 
 }  // namespace

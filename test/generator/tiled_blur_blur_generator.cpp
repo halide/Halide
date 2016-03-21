@@ -34,6 +34,6 @@ public:
         return blur;
     }
 };
-Halide::RegisterGenerator<TiledBlurBlur> register_my_gen{"tiled_blur_blur"};
+Halide::RegisterGenerator<TiledBlurBlur> register_tiled_blur_blur_gen{"tiled_blur_blur"};
 
 }  // namespace

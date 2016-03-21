@@ -3,13 +3,13 @@
 
 using namespace Halide;
 
-int memory_peak = 0;
+int heap_peak = 0;
 int num_mallocs = 0;
 int malloc_avg = 0;
 int stack_peak = 0;
 
 void reset_stats() {
-    memory_peak = 0;
+    heap_peak = 0;
     num_mallocs = 0;
     malloc_avg = 0;
     stack_peak = 0;
@@ -17,16 +17,16 @@ void reset_stats() {
 
 void my_print(void *, const char *msg) {
     float this_ms;
-    int idx, this_percentage, this_memory_peak;
+    int idx, this_percentage, this_heap_peak;
     int this_num_mallocs, this_malloc_avg, this_stack_peak;
     int val;
 
     val = sscanf(msg, " g_%d: %fms (%d%%) peak: %d num: %d avg: %d",
-        &idx, &this_ms, &this_percentage, &this_memory_peak,
+        &idx, &this_ms, &this_percentage, &this_heap_peak,
         &this_num_mallocs, &this_malloc_avg);
     printf("%s\n", msg);
     if (val == 6) {
-        memory_peak = this_memory_peak;
+        heap_peak = this_heap_peak;
         num_mallocs = this_num_mallocs;
         malloc_avg = this_malloc_avg;
     }
@@ -40,13 +40,12 @@ void my_print(void *, const char *msg) {
 }
 
 // Return 0 if there is no error found
-int check_error(int exp_mem_peak, int exp_num_mallocs,
+int check_error(int exp_heap_peak, int exp_num_mallocs,
                 int exp_malloc_avg, int exp_stack_peak) {
-    /*printf("Memory memory_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
-            "stack_peak: %d\n", memory_peak, memory_total, num_mallocs,
-            malloc_avg, stack_peak);*/
-    if (memory_peak != exp_mem_peak) {
-        printf("Peak memory was %d instead of %d\n", memory_peak, exp_mem_peak);
+    /*printf("Memory heap_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
+            "stack_peak: %d\n", heap_peak, num_mallocs, malloc_avg, stack_peak);*/
+    if (heap_peak != exp_heap_peak) {
+        printf("Peak heap was %d instead of %d\n", heap_peak, exp_heap_peak);
         return -1;
     }
     if (num_mallocs != exp_num_mallocs) {
@@ -66,14 +65,13 @@ int check_error(int exp_mem_peak, int exp_num_mallocs,
 
 
 // Return 0 if there is no error found
-int check_error_parallel(int min_mem_peak, int max_mem_peak, int exp_num_mallocs,
+int check_error_parallel(int min_heap_peak, int max_heap_peak, int exp_num_mallocs,
                          int exp_malloc_avg, int exp_stack_peak) {
-    /*printf("Memory memory_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
-            "stack_peak: %d\n", memory_peak, memory_total, num_mallocs,
-            malloc_avg, stack_peak);*/
-    if (memory_peak < min_mem_peak || memory_peak > max_mem_peak) {
-        printf("Peak memory was %d which was outside the range of [%d, %d]\n",
-               memory_peak, min_mem_peak, max_mem_peak);
+    /*printf("Memory heap_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
+            "stack_peak: %d\n", heap_peak, num_mallocs, malloc_avg, stack_peak);*/
+    if (heap_peak < min_heap_peak || heap_peak > max_heap_peak) {
+        printf("Peak heap was %d which was outside the range of [%d, %d]\n",
+               heap_peak, min_heap_peak, max_heap_peak);
         return -1;
     }
     if (num_mallocs != exp_num_mallocs) {
@@ -263,9 +261,9 @@ int main(int argc, char **argv) {
 
         reset_stats();
         f10.realize(size_x, size_y, t);
-        int min_mem_peak = size_x*sizeof(int);
+        int min_heap_peak = size_x*sizeof(int);
         int total = size_x*size_y*sizeof(int);
-        if (check_error_parallel(min_mem_peak, total, size_y, total/size_y, 0) != 0) {
+        if (check_error_parallel(min_heap_peak, total, size_y, total/size_y, 0) != 0) {
             return -1;
         }
     }
@@ -287,6 +285,28 @@ int main(int argc, char **argv) {
         f11.realize(size_x, size_y, t);
         int total = size_x*size_y*sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
+            return -1;
+        }
+    }
+
+    {
+        printf("Running parallel stack allocation test...\n");
+        const int size_x = 10;
+        const int size_y = 10;
+        Func f12("f_12"), g8("g_8");
+        g8(x, y) = x;
+        f12(x, y) = g8(x%size_x, y%size_y);
+        g8.store_at(f12, y).compute_at(f12, y);
+
+        f12.parallel(y);
+
+        f12.set_custom_print(&my_print);
+        //f12.print_loop_nest();
+
+        reset_stats();
+        f12.realize(size_x, size_y, t);
+        int stack_size = size_x*size_y*sizeof(int);
+        if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;
         }
     }
