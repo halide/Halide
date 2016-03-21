@@ -9,7 +9,7 @@
 
 using namespace Halide::Tools;
 
-int32_t extract_value_global(const int32_t *arg) {
+int32_t extract_value_global(int32_t *arg) {
     return *arg;
 }
 
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     Image<double> result(100);
 
     int ptr_arg = 42;
-    assert(HalideTest::c_plus_plus_name_mangling_define_extern(input, &ptr_arg, result) == 0);
+    assert(HalideTest::c_plus_plus_name_mangling_define_extern(input, &ptr_arg, &ptr_arg, result) == 0);
 
     printf("Success!\n");
     return 0;
