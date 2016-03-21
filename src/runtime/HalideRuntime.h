@@ -857,6 +857,23 @@ struct halide_type_of_helper<T *> {
     }
 };
 
+template<typename T>
+struct halide_type_of_helper<T &> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+
+// Halide runtime does not require C++11
+#if __cplusplus > 199711L
+template<typename T>
+struct halide_type_of_helper<T &&> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+#endif
+
 template<>
 struct halide_type_of_helper<float> {
     operator halide_type_t() { return halide_type_t(halide_type_float, 32); }

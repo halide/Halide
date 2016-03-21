@@ -9,7 +9,7 @@
 
 using namespace Halide::Tools;
 
-int32_t extract_value_global(const int32_t *arg) {
+int32_t extract_value_global(int32_t *arg) {
     return *arg;
 }
 
@@ -32,8 +32,8 @@ int main(int argc, char **argv) {
 
     int ptr_arg = 42;
     assert(HalideTest::c_plus_plus_name_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
-						 -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
-						 &ptr_arg, result) == 0);
+                                                 -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
+                                                 &ptr_arg, &ptr_arg, result) == 0);
 
     printf("Success!\n");
     return 0;

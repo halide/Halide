@@ -150,24 +150,29 @@ clang::QualType halide_type_to_clang_type(clang::ASTContext &context, PreviousDe
                 }
             }
 
-            // TODO: Halide's CodeGen_C support for generating the
-            // prototypes currently always makes non-buffer_t
-            // arguemnts const, hence we do so here. This somewhat
-            // makes sense as there is no way to specify scalar return
-            // values from a Halide program.  However, this would be
-            // better handled by ensuring the Const flag is set by the
-            // Param mechanism.
-            if (type.handle_type->inner_name.cpp_type_qualifiers & halide_cplusplus_type_name::Const ||
-                !(type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct &&
-                  type.handle_type->inner_name.name == "buffer_t")) {
-                base_type.addConst();
+            for (uint8_t modifier : type.handle_type->cpp_type_modifiers) {
+                if (modifier & halide_handle_cplusplus_type::Const) {
+                    base_type.addConst();
+                }
+                if (modifier & halide_handle_cplusplus_type::Volatile) {
+                    base_type.addVolatile();
+                }
+                if (modifier & halide_handle_cplusplus_type::Restrict) {
+                    base_type.addRestrict();
+                }
+                if (modifier & halide_handle_cplusplus_type::Pointer) {
+                    base_type = context.getPointerType(base_type);
+                } else {
+                    break;
+                }
             }
-            if (type.handle_type->inner_name.cpp_type_qualifiers & halide_cplusplus_type_name::Volatile) {
-                base_type.addVolatile();
+ 
+            if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+                    base_type = context.getLValueReferenceType(base_type);
+            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+                    base_type = context.getRValueReferenceType(base_type);
             }
-            for (int32_t i = 0; i <= type.handle_type->extra_indirection_levels; i++)  {
-                base_type = context.getPointerType(base_type);
-            }
+
             return base_type;
         }
         // Otherwise return void *

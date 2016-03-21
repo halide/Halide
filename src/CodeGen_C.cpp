@@ -245,7 +245,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
              (!type.handle_type->namespaces.empty() ||
               !type.handle_type->enclosing_types.empty() ||
               type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
-            oss << "void *";
+            oss << "const void *";
         } else {
             if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
                 oss << "struct ";
@@ -262,9 +262,28 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
                     oss << type.handle_type->enclosing_types[i].name << "::";
                 }
             }
-            oss << type.handle_type->inner_name.name << " *";
-            for (int32_t i = 0; i < type.handle_type->extra_indirection_levels; i++) {
-                oss << "*";
+            oss << type.handle_type->inner_name.name;
+            if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+                oss << " &";
+            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+                oss << " &&";
+            }
+            for (auto modifier : type.handle_type->cpp_type_modifiers) {
+                if (modifier & halide_handle_cplusplus_type::Const) {
+                    oss << " const";
+                }
+                if (modifier & halide_handle_cplusplus_type::Volatile) {
+                    oss << " volatile";
+                }
+                if (modifier & halide_handle_cplusplus_type::Restrict) {
+                    oss << " restrict";
+                }
+                if (modifier & halide_handle_cplusplus_type::Pointer) {
+                    oss << " *";
+                } else {
+                    break;
+                }
+              
             }
         }
     } else {
@@ -509,8 +528,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << print_name(args[i].name)
                    << "_buffer";
         } else {
-            stream << "const "
-                   << print_type(args[i].type, AppendSpace)
+            stream << print_type(args[i].type, AppendSpace)
                    << print_name(args[i].name);
         }
 
