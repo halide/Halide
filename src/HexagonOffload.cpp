@@ -182,8 +182,8 @@ public:
         //compile_module_to_shared_object(device_code, "/tmp/hex.so");
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
-        compile_module_to_object(device_code, "hex.o");
-        system("$HEX_CLANG hex.o -shared -o hex.so");
+        compile_module_to_llvm_bitcode(device_code, "hex.bc");
+        system("$HEX_CLANG hex.bc -fPIC -shared -o hex.so");
 
         std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
         object.resize(so.tellg());
