@@ -601,7 +601,7 @@ endif()
     # ensure to get a unique var name each time find_library is
     # called, it reuses the first one it encountered.
     find_library(RESOLVED_${CLANG_LIB} NAME "${CLANG_LIB}" PATHS ${LLVM_LIB_DIR} NO_DEFAULT_PATH)
-    target_link_libraries(Halide PUBLIC "${RESOLVED_${CLANG_LIB}}")    
+    target_link_libraries(Halide PRIVATE "${RESOLVED_${CLANG_LIB}}")    
   endforeach()
   # 
   target_include_directories(Halide PRIVATE "${LLVM_SRC_ROOT}/tools/clang/include" "${LLVM_OBJ_ROOT}/tools/clang/include/" "${LLVM_INCLUDE}/tools/clang/include")
