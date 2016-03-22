@@ -1359,22 +1359,87 @@ void check_hvx_all() {
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, u32(x/2), u32(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, i32(x/2), i32(x/2)));
 
-    // We know the following don't work yet; They are WIP. Do this to sort of
-    // XFAIL them.
-#if 0
+    check("vmax(v*.ub,v*.ub)", hvx_width, max(u8_1, u8_2));
+    check("vmax(v*.uh,v*.uh)", hvx_width/2, max(u16_1, u16_2));
+    check("vmax(v*.h,v*.h)", hvx_width/2, max(i16_1, i16_2));
+    check("vmax(v*.w,v*.w)", hvx_width/4, max(i32_1, i32_2));
+    check("vmin(v*.ub,v*.ub)", hvx_width, min(u8_1, u8_2));
+    check("vmin(v*.uh,v*.uh)", hvx_width/2, min(u16_1, u16_2));
+    check("vmin(v*.h,v*.h)", hvx_width/2, min(i16_1, i16_2));
+    check("vmin(v*.w,v*.w)", hvx_width/4, min(i32_1, i32_2));
+
+    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 < i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 < u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 < i16_2, i16_1, i16_2));
+    check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 < u16_2, u16_1, u16_2));
+    check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 < i32_2, i32_1, i32_2));
+    check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 < u32_2, u32_1, u32_2));
+
+    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 > i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 > u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 > i16_2, i16_1, i16_2));
+    check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 > u16_2, u16_1, u16_2));
+    check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 > i32_2, i32_1, i32_2));
+    check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 > u32_2, u32_1, u32_2));
+
+    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 <= i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 <= u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 <= i16_2, i16_1, i16_2));
+    check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 <= u16_2, u16_1, u16_2));
+    check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 <= i32_2, i32_1, i32_2));
+    check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 <= u32_2, u32_1, u32_2));
+
+    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 >= i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 >= u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 >= i16_2, i16_1, i16_2));
+    check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 >= u16_2, u16_1, u16_2));
+    check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 >= i32_2, i32_1, i32_2));
+    check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 >= u32_2, u32_1, u32_2));
+
+    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(i8_1 == i8_2, i8_1, i8_2));
+    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(u8_1 == u8_2, u8_1, u8_2));
+    check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(i16_1 == i16_2, i16_1, i16_2));
+    check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(u16_1 == u16_2, u16_1, u16_2));
+    check("vcmp.eq(v*.w,v*.w)", hvx_width/4, select(i32_1 == i32_2, i32_1, i32_2));
+    check("vcmp.eq(v*.w,v*.w)", hvx_width/4, select(u32_1 == u32_2, u32_1, u32_2));
+
+    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(i8_1 != i8_2, i8_1, i8_2));
+    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(u8_1 != u8_2, u8_1, u8_2));
+    check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(i16_1 != i16_2, i16_1, i16_2));
+    check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(u16_1 != u16_2, u16_1, u16_2));
+    check("vcmp.eq(v*.w,v*.w)", hvx_width/4, select(i32_1 != i32_2, i32_1, i32_2));
+    check("vcmp.eq(v*.w,v*.w)", hvx_width/4, select(u32_1 != u32_2, u32_1, u32_2));
+
     check("vabsdiff(v*.ub,v*.ub)", hvx_width/1, absd(u8_1, u8_2));
     check("vabsdiff(v*.uh,v*.uh)", hvx_width/2, absd(u16_1, u16_2));
-    check("vabsdiff(v*.uw,v*.uw)", hvx_width/4, absd(u32_1, u32_2));
-    check("vabsdiff(v*.b,v*.b)", hvx_width/1, absd(i8_1, i8_2));
     check("vabsdiff(v*.h,v*.h)", hvx_width/2, absd(i16_1, i16_2));
     check("vabsdiff(v*.w,v*.w)", hvx_width/4, absd(i32_1, i32_2));
 
+    // We know the following don't work yet; They are WIP. Do this to sort of
+    // XFAIL them.
+#if 0
     check("vasr(v*.ub,v*.ub,r*):sat", hvx_width/1, u8c((u16(u8_1) + u16(u8_2)) >> 4));
     check("vasr(v*.uh,v*.uh,r*):sat", hvx_width/1, u16c((u32(u16_1) + u32(u16_2)) >> 4));
     check("vasr(v*.uw,v*.uw,r*):sat", hvx_width/1, u32c((u64(u32_1) + u64(u32_2)) >> 4));
     check("vasr(v*.b,v*.b,r*):sat", hvx_width/1, i8c((i16(i8_1) + i16(i8_2)) >> 4));
     check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, i16c((i32(i16_1) + i32(i16_2)) >> 4));
     check("vasr(v*.w,v*.w,r*):sat", hvx_width/1, i32c((i64(i32_1) + i64(i32_2)) >> 4));
+    // Todo: Move the following tests from test/hexagon/codegen into simd_op_check
+    // 1. vminmax.cpp <DONE>
+    // 2. vsat.cpp
+    // 3. vselect.cpp <DONE>
+    // 4. vshuff.cpp
+    // 5. vsplat.cpp
+    // 6. vzero.cpp
+    // 7. vmpyi.cpp
+    // 8. vmpyi-vector-by-scalar.cpp
+    // 9. vmpa.cpp
+    // 10. vmpy.cpp
+    // 11. valign.cpp
+    // 12. vbitwise.cpp
+    // 13. varith.cpp
+    // 14. vmpa-accumulate.cpp
+    // 15. vdmpy.cpp
 #endif
 }
 

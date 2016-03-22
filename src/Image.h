@@ -65,7 +65,7 @@ public:
     EXPORT ImageBase(Type t, const buffer_t *b, const std::string &name = "");
 
     /** Get the name of this image. */
-    EXPORT const std::string &name();
+    EXPORT const std::string &name() const;
 
     /** Manually copy-back data to the host, if it's on a device. This
      * is done for you if you construct an image from a buffer, but
