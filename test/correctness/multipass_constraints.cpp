@@ -33,11 +33,11 @@ int main(int argc, char **argv) {
     out.infer_input_bounds(out_buf);
 
     if (in.get().min(0) != -4 ||
-        in.get().extent(0) != 34 ||
+        in.get().extent(0) != 32 ||
         in.get().min(1) != 1 ||
         in.get().extent(1) != 10 ||
         out_buf.min(0) != 0 ||
-        out_buf.extent(0) != 24 ||
+        out_buf.extent(0) != 22 ||
         out_buf.min(1) != 2 ||
         out_buf.extent(1) != 8) {
 
