@@ -21,10 +21,10 @@ void my_print(void *, const char *msg) {
     int this_num_mallocs, this_malloc_avg, this_stack_peak;
     int val;
 
+    printf("%s\n", msg);
     val = sscanf(msg, " g_%d: %fms (%d%%) peak: %d num: %d avg: %d",
         &idx, &this_ms, &this_percentage, &this_heap_peak,
         &this_num_mallocs, &this_malloc_avg);
-    printf("%s\n", msg);
     if (val == 6) {
         heap_peak = this_heap_peak;
         num_mallocs = this_num_mallocs;
@@ -33,7 +33,6 @@ void my_print(void *, const char *msg) {
 
     val = sscanf(msg, " g_%d: %fms (%d%%) stack: %d",
         &idx, &this_ms, &this_percentage, &this_stack_peak);
-    printf("%s\n", msg);
     if (val == 4) {
         stack_peak = this_stack_peak;
     }
@@ -105,7 +104,6 @@ int main(int argc, char **argv) {
         g1.compute_root();
 
         f1.set_custom_print(&my_print);
-        //f1.print_loop_nest();
 
         reset_stats();
         f1.realize(size_x, size_y, t);
@@ -127,7 +125,6 @@ int main(int argc, char **argv) {
         g2.compute_root();
 
         f2.set_custom_print(&my_print);
-        //f2.print_loop_nest();
 
         reset_stats();
         f2.realize(size_x, size_y, t);
@@ -146,7 +143,6 @@ int main(int argc, char **argv) {
         g3.compute_root();
 
         f3.set_custom_print(&my_print);
-        //f3.print_loop_nest();
 
         reset_stats();
         f3.realize(1000, 1000, t);
@@ -174,7 +170,6 @@ int main(int argc, char **argv) {
         f5.compute_root();
 
         f6.set_custom_print(&my_print);
-        //f6.print_loop_nest();
 
         int total = 0;
 
@@ -227,10 +222,7 @@ int main(int argc, char **argv) {
         g5.store_at(f8, y).compute_at(f8, y);
         f7.compute_at(f8, y);
 
-        //f8.parallel(y);
-
         f8.set_custom_print(&my_print);
-        //f8.print_loop_nest();
 
         reset_stats();
         f8.realize(size_x, size_y, t);
@@ -257,7 +249,6 @@ int main(int argc, char **argv) {
         f10.parallel(y);
 
         f10.set_custom_print(&my_print);
-        //f10.print_loop_nest();
 
         reset_stats();
         f10.realize(size_x, size_y, t);
@@ -279,7 +270,6 @@ int main(int argc, char **argv) {
         g7.compute_root();
 
         f11.set_custom_print(&my_print);
-        //f11.print_loop_nest();
 
         reset_stats();
         f11.realize(size_x, size_y, t);
@@ -301,7 +291,6 @@ int main(int argc, char **argv) {
         f12.parallel(y);
 
         f12.set_custom_print(&my_print);
-        //f12.print_loop_nest();
 
         reset_stats();
         f12.realize(size_x, size_y, t);

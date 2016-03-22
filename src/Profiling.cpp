@@ -18,20 +18,6 @@ using std::map;
 using std::string;
 using std::vector;
 
-namespace {
-
-template <typename K, typename V>
-inline V get_value(const map <K, V>& m, const K& key) {
-    typename map<K, V>::const_iterator it = m.find(key);
-    if (it == m.end()) {
-        return 0;
-    } else {
-        return it->second;
-    }
-}
-
-}
-
 class InjectProfiling : public IRMutator {
 public:
     map<string, int> indices;   // maps from func name -> index in buffer.
@@ -45,8 +31,8 @@ public:
         stack.push_back(0);
     }
 
-    map<int, Expr> func_stack_current; // map from func id -> current stack allocation
-    map<int, Expr> func_stack_peak; // map from func id -> peak stack allocation
+    map<int, int> func_stack_current; // map from func id -> current stack allocation
+    map<int, int> func_stack_peak; // map from func id -> peak stack allocation
 
 private:
     using IRMutator::visit;
@@ -123,9 +109,10 @@ private:
         func_alloc_sizes.push(op->name, {on_stack, size});
 
         if (!is_zero(size) && on_stack) {
-            func_stack_current[idx] = simplify(size + get_value(func_stack_current, idx));
-            func_stack_peak[idx] = simplify(
-                max(get_value(func_stack_peak, idx), get_value(func_stack_current, idx)));
+            const int64_t *int_size = as_const_int(size);
+            internal_assert(int_size != NULL); // Stack size is always a const int
+            func_stack_current[idx] += *int_size;
+            func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
             debug(1) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name
                      << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
         }
@@ -172,7 +159,10 @@ private:
                                            {profiler_pipeline_state, idx, alloc.size}, Call::Extern);
                 stmt = Block::make(Evaluate::make(set_task), stmt);
             } else {
-                func_stack_current[idx] = simplify(get_value(func_stack_current, idx) - alloc.size);
+                const int64_t *int_size = as_const_int(alloc.size);
+                internal_assert(int_size != NULL);
+
+                func_stack_current[idx] -= *int_size;
                 debug(1) << "  Free on stack: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name
                          << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
             }
@@ -240,13 +230,12 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     Expr stop_profiler = Call::make(Int(32), Call::register_destructor,
                                     {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
 
-    Expr stack_peak = 0;
+    int stack_peak = 0;
     for (const auto& iter : profiling.func_stack_peak) {
-        stack_peak = max(stack_peak, iter.second);
+        stack_peak = std::max(stack_peak, iter.second);
     }
-    stack_peak = simplify(stack_peak);
 
-    if (!is_zero(stack_peak)) {
+    if (stack_peak > 0) {
         Expr func_stack_peak_buf = Load::make(Handle(), "profiling_func_stack_peak_buf", 0, Buffer(), Parameter());
         func_stack_peak_buf = Call::make(Handle(), Call::address_of, {func_stack_peak_buf}, Call::Intrinsic);
 
@@ -264,9 +253,9 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     s = Block::make(AssertStmt::make(profiler_token >= 0, profiler_token), s);
     s = LetStmt::make("profiler_token", start_profiler, s);
 
-    if (!is_zero(stack_peak)) {
+    if (stack_peak > 0) {
         for (int i = num_funcs-1; i >= 0; --i) {
-            s = Block::make(Store::make("profiling_func_stack_peak_buf", get_value(profiling.func_stack_peak, i), i), s);
+            s = Block::make(Store::make("profiling_func_stack_peak_buf", profiling.func_stack_peak[i], i), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
         s = Allocate::make("profiling_func_stack_peak_buf", Int(32), {num_funcs}, const_true(), s);
