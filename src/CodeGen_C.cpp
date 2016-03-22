@@ -1262,7 +1262,7 @@ void CodeGen_C::visit(const Allocate *op) {
                            << op->name << " is constant but exceeds 2^31 - 1.\n";
             } else {
                 size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
-                if (target.is_allocation_on_stack(stack_bytes)) {
+                if (can_allocation_fit_on_stack(stack_bytes)) {
                     on_stack = true;
                 }
             }

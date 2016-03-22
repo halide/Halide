@@ -178,5 +178,12 @@ bool function_takes_user_context(const std::string &name) {
     return starts_with(name, "halide_error_");
 }
 
+bool can_allocation_fit_on_stack(int32_t size) {
+    if (size <= 0) {
+        user_error << "Allocation size should be a positive number\n";
+    }
+    return (size <= 1024 * 16);
+}
+
 }
 }
