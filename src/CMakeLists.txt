@@ -584,12 +584,16 @@ if (NOT MSVC)
 endif()
 
 if (WITH_C_PLUS_PLUS_NAME_MANGLING)
+if(MSVC)
+  set(LLVM_LIB_DIR "${LLVM_LIB}")
+else()
   execute_process(COMMAND "${LLVM_CONFIG}" --libdir OUTPUT_VARIABLE LLVM_LIB_DIR_UNSTRIPPED)
   string(STRIP "${LLVM_LIB_DIR_UNSTRIPPED}" LLVM_LIB_DIR)
   execute_process(COMMAND "${LLVM_CONFIG}" --src-root OUTPUT_VARIABLE LLVM_SRC_ROOT_UNSTRIPPED)
   string(STRIP "${LLVM_SRC_ROOT_UNSTRIPPED}" LLVM_SRC_ROOT)
   execute_process(COMMAND "${LLVM_CONFIG}" --obj-root OUTPUT_VARIABLE LLVM_OBJ_ROOT_UNSTRIPPED)
   string(STRIP "${LLVM_OBJ_ROOT_UNSTRIPPED}" LLVM_OBJ_ROOT)
+endif()
 
   foreach (CLANG_LIB clangAST clangFrontend clangBasic clangARCMigrate clangAST clangASTMatchers clangAnalysis clangBasic clangCodeGen clangDriver clangDynamicASTMatchers clangEdit clangFormat clangFrontend clangFrontendTool clangIndex clangLex clangParse clangRewrite clangRewriteCore clangRewriteFrontend clangSema clangSerialization clangStaticAnalyzerCheckers clangStaticAnalyzerCore clangStaticAnalyzerFrontend clangTooling LLVMOption)
     # Because cmake: The first argument to find_library is sort of a
@@ -599,8 +603,9 @@ if (WITH_C_PLUS_PLUS_NAME_MANGLING)
     find_library(RESOLVED_${CLANG_LIB} NAME "${CLANG_LIB}" PATHS ${LLVM_LIB_DIR} NO_DEFAULT_PATH)
     target_link_libraries(Halide PUBLIC "${RESOLVED_${CLANG_LIB}}")    
   endforeach()
-  target_include_directories(Halide PRIVATE "${LLVM_SRC_ROOT}/tools/clang/include" "${LLVM_OBJ_ROOT}/tools/clang/include/")
-  message(STATUS "Clang include directories for C++ name mangling: " "${LLVM_SRC_ROOT}/tools/clang/include" " " "${LLVM_OBJ_ROOT}/tools/clang/include/")
+  # 
+  target_include_directories(Halide PRIVATE "${LLVM_SRC_ROOT}/tools/clang/include" "${LLVM_OBJ_ROOT}/tools/clang/include/" "${LLVM_INCLUDE}/tools/clang/include")
+  message(STATUS "Clang include directories for C++ name mangling: " "${LLVM_SRC_ROOT}/tools/clang/include" " " "${LLVM_OBJ_ROOT}/tools/clang/include/" "${LLVM_INCLUDE}/tools/clang/include")
 endif()
 
 add_dependencies(Halide
