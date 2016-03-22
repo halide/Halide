@@ -15,6 +15,7 @@
 #include "Util.h"
 #include "LLVM_Runtime_Linker.h"
 #include "MatlabWrapper.h"
+#include "IntegerDivisionTable.h"
 
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
@@ -1259,9 +1260,130 @@ void CodeGen_LLVM::visit(const Mul *op) {
     }
 }
 
+Value *CodeGen_LLVM::unsigned_mulhi_shr(Value *a, Value *b, int shr) {
+    llvm::Type *ty = a->getType();
+    llvm::VectorType *vty = dyn_cast<VectorType>(ty);
+    llvm::Type *element_ty = vty ? vty->getElementType() : ty;
+    llvm::Type *wide_ty = llvm::IntegerType::get(ty->getContext(), element_ty->getIntegerBitWidth() * 2);
+    if (vty) {
+        wide_ty = llvm::VectorType::get(wide_ty, vty->getNumElements());
+    }
+
+    // We assume the inputs are unsigned, so we zero extend.
+    Value *a_wide = builder->CreateIntCast(a, wide_ty, false);
+    Value *b_wide = builder->CreateIntCast(b, wide_ty, false);
+    Value *p_wide = builder->CreateMul(a_wide, b_wide);
+
+    // Do the shift (add 8 or 16 or 32 to narrow back down)
+    Constant *shift_amount = ConstantInt::get(wide_ty, shr + element_ty->getIntegerBitWidth());
+    Value *p = builder->CreateLShr(p_wide, shift_amount);
+    return builder->CreateIntCast(p, ty, true);
+}
+
+Value *CodeGen_LLVM::sorted_avg(Value *a, Value *b) {
+    // b > a, so the following works without widening:
+    // a + (b - a)/2
+    Value *diff = builder->CreateSub(b, a);
+    diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
+    return builder->CreateAdd(a, diff);
+}
+
+
 void CodeGen_LLVM::visit(const Div *op) {
+    user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
+
+    // Detect if it's a small int division
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
+
+    int shift_amount;
+    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
+
     if (op->type.is_float()) {
         value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
+    } else if (power_of_two && op->type.is_int()) {
+        Value *numerator = codegen(op->a);
+        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
+        value = builder->CreateAShr(numerator, shift);
+    } else if (power_of_two && op->type.is_uint()) {
+        Value *numerator = codegen(op->a);
+        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
+        value = builder->CreateLShr(numerator, shift);
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_int_divisor > 1 &&
+               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+
+        int64_t multiplier, shift;
+        if (op->type.bits() == 32) {
+            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
+        } else if (op->type.bits() == 16) {
+            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
+        } else {
+            // 8 bit
+            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
+            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
+        }
+
+        Value *val = codegen(op->a);
+
+        // Make an all-ones mask if the numerator is negative
+        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits()-1)));
+        // Flip the numerator bits if the mask is high.
+        Value *flipped = builder->CreateXor(sign, val);
+
+        // Grab the multiplier.
+        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
+
+        // Widening multiply, keep high half, shift
+        val = unsigned_mulhi_shr(flipped, mult, shift);
+
+        // Maybe flip the bits again
+        value = builder->CreateXor(val, sign);
+
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
+
+        int64_t method, multiplier, shift;
+        if (op->type.bits() == 32) {
+            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
+        } else if (op->type.bits() == 16) {
+            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
+        } else {
+            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
+            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
+            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
+        }
+
+        internal_assert(method != 0)
+            << "method 0 division is for powers of two and should have been handled elsewhere\n";
+
+        Value *num = codegen(op->a);
+
+        // Widen, multiply, narrow
+        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
+        Value *val = unsigned_mulhi_shr(num, mult, method == 1 ? shift : 0);
+
+        if (method == 2) {
+            // Average with original numerator.
+            val = sorted_avg(val, num);
+
+            // Do the final shift
+            if (shift) {
+                val = builder->CreateLShr(val, ConstantInt::get(llvm_type_of(op->type), shift));
+            }
+        }
+
+        value = val;
     } else if (op->type.is_uint()) {
         value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {

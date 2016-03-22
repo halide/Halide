@@ -8,7 +8,6 @@
 #include "Debug.h"
 #include "Util.h"
 #include "Simplify.h"
-#include "IntegerDivisionTable.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 
@@ -469,13 +468,36 @@ void CodeGen_ARM::visit(const Mul *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_ARM::visit(const Div *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
+Value *CodeGen_ARM::sorted_avg(Value *a, Value *b) {
+    internal_assert(a->getType() == b->getType());
+    llvm::Type *ty = a->getType();
+    if (!neon_intrinsics_disabled() && ty->isVectorTy()) {
+        if (ty->getScalarSizeInBits() == 32) {
+            if (target.bits == 32) {
+                return call_intrin(ty, 2, "llvm.arm.neon.vhaddu.v2i32", {a, b});
+            } else {
+                return call_intrin(ty, 2, "llvm.aarch64.neon.uhadd.v2i32", {a, b});
+            }
+        } else if (ty->getScalarSizeInBits() == 16) {
+            if (target.bits == 32) {
+                return call_intrin(ty, 4, "llvm.arm.neon.vhaddu.v4i16", {a, b});
+            } else {
+                return call_intrin(ty, 4, "llvm.aarch64.neon.uhadd.v4i16", {a, b});
+            }
+        } else if (ty->getScalarSizeInBits() == 8) {
+            if (target.bits == 32) {
+                return call_intrin(ty, 8, "llvm.arm.neon.vhaddu.v8i8", {a, b});
+            } else {
+                return call_intrin(ty, 8, "llvm.aarch64.neon.uhadd.v8i8", {a, b});
+            }
+        }
     }
+    return CodeGen_Posix::sorted_avg(a, b);
+}
 
-    if (op->type.is_vector() && is_two(op->b) &&
+void CodeGen_ARM::visit(const Div *op) {
+    if (!neon_intrinsics_disabled() &&
+        op->type.is_vector() && is_two(op->b) &&
         (op->a.as<Add>() || op->a.as<Sub>())) {
         vector<Expr> matches;
         for (size_t i = 0; i < averagings.size(); i++) {
@@ -485,148 +507,7 @@ void CodeGen_ARM::visit(const Div *op) {
             }
         }
     }
-
-    // Detect if it's a small int division
-    const int64_t *const_int_divisor = as_const_int(op->b);
-    const uint64_t *const_uint_divisor = as_const_uint(op->b);
-
-    // Check if the divisor is a power of two
-    int shift_amount;
-    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
-
-    vector<Expr> matches;
-    if (power_of_two && op->type.is_int()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateAShr(numerator, shift);
-    } else if (power_of_two && op->type.is_uint()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateLShr(numerator, shift);
-    } else if (const_int_divisor &&
-               op->type.is_int() &&
-               (op->type.bits() == 32 || op->type.bits() == 16 || op->type.bits() == 8) &&
-               *const_int_divisor > 1 &&
-               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
-
-        int64_t multiplier, shift;
-        if (op->type.bits() == 32) {
-            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
-        } else if (op->type.bits() == 16) {
-            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
-        } else {
-            // 8 bit
-            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
-        }
-
-        Value *val = codegen(op->a);
-
-        // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits()-1)));
-        // Flip the numerator bits if the mask is high
-        Value *flipped = builder->CreateXor(sign, val);
-        // Grab the multiplier
-        Value *mult = codegen(make_const(op->type, (int)multiplier));
-        // Widening multiply
-        llvm::Type *narrower = llvm_type_of(op->type);
-        llvm::Type *wider = llvm_type_of(Int(op->type.bits()*2, op->type.lanes()));
-        // flipped's high bit is zero, so it's ok to zero-extend it
-        Value *flipped_wide = builder->CreateIntCast(flipped, wider, false);
-        Value *mult_wide = builder->CreateIntCast(mult, wider, false);
-        Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
-        // Do the shift (add 8 or 16 to narrow back down)
-        Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits()));
-        val = builder->CreateLShr(wide_val, shift_amount);
-        val = builder->CreateIntCast(val, narrower, true);
-        // Maybe flip the bits again
-        value = builder->CreateXor(val, sign);
-
-    } else if (const_uint_divisor &&
-               op->type.is_uint() &&
-               (op->type.bits() == 32 || op->type.bits() == 16 || op->type.bits() == 8) &&
-               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
-
-        int64_t method, multiplier, shift;
-        if (op->type.bits() == 32) {
-            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
-        } else if (op->type.bits() == 16) {
-            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
-        } else {
-            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
-            multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
-        }
-
-        internal_assert(method != 0)
-            << "method 0 division is for powers of two and should have been handled elsewhere\n";
-
-        Value *num = codegen(op->a);
-
-        // Widen
-        llvm::Type *narrower = llvm_type_of(op->type);
-        llvm::Type *wider = llvm_type_of(UInt(op->type.bits()*2, op->type.lanes()));
-        Value *mult = ConstantInt::get(narrower, multiplier);
-        mult = builder->CreateIntCast(mult, wider, false);
-        Value *val = builder->CreateIntCast(num, wider, false);
-
-        // Multiply
-        val = builder->CreateMul(val, mult);
-
-        // Narrow
-        int shift_bits = op->type.bits();
-        // For method 1, we can do the final shift here too.
-        if (method == 1) {
-            shift_bits += (int)shift;
-        }
-        Constant *shift_amount = ConstantInt::get(wider, shift_bits);
-        val = builder->CreateLShr(val, shift_amount);
-        val = builder->CreateIntCast(val, narrower, false);
-
-        // Average with original numerator
-        if (method == 2) {
-            if (op->type.is_vector() && op->type.bits() == 32) {
-                if (target.bits == 32) {
-                    val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", {val, num});
-                } else {
-                    val = call_intrin(narrower, 2, "llvm.aarch64.neon.uhadd.v2i32", {val, num});
-                }
-            } else if (op->type.is_vector() && op->type.bits() == 16) {
-                if (target.bits == 32) {
-                    val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", {val, num});
-                } else {
-                    val = call_intrin(narrower, 4, "llvm.aarch64.neon.uhadd.v4i16", {val, num});
-                }
-            } else if (op->type.is_vector() && op->type.bits() == 8) {
-                if (target.bits == 32) {
-                    val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", {val, num});
-                } else {
-                    val = call_intrin(narrower, 8, "llvm.aarch64.neon.uhadd.v8i8", {val, num});
-                }
-            } else {
-                // num > val, so the following works without widening:
-                // val += (num - val)/2
-                Value *diff = builder->CreateSub(num, val);
-                diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
-                val = builder->CreateAdd(val, diff);
-            }
-
-            // Do the final shift
-            if (shift) {
-                val = builder->CreateLShr(val, ConstantInt::get(narrower, shift));
-            }
-        }
-
-        value = val;
-    } else {
-        CodeGen_Posix::visit(op);
-    }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Add *op) {
