@@ -823,9 +823,6 @@ struct halide_profiler_state {
 
     /** Is the profiler thread running. */
     bool started;
-
-    /** An internal cache which points to the most recently accessed pipeline. */
-    halide_profiler_pipeline_stats *mru_pipeline;
 };
 
 /** Profiler func ids with special meanings. */

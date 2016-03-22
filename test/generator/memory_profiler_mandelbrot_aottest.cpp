@@ -64,7 +64,8 @@ void validate(halide_profiler_state *s) {
 int launcher_task(void *user_context, int index, uint8_t *closure) {
     Image<float> output(width, height);
     float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
-    memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters, output.width(), output.height(), output);
+    memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
+                               output.width(), output.height(), output);
 
     return 0;
 }
@@ -73,7 +74,8 @@ int main(int argc, char **argv) {
     // Hijack halide's runtime to run a bunch of instances of this function
     // in parallel.
     printf("Running memory profiler comparison test\n");
-    printf("mandelbrot expected value\n  nmalocs (all tasks): %d, heap/iter (per task): %d, heap total (all tasks): %d\n",
+    printf("mandelbrot expected value\n  nmalocs (all tasks): %d, heap/iter "
+           "(per task): %d, heap total (all tasks): %d\n",
            mandelbrot_n_mallocs, mandelbrot_heap_per_iter, mandelbrot_heap_total);
     printf("argmin expected value\n  stack peak: %d\n", argmin_stack_peak);
     printf("\n");
