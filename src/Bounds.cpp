@@ -751,19 +751,6 @@ private:
                 // Just use the bounds of the type
                 bounds_of_type(t);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::promise_bounded) {
-            assert(op->args.size() == 3);
-
-            // Treat it like a clamp
-            //Expr equiv_clamp = clamp(op->args[0], op->args[1], op->args[2]);
-            //equiv_clamp.accept(this);
-
-            op->args[1].accept(this);
-            Expr min_a = min;
-            op->args[2].accept(this);
-            min = min_a;
-
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
