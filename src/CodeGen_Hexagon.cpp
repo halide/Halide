@@ -2850,24 +2850,12 @@ void CodeGen_Hexagon::visit(const Select *op) {
       else if (isValidHexagonVector(op->type, native_vector_bits())) {
         std::vector<Expr> Selects;
         std::vector<Expr> matches;
-        Selects.push_back(select(char_cmp_vector,
-                                     wild_i8xW,
-                                     wild_i8xW));
-        Selects.push_back(select(char_cmp_vector,
-                                     wild_u8xW,
-                                     wild_u8xW));
-        Selects.push_back(select(short_cmp_vector,
-                                     wild_i16xW,
-                                     wild_i16xW));
-        Selects.push_back(select(short_cmp_vector,
-                                     wild_u16xW,
-                                     wild_u16xW));
-        Selects.push_back(select(word_cmp_vector,
-                                     wild_i32xW,
-                                     wild_i32xW));
-        Selects.push_back(select(word_cmp_vector,
-                                     wild_u32xW,
-                                     wild_u32xW));
+        Selects.push_back(select(char_cmp_vector, wild_i8xW, wild_i8xW));
+        Selects.push_back(select(char_cmp_vector, wild_u8xW, wild_u8xW));
+        Selects.push_back(select(short_cmp_vector, wild_i16xW, wild_i16xW));
+        Selects.push_back(select(short_cmp_vector, wild_u16xW, wild_u16xW));
+        Selects.push_back(select(word_cmp_vector, wild_i32xW, wild_i32xW));
+        Selects.push_back(select(word_cmp_vector, wild_u32xW, wild_u32xW));
         for (size_t I = 0; I < Selects.size(); ++I) {
           const Expr P = Selects[I];
           if (expr_match(P, op, matches)) {
