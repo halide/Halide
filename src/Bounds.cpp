@@ -1232,8 +1232,59 @@ private:
         op->condition.accept(this);
 
         if (expr_uses_vars(op->condition, scope)) {
-            op->then_case.accept(this);
-            if (op->else_case.defined()) {
+            if (!op->else_case.defined()) {
+                // Trim the scope down to represent the fact that the
+                // condition is true. We only understand certain types
+                // of conditions for now.
+                Expr c = op->condition;
+                const Call *call = c.as<Call>();
+                if (call && call->call_type == Call::Intrinsic && call->name == Call::likely) {
+                    c = call->args[0];
+                }
+                const LT *lt = c.as<LT>();
+                const LE *le = c.as<LE>();
+                const GT *gt = c.as<GT>();
+                const GE *ge = c.as<GE>();
+                const EQ *eq = c.as<EQ>();
+                Expr a, b;
+                if (lt) {a = lt->a; b = lt->b;}
+                if (le) {a = le->a; b = le->b;}
+                if (gt) {a = gt->a; b = gt->b;}
+                if (ge) {a = ge->a; b = ge->b;}
+                if (eq) {a = eq->a; b = eq->b;}
+                const Variable *var_a = a.as<Variable>();
+                const Variable *var_b = b.as<Variable>();
+
+                string var_to_pop;
+                if (a.defined() && b.defined() && a.type() == Int(32)) {
+                    Expr inner_min, inner_max;
+                    if (var_a && scope.contains(var_a->name)) {
+                        Interval i = scope.get(var_a->name);
+                        Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
+                        if (lt)       i.max = min(i.max, bi.max - 1);
+                        if (le || eq) i.max = min(i.max, bi.max);
+                        if (gt)       i.min = max(i.min, bi.min + 1);
+                        if (ge || eq) i.min = max(i.min, bi.min);
+                        scope.push(var_a->name, i);
+                        var_to_pop = var_a->name;
+                    } else if (var_b && scope.contains(var_b->name)) {
+                        Interval i = scope.get(var_b->name);
+                        Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
+                        if (gt)       i.max = min(i.max, ai.max - 1);
+                        if (ge || eq) i.max = min(i.max, ai.max);
+                        if (lt)       i.min = max(i.min, ai.min + 1);
+                        if (le || eq) i.min = max(i.min, ai.min);
+                        scope.push(var_b->name, i);
+                        var_to_pop = var_b->name;
+                    }
+                }
+                op->then_case.accept(this);
+                if (!var_to_pop.empty()) {
+                    scope.pop(var_to_pop);
+                }
+            } else {
+                // Just take the union over the branches
+                op->then_case.accept(this);
                 op->else_case.accept(this);
             }
         } else {
