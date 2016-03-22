@@ -1086,9 +1086,9 @@ CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
   std::vector<Expr> Patterns, matches;
   int num_hw_pair = (bytes_in_vector() / 2) * 2; // num half words in a pair.
   int num_w_quad = (bytes_in_vector() / 4) * 4;
-  Patterns.push_back(wild_i32x4W * wild_i32x4W + (1 << 14)
+  Patterns.push_back((wild_i32x4W * wild_i32x4W + (1 << 14))
                      / Broadcast::make(wild_i32, num_w_quad));
-  Patterns.push_back(wild_i16x2W * wild_i16x2W + (1 << 14)
+  Patterns.push_back((wild_i16x2W * wild_i16x2W + (1 << 14))
                      / Broadcast::make(wild_i16, num_hw_pair));
   for (size_t I = 0; I < Patterns.size(); ++I) {
     Expr pat = Patterns[I];
