@@ -22,12 +22,12 @@ namespace {
 
 template <typename K, typename V>
 inline V get_value(const map <K, V>& m, const K& key) {
-   typename map<K, V>::const_iterator it = m.find(key);
-   if (it == m.end()) {
-      return 0;
-   } else {
-      return it->second;
-   }
+    typename map<K, V>::const_iterator it = m.find(key);
+    if (it == m.end()) {
+        return 0;
+    } else {
+        return it->second;
+    }
 }
 
 }

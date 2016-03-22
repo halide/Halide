@@ -53,6 +53,6 @@ public:
         return brighter2;
     }
 };
-Halide::RegisterGenerator<TiledBlur> register_tiled_blur_gen{"tiled_blur"};
+Halide::RegisterGenerator<TiledBlur> register_my_gen{"tiled_blur"};
 
 }  // namespace

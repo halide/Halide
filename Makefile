@@ -847,6 +847,7 @@ $(FILTERS_DIR)/user_context_insanity.o $(FILTERS_DIR)/user_context_insanity.h: $
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
+
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
 # (1) Ensuring the extra _generator.cpp is built into the .generator.
@@ -891,12 +892,6 @@ $(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_rel
 
 # By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
 $(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.$(SHARED_EXT),$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
-
-$(BIN_DIR)/generator_jit_memory_profiler: $(ROOT_DIR)/test/generator/memory_profiler_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).o
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.$(SHARED_EXT),$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
-
-$(BIN_DIR)/generator_jit_memory_profiler_mandelbrot: $(ROOT_DIR)/test/generator/memory_profiler_mandelbrot_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).o
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.$(SHARED_EXT),$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
 
 # nested externs doesn't actually contain a generator named

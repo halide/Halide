@@ -344,8 +344,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     sstr << " num: " << fs->num_allocs;
                     while (sstr.size() < 80) sstr << " ";
                     sstr << " avg: " << alloc_avg;
-                    while (sstr.size() < 95) sstr << " ";
-                    sstr << " total: " << fs->memory_total;
+                    /*while (sstr.size() < 95) sstr << " ";
+                    sstr << " total: " << fs->memory_total;*/
                 }
                 if (fs->stack_peak > 0) {
                     sstr << " stack: " << fs->stack_peak;
