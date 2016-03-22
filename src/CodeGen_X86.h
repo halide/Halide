@@ -29,6 +29,8 @@ protected:
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
 
+    llvm::Value *unsigned_mulhi_shr(llvm::Value *a, llvm::Value *b, int shr);
+
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
@@ -36,7 +38,6 @@ protected:
     void visit(const Add *);
     void visit(const Sub *);
     void visit(const Cast *);
-    void visit(const Div *);
     void visit(const Min *);
     void visit(const Max *);
     void visit(const GT *);

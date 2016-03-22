@@ -18,6 +18,8 @@ public:
 
 protected:
 
+    llvm::Value *sorted_avg(llvm::Value *a, llvm::Value *b);
+
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific neon intrinsics */
