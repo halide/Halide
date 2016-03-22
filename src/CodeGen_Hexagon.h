@@ -22,8 +22,6 @@ public:
     static void test();
 
 protected:
-
-
     using CodeGen_Posix::visit;
 
     /* /\** Nodes for which we want to emit specific hexagon intrinsics *\/ */
@@ -69,6 +67,19 @@ protected:
     Expr wild_i32, wild_u32;
     Expr wild_i16, wild_u16;
     Expr wild_i8, wild_u8;
+
+    // These are wildcards with 1x, 2x, and 4x the HVX vector width per the target flags.
+    Expr wild_u8xW, wild_i8xW;
+    Expr wild_u16xW, wild_i16xW;
+    Expr wild_u32xW, wild_i32xW;
+    Expr wild_u8x2W, wild_i8x2W;
+    Expr wild_u16x2W, wild_i16x2W;
+    Expr wild_u32x2W, wild_i32x2W;
+    Expr wild_u8x4W, wild_i8x4W;
+    Expr wild_u16x4W, wild_i16x4W;
+    Expr wild_u32x4W, wild_i32x4W;
+
+
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
     llvm::Value *getLoVectorFromPair(llvm::Value *Vec);
     void slice_into_halves(Expr, std::vector<Expr> &);
