@@ -49,6 +49,8 @@ public:
     Param<int> h{"h"};
 
     Func build() {
+        target.set(get_target().with_feature(Target::Profile));
+
         Var x, y, z;
 
         Complex initial(lerp(x_min, x_max, cast<float>(x) / w),
@@ -80,6 +82,6 @@ private:
     Func mandelbrot{"mandelbrot"};
 };
 
-RegisterGenerator<Mandelbrot> register_my_gen{"mandelbrot"};
+RegisterGenerator<Mandelbrot> register_my_gen{"memory_profiler_mandelbrot"};
 
 }  // namespace
