@@ -43,6 +43,11 @@ llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
 
+/** Given a size (in bytes), return True if the allocation size can fit
+ * on the stack; otherwise, return False. This routine asserts if size is
+ * non-positive. */
+bool can_allocation_fit_on_stack(int32_t size);
+
 }}
 
 #endif

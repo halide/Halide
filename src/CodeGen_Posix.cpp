@@ -61,7 +61,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
             user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
-        } else if (!target.is_allocation_on_stack(stack_bytes)) {
+        } else if (!can_allocation_fit_on_stack(stack_bytes)) {
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
         }

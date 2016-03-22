@@ -4,11 +4,11 @@
 #include <limits>
 
 #include "Profiling.h"
+#include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "Target.h"
 #include "Util.h"
 
 namespace Halide {
@@ -75,7 +75,7 @@ private:
             int64_t stack_bytes = constant_size * type.bytes();
             if (stack_bytes > ((int64_t(1) << 31) - 1)) { // Out of memory
                 return 0;
-            } else if (get_host_target().is_allocation_on_stack(stack_bytes)) { // Allocation on stack
+            } else if (can_allocation_fit_on_stack(stack_bytes)) { // Allocation on stack
                 return Expr((int32_t)stack_bytes);
             }
         }
