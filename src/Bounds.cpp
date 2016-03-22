@@ -1520,25 +1520,6 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
     return fb;
 }
 
-namespace {
-class RemoveBoundsPromises : public IRMutator {
-    using IRMutator::visit;
-    void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic &&
-            op->name == Call::promise_bounded) {
-            internal_assert(op->args.size() == 3);
-            expr = mutate(op->args[0]);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-};
-}
-
-Stmt remove_bounds_promises(Stmt s) {
-    return RemoveBoundsPromises().mutate(s);
-}
-
 void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
     FuncValueBounds fb;
     Interval result = bounds_of_expr_in_scope(e, scope, fb);
