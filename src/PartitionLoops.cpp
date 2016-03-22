@@ -279,6 +279,19 @@ private:
         }
     }
 
+    void visit(const IfThenElse *op) {
+        // For select statements, mins, and maxes, you can mark the
+        // likely branch with likely. For if statements there's no way
+        // to mark the likely stmt. So if the condition of an if
+        // statement is marked as likely, treat it as likely true and
+        // partition accordingly.
+        IRVisitor::visit(op);
+        const Call *call = op->condition.as<Call>();
+        if (call && call->call_type == Call::Intrinsic && call->name == Call::likely) {
+            new_simplification(op->condition, op->condition, const_true(), const_false());
+        }
+    }
+
     void visit(const For *op) {
         vector<Simplification> old;
         old.swap(simplifications);

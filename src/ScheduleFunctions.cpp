@@ -129,7 +129,6 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the function args in terms of the loop variables using the splits
-    map<string, pair<string, Expr>> base_values;
     for (const Split &split : splits) {
         Expr outer = Variable::make(Int(32), prefix + split.outer);
         Expr outer_max = Variable::make(Int(32), prefix + split.outer + ".loop_max");
@@ -158,36 +157,22 @@ Stmt build_provide_loop_nest(Function f,
             } else if (split.exact || is_update) {
                 // It's an exact split but we failed to prove that the
                 // extent divides the factor. Use predication.
-                Stmt unguarded = stmt;
 
-                string tail_size_var_name = prefix + split.old_var + ".tail_size";
-                Expr tail_size_var = Variable::make(Int(32), tail_size_var_name);
-                Stmt guarded = IfThenElse::make(inner < tail_size_var, stmt, Stmt());
-                guarded = LetStmt::make(tail_size_var_name, old_extent % split.factor, guarded);
+                // Make a var representing the original var minus its
+                // min. It's important that this is a single Var so
+                // that bounds inference has a chance of understanding
+                // what it means for it to be limited by the if
+                // statement's condition.
+                Expr rebased = outer * split.factor + inner;
+                string rebased_var_name = prefix + split.old_var + ".rebased";
+                Expr rebased_var = Variable::make(Int(32), rebased_var_name);
+                stmt = substitute(prefix + split.old_var, rebased_var + old_min, stmt);
 
-                Expr guards_not_necessary = outer < old_extent / split.factor;
-                guards_not_necessary = select(guards_not_necessary, likely(const_true()), const_false());
-
-                // Help out bounds inference
-                Expr bounded_var = promise_bounded(outer, 0, old_extent / split.factor - 1) * split.factor + inner;
-                unguarded = substitute(old_var_name, bounded_var, unguarded);
-
-                bounded_var = outer * split.factor + promise_bounded(inner, 0, tail_size_var);
-                guarded = substitute(old_var_name, bounded_var, guarded);
-
-                stmt = IfThenElse::make(guards_not_necessary,
-                                        unguarded,
-                                        guarded);
-
-
-                /*
-                Expr cond = outer * split.factor + inner < old_extent;
-                // Tell Halide to optimize for the case in which this condition is true.
-                cond = select(cond, likely(const_true()), const_false());
+                // Tell Halide to optimize for the case in which this
+                // condition is true by partitioning some outer loop.
+                Expr cond = likely(rebased_var < old_extent);
                 stmt = IfThenElse::make(cond, stmt, Stmt());
-                */
-
-
+                stmt = LetStmt::make(rebased_var_name, rebased, stmt);
 
             } else {
                 // Adjust the base downwards to not compute off the
