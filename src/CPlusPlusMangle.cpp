@@ -29,6 +29,7 @@ clang::TagDecl::TagKind map_tag_decl_kind(halide_cplusplus_type_name::CPPTypeTyp
     switch (halide_val) {
     case halide_cplusplus_type_name::Simple:
         internal_error << "Simple types should have already been handled.\n";
+	return clang::TTK_Struct; // Have to return here to avoid unknown case below.
     case halide_cplusplus_type_name::Struct:
         return clang::TTK_Struct;
     case halide_cplusplus_type_name::Class:
@@ -38,6 +39,8 @@ clang::TagDecl::TagKind map_tag_decl_kind(halide_cplusplus_type_name::CPPTypeTyp
     case halide_cplusplus_type_name::Enum:
         return clang::TTK_Enum;
     }
+    internal_error << "Unknown halide_cplusplus_type_name::CPPTypeType.\n";
+    return clang::TTK_Struct; // Avoid control flow analysis error.
 }
 
 struct PreviousDeclarations {
