@@ -699,6 +699,8 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
+        const Div *div_b_a = mul_b ? mul_b->a.as<Div>() : nullptr;
 
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
@@ -1025,6 +1027,24 @@ private:
                    is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
             expr = mutate(max_a->b - max_b->a);
+        } else if (no_overflow(op->type) &&
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   mul_a &&
+                   div_a_a &&
+                   is_positive_const(mul_a->b) &&
+                   equal(mul_a->b, div_a_a->b) &&
+                   equal(div_a_a->a, b)) {
+            // (x/4)*4 - x -> -(x%4)
+            expr = mutate(make_zero(a.type()) - (b % mul_a->b));
+        } else if (no_overflow(op->type) &&
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   mul_b &&
+                   div_b_a &&
+                   is_positive_const(mul_b->b) &&
+                   equal(mul_b->b, div_b_a->b) &&
+                   equal(div_b_a->a, a)) {
+            // x - (x/4)*4 -> x%4
+            expr = mutate(a % mul_b->b);
         } else if (no_overflow(op->type) &&
                    div_b &&
                    const_int(div_b->b, &ib) &&
@@ -2211,6 +2231,7 @@ private:
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
+        const Add *add_a_a_a = div_a_a ? div_a_a->a.as<Add>() : nullptr;
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
@@ -2392,16 +2413,74 @@ private:
                 }
             } else if (mul_a &&
                        div_a_a &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(div_a_a->a, b)) {
+                // subtract (x/c1)*c1 from both sides
+                // (x/c1)*c1 < x -> 0 < x % c1
+                expr = mutate(0 < b % make_const(a.type(), ia));
+            } else if (mul_a &&
+                       div_a_a &&
                        add_b &&
                        const_int(div_a_a->b, &ia) &&
                        const_int(mul_a->b, &ib) &&
-                       const_int(add_b->b, &ic) &&
                        ia > 0 &&
                        ia == ib &&
-                       ia <= -ic &&
                        equal(div_a_a->a, add_b->a)) {
-                // (x/c1)*c1 < x + c2 where c1 <= -c2 -> false
-                expr = const_false();
+                // subtract (x/c1)*c1 from both sides
+                // (x/c1)*c1 < x + y -> 0 < x % c1 + y
+                expr = mutate(0 < add_b->a % div_a_a->b + add_b->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       sub_b &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(div_a_a->a, sub_b->a)) {
+                // subtract (x/c1)*c1 from both sides
+                // (x/c1)*c1 < x - y -> y < x % c1
+                expr = mutate(sub_b->b < sub_b->a % div_a_a->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       add_a_a_a &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_a_a_a->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(add_a_a_a->a, b)) {
+                // subtract ((x+c2)/c1)*c1 from both sides
+                // ((x+c2)/c1)*c1 < x -> c2 < (x+c2) % c1
+                expr = mutate(add_a_a_a->b < div_a_a->a % div_a_a->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       add_b &&
+                       add_a_a_a &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_a_a_a->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(add_a_a_a->a, add_b->a)) {
+                // subtract ((x+c2)/c1)*c1 from both sides
+                // ((x+c2)/c1)*c1 < x + y -> c2 < (x+c2) % c1 + y
+                expr = mutate(add_a_a_a->b < div_a_a->a % div_a_a->b + add_b->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       add_a_a_a &&
+                       sub_b &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_a_a_a->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(add_a_a_a->a, sub_b->a)) {
+                // subtract ((x+c2)/c1)*c1 from both sides
+                // ((x+c2)/c1)*c1 < x - y -> y < (x+c2) % c1 + (-c2)
+                expr = mutate(sub_b->b < div_a_a->a % div_a_a->b + make_const(a.type(), -ic));
             } else if (delta_ramp &&
                        is_positive_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) < 0))) {
@@ -3336,10 +3415,7 @@ private:
 
         if (is_no_op(new_body)) {
             stmt = new_body;
-            return;
-        }
-
-        if (op->min.same_as(new_min) &&
+        } else if (op->min.same_as(new_min) &&
             op->extent.same_as(new_extent) &&
             op->body.same_as(new_body)) {
             stmt = op;
@@ -3388,6 +3464,42 @@ private:
         }
     }
 
+    void visit(const Allocate *op) {
+        std::vector<Expr> new_extents;
+        bool all_extents_unmodified = true;
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            new_extents.push_back(mutate(op->extents[i]));
+            all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
+        }
+        Stmt body = mutate(op->body);
+        Expr condition = mutate(op->condition);
+        Expr new_expr;
+        if (op->new_expr.defined()) {
+            new_expr = mutate(op->new_expr);
+        }
+        const IfThenElse *body_if = body.as<IfThenElse>();
+        if (body_if &&
+            op->condition.defined() &&
+            equal(op->condition, body_if->condition)) {
+            // We can move the allocation into the if body case. The
+            // else case must not use it.
+            stmt = Allocate::make(op->name, op->type, new_extents,
+                                  condition, body_if->then_case,
+                                  new_expr, op->free_function);
+            stmt = IfThenElse::make(body_if->condition, stmt, body_if->else_case);
+        } else if (all_extents_unmodified &&
+                   body.same_as(op->body) &&
+                   condition.same_as(op->condition) &&
+                   new_expr.same_as(op->new_expr)) {
+            stmt = op;
+        } else {
+            stmt = Allocate::make(op->name, op->type, new_extents,
+                                  condition, body,
+                                  new_expr, op->free_function);
+        }
+    }
+
+
     void visit(const ProducerConsumer *op) {
         Stmt produce = mutate(op->produce);
         Stmt update = op->update;
@@ -3395,10 +3507,31 @@ private:
             update = mutate(update);
         }
         Stmt consume = mutate(op->consume);
+
+        const IfThenElse *produce_if = produce.as<IfThenElse>();
+        const IfThenElse *update_if  = update.as<IfThenElse>();
+        const IfThenElse *consume_if = consume.as<IfThenElse>();
+
         if (is_no_op(produce) &&
             is_no_op(consume) &&
             is_no_op(update)) {
             stmt = Evaluate::make(0);
+        } else if (produce_if &&
+                   !produce_if->else_case.defined() &&
+                   consume_if &&
+                   !consume_if->else_case.defined() &&
+                   equal(produce_if->condition, consume_if->condition) &&
+                   (!update.defined() ||
+                    (update_if &&
+                     !update_if->else_case.defined() &&
+                     equal(produce_if->condition, update_if->condition)))) {
+            // All parts are guarded by the same condition. Lift it outwards.
+            Expr condition = produce_if->condition;
+            produce = produce_if->then_case;
+            if (update_if) update = update_if->then_case;
+            consume = consume_if->then_case;
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = IfThenElse::make(condition, stmt);
         } else if (produce.same_as(op->produce) &&
                    update.same_as(op->update) &&
                    consume.same_as(op->consume)) {
@@ -3651,6 +3784,15 @@ void check_algebra() {
     check(xf - yf*-2.0f, xf + y*2.0f);
     check(xf + yf*-2.0f, xf - y*2.0f);
     check(xf*-2.0f + yf, yf - x*2.0f);
+
+    check(x - (x/8)*8, x % 8);
+    check((x/8)*8 - x, -(x % 8));
+    check((x/8)*8 < x + y, 0 < x%8 + y);
+    check((x/8)*8 < x - y, y < x%8);
+    check((x/8)*8 < x, 0 < x%8);
+    check(((x+3)/8)*8 < x + y, 3 < (x+3)%8 + y);
+    check(((x+3)/8)*8 < x - y, y < (x+3)%8 + (-3));
+    check(((x+3)/8)*8 < x, 3 < (x+3)%8);
 
     check(x*0, 0);
     check(0*x, 0);
@@ -4064,7 +4206,8 @@ void check_boolean() {
 
     check((x/8)*8 < x - 8, f);
     check((x/8)*8 < x - 9, f);
-    check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
+    check((x/8)*8 < x - 7, f);
+    check((x/8)*8 < x - 6, 6 < x % 8);
     check(ramp(x*4, 1, 4) < broadcast(y*4, 4), broadcast(x < y, 4));
     check(ramp(x*8, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
     check(ramp(x*8 + 1, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
