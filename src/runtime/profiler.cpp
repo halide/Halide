@@ -43,7 +43,6 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     p->memory_peak = 0;
     p->memory_total = 0;
     p->num_allocs = 0;
-    p->stack_peak = 0;
     p->funcs = (halide_profiler_func_stats *)malloc(num_funcs * sizeof(halide_profiler_func_stats));
     if (!p->funcs) {
         free(p);
@@ -183,14 +182,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
 WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
-                                            int p_value,
                                             int *f_values) {
-    // Note: Ideally this should not have happened. We shouldn't call this
-    // routine if the max pipeline's stack peak is zero for performance reason.
-    if (p_value == 0) {
-        return;
-    }
-
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
     halide_assert(user_context, p_stats != NULL);
 
@@ -200,12 +192,8 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
     // current desctructor (called on profiler shutdown) does not free the structs
     // unless user specifically calls halide_profiler_reset().
 
-    // Update per-pipeline memory stats
-    sync_compare_max_and_swap(&p_stats->stack_peak, p_value);
-
     // Update per-func memory stats
     for (int i = 0; i < p_stats->num_funcs; ++i) {
-        halide_assert(user_context, p_value >= f_values[i]);
         if (f_values[i] != 0) {
             sync_compare_max_and_swap(&(p_stats->funcs[i]).stack_peak, f_values[i]);
         }
@@ -298,10 +286,21 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
              << "  runs: " << p->runs
              << "  time/run: " << t / p->runs << " ms\n"
              << " heap allocations: " << p->num_allocs
-             << "  peak heap usage: " << p->memory_peak << " bytes"
-             << "  peak stack usage: " << p->stack_peak << " bytes\n";
+             << "  peak heap usage: " << p->memory_peak << " bytes\n";
         halide_print(user_context, sstr.str());
-        if (p->time || p->memory_total || p->stack_peak) {
+
+        bool print_f_states = p->time || p->memory_total;
+        if (!print_f_states) {
+            for (int i = 0; i < p->num_funcs; i++) {
+                halide_profiler_func_stats *fs = p->funcs + i;
+                if (fs->stack_peak) {
+                    print_f_states = true;
+                    break;
+                }
+            }
+        }
+
+        if (print_f_states) {
             for (int i = 0; i < p->num_funcs; i++) {
                 sstr.clear();
                 halide_profiler_func_stats *fs = p->funcs + i;
@@ -335,8 +334,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     sstr << " num: " << fs->num_allocs;
                     while (sstr.size() < 80) sstr << " ";
                     sstr << " avg: " << alloc_avg;
-                    /*while (sstr.size() < 95) sstr << " ";
-                    sstr << " total: " << fs->memory_total;*/
                 }
                 if (fs->stack_peak > 0) {
                     sstr << " stack: " << fs->stack_peak;
@@ -357,8 +354,8 @@ WEAK void halide_profiler_report(void *user_context) {
 
 
 WEAK void halide_profiler_reset() {
-    // WARNING: Do not call this method while there is other halide
-    // pipeline running; halide_profiler_memory_allocate/free and
+    // WARNING: Do not call this method while any other halide
+    // pipeline is running; halide_profiler_memory_allocate/free and
     // halide_profiler_stack_peak_update update the profiler pipeline's
     // state without grabbing the global profiler state's lock.
     halide_profiler_state *s = halide_profiler_get_state();

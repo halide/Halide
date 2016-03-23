@@ -795,9 +795,6 @@ struct halide_profiler_pipeline_stats {
 
     /** The total number of memory allocation of funcs in this pipeline. */
     int num_allocs;
-
-    /** The peak stack allocation of funcs threads running in this pipeline. */
-    int stack_peak;
 };
 
 /** The global state of the profiler. */
@@ -844,7 +841,7 @@ extern halide_profiler_state *halide_profiler_get_state();
 extern halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
 /** Reset all profiler state.
- * WARNING: Do NOT call this method while there is other halide pipeline
+ * WARNING: Do NOT call this method while any halide pipeline is
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
