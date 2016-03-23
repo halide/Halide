@@ -6,6 +6,12 @@
 
 #include "CodeGen_Posix.h"
 
+namespace llvm {
+namespace Intrinsic {
+enum ID;
+}
+}
+
 namespace Halide {
 namespace Internal {
 
@@ -49,14 +55,11 @@ protected:
     bool shouldUseVMPA(const Add *, std::vector<llvm::Value *> &);
     bool shouldUseVDMPY(const Add *, std::vector<llvm::Value *> &);
 
-    llvm::Value *emitBinaryOp(const BaseExprNode *op,
-                              std::vector<Pattern> &Patterns);
-    llvm::Value *CallLLVMIntrinsic(llvm::Function *F,
-                                   std::vector<llvm::Value *> &Ops);
-    void getHighAndLowVectors(Expr DoubleVec,
-                               std::vector<Expr> &Res);
-    void getHighAndLowVectors(llvm::Value *DoubleVec,
-                               std::vector<llvm::Value *> &Res);
+    llvm::Value *emitBinaryOp(const BaseExprNode *op, std::vector<Pattern> &Patterns);
+    llvm::Value *callLLVMIntrinsic(llvm::Function *F, std::vector<llvm::Value *> Ops);
+    llvm::Value *callLLVMIntrinsic(llvm::Intrinsic::ID id, std::vector<llvm::Value *> Ops);
+    std::vector<Expr> getHighAndLowVectors(Expr DoubleVec);
+    std::vector<llvm::Value *> getHighAndLowVectors(llvm::Value *DoubleVec);
     llvm::Value *concatVectors(llvm::Value *High, llvm::Value *Low);
     llvm::Value *convertValueType(llvm::Value *V, llvm::Type *T);
     std::string mcpu() const;
@@ -84,7 +87,7 @@ protected:
 
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
     llvm::Value *getLoVectorFromPair(llvm::Value *Vec);
-    void slice_into_halves(Expr, std::vector<Expr> &);
+    std::vector<Expr> slice_into_halves(Expr);
     llvm::Value *handleLargeVectors(const Add *);
     llvm::Value *handleLargeVectors(const Sub *);
     llvm::Value *handleLargeVectors(const Min *);
