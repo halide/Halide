@@ -93,14 +93,11 @@ protected:
                              int ops_lanes, std::vector<llvm::Value *>);
     ///@}
 
-
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
     llvm::Value *getLoVectorFromPair(llvm::Value *Vec);
     std::vector<Expr> slice_into_halves(Expr);
     llvm::Value *handleLargeVectors(const Add *);
     llvm::Value *handleLargeVectors(const Sub *);
-    llvm::Value *handleLargeVectors(const Min *);
-    llvm::Value *handleLargeVectors(const Max *);
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Div *);
     llvm::Value *handleLargeVectors_absd(const Call *);

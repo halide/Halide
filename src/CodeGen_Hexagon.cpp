@@ -293,17 +293,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   // Word Double Vectors.
   varith.emplace_back(wild_i32x2W - wild_i32x2W, IPICK(Intrinsic::hexagon_V6_vsubw_dv));
 
-  // "Max"
-  varith.emplace_back(max(wild_u8xW, wild_u8xW), IPICK(Intrinsic::hexagon_V6_vmaxub));
-  varith.emplace_back(max(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vmaxh));
-  varith.emplace_back(max(wild_u16xW, wild_u16xW), IPICK(Intrinsic::hexagon_V6_vmaxuh));
-  varith.emplace_back(max(wild_i32xW, wild_i32xW), IPICK(Intrinsic::hexagon_V6_vmaxw));
-  // "Min"
-  varith.emplace_back(min(wild_u8xW, wild_u8xW), IPICK(Intrinsic::hexagon_V6_vminub));
-  varith.emplace_back(min(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vminh));
-  varith.emplace_back(min(wild_u16xW, wild_u16xW), IPICK(Intrinsic::hexagon_V6_vminuh));
-  varith.emplace_back(min(wild_i32xW, wild_i32xW), IPICK(Intrinsic::hexagon_V6_vminw));
-
   averages.emplace_back(((wild_u8xW + wild_u8xW)/2), IPICK(Intrinsic::hexagon_V6_vavgub));
   averages.emplace_back(((wild_u8xW - wild_u8xW)/2), IPICK(Intrinsic::hexagon_V6_vnavgub));
   averages.emplace_back(((wild_u16xW + wild_u16xW)/2), IPICK(Intrinsic::hexagon_V6_vavguh));
@@ -1152,32 +1141,6 @@ void CodeGen_Hexagon::visit(const Sub *op) {
   }
   return;
 }
-void CodeGen_Hexagon::visit(const Max *op) {
-  if (isLargerThanVector(op->type, native_vector_bits())) {
-    value = handleLargeVectors(op);
-    if (value)
-      return;
-  }
-  value = emitBinaryOp(op, varith);
-  if (!value) {
-    checkVectorOp(op, "in visit(Max *)\n");
-    CodeGen_Posix::visit(op);
-  }
-  return;
-}
-void CodeGen_Hexagon::visit(const Min *op) {
-  if (isLargerThanVector(op->type, native_vector_bits())) {
-    value = handleLargeVectors(op);
-    if (value)
-      return;
-  }
-  value = emitBinaryOp(op, varith);
-  if (!value) {
-    checkVectorOp(op, "in visit(Min *)\n");
-    CodeGen_Posix::visit(op);
-  }
-  return;
-}
 
 /////////////////////////////////////////////////////////////////////////////
 // Start of handleLargeVectors
@@ -1195,22 +1158,6 @@ llvm::Value *
 CodeGen_Hexagon::handleLargeVectors(const Sub *op) {
   debug(4) << "HexCG: " << op->type << ", handleLargeVectors (Sub)\n";
   #define _OP(a,b)  a - b
-  #include "CodeGen_Hexagon_LV.h"
-}
-
-// Handle Min on types greater than a single vector
-llvm::Value *
-CodeGen_Hexagon::handleLargeVectors(const Min *op) {
-  debug(4) << "HexCG: " << op->type << ", handleLargeVectors (Min)\n";
-  #define _OP(a,b)  min(a, b)
-  #include "CodeGen_Hexagon_LV.h"
-}
-
-// Handle Max on types greater than a single vector
-llvm::Value *
-CodeGen_Hexagon::handleLargeVectors(const Max *op) {
-  debug(4) << "HexCG: " << op->type << ", handleLargeVectors (Max)\n";
-  #define _OP(a,b)  max(a, b)
   #include "CodeGen_Hexagon_LV.h"
 }
 
@@ -2457,42 +2404,73 @@ void CodeGen_Hexagon::visit(const Load *op) {
     CodeGen_Posix::visit(op);
   return;
 }
-  // Sometimes, when we are dealing with vector selects of vector pairs,
-  // it is possible to do the select as vectors and then up-cast the
-  // result.
-  // For e.g.
-  // vector_pair_result = select(x128(s0) < x128(s1), cast<int16_t>(v0),
-  //                                                  cast<int16_t>(v1))
-  // where:
-  //       s0, s1 are 1 byte scalars.
-  //       v0 and v1 are vectors of 64 byte (single mode) or 128 bytes
-  //       (double mode)
-bool CodeGen_Hexagon::possiblyCodeGenNarrowerType(const Select *op) {
-  // At this point, we call possiblyCodeGenNarrowerType only for vector
-  // pairs and when the condition is also a vector pair.
 
-  Expr cond = op->condition;
-  Expr true_value = op->true_value;
-  Expr false_value = op->false_value;
-  Type t = op->type;
-  Type narrow = Type(t.code(), (t.bits()/2), t.lanes());
-  Expr n_cond = lossless_cast_cmp(narrow, cond);
-  Expr n_tv = lossless_cast(narrow, true_value);
-  Expr n_fv = lossless_cast(narrow, false_value);
-  if (n_cond.defined() && n_tv.defined() && n_fv.defined()) {
-    value = codegen(Cast::make(t, Select::make(n_cond, n_tv, n_fv)));
-    return true;
-  }
-  return false;
+namespace {
+Intrinsic::ID select_intrinsic(Type type,
+                               Intrinsic::ID b, Intrinsic::ID h, Intrinsic::ID w,
+                               Intrinsic::ID ub, Intrinsic::ID uh, Intrinsic::ID uw) {
+    switch (type.bits()) {
+    case 8: return type.is_int() ? b : ub;
+    case 16: return type.is_int() ? h : uh;
+    case 32: return type.is_int() ? w : uw;
+    }
+
+    internal_error << "Type not handled for intrinsic.\n";
+    return Intrinsic::not_intrinsic;
 }
+
+Intrinsic::ID select_intrinsic(Type type,
+                               Intrinsic::ID b, Intrinsic::ID h, Intrinsic::ID w) {
+    return select_intrinsic(type, b, h, w, b, h, w);
+}
+}  // namespace
+
+void CodeGen_Hexagon::visit(const Max *op) {
+    if (op->type.is_vector()) {
+        bool B128 = target.has_feature(Halide::Target::HVX_128);
+        Intrinsic::ID id = select_intrinsic(op->type,
+                                            Intrinsic::not_intrinsic,
+                                            IPICK(Intrinsic::hexagon_V6_vmaxh),
+                                            IPICK(Intrinsic::hexagon_V6_vmaxw),
+                                            IPICK(Intrinsic::hexagon_V6_vmaxub),
+                                            IPICK(Intrinsic::hexagon_V6_vmaxuh),
+                                            Intrinsic::not_intrinsic);
+        if (id != Intrinsic::not_intrinsic) {
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(op->type, intrin_lanes, id, op->type.lanes(), {op->a, op->b});
+            return;
+        }
+    }
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_Hexagon::visit(const Min *op) {
+    if (op->type.is_vector()) {
+        bool B128 = target.has_feature(Halide::Target::HVX_128);
+        Intrinsic::ID id = select_intrinsic(op->type,
+                                            Intrinsic::not_intrinsic,
+                                            IPICK(Intrinsic::hexagon_V6_vminh),
+                                            IPICK(Intrinsic::hexagon_V6_vminw),
+                                            IPICK(Intrinsic::hexagon_V6_vminub),
+                                            IPICK(Intrinsic::hexagon_V6_vminuh),
+                                            Intrinsic::not_intrinsic);
+        if (id != Intrinsic::not_intrinsic) {
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(op->type, intrin_lanes, id, op->type.lanes(), {op->a, op->b});
+            return;
+        }
+    }
+    CodeGen_Posix::visit(op);
+}
+
 void CodeGen_Hexagon::visit(const Select *op) {
     if (op->type.is_vector()) {
         bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Type cmp_type = op->true_value.type();
-        int intrin_lanes = native_vector_bits() / cmp_type.bits();
+        Type type = op->true_value.type();
+        int intrin_lanes = native_vector_bits() / type.bits();
         value = call_intrin(op->type, intrin_lanes,
                             IPICK(Intrinsic::hexagon_V6_vmux),
-                            cmp_type.lanes(),
+                            type.lanes(),
                             {op->condition, op->true_value, op->false_value});
     } else {
         CodeGen_Posix::visit(op);
@@ -2502,48 +2480,38 @@ void CodeGen_Hexagon::visit(const Select *op) {
 void CodeGen_Hexagon::visit(const GT *op) {
     if (op->type.is_vector()) {
         bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Type cmp_type = op->a.type();
-        Intrinsic::ID id;
-        if (cmp_type.is_uint()) {
-            switch(cmp_type.bits()) {
-            case 8:  id = IPICK(Intrinsic::hexagon_V6_vgtub); break;
-            case 16: id = IPICK(Intrinsic::hexagon_V6_vgtuh); break;
-            case 32: id = IPICK(Intrinsic::hexagon_V6_vgtuw); break;
-            default: CodeGen_Posix::visit(op); return;
-            }
-        } else if (cmp_type.is_int()) {
-            switch(cmp_type.bits()) {
-            case 8:  id = IPICK(Intrinsic::hexagon_V6_vgtb); break;
-            case 16: id = IPICK(Intrinsic::hexagon_V6_vgth); break;
-            case 32: id = IPICK(Intrinsic::hexagon_V6_vgtw); break;
-            default: CodeGen_Posix::visit(op); return;
-            }
-        } else {
-            internal_error << "GT type is not int or uint\n";
+        Type type = op->a.type();
+        Intrinsic::ID id = select_intrinsic(type,
+                                            IPICK(Intrinsic::hexagon_V6_vgtb),
+                                            IPICK(Intrinsic::hexagon_V6_vgth),
+                                            IPICK(Intrinsic::hexagon_V6_vgtw),
+                                            IPICK(Intrinsic::hexagon_V6_vgtub),
+                                            IPICK(Intrinsic::hexagon_V6_vgtuh),
+                                            IPICK(Intrinsic::hexagon_V6_vgtuw));
+        if (id != Intrinsic::not_intrinsic) {
+            int intrin_lanes = native_vector_bits() / type.bits();
+            value = call_intrin(op->type, intrin_lanes, id, type.lanes(), {op->a, op->b});
+            return;
         }
-        int intrin_lanes = native_vector_bits() / cmp_type.bits();
-        value = call_intrin(op->type, intrin_lanes, id, cmp_type.lanes(), {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const EQ *op) {
     if (op->type.is_vector()) {
         bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Type cmp_type = op->a.type();
-        Intrinsic::ID id;
-        switch(cmp_type.bits()) {
-        case 8:  id = IPICK(Intrinsic::hexagon_V6_veqb); break;
-        case 16: id = IPICK(Intrinsic::hexagon_V6_veqh); break;
-        case 32: id = IPICK(Intrinsic::hexagon_V6_veqw); break;
-        default: CodeGen_Posix::visit(op); return;
+        Type type = op->a.type();
+        Intrinsic::ID id = select_intrinsic(type,
+                                            IPICK(Intrinsic::hexagon_V6_veqb),
+                                            IPICK(Intrinsic::hexagon_V6_veqh),
+                                            IPICK(Intrinsic::hexagon_V6_veqw));
+        if (id != Intrinsic::not_intrinsic) {
+            int intrin_lanes = native_vector_bits() / type.bits();
+            value = call_intrin(op->type, intrin_lanes, id, type.lanes(), {op->a, op->b});
+            return;
         }
-        int intrin_lanes = native_vector_bits() / cmp_type.bits();
-        value = call_intrin(op->type, intrin_lanes, id, cmp_type.lanes(), {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const GE *op) {
