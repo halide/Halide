@@ -42,17 +42,6 @@ class DebugToFile : public IRMutator {
             args.push_back(Load::make(op->types[0], f.name(), 0, Buffer(), Parameter()));
             args.push_back(Load::make(op->types[0], f.name(), num_elements-1, Buffer(), Parameter()));
 
-            // The header
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                if (i < 4) {
-                    args.push_back(op->bounds[i].extent);
-                } else {
-                    args.back() *= op->bounds[i].extent;
-                }
-            }
-            // Fill the remaining args with ones.
-            args.resize(7, 1);
-
             int type_code = 0;
             Type t = op->types[0];
             if (t == Float(32)) {
@@ -79,7 +68,6 @@ class DebugToFile : public IRMutator {
                 user_error << "Type " << t << " not supported for debug_to_file\n";
             }
             args.push_back(type_code);
-            args.push_back(t.bytes());
 
             Expr buf = Variable::make(Handle(), f.name() + ".buffer");
             args.push_back(buf);

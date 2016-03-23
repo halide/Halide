@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include "printer.h"
 
 extern "C" void *fopen(const char *, const char *);
 extern "C" int fclose(void *);
@@ -102,50 +101,65 @@ WEAK bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
+int32_t get_data_index(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
+                       const int32_t *strides) {
+    int32_t index = dim0*strides[0] + dim1*strides[1] + dim2*strides[2] + dim3*strides[3];
+    return index;
+}
+
 // Reorder the data according to the stride
-WEAK void reorder_data(struct buffer_t *buf, uint8_t *data) {
+WEAK int write_data(void *user_context, void *f, int32_t s0, int32_t s1,
+                    int32_t s2, int32_t s3, size_t elts, int32_t bytes_per_element,
+                    const int32_t *strides, uint8_t *data) {
+    bool in_order = true;
+    for (int i = 0; i < 4; ++i) {
+        if (strides[i+1] == 0) {
+            break;
+        }
+        if (strides[i] > strides[i+1]) {
+            in_order = false;
+            break;
+        }
+    }
+    if (in_order) {
+        if (fwrite((void *)data, bytes_per_element * elts, 1, f)) {
+            fclose(f);
+            return 0;
+        } else {
+            fclose(f);
+            return -1;
+        }
+    }
 
-    /*uint8_t *temp;
-
-    for () {
-
-    }*/
+    for (int32_t dim3 = 0; dim3 < s3; ++dim3) {
+        for (int32_t dim2 = 0; dim2 < s2; ++dim2) {
+            for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
+                for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
+                    int32_t index = get_data_index(dim0, dim1, dim2, dim3, strides);
+                    uint8_t *loc = data + index*bytes_per_element;
+                    if (!fwrite((void *)loc, bytes_per_element, 1, f)) {
+                        fclose(f);
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+    fclose(f);
+    return 0;
 }
 
 }}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename, uint8_t *data,
-                                             int32_t s0, int32_t s1, int32_t s2, int32_t s3,
-                                             int32_t type_code, int32_t bytes_per_element,
-                                             struct buffer_t *buf) {
-
-    char line_buf[160];
-    Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
-    sstr << "Extent: " << buf->extent[0] << ", " << buf->extent[1] << ", " << buf->extent[2] << ", " << buf->extent[3] << "\n";
-    halide_print(user_context, sstr.str());
-
-    sstr.clear();
-    sstr << "Element size: " << buf->elem_size << "\n";
-    halide_print(user_context, sstr.str());
-
-    sstr.clear();
-    sstr << "Stride: " << buf->stride[0] << ", " << buf->stride[1] << ", " << buf->stride[2] << ", " << buf->stride[3] << "\n";
-    halide_print(user_context, sstr.str());
-
-    sstr.clear();
-    sstr << "Min: " << buf->min[0] << ", " << buf->min[1] << ", " << buf->min[2] << ", " << buf->min[3] << "\n";
-    halide_print(user_context, sstr.str());
-
-    sstr.clear();
-    sstr << "s0: " << s0 << ", " << s1 << ", " << s2 << ", " << s3 << "\n";
-    sstr << "\n";
-    halide_print(user_context, sstr.str());
+                                             int32_t type_code, struct buffer_t *buf) {
 
     void *f = fopen(filename, "wb");
     if (!f) return -1;
 
-    /*int32_t s0 = buf->extent[0], s1 = buf->extent[1], s2 = buf->extent[2], s3 = max(1, buf->extent[3]);
-    int32_t bytes_per_element = buf->elem_size;*/
+    int32_t s0 = max(1, buf->extent[0]), s1 = max(1, buf->extent[1]);
+    int32_t s2 = max(1, buf->extent[2]), s3 = max(1, buf->extent[3]);
+    int32_t bytes_per_element = buf->elem_size;
 
     size_t elts = s0;
     elts *= s1*s2*s3;
@@ -236,11 +250,6 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
 
-    if (fwrite((void *)data, bytes_per_element * elts, 1, f)) {
-        fclose(f);
-        return 0;
-    } else {
-        fclose(f);
-        return -1;
-    }
+    return write_data(user_context, f, s0, s1, s2, s3, elts, bytes_per_element,
+                      buf->stride, data);
 }
