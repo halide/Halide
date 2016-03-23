@@ -651,8 +651,7 @@ int CodeGen_Hexagon::bytes_in_vector() const {
 llvm::Value *CodeGen_Hexagon::emitBinaryOp(const BaseExprNode *op,
                                            std::vector<Pattern> &Patterns) {
   vector<Expr> matches;
-  for (size_t I = 0; I < Patterns.size(); ++I) {
-    const Pattern &P = Patterns[I];
+  for (const Pattern &P : Patterns) {
     if (expr_match(P.pattern, op, matches)) {
         Intrinsic::ID ID = P.ID;
         bool BitCastNeeded = false;
@@ -938,8 +937,7 @@ bool CodeGen_Hexagon::possiblyGenerateVMPAAccumulate(const Add *op) {
   Patterns.push_back(Pattern(wild_i32x2W + wild_i32x2W + wild_i32x2W,
                              IPICK(Intrinsic::hexagon_V6_vmpahb_acc)));
   vector<Expr> matches;
-  for (size_t I = 0; I < Patterns.size(); ++I) {
-    const Pattern &P = Patterns[I];
+  for (const Pattern &P : Patterns) {
     if (expr_match(P.pattern, op, matches)) {
       internal_assert(matches.size() == 3);
       Expr Op0, Op1, Op2;
@@ -1066,9 +1064,8 @@ CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
                      / Broadcast::make(wild_i32, num_w_quad));
   Patterns.push_back((wild_i16x2W * wild_i16x2W + (1 << 14))
                      / Broadcast::make(wild_i16, num_hw_pair));
-  for (size_t I = 0; I < Patterns.size(); ++I) {
-    Expr pat = Patterns[I];
-    if (expr_match(pat, op, matches)) {
+  for (const Expr &P : Patterns) {
+    if (expr_match(P, op, matches)) {
       Type t = matches[0].type();
       if (t.bits() == 32) {
         Type narrow = Type(t.code(), (t.bits()/2), t.lanes());
@@ -1087,12 +1084,11 @@ CodeGen_Hexagon::possiblyCodeGenWideningMultiplySatRndSat(const Div *op) {
         std::vector<Value *> OpsB = getHighAndLowVectors(DoubleVecB);
         Value *HighRes = callLLVMIntrinsic(IntrinsID, {OpsA[0], OpsB[0]});
         Value *LowRes = callLLVMIntrinsic(IntrinsID, {OpsA[1], OpsB[1]});
-        std::vector<Value*> Ops = {LowRes, HighRes};
+        Value *Op = concat_vectors({LowRes, HighRes});
         if (t.bits() != 32)
-          return convertValueType(concat_vectors(Ops), llvm_type_of(op->type));
+          return convertValueType(Op, llvm_type_of(op->type));
         else
-          return convertValueType(concat_vectors(Ops),
-                                  llvm_type_of(matches[0].type()));
+          return convertValueType(Op, llvm_type_of(matches[0].type()));
       } else
         return NULL;
     }
@@ -1128,8 +1124,7 @@ void CodeGen_Hexagon::visit(const Div *op) {
                                  IPICK(Intrinsic::hexagon_V6_vasrw)));
       Patterns.push_back(Pattern(wild_i16xW / Broadcast::make(wild_i16, HalfWordsInVector),
                                  IPICK(Intrinsic::hexagon_V6_vasrh)));
-      for (size_t I = 0; I < Patterns.size(); ++I) {
-        const Pattern &P = Patterns[I];
+      for (const Pattern &P : Patterns) {
         if (expr_match(P.pattern, op, matches)) {
           int rt_shift_by = 0;
           if (is_const_power_of_two_integer(matches[1], &rt_shift_by)) {
@@ -1325,8 +1320,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
                                IPICK(Intrinsic::hexagon_V6_vsh)));
 
 
-    for (size_t I = 0; I < Patterns.size(); ++I) {
-        const Pattern &P = Patterns[I];
+    for (const Pattern &P : Patterns) {
         if (expr_match(P.pattern, op, matches)) {
           // You have a vector that is u8x64 in matches. Extend this to u32x64.
           debug(4) << "HexCG::" << op->type <<
@@ -1390,8 +1384,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
     Patterns.push_back(Pattern(u8_(max(min(wild_i32x4W, UINT_8_IMAX), UINT_8_IMIN)),
                                IPICK(Intrinsic::hexagon_V6_vsathub)));
 
-    for (size_t I = 0; I < Patterns.size(); ++I) {
-      const Pattern &P = Patterns[I];
+    for (const Pattern &P : Patterns) {
       if (expr_match(P.pattern, op, matches)) {
         // At the present moment we barf when saturating to an i8 value.
         // Once we fix this issue, make sure to get rid of the error
@@ -1448,8 +1441,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
                                  IPICK(Intrinsic::hexagon_V6_vshuffeb)));
       Patterns.push_back(Pattern(i8_(wild_i32x4W),
                                  IPICK(Intrinsic::hexagon_V6_vshuffeb)));
-      for (size_t I = 0; I < Patterns.size(); ++I) {
-        const Pattern &P = Patterns[I];
+      for (const Pattern & P : Patterns) {
         if (expr_match(P.pattern, op, matches)) {
           Type FirstStepType = Type(matches[0].type().code(), 16, op->type.lanes());
           Value *FirstStep = codegen(cast(FirstStepType, matches[0]));
@@ -1470,8 +1462,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
 
       Patterns.push_back(Pattern(i16_(max(min(wild_i32x4W, INT_16_IMAX), INT_16_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vsatwh)));
-      for (size_t I = 0; I < Patterns.size(); ++I) {
-        const Pattern &P = Patterns[I];
+      for (const Pattern &P : Patterns) {
         if (expr_match(P.pattern, op, matches)) {
           Value *Vector = codegen(matches[0]);
           int bytes_in_vector = native_vector_bits() / 8;
@@ -1505,8 +1496,7 @@ CodeGen_Hexagon::handleLargeVectors(const Cast *op) {
                                  IPICK(Intrinsic::hexagon_V6_vshufeh)));
       Patterns.push_back(Pattern(i16_(wild_i32x4W),
                                  IPICK(Intrinsic::hexagon_V6_vshufeh)));
-      for (size_t I = 0; I < Patterns.size(); ++I) {
-        const Pattern &P = Patterns[I];
+      for (const Pattern &P : Patterns) {
         if (expr_match(P.pattern, op, matches)) {
           Value *Vector = codegen(matches[0]);
           int bytes_in_vector = native_vector_bits() / 8;
@@ -1586,8 +1576,7 @@ bool CodeGen_Hexagon::possiblyCodeGenVavg(const Cast *op) {
   avgs.push_back(Pattern(vnavg(wild_i32xW, wild_i32xW),
                          IPICK(Intrinsic::hexagon_V6_vnavgw)));
   matches.clear();
-  for (size_t I = 0; I < avgs.size(); ++I) {
-    const Pattern &P = avgs[I];
+  for (const Pattern &P : avgs) {
     if (expr_match(P.pattern, op, matches)) {
       Value *Vec0 = codegen(matches[0]);
       Value *Vec1 = codegen(matches[1]);
@@ -1618,8 +1607,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
       // Vdd32.uw=vmpy(Vu32.uh,Vv32.uh)
       // Vdd32.w=vmpy(Vu32.h,Vv32.h)
       // Vd32.h=vmpyi(Vu32.h,Vv32.h)
-      for (size_t I = 0; I < multiplies.size(); ++I) {
-        const Pattern &P = multiplies[I];
+      for (const Pattern &P : multiplies) {
         if (expr_match(P.pattern, op, matches)) {
           internal_assert(matches.size() == 2);
           Intrinsic::ID ID = P.ID;
@@ -1659,8 +1647,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
       // Vdd32.uw=vzxt(Vu32.uh) i.e. u16x32 -> u32x32
       // Vdd32.h=vsxt(Vu32.b) i.e. i8x64 -> i16x64
       // Vdd32.w=vsxt(Vu32.h) i.e. i16x32 -> i32x32
-      for (size_t I = 0; I < casts.size(); ++I) {
-        const Pattern &P = casts[I];
+      for (const Pattern &P : casts) {
         if (expr_match(P.pattern, op, matches)) {
           Intrinsic::ID ID = P.ID;
           llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
@@ -1726,8 +1713,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
                                  IPICK(Intrinsic::hexagon_V6_vshufoh)));
 
       matches.clear();
-      for (size_t I = 0; I < Shuffles.size(); ++I) {
-        const Pattern &P = Shuffles[I];
+      for (const Pattern &P : Shuffles) {
         if (expr_match(P.pattern, op, matches)) {
           Value *DoubleVector = codegen(matches[0]);
           Value *ShuffleInst = callLLVMIntrinsic(P.ID, getHighAndLowVectors(DoubleVector));
@@ -1755,8 +1741,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
                                               UINT_16_IMAX), UINT_16_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrwuhsat)));
 
-    for (size_t I = 0; I < SatAndPack.size(); ++I) {
-      const Pattern &P = SatAndPack[I];
+    for (const Pattern &P : SatAndPack) {
       if (expr_match(P.pattern, op, matches)) {
         Value *DoubleVector = codegen(matches[0]);
         Value *ShiftOperand = codegen(matches[1]);
@@ -1783,8 +1768,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
                                               UINT_16_IMAX), UINT_16_IMIN)),
                                  IPICK(Intrinsic::hexagon_V6_vasrwuhsat)));
 
-    for (size_t I = 0; I < SatAndPack.size(); ++I) {
-      const Pattern &P = SatAndPack[I];
+    for (const Pattern &P : SatAndPack) {
       if (expr_match(P.pattern, op, matches)) {
           int rt_shift_by = 0;
           if (is_const_power_of_two_integer(matches[1], &rt_shift_by)) {
@@ -1809,8 +1793,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     // -128 when implicitly coerced to uint16 is 65408.
     SatAndPack.push_back(Pattern(i8_(max(min(wild_u16x2W, 127), 65408 /*uint16(-128)*/)),
                                  Intrinsic::not_intrinsic));
-    for (size_t I = 0; I < SatAndPack.size(); ++I) {
-      const Pattern &P = SatAndPack[I];
+    for (const Pattern &P : SatAndPack) {
       if (expr_match(P.pattern, op, matches)) {
         if (P.ID == Intrinsic::not_intrinsic) {
           user_error << "Saturate and packing not supported when downcasting"
@@ -1845,8 +1828,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
       Shuffles.push_back(Pattern(i16_(wild_i32x2W),
                                  IPICK(Intrinsic::hexagon_V6_vshufeh)));
       matches.clear();
-      for (size_t I = 0; I < Shuffles.size(); ++I) {
-        const Pattern &P = Shuffles[I];
+      for (const Pattern &P : Shuffles) {
         if (expr_match(P.pattern, op, matches)) {
           Value *DoubleVector = codegen(matches[0]);
           Value *ShuffleInst = callLLVMIntrinsic(P.ID, getHighAndLowVectors(DoubleVector));
@@ -1859,8 +1841,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
   } else if (isSameSizeVectorCast(op)) {
       // ******** Part 3: Same size casts (typecast) ************
       matches.clear();
-      for (size_t I = 0; I < typecasts.size(); ++I) {
-        const Pattern &P = typecasts[I];
+      for (const Pattern &P : typecasts) {
         if (expr_match(P.pattern, op, matches)) {
           Intrinsic::ID ID = P.ID;
           llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
@@ -1893,8 +1874,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 void CodeGen_Hexagon::visit(const Call *op) {
   vector<Expr> matches;
   debug(2) << "HexCG: " << op->type << ", " << "visit(Call)\n";
-  for (size_t I = 0; I < combiners.size(); ++I) {
-    const Pattern &P = combiners[I];
+  for (const Pattern &P : combiners) {
     if (expr_match(P.pattern, op, matches)) {
       Intrinsic::ID ID = P.ID;
       bool InvertOperands = P.InvertOperands;
@@ -2018,8 +1998,7 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
                              IPICK(Intrinsic::hexagon_V6_vmpybus)));
   Patterns.push_back(Pattern(wild_i32x2W * wild_i32x2W,
                              IPICK(Intrinsic::hexagon_V6_vmpyh)));
-  for (size_t I = 0; I < Patterns.size(); ++I) {
-    const Pattern &P = Patterns[I];
+  for (const Pattern & P : Patterns) {
     if (expr_match(P.pattern, op, matches)) {
       if (bc_a) {
         BC = matches[0];
@@ -2054,8 +2033,7 @@ bool CodeGen_Hexagon::possiblyCodeGenWideningMultiply(const Mul *op) {
                                IPICK(Intrinsic::hexagon_V6_vmpyub)));
     Patterns.push_back(Pattern(wild_u32x2W * wild_u32x2W,
                                IPICK(Intrinsic::hexagon_V6_vmpyuh)));
-    for (size_t I = 0; I < Patterns.size(); ++I) {
-      const Pattern &P = Patterns[I];
+    for (const Pattern & P : Patterns) {
       if (expr_match(P.pattern, op, matches)) {
         if (bc_a) {
           BC = matches[0];
@@ -2173,8 +2151,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
       }
       std::vector<Expr> matches;
       Expr Vec, Other;
-      for (size_t I = 0; I < Patterns.size(); ++I) {
-        const Expr P = Patterns[I];
+      for (const Expr &P : Patterns) {
         if (expr_match(P, op, matches)) {
           //__builtin_HEXAGON_V6_vmpyhss, __builtin_HEXAGON_V6_hi
           debug (4)<< "HexCG: Going to generate __builtin_HEXAGON_V6_vmpyhss\n";
@@ -2635,8 +2612,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
         PairSelects.push_back(select(short_dbl_cmp_vector, wild_u16x2W, wild_u16x2W));
         PairSelects.push_back(select(word_dbl_cmp_vector, wild_i32x2W, wild_i32x2W));
         PairSelects.push_back(select(word_dbl_cmp_vector, wild_u32x2W, wild_u32x2W));
-        for (size_t I = 0; I < PairSelects.size(); ++I) {
-          const Expr P = PairSelects[I];
+        for (Expr P : PairSelects) {
           if (expr_match(P, op, matches)) {
             // 1. Codegen the condition. Since we are dealing with vector pairs,
             // the condition will be of type 2048i1(128B mode) or
@@ -2678,8 +2654,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
         Selects.push_back(select(short_cmp_vector, wild_u16xW, wild_u16xW));
         Selects.push_back(select(word_cmp_vector, wild_i32xW, wild_i32xW));
         Selects.push_back(select(word_cmp_vector, wild_u32xW, wild_u32xW));
-        for (size_t I = 0; I < Selects.size(); ++I) {
-          const Expr P = Selects[I];
+        for (Expr P : Selects) {
           if (expr_match(P, op, matches)) {
             // 1. Codegen the condition. Since we are dealing with vector pairs,
             // the condition will be of type 2048i1(128B mode) or
@@ -2719,8 +2694,7 @@ CodeGen_Hexagon::generate_vector_comparison(const BaseExprNode *op,
                                           std::vector<Pattern> &VecCompares,
                                           bool invert_ops, bool negate_after) {
   std::vector<Expr> matches;
-  for (size_t I = 0; I < VecPairCompares.size(); ++I) {
-    const Pattern &P = VecPairCompares[I];
+  for (const Pattern &P : VecPairCompares) {
     if (expr_match(P.pattern, op, matches)) {
       Value *DblVecA = codegen(matches[0]);
       Value *DblVecB = codegen(matches[1]);
@@ -2748,8 +2722,7 @@ CodeGen_Hexagon::generate_vector_comparison(const BaseExprNode *op,
       return concat_vectors({LowCmp, HighCmp});
      }
   }
-  for (size_t I = 0; I < VecCompares.size(); ++I) {
-    const Pattern &P = VecCompares[I];
+  for (const Pattern &P : VecCompares) {
     if (expr_match(P.pattern, op, matches)) {
       Value *VecA = codegen(matches[0]);
       Value *VecB = codegen(matches[1]);
