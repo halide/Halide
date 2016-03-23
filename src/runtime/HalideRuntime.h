@@ -153,7 +153,8 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
                                     uint8_t *data, int32_t s0, int32_t s1, int32_t s2,
                                     int32_t s3, int32_t type_code,
-                                    int32_t bytes_per_element);
+                                    int32_t bytes_per_element,
+                                    struct buffer_t *buf);
 
 
 enum halide_trace_event_code {halide_trace_load = 0,

@@ -81,6 +81,9 @@ class DebugToFile : public IRMutator {
             args.push_back(type_code);
             args.push_back(t.bytes());
 
+            Expr buf = Variable::make(Handle(), f.name() + ".buffer");
+            args.push_back(buf);
+
             Expr call = Call::make(Int(32), Call::debug_to_file, args, Call::Intrinsic);
             string call_result_name = unique_name("debug_to_file_result");
             Expr call_result_var = Variable::make(Int(32), call_result_name);
