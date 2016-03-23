@@ -2179,7 +2179,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(0 < op->args.size());
             value = interleave_vectors(op->type, op->args);
         } else if (op->name == Call::debug_to_file) {
-            internal_assert(op->args.size() == 9);
+            internal_assert(op->args.size() == 10);
             const StringImm *filename = op->args[0].as<StringImm>();
             const Load *func = op->args[1].as<Load>();
             internal_assert(func && filename) << "Malformed debug_to_file node\n";
@@ -2197,6 +2197,10 @@ void CodeGen_LLVM::visit(const Call *op) {
                 debug(4) << op->args[i];
                 args.push_back(codegen(op->args[i]));
             }
+
+            Value *buffer = codegen(op->args[9]);
+            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+            args.push_back(buffer);
 
             debug(4) << "Creating call to debug_to_file\n";
 

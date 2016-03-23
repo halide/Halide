@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "printer.h"
 
 extern "C" void *fopen(const char *, const char *);
 extern "C" int fclose(void *);
@@ -101,13 +102,50 @@ WEAK bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
+// Reorder the data according to the stride
+WEAK void reorder_data(struct buffer_t *buf, uint8_t *data) {
+
+    /*uint8_t *temp;
+
+    for () {
+
+    }*/
+}
+
 }}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename, uint8_t *data,
                                              int32_t s0, int32_t s1, int32_t s2, int32_t s3,
-                                             int32_t type_code, int32_t bytes_per_element) {
+                                             int32_t type_code, int32_t bytes_per_element,
+                                             struct buffer_t *buf) {
+
+    char line_buf[160];
+    Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
+    sstr << "Extent: " << buf->extent[0] << ", " << buf->extent[1] << ", " << buf->extent[2] << ", " << buf->extent[3] << "\n";
+    halide_print(user_context, sstr.str());
+
+    sstr.clear();
+    sstr << "Element size: " << buf->elem_size << "\n";
+    halide_print(user_context, sstr.str());
+
+    sstr.clear();
+    sstr << "Stride: " << buf->stride[0] << ", " << buf->stride[1] << ", " << buf->stride[2] << ", " << buf->stride[3] << "\n";
+    halide_print(user_context, sstr.str());
+
+    sstr.clear();
+    sstr << "Min: " << buf->min[0] << ", " << buf->min[1] << ", " << buf->min[2] << ", " << buf->min[3] << "\n";
+    halide_print(user_context, sstr.str());
+
+    sstr.clear();
+    sstr << "s0: " << s0 << ", " << s1 << ", " << s2 << ", " << s3 << "\n";
+    sstr << "\n";
+    halide_print(user_context, sstr.str());
+
     void *f = fopen(filename, "wb");
     if (!f) return -1;
+
+    /*int32_t s0 = buf->extent[0], s1 = buf->extent[1], s2 = buf->extent[2], s3 = max(1, buf->extent[3]);
+    int32_t bytes_per_element = buf->elem_size;*/
 
     size_t elts = s0;
     elts *= s1*s2*s3;
@@ -138,7 +176,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
 
         tiff_tag *tag = &header.entries[0];
-        tag++->assign32(256, 1, width);                             // Image width
+        tag++->assign32(256, 1, width);                          // Image width
         tag++->assign32(257, 1, height);                         // Image height
         tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // Bits per sample
         tag++->assign16(259, 1, 1);                              // Compression -- none

@@ -61,7 +61,7 @@ const string globals =
     "void halide_free(void *ctx, void *ptr);\n"
     "void *halide_print(void *ctx, const void *str);\n"
     "void *halide_error(void *ctx, const void *str);\n"
-    "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
+    "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int, struct buffer_t *buf);\n"
     "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
     "void halide_profiler_pipeline_end(void *, void *);\n"
@@ -791,7 +791,11 @@ void CodeGen_C::visit(const Call *op) {
             rhs << (have_user_context ? "__user_context_" : "nullptr");
             rhs << ", \"" + filename + "\", " + func;
             for (size_t i = 0; i < args.size(); i++) {
-                rhs << ", " << args[i];
+                if (i == args.size()-1) {
+                    rhs << ", " << print_name(args[i]);
+                } else {
+                    rhs << ", " << args[i];
+                }
             }
             rhs << ")";
         } else if (op->name == Call::bitwise_and) {
