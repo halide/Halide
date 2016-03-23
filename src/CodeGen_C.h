@@ -98,9 +98,6 @@ protected:
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;
 
-    /** The target we're generating code for */
-    Halide::Target target;
-
     using IRPrinter::visit;
 
     void visit(const Variable *);
