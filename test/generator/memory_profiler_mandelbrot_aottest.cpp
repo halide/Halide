@@ -43,8 +43,6 @@ void validate(halide_profiler_state *s) {
         assert(mandelbrot_heap_per_iter <= p->memory_peak);
         assert(p->memory_peak <= mandelbrot_heap_total);
 
-        assert(p->stack_peak == argmin_stack_peak);
-
         for (int i = 0; i < p->num_funcs; i++) {
             halide_profiler_func_stats *fs = p->funcs + i;
             if (strncmp(fs->name, "argmin", 6) == 0) {
