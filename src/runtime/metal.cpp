@@ -1,7 +1,6 @@
-#include "runtime_internal.h"
+#include "HalideRuntimeMetal.h"
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
-#include "HalideRuntimeMetal.h"
 #include "printer.h"
 
 #include "cuda_opencl_shared.h"
@@ -37,7 +36,7 @@ WEAK mtl_buffer *new_buffer(mtl_device *device, size_t length) {
 WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
     return (mtl_command_queue *)objc_msgSend(device, sel_getUid("newCommandQueue"));
 }
-    
+
 WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue) {
     return (mtl_command_buffer *)objc_msgSend(queue, sel_getUid("commandBuffer"));
 }

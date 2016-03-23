@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
     // Hijack halide's runtime to run a bunch of instances of this function
     // in parallel.
-    halide_do_par_for(NULL, launcher_task, 0, num_launcher_tasks, NULL);
+    halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
 
     for (int i = 0; i < num_launcher_tasks; ++i)
         assert(got_context[i] == true);

@@ -477,7 +477,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         // shuffle vector expression is vectorized.
         bool all_int = true;
         for (int i = 0; i != shuffle_lanes && all_int; ++i) {
-            all_int = all_int && (op->args[1 + i].as<IntImm>() != NULL);
+            all_int = all_int && (op->args[1 + i].as<IntImm>() != nullptr);
         }
 
         // Check if the shuffle maps to a canonical type like .r or .rgb

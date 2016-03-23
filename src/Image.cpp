@@ -31,7 +31,7 @@ void ImageBase::prepare_for_direct_pixel_access() {
         origin = (void *)((uint8_t *)origin - offset);
         dims = buffer.dimensions();
     } else {
-        origin = NULL;
+        origin = nullptr;
         stride_0 = stride_1 = stride_2 = stride_3 = 0;
         dims = 0;
     }
@@ -42,7 +42,7 @@ bool ImageBase::add_implicit_args_if_placeholder(std::vector<Expr> &args,
                                                  int total_args,
                                                  bool placeholder_seen) const {
     const Internal::Variable *var = last_arg.as<Internal::Variable>();
-    bool is_placeholder = var != NULL && Var::is_placeholder(var->name);
+    bool is_placeholder = var != nullptr && Var::is_placeholder(var->name);
     if (is_placeholder) {
         user_assert(!placeholder_seen)
             << "Only one placeholder ('_') allowed in argument list for Image.\n";
@@ -77,7 +77,7 @@ std::string make_image_name(const std::string &name, ImageBase *im) {
 }
 
 ImageBase::ImageBase(Type t, int x, int y, int z, int w, const std::string &name) :
-    buffer(Buffer(t, x, y, z, w, NULL, make_image_name(name, this))) {
+    buffer(Buffer(t, x, y, z, w, nullptr, make_image_name(name, this))) {
     prepare_for_direct_pixel_access();
 }
 
@@ -104,7 +104,7 @@ ImageBase::ImageBase(Type t, const buffer_t *b, const std::string &name) :
     prepare_for_direct_pixel_access();
 }
 
-const std::string &ImageBase::name() {
+const std::string &ImageBase::name() const {
     return buffer.name();
 }
 
