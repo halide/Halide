@@ -48,11 +48,11 @@
       std::vector<Expr> VectorRegisterPairsA;
       std::vector<Expr> VectorRegisterPairsB;
       if (isDblVector(op->type, native_vector_bits())) {
-        getHighAndLowVectors(matches[0], VectorRegisterPairsA);
-        getHighAndLowVectors(matches[1], VectorRegisterPairsB);
+        VectorRegisterPairsA = getHighAndLowVectors(matches[0]);
+        VectorRegisterPairsB = getHighAndLowVectors(matches[1]);
       } else {
-        slice_into_halves(matches[0], VectorRegisterPairsA);
-        slice_into_halves(matches[1], VectorRegisterPairsB);
+        VectorRegisterPairsA = slice_into_halves(matches[0]);
+        VectorRegisterPairsB = slice_into_halves(matches[1]);
       }
 
       // 2. Operate on the halves
@@ -82,4 +82,3 @@
 
 #undef _OP
 #undef _EXCLu16x128
-
