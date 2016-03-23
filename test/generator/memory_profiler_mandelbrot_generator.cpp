@@ -57,6 +57,7 @@ public:
                         lerp(y_min, y_max, cast<float>(y) / h));
         Complex c(c_real, c_imag);
 
+        Func mandelbrot;
         mandelbrot(x, y, z) = initial;
         RDom t(1, iters);
         Complex current = mandelbrot(x, y, t - 1);
@@ -76,10 +77,6 @@ public:
 
         return count;
     }
-private:
-    // Declared as a member variable to verify that Funcs-as-members won't cause
-    // spurious "Invalid Param name: __user_context" errors (Issue #561)
-    Func mandelbrot{"mandelbrot"};
 };
 
 RegisterGenerator<Mandelbrot> register_my_gen{"memory_profiler_mandelbrot"};
