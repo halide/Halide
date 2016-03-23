@@ -2486,95 +2486,17 @@ bool CodeGen_Hexagon::possiblyCodeGenNarrowerType(const Select *op) {
   return false;
 }
 void CodeGen_Hexagon::visit(const Select *op) {
-  if (!op->type.is_vector()) {
-    CodeGen_Posix::visit(op);
-    return;
-  }
-
-  bool B128 = target.has_feature(Halide::Target::HVX_128);
-  Expr char_cmp_vector = Variable::make(Bool(CPICK(128, 64)), "*");
-  Expr short_cmp_vector = Variable::make(Bool(CPICK(64, 32)), "*");
-  Expr word_cmp_vector = Variable::make(Bool(CPICK(32, 16)), "*");
-  Expr char_dbl_cmp_vector = Variable::make(Bool(CPICK(128*2, 64*2)), "*");
-  Expr short_dbl_cmp_vector = Variable::make(Bool(CPICK(64*2, 32*2)), "*");
-  Expr word_dbl_cmp_vector = Variable::make(Bool(CPICK(32*2, 16*2)), "*");
-
-  if (op->condition.type().is_vector()) {
-      if (isValidHexagonVectorPair(op->type, native_vector_bits())) {
-        if (possiblyCodeGenNarrowerType(op))
-          return;
-        std::vector<Expr> PairSelects;
-        std::vector<Expr> matches;
-        int PredVectorSize = CPICK(1024, 512);
-        PairSelects.push_back(select(char_dbl_cmp_vector, wild_i8x2W, wild_i8x2W));
-        PairSelects.push_back(select(char_dbl_cmp_vector, wild_u8x2W, wild_u8x2W));
-        PairSelects.push_back(select(short_dbl_cmp_vector, wild_i16x2W, wild_i16x2W));
-        PairSelects.push_back(select(short_dbl_cmp_vector, wild_u16x2W, wild_u16x2W));
-        PairSelects.push_back(select(word_dbl_cmp_vector, wild_i32x2W, wild_i32x2W));
-        PairSelects.push_back(select(word_dbl_cmp_vector, wild_u32x2W, wild_u32x2W));
-        for (Expr P : PairSelects) {
-          if (expr_match(P, op, matches)) {
-            // 1. Codegen the condition. Since we are dealing with vector pairs,
-            // the condition will be of type 2048i1(128B mode) or
-            // 1024i1(64B mode).
-            Value *Cond = codegen(op->condition);
-            // 2. Slice the condition into halves.
-            // PDB. Cond should be the result of an HVX intrinsics. We put pairs
-            // together using concat_vectors in all our comparison visitors.
-            // This means we don't use vcombine there, or in other words, we use
-            // shuffle_vector to concatenate the two vectors. This means the
-            // following slice_vectors that end up inserting "shuffle_vectors"
-            // and the shuffle_vectors inserted as part of codegen for cond
-            // should get optimized away.
-            Value *LowCond = slice_vector(Cond, 0, PredVectorSize);
-            Value *HighCond = slice_vector(Cond, PredVectorSize,
-                                           PredVectorSize);
-            // 3. Codegen the double vectors.
-            Value *DblVecA = codegen(matches[1]);
-            Value *DblVecB = codegen(matches[2]);
-
-            // 4. Slice them into halves or vector registers.
-            std::vector<Value *> OpsA = getHighAndLowVectors(DblVecA);
-            std::vector<Value *> OpsB = getHighAndLowVectors(DblVecB);
-            Intrinsic::ID ID = IPICK(Intrinsic::hexagon_V6_vmux);
-            Value *HighMux = callLLVMIntrinsic(ID, {HighCond, OpsA[0], OpsB[0]});
-            Value *LowMux = callLLVMIntrinsic(ID, {LowCond, OpsA[1], OpsB[1]});
-            value = convertValueType(concat_vectors({LowMux, HighMux}),
-                                     llvm_type_of(op->type));
-            return;
-          }
-        }
-      }
-      else if (isValidHexagonVector(op->type, native_vector_bits())) {
-        std::vector<Expr> Selects;
-        std::vector<Expr> matches;
-        Selects.push_back(select(char_cmp_vector, wild_i8xW, wild_i8xW));
-        Selects.push_back(select(char_cmp_vector, wild_u8xW, wild_u8xW));
-        Selects.push_back(select(short_cmp_vector, wild_i16xW, wild_i16xW));
-        Selects.push_back(select(short_cmp_vector, wild_u16xW, wild_u16xW));
-        Selects.push_back(select(word_cmp_vector, wild_i32xW, wild_i32xW));
-        Selects.push_back(select(word_cmp_vector, wild_u32xW, wild_u32xW));
-        for (Expr P : Selects) {
-          if (expr_match(P, op, matches)) {
-            // 1. Codegen the condition. Since we are dealing with vector pairs,
-            // the condition will be of type 2048i1(128B mode) or
-            // 1024i1(64B mode).
-            Value *Cond = codegen(op->condition);
-            // 2. Codegen the vectors.
-            Value *VecA = codegen(matches[1]);
-            Value *VecB = codegen(matches[2]);
-            // 3. Generate the vmux intrinsic.
-            Value *Mux = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_vmux), {Cond, VecA, VecB});
-            value = convertValueType(Mux, llvm_type_of(op->type));
-            return;
-          }
-        }
-      }
-  }
-  if (!value) {
-    checkVectorOp(op, "in visit(Select *)\n");
-    CodeGen_Posix::visit(op);
-  }
+    if (op->type.is_vector()) {
+        bool B128 = target.has_feature(Halide::Target::HVX_128);
+        Type cmp_type = op->true_value.type();
+        int intrin_lanes = native_vector_bits() / cmp_type.bits();
+        value = call_intrin(op->type, intrin_lanes,
+                            IPICK(Intrinsic::hexagon_V6_vmux),
+                            cmp_type.lanes(),
+                            {op->condition, op->true_value, op->false_value});
+    } else {
+        CodeGen_Posix::visit(op);
+    }
 }
 
 void CodeGen_Hexagon::visit(const GT *op) {
