@@ -6,6 +6,12 @@
 
 #include "CodeGen_Posix.h"
 
+namespace llvm {
+namespace Intrinsic {
+enum ID;
+}
+}
+
 namespace Halide {
 namespace Internal {
 
@@ -48,7 +54,8 @@ protected:
     bool shouldUseVDMPY(const Add *, std::vector<llvm::Value *> &);
 
     llvm::Value *emitBinaryOp(const BaseExprNode *op, std::vector<Pattern> &Patterns);
-    llvm::Value *CallLLVMIntrinsic(llvm::Function *F, std::vector<llvm::Value *> Ops);
+    llvm::Value *callLLVMIntrinsic(llvm::Function *F, std::vector<llvm::Value *> Ops);
+    llvm::Value *callLLVMIntrinsic(llvm::Intrinsic::ID id, std::vector<llvm::Value *> Ops);
     std::vector<Expr> getHighAndLowVectors(Expr DoubleVec);
     std::vector<llvm::Value *> getHighAndLowVectors(llvm::Value *DoubleVec);
     llvm::Value *concatVectors(llvm::Value *High, llvm::Value *Low);

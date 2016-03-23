@@ -387,7 +387,6 @@ HEADER_FILES = \
   Buffer.h \
   Closure.h \
   CodeGen_ARM.h \
-  CodeGen_Hexagon.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
