@@ -292,7 +292,7 @@ struct Allocate : public StmtNode<Allocate> {
      * not all constants; otherwise, it returns the total constant allocation
      * size. */
     EXPORT static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
-    int32_t constant_allocation_size() const;
+    EXPORT int32_t constant_allocation_size() const;
 };
 
 /** Free the resources associated with the given buffer. */
