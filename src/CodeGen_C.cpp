@@ -340,8 +340,6 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
-    target = input.target();
-
     for (size_t i = 0; i < input.buffers.size(); i++) {
         compile(input.buffers[i]);
     }
