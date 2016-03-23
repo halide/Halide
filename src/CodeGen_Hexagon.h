@@ -42,6 +42,7 @@ protected:
     void visit(const Call *);
     void visit(const Mul *);
     void visit(const Load *);
+    void visit(const GE *);
     void visit(const LE *);
     void visit(const LT *);
     void visit(const NE *);
@@ -81,6 +82,16 @@ protected:
     Expr wild_u8x4W, wild_i8x4W;
     Expr wild_u16x4W, wild_i16x4W;
     Expr wild_u32x4W, wild_i32x4W;
+
+    /** Define overloads of CodeGen_LLVM::call_intrin that use Intrinsic::ID. */
+    ///@{
+    llvm::Value *call_intrin(Type t, int intrin_lanes,
+                             llvm::Intrinsic::ID id,
+                             int ops_lanes, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
+                             llvm::Intrinsic::ID id,
+                             int ops_lanes, std::vector<llvm::Value *>);
+    ///@}
 
 
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
