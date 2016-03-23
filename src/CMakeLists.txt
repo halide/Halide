@@ -584,23 +584,25 @@ if (NOT MSVC)
 endif()
 
 if (WITH_C_PLUS_PLUS_NAME_MANGLING)
-if(MSVC)
-  set(LLVM_LIB_DIR "${LLVM_LIB}")
-else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --libdir OUTPUT_VARIABLE LLVM_LIB_DIR_UNSTRIPPED)
-  string(STRIP "${LLVM_LIB_DIR_UNSTRIPPED}" LLVM_LIB_DIR)
-  execute_process(COMMAND "${LLVM_CONFIG}" --src-root OUTPUT_VARIABLE LLVM_SRC_ROOT_UNSTRIPPED)
-  string(STRIP "${LLVM_SRC_ROOT_UNSTRIPPED}" LLVM_SRC_ROOT)
-  execute_process(COMMAND "${LLVM_CONFIG}" --obj-root OUTPUT_VARIABLE LLVM_OBJ_ROOT_UNSTRIPPED)
-  string(STRIP "${LLVM_OBJ_ROOT_UNSTRIPPED}" LLVM_OBJ_ROOT)
-endif()
+  message(STATUS "Adding clang includes and libs.")
+  if(MSVC)
+    set(LLVM_LIB_DIR "${LLVM_LIB}")
+  else()
+    execute_process(COMMAND "${LLVM_CONFIG}" --libdir OUTPUT_VARIABLE LLVM_LIB_DIR_UNSTRIPPED)
+    string(STRIP "${LLVM_LIB_DIR_UNSTRIPPED}" LLVM_LIB_DIR)
+    execute_process(COMMAND "${LLVM_CONFIG}" --src-root OUTPUT_VARIABLE LLVM_SRC_ROOT_UNSTRIPPED)
+    string(STRIP "${LLVM_SRC_ROOT_UNSTRIPPED}" LLVM_SRC_ROOT)
+    execute_process(COMMAND "${LLVM_CONFIG}" --obj-root OUTPUT_VARIABLE LLVM_OBJ_ROOT_UNSTRIPPED)
+    string(STRIP "${LLVM_OBJ_ROOT_UNSTRIPPED}" LLVM_OBJ_ROOT)
+  endif()
 
-  foreach (CLANG_LIB clangAST clangFrontend clangBasic clangARCMigrate clangAST clangASTMatchers clangAnalysis clangBasic clangCodeGen clangDriver clangDynamicASTMatchers clangEdit clangFormat clangFrontend clangFrontendTool clangIndex clangLex clangParse clangRewrite clangRewriteCore clangRewriteFrontend clangSema clangSerialization clangStaticAnalyzerCheckers clangStaticAnalyzerCore clangStaticAnalyzerFrontend clangTooling LLVMOption)
+  foreach (CLANG_LIB clangAST clangBasic clangFrontend clangLex clangSema clangSerialization clangDriver clangEdit clangAnalysis clangParse LLVMOption)
     # Because cmake: The first argument to find_library is sort of a
     # var name but is used as directly as a cache key thus if we don't
     # ensure to get a unique var name each time find_library is
     # called, it reuses the first one it encountered.
     find_library(RESOLVED_${CLANG_LIB} NAME "${CLANG_LIB}" PATHS ${LLVM_LIB_DIR} NO_DEFAULT_PATH)
+    message(STATUS "Adding clang library ${RESOLVED_${CLANG_LIB}}.")
     target_link_libraries(Halide PRIVATE "${RESOLVED_${CLANG_LIB}}")    
   endforeach()
   # 
