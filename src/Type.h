@@ -196,7 +196,7 @@ template<>
 struct halide_handle_traits<const char *> {
     static const halide_handle_cplusplus_type *type_info() {
         static const halide_handle_cplusplus_type the_info{
-            halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "const char"),
+            halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "char"),
               {}, {}, { halide_handle_cplusplus_type::Pointer |
                         halide_handle_cplusplus_type::Const}};
         return &the_info;

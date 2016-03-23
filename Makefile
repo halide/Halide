@@ -79,7 +79,7 @@ HL_JIT_TARGET ?= host
 
 ifeq ($(WITH_CPLUSPLUS_NAME_MANGLING), 1)
 LLVM_CXX_FLAGS += -I$(shell $(LLVM_CONFIG) --src-root)/tools/clang/include -I$(shell $(LLVM_CONFIG) --obj-root)/tools/clang/include/
-LLVM_CLANG_LIBS= -lclangAST -lclangFrontend -lclangBasic -lclangARCMigrate -lclangAST -lclangASTMatchers -lclangAnalysis -lclangBasic -lclangCodeGen -lclangDriver -lclangDynamicASTMatchers -lclangEdit -lclangFormat -lclangFrontend -lclangFrontendTool -lclangIndex -lclangLex -lclangParse -lclangRewrite -lclangRewriteCore -lclangRewriteFrontend -lclangSema -lclangSerialization -lclangStaticAnalyzerCheckers -lclangStaticAnalyzerCore -lclangStaticAnalyzerFrontend -lclangTooling -lLLVMOption
+LLVM_CLANG_LIBS= -lclangAST -lclangBasic -lclangFrontend -lclangLex -lclangSema -lclangSerialization -lclangDriver -lclangEdit -lclangAnalysis -lclangParse -lLLVMOption
 LLVM_CLANG_SHARED_LIB_FLAG=-Lclang$(LLVM_FULL_VERSION)
 endif
 
