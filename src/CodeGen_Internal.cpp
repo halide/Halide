@@ -111,7 +111,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
                 return llvm::Type::getDoubleTy(*c);
             default:
                 internal_error << "There is no llvm type matching this floating-point bit width: " << t << "\n";
-                return NULL;
+                return nullptr;
             }
         } else if (t.is_handle()) {
             return llvm::Type::getInt8PtrTy(*c);

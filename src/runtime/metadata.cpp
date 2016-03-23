@@ -1,6 +1,5 @@
 #include "HalideRuntime.h"
 #include "scoped_mutex_lock.h"
-#include "runtime_internal.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
 

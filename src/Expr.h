@@ -108,7 +108,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
     }
 
     /** Downcast this ir node to its actual type (e.g. Add, or
-     * Select). This returns NULL if the node is not of the requested
+     * Select). This returns nullptr if the node is not of the requested
      * type. Example usage:
      *
      * if (const Add *add = node->as<Add>()) {
@@ -119,7 +119,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
         if (ptr->type_info() == &T::_type_info) {
             return (const T *)ptr;
         }
-        return NULL;
+        return nullptr;
     }
 };
 

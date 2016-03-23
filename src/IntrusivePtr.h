@@ -84,7 +84,7 @@ public:
         decref(ptr);
     }
 
-    IntrusivePtr() : ptr(NULL) {
+    IntrusivePtr() : ptr(nullptr) {
     }
 
     IntrusivePtr(T *p) : ptr(p) {
@@ -96,7 +96,7 @@ public:
     }
 
     IntrusivePtr(IntrusivePtr<T> &&other) : ptr(other.ptr) {
-        other.ptr = NULL;
+        other.ptr = nullptr;
     }
 
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
@@ -118,7 +118,7 @@ public:
 
     /* Handles can be null. This checks that. */
     bool defined() const {
-        return ptr != NULL;
+        return ptr != nullptr;
     }
 
     /* Check if two handles point to the same ptr. This is
