@@ -53,7 +53,7 @@ using namespace llvm;
             bool Invert = false) : pattern(p), ID(id), type(t),
                                    InvertOperands(Invert) {}
   };
-  std::vector<Pattern> casts, typecasts, varith, averages, combiners, vbitwise, multiplies;
+  std::vector<Pattern> casts, typecasts, varith, averages, combiners, multiplies;
 
 namespace {
 Expr sat_h_ub(Expr A) {
@@ -1789,7 +1789,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
 
-  value = emitBinaryOp(op, vbitwise);
   if (!value) {
     if (op->name == Call::get_high_register) {
       internal_assert(op->type.is_vector());
