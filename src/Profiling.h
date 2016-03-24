@@ -10,7 +10,7 @@
  * Output format:
  * <pipeline_name>
  *  <total time spent in this pipeline> <# of samples taken> <# of runs> <avg time/run>
- *  <# of heap allocations> <peak heap allocation> <worst-case peak stack allocation>
+ *  <# of heap allocations> <peak heap allocation>
  *   <func_name> <total time spent in this func> <percentage of time spent>
  *     (<peak heap alloc by this func> <num of allocs> <average alloc size> |
  *      <worst-case peak stack alloc by this func>)?
