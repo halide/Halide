@@ -2088,23 +2088,37 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 }
 
 void CodeGen_Hexagon::visit(const Broadcast *op) {
-    // vsplatw only splats 32 bit words, so if scalar is less, we need
-    // to broadcast it to (up to) 32 bits, then use vsplat if necessary.
-    int scalar_broadcast = std::min(op->lanes, 32 / op->type.bits());
-    value = create_broadcast(codegen(op->value), scalar_broadcast);
-    if (scalar_broadcast == op->lanes) {
-        // We only needed to broadcast up to the scalar broadcast width,
-        // we're done.
-    } else if (op->lanes % scalar_broadcast == 0) {
-        bool B128 = target.has_feature(Halide::Target::HVX_128);
-        int intrin_lanes = native_vector_bits() / op->type.bits();
-        value = call_intrin(llvm_type_of(op->type), intrin_lanes,
-                            IPICK(Intrinsic::hexagon_V6_lvsplatw),
-                            scalar_broadcast, {value});
+    if (is_zero(op->value)) {
+        if (op->lanes * op->type.bits() <= 32) {
+            // If the result is not more than 32 bits, just use scalar code.
+            CodeGen_Posix::visit(op);
+        } else {
+            // Use vd0.
+            bool B128 = target.has_feature(Halide::Target::HVX_128);
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(llvm_type_of(op->type), intrin_lanes,
+                                IPICK(Intrinsic::hexagon_V6_vd0),
+                                0, {});
+        }
     } else {
-        // TODO: We can handle this case (the broadcast result is not
-        // a multiple of 32 bits) by being clever with call_intrin.
-        CodeGen_Posix::visit(op);
+        // vsplatw only splats 32 bit words, so if scalar is less, we need
+        // to broadcast it to (up to) 32 bits, then use vsplat if necessary.
+        int scalar_broadcast = std::min(op->lanes, 32 / op->type.bits());
+        value = create_broadcast(codegen(op->value), scalar_broadcast);
+        if (scalar_broadcast == op->lanes) {
+            // We only needed to broadcast up to the scalar broadcast width,
+            // we're done.
+        } else if (op->lanes % scalar_broadcast == 0) {
+            bool B128 = target.has_feature(Halide::Target::HVX_128);
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(llvm_type_of(op->type), intrin_lanes,
+                                IPICK(Intrinsic::hexagon_V6_lvsplatw),
+                                scalar_broadcast, {value});
+        } else {
+            // TODO: We can handle this case (the broadcast result is not
+            // a multiple of 32 bits) by being clever with call_intrin.
+            CodeGen_Posix::visit(op);
+        }
     }
 }
 
