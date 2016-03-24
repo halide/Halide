@@ -1431,6 +1431,32 @@ void check_hvx_all() {
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0
+    check("vlsr(v*.ub,v*.ub)", hvx_width/1, u8_1 >> in_u8_2(0));
+    check("vlsr(v*.uh,v*.uh)", hvx_width/2, u16_1 >> in_u16_2(0));
+    check("vlsr(v*.uw,v*.uw)", hvx_width/4, u32_1 >> in_u32_2(0));
+    check("vasr(v*.b,v*.b)", hvx_width/1, i8_1 >> in_i8_2(0));
+    check("vasr(v*.h,v*.h)", hvx_width/2, i16_1 >> in_i16_2(0));
+    check("vasr(v*.w,v*.w)", hvx_width/4, i32_1 >> in_i32_2(0));
+    check("vasl(v*.ub,v*.ub)", hvx_width/1, u8_1 << in_u8_2(0));
+    check("vasl(v*.uh,v*.uh)", hvx_width/2, u16_1 << in_u16_2(0));
+    check("vasl(v*.uw,v*.uw)", hvx_width/4, u32_1 << in_u32_2(0));
+    check("vasl(v*.b,v*.b)", hvx_width/1, i8_1 << in_i8_2(0));
+    check("vasl(v*.h,v*.h)", hvx_width/2, i16_1 << in_i16_2(0));
+    check("vasl(v*.w,v*.w)", hvx_width/4, i32_1 << in_i32_2(0));
+
+    check("vlsr(v*.ub,v*.ub)", hvx_width/1, u8_1 >> u8_2);
+    check("vlsr(v*.uh,v*.uh)", hvx_width/2, u16_1 >> u16_2);
+    check("vlsr(v*.uw,v*.uw)", hvx_width/4, u32_1 >> u32_2);
+    check("vasr(v*.b,v*.b)", hvx_width/1, i8_1 >> i8_2);
+    check("vasr(v*.h,v*.h)", hvx_width/2, i16_1 >> i16_2);
+    check("vasr(v*.w,v*.w)", hvx_width/4, i32_1 >> i32_2);
+    check("vasl(v*.ub,v*.ub)", hvx_width/1, u8_1 << u8_2);
+    check("vasl(v*.uh,v*.uh)", hvx_width/2, u16_1 << u16_2);
+    check("vasl(v*.uw,v*.uw)", hvx_width/4, u32_1 << u32_2);
+    check("vasl(v*.b,v*.b)", hvx_width/1, i8_1 << i8_2);
+    check("vasl(v*.h,v*.h)", hvx_width/2, i16_1 << i16_2);
+    check("vasl(v*.w,v*.w)", hvx_width/4, i32_1 << i32_2);
+
     check("vasr(v*.ub,v*.ub,r*):sat", hvx_width/1, u8c((u16(u8_1) + u16(u8_2)) >> 4));
     check("vasr(v*.uh,v*.uh,r*):sat", hvx_width/1, u16c((u32(u16_1) + u32(u16_2)) >> 4));
     check("vasr(v*.uw,v*.uw,r*):sat", hvx_width/1, u32c((u64(u32_1) + u64(u32_2)) >> 4));

@@ -1726,8 +1726,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
         << "Can only codegen extern calls and intrinsics\n";
 
-    debug(3) << "visit(Call):" << Expr(op) << "\n";
-
     bool B128 = target.has_feature(Halide::Target::HVX_128);
 
     if (op->call_type == Call::Intrinsic && op->type.is_vector()) {
