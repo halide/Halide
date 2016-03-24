@@ -4,8 +4,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    const int size_x = 7676;
-    const int size_y = 3131;
+    const int size_x = 766;
+    const int size_y = 311;
 
     {
         Func f, g, h, j;
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     assert(header[3] == 1);
     assert(header[4] == 7);
 
-    int32_t f_data[(size_x+1)*size_y];
+    std::vector<int32_t> f_data((size_x+1)*size_y);
     assert(fread((void *)(&f_data[0]), 4, (size_x+1)*size_y, f) == (size_x+1)*size_y);
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x+1; x++) {
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     assert(header[3] == 1);
     assert(header[4] == 0);
 
-    float g_data[size_x*size_y];
+    std::vector<float> g_data(size_x*size_y);
     assert(fread((void *)(&g_data[0]), 4, size_x*size_y, g) == size_x*size_y);
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x; x++) {
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     assert(header[3] == 1);
     assert(header[4] == 0);
 
-    float h_data[size_x*size_y];
+    std::vector<float> h_data(size_x*size_y);
     assert(fread((void *)(&h_data[0]), 4, size_x*size_y, h) == size_x*size_y);
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x; x++) {
