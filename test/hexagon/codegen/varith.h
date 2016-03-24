@@ -70,30 +70,3 @@ void testAddDouble(Target& target) {
   args[1] = inputTwo;
   COMPILE(Addb, "Addb");
 }
-
-
-template<typename T>
-void testAvg(Target& target) {
-  Halide::Var x("x"), y("y");
-  ImageParam inputOne (type_of<T>(), 2);
-  ImageParam inputTwo (type_of<T>(), 2);
-  Halide::Func Avg;
-  int split_by = VECTORSIZE / sizeof(T);
-  Avg (x, y) = (inputOne(x, y) + inputTwo(x, y))/2;
-  Var x_outer, x_inner;
-  Avg.split(x, x_outer, x_inner, split_by);
-  Avg.vectorize(x_inner);
-  std::vector<Argument> args(2);
-  args[0]  = inputOne;
-  args[1] = inputTwo;
-  COMPILE(Avg, "Avg");
-
-
-  Halide::Func Navg;
-  Navg (x, y) = (inputOne(x, y) - inputTwo(x, y))/2;
-  Navg.split(x, x_outer, x_inner, split_by);
-  Navg.vectorize(x_inner);
-  args[0]  = inputOne;
-  args[1] = inputTwo;
-  COMPILE(Navg, "Navg");
-}
