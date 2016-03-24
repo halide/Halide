@@ -4,6 +4,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    const int size_x = 7676;
+    const int size_y = 3131;
 
     {
         Func f, g, h, j;
@@ -23,7 +25,7 @@ int main(int argc, char **argv) {
             h.compute_root().debug_to_file("h.tmp");
         }
 
-        Image<float> im = h.realize(10, 10, target);
+        Image<float> im = h.realize(size_x, size_y, target);
     }
 
     FILE *f = fopen("f.tmp", "rb");
@@ -33,17 +35,17 @@ int main(int argc, char **argv) {
 
     int header[5];
     assert(fread((void *)(&header[0]), 4, 5, f) == 5);
-    assert(header[0] == 11);
-    assert(header[1] == 10);
+    assert(header[0] == size_x+1);
+    assert(header[1] == size_y);
     assert(header[2] == 1);
     assert(header[3] == 1);
     assert(header[4] == 7);
 
-    int32_t f_data[11*10];
-    assert(fread((void *)(&f_data[0]), 4, 11*10, f) == 11*10);
-    for (int y = 0; y < 10; y++) {
-        for (int x = 0; x < 11; x++) {
-            int32_t val = f_data[y*11+x];
+    int32_t f_data[(size_x+1)*size_y];
+    assert(fread((void *)(&f_data[0]), 4, (size_x+1)*size_y, f) == (size_x+1)*size_y);
+    for (int y = 0; y < size_y; y++) {
+        for (int x = 0; x < size_x+1; x++) {
+            int32_t val = f_data[y*(size_x+1)+x];
             if (val != x+y) {
                 printf("f_data[%d, %d] = %d instead of %d\n", x, y, val, x+y);
                 return -1;
@@ -53,18 +55,18 @@ int main(int argc, char **argv) {
     fclose(f);
 
     assert(fread((void *)(&header[0]), 4, 5, g) == 5);
-    assert(header[0] == 10);
-    assert(header[1] == 10);
+    assert(header[0] == size_x);
+    assert(header[1] == size_y);
     assert(header[2] == 1);
     assert(header[3] == 1);
     assert(header[4] == 0);
 
-    float g_data[10*10];
-    assert(fread((void *)(&g_data[0]), 4, 10*10, g) == 10*10);
-    for (int y = 0; y < 10; y++) {
-        for (int x = 0; x < 10; x++) {
-            float val = g_data[y*10+x];
-            float correct = (float)(f_data[y*11+x] + f_data[y*11+x+1]);
+    float g_data[size_x*size_y];
+    assert(fread((void *)(&g_data[0]), 4, size_x*size_y, g) == size_x*size_y);
+    for (int y = 0; y < size_y; y++) {
+        for (int x = 0; x < size_x; x++) {
+            float val = g_data[y*size_x+x];
+            float correct = (float)(f_data[y*(size_x+1)+x] + f_data[y*(size_x+1)+x+1]);
             if (val != correct) {
                 printf("g_data[%d, %d] = %f instead of %f\n", x, y, val, correct);
                 return -1;
@@ -74,18 +76,18 @@ int main(int argc, char **argv) {
     fclose(g);
 
     assert(fread((void *)(&header[0]), 4, 5, h) == 5);
-    assert(header[0] == 10);
-    assert(header[1] == 10);
+    assert(header[0] == size_x);
+    assert(header[1] == size_y);
     assert(header[2] == 1);
     assert(header[3] == 1);
     assert(header[4] == 0);
 
-    float h_data[10*10];
-    assert(fread((void *)(&h_data[0]), 4, 10*10, h) == 10*10);
-    for (int y = 0; y < 10; y++) {
-        for (int x = 0; x < 10; x++) {
-            float val = h_data[y*10+x];
-            float correct = f_data[y*11+x] + g_data[y*10+x];
+    float h_data[size_x*size_y];
+    assert(fread((void *)(&h_data[0]), 4, size_x*size_y, h) == size_x*size_y);
+    for (int y = 0; y < size_y; y++) {
+        for (int x = 0; x < size_x; x++) {
+            float val = h_data[y*size_x+x];
+            float correct = f_data[y*(size_x+1)+x] + g_data[y*size_x+x];
             if (val != correct) {
                 printf("h_data[%d, %d] = %f instead of %f\n", x, y, val, correct);
                 return -1;

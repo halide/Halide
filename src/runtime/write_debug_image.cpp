@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "printer.h"
 
 extern "C" void *fopen(const char *, const char *);
 extern "C" int fclose(void *);
@@ -108,44 +109,43 @@ int32_t get_data_index(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
 }
 
 // Reorder the data according to the stride
-WEAK int write_data(void *user_context, void *f, int32_t s0, int32_t s1,
-                    int32_t s2, int32_t s3, size_t elts, int32_t bytes_per_element,
+WEAK int write_data(void *f, int32_t s0, int32_t s1, int32_t s2, int32_t s3,
+                    size_t elts, int32_t bytes_per_element,
                     const int32_t *strides, uint8_t *data) {
-    bool in_order = true;
-    for (int i = 0; i < 4; ++i) {
-        if (strides[i+1] == 0) {
-            break;
-        }
-        if (strides[i] > strides[i+1]) {
-            in_order = false;
-            break;
-        }
-    }
-    if (in_order) {
-        if (fwrite((void *)data, bytes_per_element * elts, 1, f)) {
-            fclose(f);
-            return 0;
-        } else {
-            fclose(f);
-            return -1;
-        }
-    }
+    const int TEMP_SIZE = 4*1024;
+    uint8_t temp[TEMP_SIZE];
+    int max_elts = TEMP_SIZE/bytes_per_element;
+    int counter = 0;
 
     for (int32_t dim3 = 0; dim3 < s3; ++dim3) {
         for (int32_t dim2 = 0; dim2 < s2; ++dim2) {
             for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
                 for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
+                    counter++;
                     int32_t index = get_data_index(dim0, dim1, dim2, dim3, strides);
                     uint8_t *loc = data + index*bytes_per_element;
-                    if (!fwrite((void *)loc, bytes_per_element, 1, f)) {
-                        fclose(f);
-                        return -1;
+                    void *dst = temp + (counter-1)*bytes_per_element;
+                    memcpy(dst, loc, bytes_per_element);
+
+                    if (counter == max_elts) {
+                        counter = 0;
+                        if (!fwrite((void *)temp, max_elts*bytes_per_element, 1, f)) {
+                            fclose(f);
+                            return -1;
+                        }
                     }
                 }
             }
         }
     }
+    if (counter > 0) {
+        if (!fwrite((void *)temp, counter*bytes_per_element, 1, f)) {
+            fclose(f);
+            return -1;
+        }
+    }
     fclose(f);
+
     return 0;
 }
 
@@ -250,6 +250,15 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
 
-    return write_data(user_context, f, s0, s1, s2, s3, elts, bytes_per_element,
-                      buf->stride, data);
+    uint64_t t_before = halide_current_time_ns(user_context);
+    int ret = write_data(f, s0, s1, s2, s3, elts, bytes_per_element,
+                         buf->stride, data);
+    uint64_t t_after = halide_current_time_ns(user_context);
+
+    char line_buf[160];
+    Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
+    sstr << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    halide_print(user_context, sstr.str());
+
+    return ret;
 }
