@@ -115,6 +115,8 @@ WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int3
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
                                              int32_t type_code, struct buffer_t *buf) {
 
+    halide_copy_to_host(user_context, buf);
+
     void *f = fopen(filename, "wb");
     if (!f) return -1;
 
