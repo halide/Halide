@@ -2180,10 +2180,9 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(0 < op->args.size());
         value = interleave_vectors(op->type, op->args);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
-        internal_assert(op->args.size() == 9);
+        internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
-        const Load *func = op->args[1].as<Load>();
-        internal_assert(func && filename) << "Malformed debug_to_file node\n";
+        internal_assert(filename) << "Malformed debug_to_file node\n";
         // Grab the function from the initial module
         llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
         internal_assert(debug_to_file) << "Could not find halide_debug_to_file function in initial module\n";
@@ -2191,17 +2190,14 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Make the filename a global string constant
         Value *user_context = get_user_context();
         Value *char_ptr = codegen(Expr(filename));
-        Value *data_ptr = symbol_table.get(func->name + ".host");
-        data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
-        vector<Value *> args = {user_context, char_ptr, data_ptr};
-        for (size_t i = 3; i < 9; i++) {
-            debug(4) << op->args[i];
-            args.push_back(codegen(op->args[i]));
-        }
+        vector<Value *> args = {user_context, char_ptr, codegen(op->args[1])};
 
-        debug(4) << "Creating call to debug_to_file\n";
+        Value *buffer = codegen(op->args[2]);
+        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        args.push_back(buffer);
 
         value = builder->CreateCall(debug_to_file, args);
+
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         value = builder->CreateAnd(codegen(op->args[0]), codegen(op->args[1]));

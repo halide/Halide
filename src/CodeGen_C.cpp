@@ -61,7 +61,7 @@ const string globals =
     "void halide_free(void *ctx, void *ptr);\n"
     "void *halide_print(void *ctx, const void *str);\n"
     "void *halide_error(void *ctx, const void *str);\n"
-    "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
+    "int halide_debug_to_file(void *ctx, const char *filename, int, struct buffer_t *buf);\n"
     "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
     "void halide_profiler_pipeline_end(void *, void *);\n"
@@ -776,25 +776,17 @@ void CodeGen_C::visit(const Call *op) {
 
     // Handle intrinsics first
     if (op->is_intrinsic(Call::debug_to_file)) {
-        internal_assert(op->args.size() == 9);
+        internal_assert(op->args.size() == 3);
         const StringImm *string_imm = op->args[0].as<StringImm>();
         internal_assert(string_imm);
         string filename = string_imm->value;
-        const Load *load = op->args[1].as<Load>();
-        internal_assert(load);
-        string func = print_name(load->name);
-
-        vector<string> args(6);
-        for (size_t i = 0; i < args.size(); i++) {
-            args[i] = print_expr(op->args[i+3]);
-        }
+        string typecode = print_expr(op->args[1]);
+        string buffer = print_name(print_expr(op->args[2]));
 
         rhs << "halide_debug_to_file(";
         rhs << (have_user_context ? "__user_context_" : "nullptr");
-        rhs << ", \"" + filename + "\", " + func;
-        for (size_t i = 0; i < args.size(); i++) {
-            rhs << ", " << args[i];
-        }
+        rhs << ", \"" + filename + "\", " + typecode;
+        rhs << ", (struct buffer_t *)" << buffer;
         rhs << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
@@ -1253,7 +1245,8 @@ void CodeGen_C::visit(const Allocate *op) {
         heap_allocations.push(op->name, 0);
         stream << print_type(op->type) << "*" << print_name(op->name) << " = (" << print_expr(op->new_expr) << ");\n";
     } else {
-        if (constant_allocation_size(op->extents, op->name, constant_size)) {
+        constant_size = op->constant_allocation_size();
+        if (constant_size > 0) {
             int64_t stack_bytes = constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
@@ -1261,7 +1254,7 @@ void CodeGen_C::visit(const Allocate *op) {
                            << op->name << " is constant but exceeds 2^31 - 1.\n";
             } else {
                 size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
-                if (stack_bytes <= 1024 * 8) {
+                if (can_allocation_fit_on_stack(stack_bytes)) {
                     on_stack = true;
                 }
             }

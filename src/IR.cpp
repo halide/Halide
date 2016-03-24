@@ -413,6 +413,41 @@ Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extent
     return node;
 }
 
+int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
+    int64_t result = 1;
+
+    for (size_t i = 0; i < extents.size(); i++) {
+        if (const IntImm *int_size = extents[i].as<IntImm>()) {
+            // Check if the individual dimension is > 2^31 - 1. Not
+            // currently necessary because it's an int32_t, which is
+            // always smaller than 2^31 - 1. If we ever upgrade the
+            // type of IntImm but not the maximum allocation size, we
+            // should re-enable this.
+            /*
+            if ((int64_t)int_size->value > (((int64_t)(1)<<31) - 1)) {
+                user_error
+                    << "Dimension " << i << " for allocation " << name << " has size " <<
+                    int_size->value << " which is greater than 2^31 - 1.";
+            }
+            */
+            result *= int_size->value;
+            if (result > (static_cast<int64_t>(1)<<31) - 1) {
+                user_error
+                    << "Total size for allocation " << name
+                    << " is constant but exceeds 2^31 - 1.\n";
+            }
+        } else {
+            return 0;
+        }
+    }
+
+    return static_cast<int32_t>(result);
+}
+
+int32_t Allocate::constant_allocation_size() const {
+    return Allocate::constant_allocation_size(extents, name);
+}
+
 Stmt Free::make(std::string name) {
     Free *node = new Free;
     node->name = name;
