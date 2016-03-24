@@ -65,14 +65,6 @@ int main(int argc, char **argv) {
   //CHECK: vsub(v{{[0-9]+}}:{{[0-9]+}}.w,v{{[0-9]+}}:{{[0-9]+}}.w)
   testSubDouble<int32_t>(target);
 
-  //CHECK: vavg(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
-  //CHECK: vnavg(v{{[0-9]+}}.ub,v{{[0-9]+}}.ub)
-  testAvg<uint8_t>(target);
-  //CHECK: vavg(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
-  //CHECK: vnavg(v{{[0-9]+}}.w,v{{[0-9]+}}.w)
-  testAvg<int32_t>(target);
-  //Todo: testAvg for 'h'
-  // no vnavg for uh.
   printf ("Done\n");
 
   return 0;
