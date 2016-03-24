@@ -88,7 +88,7 @@ private:
                 b = Cast::make(t, b);
             }
             // Replace logical operation with bitwise operation.
-            expr = Call::make(t, bitwise_op, {a, b}, Call::Intrinsic);
+            expr = Call::make(t, bitwise_op, {a, b}, Call::PureIntrinsic);
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
         } else {
@@ -108,7 +108,7 @@ private:
         Expr a = mutate(op->a);
         if (a.type().lanes() > 1) {
             // Replace logical operation with bitwise operation.
-            expr = Call::make(a.type(), Call::bitwise_not, {a}, Call::Intrinsic);
+            expr = Call::make(a.type(), Call::bitwise_not, {a}, Call::PureIntrinsic);
         } else if (!a.same_as(op->a)) {
             expr = Not::make(a);
         } else {

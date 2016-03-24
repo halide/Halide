@@ -310,7 +310,7 @@ class Monotonic : public IRVisitor {
 
     void visit(const Call *op) {
         // Some functions are known to be monotonic
-        if (op->name == Call::likely && op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::likely)) {
             op->args[0].accept(this);
             return;
         }
