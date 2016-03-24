@@ -1415,6 +1415,19 @@ void check_hvx_all() {
     check("vabsdiff(v*.h,v*.h)", hvx_width/2, absd(i16_1, i16_2));
     check("vabsdiff(v*.w,v*.w)", hvx_width/4, absd(i32_1, i32_2));
 
+    check("vand(v*,v*)", hvx_width/1, u8_1 & u8_2);
+    check("vand(v*,v*)", hvx_width/2, u16_1 & u16_2);
+    check("vand(v*,v*)", hvx_width/4, u32_1 & u32_2);
+    check("vor(v*,v*)", hvx_width/1, u8_1 | u8_2);
+    check("vor(v*,v*)", hvx_width/2, u16_1 | u16_2);
+    check("vor(v*,v*)", hvx_width/4, u32_1 | u32_2);
+    check("vxor(v*,v*)", hvx_width/1, u8_1 ^ u8_2);
+    check("vxor(v*,v*)", hvx_width/2, u16_1 ^ u16_2);
+    check("vxor(v*,v*)", hvx_width/4, u32_1 ^ u32_2);
+    check("vnot(v*)", hvx_width/1, ~u8_1);
+    check("vnot(v*)", hvx_width/2, ~u16_1);
+    check("vnot(v*)", hvx_width/4, ~u32_1);
+
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0

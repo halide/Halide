@@ -221,26 +221,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   combiners.emplace_back(absd(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vabsdiffh));
   combiners.emplace_back(absd(wild_i32xW, wild_i32xW), IPICK(Intrinsic::hexagon_V6_vabsdiffw));
 
-  // Our bitwise operations are all type agnostic; all they need are vectors
-  // of 64 bytes (single mode) or 128 bytes (double mode). Over 4 types -
-  // unsigned bytes, signed and unsigned half-word, and signed word, we have
-  // 12 such patterns for each operation. But, we'll stick to only like types
-  // here.
-  vbitwise.emplace_back(bitwiseAnd(wild_u8xW, wild_u8xW), IPICK(Intrinsic::hexagon_V6_vand));
-  vbitwise.emplace_back(bitwiseAnd(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vand));
-  vbitwise.emplace_back(bitwiseAnd(wild_u16xW, wild_u16xW), IPICK(Intrinsic::hexagon_V6_vand));
-  vbitwise.emplace_back(bitwiseAnd(wild_i32xW, wild_i32xW), IPICK(Intrinsic::hexagon_V6_vand));
-
-  vbitwise.emplace_back(bitwiseXor(wild_u8xW, wild_u8xW), IPICK(Intrinsic::hexagon_V6_vxor));
-  vbitwise.emplace_back(bitwiseXor(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vxor));
-  vbitwise.emplace_back(bitwiseXor(wild_u16xW, wild_u16xW), IPICK(Intrinsic::hexagon_V6_vxor));
-  vbitwise.emplace_back(bitwiseXor(wild_i32xW, wild_i32xW), IPICK(Intrinsic::hexagon_V6_vxor));
-
-  vbitwise.emplace_back(bitwiseOr(wild_u8xW, wild_u8xW), IPICK(Intrinsic::hexagon_V6_vor));
-  vbitwise.emplace_back(bitwiseOr(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vor));
-  vbitwise.emplace_back(bitwiseOr(wild_u16xW, wild_u16xW), IPICK(Intrinsic::hexagon_V6_vor));
-  vbitwise.emplace_back(bitwiseOr(wild_i32xW, wild_i32xW), IPICK(Intrinsic::hexagon_V6_vor));
-
   // "Add"
   // Byte Vectors
   varith.emplace_back(wild_i8xW + wild_i8xW, IPICK(Intrinsic::hexagon_V6_vaddb));
@@ -360,6 +340,26 @@ llvm::Value *CodeGen_Hexagon::callLLVMIntrinsic(llvm::Intrinsic::ID id,
     return callLLVMIntrinsic(Intrinsic::getDeclaration(module.get(), id), Ops);
 }
 
+namespace {
+Intrinsic::ID select_intrinsic(Type type,
+                               Intrinsic::ID b, Intrinsic::ID h, Intrinsic::ID w,
+                               Intrinsic::ID ub, Intrinsic::ID uh, Intrinsic::ID uw) {
+    switch (type.bits()) {
+    case 8: return type.is_int() ? b : ub;
+    case 16: return type.is_int() ? h : uh;
+    case 32: return type.is_int() ? w : uw;
+    }
+
+    internal_error << "Type not handled for intrinsic.\n";
+    return Intrinsic::not_intrinsic;
+}
+
+Intrinsic::ID select_intrinsic(Type type,
+                               Intrinsic::ID b, Intrinsic::ID h, Intrinsic::ID w) {
+    return select_intrinsic(type, b, h, w, b, h, w);
+}
+}  // namespace
+
 llvm::Value *CodeGen_Hexagon::call_intrin(Type t, int intrin_lanes,
                                           llvm::Intrinsic::ID id,
                                           int ops_lanes,
@@ -377,19 +377,20 @@ llvm::Value *CodeGen_Hexagon::call_intrin(llvm::Type *t, int intrin_lanes,
                                           llvm::Intrinsic::ID id,
                                           int ops_lanes,
                                           std::vector<llvm::Value *> ops) {
+    internal_assert(id != Intrinsic::not_intrinsic);
     llvm::Function *fn = Intrinsic::getDeclaration(module.get(), id);
     llvm::FunctionType *fty = fn->getFunctionType();
     internal_assert(fty->getNumParams() == ops.size());
     for (size_t i = 0; i < ops.size(); i++) {
         llvm::Type *ty = fty->getParamType(i);
-        // We might need to cast, but the operands might have a
-        // different number of lanes. Fix up vector types before
-        // trying to cast.
-        if (ty->isVectorTy()) {
-            ty = llvm::VectorType::get(ty->getVectorElementType(),
-                                       ops_lanes*ty->getVectorNumElements()/intrin_lanes);
-        }
         if (ty != ops[i]->getType()) {
+            // We might need to cast, but the operands might have a
+            // different number of lanes. Fix up vector types before
+            // trying to cast.
+            if (ty->isVectorTy()) {
+                ty = llvm::VectorType::get(ty->getVectorElementType(),
+                                           ops_lanes*ty->getVectorNumElements()/intrin_lanes);
+            }
             ops[i] = builder->CreateBitCast(ops[i], ty);
         }
     }
@@ -1722,6 +1723,45 @@ void CodeGen_Hexagon::visit(const Cast *op) {
   return;
 }
 void CodeGen_Hexagon::visit(const Call *op) {
+    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+        << "Can only codegen extern calls and intrinsics\n";
+
+    debug(3) << "visit(Call):" << Expr(op) << "\n";
+
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
+
+    if (op->call_type == Call::Intrinsic && op->type.is_vector()) {
+        if (op->name == Call::bitwise_and) {
+            internal_assert(op->args.size() == 2);
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(op->type, intrin_lanes,
+                                IPICK(Intrinsic::hexagon_V6_vand),
+                                op->type.lanes(), op->args);
+            return;
+        } else if (op->name == Call::bitwise_xor) {
+            internal_assert(op->args.size() == 2);
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(op->type, intrin_lanes,
+                                IPICK(Intrinsic::hexagon_V6_vxor),
+                                op->type.lanes(), op->args);
+            return;
+        } else if (op->name == Call::bitwise_or) {
+            internal_assert(op->args.size() == 2);
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(op->type, intrin_lanes,
+                                IPICK(Intrinsic::hexagon_V6_vor),
+                                op->type.lanes(), op->args);
+            return;
+        } else if (op->name == Call::bitwise_not) {
+            internal_assert(op->args.size() == 1);
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            value = call_intrin(op->type, intrin_lanes,
+                                IPICK(Intrinsic::hexagon_V6_vnot),
+                                op->type.lanes(), op->args);
+            return;
+        }
+    }
+
   vector<Expr> matches;
   debug(2) << "HexCG: " << op->type << ", " << "visit(Call)\n";
   for (const Pattern &P : combiners) {
@@ -1762,20 +1802,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
     }
   }
 
-  bool B128 = target.has_feature(Halide::Target::HVX_128);
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
 
   value = emitBinaryOp(op, vbitwise);
   if (!value) {
-    if (op->name == Call::bitwise_not) {
-      if (op->type.is_vector() &&
-          ((op->type.bytes() * op->type.lanes()) == VecSize)) {
-        Value *Call = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_vnot), {codegen(op->args[0])});
-        value = convertValueType(Call, llvm_type_of(op->type));
-        return;
-      }
-    } else if (op->name == Call::absd) {
+    if (op->name == Call::absd) {
       if (isLargerThanVector(op->type, native_vector_bits())) {
         value = handleLargeVectors_absd(op);
         if (value)
@@ -2404,26 +2436,6 @@ void CodeGen_Hexagon::visit(const Load *op) {
     CodeGen_Posix::visit(op);
   return;
 }
-
-namespace {
-Intrinsic::ID select_intrinsic(Type type,
-                               Intrinsic::ID b, Intrinsic::ID h, Intrinsic::ID w,
-                               Intrinsic::ID ub, Intrinsic::ID uh, Intrinsic::ID uw) {
-    switch (type.bits()) {
-    case 8: return type.is_int() ? b : ub;
-    case 16: return type.is_int() ? h : uh;
-    case 32: return type.is_int() ? w : uw;
-    }
-
-    internal_error << "Type not handled for intrinsic.\n";
-    return Intrinsic::not_intrinsic;
-}
-
-Intrinsic::ID select_intrinsic(Type type,
-                               Intrinsic::ID b, Intrinsic::ID h, Intrinsic::ID w) {
-    return select_intrinsic(type, b, h, w, b, h, w);
-}
-}  // namespace
 
 void CodeGen_Hexagon::visit(const Max *op) {
     if (op->type.is_vector()) {
