@@ -399,7 +399,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         t.bits() == op->value.type().bits() * 2) {
         Expr a, b;
         const Call *c = op->value.as<Call>();
-        if (c && c->name == Call::absd && c->call_type == Call::Intrinsic) {
+        if (c && c->is_intrinsic(Call::absd)) {
             ostringstream ss;
             int intrin_lanes = 128 / t.bits();
             ss << "vabdl_" << (c->args[0].type().is_int() ? 'i' : 'u') << t.bits() / 2 << 'x' << intrin_lanes;
@@ -759,8 +759,8 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     if (is_one(ramp->stride) &&
-        call && call->call_type == Call::Intrinsic &&
-        call->name == Call::interleave_vectors &&
+        call &&
+        call->is_intrinsic(Call::interleave_vectors) &&
         type_ok_for_vst &&
         2 <= call->args.size() && call->args.size() <= 4) {
 
@@ -1058,32 +1058,30 @@ void CodeGen_ARM::visit(const Load *op) {
 }
 
 void CodeGen_ARM::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::abs && op->type.is_uint()) {
-            internal_assert(op->args.size() == 1);
-            // If the arg is a subtract with narrowable args, we can use vabdl.
-            const Sub *sub = op->args[0].as<Sub>();
-            if (sub) {
-                Expr a = sub->a, b = sub->b;
-                Type narrow = UInt(a.type().bits()/2, a.type().lanes());
-                Expr na = lossless_cast(narrow, a);
-                Expr nb = lossless_cast(narrow, b);
+    if (op->is_intrinsic(Call::abs) && op->type.is_uint()) {
+        internal_assert(op->args.size() == 1);
+        // If the arg is a subtract with narrowable args, we can use vabdl.
+        const Sub *sub = op->args[0].as<Sub>();
+        if (sub) {
+            Expr a = sub->a, b = sub->b;
+            Type narrow = UInt(a.type().bits()/2, a.type().lanes());
+            Expr na = lossless_cast(narrow, a);
+            Expr nb = lossless_cast(narrow, b);
 
-                // Also try an unsigned narrowing
-                if (!na.defined() || !nb.defined()) {
-                    narrow = Int(narrow.bits(), narrow.lanes());
-                    na = lossless_cast(narrow, a);
-                    nb = lossless_cast(narrow, b);
-                }
+            // Also try an unsigned narrowing
+            if (!na.defined() || !nb.defined()) {
+                narrow = Int(narrow.bits(), narrow.lanes());
+                na = lossless_cast(narrow, a);
+                nb = lossless_cast(narrow, b);
+            }
 
-                if (na.defined() && nb.defined()) {
-                    Expr absd = Call::make(UInt(narrow.bits(), narrow.lanes()), Call::absd,
-                                           {na, nb}, Call::Intrinsic);
+            if (na.defined() && nb.defined()) {
+                Expr absd = Call::make(UInt(narrow.bits(), narrow.lanes()), Call::absd,
+                                       {na, nb}, Call::PureIntrinsic);
 
-                    absd = Cast::make(op->type, absd);
-                    codegen(absd);
-                    return;
-                }
+                absd = Cast::make(op->type, absd);
+                codegen(absd);
+                return;
             }
         }
     }
