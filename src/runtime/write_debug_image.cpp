@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include "printer.h"
 
 extern "C" void *fopen(const char *, const char *);
 extern "C" int fclose(void *);
@@ -250,15 +249,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
 
-    uint64_t t_before = halide_current_time_ns(user_context);
     int ret = write_data(f, s0, s1, s2, s3, elts, bytes_per_element,
                          buf->stride, data);
-    uint64_t t_after = halide_current_time_ns(user_context);
-
-    char line_buf[160];
-    Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
-    sstr << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    halide_print(user_context, sstr.str());
-
     return ret;
 }
