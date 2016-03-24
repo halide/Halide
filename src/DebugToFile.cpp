@@ -39,8 +39,6 @@ class DebugToFile : public IRMutator {
             for (size_t i = 0; i < op->bounds.size(); i++) {
                 num_elements *= op->bounds[i].extent;
             }
-            args.push_back(Load::make(op->types[0], f.name(), 0, Buffer(), Parameter()));
-            args.push_back(Load::make(op->types[0], f.name(), num_elements-1, Buffer(), Parameter()));
 
             int type_code = 0;
             Type t = op->types[0];

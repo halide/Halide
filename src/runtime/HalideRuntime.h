@@ -151,7 +151,7 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
  * Cannot be replaced in JITted code at present.
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                    uint8_t *data, int32_t type_code,
+                                    int32_t type_code,
                                     struct buffer_t *buf);
 
 

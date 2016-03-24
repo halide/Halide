@@ -61,7 +61,7 @@ const string globals =
     "void halide_free(void *ctx, void *ptr);\n"
     "void *halide_print(void *ctx, const void *str);\n"
     "void *halide_error(void *ctx, const void *str);\n"
-    "int halide_debug_to_file(void *ctx, const char *filename, void *data, int, struct buffer_t *buf);\n"
+    "int halide_debug_to_file(void *ctx, const char *filename, int, struct buffer_t *buf);\n"
     "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
     "void halide_profiler_pipeline_end(void *, void *);\n"
@@ -774,29 +774,17 @@ void CodeGen_C::visit(const Call *op) {
     // Handle intrinsics first
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::debug_to_file) {
-            internal_assert(op->args.size() == 5);
+            internal_assert(op->args.size() == 3);
             const StringImm *string_imm = op->args[0].as<StringImm>();
             internal_assert(string_imm);
             string filename = string_imm->value;
-            const Load *load = op->args[1].as<Load>();
-            internal_assert(load);
-            string func = print_name(load->name);
-
-            vector<string> args(2);
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = print_expr(op->args[i+3]);
-            }
+            string typecode = print_expr(op->args[1]);
+            string buffer = print_name(print_expr(op->args[2]));
 
             rhs << "halide_debug_to_file(";
             rhs << (have_user_context ? "__user_context_" : "nullptr");
-            rhs << ", \"" + filename + "\", " + func;
-            for (size_t i = 0; i < args.size(); i++) {
-                if (i == args.size()-1) {
-                    rhs << ", " << print_name(args[i]);
-                } else {
-                    rhs << ", " << args[i];
-                }
-            }
+            rhs << ", \"" + filename + "\", " + typecode;
+            rhs << ", " << buffer;
             rhs << ")";
         } else if (op->name == Call::bitwise_and) {
             internal_assert(op->args.size() == 2);

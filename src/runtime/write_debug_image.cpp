@@ -101,56 +101,18 @@ WEAK bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
-int32_t get_data_index(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
-                       const int32_t *strides) {
-    int32_t index = dim0*strides[0] + dim1*strides[1] + dim2*strides[2] + dim3*strides[3];
-    return index;
-}
-
-// Reorder the data according to the stride
-WEAK int write_data(void *f, int32_t s0, int32_t s1, int32_t s2, int32_t s3,
-                    size_t elts, int32_t bytes_per_element,
-                    const int32_t *strides, uint8_t *data) {
-    const int TEMP_SIZE = 4*1024;
-    uint8_t temp[TEMP_SIZE];
-    int max_elts = TEMP_SIZE/bytes_per_element;
-    int counter = 0;
-
-    for (int32_t dim3 = 0; dim3 < s3; ++dim3) {
-        for (int32_t dim2 = 0; dim2 < s2; ++dim2) {
-            for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
-                for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
-                    counter++;
-                    int32_t index = get_data_index(dim0, dim1, dim2, dim3, strides);
-                    uint8_t *loc = data + index*bytes_per_element;
-                    void *dst = temp + (counter-1)*bytes_per_element;
-                    memcpy(dst, loc, bytes_per_element);
-
-                    if (counter == max_elts) {
-                        counter = 0;
-                        if (!fwrite((void *)temp, max_elts*bytes_per_element, 1, f)) {
-                            fclose(f);
-                            return -1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (counter > 0) {
-        if (!fwrite((void *)temp, counter*bytes_per_element, 1, f)) {
-            fclose(f);
-            return -1;
-        }
-    }
-    fclose(f);
-
-    return 0;
+WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
+                                  const struct buffer_t *buf) {
+    uint8_t *ptr = buf->host + buf->elem_size * ((dim0 - buf->min[0]) * buf->stride[0] +
+                                                 (dim1 - buf->min[1]) * buf->stride[1] +
+                                                 (dim2 - buf->min[2]) * buf->stride[2] +
+                                                 (dim3 - buf->min[3]) * buf->stride[3]);
+    return ptr;
 }
 
 }}} // namespace Halide::Runtime::Internal
 
-WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename, uint8_t *data,
+WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
                                              int32_t type_code, struct buffer_t *buf) {
 
     void *f = fopen(filename, "wb");
@@ -249,7 +211,39 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
 
-    int ret = write_data(f, s0, s1, s2, s3, elts, bytes_per_element,
-                         buf->stride, data);
-    return ret;
+    // Reorder the data according to the strides.
+    const int TEMP_SIZE = 4*1024;
+    uint8_t temp[TEMP_SIZE];
+    int max_elts = TEMP_SIZE/bytes_per_element;
+    int counter = 0;
+
+    for (int32_t dim3 = 0; dim3 < s3; ++dim3) {
+        for (int32_t dim2 = 0; dim2 < s2; ++dim2) {
+            for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
+                for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
+                    counter++;
+                    uint8_t *loc = get_pointer_to_data(dim0, dim1, dim2, dim3, buf);
+                    void *dst = temp + (counter-1)*bytes_per_element;
+                    memcpy(dst, loc, bytes_per_element);
+
+                    if (counter == max_elts) {
+                        counter = 0;
+                        if (!fwrite((void *)temp, max_elts*bytes_per_element, 1, f)) {
+                            fclose(f);
+                            return -1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (counter > 0) {
+        if (!fwrite((void *)temp, counter*bytes_per_element, 1, f)) {
+            fclose(f);
+            return -1;
+        }
+    }
+    fclose(f);
+
+    return 0;
 }
