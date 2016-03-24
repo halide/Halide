@@ -69,7 +69,7 @@ class IsNoOp : public IRVisitor {
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
             debug(3) << "Anding condition over domain... " << is_no_op << "\n";
-            is_no_op = and_condition_over_domain(is_no_op, Scope<Interval>::empty_scope(), &tight);
+            is_no_op = and_condition_over_domain(is_no_op, Scope<Interval>::empty_scope());
             condition = make_and(condition, is_no_op);
             debug(3) << "Condition is now " << condition << "\n";
         }
@@ -83,7 +83,7 @@ class IsNoOp : public IRVisitor {
         varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
         condition = simplify(common_subexpression_elimination(condition));
         debug(3) << "About to relax over " << op->name << " : " << condition << "\n";
-        condition = and_condition_over_domain(condition, varying, &tight);
+        condition = and_condition_over_domain(condition, varying);
         debug(3) << "Relaxed: " << condition << "\n";
         condition = make_and(old_condition, make_or(condition, simplify(op->extent <= 0)));
     }
@@ -133,10 +133,6 @@ class IsNoOp : public IRVisitor {
 
 public:
     Expr condition = const_true();
-
-    /** If this is still true after visiting the Stmt, then the
-     * condition is sufficient and necessary, not just sufficient. */
-    bool tight = true;
 };
 
 class SimplifyUsingBounds : public IRMutator {
@@ -151,7 +147,6 @@ class SimplifyUsingBounds : public IRMutator {
     // Can we prove a condition over the non-rectangular domain of the for loops we're in?
     bool provably_true_over_domain(Expr test) {
         debug(3) << "Attempting to prove: " << test << "\n";
-        bool tight = true;
         for (size_t i = containing_loops.size(); i > 0; i--) {
             // Because the domain is potentially non-rectangular, we
             // need to take each variable one-by-one, simplifying in
@@ -173,7 +168,7 @@ class SimplifyUsingBounds : public IRMutator {
                     test = solved;
                 }
                 s.push(loop.var, loop.i);
-                test = and_condition_over_domain(test, s, &tight);
+                test = and_condition_over_domain(test, s);
             }
             test = simplify(test);
             debug(3) << " -> " << test << "\n";
@@ -182,7 +177,7 @@ class SimplifyUsingBounds : public IRMutator {
     }
 
     void visit(const Min *op) {
-        if (!op->type.is_int() || op->type.bits < 32) {
+        if (!op->type.is_int() || op->type.bits() < 32) {
             IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
@@ -199,7 +194,7 @@ class SimplifyUsingBounds : public IRMutator {
     }
 
     void visit(const Max *op) {
-        if (!op->type.is_int() || op->type.bits < 32) {
+        if (!op->type.is_int() || op->type.bits() < 32) {
             IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
