@@ -1435,6 +1435,11 @@ void check_hvx_all() {
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0
+    // I think the optimizer is just being too clever with these.
+    check("vd0", hvx_width/1, cast<uint8_t>(0));
+    check("vd0", hvx_width/2, cast<uint16_t>(0));
+    check("vd0", hvx_width/4, cast<uint32_t>(0));
+
     check("vlsr(v*.ub,v*.ub)", hvx_width/1, u8_1 >> in_u8_2(0));
     check("vlsr(v*.uh,v*.uh)", hvx_width/2, u16_1 >> in_u16_2(0));
     check("vlsr(v*.uw,v*.uw)", hvx_width/4, u32_1 >> in_u32_2(0));
