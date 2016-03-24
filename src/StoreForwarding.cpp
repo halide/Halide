@@ -751,7 +751,7 @@ class LoopCarry : public IRMutator {
     void visit(const For *op) {
         Stmt body = mutate(op->body);
 
-        debug(0) << "\n** Considering loop over " << op->name << "\n";
+        debug(3) << "\n** Considering loop over " << op->name << "\n";
 
         if (op->for_type != ForType::Serial) {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
@@ -794,13 +794,13 @@ class LoopCarry : public IRMutator {
         next_bundle = simplify(substitute(op->name, next_var, next_bundle));
         next_bundle = RenameVars().mutate(next_bundle);
 
-        debug(0) << "Current: " << curr_bundle << "\n";
-        debug(0) << "Next   : " << next_bundle << "\n";
+        debug(3) << "Current: " << curr_bundle << "\n";
+        debug(3) << "Next   : " << next_bundle << "\n";
 
         Expr together = pack_bundle({curr_bundle, next_bundle, stores_bundle, loads_bundle});
 
         together = common_subexpression_elimination(together, false);
-        debug(0) << "\n After CSE: \n" << together << "\n\n";
+        debug(3) << "\n After CSE: \n" << together << "\n\n";
 
         // The Let nodes on 'together' now contains good candidates of
         // things to save for the next loop iteration. However, they
@@ -837,14 +837,14 @@ class LoopCarry : public IRMutator {
         curr_bundle = pack_bundle({curr_bundle, pack_bundle(values_stored)});
         curr_bundle = wrap_lets(curr_bundle, lets);
 
-        debug(0) << "Prev bundle2 : " << prev_bundle2 << "\n";
-        debug(0) << "Curr bundle2 : " << curr_bundle2 << "\n";
+        debug(3) << "Prev bundle2 : " << prev_bundle2 << "\n";
+        debug(3) << "Curr bundle2 : " << curr_bundle2 << "\n";
 
         together = pack_bundle({curr_bundle2, prev_bundle2, curr_bundle});
 
-        debug(0) << "Together: " << together << "\n";
+        debug(3) << "Together: " << together << "\n";
         together = common_subexpression_elimination(simplify(together), false);
-        debug(0) << "Together: " << together << "\n";
+        debug(3) << "Together: " << together << "\n";
 
         // We now have an expression where the mapping between
         // curr_bundle2 and prev_bundle2 tells us the next iteration's
@@ -873,15 +873,15 @@ class LoopCarry : public IRMutator {
         curr_bundle_values = unpack_bundle(exprs[2]);
         curr_bundle = wrap_used_lets(exprs[2], lets);
 
-        debug(0) << "Stuff we need to compute: " << curr_bundle << "\n";
+        debug(3) << "Stuff we need to compute: " << curr_bundle << "\n";
 
-        debug(0) << "Lets:\n";
+        debug(3) << "Lets:\n";
 
         for (pair<string, Expr> l : lets) {
-            debug(0) << " " << l.first << " = " << l.second << "\n";
+            debug(3) << " " << l.first << " = " << l.second << "\n";
         }
 
-        debug(0) << "Loop carry mapping:\n";
+        debug(3) << "Loop carry mapping:\n";
 
         for (size_t i = 0; i < curr_bundle2_values.size(); i++) {
             Expr curr_expr = curr_bundle2_values[i];
@@ -889,7 +889,7 @@ class LoopCarry : public IRMutator {
             const Variable *prev = prev_expr.as<Variable>();
             const Variable *curr = curr_expr.as<Variable>();
 
-            debug(0) << " " << curr_expr << " --> " << prev_expr << "\n";
+            debug(3) << " " << curr_expr << " --> " << prev_expr << "\n";
 
             // Force them to be variables
             /*
@@ -956,17 +956,17 @@ class LoopCarry : public IRMutator {
                 continue;
             }
 
-            debug(0) << "*** " << curr_expr << " --> " << prev_expr << "\n";
+            debug(3) << "*** " << curr_expr << " --> " << prev_expr << "\n";
 
             CarriedValue cv {curr->name, prev->name, unique_name('b')};
             carried_values_by_reuse_name[prev->name] = cv;
             carried_values_by_save_name[curr->name] = cv;
-            debug(0) << " Carried value: " << curr->name
+            debug(3) << " Carried value: " << curr->name
                      << " in iteration i-1 becomes " << prev->name
                      << " in iteration i\n";
         }
 
-        debug(0) << "Values we need in terms of lets:\n";
+        debug(3) << "Values we need in terms of lets:\n";
 
         //vector<pair<string, Expr>> junk_lets;
         //curr_bundle = unwrap_lets(curr_bundle, junk_lets);
@@ -975,7 +975,7 @@ class LoopCarry : public IRMutator {
         //curr_bundle_values = unpack_bundle(curr_bundle);
         curr_bundle_values = unpack_bundle(curr_bundle_values[0]);
         for (size_t i = 0; i < curr_bundle_values.size(); i++) {
-            debug(0) << " " << curr_bundle_values[i] << "\n";
+            debug(3) << " " << curr_bundle_values[i] << "\n";
             // They're probably vars - don't introduce pointless let statements.
             if (curr_bundle_values[i].as<Variable>()) {
                 body = substitute(orig_lets[i].first, curr_bundle_values[i], body);
@@ -1064,15 +1064,15 @@ class LoopCarry : public IRMutator {
 };
 
 Stmt store_forwarding(Stmt s) {
-    debug(0) << "\n\n ************* BEFORE: " << s << "\n";
+    debug(3) << "\n\n ************* BEFORE: " << s << "\n";
     s = LiftFixedExpressions().mutate(s);
-    debug(0) << "\n\n ************* Lift fixed exprs: " << s << "\n";
+    debug(3) << "\n\n ************* Lift fixed exprs: " << s << "\n";
     s = StoreForwarding().mutate(s);
-    debug(0) << "\n\n ************* Store forwarding: " << s << "\n";
+    debug(3) << "\n\n ************* Store forwarding: " << s << "\n";
     s = LiftFixedExpressions().mutate(s);
-    debug(0) << "\n\n ************* Lift fixed exprs: " << s << "\n";
+    debug(3) << "\n\n ************* Lift fixed exprs: " << s << "\n";
     s = LoopCarry().mutate(s);
-    debug(0) << "\n\n ************* Loop carry: " << s << "\n";
+    debug(3) << "\n\n ************* Loop carry: " << s << "\n";
     return s;
 }
 
