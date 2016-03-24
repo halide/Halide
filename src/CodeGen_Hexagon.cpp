@@ -200,10 +200,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   combiners.emplace_back((sat_w_h(wild_i32xW) * 65536) | sat_w_h(wild_i32xW),
                          IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
                          false);
-  combiners.emplace_back(absd(wild_u8xW, wild_u8xW), IPICK(Intrinsic::hexagon_V6_vabsdiffub));
-  combiners.emplace_back(absd(wild_u16xW, wild_u16xW), IPICK(Intrinsic::hexagon_V6_vabsdiffuh));
-  combiners.emplace_back(absd(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vabsdiffh));
-  combiners.emplace_back(absd(wild_i32xW, wild_i32xW), IPICK(Intrinsic::hexagon_V6_vabsdiffw));
 
   // "Add"
   // Byte Vectors
@@ -1162,13 +1158,6 @@ CodeGen_Hexagon::handleLargeVectors(const Div *op) {
   #include "CodeGen_Hexagon_LV.h"
 }
 
-llvm::Value *
-CodeGen_Hexagon::handleLargeVectors_absd(const Call *op) {
-  debug(4) << "HexCG: " << op->type << ", handleLargeVectors_absd (Call)\n";
-  #define _OP(a,b)  absd(a, b)
-  #include "CodeGen_Hexagon_LV.h"
-}
-
 // Handle Cast on types greater than a single vector
 static
 bool isWideningVectorCast(const Cast *op) {
@@ -1741,6 +1730,19 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 IPICK(Intrinsic::hexagon_V6_vnot),
                                 op->type.lanes(), op->args);
             return;
+        } else if (op->name == Call::absd) {
+            internal_assert(op->args.size() == 2);
+            int intrin_lanes = native_vector_bits() / op->type.bits();
+            Intrinsic::ID id = select_intrinsic(op->args[0].type(),
+                                                Intrinsic::not_intrinsic,
+                                                IPICK(Intrinsic::hexagon_V6_vabsdiffh),
+                                                IPICK(Intrinsic::hexagon_V6_vabsdiffw),
+                                                IPICK(Intrinsic::hexagon_V6_vabsdiffub),
+                                                IPICK(Intrinsic::hexagon_V6_vabsdiffuh),
+                                                Intrinsic::not_intrinsic);
+            value = call_intrin(op->type, intrin_lanes, id,
+                                op->type.lanes(), op->args);
+            return;
         }
     }
 
@@ -1789,15 +1791,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
   value = emitBinaryOp(op, vbitwise);
   if (!value) {
-    if (op->name == Call::absd) {
-      if (isLargerThanVector(op->type, native_vector_bits())) {
-        value = handleLargeVectors_absd(op);
-        if (value)
-          return;
-      }
-      // vector sized absdiff should have been covered by the look up table
-      // "combiners".
-    } else if (op->name == Call::get_high_register) {
+    if (op->name == Call::get_high_register) {
       internal_assert(op->type.is_vector());
       internal_assert((op->type.bytes() * op->type.lanes()) == VecSize);
       Value *Call = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_hi), {codegen(op->args[0])});

@@ -100,7 +100,6 @@ protected:
     llvm::Value *handleLargeVectors(const Sub *);
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Div *);
-    llvm::Value *handleLargeVectors_absd(const Call *);
     llvm::Value *handleLargeVectors(const Cast *);
     /* Ideally, we'd have liked to call compare with llvm::Intrinsic::ID
      as the last argument, but that means "llvm/IR/Intrinsics.h" would be needed
