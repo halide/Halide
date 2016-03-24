@@ -53,7 +53,7 @@ using namespace llvm;
             bool Invert = false) : pattern(p), ID(id), type(t),
                                    InvertOperands(Invert) {}
   };
-  std::vector<Pattern> casts, typecasts, varith, averages, combiners, multiplies;
+  std::vector<Pattern> casts, typecasts, varith, averages, multiplies;
 
 namespace {
 Expr sat_h_ub(Expr A) {
@@ -186,20 +186,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   typecasts.emplace_back(cast(UInt(32, CPICK(32,16)), wild_i32xW), IPICK(Intrinsic::hexagon_V6_vassign));
   typecasts.emplace_back(cast(UInt(16, CPICK(64,32)), wild_i16xW), IPICK(Intrinsic::hexagon_V6_vassign));
   typecasts.emplace_back(cast(UInt(8, CPICK(128,64)), wild_i8xW), IPICK(Intrinsic::hexagon_V6_vassign));
-
-  // "shift_left (x, 8)" is converted to x*256 by Simplify.cpp
-  combiners.emplace_back(sat_h_ub(wild_i16xW) | (sat_h_ub(wild_i16xW) * 256),
-                         IPICK(Intrinsic::hexagon_V6_vsathub), Pattern::Simple,
-                         true);
-  combiners.emplace_back((sat_h_ub(wild_i16xW) * 256) | sat_h_ub(wild_i16xW),
-                         IPICK(Intrinsic::hexagon_V6_vsathub), Pattern::Simple,
-                         false);
-  combiners.emplace_back(sat_w_h(wild_i32xW) | (sat_w_h(wild_i32xW) * 65536),
-                         IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
-                         true);
-  combiners.emplace_back((sat_w_h(wild_i32xW) * 65536) | sat_w_h(wild_i32xW),
-                         IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
-                         false);
 
   // "Add"
   // Byte Vectors
@@ -1731,46 +1717,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
             return;
         }
     }
-
-  vector<Expr> matches;
-  debug(2) << "HexCG: " << op->type << ", " << "visit(Call)\n";
-  for (const Pattern &P : combiners) {
-    if (expr_match(P.pattern, op, matches)) {
-      Intrinsic::ID ID = P.ID;
-      bool InvertOperands = P.InvertOperands;
-      llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
-      llvm::FunctionType *FType = F->getFunctionType();
-      size_t NumMatches = matches.size();
-      internal_assert(NumMatches == 2);
-      internal_assert(FType->getNumParams() == NumMatches);
-      Value *Op0 = codegen(matches[0]);
-      Value *Op1 = codegen(matches[1]);
-      llvm::Type *T0 = FType->getParamType(0);
-      llvm::Type *T1 = FType->getParamType(1);
-      Halide::Type DestType = op->type;
-      llvm::Type *DestLLVMType = llvm_type_of(DestType);
-      if (T0 != Op0->getType()) {
-        Op0 = builder->CreateBitCast(Op0, T0);
-      }
-      if (T1 != Op1->getType()) {
-        Op1 = builder->CreateBitCast(Op1, T1);
-      }
-      Value *Call;
-      if (InvertOperands) {
-        std::vector<Value *> Ops;
-        Ops.push_back(Op1);
-        Ops.push_back(Op0);
-        Call = builder->CreateCall(F, Ops);
-      } else {
-        std::vector<Value *> Ops;
-        Ops.push_back(Op0);
-        Ops.push_back(Op1);
-        Call = builder->CreateCall(F, Ops);
-      }
-      value = builder->CreateBitCast(Call, DestLLVMType);
-      return;
-    }
-  }
 
   int VecSize = HEXAGON_SINGLE_MODE_VECTOR_SIZE;
   if (B128) VecSize *= 2;
