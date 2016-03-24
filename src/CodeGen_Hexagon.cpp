@@ -1702,46 +1702,32 @@ void CodeGen_Hexagon::visit(const Call *op) {
     bool B128 = target.has_feature(Halide::Target::HVX_128);
 
     if (op->call_type == Call::Intrinsic && op->type.is_vector()) {
+        Intrinsic::ID intrin = Intrinsic::not_intrinsic;
+        int intrin_lanes = native_vector_bits() / op->type.bits();
         if (op->name == Call::bitwise_and) {
             internal_assert(op->args.size() == 2);
-            int intrin_lanes = native_vector_bits() / op->type.bits();
-            value = call_intrin(op->type, intrin_lanes,
-                                IPICK(Intrinsic::hexagon_V6_vand),
-                                op->type.lanes(), op->args);
-            return;
+            intrin = IPICK(Intrinsic::hexagon_V6_vand);
         } else if (op->name == Call::bitwise_xor) {
             internal_assert(op->args.size() == 2);
-            int intrin_lanes = native_vector_bits() / op->type.bits();
-            value = call_intrin(op->type, intrin_lanes,
-                                IPICK(Intrinsic::hexagon_V6_vxor),
-                                op->type.lanes(), op->args);
-            return;
+            intrin = IPICK(Intrinsic::hexagon_V6_vxor);
         } else if (op->name == Call::bitwise_or) {
             internal_assert(op->args.size() == 2);
-            int intrin_lanes = native_vector_bits() / op->type.bits();
-            value = call_intrin(op->type, intrin_lanes,
-                                IPICK(Intrinsic::hexagon_V6_vor),
-                                op->type.lanes(), op->args);
-            return;
+            intrin = IPICK(Intrinsic::hexagon_V6_vor);
         } else if (op->name == Call::bitwise_not) {
             internal_assert(op->args.size() == 1);
-            int intrin_lanes = native_vector_bits() / op->type.bits();
-            value = call_intrin(op->type, intrin_lanes,
-                                IPICK(Intrinsic::hexagon_V6_vnot),
-                                op->type.lanes(), op->args);
-            return;
+            intrin = IPICK(Intrinsic::hexagon_V6_vnot);
         } else if (op->name == Call::absd) {
             internal_assert(op->args.size() == 2);
-            int intrin_lanes = native_vector_bits() / op->type.bits();
-            Intrinsic::ID id = select_intrinsic(op->args[0].type(),
+            intrin = select_intrinsic(op->args[0].type(),
                                                 Intrinsic::not_intrinsic,
                                                 IPICK(Intrinsic::hexagon_V6_vabsdiffh),
                                                 IPICK(Intrinsic::hexagon_V6_vabsdiffw),
                                                 IPICK(Intrinsic::hexagon_V6_vabsdiffub),
                                                 IPICK(Intrinsic::hexagon_V6_vabsdiffuh),
                                                 Intrinsic::not_intrinsic);
-            value = call_intrin(op->type, intrin_lanes, id,
-                                op->type.lanes(), op->args);
+        }
+        if (intrin != Intrinsic::not_intrinsic) {
+            value = call_intrin(op->type, intrin_lanes, intrin, op->type.lanes(), op->args);
             return;
         }
     }
