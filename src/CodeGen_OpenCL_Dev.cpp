@@ -15,8 +15,6 @@ using std::string;
 using std::vector;
 using std::sort;
 
-static ostringstream nil;
-
 // OpenCL doesn't support vectors of bools, this mutator rewrites IR
 // to use signed integer vectors instead. This means that all logical
 // ops are re-written to be bitwise ops. This then requires that
