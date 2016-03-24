@@ -346,6 +346,7 @@ SOURCE_FILES = \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
+  TrimNoOps.cpp \
   Tuple.cpp \
   Type.cpp \
   UnifyDuplicateLets.cpp \
@@ -473,6 +474,7 @@ HEADER_FILES = \
   Substitute.h \
   Target.h \
   Tracing.h \
+  TrimNoOps.h \
   Tuple.h \
   Type.h \
   UnifyDuplicateLets.h \
