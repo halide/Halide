@@ -1428,6 +1428,10 @@ void check_hvx_all() {
     check("vnot(v*)", hvx_width/2, ~u16_1);
     check("vnot(v*)", hvx_width/4, ~u32_1);
 
+    check("vsplat(r*)", hvx_width/1, in_u8(0));
+    check("vsplat(r*)", hvx_width/2, in_u16(0));
+    check("vsplat(r*)", hvx_width/4, in_u32(0));
+
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0

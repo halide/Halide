@@ -2107,146 +2107,28 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     return;
   }
 }
+
 void CodeGen_Hexagon::visit(const Broadcast *op) {
-    bool B128 = target.has_feature(Halide::Target::HVX_128);
-
-    int Width = op->lanes;
-    bool match32 = false;
-    bool match16 = false;
-    bool match8  = false;
-    vector<Expr> Matches;
-
-    int width_32 = CPICK(32,16);
-    int width_16 = CPICK(64,32);
-    int width_8  = CPICK(128,64);
-
-    debug(4) << "HexCG: Entering vector broadcast\n";
-
-    // Look for supported broadcasts.
-    Expr match_i32 = Broadcast::make(wild_i32, 0);
-    Expr match_u32 = Broadcast::make(wild_u32, 0);
-    match32 = expr_match(match_i32, op, Matches) ||
-              expr_match(match_u32, op, Matches);
-    if (!match32) {
-      Expr match_i16 = Broadcast::make(wild_i16, 0);
-      Expr match_u16 = Broadcast::make(wild_u16, 0);
-      match16 = expr_match(match_i16, op, Matches) ||
-                expr_match(match_u16, op, Matches);
+    // vsplatw only splats 32 bit words, so if scalar is less, we need
+    // to broadcast it to (up to) 32 bits, then use vsplat if necessary.
+    int scalar_broadcast = std::min(op->lanes, 32 / op->type.bits());
+    value = create_broadcast(codegen(op->value), scalar_broadcast);
+    if (scalar_broadcast == op->lanes) {
+        // We only needed to broadcast up to the scalar broadcast width,
+        // we're done.
+    } else if (op->lanes % scalar_broadcast == 0) {
+        bool B128 = target.has_feature(Halide::Target::HVX_128);
+        int intrin_lanes = native_vector_bits() / op->type.bits();
+        value = call_intrin(llvm_type_of(op->type), intrin_lanes,
+                            IPICK(Intrinsic::hexagon_V6_lvsplatw),
+                            scalar_broadcast, {value});
+    } else {
+        // TODO: We can handle this case (the broadcast result is not
+        // a multiple of 32 bits) by being clever with call_intrin.
+        CodeGen_Posix::visit(op);
     }
-    if (!match32 && !match16) {
-      Expr match_i8 = Broadcast::make(wild_i8, 0);
-      Expr match_u8 = Broadcast::make(wild_u8, 0);
-      match8 = expr_match(match_i8, op, Matches) ||
-               expr_match(match_u8, op, Matches);
-    }
-
-    // Select the correct intrinsic & broadcast value preparation.
-    Intrinsic::ID ID = (Intrinsic::ID) 0;
-    bool zext_wordsize = false;
-    bool fill_wordsize = false;
-    bool zero_bcast = false;
-    size_t NumOps   = 0;
-    int WidthOps = 0;
-
-    if (match32 || match16 || match8) {
-      if (is_zero(op->value)) {
-        ID = IPICK(Intrinsic::hexagon_V6_vd0);
-        zero_bcast = true;
-#include <v62feat4.inc>
-      } else {
-        ID = IPICK(Intrinsic::hexagon_V6_lvsplatw);
-        if (match8 || match16) {
-          zext_wordsize = true;
-          fill_wordsize = true;
-        }
-      }
-
-      if (match32) {
-        WidthOps = width_32;
-      } else if (match16) {
-        WidthOps = width_16;
-      } else if (match8) {
-        WidthOps = width_8;
-      }
-      NumOps = Width / WidthOps;
-    }
-
-    if (ID == (Intrinsic::ID) 0) {  // Didn't find a matching intrinsic.
-      user_warning << "Unsupported type for vector broadcast ("
-                   << op->type
-                   << (match32 ? " m32" : "")
-                   << (match16 ? " m16" : "")
-                   << (match8  ? " m8"  : "")
-                   << " WidthOps:" << WidthOps
-                   << " NumOps:" << NumOps
-                   << ")\n";
-      checkVectorOp(op, "Unhandled type in visit(Broadcast *)\n");
-      CodeGen_Posix::visit(op);
-      return;
-    }
-
-    if (Width % WidthOps) {  // Check for integer multiple of vector.
-      user_warning << "Width not a supported multiple for vector broadcast ("
-                   << op->type
-                   << (match32 ? " m32" : "")
-                   << (match16 ? " m16" : "")
-                   << (match8  ? " m8"  : "")
-                   << " WidthOps:" << WidthOps
-                   << " NumOps:" << NumOps
-                   << ")\n";
-      checkVectorOp(op, "Unhandled width in visit(Broadcast *)\n");
-      CodeGen_Posix::visit(op);
-      return;
-    }
-
-    // Generate the broadcast code.
-    debug(4) << "HexCG: Matched vector broadcast ("
-                 << op->type
-                 << (match32 ? " m32" : "")
-                 << (match16 ? " m16" : "")
-                 << (match8  ? " m8"  : "")
-                 << " WidthOps:" << WidthOps
-                 << " NumOps:" << NumOps
-                 << ")\n";
-
-    Value *splatval = NULL;
-    if (!zero_bcast) {
-      if (zext_wordsize) {   // Widen splat value to 32bit word.
-        splatval = builder->CreateZExt(codegen(op->value), llvm_type_of(UInt(32)));
-      } else {
-        splatval = codegen(op->value);
-      }
-
-      if (fill_wordsize) {   // Replicate smaller bitsize within 32bit word.
-        if (match16 || match8) {  // Stage 1: shift left by 16 & or.
-          Constant *shift = ConstantInt::get(llvm_type_of(UInt(32)), 16);
-          Value *tempsh = builder->CreateShl(splatval, shift);
-          Value *tempor = builder->CreateOr(tempsh, splatval);
-          splatval = tempor;
-        }
-        if (match8) {             // Stage 2: shift left by 8 & or.
-          Constant *shift = ConstantInt::get(llvm_type_of(UInt(32)), 8);
-          Value *tempsh = builder->CreateShl(splatval, shift);
-          Value *tempor = builder->CreateOr(tempsh, splatval);
-          splatval = tempor;
-        }
-      }
-    }
-
-    std::vector<Value *> ResVec;
-    for (size_t numop = 0; numop < NumOps; ++numop) {
-      llvm::Function *F = Intrinsic::getDeclaration(module.get(), ID);
-      std::vector<Value *> Ops;
-      if (splatval) {
-         Ops.push_back(splatval);
-      }
-      Value *ResOne = callLLVMIntrinsic(F, Ops);
-      ResVec.push_back(ResOne);
-    }
-
-    value = concat_vectors(ResVec);
-    value = convertValueType(value, llvm_type_of(op->type));
 }
+
 void CodeGen_Hexagon::visit(const Load *op) {
   bool B128 = target.has_feature(Halide::Target::HVX_128);
   if (op->type.is_vector() && isValidHexagonVector(op->type,
