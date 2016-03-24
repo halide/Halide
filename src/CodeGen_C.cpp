@@ -784,7 +784,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "halide_debug_to_file(";
             rhs << (have_user_context ? "__user_context_" : "nullptr");
             rhs << ", \"" + filename + "\", " + typecode;
-            rhs << ", " << buffer;
+            rhs << ", (struct buffer_t *)" << buffer;
             rhs << ")";
         } else if (op->name == Call::bitwise_and) {
             internal_assert(op->args.size() == 2);
