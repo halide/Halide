@@ -16,8 +16,6 @@ using std::string;
 using std::vector;
 using std::sort;
 
-static ostringstream nil;
-
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
     clc(src_stream), target(t) {
 }
