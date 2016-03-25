@@ -1359,10 +1359,18 @@ void check_hvx_all() {
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, u32(x/2), u32(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, i32(x/2), i32(x/2)));
 
+    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_u8(x/2), in_u8((x+16)/2)));
+    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_i8(x/2), in_i8((x+16)/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, in_u16(x/2), in_u16((x+16)/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, in_i16(x/2), in_i16((x+16)/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_u32(x/2), in_u32((x+16)/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_i32(x/2), in_i32((x+16)/2)));
+
     check("vmax(v*.ub,v*.ub)", hvx_width, max(u8_1, u8_2));
     check("vmax(v*.uh,v*.uh)", hvx_width/2, max(u16_1, u16_2));
     check("vmax(v*.h,v*.h)", hvx_width/2, max(i16_1, i16_2));
     check("vmax(v*.w,v*.w)", hvx_width/4, max(i32_1, i32_2));
+
     check("vmin(v*.ub,v*.ub)", hvx_width, min(u8_1, u8_2));
     check("vmin(v*.uh,v*.uh)", hvx_width/2, min(u16_1, u16_2));
     check("vmin(v*.h,v*.h)", hvx_width/2, min(i16_1, i16_2));
@@ -1431,6 +1439,10 @@ void check_hvx_all() {
     check("vsplat(r*)", hvx_width/1, in_u8(0));
     check("vsplat(r*)", hvx_width/2, in_u16(0));
     check("vsplat(r*)", hvx_width/4, in_u32(0));
+
+    check("vmux(q*,v*,v*)", hvx_width/1, select(i8_1 == i8_2, i8_1, i8_2));
+    check("vmux(q*,v*,v*)", hvx_width/2, select(i16_1 == i16_2, i16_1, i16_2));
+    check("vmux(q*,v*,v*)", hvx_width/4, select(i32_1 == i32_2, i32_1, i32_2));
 
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
